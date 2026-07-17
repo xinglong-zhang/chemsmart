@@ -7,7 +7,6 @@ import re
 import subprocess
 import time
 import uuid
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -22,11 +21,9 @@ from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
 from chemsmart.agent.harness.trace import write_harness_result
 from chemsmart.agent.harness.workflow_state import (
-    hydrate_workflow_state,
     workflow_state_scope,
 )
 from chemsmart.agent.loop import (
-    ToolLoop,
     ToolLoopBudgets,
     registry_tool_defs_for_provider,
 )
@@ -39,14 +36,11 @@ from chemsmart.agent.models import (
 )
 from chemsmart.agent.permissions import (
     ApprovalDecision,
-    PermissionMode,
     PermissionPolicy,
-    RuntimePermissionMode,
 )
 from chemsmart.agent.prompts import load_prompt
 from chemsmart.agent.prompts.identity import (
     build_system_prompt,
-    ensure_system_message,
 )
 from chemsmart.agent.provider_adapter import ToolRequest, extract_response_text
 from chemsmart.agent.providers import (
@@ -55,8 +49,7 @@ from chemsmart.agent.providers import (
     get_provider,
 )
 from chemsmart.agent.registry import ToolRegistry
-from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
-from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.runtime.contracts import RuntimeV2Mode
 from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.services.plan_support import (
@@ -75,6 +68,7 @@ from chemsmart.agent.services.result_codec import (
     restore_json_result,
 )
 from chemsmart.agent.services.session_store import load_current_session_state
+from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 UTC = timezone.utc
 
@@ -271,353 +265,14 @@ class AgentSession:
         policy: PermissionPolicy | None = None,
         approver: Callable[[ToolRequest], ApprovalDecision] | None = None,
     ) -> dict[str, Any]:
-        self._run_start_time = time.perf_counter()
-        self._llm_stats = []
-        self._last_harness_result = None
-        if self.state is None or self.session_dir is None:
-            self._start_new_session(request)
-            continuing_ask_user = False
-        elif self._has_pending_ask_user():
-            self._resume_pending_ask_user(request)
-            continuing_ask_user = True
-        else:
-            self._start_new_turn(request)
-            continuing_ask_user = False
-        assert self.state is not None
-        assert self.decision_log is not None
-        assert self.handle_store is not None
-
-        self._save_state()
-        if not continuing_ask_user:
-            self.decision_log.write(
-                "request", {"request": request}, rationale=request
-            )
-        self._refresh_conversation_history()
-
-        provider = self._provider_instance()
-        provider_name = getattr(provider, "name", None) or "openai"
-        policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
-        runtime_mode = (
-            policy.mode
-            if isinstance(policy.mode, RuntimePermissionMode)
-            else None
-        )
-        tool_defs = (
-            None
-            if runtime_mode is not None
-            else self._tool_defs_for_provider(provider_name)
-        )
-        runtime_controller = self._ensure_runtime_controller()
-        runtime_allowed_tools: set[str] | None = None
-        runtime_lifecycle = None
-        if runtime_controller is not None:
-            with workflow_state_scope(self.state.session_id):
-                durable = runtime_controller.state
-                has_durable_workflow_state = any(
-                    (
-                        durable.active_project is not None,
-                        durable.active_server is not None,
-                        bool(durable.previous_command),
-                        bool(durable.unresolved_slots),
-                    )
-                )
-                hydrated = hydrate_workflow_state(
-                    {
-                        "cwd": self.state.cwd,
-                        "project": (
-                            durable.active_project.model_dump(mode="json")
-                            if durable.active_project is not None
-                            else None
-                        ),
-                        "server": (
-                            durable.active_server.model_dump(mode="json")
-                            if durable.active_server is not None
-                            else None
-                        ),
-                        "previous_command": durable.previous_command,
-                        "unresolved_slots": durable.unresolved_slots,
-                    },
-                    cwd=self.state.cwd,
-                    overwrite=has_durable_workflow_state,
-                )
-                runtime_controller.start_turn(
-                    request=request,
-                    turn_index=self.state.turn_index,
-                    provider_name=provider_name,
-                    cwd=self.state.cwd,
-                    workflow_state=hydrated,
-                )
-            runtime_lifecycle = runtime_controller.lifecycle()
-            if self.runtime_v2_mode is RuntimeV2Mode.ACTIVE:
-                tool_defs = runtime_controller.tool_defs(provider_name)
-                assert runtime_controller.selection is not None
-                runtime_allowed_tools = set(
-                    runtime_controller.selection.direct
-                )
-        self._log_loop_mode(policy)
-        if messages is None:
-            if continuing_ask_user:
-                messages = [
-                    *deepcopy(self.state.pending_messages or []),
-                    {"role": "user", "content": request},
-                ]
-            else:
-                messages = [{"role": "user", "content": request}]
-        messages = ensure_system_message(
-            messages,
-            self._tool_loop_system_prompt(policy, request=request),
-        )
-        if budgets is None:
-            budgets = ToolLoopBudgets(
-                log_provider_turn_raw=log_raw_provider_turns
-            )
-        elif log_raw_provider_turns and not budgets.log_provider_turn_raw:
-            budgets = ToolLoopBudgets(
-                max_model_steps_per_turn=budgets.max_model_steps_per_turn,
-                max_total_tool_calls_per_turn=(
-                    budgets.max_total_tool_calls_per_turn
-                ),
-                max_consecutive_tool_errors=(
-                    budgets.max_consecutive_tool_errors
-                ),
-                max_same_signature_retries=(
-                    budgets.max_same_signature_retries
-                ),
-                max_provider_errors_per_turn=(
-                    budgets.max_provider_errors_per_turn
-                ),
-                log_provider_turn_raw=True,
-            )
-
-        loop = ToolLoop(
-            provider=provider,
-            registry=self.registry,
-            handle_store=self.handle_store,
-            decision_log=self.decision_log,
+        return UnifiedSessionRunner(self).run(
+            request,
             budgets=budgets,
+            messages=messages,
+            log_raw_provider_turns=log_raw_provider_turns,
             policy=policy,
             approver=approver,
-            lifecycle=runtime_lifecycle,
         )
-        with workflow_state_scope(self.state.session_id):
-            loop_result = loop.run_turn(
-                messages=messages,
-                tool_defs=tool_defs,
-                mode=runtime_mode,
-                allowed_tool_names=runtime_allowed_tools,
-            )
-
-        if runtime_controller is not None:
-            if loop_result.get("ask_user"):
-                if (
-                    runtime_controller.state.phase
-                    is not TaskPhase.WAITING_USER
-                ):
-                    runtime_controller.emit(
-                        EventKind.CLARIFICATION_REQUESTED,
-                        {
-                            "slots": ["clarification"],
-                            "question": loop_result["ask_user"].get(
-                                "question", ""
-                            ),
-                        },
-                    )
-            elif loop_result.get("limit_reason"):
-                runtime_controller.block(
-                    reason=str(loop_result["limit_reason"])
-                )
-            else:
-                runtime_controller.complete()
-            completion_notice = runtime_controller.completion_notice()
-            if completion_notice:
-                assistant_text = str(
-                    loop_result.get("assistant_text") or ""
-                ).rstrip()
-                loop_result["assistant_text"] = (
-                    f"{assistant_text}\n\n{completion_notice}"
-                    if assistant_text
-                    else completion_notice
-                )
-
-        tool_requests = loop_result["tool_requests"]
-        tool_outcomes = loop_result["tool_outcomes"]
-        results = [
-            (
-                outcome.raw_result
-                if outcome.raw_result is not None
-                else outcome.result
-            )
-            for outcome in tool_outcomes
-            if outcome.status != "ask_user"
-        ]
-        synthetic_plan = _synthetic_plan_from_tool_requests(tool_requests)
-        dry_run_results = [
-            outcome.raw_result
-            for outcome in tool_outcomes
-            if outcome.name == "dry_run_input"
-            and outcome.status == "ok"
-            and isinstance(outcome.raw_result, dict)
-        ]
-        runtime_result = next(
-            (
-                outcome.raw_result
-                for outcome in reversed(tool_outcomes)
-                if outcome.name == "validate_runtime"
-                and outcome.status == "ok"
-                and isinstance(outcome.raw_result, dict)
-            ),
-            None,
-        )
-        intent_request = (
-            self.state.request
-            if continuing_ask_user and self.state.request is not None
-            else request
-        )
-
-        self.state.plan = synthetic_plan
-        self.state.request_intent = (
-            "chitchat"
-            if _is_chitchat_request(intent_request) and not tool_requests
-            else "workflow"
-            if tool_requests
-            else "advisory"
-        )
-        self.state.total_steps_planned = len(tool_requests)
-        self.state.current_step_index = len(results)
-        self.state.pending_messages = loop_result.get("messages")
-        self.state.pending_ask_user = loop_result.get("ask_user")
-        self._save_state()
-
-        self._llm_stats = [
-            {
-                "stage": "tool_loop",
-                "attempt": 1,
-                "provider_name": provider_name,
-                "resolved_model": getattr(provider, "default_model", None),
-                "input_tokens": loop_result["total_input_tokens"],
-                "output_tokens": loop_result["total_output_tokens"],
-                "latency_ms": _elapsed_ms(self._run_start_time),
-                "success": True,
-            }
-        ]
-        if loop_result.get("ask_user"):
-            self._write_training_episode(
-                provider_name=provider_name,
-                provider=provider,
-                loop_result=loop_result,
-                paused=True,
-            )
-            self._refresh_conversation_history()
-            return {
-                "session_id": self.state.session_id,
-                "session_dir": str(self.session_dir),
-                "plan": synthetic_plan,
-                "plan_text": render_plan(synthetic_plan),
-                "critic_verdict": None,
-                "completed_steps": self.state.current_step_index,
-                "blocked": False,
-                "dry_run_result": _primary_dry_run_result(dry_run_results),
-                "dry_run_results": dry_run_results,
-                "runtime_result": runtime_result,
-                "preview_submit": None,
-                "results": results,
-                "assistant_output": loop_result["assistant_text"],
-                "tool_requests": tool_requests,
-                "tool_outcomes": tool_outcomes,
-                "loop_state": {
-                    "stop_reason": loop_result["stop_reason"],
-                    "model_steps": loop_result["model_steps"],
-                    "tool_calls": len(
-                        [
-                            outcome
-                            for outcome in tool_outcomes
-                            if outcome.status not in {"skipped", "ask_user"}
-                        ]
-                    ),
-                    "limit_reason": loop_result["limit_reason"],
-                    "provider_errors": loop_result["provider_errors"],
-                },
-                "final_message": loop_result["assistant_text"],
-                "limit_reason": loop_result["limit_reason"],
-                "provider_errors": loop_result["provider_errors"],
-                "advisory_only": not tool_requests,
-                "is_chitchat": (
-                    _is_chitchat_request(intent_request) and not tool_requests
-                ),
-                "approval_mode": policy.mode.value,
-                "driving_mode": policy.mode == PermissionMode.DRIVING,
-                "yolo": policy.yolo,
-                "denials_count": loop_result["denials_count"],
-                "approvals_count": loop_result["approvals_count"],
-                "ask_user_question": loop_result["ask_user"],
-                "runtime_v2": self._runtime_v2_metadata(),
-            }
-
-        self._write_training_episode(
-            provider_name=provider_name,
-            provider=provider,
-            loop_result=loop_result,
-        )
-        self.state.pending_messages = None
-        self.state.pending_ask_user = None
-        self._save_state()
-        self._finalize_session(
-            verdict=None,
-            blocked=False,
-            block_reason=loop_result["limit_reason"],
-            dry_run_results=dry_run_results,
-            advisory_only=not tool_requests,
-            is_chitchat=(
-                _is_chitchat_request(intent_request) and not tool_requests
-            ),
-            rationale=loop_result["assistant_text"] or "",
-        )
-        self._refresh_conversation_history()
-
-        return {
-            "session_id": self.state.session_id,
-            "session_dir": str(self.session_dir),
-            "plan": synthetic_plan,
-            "plan_text": render_plan(synthetic_plan),
-            "critic_verdict": None,
-            "completed_steps": self.state.current_step_index,
-            "blocked": False,
-            "dry_run_result": _primary_dry_run_result(dry_run_results),
-            "dry_run_results": dry_run_results,
-            "runtime_result": runtime_result,
-            "preview_submit": None,
-            "results": results,
-            "assistant_output": loop_result["assistant_text"],
-            "tool_requests": tool_requests,
-            "tool_outcomes": tool_outcomes,
-            "loop_state": {
-                "stop_reason": loop_result["stop_reason"],
-                "model_steps": loop_result["model_steps"],
-                "tool_calls": len(
-                    [
-                        outcome
-                        for outcome in tool_outcomes
-                        if outcome.status not in {"skipped", "ask_user"}
-                    ]
-                ),
-                "limit_reason": loop_result["limit_reason"],
-                "provider_errors": loop_result["provider_errors"],
-            },
-            "final_message": loop_result["assistant_text"],
-            "limit_reason": loop_result["limit_reason"],
-            "provider_errors": loop_result["provider_errors"],
-            "advisory_only": not tool_requests,
-            "is_chitchat": (
-                _is_chitchat_request(intent_request) and not tool_requests
-            ),
-            "approval_mode": policy.mode.value,
-            "driving_mode": policy.mode == PermissionMode.DRIVING,
-            "yolo": policy.yolo,
-            "denials_count": loop_result["denials_count"],
-            "approvals_count": loop_result["approvals_count"],
-            "ask_user_question": None,
-            "runtime_v2": self._runtime_v2_metadata(),
-        }
 
     def _continue_run(
         self,
