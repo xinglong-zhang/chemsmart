@@ -67,43 +67,31 @@ def summarize_tool_use_result(
     args = req.get("args") if isinstance(req, dict) else {}
     if not isinstance(args, dict):
         args = {}
-    if tool == "build_molecule":
-        return _display_molecule_summary(args, inner)
-    if tool == "recommend_method":
-        method = _method_summary(inner) if isinstance(inner, dict) else None
-        return f"recommend_method suggested {method}." if method else None
-    if tool in _PROJECT_YAML_TOOLS:
-        return _project_yaml_summary(
-            tool,
-            inner if isinstance(inner, dict) else {},
-        )
-    if tool in {"build_gaussian_settings", "build_orca_settings"}:
-        method = _method_summary(
-            {
-                "functional": args.get("functional"),
-                "basis": args.get("basis"),
-                "ab_initio": args.get("ab_initio"),
-                "solvent_id": args.get("solvent_id"),
-            }
-        )
-        return f"{tool} prepared {method} settings." if method else None
-    if tool == "build_job":
-        return _display_job_summary(args, inner)
-    if tool == "dry_run_input":
-        return _display_dry_run_summary(inner)
-    if tool == "extract_optimized_geometry":
-        return _geometry_summary(_display_molecule_formula(inner))
-    if tool == "validate_runtime":
-        return _display_runtime_summary(inner)
-    if tool == "ssh_probe":
-        return _ssh_probe_summary(args, inner, payload.get("status"))
-    if tool == "scheduler_query":
-        return _scheduler_summary(args, inner)
-    if tool == "log_tail":
-        return _log_tail_summary(args, inner)
-    if tool == "read":
-        return _read_summary(args, inner)
-    return None
+    handler = _DISPLAY_SUMMARIES.get(tool)
+    if handler is None:
+        return None
+    return handler(tool, args, inner, payload)
+
+
+def _display_recommend_method(
+    tool: str, args: dict[str, Any], inner: Any, payload: dict[str, Any]
+) -> str | None:
+    method = _method_summary(inner) if isinstance(inner, dict) else None
+    return f"recommend_method suggested {method}." if method else None
+
+
+def _display_settings_summary(
+    tool: str, args: dict[str, Any], inner: Any, payload: dict[str, Any]
+) -> str | None:
+    method = _method_summary(
+        {
+            "functional": args.get("functional"),
+            "basis": args.get("basis"),
+            "ab_initio": args.get("ab_initio"),
+            "solvent_id": args.get("solvent_id"),
+        }
+    )
+    return f"{tool} prepared {method} settings." if method else None
 
 
 def summarize_ask_user(payload: dict[str, Any]) -> str | None:
@@ -140,6 +128,46 @@ _PROJECT_YAML_TOOLS = {
     "critic_project_yaml",
     "write_project_yaml",
 }
+
+_DISPLAY_SUMMARIES: dict[str, Any] = {
+    "build_molecule": lambda tool, args, inner, payload: (
+        _display_molecule_summary(args, inner)
+    ),
+    "recommend_method": _display_recommend_method,
+    "build_gaussian_settings": _display_settings_summary,
+    "build_orca_settings": _display_settings_summary,
+    "build_job": lambda tool, args, inner, payload: _display_job_summary(
+        args, inner
+    ),
+    "dry_run_input": lambda tool, args, inner, payload: (
+        _display_dry_run_summary(inner)
+    ),
+    "extract_optimized_geometry": lambda tool, args, inner, payload: (
+        _geometry_summary(_display_molecule_formula(inner))
+    ),
+    "validate_runtime": lambda tool, args, inner, payload: (
+        _display_runtime_summary(inner)
+    ),
+    "ssh_probe": lambda tool, args, inner, payload: _ssh_probe_summary(
+        args, inner, payload.get("status")
+    ),
+    "scheduler_query": lambda tool, args, inner, payload: _scheduler_summary(
+        args, inner
+    ),
+    "log_tail": lambda tool, args, inner, payload: _log_tail_summary(
+        args, inner
+    ),
+    "read": lambda tool, args, inner, payload: _read_summary(args, inner),
+}
+_DISPLAY_SUMMARIES.update(
+    dict.fromkeys(
+        _PROJECT_YAML_TOOLS,
+        lambda tool, args, inner, payload: _project_yaml_summary(
+            tool,
+            inner if isinstance(inner, dict) else {},
+        ),
+    )
+)
 
 
 def _build_molecule_summary(
