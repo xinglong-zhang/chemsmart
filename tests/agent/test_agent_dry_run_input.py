@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chemsmart.agent.tools import build_job, build_molecule, dry_run_input
 from chemsmart.agent.harness.workflow_state import (
     select_workspace_project,
     workflow_state_scope,
 )
+from chemsmart.agent.tools import build_job, build_molecule, dry_run_input
 from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
@@ -143,9 +143,7 @@ class TestDryRunInput:
         from chemsmart.agent.tools import build_gaussian_settings
 
         monkeypatch.chdir(tmp_path)
-        project_path = (
-            tmp_path / ".chemsmart" / "gaussian" / "water_demo.yaml"
-        )
+        project_path = tmp_path / ".chemsmart" / "gaussian" / "water_demo.yaml"
         project_path.parent.mkdir(parents=True)
         project_path.write_text(
             "gas:\n  functional: b3lyp empiricaldispersion=gd3bj\n"

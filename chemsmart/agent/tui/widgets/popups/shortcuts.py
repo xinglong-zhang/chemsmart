@@ -31,14 +31,23 @@ class ShortcutOverlay(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         rows = [
             (self.bindings.get("show_shortcuts", "F1"), "shortcut reference"),
-            (self.bindings.get("toggle_transcript", "Ctrl+O"), "compact/full transcript"),
+            (
+                self.bindings.get("toggle_transcript", "Ctrl+O"),
+                "compact/full transcript",
+            ),
             (self.bindings.get("show_activity", "Ctrl+T"), "tool activity"),
             (
                 self.bindings.get("show_calculations", "Ctrl+B"),
                 "calculation monitor and logs",
             ),
-            (self.bindings.get("search_history", "Ctrl+R"), "previous request"),
-            (self.bindings.get("show_project_yaml", "Shift+Tab"), "workspace project YAML"),
+            (
+                self.bindings.get("search_history", "Ctrl+R"),
+                "previous request",
+            ),
+            (
+                self.bindings.get("show_project_yaml", "Shift+Tab"),
+                "workspace project YAML",
+            ),
             ("/ · ↑/↓ · Tab · Enter", "command palette"),
             ("@", "workspace file picker"),
             ("Ctrl+G", "external editor"),
@@ -54,7 +63,9 @@ class ShortcutOverlay(ModalScreen[None]):
             yield Static(text, id="shortcut-summary")
 
     def on_mount(self) -> None:
-        self.query_one("#shortcut-summary", Static).border_title = "Keyboard shortcuts"
+        self.query_one("#shortcut-summary", Static).border_title = (
+            "Keyboard shortcuts"
+        )
 
     def action_close(self) -> None:
         self.dismiss(None)

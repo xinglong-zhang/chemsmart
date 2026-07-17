@@ -18,7 +18,6 @@ from chemsmart.agent.harness.command_rules.tokens import (
     option_value,
 )
 
-
 COORDINATE_FLAGS = ("-c", "--coordinates")
 SCAN_FLAGS = {
     "gaussian": {
@@ -48,9 +47,11 @@ def coordinate_contract_issues(
     if missing:
         issues.append(
             reject(
-                "cmd.contract.scan_required_parameters"
-                if job == "scan"
-                else "cmd.contract.modred_coordinates_required",
+                (
+                    "cmd.contract.scan_required_parameters"
+                    if job == "scan"
+                    else "cmd.contract.modred_coordinates_required"
+                ),
                 f"{program} {job} is missing required coordinate parameters",
                 {"program": program, "job": job, "missing": missing},
                 tuple(missing),

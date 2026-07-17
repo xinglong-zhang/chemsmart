@@ -26,15 +26,20 @@ from chemsmart.agent.permissions import (
 )
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
-from chemsmart.agent.services.session_store import (
-    SessionMigrationError,
-    migrate_legacy_session,
-    resolve_session_source,
+from chemsmart.agent.services.cli_presenters import (
+    first_dry_run_result,
+    format_wizard_validation_errors,
+    get_gateway_url,
+    is_advisory_plan,
+    principal_args,
 )
-from chemsmart.agent.services.session_listing import (
-    format_session_age,
-    load_session_snapshots,
-    truncate_session_request,
+from chemsmart.agent.services.cli_presenters import (
+    sanitize_inline_cli_output as sanitize_inline_cli_output,
+)
+from chemsmart.agent.services.cli_presenters import (
+    tool_description,
+    wizard_refresh_table,
+    wizard_verify_table,
 )
 from chemsmart.agent.services.command_logging import (
     _apply_third_party_silence,
@@ -42,16 +47,15 @@ from chemsmart.agent.services.command_logging import (
     _flush_logging_handlers,
     _silence_console_logging,
 )
-from chemsmart.agent.services.cli_presenters import (
-    first_dry_run_result,
-    format_wizard_validation_errors,
-    get_gateway_url,
-    is_advisory_plan,
-    principal_args,
-    sanitize_inline_cli_output as sanitize_inline_cli_output,
-    tool_description,
-    wizard_refresh_table,
-    wizard_verify_table,
+from chemsmart.agent.services.session_listing import (
+    format_session_age,
+    load_session_snapshots,
+    truncate_session_request,
+)
+from chemsmart.agent.services.session_store import (
+    SessionMigrationError,
+    migrate_legacy_session,
+    resolve_session_source,
 )
 from chemsmart.agent.wizard import (
     ProbeRunner,
@@ -165,11 +169,11 @@ def dump_cli_schema(out_path: Path | None) -> None:
 def doctor(no_ping: bool):
     """Validate agent.yaml, provider connectivity, and registered tools."""
     with _agent_command_logging():
+        import chemsmart.agent.providers as providers
         from chemsmart.agent.provider_config import (
             AgentProviderConfigError,
             load_active_provider_config,
         )
-        import chemsmart.agent.providers as providers
 
         try:
             provider_config = load_active_provider_config()
@@ -602,9 +606,7 @@ def _agent_command_logging():
     debug = _agent_debug_enabled()
     if verbose:
         _enable_console_logging()
-        _apply_third_party_silence(
-            logging.DEBUG if debug else logging.WARNING
-        )
+        _apply_third_party_silence(logging.DEBUG if debug else logging.WARNING)
         logger.debug("Agent verbose logging enabled")
         try:
             yield

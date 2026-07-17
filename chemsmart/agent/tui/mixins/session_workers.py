@@ -284,4 +284,3 @@ class SessionWorkersMixin:
             runtime_v2=self.runtime_v2,
         )
         return self.active_agent_session
-

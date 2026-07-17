@@ -1,4 +1,5 @@
 """Generated-input route invariants beyond gaussian.ts + evaluate_harness dispatch."""
+
 from __future__ import annotations
 
 from chemsmart.agent.harness.invariants.route_checks import (
@@ -36,17 +37,24 @@ def _run(kind: str, content: str):
 
 # --- unit: individual invariants -------------------------------------------
 
+
 def test_orca_freq_missing_freq_rejects():
     r = check_freq_route("!  hf sto-3g defgrid2", software="orca")
     assert r.verdict == "reject"
 
 
 def test_orca_freq_present_ok():
-    assert check_freq_route("! Opt Freq hf sto-3g", software="orca").verdict == "ok"
+    assert (
+        check_freq_route("! Opt Freq hf sto-3g", software="orca").verdict
+        == "ok"
+    )
 
 
 def test_freq_duplicate_rejects():
-    assert check_freq_route("! Opt Freq Freq hf", software="orca").verdict == "reject"
+    assert (
+        check_freq_route("! Opt Freq Freq hf", software="orca").verdict
+        == "reject"
+    )
 
 
 def test_orca_ts_missing_optts_rejects():
@@ -58,21 +66,29 @@ def test_orca_ts_present_ok():
 
 
 def test_gaussian_irc_missing_keyword_rejects():
-    assert check_irc_route("#p opt b3lyp 6-31g*", software="gaussian").verdict == "reject"
+    assert (
+        check_irc_route("#p opt b3lyp 6-31g*", software="gaussian").verdict
+        == "reject"
+    )
 
 
 def test_gaussian_irc_present_ok():
     assert (
-        check_irc_route("#p irc=(calcfc,forward) b3lyp", software="gaussian").verdict
+        check_irc_route(
+            "#p irc=(calcfc,forward) b3lyp", software="gaussian"
+        ).verdict
         == "ok"
     )
 
 
 # --- integration: evaluate_harness now dispatches per kind ------------------
 
+
 def test_evaluate_harness_dispatches_orca_freq():
     # regression for the silent ORCA freq bug: a freq job whose route lacks Freq
-    verdict, failed = _run("orca.freq", "!  hf sto-3g defgrid2\n* xyz 0 1\n*\n")
+    verdict, failed = _run(
+        "orca.freq", "!  hf sto-3g defgrid2\n* xyz 0 1\n*\n"
+    )
     assert verdict == "reject"
     assert "orca.freq.route" in failed
 

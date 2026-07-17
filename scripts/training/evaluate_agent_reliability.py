@@ -44,9 +44,10 @@ def _is_positive(
     require_intent: bool = False,
 ) -> bool:
     if source == "sub_terminal":
-        terminal_positive = (
-            row.get("grade") == "PASS_SUB_TERMINAL"
-            and terminal_state_is_positive(row.get("terminal_state"))
+        terminal_positive = row.get(
+            "grade"
+        ) == "PASS_SUB_TERMINAL" and terminal_state_is_positive(
+            row.get("terminal_state")
         )
         if not terminal_positive:
             return False
@@ -118,13 +119,15 @@ def evaluate(
                 "positive_trials": positives,
                 "failed_trials": trial_count - positives,
                 "pass_at_1": round(pass_at_1, 6),
-                "pass_power_k": round(pass_at_1**k, 6)
-                if enough_trials
-                else None,
-                "all_trials_pass": positives == trial_count
-                if enough_trials
-                else None,
-                "status": "measured" if enough_trials else "insufficient_trials",
+                "pass_power_k": (
+                    round(pass_at_1**k, 6) if enough_trials else None
+                ),
+                "all_trials_pass": (
+                    positives == trial_count if enough_trials else None
+                ),
+                "status": (
+                    "measured" if enough_trials else "insufficient_trials"
+                ),
                 "batch_ids": sorted(
                     {str(row.get("batch_id") or "unknown") for row in trials}
                 ),
@@ -148,16 +151,23 @@ def evaluate(
             "excluded_rows": excluded,
             "all_measured_groups_pass": bool(measured)
             and all(row["all_trials_pass"] for row in measured),
-            "mean_pass_at_1": round(
-                sum(row["pass_at_1"] for row in measured) / len(measured), 6
-            )
-            if measured
-            else None,
-            "mean_pass_power_k": round(
-                sum(row["pass_power_k"] for row in measured) / len(measured), 6
-            )
-            if measured
-            else None,
+            "mean_pass_at_1": (
+                round(
+                    sum(row["pass_at_1"] for row in measured) / len(measured),
+                    6,
+                )
+                if measured
+                else None
+            ),
+            "mean_pass_power_k": (
+                round(
+                    sum(row["pass_power_k"] for row in measured)
+                    / len(measured),
+                    6,
+                )
+                if measured
+                else None
+            ),
         },
     }
 

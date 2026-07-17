@@ -397,7 +397,9 @@ class Config:
             model = "chemsmart-qwen2.5-coder-3b-instruct-v13_1"
             cached = _local_model_is_cached()
             if cached:
-                click.echo("Model artifacts already cached; skipping download.")
+                click.echo(
+                    "Model artifacts already cached; skipping download."
+                )
                 hf_token = ""
             else:
                 hf_token = click.prompt(
@@ -417,9 +419,7 @@ class Config:
 
         # Switch active to the canonical provider key in the template.
         active_provider_key = (
-            "local_chemsmart_v13_1"
-            if active_name == "local"
-            else active_name
+            "local_chemsmart_v13_1" if active_name == "local" else active_name
         )
 
         self.chemsmart_agent.mkdir(parents=True, exist_ok=True)

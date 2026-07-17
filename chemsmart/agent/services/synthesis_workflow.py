@@ -27,9 +27,9 @@ from chemsmart.agent.services.synthesis_support import (
     _ensure_program_project,
     _extract_command_from_text,
     _is_project_name_missing,
+    _parse_json_response,
     _request_needs_workspace_project,
     _selected_project_for_command,
-    _parse_json_response,
 )
 from chemsmart.settings.workspace_project import resolve_workspace_project
 
@@ -513,9 +513,11 @@ class SynthesisWorkflowMixin:
         alternatives = normalized.get("alternatives") or []
         if isinstance(alternatives, list):
             normalized["alternatives"] = [
-                _ensure_program_project(str(item), self.default_project)
-                if isinstance(item, str)
-                else item
+                (
+                    _ensure_program_project(str(item), self.default_project)
+                    if isinstance(item, str)
+                    else item
+                )
                 for item in alternatives
             ]
         normalized["project"] = self.default_project

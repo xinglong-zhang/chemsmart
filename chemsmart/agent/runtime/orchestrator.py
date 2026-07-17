@@ -234,7 +234,11 @@ class RuntimeController:
         return True
 
     def completion_rule_ids(self) -> tuple[str, ...]:
-        phase = self.selection.phase if self.selection is not None else self.state.phase
+        phase = (
+            self.selection.phase
+            if self.selection is not None
+            else self.state.phase
+        )
         receipts = self.state.completed_tool_receipts
         if phase is TaskPhase.PROJECT and _project_authoring_requested(
             self.state.request
@@ -270,7 +274,11 @@ class RuntimeController:
         return ()
 
     def completion_notice(self) -> str:
-        phase = self.selection.phase if self.selection is not None else self.state.phase
+        phase = (
+            self.selection.phase
+            if self.selection is not None
+            else self.state.phase
+        )
         if (
             phase is TaskPhase.PROJECT
             and _project_authoring_requested(self.state.request)

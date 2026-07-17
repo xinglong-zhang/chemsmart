@@ -30,7 +30,9 @@ def score(matrix_path: Path, result_paths: list[Path]) -> dict[str, Any]:
             case_id = str(raw.get("case_id") or "")
             case = cases.get(case_id)
             if case is None:
-                raise ValueError(f"result references unknown case_id: {case_id}")
+                raise ValueError(
+                    f"result references unknown case_id: {case_id}"
+                )
             outcome = classify_agent_result(
                 status=str(raw.get("status") or ""),
                 expected_outcome=case.expected_outcome,

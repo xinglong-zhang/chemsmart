@@ -41,7 +41,9 @@ def test_ts_runtime_route_extra_rejects():
 
 def test_ts_true_extra_passes_spec_gate():
     issues = SI.check_spec(
-        _workflow("gaussian.ts", {"additional_opt_options_in_route": ["maxstep=8"]}),
+        _workflow(
+            "gaussian.ts", {"additional_opt_options_in_route": ["maxstep=8"]}
+        ),
         "TS search in Gaussian from mol.xyz with maxstep 8",
     )
 
@@ -80,7 +82,9 @@ def test_job_project_is_runtime_owned():
 
     issues = SI.check_spec(spec, "Freeze bond 1-2 in mol.xyz")
 
-    assert any(issue.rule_id == "spec.project.runtime_owned" for issue in issues)
+    assert any(
+        issue.rule_id == "spec.project.runtime_owned" for issue in issues
+    )
 
 
 def test_fragment_indices_with_underscore_counts_as_structural_slot():
@@ -89,7 +93,9 @@ def test_fragment_indices_with_underscore_counts_as_structural_slot():
         "Need a Gaussian DIAS job for mol.xyz; fragment_indices [[1], [2]].",
     )
 
-    assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]
+    assert not [
+        issue for issue in issues if issue.rule_id == "spec.decline_contract"
+    ]
 
 
 def test_chinese_atom_enumeration_satisfies_decline_contract():
@@ -98,7 +104,9 @@ def test_chinese_atom_enumeration_satisfies_decline_contract():
         "Pd、ipso-C 和 Br 分别是原子 1、2、3。保持当前角度。",
     )
 
-    assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]
+    assert not [
+        issue for issue in issues if issue.rule_id == "spec.decline_contract"
+    ]
 
 
 def test_db_record_selector_passes_for_db_file():
@@ -112,7 +120,9 @@ def test_db_record_selector_passes_for_db_file():
         "Run a Gaussian single point from structure 2 of record 1 in results.db",
     )
 
-    assert not [issue for issue in issues if issue.rule_id.startswith("spec.db.")]
+    assert not [
+        issue for issue in issues if issue.rule_id.startswith("spec.db.")
+    ]
 
 
 def test_db_selector_cardinality_rejects_missing_selector_for_db_file():
@@ -121,7 +131,9 @@ def test_db_selector_cardinality_rejects_missing_selector_for_db_file():
         "Run an ORCA single point from results.db",
     )
 
-    assert any(issue.rule_id == "spec.db.selector_cardinality" for issue in issues)
+    assert any(
+        issue.rule_id == "spec.db.selector_cardinality" for issue in issues
+    )
 
 
 def test_db_molecule_id_rejects_for_job_submission():
@@ -151,4 +163,6 @@ def test_db_selector_without_db_file_rejects():
         "Run Gaussian single point for mol.xyz",
     )
 
-    assert any(issue.rule_id == "spec.db.selector_without_db" for issue in issues)
+    assert any(
+        issue.rule_id == "spec.db.selector_without_db" for issue in issues
+    )

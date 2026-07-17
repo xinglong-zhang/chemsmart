@@ -21,7 +21,6 @@ from chemsmart.agent.project_yaml_values import (
     string_or_none,
 )
 
-
 _D3BJ_ALIASES = (
     "d3bj",
     "d3-bj",
@@ -343,11 +342,11 @@ def _extract_solvent(lowered: str) -> dict[str, str | None]:
     model = (
         "smd"
         if "smd" in lowered
-        else "cpcm"
-        if "cpcm" in lowered
-        else "pcm"
-        if "pcm" in lowered
-        else None
+        else (
+            "cpcm"
+            if "cpcm" in lowered
+            else "pcm" if "pcm" in lowered else None
+        )
     )
     if model is None:
         return {"solvent_model": None, "solvent_id": None}

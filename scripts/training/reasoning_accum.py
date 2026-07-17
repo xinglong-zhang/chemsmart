@@ -84,7 +84,11 @@ class CostMeter:
     def record(self, usage: Any) -> None:
         if not usage:
             return
-        get = usage.get if isinstance(usage, dict) else lambda k, d=None: getattr(usage, k, d)
+        get = (
+            usage.get
+            if isinstance(usage, dict)
+            else lambda k, d=None: getattr(usage, k, d)
+        )
         self.calls += 1
         self.prompt_tokens += int(get("prompt_tokens", 0) or 0)
         self.completion_tokens += int(get("completion_tokens", 0) or 0)
@@ -113,6 +117,8 @@ class CostMeter:
             "budget_usd": self.budget_usd,
             "priced": self.rate is not None,
         }
+
+
 H2O_XYZ = (
     "3\n"
     "water-like placeholder\n"
@@ -132,16 +138,66 @@ class CorpusItem:
 
 
 AGENT_DOMAIN_CORPUS: list[CorpusItem] = [
-    CorpusItem("sp", "orca", "Run a DLPNO-CCSD(T) single-point energy calculation on the optimized iron complex. I need a complete basis set (CBS) extrapolation using def2-TZVPP and def2-QZVPP, along with the corresponding def2-TZVPP/C and def2-QZVPP/C auxiliary basis sets.", "dlpno_ccsd_t_cbs"),
-    CorpusItem("ts", "gaussian", "Locate the transition state for the concerted [4+2] cycloaddition using the Berny algorithm with a pre-calculated analytical Hessian (calcall).", "ts_opt_calcall"),
-    CorpusItem("irc", "gaussian", "Wait, freeze the core backbone atoms using modredundant. After finding the saddle point, confirm it has exactly one imaginary frequency corresponding to the proton transfer, then run a MaxPoints=30 IRC.", "irc_validation"),
-    CorpusItem("opt", "gaussian", "Optimize this fluorinated intermediate using the SMD solvation model for 1,2-dichloroethane.", "implicit_solvation_smd"),
-    CorpusItem("nci", "gaussian", "Run a Hirshfeld population analysis alongside a standard Mulliken charge analysis on this transition metal complex, then perform NCI analysis.", "nci_population"),
-    CorpusItem("sp", "gaussian", "Evaluate the spin-state energetics of this octahedral Fe(II) complex. I need geometry optimizations for the low-spin (S=0), intermediate-spin (S=1), and high-spin (S=2) states.", "spin_state_energetics"),
-    CorpusItem("opt", "orca", "Set up an open-shell broken-symmetry DFT calculation for a dinuclear copper complex, charge +2, multiplicity 1 (antiferromagnetic coupling). Use B3LYP with def2-SVP.", "broken_symmetry_dft"),
-    CorpusItem("modred", "orca", "Perform a relaxed surface scan on the C-C bond length from 1.5 to 2.5 Angstroms in 10 steps using ORCA, neutral singlet.", "relaxed_surface_scan"),
-    CorpusItem("sp", "gaussian", "Calculate the NMR shielding tensors for this organic molecule using the GIAO method at the m062x/def2-tzvp level.", "nmr_giao"),
-    CorpusItem("ts", "orca", "Optimize the transition state for the bulky chiral phosphoric acid catalyzed step. Use Cartesian coordinates with the GEDIIS algorithm.", "ts_opt_gediis")
+    CorpusItem(
+        "sp",
+        "orca",
+        "Run a DLPNO-CCSD(T) single-point energy calculation on the optimized iron complex. I need a complete basis set (CBS) extrapolation using def2-TZVPP and def2-QZVPP, along with the corresponding def2-TZVPP/C and def2-QZVPP/C auxiliary basis sets.",
+        "dlpno_ccsd_t_cbs",
+    ),
+    CorpusItem(
+        "ts",
+        "gaussian",
+        "Locate the transition state for the concerted [4+2] cycloaddition using the Berny algorithm with a pre-calculated analytical Hessian (calcall).",
+        "ts_opt_calcall",
+    ),
+    CorpusItem(
+        "irc",
+        "gaussian",
+        "Wait, freeze the core backbone atoms using modredundant. After finding the saddle point, confirm it has exactly one imaginary frequency corresponding to the proton transfer, then run a MaxPoints=30 IRC.",
+        "irc_validation",
+    ),
+    CorpusItem(
+        "opt",
+        "gaussian",
+        "Optimize this fluorinated intermediate using the SMD solvation model for 1,2-dichloroethane.",
+        "implicit_solvation_smd",
+    ),
+    CorpusItem(
+        "nci",
+        "gaussian",
+        "Run a Hirshfeld population analysis alongside a standard Mulliken charge analysis on this transition metal complex, then perform NCI analysis.",
+        "nci_population",
+    ),
+    CorpusItem(
+        "sp",
+        "gaussian",
+        "Evaluate the spin-state energetics of this octahedral Fe(II) complex. I need geometry optimizations for the low-spin (S=0), intermediate-spin (S=1), and high-spin (S=2) states.",
+        "spin_state_energetics",
+    ),
+    CorpusItem(
+        "opt",
+        "orca",
+        "Set up an open-shell broken-symmetry DFT calculation for a dinuclear copper complex, charge +2, multiplicity 1 (antiferromagnetic coupling). Use B3LYP with def2-SVP.",
+        "broken_symmetry_dft",
+    ),
+    CorpusItem(
+        "modred",
+        "orca",
+        "Perform a relaxed surface scan on the C-C bond length from 1.5 to 2.5 Angstroms in 10 steps using ORCA, neutral singlet.",
+        "relaxed_surface_scan",
+    ),
+    CorpusItem(
+        "sp",
+        "gaussian",
+        "Calculate the NMR shielding tensors for this organic molecule using the GIAO method at the m062x/def2-tzvp level.",
+        "nmr_giao",
+    ),
+    CorpusItem(
+        "ts",
+        "orca",
+        "Optimize the transition state for the bulky chiral phosphoric acid catalyzed step. Use Cartesian coordinates with the GEDIIS algorithm.",
+        "ts_opt_gediis",
+    ),
 ]
 
 WORKFLOW_HARD_CORPUS: list[CorpusItem] = [
@@ -377,80 +433,448 @@ COMMAND_HARD_CORPUS: list[CorpusItem] = [
 # phrasing gets misrouted into project-YAML authoring.
 
 AGENT_QMMM_CORPUS: list[CorpusItem] = [
-    CorpusItem("qmmm", "orca", "Run a QM/MM optimization of the enzyme-substrate complex in enzyme.xyz. Treat atoms 1-25 at the QM level (B3LYP/def2-SVP) and the rest at the MM level. I have the force field file prepared.", "orca_qmmm_basic", "hard"),
-    CorpusItem("qmmm", "orca", "Set up an ORCA QM/MM frequency calculation for protein_opt.xyz. The high-level region is atoms 15-40. Charge is -1 and multiplicity is 2, but wait, the QM region itself has a charge of -1 and multiplicity 2, while the MM region is neutral. Figure out how to specify this.", "orca_qmmm_charge_spin", "hard"),
-    CorpusItem("qmmm", "gaussian", "I want a 2-layer ONIOM (B3LYP/6-31G*:UFF) optimization on complex.xyz. The real system has charge +1 and multiplicity 1, and the model system is neutral singlet. Make sure the charge/multiplicity scope is correctly mapped.", "gaussian_oniom_opt", "hard"),
-    CorpusItem("qmmm", "gaussian", "Gaussian QM/MM (ONIOM) single point energy on the snapshot from my MD simulation (snapshot_100.xyz). High level: M06-2X/def2-TZVP. Low level: AMBER. The total system charge is -2, multiplicity 1. Model system charge is -1, multiplicity 1.", "gaussian_oniom_sp", "hard"),
-    CorpusItem("qmmm", "orca", "Do a QM/MM MD simulation step using ORCA for solvated_box.xyz. High layer atoms are 1-15. Ensure you use the current project settings and don't forget the total charge/multiplicity and QM region charge/multiplicity. It's all neutral singlets.", "orca_qmmm_md", "hard"),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run a QM/MM optimization of the enzyme-substrate complex in enzyme.xyz. Treat atoms 1-25 at the QM level (B3LYP/def2-SVP) and the rest at the MM level. I have the force field file prepared.",
+        "orca_qmmm_basic",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Set up an ORCA QM/MM frequency calculation for protein_opt.xyz. The high-level region is atoms 15-40. Charge is -1 and multiplicity is 2, but wait, the QM region itself has a charge of -1 and multiplicity 2, while the MM region is neutral. Figure out how to specify this.",
+        "orca_qmmm_charge_spin",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "gaussian",
+        "I want a 2-layer ONIOM (B3LYP/6-31G*:UFF) optimization on complex.xyz. The real system has charge +1 and multiplicity 1, and the model system is neutral singlet. Make sure the charge/multiplicity scope is correctly mapped.",
+        "gaussian_oniom_opt",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "gaussian",
+        "Gaussian QM/MM (ONIOM) single point energy on the snapshot from my MD simulation (snapshot_100.xyz). High level: M06-2X/def2-TZVP. Low level: AMBER. The total system charge is -2, multiplicity 1. Model system charge is -1, multiplicity 1.",
+        "gaussian_oniom_sp",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Do a QM/MM MD simulation step using ORCA for solvated_box.xyz. High layer atoms are 1-15. Ensure you use the current project settings and don't forget the total charge/multiplicity and QM region charge/multiplicity. It's all neutral singlets.",
+        "orca_qmmm_md",
+        "hard",
+    ),
 ]
 
 AGENT_RARE_CORPUS: list[CorpusItem] = [
-    CorpusItem("td", "gaussian", "Calculate the first 15 excited singlet and triplet states of OLED_emitter.xyz using TD-DFT in Gaussian. Also account for solvation in THF.", "gaussian_tddft_oled", "hard"),
-    CorpusItem("modred", "orca", "I need to do a relaxed surface scan using ORCA modredundant for conformer_scan.xyz. Scan the dihedral angle between atoms 4 5 6 7 from 0 to 180 degrees in 18 steps.", "orca_modred_scan", "hard"),
-    CorpusItem("qrc", "orca", "The TS optimization finished (ts_final.xyz). Now I need to run an ORCA QRC (Quasi-Reaction Coordinate) calculation to verify it connects the correct minimums. Neutral singlet.", "orca_qrc_verify", "hard"),
-    CorpusItem("crest", "gaussian", "Run a CREST conformational sampling for this highly flexible macrocycle (macrocycle.xyz) before I do DFT optimizations. Use the semiempirical GFN2-xTB level.", "gaussian_crest_sampling", "hard"),
-    CorpusItem("modred", "orca", "Freeze the distance between the metal center (atom 1) and the ligand nitrogen (atom 15) at 2.1 Angstroms in ORCA, then optimize the rest of the structure. Charge +2, spin 1.", "orca_modred_freeze", "hard"),
+    CorpusItem(
+        "td",
+        "gaussian",
+        "Calculate the first 15 excited singlet and triplet states of OLED_emitter.xyz using TD-DFT in Gaussian. Also account for solvation in THF.",
+        "gaussian_tddft_oled",
+        "hard",
+    ),
+    CorpusItem(
+        "modred",
+        "orca",
+        "I need to do a relaxed surface scan using ORCA modredundant for conformer_scan.xyz. Scan the dihedral angle between atoms 4 5 6 7 from 0 to 180 degrees in 18 steps.",
+        "orca_modred_scan",
+        "hard",
+    ),
+    CorpusItem(
+        "qrc",
+        "orca",
+        "The TS optimization finished (ts_final.xyz). Now I need to run an ORCA QRC (Quasi-Reaction Coordinate) calculation to verify it connects the correct minimums. Neutral singlet.",
+        "orca_qrc_verify",
+        "hard",
+    ),
+    CorpusItem(
+        "crest",
+        "gaussian",
+        "Run a CREST conformational sampling for this highly flexible macrocycle (macrocycle.xyz) before I do DFT optimizations. Use the semiempirical GFN2-xTB level.",
+        "gaussian_crest_sampling",
+        "hard",
+    ),
+    CorpusItem(
+        "modred",
+        "orca",
+        "Freeze the distance between the metal center (atom 1) and the ligand nitrogen (atom 15) at 2.1 Angstroms in ORCA, then optimize the rest of the structure. Charge +2, spin 1.",
+        "orca_modred_freeze",
+        "hard",
+    ),
 ]
 
 
 AGENT_REPAIR_FODDER: list[CorpusItem] = [
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys1.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_1", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys2.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_2", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys3.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_3", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys4.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_4", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys5.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_5", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys6.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_6", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys7.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_7", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys8.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_8", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys9.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_9", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys10.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_10", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys11.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_11", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys12.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_12", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys13.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_13", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys14.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_14", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys15.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_15", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys16.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_16", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys17.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_17", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys18.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_18", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys19.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_19", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys20.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_20", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys21.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_21", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys22.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_22", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys23.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_23", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys24.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_24", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys25.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_25", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys26.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_26", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys27.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_27", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys28.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_28", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys29.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_29", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys30.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_30", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys31.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_31", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys32.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_32", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys33.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_33", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys34.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_34", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys35.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_35", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys36.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_36", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys37.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_37", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys38.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_38", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys39.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_39", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys40.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_40", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys41.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_41", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys42.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_42", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys43.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_43", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys44.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_44", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys45.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_45", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys46.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_46", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys47.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_47", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys48.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_48", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys49.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_49", "hard"),
-    CorpusItem("qmmm", "orca", "Run ORCA QM/MM optimization on sys50.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.", "orca_qmmm_repair_50", "hard"),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys1.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_1",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys2.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_2",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys3.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_3",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys4.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_4",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys5.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_5",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys6.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_6",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys7.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_7",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys8.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_8",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys9.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_9",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys10.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_10",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys11.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_11",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys12.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_12",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys13.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_13",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys14.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_14",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys15.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_15",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys16.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_16",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys17.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_17",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys18.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_18",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys19.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_19",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys20.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_20",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys21.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_21",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys22.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_22",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys23.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_23",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys24.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_24",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys25.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_25",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys26.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_26",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys27.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_27",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys28.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_28",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys29.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_29",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys30.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_30",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys31.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_31",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys32.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_32",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys33.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_33",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys34.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_34",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys35.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_35",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys36.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_36",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys37.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_37",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys38.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_38",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys39.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_39",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys40.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_40",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys41.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_41",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys42.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_42",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys43.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_43",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys44.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_44",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys45.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_45",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys46.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_46",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys47.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_47",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys48.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_48",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys49.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 1 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_49",
+        "hard",
+    ),
+    CorpusItem(
+        "qmmm",
+        "orca",
+        "Run ORCA QM/MM optimization on sys50.xyz with QM atoms 1-10. Wait, I forgot to tell you the total charge is 0 and total multiplicity is 1. Figure out the flags.",
+        "orca_qmmm_repair_50",
+        "hard",
+    ),
 ]
 
 GOAL_BATCH_CORPORA = {}
 for batch_name, prompts in BATCHES.items():
     items = []
     for i, p in enumerate(prompts):
-        items.append(CorpusItem(kind="mixed", program="mixed", request=p, workflow=f"{batch_name}_{i}", difficulty="hard"))
+        items.append(
+            CorpusItem(
+                kind="mixed",
+                program="mixed",
+                request=p,
+                workflow=f"{batch_name}_{i}",
+                difficulty="hard",
+            )
+        )
     GOAL_BATCH_CORPORA[batch_name] = items
 
 GAP_FILL_CORPUS: list[CorpusItem] = [
@@ -632,9 +1056,7 @@ GAP_FILL_WIDE_CORPUS: list[CorpusItem] = [
         kind="qrc",
         program="gaussian",
         workflow="qrc_lab_shorthand",
-        request=(
-            "qrc off ts_a.log, chg 0 mult 1, current proj, cmd only pls"
-        ),
+        request=("qrc off ts_a.log, chg 0 mult 1, current proj, cmd only pls"),
     ),
     CorpusItem(
         kind="qrc",
@@ -997,8 +1419,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    os.environ["PATH"] = (
-        "/opt/anaconda3/envs/chemsmart/bin:" + os.environ.get("PATH", "")
+    os.environ["PATH"] = "/opt/anaconda3/envs/chemsmart/bin:" + os.environ.get(
+        "PATH", ""
     )
     sys.path.insert(0, str(REPO))
     os.chdir(REPO)
@@ -1041,7 +1463,9 @@ def main(argv: list[str] | None = None) -> int:
             if tools:
                 kwargs["tools"] = tools
             meter.check()
-            payload = self._client.chat.completions.create(**kwargs).model_dump()
+            payload = self._client.chat.completions.create(
+                **kwargs
+            ).model_dump()
             meter.record(payload.get("usage"))
             return payload
 
@@ -1127,7 +1551,10 @@ def main(argv: list[str] | None = None) -> int:
         f"== {args.model}: {tally} | with_reasoning={with_reasoning}/{len(results)} ==",
         flush=True,
     )
-    print(f"== spend: {json.dumps(meter.summary(), sort_keys=True)} ==", flush=True)
+    print(
+        f"== spend: {json.dumps(meter.summary(), sort_keys=True)} ==",
+        flush=True,
+    )
     return 0
 
 
@@ -1167,7 +1594,9 @@ def _run_one(
     try:
         session = AgentSession(
             provider=provider,
-            registry=ToolRegistry.default(groups=["synthesis", "project_yaml"]),
+            registry=ToolRegistry.default(
+                groups=["synthesis", "project_yaml"]
+            ),
             session_root=work / "sessions" / task_id,
             stage_prompt="unified_agent.md",
         )
@@ -1187,9 +1616,7 @@ def _run_one(
             command = str(synth.get("command") or "").strip()
             semantic = synth.get("semantic") or {}
             verdict = (
-                semantic.get("verdict")
-                if isinstance(semantic, dict)
-                else None
+                semantic.get("verdict") if isinstance(semantic, dict) else None
             )
             record["command"] = command
             record["gate"] = verdict
@@ -1253,7 +1680,9 @@ def _write_collection_plan(
                 "workflow": item.workflow,
                 "workspace_yaml_policy": "one project YAML per task workspace",
             }
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            handle.write(
+                json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+            )
     return path
 
 
@@ -1402,7 +1831,9 @@ def _append_results(run_dir: Path, results: list[dict[str, Any]]) -> None:
     path = run_dir / "reasoning_accum_results.jsonl"
     with path.open("a", encoding="utf-8") as handle:
         for row in results:
-            handle.write(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n")
+            handle.write(
+                json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n"
+            )
 
 
 if __name__ == "__main__":

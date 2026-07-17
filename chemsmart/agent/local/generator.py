@@ -20,9 +20,11 @@ _SYSTEM_PROMPT_FILE = "planner_compact.md"
 
 def load_system_prompt() -> str:
     """Return the planner_compact system prompt shipped next to this module."""
-    return resources.files("chemsmart.agent.local").joinpath(
-        _SYSTEM_PROMPT_FILE
-    ).read_text(encoding="utf-8")
+    return (
+        resources.files("chemsmart.agent.local")
+        .joinpath(_SYSTEM_PROMPT_FILE)
+        .read_text(encoding="utf-8")
+    )
 
 
 def render_chat(
@@ -97,7 +99,7 @@ def generate_plan(
             pad_token_id=tokenizer.eos_token_id,
         )
 
-    generated = outputs[0][inputs["input_ids"].shape[1]:]
+    generated = outputs[0][inputs["input_ids"].shape[1] :]
     raw = tokenizer.decode(generated, skip_special_tokens=True)
     plan = _parse_planner_json(raw)
     if apply_postprocessor:

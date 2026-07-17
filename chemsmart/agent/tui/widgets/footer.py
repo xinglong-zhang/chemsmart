@@ -117,7 +117,9 @@ class FooterWidget(Static):
             self.reducer.update(project=project)
         self._refresh_text()
 
-    def set_yaml_status(self, *, loaded: bool, label: str | None = None) -> None:
+    def set_yaml_status(
+        self, *, loaded: bool, label: str | None = None
+    ) -> None:
         self.reducer.update(
             yaml_loaded=bool(loaded),
             yaml_label=label or ("YAML OK" if loaded else "YAML MISSING"),

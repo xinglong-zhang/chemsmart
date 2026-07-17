@@ -14,11 +14,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import PurePath
 from typing import Any, Literal
 
-from chemsmart.agent.harness.workflow_state import project_name_from_request
 from chemsmart.agent.harness.value_equivalence import (
     structured_sequence,
     unwrap_singleton_group,
 )
+from chemsmart.agent.harness.workflow_state import project_name_from_request
 from chemsmart.agent.model_command_parser import parse_model_command
 
 IntentVerdict = Literal["ok", "reject"]
@@ -80,11 +80,11 @@ class IntentSpec:
             input_path=_input_path_from_request(text),
             charge=charge,
             multiplicity=multiplicity,
-            execution_mode="submit"
-            if action == "sub"
-            else "local"
-            if action == "run"
-            else None,
+            execution_mode=(
+                "submit"
+                if action == "sub"
+                else "local" if action == "run" else None
+            ),
             chemistry=chemistry,
         )
 
@@ -233,8 +233,7 @@ def _apply_coordinate_request(
     if bond:
         chemistry["coordinates"] = [int(bond.group(1)), int(bond.group(2))]
     frozen = re.search(
-        r"\b(?:freez\w*|keep\w*)\s+(?:the\s+)?bond\s+"
-        r"(\d+)\s*[-–]\s*(\d+)",
+        r"\b(?:freez\w*|keep\w*)\s+(?:the\s+)?bond\s+" r"(\d+)\s*[-–]\s*(\d+)",
         lowered,
     )
     if not frozen:
@@ -303,11 +302,11 @@ class ObservedIntent:
             output_path=None,
             charge=parsed.charge,
             multiplicity=parsed.multiplicity,
-            execution_mode="submit"
-            if parsed.action == "sub"
-            else "local"
-            if parsed.action == "run"
-            else None,
+            execution_mode=(
+                "submit"
+                if parsed.action == "sub"
+                else "local" if parsed.action == "run" else None
+            ),
             chemistry=chemistry,
         )
 
@@ -439,9 +438,11 @@ def evaluate_intent(
                     id="intent.chemistry.route_contains",
                     expected=expected_value,
                     observed=route,
-                    status="pass"
-                    if str(expected_value).lower() in route.lower()
-                    else "fail",
+                    status=(
+                        "pass"
+                        if str(expected_value).lower() in route.lower()
+                        else "fail"
+                    ),
                 )
             )
         else:

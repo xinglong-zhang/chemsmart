@@ -153,9 +153,7 @@ def test_missing_job_subcommand_rejects_before_safe_execution(
     )
 
     assert result.verdict == "reject"
-    assert result.failed_rule_ids == [
-        "cmd.contract.job_subcommand_required"
-    ]
+    assert result.failed_rule_ids == ["cmd.contract.job_subcommand_required"]
     assert result.missing_info == [
         "explicit gaussian computational job subcommand"
     ]
@@ -192,10 +190,7 @@ def test_db_record_selector_shape_passes_to_safe_execution(
         from pathlib import Path
 
         (Path(_kwargs["cwd"]) / "record_sp.com").write_text(
-            (
-                "# b3lyp/def2svp\n\nrecord\n\n0 1\n"
-                "H 0 0 0\nH 0 0 0.74\n\n"
-            ),
+            ("# b3lyp/def2svp\n\nrecord\n\n0 1\n" "H 0 0 0\nH 0 0 0.74\n\n"),
             encoding="utf-8",
         )
         return subprocess.CompletedProcess(argv, 0, "", "")

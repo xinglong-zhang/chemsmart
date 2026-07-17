@@ -510,9 +510,7 @@ class ToolLoop:
         tool_defs: list[dict[str, Any]],
         allowed_tool_names: set[str],
     ) -> list[dict[str, Any]]:
-        return _filter_tool_defs(
-            provider_name, tool_defs, allowed_tool_names
-        )
+        return _filter_tool_defs(provider_name, tool_defs, allowed_tool_names)
 
     def _store_result_handle(
         self,

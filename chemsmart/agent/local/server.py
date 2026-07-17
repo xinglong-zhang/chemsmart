@@ -94,7 +94,7 @@ def build_app(bundle: Any) -> Any:
 
 
 def _extract_user_query(
-    messages: list[dict[str, Any]]
+    messages: list[dict[str, Any]],
 ) -> tuple[str, list[dict[str, str]]]:
     """Return the last user message and the prior non-system turns as history.
 

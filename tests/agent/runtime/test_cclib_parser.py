@@ -7,7 +7,6 @@ import pytest
 from chemsmart.agent.runtime import cclib_parser
 from chemsmart.agent.runtime.calculations import inspect_output
 
-
 REPO_ROOT = Path(__file__).parents[3]
 
 
@@ -63,7 +62,9 @@ def test_cclib_parser_failure_is_evidence_not_calculation_failure(
         def parse(self):
             raise IndexError("ORCA 6 SCF layout")
 
-    monkeypatch.setattr(cclib_parser, "ccopen", lambda *args, **kwargs: BrokenParser())
+    monkeypatch.setattr(
+        cclib_parser, "ccopen", lambda *args, **kwargs: BrokenParser()
+    )
 
     summary = inspect_output(output, program="orca", kind="sp")
 

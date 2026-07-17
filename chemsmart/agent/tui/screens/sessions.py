@@ -87,7 +87,9 @@ class SessionsScreen(ModalScreen[str | None]):
     def _load_session_ids(self) -> list[str]:
         if not self.session_root.exists():
             return []
-        return [path.name for path in agent_session_dirs(self.session_root)[:10]]
+        return [
+            path.name for path in agent_session_dirs(self.session_root)[:10]
+        ]
 
     def _render_text(self) -> str:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]

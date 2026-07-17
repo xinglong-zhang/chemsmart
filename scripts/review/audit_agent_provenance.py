@@ -15,7 +15,6 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Iterable, Sequence
 
-
 TEXT_SUFFIXES = {
     ".css",
     ".js",
@@ -53,8 +52,7 @@ SKIP_NAMES = {
     "yarn.lock",
 }
 TOKEN_RE = re.compile(
-    r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|"
-    r"==|!=|<=|>=|:=|->|=>|::|&&|\|\|"
+    r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|" r"==|!=|<=|>=|:=|->|=>|::|&&|\|\|"
 )
 BLAME_HEADER_RE = re.compile(r"^([0-9a-f^]{40}) \d+ \d+(?: \d+)?$")
 
@@ -140,7 +138,9 @@ def is_text_candidate(path: Path) -> bool:
     )
 
 
-def read_text_document(root: Path, path: Path, source: str) -> TextDocument | None:
+def read_text_document(
+    root: Path, path: Path, source: str
+) -> TextDocument | None:
     if not is_text_candidate(path) or path.stat().st_size > 1_000_000:
         return None
     try:
@@ -226,7 +226,9 @@ def _blame_counts(repo: Path, head: str, path: str) -> list[dict[str, object]]:
     ]
 
 
-def production_lineage(repo: Path, head: str, boundary: str) -> list[dict[str, object]]:
+def production_lineage(
+    repo: Path, head: str, boundary: str
+) -> list[dict[str, object]]:
     boundary_commit = run_git(repo, "rev-parse", boundary)
     rows: list[dict[str, object]] = []
     for path in tracked_paths(repo, "chemsmart/agent"):
@@ -270,7 +272,9 @@ def _line_shingle_index(
     for document_index, document in enumerate(documents):
         lines = document.nonblank_lines
         for position in range(len(lines) - width + 1):
-            key = token_hash(tuple(value for _, value in lines[position : position + width]))
+            key = token_hash(
+                tuple(value for _, value in lines[position : position + width])
+            )
             index[key].append((document_index, position))
     return index
 
@@ -296,8 +300,13 @@ def exact_line_matches(
                     ]
                 )
             )
-            for candidate_index_value, candidate_position in candidate_index.get(key, ()):
-                candidate_lines = candidates[candidate_index_value].nonblank_lines
+            for (
+                candidate_index_value,
+                candidate_position,
+            ) in candidate_index.get(key, ()):
+                candidate_lines = candidates[
+                    candidate_index_value
+                ].nonblank_lines
                 left = 0
                 while (
                     candidate_position - left > 0
@@ -381,7 +390,9 @@ def exact_token_matches(
         external_tokens = external.tokens
         for source_position in range(len(external_tokens) - anchor_tokens + 1):
             anchor = token_hash(
-                external_tokens[source_position : source_position + anchor_tokens]
+                external_tokens[
+                    source_position : source_position + anchor_tokens
+                ]
             )
             occurrences = candidate_index.get(anchor, ())
             if len(occurrences) > 200:
@@ -443,7 +454,9 @@ def _python_units(document_index: int, text: str) -> list[Unit]:
     lines = text.splitlines()
     units: list[Unit] = []
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        if not isinstance(
+            node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
             continue
         end = int(getattr(node, "end_lineno", node.lineno))
         tokens = tokenize("\n".join(lines[node.lineno - 1 : end]))
@@ -452,11 +465,15 @@ def _python_units(document_index: int, text: str) -> list[Unit]:
     return units
 
 
-def _split_unit(document_index: int, start: int, tokens: tuple[str, ...]) -> list[Unit]:
+def _split_unit(
+    document_index: int, start: int, tokens: tuple[str, ...]
+) -> list[Unit]:
     if len(tokens) <= 800:
         return [Unit(document_index, start, tokens)]
     return [
-        Unit(document_index, start + position, tokens[position : position + 400])
+        Unit(
+            document_index, start + position, tokens[position : position + 400]
+        )
         for position in range(0, len(tokens) - 99, 200)
     ]
 
@@ -472,7 +489,13 @@ def comparison_units(documents: Sequence[TextDocument]) -> list[Unit]:
             if len(tokens) < width:
                 continue
             for position in range(0, len(tokens) - width + 1, width // 2):
-                units.append(Unit(document_index, position + 1, tokens[position : position + width]))
+                units.append(
+                    Unit(
+                        document_index,
+                        position + 1,
+                        tokens[position : position + width],
+                    )
+                )
     return units
 
 
@@ -488,21 +511,26 @@ def near_token_matches(
     anchors: dict[str, set[int]] = defaultdict(set)
     for unit_index, unit in enumerate(candidate_units):
         for position in range(0, len(unit.tokens) - anchor_tokens + 1, 4):
-            anchors[token_hash(unit.tokens[position : position + anchor_tokens])].add(
-                unit_index
-            )
+            anchors[
+                token_hash(unit.tokens[position : position + anchor_tokens])
+            ].add(unit_index)
     seen_pairs: set[tuple[int, int]] = set()
     matches: list[Match] = []
     for external_unit_index, external_unit in enumerate(external_units):
         candidates_for_unit: Counter[int] = Counter()
-        for position in range(0, len(external_unit.tokens) - anchor_tokens + 1, 4):
+        for position in range(
+            0, len(external_unit.tokens) - anchor_tokens + 1, 4
+        ):
             key = token_hash(
                 external_unit.tokens[position : position + anchor_tokens]
             )
             unit_ids = anchors.get(key, ())
             if len(unit_ids) <= 40:
                 candidates_for_unit.update(unit_ids)
-        for candidate_unit_index, shared_anchors in candidates_for_unit.most_common(20):
+        for (
+            candidate_unit_index,
+            shared_anchors,
+        ) in candidates_for_unit.most_common(20):
             if shared_anchors < 2:
                 continue
             pair = (candidate_unit_index, external_unit_index)
@@ -510,9 +538,9 @@ def near_token_matches(
                 continue
             seen_pairs.add(pair)
             candidate_unit = candidate_units[candidate_unit_index]
-            length_ratio = min(len(candidate_unit.tokens), len(external_unit.tokens)) / max(
+            length_ratio = min(
                 len(candidate_unit.tokens), len(external_unit.tokens)
-            )
+            ) / max(len(candidate_unit.tokens), len(external_unit.tokens))
             if length_ratio < minimum_similarity:
                 continue
             matcher = SequenceMatcher(
@@ -543,14 +571,22 @@ def near_token_matches(
             )
     return sorted(
         matches,
-        key=lambda match: (-match.similarity, -match.tokens, match.candidate_path),
+        key=lambda match: (
+            -match.similarity,
+            -match.tokens,
+            match.candidate_path,
+        ),
     )
 
 
 def _drop_contained_matches(matches: Iterable[Match]) -> list[Match]:
     ordered = sorted(
         matches,
-        key=lambda match: (-match.units, match.candidate_path, match.candidate_start),
+        key=lambda match: (
+            -match.units,
+            match.candidate_path,
+            match.candidate_start,
+        ),
     )
     kept: list[Match] = []
     for match in ordered:
@@ -566,7 +602,9 @@ def _drop_contained_matches(matches: Iterable[Match]) -> list[Match]:
         ):
             continue
         kept.append(match)
-    return sorted(kept, key=lambda item: (item.candidate_path, item.candidate_start))
+    return sorted(
+        kept, key=lambda item: (item.candidate_path, item.candidate_start)
+    )
 
 
 def load_and_verify_sources(
@@ -727,7 +765,8 @@ def markdown(report: dict[str, object]) -> str:
             f"- Files whose first recorded commit predates the boundary: {len(before_boundary)}",
             "- Introduction authors: "
             + ", ".join(
-                f"{author} ({count})" for author, count in introductions.most_common()
+                f"{author} ({count})"
+                for author, count in introductions.most_common()
             ),
             "- Full per-file introduction, latest-change, and blame distributions "
             "are retained in `agent-provenance-audit.json`.",

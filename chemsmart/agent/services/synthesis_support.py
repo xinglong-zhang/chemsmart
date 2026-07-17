@@ -9,17 +9,16 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from chemsmart.agent.services.compact_spec import (
-    non_workflow_result,
-    project_compact_spec,
-)
-
 import click
 
 from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.harness.workflow_state import current_workflow_state
 from chemsmart.agent.model_command_parser import parse_model_command
 from chemsmart.agent.provider_adapter import extract_response_text
+from chemsmart.agent.services.compact_spec import (
+    non_workflow_result,
+    project_compact_spec,
+)
 from chemsmart.settings.workspace_project import (
     resolve_workspace_project,
     workspace_project_path,

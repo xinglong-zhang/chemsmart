@@ -12,7 +12,11 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticResult,
     evaluate_command_semantics,
 )
-from chemsmart.agent.harness.intent import IntentResult, IntentSpec, evaluate_intent
+from chemsmart.agent.harness.intent import (
+    IntentResult,
+    IntentSpec,
+    evaluate_intent,
+)
 
 
 class OutcomeClass(str, Enum):
@@ -109,8 +113,12 @@ def load_case_matrix(path: str | Path) -> list[HarnessCase]:
                 HarnessCase(
                     case_id=f"{family['id']}::{variant['id']}",
                     family=str(family["id"]),
-                    turns=tuple(str(item) for item in variant.get("turns") or ()),
-                    expected_outcome=str(variant.get("expected_outcome") or "direct_pass"),
+                    turns=tuple(
+                        str(item) for item in variant.get("turns") or ()
+                    ),
+                    expected_outcome=str(
+                        variant.get("expected_outcome") or "direct_pass"
+                    ),
                     intent=IntentSpec.from_dict(intent),
                     fixture=dict(family.get("fixture") or {}),
                 )
@@ -126,15 +134,28 @@ def evaluate_case_command(
     repaired: bool = False,
 ) -> CaseEvaluation:
     semantic = evaluate_command_semantics(command, cwd=cwd)
-    intent = evaluate_intent(command, case.intent, cwd=str(cwd) if cwd else None)
+    intent = evaluate_intent(
+        command, case.intent, cwd=str(cwd) if cwd else None
+    )
     semantic_rules = tuple(semantic.failed_rule_ids)
     intent_rules = tuple(intent.failed_rule_ids)
     if semantic.verdict == "reject":
         outcome = classify_semantic_failure(semantic_rules)
-        return CaseEvaluation(case.case_id, outcome, False, semantic, intent, semantic_rules)
+        return CaseEvaluation(
+            case.case_id, outcome, False, semantic, intent, semantic_rules
+        )
     if intent.verdict == "reject":
-        return CaseEvaluation(case.case_id, OutcomeClass.INTENT_DRIFT, False, semantic, intent, intent_rules)
-    outcome = OutcomeClass.REPAIR_PASS if repaired else OutcomeClass.DIRECT_PASS
+        return CaseEvaluation(
+            case.case_id,
+            OutcomeClass.INTENT_DRIFT,
+            False,
+            semantic,
+            intent,
+            intent_rules,
+        )
+    outcome = (
+        OutcomeClass.REPAIR_PASS if repaired else OutcomeClass.DIRECT_PASS
+    )
     return CaseEvaluation(case.case_id, outcome, True, semantic, intent)
 
 
@@ -149,7 +170,11 @@ def classify_agent_result(
     semantic = tuple(semantic_rule_ids)
     intent = tuple(intent_rule_ids)
     if status == "needs_clarification":
-        return OutcomeClass.VALID_ASK if expected_outcome == "valid_ask" else OutcomeClass.SPURIOUS_ASK
+        return (
+            OutcomeClass.VALID_ASK
+            if expected_outcome == "valid_ask"
+            else OutcomeClass.SPURIOUS_ASK
+        )
     if intent:
         return OutcomeClass.INTENT_DRIFT
     if semantic:
@@ -159,7 +184,9 @@ def classify_agent_result(
     return OutcomeClass.REPAIR_PASS if repaired else OutcomeClass.DIRECT_PASS
 
 
-def reliability_metrics(rows: Iterable[dict[str, Any]], *, k: int = 3) -> dict[str, Any]:
+def reliability_metrics(
+    rows: Iterable[dict[str, Any]], *, k: int = 3
+) -> dict[str, Any]:
     by_case: dict[str, list[bool]] = {}
     for row in rows:
         by_case.setdefault(str(row["case_id"]), []).append(bool(row["passed"]))
@@ -168,9 +195,24 @@ def reliability_metrics(rows: Iterable[dict[str, Any]], *, k: int = 3) -> dict[s
     return {
         "case_count": len(trials),
         "trial_count": len(all_attempts),
-        "pass_at_1": (sum(values[0] for values in trials) / len(trials)) if trials else 0.0,
-        f"pass_at_{k}": (sum(any(values) for values in trials) / len(trials)) if trials else 0.0,
-        f"pass_power_{k}": (sum(len(values) == k and all(values) for values in trials) / len(trials)) if trials else 0.0,
+        "pass_at_1": (
+            (sum(values[0] for values in trials) / len(trials))
+            if trials
+            else 0.0
+        ),
+        f"pass_at_{k}": (
+            (sum(any(values) for values in trials) / len(trials))
+            if trials
+            else 0.0
+        ),
+        f"pass_power_{k}": (
+            (
+                sum(len(values) == k and all(values) for values in trials)
+                / len(trials)
+            )
+            if trials
+            else 0.0
+        ),
     }
 
 
@@ -186,14 +228,22 @@ def classify_semantic_failure(rule_ids: Iterable[str]) -> OutcomeClass:
         return OutcomeClass.GENERATED_INPUT_FAILURE
     if any("project" in rule or "yaml" in rule for rule in rules):
         return OutcomeClass.YAML_STATE_FAILURE
-    if any(rule in _TERMINAL_RULE_IDS or rule.startswith("terminal.") for rule in rules):
+    if any(
+        rule in _TERMINAL_RULE_IDS or rule.startswith("terminal.")
+        for rule in rules
+    ):
         return OutcomeClass.TERMINAL_ENVIRONMENT_FAILURE
-    if any(rule in _FORMAT_RULE_IDS or rule.startswith("cmd.contract.") for rule in rules):
+    if any(
+        rule in _FORMAT_RULE_IDS or rule.startswith("cmd.contract.")
+        for rule in rules
+    ):
         return OutcomeClass.FORMAT_SCHEMA_FAILURE
     return OutcomeClass.CLI_RUNTIME_FAILURE
 
 
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def _deep_merge(
+    base: dict[str, Any], override: dict[str, Any]
+) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):

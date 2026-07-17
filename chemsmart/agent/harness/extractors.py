@@ -106,7 +106,9 @@ def _extract_gaussian_cartesian_state(content: str) -> dict[str, Any] | None:
                 result["layer_atoms"] = {
                     layer: [
                         atom_index
-                        for atom_index, observed in enumerate(atom_layers, start=1)
+                        for atom_index, observed in enumerate(
+                            atom_layers, start=1
+                        )
                         if observed == layer
                     ]
                     for layer in ("H", "M", "L")

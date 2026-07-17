@@ -12,7 +12,6 @@ from scripts.review.audit_agent_provenance import (
     near_token_matches,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 

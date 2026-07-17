@@ -43,9 +43,7 @@ def apply_deterministic_gates(
     final = _apply_software_harness(
         host, final, issues, rationale, plan, dry_run_results
     )
-    final = _apply_duplicate_check(
-        final, issues, rationale, preview_submit
-    )
+    final = _apply_duplicate_check(final, issues, rationale, preview_submit)
     if final == "warn" and not issues:
         final = "ok"
     return CriticVerdict(
@@ -124,7 +122,9 @@ def _apply_software_harness(
         return "reject"
     if result.verdict == "warn":
         issues.extend(harness_issue_messages(result))
-        rationale.append("software invariant harness warned on generated input")
+        rationale.append(
+            "software invariant harness warned on generated input"
+        )
         return "warn" if verdict == "ok" else verdict
     return verdict
 
@@ -190,7 +190,9 @@ def plan_requires_geometry_handoff(plan: Plan) -> bool:
         source = source_step_for_ref(plan, step.args.get("molecule"))
         if source is None or source.tool != "build_molecule":
             continue
-        if any(_is_geometry_source(candidate) for candidate in plan.steps[:index]):
+        if any(
+            _is_geometry_source(candidate) for candidate in plan.steps[:index]
+        ):
             return True
     return False
 
@@ -230,11 +232,15 @@ def malformed_input_issue(result: dict[str, Any] | None) -> str | None:
     if not isinstance(content, str):
         return None
     if inputfile.endswith(".inp"):
-        return None if _ORCA_ROUTE_RE.search(content) else (
-            "ORCA route line missing or malformed"
+        return (
+            None
+            if _ORCA_ROUTE_RE.search(content)
+            else ("ORCA route line missing or malformed")
         )
-    return None if _GAUSSIAN_ROUTE_RE.search(content) else (
-        "Gaussian route line missing or malformed"
+    return (
+        None
+        if _GAUSSIAN_ROUTE_RE.search(content)
+        else ("Gaussian route line missing or malformed")
     )
 
 

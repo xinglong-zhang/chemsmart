@@ -19,14 +19,20 @@ from chemsmart.agent.project_protocol import (
     extract_project_protocol,
     render_project_document,
 )
+from chemsmart.agent.project_yaml_rules import issue as _issue
 from chemsmart.agent.project_yaml_rules import (
-    issue as _issue,
     protocol_alignment_issues as _protocol_alignment_issues,
+)
+from chemsmart.agent.project_yaml_rules import (
     static_project_yaml_issues as _static_project_yaml_issues,
 )
 from chemsmart.agent.project_yaml_values import (
     normalize_program as _normalize_program,
+)
+from chemsmart.agent.project_yaml_values import (
     normalize_project_name as _normalize_project_name,
+)
+from chemsmart.agent.project_yaml_values import (
     normalize_yaml_text as _normalize_yaml_text,
 )
 from chemsmart.settings.workspace_project import (

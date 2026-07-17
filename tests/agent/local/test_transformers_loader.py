@@ -62,7 +62,9 @@ def test_merged_transformers_loader_preserves_platform_paths(
 
     from chemsmart.agent.local import loader
 
-    monkeypatch.setattr(loader, "_enforce_huggingface_hub_compat", lambda: None)
+    monkeypatch.setattr(
+        loader, "_enforce_huggingface_hub_compat", lambda: None
+    )
     bundle = loader.load_transformers_model(
         base_model_id="lab/merged-model",
         runtime=runtime,

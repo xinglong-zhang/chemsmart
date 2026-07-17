@@ -166,10 +166,10 @@ def test_registry_default_registration_sets_read_tool_metadata():
             "search_basis_sets",
             "synthesize_command",
             "repair_command",
-                "execute_chemsmart_command",
-                "inspect_calculation",
-            }
+            "execute_chemsmart_command",
+            "inspect_calculation",
         }
+    }
 
     assert read_tool is not None
     assert ssh_probe_tool is not None
@@ -209,7 +209,9 @@ def test_registry_default_registration_sets_read_tool_metadata():
         read_only=True,
         ui_summary_template="Search basis sets {query}",
     )
-    assert project_tools["inspect_calculation"].metadata == RuntimeToolMetadata(
+    assert project_tools[
+        "inspect_calculation"
+    ].metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Inspect calculation {run_id}",
     )
@@ -232,9 +234,9 @@ def test_registry_default_registration_sets_read_tool_metadata():
             "search_basis_sets",
             "synthesize_command",
             "repair_command",
-                "execute_chemsmart_command",
-                "inspect_calculation",
-            }
+            "execute_chemsmart_command",
+            "inspect_calculation",
+        }
     )
 
 

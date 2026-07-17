@@ -256,8 +256,10 @@ def stringify_response(response: Any) -> str | None:
 def estimate_tokens(value: Any) -> int:
     if value is None:
         return 0
-    text = value if isinstance(value, str) else json.dumps(
-        json_safe(value), sort_keys=True
+    text = (
+        value
+        if isinstance(value, str)
+        else json.dumps(json_safe(value), sort_keys=True)
     )
     return max(1, int(round(len(text) / 4)))
 
@@ -271,9 +273,7 @@ def resolved_model(provider: Any, response: Any) -> str | None:
     return fallback
 
 
-def _usage(
-    messages: list[dict[str, Any]], response: Any
-) -> tuple[int, int]:
+def _usage(messages: list[dict[str, Any]], response: Any) -> tuple[int, int]:
     usage = extract_response_usage(response)
     input_tokens = usage["input_tokens"]
     output_tokens = usage["output_tokens"]

@@ -185,9 +185,9 @@ class WorkerLifecycleMixin:
         ):
             return
         self.query_one(FooterWidget).set_usage(
-            input_tokens=input_tokens
-            if isinstance(input_tokens, int)
-            else None,
+            input_tokens=(
+                input_tokens if isinstance(input_tokens, int) else None
+            ),
             output_tokens=(
                 output_tokens if isinstance(output_tokens, int) else None
             ),

@@ -37,7 +37,9 @@ def selection_contract_issues(
     return []
 
 
-def _trajectory_contract_issues(tokens: list[str]) -> list[CommandContractIssue]:
+def _trajectory_contract_issues(
+    tokens: list[str],
+) -> list[CommandContractIssue]:
     issues: list[CommandContractIssue] = []
     if not has_option(tokens, ("-j", "--jobtype")):
         issues.append(
@@ -212,4 +214,8 @@ def td_project_issue(
     )
 
 
-__all__ = ["dias_contract_issues", "selection_contract_issues", "td_project_issue"]
+__all__ = [
+    "dias_contract_issues",
+    "selection_contract_issues",
+    "td_project_issue",
+]

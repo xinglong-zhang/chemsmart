@@ -35,30 +35,185 @@ CLI_HELP_PATHS = (
     ("sub", "--help"),
     ("run", "gaussian", "--help"),
     ("run", "orca", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "opt", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "sp", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "ts", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "irc", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "scan", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "modred", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "nci", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "resp", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "td", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "dias", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "crest", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "traj", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "wbi", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "qrc", "--help"),
-    ("run", "gaussian", "-p", "test", "-f", "examples/h2o.xyz", "opt", "qmmm", "--help"),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "opt",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "sp",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "ts",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "irc",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "scan",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "modred",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "nci",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "resp",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "td",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "dias",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "crest",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "traj",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "wbi",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "qrc",
+        "--help",
+    ),
+    (
+        "run",
+        "gaussian",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "opt",
+        "qmmm",
+        "--help",
+    ),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "sp", "--help"),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "opt", "--help"),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "ts", "--help"),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "irc", "--help"),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "scan", "--help"),
-    ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "modred", "--help"),
+    (
+        "run",
+        "orca",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "modred",
+        "--help",
+    ),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "neb", "--help"),
     ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "qrc", "--help"),
-    ("run", "orca", "-p", "test", "-f", "examples/h2o.xyz", "opt", "qmmm", "--help"),
+    (
+        "run",
+        "orca",
+        "-p",
+        "test",
+        "-f",
+        "examples/h2o.xyz",
+        "opt",
+        "qmmm",
+        "--help",
+    ),
 )
 
 SESSION_ARTIFACTS = (
@@ -101,7 +256,9 @@ def normalize_value(value: Any, replacements: dict[str, str]) -> Any:
     if isinstance(value, dict):
         return {
             str(key): normalize_value(item, replacements)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(
+                value.items(), key=lambda pair: str(pair[0])
+            )
         }
     if isinstance(value, (list, tuple)):
         return [normalize_value(item, replacements) for item in value]
@@ -118,7 +275,9 @@ def normalize_value(value: Any, replacements: dict[str, str]) -> Any:
 
 
 @contextmanager
-def isolated_environment(repo_root: Path) -> Iterator[tuple[Path, dict[str, str]]]:
+def isolated_environment(
+    repo_root: Path,
+) -> Iterator[tuple[Path, dict[str, str]]]:
     with tempfile.TemporaryDirectory(prefix="chemsmart-contract-") as raw:
         root = Path(raw)
         home = root / "home"
@@ -137,8 +296,14 @@ def isolated_environment(repo_root: Path) -> Iterator[tuple[Path, dict[str, str]
         tempfile.tempdir = str(runtime_tmp)
         templates = repo_root / "chemsmart/settings/templates/.chemsmart"
         for source, destination in (
-            (templates / "server/local.yaml", home / ".chemsmart/server/local.yaml"),
-            (templates / "gaussian/test.yaml", home / ".chemsmart/gaussian/test.yaml"),
+            (
+                templates / "server/local.yaml",
+                home / ".chemsmart/server/local.yaml",
+            ),
+            (
+                templates / "gaussian/test.yaml",
+                home / ".chemsmart/gaussian/test.yaml",
+            ),
             (templates / "orca/test.yaml", home / ".chemsmart/orca/test.yaml"),
         ):
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -167,7 +332,9 @@ def isolated_environment(repo_root: Path) -> Iterator[tuple[Path, dict[str, str]
                 os.environ["PYTHONPATH"] = old_pythonpath
 
 
-def cli_help_contract(repo_root: Path, replacements: dict[str, str]) -> dict[str, Any]:
+def cli_help_contract(
+    repo_root: Path, replacements: dict[str, str]
+) -> dict[str, Any]:
     environment = dict(os.environ)
     environment.update(
         {
@@ -230,7 +397,9 @@ def tool_registry_contract() -> list[dict[str, Any]]:
         rows.append(
             {
                 "name": tool.name,
-                "description": tool.openai_tool_def()["function"]["description"],
+                "description": tool.openai_tool_def()["function"][
+                    "description"
+                ],
                 "parameters": tool.openai_tool_def()["function"]["parameters"],
                 "metadata": metadata,
             }
@@ -316,21 +485,29 @@ def prompt_contract(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def workspace_yaml_contract(workspace: Path, replacements: dict[str, str]) -> dict[str, Any]:
+def workspace_yaml_contract(
+    workspace: Path, replacements: dict[str, str]
+) -> dict[str, Any]:
     from chemsmart.settings.workspace_project import resolve_workspace_project
 
     def project_status(selected_path: Path | None = None) -> dict[str, Any]:
-        status = resolve_workspace_project(cwd=workspace, selected_path=selected_path)
+        status = resolve_workspace_project(
+            cwd=workspace, selected_path=selected_path
+        )
         return normalize_value(asdict(status), replacements)
 
     statuses = {"empty": project_status()}
     gaussian = workspace / ".chemsmart/gaussian/demo.yaml"
     gaussian.parent.mkdir(parents=True)
-    gaussian.write_text("gas:\n  functional: b3lyp\n  basis: def2svp\n", encoding="utf-8")
+    gaussian.write_text(
+        "gas:\n  functional: b3lyp\n  basis: def2svp\n", encoding="utf-8"
+    )
     statuses["single"] = project_status()
     orca = workspace / ".chemsmart/orca/orca_demo.yaml"
     orca.parent.mkdir(parents=True)
-    orca.write_text("gas:\n  functional: pbe0\n  basis: def2-svp\n", encoding="utf-8")
+    orca.write_text(
+        "gas:\n  functional: pbe0\n  basis: def2-svp\n", encoding="utf-8"
+    )
     statuses["multiple_unselected"] = project_status()
     statuses["multiple_selected"] = project_status(orca)
     return statuses
@@ -338,7 +515,9 @@ def workspace_yaml_contract(workspace: Path, replacements: dict[str, str]) -> di
 
 def session_artifact_contract(repo_root: Path) -> dict[str, Any]:
     from chemsmart.agent.core import SessionState
-    from chemsmart.agent.services.session_finalizer import SESSION_METADATA_KEYS
+    from chemsmart.agent.services.session_finalizer import (
+        SESSION_METADATA_KEYS,
+    )
 
     return {
         "artifact_names": list(SESSION_ARTIFACTS),
@@ -385,7 +564,9 @@ def _prepare_full26_workspace(repo_root: Path, workspace: Path) -> None:
     for program in ("gaussian", "orca"):
         target = workspace / ".chemsmart" / program
         target.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(templates / program / "test.yaml", target / "contract.yaml")
+        shutil.copy2(
+            templates / program / "test.yaml", target / "contract.yaml"
+        )
         shutil.copy2(
             templates / program / "test_qmmm.yaml",
             target / "contract_qmmm.yaml",
@@ -395,7 +576,9 @@ def _prepare_full26_workspace(repo_root: Path, workspace: Path) -> None:
     shutil.copy2(templates / "server/local.yaml", server_dir / "local.yaml")
 
 
-def _normalized_generated_input(item: dict[str, Any], replacements: dict[str, str]) -> dict[str, Any]:
+def _normalized_generated_input(
+    item: dict[str, Any], replacements: dict[str, str]
+) -> dict[str, Any]:
     output = normalize_value(item, replacements)
     if isinstance(output, dict) and "path" in output:
         output["path"] = Path(str(output["path"])).name
@@ -410,17 +593,23 @@ def full26_contract(
     workspace: Path,
     replacements: dict[str, str],
 ) -> list[dict[str, Any]]:
-    from chemsmart.agent.harness.command_semantics import evaluate_command_semantics
+    from chemsmart.agent.harness.command_semantics import (
+        evaluate_command_semantics,
+    )
     from chemsmart.agent.harness.intent import IntentSpec, evaluate_intent
     from chemsmart.agent.v8_adapter import adapt
     from chemsmart.agent.v8_kind_index import KIND_SETTINGS
 
-    fixture_path = repo_root / "tests/agent/contracts/full26_compact_specs.json"
+    fixture_path = (
+        repo_root / "tests/agent/contracts/full26_compact_specs.json"
+    )
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     cases = fixture["cases"]
     kinds = [case["kind"] for case in cases]
     if sorted(kinds) != sorted(KIND_SETTINGS):
-        raise ValueError("full26 fixture must contain every canonical kind exactly once")
+        raise ValueError(
+            "full26 fixture must contain every canonical kind exactly once"
+        )
     _prepare_full26_workspace(repo_root, workspace)
     rows: list[dict[str, Any]] = []
     for case in cases:
@@ -471,12 +660,22 @@ def full26_contract(
                 "kind": kind,
                 "spec": spec,
                 "adapter_valid": adapted.get("valid"),
-                "adapter_errors": normalize_value(adapted.get("errors") or [], replacements),
+                "adapter_errors": normalize_value(
+                    adapted.get("errors") or [], replacements
+                ),
                 "command": normalize_text(command, replacements),
-                "semantic_verdict": semantic.verdict if semantic else "not_run",
-                "failed_rule_ids": semantic.failed_rule_ids if semantic else [],
+                "semantic_verdict": (
+                    semantic.verdict if semantic else "not_run"
+                ),
+                "failed_rule_ids": (
+                    semantic.failed_rule_ids if semantic else []
+                ),
                 "issues": normalize_value(
-                    [issue.to_dict() for issue in semantic.issues] if semantic else [],
+                    (
+                        [issue.to_dict() for issue in semantic.issues]
+                        if semantic
+                        else []
+                    ),
                     replacements,
                 ),
                 "generated_inputs": [

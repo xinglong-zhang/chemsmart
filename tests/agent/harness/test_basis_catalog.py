@@ -61,10 +61,11 @@ def test_search_basis_sets_returns_top_k_only_for_qualitative_basis():
     assert result["ok"] is True
     assert result["verdict"] in {"ask_user", "warn", "ok"}
     assert result["result_count"] <= 4
-    assert result["token_policy"] == "top_k_only; full catalog is never returned"
+    assert (
+        result["token_policy"] == "top_k_only; full catalog is never returned"
+    )
     assert any(
-        candidate["name"] == "def2-TZVPD"
-        for candidate in result["candidates"]
+        candidate["name"] == "def2-TZVPD" for candidate in result["candidates"]
     )
 
 

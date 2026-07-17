@@ -24,14 +24,13 @@ from chemsmart.agent.prompts.identity import ensure_system_message
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
 from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.plan_support import (
     is_chitchat_request,
     render_plan,
     synthetic_plan_from_tool_requests,
 )
 from chemsmart.agent.services.runtime_metrics import elapsed_ms
-
-from chemsmart.agent.runtime.orchestrator import RuntimeController
 
 
 class SessionLoopHost(Protocol):
@@ -363,9 +362,11 @@ class UnifiedSessionRunner:
         outcomes = list(loop_result["tool_outcomes"])
         requests = list(loop_result["tool_requests"])
         results = [
-            outcome.raw_result
-            if outcome.raw_result is not None
-            else outcome.result
+            (
+                outcome.raw_result
+                if outcome.raw_result is not None
+                else outcome.result
+            )
             for outcome in outcomes
             if outcome.status != "ask_user"
         ]
@@ -415,9 +416,7 @@ class UnifiedSessionRunner:
         session.state.request_intent = (
             "chitchat"
             if projection.is_chitchat
-            else "workflow"
-            if projection.tool_requests
-            else "advisory"
+            else "workflow" if projection.tool_requests else "advisory"
         )
         session.state.total_steps_planned = len(projection.tool_requests)
         session.state.current_step_index = len(projection.results)
@@ -429,7 +428,9 @@ class UnifiedSessionRunner:
                 "stage": "tool_loop",
                 "attempt": 1,
                 "provider_name": setup.provider_name,
-                "resolved_model": getattr(setup.provider, "default_model", None),
+                "resolved_model": getattr(
+                    setup.provider, "default_model", None
+                ),
                 "input_tokens": loop_result["total_input_tokens"],
                 "output_tokens": loop_result["total_output_tokens"],
                 "latency_ms": elapsed_ms(session._run_start_time),

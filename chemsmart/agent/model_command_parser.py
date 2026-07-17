@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import shlex
 import contextlib
 import io
 import logging
+import os
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -317,9 +317,7 @@ def parse_model_command(
         _RUNNER_OPTIONS,
     )
     program_opts, program_warnings = _parse_options(
-        prefix.tokens[
-            prefix.program_index + 1 : job_layout.subcommand_index
-        ],
+        prefix.tokens[prefix.program_index + 1 : job_layout.subcommand_index],
         _PROGRAM_OPTIONS,
     )
     subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
@@ -377,14 +375,22 @@ def _parse_command_layout(
     action_index = _find_first(tokens, _TOP_LEVEL_COMMANDS, start=1)
     if action_index is None:
         return _layout_error(
-            command, workspace, tokens, entrypoint, warnings,
+            command,
+            workspace,
+            tokens,
+            entrypoint,
+            warnings,
             "missing chemsmart run/sub action",
         )
     action = tokens[action_index]
     program_index = _find_program_index(tokens, action_index + 1)
     if program_index is None:
         return _layout_error(
-            command, workspace, tokens, entrypoint, warnings,
+            command,
+            workspace,
+            tokens,
+            entrypoint,
+            warnings,
             "missing computational program after run/sub options",
             action=action,
         )
@@ -535,10 +541,17 @@ def _structural_options(options: dict[str, str]) -> dict[str, str]:
 
 def _resource_options(options: dict[str, str]) -> dict[str, str]:
     resource_keys = {
-        "num_cores", "num_gpus", "mem_gb", "queue", "time_hours",
-        "scratch", "delete_scratch",
+        "num_cores",
+        "num_gpus",
+        "mem_gb",
+        "queue",
+        "time_hours",
+        "scratch",
+        "delete_scratch",
     }
-    return {key: value for key, value in options.items() if key in resource_keys}
+    return {
+        key: value for key, value in options.items() if key in resource_keys
+    }
 
 
 def format_model_command_explanation(

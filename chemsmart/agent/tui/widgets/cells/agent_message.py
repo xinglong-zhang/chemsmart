@@ -23,5 +23,7 @@ class AgentMessageCell(BaseCell):
             return
         event.stop()
         self.post_message(
-            self.CopyRequested(self.source_text, self.border_title or "Response")
+            self.CopyRequested(
+                self.source_text, self.border_title or "Response"
+            )
         )

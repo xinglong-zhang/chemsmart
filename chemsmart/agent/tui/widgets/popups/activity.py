@@ -51,7 +51,10 @@ class ToolActivityOverlay(ModalScreen[None]):
         with Vertical(id="activity-modal"):
             yield Static(self._context_text(), id="activity-context")
             yield OptionList(*options, id="activity-list")
-            yield Static("Select a tool to inspect public evidence.", id="activity-detail")
+            yield Static(
+                "Select a tool to inspect public evidence.",
+                id="activity-detail",
+            )
 
     def _context_text(self) -> str:
         phase = self.context.get("phase", "idle")

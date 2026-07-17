@@ -104,7 +104,9 @@ def _normalize_error(
                 "The path in your request does not exist relative to the "
                 "current working directory."
             ),
-            notes=["Tip: double-check the relative path, e.g. examples/h2o.xyz."],
+            notes=[
+                "Tip: double-check the relative path, e.g. examples/h2o.xyz."
+            ],
         )
     if title == "Resume failed" and message.startswith("Unknown session id:"):
         return _NormalizedError(
@@ -145,7 +147,9 @@ def _normalize_error(
     if "registry" in lowered or "schema" in lowered:
         return _NormalizedError(
             title="Tool configuration differs from expected",
-            message=("The registered tool count or schema has changed since the previous session."),
+            message=(
+                "The registered tool count or schema has changed since the previous session."
+            ),
             notes=[
                 (
                     "You can still read the previous transcript, but re-running "

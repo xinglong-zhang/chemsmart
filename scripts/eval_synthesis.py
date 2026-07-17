@@ -140,7 +140,9 @@ def main() -> int:
     try:
         provider = get_provider()
     except Exception as exc:
-        console.print(f"[red]Provider unavailable:[/red] {_sanitize(str(exc))}")
+        console.print(
+            f"[red]Provider unavailable:[/red] {_sanitize(str(exc))}"
+        )
         return 2
 
     console.print(
@@ -182,9 +184,7 @@ def main() -> int:
 
     passed = sum(1 for r in records if r["ok"])
     console.print(table)
-    console.print(
-        f"\n[bold]{passed}/{len(records)} passed[/bold]"
-    )
+    console.print(f"\n[bold]{passed}/{len(records)} passed[/bold]")
 
     out_path = Path("/tmp/eval_synthesis_run.txt")
     lines = ["chemsmart agent ask synthesis evaluation\n", "=" * 60 + "\n"]

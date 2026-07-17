@@ -204,9 +204,9 @@ def _submission_intent_assertions(
             expected=True,
             observed=present,
             evidence={
-                "source": "synthesis_intent_contract"
-                if present
-                else "missing",
+                "source": (
+                    "synthesis_intent_contract" if present else "missing"
+                ),
                 "workflow_scope": workflow_scope,
             },
         )

@@ -67,7 +67,11 @@ def build_synthesis_system_prompt(
         separators=(",", ":") if compact else None,
         indent=None if compact else 2,
     )
-    sections = [_BASE_POLICY.strip(), *packs, f"Compact CLI signature:\n{schema_json}"]
+    sections = [
+        _BASE_POLICY.strip(),
+        *packs,
+        f"Compact CLI signature:\n{schema_json}",
+    ]
     prompt = "\n\n".join(section for section in sections if section)
     if len(prompt) > max_chars:
         raise ValueError(

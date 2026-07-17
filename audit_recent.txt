@@ -1,0 +1,201 @@
+{
+  "clean_after_cap": 122,
+  "diversity": {
+    "capped_out_episodes": 0,
+    "distinct_query_skeleton_ratio": 0.8852,
+    "distinct_query_skeletons": 108,
+    "over_frequent_skeletons": {},
+    "semantic_trajectory_duplicates": 120,
+    "top_query_skeletons": [
+      [
+        "run a dlpno-ccsd(t) single-point energy calculation on the optimized iron complex. i need a complete basis set (cbs) extrapolation using def#-tzvpp and def#-qzvpp, along with the corresponding def#-tzvpp/c and def#-qzvpp/c auxiliary basis sets.",
+        2
+      ],
+      [
+        "set the tightpno cutoff and print the t# diagnostic. also, apply the rijcosx approximation.",
+        2
+      ],
+      [
+        "locate the transition state for the concerted [#+#] cycloaddition using the berny algorithm with a pre-calculated analytical hessian (calcall).",
+        2
+      ],
+      [
+        "optimize the transition state for the bulky chiral phosphoric acid catalyzed step. use cartesian coordinates with the gediis algorithm.",
+        2
+      ],
+      [
+        "wait, freeze the core backbone atoms using modredundant. after finding the saddle point, confirm it has exactly one imaginary frequency corresponding to the proton transfer, then run a maxpoints=# irc.",
+        2
+      ],
+      [
+        "optimize this fluorinated intermediate using the smd solvation model for #,#-dichloroethane.",
+        2
+      ],
+      [
+        "run a hirshfeld population analysis alongside a standard mulliken charge analysis on this transition metal complex.",
+        2
+      ],
+      [
+        "evaluate the spin-state energetics of this octahedral fe(ii) complex. i need geometry optimizations for the low-spin (s=#), intermediate-spin (s=#), and high-spin (s=#) states.",
+        2
+      ],
+      [
+        "set up a transition state optimization for this diels-alder reaction in gaussian using b#lyp and #-#g(d).",
+        2
+      ],
+      [
+        "it failed with 'optimization stopped. number of steps exceeded'. can you increase the max optimization cycles and fix the setup?",
+        2
+      ]
+    ],
+    "trajectory_entropy": -0.0
+  },
+  "episodes_after_dedup": 122,
+  "episodes_raw": 122,
+  "health_failures": [],
+  "pipelines": {
+    "by_job_kind": {},
+    "by_provider": {
+      "?:?": 122
+    },
+    "by_trajectory": {
+      "(no tools)": 122
+    }
+  },
+  "quality": {
+    "clean_episodes": 122,
+    "exact_duplicate_pairs": 0,
+    "flag_counts": {},
+    "flagged_episodes": [
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      },
+      {
+        "quality": [],
+        "session_id": null,
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": null
+      }
+    ]
+  },
+  "stability": {
+    "average_schema_efficiency_score": 0.2295,
+    "flag_counts": {
+      "repeated_identical_tool_call": 15
+    },
+    "multi_turn_episodes": 6,
+    "multi_turn_share": 0.0492,
+    "unresolved_ask_user_pauses": 0
+  }
+}

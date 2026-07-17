@@ -99,6 +99,7 @@ _ORCA_BIN_CANDIDATES: list[str] = [
 # SGE helpers                                                                  #
 # --------------------------------------------------------------------------- #
 
+
 def _sge_arch(sge_root: str) -> str | None:
     arch_bin = Path(sge_root) / "util" / "arch"
     if not arch_bin.exists():
@@ -219,6 +220,7 @@ def _build_sge_env(base: dict[str, str]) -> dict[str, str]:
 # SLURM helpers                                                                #
 # --------------------------------------------------------------------------- #
 
+
 def _find_slurm_bin() -> str | None:
     for directory in _SLURM_BIN_CANDIDATES:
         if (Path(directory) / "sinfo").exists():
@@ -234,13 +236,16 @@ def _build_slurm_env(base: dict[str, str]) -> dict[str, str]:
     current_path = env.get("PATH", "")
     if slurm_bin not in current_path.split(":"):
         env["PATH"] = slurm_bin + ":" + current_path
-        logger.debug("scheduler_env: SLURM bin at %s prepended to PATH", slurm_bin)
+        logger.debug(
+            "scheduler_env: SLURM bin at %s prepended to PATH", slurm_bin
+        )
     return env
 
 
 # --------------------------------------------------------------------------- #
 # PBS / Torque helpers                                                         #
 # --------------------------------------------------------------------------- #
+
 
 def _find_pbs_bin() -> str | None:
     for directory in _PBS_BIN_CANDIDATES:
@@ -273,9 +278,11 @@ def _build_pbs_env(base: dict[str, str]) -> dict[str, str]:
         logger.debug("scheduler_env: PBS bin at %s prepended to PATH", pbs_bin)
     return env
 
+
 # --------------------------------------------------------------------------- #
 # Gaussian helpers                                                             #
 # --------------------------------------------------------------------------- #
+
 
 def _find_gaussian_bin() -> str | None:
     for directory in _GAUSSIAN_BIN_CANDIDATES:
@@ -307,6 +314,7 @@ def _build_gaussian_env(base: dict[str, str]) -> dict[str, str]:
 # ORCA (quantum chemistry) helpers                                             #
 # --------------------------------------------------------------------------- #
 
+
 def _find_orca_qchem_bin() -> str | None:
     """Find ORCA quantum chemistry binary (distinct from Linux orca screen reader)."""
     for directory in _ORCA_BIN_CANDIDATES:
@@ -321,7 +329,9 @@ def _find_orca_qchem_bin() -> str | None:
                 timeout=5,
             )
             output = (r.stdout + r.stderr).lower()
-            if "orca" in output and ("version" in output or "release" in output):
+            if "orca" in output and (
+                "version" in output or "release" in output
+            ):
                 return directory
         except Exception:
             pass
@@ -345,6 +355,7 @@ def _build_orca_qchem_env(base: dict[str, str]) -> dict[str, str]:
 # --------------------------------------------------------------------------- #
 # Public API                                                                   #
 # --------------------------------------------------------------------------- #
+
 
 @lru_cache(maxsize=1)
 def build_scheduler_env() -> dict[str, str]:

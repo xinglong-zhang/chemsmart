@@ -47,7 +47,9 @@ def test_terminal_state_accepts_expected_negative_terminal_outcome():
         expected_returncode=1,
         assertions=[
             assertion("server.yaml_exists", expected=True, observed=True),
-            assertion("scheduler.rejection_returncode", expected=1, observed=1),
+            assertion(
+                "scheduler.rejection_returncode", expected=1, observed=1
+            ),
         ],
     )
 

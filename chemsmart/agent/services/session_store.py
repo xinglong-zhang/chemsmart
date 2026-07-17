@@ -164,7 +164,9 @@ def _tree_hashes(root: Path) -> dict[str, str]:
             payload = path.read_bytes()
         else:
             continue
-        hashes[str(path.relative_to(root))] = hashlib.sha256(payload).hexdigest()
+        hashes[str(path.relative_to(root))] = hashlib.sha256(
+            payload
+        ).hexdigest()
     return hashes
 
 

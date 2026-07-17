@@ -50,7 +50,9 @@ from chemsmart.agent.services.plan_support import (
     classify_intent,
     is_chitchat_request,
     is_project_yaml_workflow,
-    render_plan as render_plan,
+)
+from chemsmart.agent.services.plan_support import render_plan as render_plan
+from chemsmart.agent.services.plan_support import (
     resolve_plan_intent,
     synthetic_plan_from_tool_requests,
 )
@@ -76,13 +78,13 @@ from chemsmart.agent.services.runtime_metrics import (
     git_sha,
     schema_hash,
 )
-from chemsmart.agent.services.session_finalizer import SessionFinalizer
 from chemsmart.agent.services.session_context import (
     DecisionLog,
     SessionContext,
     env_snapshot,
     new_session_id,
 )
+from chemsmart.agent.services.session_finalizer import SessionFinalizer
 from chemsmart.agent.services.step_executor import (
     StepExecutor,
     is_submit_server_error,

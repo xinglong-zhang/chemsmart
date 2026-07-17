@@ -3,7 +3,7 @@ batch_1 = [
     "Alright, the pre-complex optimized well. Now let's do a transition state search for the C-Br bond cleavage in Gaussian. Set up a TS job. Oh, hold on, I noticed in the project.yaml that we are using LANL2DZ for Pd – let's change that to def2-SVP for consistency. Submit the TS job once that's updated.",
     "The TS search finished, but it looks like the imaginary frequency is really small. Let's do a relaxed scan along the C-Br bond from 1.9 to 2.5 Angstroms using Gaussian scan to find a better guess.",
     "Okay, we got a good TS. Please run a Gaussian IRC calculation to confirm it connects to our starting complex. If the IRC falls to a shallow minimum, we might need to run a normal optimization.",
-    "The IRC confirmed the pathway! Finally, let's run a single point energy calculation in Gaussian on the optimized TS. Wait, before you run it, double-check that the charge is 0 and multiplicity is 1. Extract the energies."
+    "The IRC confirmed the pathway! Finally, let's run a single point energy calculation in Gaussian on the optimized TS. Wait, before you run it, double-check that the charge is 0 and multiplicity is 1. Extract the energies.",
 ]
 
 batch_2 = [
@@ -11,7 +11,7 @@ batch_2 = [
     "Now let's find the transition state for the hydride transfer to the ketone. Set up the ORCA TS optimization.",
     "The TS job failed to converge after 50 SCF cycles. Let's restart the job but change the SCF algorithm. Also, let's increase the max SCF iterations to 128 in the yaml.",
     "We finally got the TS! Wait, Ru complexes sometimes have flat potential energy surfaces that make IRCs fail. Let's skip the IRC and just do an ORCA QRC (quasi-IRC) by displacing the geometry along the normal mode.",
-    "The pathway is verified. To understand why this ligand works better, I want to run a Non-Covalent Interaction (NCI) analysis on the transition state in Gaussian. Please set up the NCI calculation."
+    "The pathway is verified. To understand why this ligand works better, I want to run a Non-Covalent Interaction (NCI) analysis on the transition state in Gaussian. Please set up the NCI calculation.",
 ]
 
 batch_3 = [
@@ -19,7 +19,7 @@ batch_3 = [
     "I want to model solvent effects on emission. We need to do an excited-state TD-DFT optimization of the S1 state in Gaussian. Please target the 1st root and use the singlets state. Let me check the YAML config first.",
     "I'm trying to study a photoisomerization mechanism. Let's run a Gaussian TD-DFT calculation on the S0 and S1 states with 50-50 states configuration. Let's draft the YAML file first so I can inspect the settings.",
     "We synthesized a chiral helicene molecule and need to simulate its ECD spectrum. I want to use TD-DFT in Gaussian to compute the first 30 excited states. Can you set up the input for this?",
-    "I'm investigating an iridium(III) complex. This requires optimizing the triplet state. Can you set up a Gaussian TD-DFT job specifying 5 triplets roots? Let's review the YAML configuration first."
+    "I'm investigating an iridium(III) complex. This requires optimizing the triplet state. Can you set up a Gaussian TD-DFT job specifying 5 triplets roots? Let's review the YAML configuration first.",
 ]
 
 batch_4 = [
@@ -27,7 +27,7 @@ batch_4 = [
     "We're studying a transition metal complex. I'd like to benchmark this against wB97X-D. Can you set up a Gaussian TD-DFT job to calculate the first 25 singlet roots? Let me see the YAML config first.",
     "I'm looking at the photochemistry of a ketone. I want to use Gaussian TD-DFT with eqsolv enabled. Draft the project YAML so I can review the settings before submission.",
     "I'm trying to calculate the excited states for a dye. Let's run a Gaussian TD-DFT calculation with 10 singlets. Can you generate the YAML file for this job?",
-    "I need to calculate the ECD spectra using TD-DFT in Gaussian. I want to compute the first 40 states. Please show me the YAML setup first."
+    "I need to calculate the ECD spectra using TD-DFT in Gaussian. I want to compute the first 40 states. Please show me the YAML setup first.",
 ]
 
 batch_5 = [
@@ -35,7 +35,7 @@ batch_5 = [
     "Gaussian threw an error about missing MM parameters in the low layer. Can you extract the missing parameters from the log, add the force field, and run the QM/MM opt again?",
     "We need to evaluate the non-covalent pi-pi stacking interaction. Run a Gaussian DIAS (Diatomic in Molecules Fragment) interaction calculation. Fragment 1 is atoms 1-20.",
     "I want to perform a fragment interaction decomposition. Prepare the Gaussian DIAS input and start the calculation for fragment indices 1-15.",
-    "Run a WBI (Wiberg Bond Index) analysis using Gaussian to investigate the bonds in our solvated drug-receptor pocket."
+    "Run a WBI (Wiberg Bond Index) analysis using Gaussian to investigate the bonds in our solvated drug-receptor pocket.",
 ]
 
 batch_6 = [
@@ -43,7 +43,7 @@ batch_6 = [
     "The boundary region looks unstable. We need to shift the boundary. Include the entire histidine residues in the high-level atoms instead. Re-run the ORCA QM/MM optimization.",
     "Run an ORCA scan calculation of the distance between atom 1 and 2 from 1.5 to 2.5 Angstroms in 10 steps.",
     "We're mapping the reaction coordinate. Run a Gaussian relaxed PES scan of the S-C distance.",
-    "We need to do a physics-based rescoring. Set up a full ORCA QM/MM job. The high-level atoms should be the ligand."
+    "We need to do a physics-based rescoring. Set up a full ORCA QM/MM job. The high-level atoms should be the ligand.",
 ]
 
 batch_7 = [
@@ -51,7 +51,7 @@ batch_7 = [
     "Please check my project.yaml for the diradical structure. Are the charge and multiplicity fields correctly formatted? Okay, let's run a Gaussian single-point energy calculation for the triplet state.",
     "Validate the project YAML for my iron dimer complex. First, run the ferromagnetic state (multiplicity 5) ORCA optimization.",
     "I'm investigating spin coupling. Validate the inputs in project.yaml. Run the high-spin state ORCA optimization first.",
-    "Can you review my project.yaml for a manganese-oxo cluster? Execute a spin-polarized ORCA single point calculation for the high-spin configuration (multiplicity 7)."
+    "Can you review my project.yaml for a manganese-oxo cluster? Execute a spin-polarized ORCA single point calculation for the high-spin configuration (multiplicity 7).",
 ]
 
 batch_8 = [
@@ -59,7 +59,7 @@ batch_8 = [
     "Check my project.yaml for the 2D material system. Run a Gaussian geometry optimization in the high-spin ferromagnetic state.",
     "Validate the YAML configuration for this MOF structure. Perform an ORCA single-point energy calculation for the high-spin state.",
     "Please validate the project.yaml for the bulk transition metal oxide. Start with a Gaussian optimization on the ferromagnetic state.",
-    "I'm studying a magnetic polymer. Can you validate the project.yaml inputs for any issues? Run the initial calculation with Gaussian in the ferromagnetic state."
+    "I'm studying a magnetic polymer. Can you validate the project.yaml inputs for any issues? Run the initial calculation with Gaussian in the ferromagnetic state.",
 ]
 
 BATCHES = {
@@ -70,5 +70,5 @@ BATCHES = {
     "batch_5": batch_5,
     "batch_6": batch_6,
     "batch_7": batch_7,
-    "batch_8": batch_8
+    "batch_8": batch_8,
 }

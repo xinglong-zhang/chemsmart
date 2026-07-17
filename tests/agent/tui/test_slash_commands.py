@@ -119,7 +119,9 @@ def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
             assert screen._build_mode is False
 
             # /init with an argument injects project-YAML intent.
-            _set_composer_text(app, "/init Use Gaussian B3LYP/def2-SVP, call it co2.")
+            _set_composer_text(
+                app, "/init Use Gaussian B3LYP/def2-SVP, call it co2."
+            )
             await pilot.press("enter")
             await pilot.pause()
             assert captured[-1].startswith(
@@ -166,7 +168,7 @@ def test_latest_project_yaml_candidate_reads_tool_loop_log(tmp_path):
                     "issues": [],
                 },
             },
-        }
+        },
     ]
     (session_dir / "decision_log.jsonl").write_text(
         "\n".join(json.dumps(entry) for entry in entries) + "\n",
@@ -277,16 +279,10 @@ def test_candidate_uses_yaml_from_matching_validation_request(tmp_path):
     session_dir = tmp_path / "session"
     session_dir.mkdir()
     rejected_yaml = (
-        "gas:\n"
-        "  functional: null\n"
-        "  basis: def2svp\n"
-        "  freq: true\n"
+        "gas:\n" "  functional: null\n" "  basis: def2svp\n" "  freq: true\n"
     )
     validated_yaml = (
-        "gas:\n"
-        "  functional: pbe0\n"
-        "  basis: def2-SVP\n"
-        "  freq: true\n"
+        "gas:\n" "  functional: pbe0\n" "  basis: def2-SVP\n" "  freq: true\n"
     )
     rejected_render = _render_entry(rejected_yaml, project="water")
     rejected_render["payload"]["payload"].update(
@@ -321,11 +317,7 @@ def test_candidate_uses_yaml_from_matching_validation_request(tmp_path):
 def test_rejected_render_cannot_be_promoted_by_unbound_validation(tmp_path):
     session_dir = tmp_path / "session"
     session_dir.mkdir()
-    rejected_yaml = (
-        "gas:\n"
-        "  functional: null\n"
-        "  basis: def2svp\n"
-    )
+    rejected_yaml = "gas:\n" "  functional: null\n" "  basis: def2svp\n"
     rejected_render = _render_entry(rejected_yaml, project="water")
     rejected_render["payload"]["payload"].update(
         {

@@ -26,7 +26,9 @@ def parse_coordinate_literal(
     if not isinstance(parsed, list) or not parsed:
         return None, "coordinates must be a non-empty list"
 
-    if all(isinstance(item, int) and not isinstance(item, bool) for item in parsed):
+    if all(
+        isinstance(item, int) and not isinstance(item, bool) for item in parsed
+    ):
         groups: list[list[Any]] = [parsed]
     elif all(isinstance(item, list) for item in parsed):
         groups = parsed
@@ -49,7 +51,10 @@ def parse_coordinate_literal(
         min(tuple(group), tuple(reversed(group))) for group in normalized
     }
     if len(normalized) != len(canonical_groups):
-        return None, "coordinate groups must not be duplicated or reversed duplicates"
+        return (
+            None,
+            "coordinate groups must not be duplicated or reversed duplicates",
+        )
     return normalized, None
 
 

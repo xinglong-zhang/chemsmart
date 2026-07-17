@@ -178,8 +178,18 @@ def test_intent_asserts_nstates_from_ordinary_tddft_wording() -> None:
     request = "Gaussian TD-DFT with 10 lowest triplet excited states"
     expected = IntentSpec.from_request(request)
     assert expected.chemistry["nstates"] == 10
-    assert _verdict(request, "chemsmart run gaussian td --nstates 10 --states triplets") == "ok"
-    assert _verdict(request, "chemsmart run gaussian td --nstates 8 --states triplets") == "reject"
+    assert (
+        _verdict(
+            request, "chemsmart run gaussian td --nstates 10 --states triplets"
+        )
+        == "ok"
+    )
+    assert (
+        _verdict(
+            request, "chemsmart run gaussian td --nstates 8 --states triplets"
+        )
+        == "reject"
+    )
 
 
 def test_intent_asserts_orca_scan_point_count_and_project() -> None:
@@ -317,7 +327,9 @@ def test_intent_asserts_trajectory_frame_count_and_explicit_jobtype() -> None:
     assert _verdict(request, command.replace("-j opt", "-j sp")) == "reject"
 
 
-def test_intent_trajectory_selection_beats_generic_optimization_and_no_neb_endpoint() -> None:
+def test_intent_trajectory_selection_beats_generic_optimization_and_no_neb_endpoint() -> (
+    None
+):
     request = (
         "Using the loaded project, select 4 representative MD snapshots from "
         "ligand_md.xyz and perform Gaussian geometry optimization on each."
@@ -331,7 +343,9 @@ def test_intent_trajectory_selection_beats_generic_optimization_and_no_neb_endpo
     }
 
 
-def test_intent_asserts_snapshot_count_when_number_follows_snapshot_word() -> None:
+def test_intent_asserts_snapshot_count_when_number_follows_snapshot_word() -> (
+    None
+):
     request = (
         "MD trajectory에서 대표 구조 4개를 선택해 Gaussian single-point "
         "calculations for ligand_md.xyz를 준비해줘."
@@ -362,13 +376,18 @@ def test_intent_asserts_bare_userjob_route_keyword() -> None:
     )
     expected = IntentSpec.from_request(request)
     assert expected.chemistry["route_contains"] == "freq"
-    assert _verdict(
-        request,
-        "chemsmart run gaussian -f intermediate.xyz -c 0 -m 1 userjob -r freq",
-    ) == "ok"
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f intermediate.xyz -c 0 -m 1 userjob -r freq",
+        )
+        == "ok"
+    )
 
 
-def test_intent_discards_terminal_prose_punctuation_from_userjob_route() -> None:
+def test_intent_discards_terminal_prose_punctuation_from_userjob_route() -> (
+    None
+):
     request = (
         "Make a Gaussian userjob command for donor.xyz, charge 0, multiplicity 1, "
         "with custom route pop=(nbo), using the loaded project."
@@ -412,9 +431,7 @@ def test_kind_from_request_recovers_scan_and_freeze_phrasings() -> None:
         == "gaussian.scan"
     )
     assert (
-        _kind_from_request(
-            "hold the 1-2 bond fixed and optimize", "gaussian"
-        )
+        _kind_from_request("hold the 1-2 bond fixed and optimize", "gaussian")
         == "gaussian.modred"
     )
 

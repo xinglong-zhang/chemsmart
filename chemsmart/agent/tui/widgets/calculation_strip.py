@@ -54,9 +54,7 @@ class CalculationStatusStrip(Static):
         style = (
             "accent"
             if status.lower() in _ACTIVE
-            else "success"
-            if status == "COMPLETED"
-            else "error"
+            else "success" if status == "COMPLETED" else "error"
         )
         program = str(current.get("program") or "calculation").upper()
         kind = str(current.get("kind") or "job").upper()

@@ -12,9 +12,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-MODEL_REPO_ID = (
-    "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
-)
+MODEL_REPO_ID = "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
 DEFAULT_MAX_SEQ_LENGTH = 4096
 
 

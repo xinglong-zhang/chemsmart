@@ -103,7 +103,9 @@ def test_zero_all_turn_skeleton_leakage(tmp_path):
         {
             "tool_loop_sft": [
                 _tool_loop("s1", "optimize alpha.xyz", "freeze bond 3 and 5"),
-                _tool_loop("s2", "single point on beta.xyz", "freeze bond 3 and 5"),
+                _tool_loop(
+                    "s2", "single point on beta.xyz", "freeze bond 3 and 5"
+                ),
             ]
         },
     )
@@ -122,7 +124,9 @@ def test_zero_scenario_family_leakage(tmp_path):
         tmp_path,
         {
             "tool_loop_sft": [
-                _tool_loop("s1", "totally distinct request one", provenance=prov),
+                _tool_loop(
+                    "s1", "totally distinct request one", provenance=prov
+                ),
                 _tool_loop("s2", "an unrelated phrasing two", provenance=prov),
             ]
         },
@@ -144,9 +148,13 @@ def test_repaired_positive_chain_can_land_in_train(tmp_path):
         tmp_path,
         {
             "tool_loop_sft": [
-                _tool_loop("s1", "keep bond 4-8 fixed then opt", recovered=True)
+                _tool_loop(
+                    "s1", "keep bond 4-8 fixed then opt", recovered=True
+                )
             ],
-            "repair_pairs": [_repair_pair("s1", "keep bond 4-8 fixed then opt")],
+            "repair_pairs": [
+                _repair_pair("s1", "keep bond 4-8 fixed then opt")
+            ],
         },
     )
     manifest = build_split_manifest(export, eval_fraction=0)  # all -> train
@@ -175,7 +183,10 @@ def test_terminal_success_chain_can_land_in_train(tmp_path):
     assert terminal["tool_loop_terminal_success_chains"]["train"] == 1
     assert terminal["terminal_state_assertions"]["train"] == 1
     assert _read(
-        _splits(export) / "train" / "evidence" / "terminal_state_assertions.jsonl"
+        _splits(export)
+        / "train"
+        / "evidence"
+        / "terminal_state_assertions.jsonl"
     )
 
 
@@ -221,7 +232,9 @@ def test_legacy_rows_without_provenance_split_deterministically(tmp_path):
     assert train_a == train_b
     manifest_a2 = build_split_manifest(export_a, eval_fraction=40)
     assert manifest_a2["counts"] == manifest_a["counts"]
-    train_a2 = (_splits(export_a) / "train" / "tool_loop_sft.jsonl").read_text()
+    train_a2 = (
+        _splits(export_a) / "train" / "tool_loop_sft.jsonl"
+    ).read_text()
     assert train_a2 == train_a
 
 

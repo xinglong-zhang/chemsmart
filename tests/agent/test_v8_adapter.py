@@ -74,13 +74,13 @@ def test_atom_index_settings_render_as_runtime_parseable_ranges():
                 "id": 2,
                 "kind": "gaussian.qmmm",
                 "file": "qm.xyz",
-                    "charge": 0,
-                    "mult": 1,
-                    "settings": {
-                        "parent_job": "opt",
-                        "high_level_atoms": [1, 2, 3],
-                        "low_level_atoms": [4, 5, 6],
-                    },
+                "charge": 0,
+                "mult": 1,
+                "settings": {
+                    "parent_job": "opt",
+                    "high_level_atoms": [1, 2, 3],
+                    "low_level_atoms": [4, 5, 6],
+                },
             },
         ],
     }
@@ -375,9 +375,7 @@ def test_gaussian_scan_definition_with_constraints_renders_runtime_flags():
                 "mult": 1,
                 "settings": {
                     "scan_definition": (
-                        "B 1 2 S 12 0.08\n"
-                        "A 3 4 5 S 8 2.0\n"
-                        "D 1 2 3 4 F"
+                        "B 1 2 S 12 0.08\n" "A 3 4 5 S 8 2.0\n" "D 1 2 3 4 F"
                     ),
                 },
             }
@@ -530,12 +528,14 @@ def test_qmmm_renders_explicit_layer_state_and_orca_mm_method():
 
     assert gaussian["valid"], gaussian["errors"]
     assert orca["valid"], orca["errors"]
-    assert "--charge-intermediate 0 --mult-intermediate 1" in gaussian[
-        "commands"
-    ][0]
-    assert "--jobtype QMMM --low-level-method AMBER=HardFirst" in orca[
-        "commands"
-    ][0]
+    assert (
+        "--charge-intermediate 0 --mult-intermediate 1"
+        in gaussian["commands"][0]
+    )
+    assert (
+        "--jobtype QMMM --low-level-method AMBER=HardFirst"
+        in orca["commands"][0]
+    )
 
 
 def test_qmmm_without_parent_is_not_rendered_as_top_level_command():
@@ -661,7 +661,9 @@ def test_kind_disambiguator_fixes_high_confidence_confusions():
             }
         ],
     }
-    fixed, changed = disambiguate("Wiberg bond index analysis", copy.deepcopy(dias))
+    fixed, changed = disambiguate(
+        "Wiberg bond index analysis", copy.deepcopy(dias)
+    )
     assert changed is True
     assert fixed["jobs"][0]["kind"] == "gaussian.wbi"
 

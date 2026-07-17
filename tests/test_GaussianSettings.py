@@ -968,8 +968,9 @@ class TestBuiltinECPBasisKeyword:
         assert section.count("SDD") == 2
 
     def test_determine_basis_keyword_respects_explicit_ecp(self):
-        from chemsmart.io.molecules.structure import Molecule
         import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
 
         settings = GaussianJobSettings.default()
         settings.basis = "genecp"

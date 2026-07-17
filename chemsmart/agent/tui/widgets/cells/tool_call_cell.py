@@ -24,7 +24,16 @@ _AUTO_EXPAND_STATUSES = frozenset(
     {"warn", "reject", "partial", "error", "denied", "skipped", "interrupted"}
 )
 _TERMINAL_STATUSES = frozenset(
-    {"ok", "warn", "reject", "partial", "error", "denied", "skipped", "interrupted"}
+    {
+        "ok",
+        "warn",
+        "reject",
+        "partial",
+        "error",
+        "denied",
+        "skipped",
+        "interrupted",
+    }
 )
 
 
@@ -72,7 +81,9 @@ class ToolCallCell(BaseCell):
 
     @property
     def elapsed_seconds(self) -> float:
-        end = self._finished_at if self._finished_at is not None else monotonic()
+        end = (
+            self._finished_at if self._finished_at is not None else monotonic()
+        )
         return max(0.0, end - self._started_at)
 
     @property
@@ -187,19 +198,25 @@ class ToolCallCell(BaseCell):
         details = [
             self._heading(),
             Text(self.description),
-            Text(f"effect: {tool_side_effect_summary(self.tool)}", style="dim"),
+            Text(
+                f"effect: {tool_side_effect_summary(self.tool)}", style="dim"
+            ),
         ]
         if self.session_rule_active:
             details.append(Text("session rule: active", style="dim"))
         if self.note:
             details.append(Text(self.note, style=status_style))
         if self.arguments:
-            details.extend([Text(""), Text(pretty_tool_args(self.arguments), style="dim")])
+            details.extend(
+                [Text(""), Text(pretty_tool_args(self.arguments), style="dim")]
+            )
         if self.result is not None:
             result_detail = render_tool_result_detail(self.tool, self.result)
             if result_summary is not None or result_detail is not None:
                 details.append(Text(""))
-                result_style = "error" if self.result.get("error") is not None else "dim"
+                result_style = (
+                    "error" if self.result.get("error") is not None else "dim"
+                )
                 details.append(
                     Text.assemble(
                         ("Result", "bold"),

@@ -78,7 +78,9 @@ class ResponseCopyOverlay(ModalScreen[None]):
         self.action_copy_selection()
 
     def action_copy_selection(self) -> None:
-        selected = self.query_one("#response-copy-text", TextArea).selected_text
+        selected = self.query_one(
+            "#response-copy-text", TextArea
+        ).selected_text
         if selected:
             self.app.copy_to_clipboard(selected)
             self.notify("Selection copied", timeout=1.5)

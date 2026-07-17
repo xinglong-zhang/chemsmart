@@ -29,14 +29,17 @@ from chemsmart.agent.runtime.calculation_models import (
     CalculationStatus,
     CalculationStore,
     EventSink,
+)
+from chemsmart.agent.runtime.calculation_models import (
     apply_chemistry_summary as _apply_chemistry_summary,
+)
+from chemsmart.agent.runtime.calculation_models import (
     current_calculation_context,
     reset_calculation_context,
     set_calculation_context,
 )
 from chemsmart.agent.runtime.output_io import read_tail as _read_tail
 from chemsmart.agent.runtime.result_parsing import inspect_output
-
 
 _ACTIVE_PROCESSES: dict[str, subprocess.Popen[str]] = {}
 _ACTIVE_LOCK = threading.Lock()
@@ -243,9 +246,11 @@ def _monitor_process(
             return True
         _refresh_output_path(setup)
         progress = _progress_summary(
-            Path(setup.run.output_path)
-            if setup.run.output_path
-            else setup.stdout_path,
+            (
+                Path(setup.run.output_path)
+                if setup.run.output_path
+                else setup.stdout_path
+            ),
             setup.run.program,
             setup.run.kind,
         )

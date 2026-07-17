@@ -6,12 +6,12 @@ import hashlib
 import json
 from typing import Any, Protocol
 
-from chemsmart.agent.runtime.contracts import RuntimeV2Mode
 from chemsmart.agent.runtime.calculations import (
     CalculationContext,
     reset_calculation_context,
     set_calculation_context,
 )
+from chemsmart.agent.runtime.contracts import RuntimeV2Mode
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.receipts import collect_artifact_refs
 from chemsmart.agent.runtime.tool_catalog import ToolSelection

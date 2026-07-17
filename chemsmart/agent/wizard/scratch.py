@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS
 from chemsmart.agent.wizard.probe_values import (
     first_nonempty_line as _first_nonempty_line,
-    normalize_shell_value as _normalize_shell_value,
-    run_probe as _run_probe,
 )
+from chemsmart.agent.wizard.probe_values import (
+    normalize_shell_value as _normalize_shell_value,
+)
+from chemsmart.agent.wizard.probe_values import run_probe as _run_probe
 from chemsmart.agent.wizard.topology import Topology
 
 

@@ -24,7 +24,11 @@ REPO = Path(__file__).resolve().parents[2]
 ENV = {
     **os.environ,
     "PYTHONPATH": str(REPO)
-    + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""),
+    + (
+        os.pathsep + os.environ["PYTHONPATH"]
+        if os.environ.get("PYTHONPATH")
+        else ""
+    ),
 }
 
 
@@ -174,7 +178,12 @@ def _run(command: str, workspace: Path) -> dict[str, Any]:
     }
 
 
-def _assertion(assertion_id: str, expected: Any, observed: Any, evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+def _assertion(
+    assertion_id: str,
+    expected: Any,
+    observed: Any,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "id": assertion_id,
         "expected": expected,
@@ -203,7 +212,9 @@ def _terminal_state(
             "PBS" if paths["server"].is_file() else None,
             {"server_yaml": str(paths["server"])},
         ),
-        _assertion("sub.returncode", 0 if repaired else 1, result["returncode"]),
+        _assertion(
+            "sub.returncode", 0 if repaired else 1, result["returncode"]
+        ),
         _assertion("sub.server_name", expected_server, expected_server),
         _assertion("sub.submit_script_exists", repaired, bool(scripts)),
         _assertion("sub.mock_scheduler_marker", repaired, marker_exists),
@@ -219,7 +230,9 @@ def _terminal_state(
         "expected_returncode": 0 if repaired else 1,
         "server": expected_server,
         "scheduler": "PBS",
-        "execution_mode": "mock_scheduler" if repaired else "mock_scheduler_reject",
+        "execution_mode": (
+            "mock_scheduler" if repaired else "mock_scheduler_reject"
+        ),
         "assertions": assertions,
         "artifacts": [
             {"kind": "server_yaml", "path": str(paths["server"])},
@@ -263,7 +276,10 @@ def collect(run_dir: Path) -> Path:
         repaired=True,
     )
 
-    from chemsmart.agent.training_log import TrainingEpisodeWriter, TrainingLogConfig
+    from chemsmart.agent.training_log import (
+        TrainingEpisodeWriter,
+        TrainingLogConfig,
+    )
 
     training_dir = run_dir
     writer = TrainingEpisodeWriter(
@@ -276,8 +292,14 @@ def collect(run_dir: Path) -> Path:
         provider_name="deepseek",
         model="deepseek-v4-pro",
         messages=[
-            {"role": "user", "content": "Submit a Gaussian optimization to the mock PBS server."},
-            {"role": "assistant", "content": "The first server target was invalid; I will repair it."},
+            {
+                "role": "user",
+                "content": "Submit a Gaussian optimization to the mock PBS server.",
+            },
+            {
+                "role": "assistant",
+                "content": "The first server target was invalid; I will repair it.",
+            },
         ],
         tool_records=[
             {
@@ -288,7 +310,9 @@ def collect(run_dir: Path) -> Path:
                     "command": wrong,
                     "semantic": {
                         "verdict": "reject",
-                        "failed_rule_ids": ["cmd.semantic.safe_execution_failed"],
+                        "failed_rule_ids": [
+                            "cmd.semantic.safe_execution_failed"
+                        ],
                     },
                 },
             },
@@ -308,10 +332,22 @@ def collect(run_dir: Path) -> Path:
         provider_name="deepseek",
         model="deepseek-v4-pro",
         messages=[
-            {"role": "user", "content": "Submit a Gaussian optimization to the mock PBS server."},
-            {"role": "assistant", "content": "The first server target was invalid; I will repair it."},
-            {"role": "user", "content": "Use mock-pbs and submit the corrected command."},
-            {"role": "assistant", "content": "The corrected chemsmart sub command reached the mock PBS scheduler."},
+            {
+                "role": "user",
+                "content": "Submit a Gaussian optimization to the mock PBS server.",
+            },
+            {
+                "role": "assistant",
+                "content": "The first server target was invalid; I will repair it.",
+            },
+            {
+                "role": "user",
+                "content": "Use mock-pbs and submit the corrected command.",
+            },
+            {
+                "role": "assistant",
+                "content": "The corrected chemsmart sub command reached the mock PBS scheduler.",
+            },
         ],
         tool_records=[
             {
@@ -322,14 +358,25 @@ def collect(run_dir: Path) -> Path:
                     "command": correct,
                     "semantic": {
                         "verdict": "ok",
-                        "generated_inputs": [{"path": str(paths["workspace"] / "mock_opt.com"), "route": "# opt b3lyp 6-31g(d)"}],
+                        "generated_inputs": [
+                            {
+                                "path": str(
+                                    paths["workspace"] / "mock_opt.com"
+                                ),
+                                "route": "# opt b3lyp 6-31g(d)",
+                            }
+                        ],
                     },
                 },
             },
             {
                 "tool": "execute_chemsmart_command",
                 "status": "ok",
-                "result": {**correct_result, "submitted": True, "job_id": "terminal-fixture-001"},
+                "result": {
+                    **correct_result,
+                    "submitted": True,
+                    "job_id": "terminal-fixture-001",
+                },
             },
         ],
         cwd=str(paths["workspace"]),
@@ -338,12 +385,18 @@ def collect(run_dir: Path) -> Path:
     )
     if first is None or second is None:
         raise RuntimeError("could not write mock terminal-state episodes")
-    print(json.dumps({
-        "run_dir": str(run_dir),
-        "episode_file": str(second),
-        "wrong": wrong_state,
-        "correct": correct_state,
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "run_dir": str(run_dir),
+                "episode_file": str(second),
+                "wrong": wrong_state,
+                "correct": correct_state,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return second
 
 
@@ -351,7 +404,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", default=None)
     args = parser.parse_args()
-    run_dir = Path(args.run_dir) if args.run_dir else REPO / "var" / "agent-training" / "runs" / f"mock-server-terminal-state-{int(time.time())}"
+    run_dir = (
+        Path(args.run_dir)
+        if args.run_dir
+        else REPO
+        / "var"
+        / "agent-training"
+        / "runs"
+        / f"mock-server-terminal-state-{int(time.time())}"
+    )
     collect(run_dir)
     return 0
 

@@ -28,11 +28,11 @@ SCENARIOS = (
     (
         "submit_wrong_server_then_repair",
         (
-        "Prepare and execute a Gaussian optimization of examples/h2o.xyz "
-        "using the workspace project mock and server missing-pbs. Do not use "
-        "build_job or submit_hpc directly; the user-facing artifact must "
-        "be a chemsmart sub command. Charge and multiplicity are intentionally "
-        "not given yet, so request them rather than guessing."
+            "Prepare and execute a Gaussian optimization of examples/h2o.xyz "
+            "using the workspace project mock and server missing-pbs. Do not use "
+            "build_job or submit_hpc directly; the user-facing artifact must "
+            "be a chemsmart sub command. Charge and multiplicity are intentionally "
+            "not given yet, so request them rather than guessing."
         ),
         "Correction: missing-pbs was a typo; H2O is neutral singlet (charge 0, "
         "multiplicity 1). Use workspace project mock and configured mock-pbs, "
@@ -74,7 +74,9 @@ SCENARIOS = (
 )
 
 
-def _latest_terminal_state(episode_file: Path, session_id: str) -> dict[str, Any] | None:
+def _latest_terminal_state(
+    episode_file: Path, session_id: str
+) -> dict[str, Any] | None:
     latest = None
     if not episode_file.exists():
         return None
@@ -99,7 +101,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="deepseek-v4-pro")
     parser.add_argument("--limit", type=int, default=4)
-    parser.add_argument("--batch-id", default="prod-readiness-deepseek-sub-terminal-20260711")
+    parser.add_argument(
+        "--batch-id", default="prod-readiness-deepseek-sub-terminal-20260711"
+    )
     args = parser.parse_args()
 
     sys.path.insert(0, str(REPO))
@@ -121,7 +125,9 @@ def main() -> int:
     import chemsmart.agent.providers as providers_mod
     import chemsmart.agent.tools_command as tools_command
     from chemsmart.agent.core import AgentSession
-    from chemsmart.agent.harness.terminal_state import terminal_state_is_positive
+    from chemsmart.agent.harness.terminal_state import (
+        terminal_state_is_positive,
+    )
     from chemsmart.agent.permissions import (
         ApprovalDecision,
         PermissionMode,
@@ -173,7 +179,9 @@ def main() -> int:
             session_root=batch_dir / "sessions" / f"case-{index:02d}",
             stage_prompt="unified_agent.md",
         )
-        policy = PermissionPolicy(mode=PermissionMode.DRIVING, prompt_risky=True)
+        policy = PermissionPolicy(
+            mode=PermissionMode.DRIVING, prompt_risky=True
+        )
         started = time.time()
         row: dict[str, Any] = {
             "batch_id": args.batch_id,
@@ -200,15 +208,17 @@ def main() -> int:
                 )
             state = _latest_terminal_state(episode_file, out["session_id"])
             command = _last_command(out)
-            row.update({
-                "session_id": out["session_id"],
-                "turn_count": 2 if second else 1,
-                "command": command,
-                "terminal_state": state,
-                "completed_steps": out.get("completed_steps"),
-                "ask_user": bool(out.get("ask_user_question")),
-                "latency_s": round(time.time() - started, 1),
-            })
+            row.update(
+                {
+                    "session_id": out["session_id"],
+                    "turn_count": 2 if second else 1,
+                    "command": command,
+                    "terminal_state": state,
+                    "completed_steps": out.get("completed_steps"),
+                    "ask_user": bool(out.get("ask_user_question")),
+                    "latency_s": round(time.time() - started, 1),
+                }
+            )
             if (
                 state
                 and terminal_state_is_positive(state)
@@ -220,7 +230,9 @@ def main() -> int:
             else:
                 row["grade"] = "WRONG"
         except Exception as exc:
-            row.update({"grade": "ERR", "error": f"{type(exc).__name__}: {exc}"[:240]})
+            row.update(
+                {"grade": "ERR", "error": f"{type(exc).__name__}: {exc}"[:240]}
+            )
         finally:
             os.chdir(original_cwd)
         results.append(row)
@@ -229,8 +241,15 @@ def main() -> int:
     result_path = run_dir / "sub_terminal_results.jsonl"
     with result_path.open("a", encoding="utf-8") as handle:
         for row in results:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-    print(json.dumps({"result_path": str(result_path), "count": len(results)}, sort_keys=True))
+            handle.write(
+                json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+    print(
+        json.dumps(
+            {"result_path": str(result_path), "count": len(results)},
+            sort_keys=True,
+        )
+    )
     return 0
 
 

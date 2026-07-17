@@ -33,13 +33,13 @@ from chemsmart.agent.runtime.calculations import (
     CalculationEvent,
     execute_observed_process,
 )
-from chemsmart.agent.services.command_terminal import (
-    execution_terminal_state,
-    submit_script_fingerprints,
-)
 from chemsmart.agent.schema_prune import (
     prune_schema_for_request,
     schema_variant_id,
+)
+from chemsmart.agent.services.command_terminal import (
+    execution_terminal_state,
+    submit_script_fingerprints,
 )
 from chemsmart.agent.synthesis import (
     SynthesisSession,
@@ -336,10 +336,7 @@ def _expected_intent_for_repair(
     spec = IntentSpec.from_request(request)
     values = spec.to_dict()
     if (
-        not any(
-            values.get(name)
-            for name in INTENT_CORE_FIELDS
-        )
+        not any(values.get(name) for name in INTENT_CORE_FIELDS)
         and not spec.chemistry
     ):
         return None

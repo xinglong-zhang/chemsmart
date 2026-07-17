@@ -26,7 +26,10 @@ def parse_cclib_output(output_path: str | Path) -> dict[str, Any]:
 
     path = Path(output_path)
     if not path.is_file():
-        return {"status": "not_found", "warning": "Output file does not exist."}
+        return {
+            "status": "not_found",
+            "warning": "Output file does not exist.",
+        }
     if path.stat().st_size > MAX_CCLIB_FILE_SIZE:
         return {
             "status": "skipped",

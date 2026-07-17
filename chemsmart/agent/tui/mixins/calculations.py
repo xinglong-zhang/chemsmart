@@ -26,7 +26,9 @@ from chemsmart.agent.tui.screens.calculations import (
     CalculationMonitorAction,
 )
 from chemsmart.agent.tui.services.job_poller import format_jobs_table
-from chemsmart.agent.tui.widgets.calculation_strip import CalculationStatusStrip
+from chemsmart.agent.tui.widgets.calculation_strip import (
+    CalculationStatusStrip,
+)
 from chemsmart.agent.tui.widgets.cells import CalculationReceiptCell
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.popups import TextPromptOverlay
@@ -159,9 +161,11 @@ class CalculationMixin:
                 else "Calculation failed · Ctrl+B for diagnostics"
             )
         self.notify(
-            "Calculation completed."
-            if status == "completed"
-            else f"Calculation ended with status {status}.",
+            (
+                "Calculation completed."
+                if status == "completed"
+                else f"Calculation ended with status {status}."
+            ),
             severity="information" if status == "completed" else "error",
             timeout=5,
         )
@@ -306,4 +310,3 @@ class CalculationMixin:
         self.query_one(CalculationStatusStrip).replace_runs(
             list(self._calculation_runs.values())
         )
-

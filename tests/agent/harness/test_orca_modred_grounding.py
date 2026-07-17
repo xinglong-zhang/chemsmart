@@ -31,9 +31,7 @@ def test_large_orca_modred_excerpt_preserves_header_constraint() -> None:
     content = (
         "! Opt B3LYP def2-SVP\n"
         "%geom\n  Constraints\n  {B 1 4 C}\n  end\nend\n"
-        "* xyz 0 1\n"
-        + "C 0.0 0.0 0.0\n" * 300
-        + "*\n"
+        "* xyz 0 1\n" + "C 0.0 0.0 0.0\n" * 300 + "*\n"
     )
     excerpt = input_excerpt(content)
 
@@ -77,7 +75,9 @@ def test_intent_rejects_regrouped_modred_coordinates() -> None:
     assert "intent.chemistry.coordinates" in result.failed_rule_ids
 
 
-def test_modred_generated_input_rejects_wrong_route_and_extra_constraint() -> None:
+def test_modred_generated_input_rejects_wrong_route_and_extra_constraint() -> (
+    None
+):
     issues = check_generated_input_invariants(
         "chemsmart run orca -p demo -f probe.xyz -c 0 -m 1 "
         "modred --coordinates '[[2,5]]'",
@@ -124,7 +124,9 @@ def test_modred_generated_input_rejects_non_internal_constraint_rows() -> None:
         }
 
 
-def test_generated_input_rejects_electron_multiplicity_parity_mismatch() -> None:
+def test_generated_input_rejects_electron_multiplicity_parity_mismatch() -> (
+    None
+):
     generated = {
         "path": "heme_sp.inp",
         "route": "! B3LYP def2-SVP",

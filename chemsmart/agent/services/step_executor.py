@@ -49,9 +49,7 @@ class StepExecutor:
         started = time.perf_counter()
         self._log_call(step_index, step, resolved_args, started_at)
         result = self._call(step.tool, resolved_args)
-        self._raise_for_failure(
-            step_index, step, result, started_at, started
-        )
+        self._raise_for_failure(step_index, step, result, started_at, started)
         artifact = session._write_result_artifact(step_index, result)
         handle_id = session._store_result_handle(step.tool, result)
         session.decision_log.write(
@@ -106,9 +104,7 @@ class StepExecutor:
         )
         return result
 
-    def record_skipped(
-        self, step_index: int, step: Step, reason: str
-    ) -> None:
+    def record_skipped(self, step_index: int, step: Step, reason: str) -> None:
         assert self.session.decision_log is not None
         self.session.decision_log.write(
             "tool_skipped",

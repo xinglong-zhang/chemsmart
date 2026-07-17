@@ -15,8 +15,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from chemsmart.agent.harness.command_semantics import evaluate_command_semantics
-from chemsmart.agent.training_log import TrainingEpisodeWriter, TrainingLogConfig
+from chemsmart.agent.harness.command_semantics import (
+    evaluate_command_semantics,
+)
+from chemsmart.agent.training_log import (
+    TrainingEpisodeWriter,
+    TrainingLogConfig,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -159,7 +164,9 @@ def _append(
     )
 
 
-def _checked_command(command: str, program: str, request: str) -> dict[str, Any]:
+def _checked_command(
+    command: str, program: str, request: str
+) -> dict[str, Any]:
     from scripts.training import reasoning_accum
 
     with tempfile.TemporaryDirectory(prefix="qmmm-runtime-gold-") as raw:
@@ -178,15 +185,15 @@ def _checked_command(command: str, program: str, request: str) -> dict[str, Any]
             f"rules={semantic['failed_rule_ids']}"
         )
     if not semantic["generated_inputs"]:
-        raise RuntimeError(f"runtime-gold command had no generated input: {command}")
+        raise RuntimeError(
+            f"runtime-gold command had no generated input: {command}"
+        )
     return semantic
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--run-id", default="qmmm-runtime-gold-20260711"
-    )
+    parser.add_argument("--run-id", default="qmmm-runtime-gold-20260711")
     args = parser.parse_args()
     training_dir = REPO / "var" / "agent-training" / "runs" / args.run_id
     writer = TrainingEpisodeWriter(
@@ -317,7 +324,9 @@ def main() -> int:
         )
     )
     if bad_semantic["verdict"] != "reject":
-        raise RuntimeError("repair fixture did not produce the expected reject")
+        raise RuntimeError(
+            "repair fixture did not produce the expected reject"
+        )
     good_semantic = _checked_command(
         good_gaussian,
         "gaussian",
@@ -397,13 +406,20 @@ def main() -> int:
                 "tool": "extract_project_protocol",
                 "status": "ok",
                 "args": {"text": route_user},
-                "result": {"status": "ready", "facts": {"program": "orca", "kind": "qmmm"}},
+                "result": {
+                    "status": "ready",
+                    "facts": {"program": "orca", "kind": "qmmm"},
+                },
             },
             {
                 "tool": "render_project_yaml",
                 "status": "ok",
                 "args": {"project_name": "route-demo"},
-                "result": {"status": "ready", "project_name": "route-demo", "yaml_text": "gas: {}"},
+                "result": {
+                    "status": "ready",
+                    "project_name": "route-demo",
+                    "yaml_text": "gas: {}",
+                },
             },
             {
                 "tool": "validate_project_yaml",

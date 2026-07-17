@@ -114,9 +114,11 @@ def _basis_catalog_issues(
             continue
         issues.append(
             issue(
-                "yaml.basis.program_unsupported"
-                if result.canonical_name
-                else "yaml.basis.unrecognized",
+                (
+                    "yaml.basis.program_unsupported"
+                    if result.canonical_name
+                    else "yaml.basis.unrecognized"
+                ),
                 "reject",
                 f"{phase}.{key}={value!r}: {result.message}",
             )

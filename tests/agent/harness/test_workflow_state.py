@@ -10,10 +10,17 @@ def test_project_name_from_request_keeps_explicit_name() -> None:
     )
 
 
-def test_project_name_from_request_ignores_generic_workspace_state_words() -> None:
+def test_project_name_from_request_ignores_generic_workspace_state_words() -> (
+    None
+):
     assert project_name_from_request("using the loaded project") == ""
     assert project_name_from_request("with the current project") == ""
-    assert project_name_from_request("keep the active Gaussian project and do not edit it") == ""
+    assert (
+        project_name_from_request(
+            "keep the active Gaussian project and do not edit it"
+        )
+        == ""
+    )
     assert project_name_from_request("keep the loaded project unchanged") == ""
     assert (
         project_name_from_request(

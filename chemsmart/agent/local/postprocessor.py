@@ -14,7 +14,9 @@ import re
 from difflib import get_close_matches
 from typing import Any
 
-PATH_RE = re.compile(r"\b(?:examples|inputs)/[^\s,;:'\"`]+?\.xyz\b", re.IGNORECASE)
+PATH_RE = re.compile(
+    r"\b(?:examples|inputs)/[^\s,;:'\"`]+?\.xyz\b", re.IGNORECASE
+)
 BAD_STEP_FIELD_RE = re.compile(r"^\$step\d+\.(molecule|settings|job)$")
 ALLOWED_RECOMMEND_REFS = {"$step2.functional", "$step2.basis"}
 
@@ -167,7 +169,9 @@ def _repair_job_kinds_and_labels(steps: list[Any]) -> None:
     job_indices: list[int] = []
 
     for one_based_index, step in enumerate(steps, start=1):
-        if not isinstance(step, dict) or not isinstance(step.get("args"), dict):
+        if not isinstance(step, dict) or not isinstance(
+            step.get("args"), dict
+        ):
             continue
         args = step["args"]
         if step.get("tool") == "build_molecule" and isinstance(

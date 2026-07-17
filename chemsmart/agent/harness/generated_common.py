@@ -9,7 +9,6 @@ from typing import Any
 from chemsmart.agent.harness.models import InvariantIssue
 from chemsmart.utils.periodictable import PeriodicTable
 
-
 _PERIODIC_TABLE = PeriodicTable()
 
 

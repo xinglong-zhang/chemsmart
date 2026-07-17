@@ -22,6 +22,8 @@ from chemsmart.agent.services.method_recommendation import (
 )
 from chemsmart.agent.services.scan_directives import (
     parse_gaussian_scan_definition as _parse_gaussian_scan_definition,
+)
+from chemsmart.agent.services.scan_directives import (
     partition_modred_route_directives as _partition_modred_route_directives,
 )
 from chemsmart.agent.services.server_selection import (

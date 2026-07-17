@@ -100,4 +100,8 @@ def check_command_contracts(
 CommandContractIssue.__module__ = __name__
 
 
-__all__ = ["CommandContractIssue", "ContractSeverity", "check_command_contracts"]
+__all__ = [
+    "CommandContractIssue",
+    "ContractSeverity",
+    "check_command_contracts",
+]

@@ -15,10 +15,10 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticResult,
     evaluate_command_semantics,
 )
+from chemsmart.agent.harness.spec_invariants import check_spec
 from chemsmart.agent.harness.workflow_state import (
     current_workflow_state,
 )
-from chemsmart.agent.harness.spec_invariants import check_spec
 from chemsmart.agent.kind_disambiguator import disambiguate
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.provider_adapter import extract_response_text

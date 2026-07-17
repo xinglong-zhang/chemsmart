@@ -25,8 +25,14 @@ def replay(paths: list[Path]) -> dict[str, Any]:
             row = json.loads(line)
             rows_seen += 1
             meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
-            provider = meta.get("provider") if isinstance(meta.get("provider"), dict) else {}
-            provider_name = str(provider.get("model") or provider.get("name") or "unknown")
+            provider = (
+                meta.get("provider")
+                if isinstance(meta.get("provider"), dict)
+                else {}
+            )
+            provider_name = str(
+                provider.get("model") or provider.get("name") or "unknown"
+            )
             providers[provider_name] += 1
             variants[str(meta.get("schema_variant") or "unknown")] += 1
             row_rules, outcome = _classify_row(row)
@@ -58,14 +64,24 @@ def _classify_row(row: dict[str, Any]) -> tuple[set[str], str]:
             continue
         if not isinstance(payload, dict):
             continue
-        statuses.append(str(payload.get("status") or payload.get("verdict") or ""))
-        semantic = payload.get("semantic") if isinstance(payload.get("semantic"), dict) else {}
+        statuses.append(
+            str(payload.get("status") or payload.get("verdict") or "")
+        )
+        semantic = (
+            payload.get("semantic")
+            if isinstance(payload.get("semantic"), dict)
+            else {}
+        )
         for issue in semantic.get("issues") or []:
             if not isinstance(issue, dict):
                 continue
             rule_id = str(issue.get("rule_id") or issue.get("id") or "")
             if rule_id == "cmd.semantic.safe_execution_failed":
-                evidence = issue.get("evidence") if isinstance(issue.get("evidence"), dict) else {}
+                evidence = (
+                    issue.get("evidence")
+                    if isinstance(issue.get("evidence"), dict)
+                    else {}
+                )
                 failure = classify_runtime_failure(
                     stdout=str(evidence.get("stdout_tail") or ""),
                     stderr=str(evidence.get("stderr_tail") or ""),
@@ -109,7 +125,11 @@ def _tool_names(row: dict[str, Any]) -> list[str]:
         for call in message.get("tool_calls") or []:
             if not isinstance(call, dict):
                 continue
-            function = call.get("function") if isinstance(call.get("function"), dict) else {}
+            function = (
+                call.get("function")
+                if isinstance(call.get("function"), dict)
+                else {}
+            )
             name = str(function.get("name") or "")
             if name:
                 names.append(name)

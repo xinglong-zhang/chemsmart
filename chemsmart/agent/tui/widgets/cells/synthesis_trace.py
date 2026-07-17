@@ -67,7 +67,9 @@ class FinalAnswerCell(BaseCell):
     def on_click(self, event: events.Click) -> None:
         event.stop()
         self.post_message(
-            self.CopyRequested(self.source_text, self.border_title or "Response")
+            self.CopyRequested(
+                self.source_text, self.border_title or "Response"
+            )
         )
 
 
@@ -130,13 +132,17 @@ def _render_trace(
         "real chemsmart CLI command was parsed into user-facing fields",
     )
     steps.add_row("5", "safe_runtime_semantic_gate", _semantic_label(semantic))
-    steps.add_row("6", "final_response", "final command or answer rendered last")
+    steps.add_row(
+        "6", "final_response", "final command or answer rendered last"
+    )
 
     parts: list[object] = [headline, meta, steps]
     public_reasoning = _public_reasoning(decision_trace)
     if public_reasoning:
         reason_table = Table.grid(padding=(0, 1))
-        reason_table.add_column("Public reasoning", style="magenta", no_wrap=True)
+        reason_table.add_column(
+            "Public reasoning", style="magenta", no_wrap=True
+        )
         reason_table.add_column("Evidence", overflow="fold")
         for index, item in enumerate(public_reasoning, start=1):
             reason_table.add_row(f"{index}.", item)
@@ -175,7 +181,9 @@ def _format_trace_text(
     lines.append(f"- semantic gate: {_semantic_label(semantic)}")
     if decision_trace:
         lines.append(f"- router: {decision_trace.get('router') or 'unknown'}")
-        lines.append(f"- routed action: {decision_trace.get('action') or 'unknown'}")
+        lines.append(
+            f"- routed action: {decision_trace.get('action') or 'unknown'}"
+        )
         reasoning = _public_reasoning(decision_trace)
         if reasoning:
             lines.append("- public reasoning:")

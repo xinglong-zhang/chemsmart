@@ -18,6 +18,7 @@ class _AgentConsoleHandler(logging.StreamHandler):
     and other host-attached ``StreamHandler`` instances untouched.
     """
 
+
 _THIRD_PARTY_LOGGERS = (
     "numexpr.utils",
     "anthropic",

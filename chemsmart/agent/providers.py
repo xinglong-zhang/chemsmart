@@ -254,7 +254,9 @@ class LocalProvider:
         try:
             plan = generate_plan(bundle, user_query, history=history)
         except ValueError as exc:
-            raise ProviderError(f"local provider decode failed: {exc}") from exc
+            raise ProviderError(
+                f"local provider decode failed: {exc}"
+            ) from exc
         from chemsmart.agent.kind_disambiguator import disambiguate
 
         plan, _changed = disambiguate(user_query, plan)
@@ -321,10 +323,13 @@ class LocalProvider:
 
     def _ping_mlx(self, started: float) -> dict[str, Any]:
         try:
-            from chemsmart.agent.local.mlx_loader import MODEL_REPO_ID
             from huggingface_hub import HfApi
+
+            from chemsmart.agent.local.mlx_loader import MODEL_REPO_ID
         except Exception as exc:  # pragma: no cover - optional runtime guard
-            raise ProviderError(f"MLX local provider ping failed: {exc}") from exc
+            raise ProviderError(
+                f"MLX local provider ping failed: {exc}"
+            ) from exc
 
         repo_id = self._base_model_id or MODEL_REPO_ID
         token = self._hf_token or None

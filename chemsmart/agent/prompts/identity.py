@@ -43,9 +43,7 @@ def build_system_prompt(
         _session_meta_block(session_meta),
         stage_instructions.strip(),
     ]
-    required = "\n\n".join(
-        section for section in required_sections if section
-    )
+    required = "\n\n".join(section for section in required_sections if section)
     if max_chars is None:
         context = _conversation_context_block(
             conversation_context, max_chars=1_000_000
@@ -87,9 +85,11 @@ def ensure_system_message(
 def _tool_summary_block(registry: ToolRegistry, *, request: str) -> str:
     """Name only the intent-relevant tools; schemas travel out-of-band."""
 
-    available = {
-        tool.name for tool in registry.list_tools()
-    } if hasattr(registry, "list_tools") else set()
+    available = (
+        {tool.name for tool in registry.list_tools()}
+        if hasattr(registry, "list_tools")
+        else set()
+    )
     text = request.lower()
     groups = {"synthesis"}
     if any(term in text for term in ("yaml", "project", "basis")):

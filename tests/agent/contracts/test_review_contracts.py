@@ -8,7 +8,6 @@ from pathlib import Path
 
 from chemsmart.agent.v8_kind_index import KIND_SETTINGS
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_DIR = REPO_ROOT / "tests/agent/contracts"
 

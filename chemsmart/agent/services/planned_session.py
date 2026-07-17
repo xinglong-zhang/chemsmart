@@ -24,7 +24,9 @@ class PlannedSessionHost(Protocol):
     def _collect_prior_results(
         self, results: list[Any], tool_name: str
     ) -> list[Any]: ...
-    def _find_prior_result(self, results: list[Any], tool_name: str) -> Any: ...
+    def _find_prior_result(
+        self, results: list[Any], tool_name: str
+    ) -> Any: ...
     def _get_logged_verdict(self) -> CriticVerdict | None: ...
     def _get_logged_summary(self) -> dict[str, Any] | None: ...
     def _execute_step(
@@ -37,9 +39,7 @@ class PlannedSessionHost(Protocol):
     def _save_state(self) -> None: ...
     def _preview_submit_step(self, *args: Any, **kwargs: Any) -> Any: ...
     def _critic_call(self, **kwargs: Any) -> CriticVerdict: ...
-    def _apply_deterministic_gates(
-        self, **kwargs: Any
-    ) -> CriticVerdict: ...
+    def _apply_deterministic_gates(self, **kwargs: Any) -> CriticVerdict: ...
     def _block_reason(self, **kwargs: Any) -> str | None: ...
     def _record_skipped_step(self, *args: Any, **kwargs: Any) -> None: ...
     def _finalize_session(self, **kwargs: Any) -> None: ...
@@ -174,7 +174,9 @@ class PlannedSessionRunner:
         context: PlannedRunContext,
         dry_submit: bool,
     ) -> None:
-        if context.verdict is not None or is_project_yaml_workflow(context.plan):
+        if context.verdict is not None or is_project_yaml_workflow(
+            context.plan
+        ):
             return
         verdict = self.session._critic_call(
             plan=context.plan,
@@ -333,9 +335,7 @@ class PlannedSessionRunner:
             "critic_verdict": context.verdict,
             "completed_steps": self.session.state.current_step_index,
             "blocked": context.blocked,
-            "dry_run_result": _primary_dry_run_result(
-                context.dry_run_results
-            ),
+            "dry_run_result": _primary_dry_run_result(context.dry_run_results),
             "dry_run_results": context.dry_run_results,
             "runtime_result": context.runtime_result,
             "preview_submit": context.preview_submit,

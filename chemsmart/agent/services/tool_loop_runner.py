@@ -53,9 +53,7 @@ class TurnState:
     consecutive_tool_errors: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
-    signature_counts: Counter[tuple[str, str]] = field(
-        default_factory=Counter
-    )
+    signature_counts: Counter[tuple[str, str]] = field(default_factory=Counter)
     tool_requests: list[ToolRequest] = field(default_factory=list)
     tool_outcomes: list[ToolOutcome] = field(default_factory=list)
     approvals_count: int = 0
@@ -202,12 +200,12 @@ class ToolLoopRunner:
                 stop_index = index
                 break
         if stop_index is not None:
-            outcomes.extend(
-                self._skip_queued(state, requests, stop_index)
-            )
+            outcomes.extend(self._skip_queued(state, requests, stop_index))
         state.tool_outcomes.extend(outcomes)
         if outcomes:
-            state.history.extend(build_tool_result_messages(protocol, outcomes))
+            state.history.extend(
+                build_tool_result_messages(protocol, outcomes)
+            )
         return stop_index is not None, asked_user
 
     def _process_one(
@@ -265,14 +263,16 @@ class ToolLoopRunner:
             },
         )
 
-    def _ask_user(
-        self, state: TurnState, request: ToolRequest
-    ) -> ToolOutcome:
+    def _ask_user(self, state: TurnState, request: ToolRequest) -> ToolOutcome:
         question = request.arguments.get("question")
         question = question.strip() if isinstance(question, str) else ""
         raw_options = request.arguments.get("options")
         options = (
-            [item.strip() for item in raw_options if isinstance(item, str) and item.strip()]
+            [
+                item.strip()
+                for item in raw_options
+                if isinstance(item, str) and item.strip()
+            ]
             if isinstance(raw_options, list)
             else []
         )

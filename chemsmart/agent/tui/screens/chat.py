@@ -14,33 +14,51 @@ from textual.widgets import OptionList
 from textual.worker import Worker
 
 from chemsmart.agent.core import CriticVerdict, DecisionLog, Plan
+from chemsmart.agent.harness.workflow_state import (
+    current_workflow_state,
+)
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
 )
 from chemsmart.agent.provider_adapter import ToolRequest
-from chemsmart.agent.harness.workflow_state import (
-    current_workflow_state,
-)
 from chemsmart.agent.synthesis import SynthesisSession
-from chemsmart.settings.workspace_project import (
-    resolve_workspace_project,
+from chemsmart.agent.tui.chat_helpers import (
+    _default_interaction_mode,
 )
-from chemsmart.agent.tui.chat_models import ReadyCommand
-from chemsmart.agent.tui.slash_catalog import (
-    SLASH_PALETTE_COMMANDS as _SLASH_PALETTE_COMMANDS,  # noqa: F401
+from chemsmart.agent.tui.chat_helpers import (  # noqa: F401,E501
+    _find_project_yaml_candidate_for_write as _find_project_yaml_candidate_for_write,
 )
 from chemsmart.agent.tui.chat_helpers import (
-    _find_project_yaml_candidate_for_write as _find_project_yaml_candidate_for_write,  # noqa: F401,E501
-    _default_interaction_mode,
     _latest_project_yaml_candidate as _latest_project_yaml_candidate,
+)
+from chemsmart.agent.tui.chat_helpers import (
     _load_tui_provider_config,
 )
-from chemsmart.agent.tui.state import TuiState
-from chemsmart.agent.tui.screens.jobs_panel import JobsPanel
+from chemsmart.agent.tui.chat_models import ReadyCommand
+from chemsmart.agent.tui.mixins.approval_flow import ApprovalFlowMixin
+from chemsmart.agent.tui.mixins.calculations import CalculationMixin
+from chemsmart.agent.tui.mixins.command_execution import CommandExecutionMixin
+from chemsmart.agent.tui.mixins.decision_log import DecisionLogMixin
+from chemsmart.agent.tui.mixins.decision_log_events import DecisionEventMixin
+from chemsmart.agent.tui.mixins.job_interaction import JobInteractionMixin
+from chemsmart.agent.tui.mixins.project_write import ProjectWriteMixin
+from chemsmart.agent.tui.mixins.request_flow import RequestFlowMixin
+from chemsmart.agent.tui.mixins.session_workers import SessionWorkersMixin
+from chemsmart.agent.tui.mixins.slash_commands import SlashCommandsMixin
+from chemsmart.agent.tui.mixins.synthesis_presentation import (
+    SynthesisPresentationMixin,
+)
+from chemsmart.agent.tui.mixins.tool_events import ToolEventMixin
+from chemsmart.agent.tui.mixins.wizard_commands import WizardCommandsMixin
+from chemsmart.agent.tui.mixins.worker_lifecycle import WorkerLifecycleMixin
+from chemsmart.agent.tui.mixins.workspace_interaction import (
+    WorkspaceInteractionMixin,
+)
 from chemsmart.agent.tui.screens.calculations import (
     CalculationMonitor,
 )
+from chemsmart.agent.tui.screens.jobs_panel import JobsPanel
 from chemsmart.agent.tui.services.job_poller import (
     JobPollerError,
     JobPollerMixin,
@@ -53,25 +71,13 @@ from chemsmart.agent.tui.services.job_poller import (
 )
 from chemsmart.agent.tui.services.log_tailer import LogTailer
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
-from chemsmart.agent.tui.mixins.decision_log import DecisionLogMixin
-from chemsmart.agent.tui.mixins.calculations import CalculationMixin
-from chemsmart.agent.tui.mixins.wizard_commands import WizardCommandsMixin
-from chemsmart.agent.tui.mixins.worker_lifecycle import WorkerLifecycleMixin
-from chemsmart.agent.tui.mixins.session_workers import SessionWorkersMixin
-from chemsmart.agent.tui.mixins.request_flow import RequestFlowMixin
-from chemsmart.agent.tui.mixins.workspace_interaction import (
-    WorkspaceInteractionMixin,
+from chemsmart.agent.tui.slash_catalog import (  # noqa: F401
+    SLASH_PALETTE_COMMANDS as _SLASH_PALETTE_COMMANDS,
 )
-from chemsmart.agent.tui.mixins.synthesis_presentation import (
-    SynthesisPresentationMixin,
+from chemsmart.agent.tui.state import TuiState
+from chemsmart.agent.tui.widgets.calculation_strip import (
+    CalculationStatusStrip,
 )
-from chemsmart.agent.tui.mixins.job_interaction import JobInteractionMixin
-from chemsmart.agent.tui.mixins.project_write import ProjectWriteMixin
-from chemsmart.agent.tui.mixins.command_execution import CommandExecutionMixin
-from chemsmart.agent.tui.mixins.slash_commands import SlashCommandsMixin
-from chemsmart.agent.tui.mixins.approval_flow import ApprovalFlowMixin
-from chemsmart.agent.tui.mixins.decision_log_events import DecisionEventMixin
-from chemsmart.agent.tui.mixins.tool_events import ToolEventMixin
 from chemsmart.agent.tui.widgets.cells import (
     CalculationReceiptCell,
     JobStatusCell,
@@ -81,9 +87,6 @@ from chemsmart.agent.tui.widgets.cells import (
 )
 from chemsmart.agent.tui.widgets.cells.base import BaseCell
 from chemsmart.agent.tui.widgets.composer import Composer
-from chemsmart.agent.tui.widgets.calculation_strip import (
-    CalculationStatusStrip,
-)
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
@@ -94,6 +97,9 @@ from chemsmart.agent.tui.widgets.slash_palette import (
 )
 from chemsmart.agent.tui.widgets.transcript import Transcript
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.settings.workspace_project import (
+    resolve_workspace_project,
+)
 
 
 class ChatScreen(

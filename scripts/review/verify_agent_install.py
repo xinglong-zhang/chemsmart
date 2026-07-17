@@ -50,7 +50,12 @@ def _verify_agent() -> dict[str, Any]:
     from chemsmart.agent.provider_config import load_active_provider_config
     from chemsmart.agent.providers import get_provider
 
-    for symbol in (AgentSession, agent, get_provider, load_active_provider_config):
+    for symbol in (
+        AgentSession,
+        agent,
+        get_provider,
+        load_active_provider_config,
+    ):
         assert callable(symbol)
     return {"agent_imports": 4}
 

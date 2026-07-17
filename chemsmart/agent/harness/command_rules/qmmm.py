@@ -14,7 +14,10 @@ from chemsmart.agent.harness.command_rules.structures import (
     atom_bound_issues,
     range_literal_error,
 )
-from chemsmart.agent.harness.command_rules.tokens import has_option, option_value
+from chemsmart.agent.harness.command_rules.tokens import (
+    has_option,
+    option_value,
+)
 from chemsmart.settings.workspace_project import workspace_project_path
 from chemsmart.utils.utils import get_list_from_string_range
 
@@ -66,9 +69,7 @@ def qmmm_contract_issues(
                 label=f"QM/MM {name}-level region",
             )
         )
-    issues.extend(
-        _region_overlap_issues(program, parent_job, region_values)
-    )
+    issues.extend(_region_overlap_issues(program, parent_job, region_values))
     issues.extend(
         _total_state_issues(
             program,
@@ -98,7 +99,12 @@ def _region_values(
         ("high", high_atoms_aliases),
         (
             "medium",
-            ("-ma", "--medium-level-atoms", "-ia", "--intermediate-level-atoms"),
+            (
+                "-ma",
+                "--medium-level-atoms",
+                "-ia",
+                "--intermediate-level-atoms",
+            ),
         ),
         ("low", ("-la", "--low-level-atoms")),
     ):
@@ -118,7 +124,11 @@ def _region_overlap_issues(
         for name, value in region_values.items()
     }
     issues: list[CommandContractIssue] = []
-    for left, right in (("high", "medium"), ("high", "low"), ("medium", "low")):
+    for left, right in (
+        ("high", "medium"),
+        ("high", "low"),
+        ("medium", "low"),
+    ):
         overlap = expanded.get(left, set()) & expanded.get(right, set())
         if overlap:
             issues.append(
@@ -187,7 +197,9 @@ def _low_level_method_issue(
     cwd: str | Path | None,
 ) -> CommandContractIssue | None:
     qmmm_jobtype = option_value(qmmm_tokens, ("-j", "--jobtype"))
-    needs_mm_method = not isinstance(qmmm_jobtype, str) or qmmm_jobtype.upper() in {
+    needs_mm_method = not isinstance(
+        qmmm_jobtype, str
+    ) or qmmm_jobtype.upper() in {
         "QMMM",
         "QM/MM",
         "QM/QM2/MM",
@@ -213,9 +225,11 @@ def _low_level_method_issue(
         {
             "program": program,
             "parent_job": parent_job,
-            "qmmm_jobtype": qmmm_jobtype
-            if isinstance(qmmm_jobtype, str)
-            else "QMMM (default)",
+            "qmmm_jobtype": (
+                qmmm_jobtype
+                if isinstance(qmmm_jobtype, str)
+                else "QMMM (default)"
+            ),
         },
         (
             "ORCA QM/MM low-level method (-lm/--low-level-method or "
@@ -240,7 +254,9 @@ def _project_has_low_level_method(
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         return False
-    if not isinstance(payload, dict) or not isinstance(payload.get("qmmm"), dict):
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("qmmm"), dict
+    ):
         return False
     qmmm = payload["qmmm"]
     return bool(

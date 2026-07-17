@@ -8,11 +8,11 @@ import pytest
 from textual.widgets import OptionList
 from textual.worker import Worker, WorkerState
 
-from chemsmart.agent.provider_config import AgentProviderConfig
 from chemsmart.agent.harness.workflow_state import (
     current_workflow_state,
     reset_workflow_state,
 )
+from chemsmart.agent.provider_config import AgentProviderConfig
 from chemsmart.agent.runtime.calculations import (
     CalculationEvent,
     CalculationRun,

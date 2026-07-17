@@ -6,7 +6,6 @@ from pathlib import Path
 
 import tomlkit
 
-
 REPO_ROOT = Path(__file__).parents[2]
 
 

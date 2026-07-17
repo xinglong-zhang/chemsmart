@@ -155,9 +155,11 @@ def _append_filename_assertion(
         command,
         "sub.intent_filename",
         expected_filename,
-        observed_filename
-        if _same_path(observed_filename, expected_filename)
-        else observed_filename,
+        (
+            observed_filename
+            if _same_path(observed_filename, expected_filename)
+            else observed_filename
+        ),
     )
 
 

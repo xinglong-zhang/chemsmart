@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.harness.evaluation import (
     load_case_matrix,
     reliability_metrics,
@@ -10,7 +11,6 @@ from chemsmart.agent.harness.failure_taxonomy import classify_runtime_failure
 from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
 )
-from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.harness.intent import IntentSpec, evaluate_intent
 from chemsmart.agent.harness.terminal_state import (
     assertion,
@@ -100,7 +100,9 @@ def test_project_read_uses_session_selection_with_multiple_workspace_yaml(
     assert loaded["path"].endswith("/.chemsmart/gaussian/beta.yaml")
 
 
-def test_project_read_and_stringified_update_refresh_state(monkeypatch, tmp_path):
+def test_project_read_and_stringified_update_refresh_state(
+    monkeypatch, tmp_path
+):
     monkeypatch.chdir(tmp_path)
     path = tmp_path / ".chemsmart" / "gaussian" / "demo.yaml"
     path.parent.mkdir(parents=True)
@@ -264,7 +266,9 @@ def test_intent_contract_detects_file_drift_and_preserves_scan_fields():
         "scan -c '[2,7]' -x 1.8 -y 3.0 -n 13"
     )
     valid = evaluate_intent(command, expected)
-    drifted = evaluate_intent(command.replace("complex.xyz", "water.xyz"), expected)
+    drifted = evaluate_intent(
+        command.replace("complex.xyz", "water.xyz"), expected
+    )
 
     assert valid.verdict == "ok"
     assert drifted.verdict == "reject"
@@ -275,21 +279,45 @@ def test_generated_input_invariants_cover_td_neb_scan_and_sp():
     td = check_generated_input_invariants(
         "chemsmart run gaussian -p photo -f dye.xyz -c 0 -m 1 td "
         "--states singlets --nstates 8 --root 2 --eqsolv",
-        [{"path": "dye.com", "route": "# TD(singlets,nstates=8,root=2,eqsolv) CAM-B3LYP", "content_tail": ""}],
+        [
+            {
+                "path": "dye.com",
+                "route": "# TD(singlets,nstates=8,root=2,eqsolv) CAM-B3LYP",
+                "content_tail": "",
+            }
+        ],
     )
     neb = check_generated_input_invariants(
         "chemsmart run orca -p demo -f reactant.xyz -c 0 -m 1 neb "
         "-e product.xyz --nimages 9 --joboption NEB-TS",
-        [{"path": "neb.inp", "route": "! B3LYP def2-SVP NEB-TS", "content_tail": "%NEB\nNEB_END_XYZFILE \"product.xyz\"\nNImages 9\nend"}],
+        [
+            {
+                "path": "neb.inp",
+                "route": "! B3LYP def2-SVP NEB-TS",
+                "content_tail": '%NEB\nNEB_END_XYZFILE "product.xyz"\nNImages 9\nend',
+            }
+        ],
     )
     scan = check_generated_input_invariants(
         "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 scan "
         "-c '[[1,2]]' -s '[0.05]' -n '[10]' -cc '[[1,3]]'",
-        [{"path": "scan.com", "route": "# opt=modredundant b3lyp/6-31g(d)", "content_tail": "B 1 2 S 10 0.05\nB 1 3 F\n"}],
+        [
+            {
+                "path": "scan.com",
+                "route": "# opt=modredundant b3lyp/6-31g(d)",
+                "content_tail": "B 1 2 S 10 0.05\nB 1 3 F\n",
+            }
+        ],
     )
     sp = check_generated_input_invariants(
         "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 sp",
-        [{"path": "sp.com", "route": "# opt freq b3lyp/6-31g(d)", "content_tail": ""}],
+        [
+            {
+                "path": "sp.com",
+                "route": "# opt freq b3lyp/6-31g(d)",
+                "content_tail": "",
+            }
+        ],
     )
 
     assert td == ()
@@ -324,7 +352,13 @@ def test_generated_input_invariants_detect_coordinate_and_qmmm_drift():
     orca_qmmm = check_generated_input_invariants(
         "chemsmart run orca -p demo -f water.xyz -c 0 -m 1 opt "
         "qmmm -ha 1-2 -lm MM.prms",
-        [{"path": "qmmm.inp", "route": "! QMMM B3LYP", "content_tail": "%qmmm\nend"}],
+        [
+            {
+                "path": "qmmm.inp",
+                "route": "! QMMM B3LYP",
+                "content_tail": "%qmmm\nend",
+            }
+        ],
     )
 
     assert "input.gaussian.scan.coordinate_atoms" in {
@@ -479,7 +513,10 @@ def test_terminal_profile_rejects_missing_required_assertion():
     )
 
     assert terminal_state_is_positive(state) is False
-    assert "terminal_state.required_missing:sub.scheduler_marker" in validate_terminal_state(state)
+    assert (
+        "terminal_state.required_missing:sub.scheduler_marker"
+        in validate_terminal_state(state)
+    )
 
 
 def test_frozen_matrix_has_48_cases_and_reliability_metrics():
@@ -541,9 +578,7 @@ def test_matrix_runner_executes_ready_command_in_safe_test_mode(
         ),
         encoding="utf-8",
     )
-    command = (
-        "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 opt"
-    )
+    command = "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 opt"
 
     class Provider:
         name = "test"

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import yaml
 
-from chemsmart.agent.harness.command_semantics import evaluate_command_semantics
+from chemsmart.agent.harness.command_semantics import (
+    evaluate_command_semantics,
+)
 from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
 )
 from chemsmart.agent.harness.intent import IntentSpec, evaluate_intent
-
 
 COMMAND = (
     "chemsmart run gaussian -p enzyme -f enzyme.xyz -c -1 -m 2 "
@@ -97,7 +98,8 @@ def test_gaussian_qmmm_three_layer_states_pass():
     )
 
     assert (
-        check_generated_input_invariants(THREE_LAYER_COMMAND, [generated]) == ()
+        check_generated_input_invariants(THREE_LAYER_COMMAND, [generated])
+        == ()
     )
 
 

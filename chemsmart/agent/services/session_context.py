@@ -294,7 +294,9 @@ class SessionContext:
             "exposed_tools": list(selection.direct) if selection else [],
             "shadow_violations": list(controller.state.shadow_violations),
             "event_log": str(controller.store.path),
-            "state_snapshot": str(controller.session_dir / "runtime_state.json"),
+            "state_snapshot": str(
+                controller.session_dir / "runtime_state.json"
+            ),
         }
 
     def has_pending_ask_user(self) -> bool:
@@ -347,7 +349,9 @@ class SessionContext:
         return getattr(session._provider, "default_model", None) or "unknown"
 
     def total_tokens(self, field: str) -> int:
-        return sum(int(stat.get(field) or 0) for stat in self.session._llm_stats)
+        return sum(
+            int(stat.get(field) or 0) for stat in self.session._llm_stats
+        )
 
 
 def new_session_id() -> str:

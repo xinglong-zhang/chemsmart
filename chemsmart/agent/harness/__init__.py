@@ -5,16 +5,16 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticResult,
     evaluate_command_semantics,
 )
-from chemsmart.agent.harness.models import (
-    HarnessResult,
-    InvariantIssue,
-    InvariantResult,
-)
 from chemsmart.agent.harness.intent import (
     IntentResult,
     IntentSpec,
     ObservedIntent,
     evaluate_intent,
+)
+from chemsmart.agent.harness.models import (
+    HarnessResult,
+    InvariantIssue,
+    InvariantResult,
 )
 from chemsmart.agent.harness.runner import evaluate_harness
 from chemsmart.agent.harness.sub_intent import build_sub_intent_assertions

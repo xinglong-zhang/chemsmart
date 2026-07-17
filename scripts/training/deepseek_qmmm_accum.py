@@ -99,7 +99,9 @@ def _last_synthesis(output: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _semantic_fields(synthesis: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+def _semantic_fields(
+    synthesis: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]]]:
     """Read normalized or raw synthesis payloads without losing gate evidence."""
 
     semantic = synthesis.get("semantic")
@@ -135,9 +137,7 @@ class _ScenarioDeadline:
 
         def raise_timeout(signum, frame):
             del signum, frame
-            raise _ScenarioTimeout(
-                f"scenario exceeded {self.seconds:g}s"
-            )
+            raise _ScenarioTimeout(f"scenario exceeded {self.seconds:g}s")
 
         signal.signal(signal.SIGALRM, raise_timeout)
         signal.setitimer(signal.ITIMER_REAL, self.seconds)
@@ -169,7 +169,8 @@ def main() -> int:
     parser.add_argument("--model", default="deepseek-v4-pro")
     parser.add_argument("--limit", type=int, default=4)
     parser.add_argument(
-        "--batch-id", default="prod-readiness-deepseek-qmmm-supplement-20260711"
+        "--batch-id",
+        default="prod-readiness-deepseek-qmmm-supplement-20260711",
     )
     parser.add_argument("--timeout-s", type=float, default=150.0)
     args = parser.parse_args()
@@ -183,9 +184,10 @@ def main() -> int:
     # the normal AgentSession ledger instead.
     logging.disable(logging.CRITICAL)
 
+    import reasoning_accum
+
     import chemsmart.agent.providers as providers_mod
     import chemsmart.agent.tools_command as tools_command
-    import reasoning_accum
     from chemsmart.agent.core import AgentSession
     from chemsmart.agent.permissions import (
         ApprovalDecision,
@@ -278,7 +280,9 @@ def main() -> int:
                 session_root=work / "sessions" / f"case-{index:02d}",
                 stage_prompt="unified_agent.md",
             )
-            policy = PermissionPolicy(mode=PermissionMode.DRIVING, prompt_risky=True)
+            policy = PermissionPolicy(
+                mode=PermissionMode.DRIVING, prompt_risky=True
+            )
             output: dict[str, Any] = {}
             turn_rows: list[dict[str, Any]] = []
             with _ScenarioDeadline(args.timeout_s):
@@ -341,7 +345,9 @@ def main() -> int:
 
     with result_path.open("a", encoding="utf-8") as handle:
         for row in results:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            handle.write(
+                json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+            )
     print(
         json.dumps(
             {

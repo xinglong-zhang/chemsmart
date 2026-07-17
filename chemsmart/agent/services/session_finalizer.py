@@ -15,7 +15,6 @@ from chemsmart.agent.services.runtime_metrics import (
     schema_hash,
 )
 
-
 SESSION_METADATA_KEYS = tuple(
     sorted(
         {

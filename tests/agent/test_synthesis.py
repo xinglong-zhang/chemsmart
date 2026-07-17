@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 from click.testing import CliRunner
 
+from chemsmart.agent.cli import agent
 from chemsmart.agent.harness.command_semantics import (
     CommandSemanticIssue,
     CommandSemanticResult,
 )
 from chemsmart.agent.harness.workflow_state import current_workflow_state
-from chemsmart.agent.cli import agent
 from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
 
 READY = {
@@ -422,8 +422,7 @@ def test_prepare_command_repairs_missing_job_before_intent_gate(
     bad = {
         "status": "ready",
         "command": (
-            "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 "
-            "-r freq"
+            "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 " "-r freq"
         ),
         "explanation": "Optimization and frequency.",
         "confidence": "high",

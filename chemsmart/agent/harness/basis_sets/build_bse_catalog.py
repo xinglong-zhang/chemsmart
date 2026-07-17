@@ -61,7 +61,12 @@ def build_catalog() -> dict[str, Any]:
         }
         basis_sets[key] = entry
         display_name_to_key[display_name] = key
-        for alias in [display_name, item.get("basename"), key, *item.get("other_names", [])]:
+        for alias in [
+            display_name,
+            item.get("basename"),
+            key,
+            *item.get("other_names", []),
+        ]:
             if not alias:
                 continue
             aliases.setdefault(normalize_basis_name(str(alias)), key)

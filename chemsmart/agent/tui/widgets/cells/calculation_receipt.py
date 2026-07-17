@@ -40,9 +40,11 @@ class CalculationReceiptCell(BaseCell):
         style = (
             "success"
             if status == "completed"
-            else "accent"
-            if status in {"validating", "starting", "running"}
-            else "error"
+            else (
+                "accent"
+                if status in {"validating", "starting", "running"}
+                else "error"
+            )
         )
         program = str(self.run.get("program") or "calculation").upper()
         kind = str(self.run.get("kind") or "job").upper()
@@ -83,9 +85,7 @@ class CalculationReceiptCell(BaseCell):
             suffix = (
                 " · converged"
                 if convergence is True
-                else " · not confirmed"
-                if convergence is False
-                else ""
+                else " · not confirmed" if convergence is False else ""
             )
             table.add_row("optimization", f"{opt_cycles} cycles{suffix}")
         imag = list(self.run.get("imag_freqs") or [])
@@ -107,9 +107,11 @@ class CalculationReceiptCell(BaseCell):
             scan_total = self.run.get("scan_points_total")
             table.add_row(
                 "scan points",
-                f"{scan_completed}/{scan_total}"
-                if isinstance(scan_total, int)
-                else str(scan_completed),
+                (
+                    f"{scan_completed}/{scan_total}"
+                    if isinstance(scan_total, int)
+                    else str(scan_completed)
+                ),
             )
         neb_images = self.run.get("neb_images")
         if isinstance(neb_images, int):

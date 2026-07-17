@@ -266,11 +266,13 @@ class WorkspaceInteractionMixin:
 
     def _slash_palette_items(self, query: str) -> list[SlashPaletteItem]:
         shortcuts = {
-            "/help": getattr(self.app, "tui_config", None).keybindings.get(
-                "show_shortcuts", "f1"
-            )
-            if getattr(self.app, "tui_config", None) is not None
-            else "f1",
+            "/help": (
+                getattr(self.app, "tui_config", None).keybindings.get(
+                    "show_shortcuts", "f1"
+                )
+                if getattr(self.app, "tui_config", None) is not None
+                else "f1"
+            ),
             "/jobs": "ctrl+b",
             "/runs": "ctrl+b",
         }

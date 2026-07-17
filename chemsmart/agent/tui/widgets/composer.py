@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-from time import monotonic
 from tempfile import NamedTemporaryFile
+from time import monotonic
 
 from textual import events
 from textual.binding import Binding

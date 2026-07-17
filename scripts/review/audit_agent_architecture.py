@@ -26,7 +26,9 @@ class SymbolMetric:
 
 
 def python_files(root: Path) -> list[Path]:
-    return sorted(path for path in root.rglob("*.py") if "__pycache__" not in path.parts)
+    return sorted(
+        path for path in root.rglob("*.py") if "__pycache__" not in path.parts
+    )
 
 
 def module_name(path: Path, repo_root: Path) -> str:
@@ -42,19 +44,30 @@ def source_lines(path: Path) -> int:
         return sum(1 for _ in handle)
 
 
-def symbol_metrics(path: Path, repo_root: Path, tree: ast.AST) -> list[SymbolMetric]:
+def symbol_metrics(
+    path: Path, repo_root: Path, tree: ast.AST
+) -> list[SymbolMetric]:
     relative = path.relative_to(repo_root).as_posix()
     metrics: list[SymbolMetric] = []
 
     def visit(body: Iterable[ast.stmt], prefix: tuple[str, ...] = ()) -> None:
         for node in body:
-            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not isinstance(
+                node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
                 continue
             end = int(getattr(node, "end_lineno", node.lineno))
             kind = "class" if isinstance(node, ast.ClassDef) else "function"
             name = ".".join((*prefix, node.name))
             metrics.append(
-                SymbolMetric(relative, name, kind, node.lineno, end, end - node.lineno + 1)
+                SymbolMetric(
+                    relative,
+                    name,
+                    kind,
+                    node.lineno,
+                    end,
+                    end - node.lineno + 1,
+                )
             )
             visit(node.body, (*prefix, node.name))
 
@@ -101,7 +114,9 @@ def imported_agent_modules(
             names = (imported,) if imported else ()
         else:
             continue
-        imports.update(name for name in names if name.startswith("chemsmart.agent"))
+        imports.update(
+            name for name in names if name.startswith("chemsmart.agent")
+        )
     return imports
 
 
@@ -114,7 +129,9 @@ def resolve_import(name: str, modules: set[str]) -> str | None:
     return None
 
 
-def strongly_connected_components(graph: dict[str, set[str]]) -> list[list[str]]:
+def strongly_connected_components(
+    graph: dict[str, set[str]],
+) -> list[list[str]]:
     index = 0
     indices: dict[str, int] = {}
     lowlinks: dict[str, int] = {}
@@ -153,7 +170,9 @@ def strongly_connected_components(graph: dict[str, set[str]]) -> list[list[str]]
     return sorted(components)
 
 
-def _run_json_command(command: list[str], cwd: Path) -> list[dict[str, object]] | None:
+def _run_json_command(
+    command: list[str], cwd: Path
+) -> list[dict[str, object]] | None:
     try:
         result = subprocess.run(
             command,
@@ -193,9 +212,9 @@ def _ruff_findings(
         if not isinstance(filename, str):
             continue
         try:
-            finding["filename"] = Path(filename).resolve().relative_to(
-                repo_root
-            ).as_posix()
+            finding["filename"] = (
+                Path(filename).resolve().relative_to(repo_root).as_posix()
+            )
         except ValueError:
             finding["filename"] = Path(filename).name
     return findings
@@ -299,11 +318,21 @@ def build_report(
 
     oversized_files = [
         {"path": path, "lines": lines}
-        for path, lines in sorted(loc.items(), key=lambda item: (-item[1], item[0]))
+        for path, lines in sorted(
+            loc.items(), key=lambda item: (-item[1], item[0])
+        )
         if lines > 800
     ]
-    long_classes = [asdict(metric) for metric in symbols if metric.kind == "class" and metric.lines > 500]
-    long_functions = [asdict(metric) for metric in symbols if metric.kind == "function" and metric.lines > 100]
+    long_classes = [
+        asdict(metric)
+        for metric in symbols
+        if metric.kind == "class" and metric.lines > 500
+    ]
+    long_functions = [
+        asdict(metric)
+        for metric in symbols
+        if metric.kind == "function" and metric.lines > 100
+    ]
     hotspots = sorted(
         (
             {
@@ -347,7 +376,9 @@ def build_report(
                 else None
             ),
         },
-        "files": dict(sorted(loc.items(), key=lambda item: (-item[1], item[0]))),
+        "files": dict(
+            sorted(loc.items(), key=lambda item: (-item[1], item[0]))
+        ),
         "oversized_files": oversized_files,
         "long_classes": long_classes,
         "long_functions": long_functions,
@@ -385,8 +416,8 @@ def markdown(report: dict[str, object]) -> str:
         )
     lines.extend(
         [
-        "| Metric | Value |",
-        "|---|---:|",
+            "| Metric | Value |",
+            "|---|---:|",
         ]
     )
     labels = {
@@ -411,7 +442,9 @@ def markdown(report: dict[str, object]) -> str:
     if isinstance(coverage, dict):
         percent = float(coverage.get("percent_covered", 0.0))
         lines.append(f"| Branch-aware test coverage | {percent:.2f}% |")
-    lines.extend(["", "## Oversized Files", "", "| File | Lines |", "|---|---:|"])
+    lines.extend(
+        ["", "## Oversized Files", "", "| File | Lines |", "|---|---:|"]
+    )
     oversized = report.get("oversized_files") or []
     assert isinstance(oversized, list)
     lines.extend(f"| `{row['path']}` | {row['lines']} |" for row in oversized)

@@ -8,7 +8,9 @@ from chemsmart.agent.harness.command_contracts import (
     CommandContractIssue,
     check_command_contracts,
 )
-from chemsmart.agent.harness.command_semantics import evaluate_command_semantics
+from chemsmart.agent.harness.command_semantics import (
+    evaluate_command_semantics,
+)
 
 
 def _issues(
@@ -105,7 +107,9 @@ def test_scan_accepts_single_and_multi_coordinate_literals() -> None:
     assert multiple == ()
 
 
-def test_modred_rejects_repeated_atoms_and_duplicate_coordinate_groups() -> None:
+def test_modred_rejects_repeated_atoms_and_duplicate_coordinate_groups() -> (
+    None
+):
     repeated_atom = _issues(
         "orca",
         "modred",
@@ -163,11 +167,14 @@ def test_gaussian_traj_requires_jobtype() -> None:
     assert [issue.rule_id for issue in issues] == [
         "cmd.contract.traj_jobtype_required"
     ]
-    assert _issues(
-        "gaussian",
-        "traj",
-        job_tokens=["traj", "-j", "opt", "-ns", "5"],
-    ) == ()
+    assert (
+        _issues(
+            "gaussian",
+            "traj",
+            job_tokens=["traj", "-j", "opt", "-ns", "5"],
+        )
+        == ()
+    )
 
 
 def test_gaussian_traj_rejects_conflicting_selection_modes() -> None:
@@ -308,7 +315,9 @@ def test_qmmm_requires_parent_job_and_explicit_region() -> None:
     ]
 
 
-def test_orca_qmmm_accepts_low_level_method_from_command_or_project(tmp_path) -> None:
+def test_orca_qmmm_accepts_low_level_method_from_command_or_project(
+    tmp_path,
+) -> None:
     command_issues = _issues(
         "orca",
         "opt",
@@ -379,7 +388,11 @@ def test_orca_qmmm_project_mm_force_field_reaches_runtime_writer(
         yaml.safe_dump(
             {
                 "SERVER": {"SCHEDULER": None, "NUM_CORES": 1},
-                "ORCA": {"EXEFOLDER": "/tmp", "LOCAL_RUN": True, "SCRATCH": False},
+                "ORCA": {
+                    "EXEFOLDER": "/tmp",
+                    "LOCAL_RUN": True,
+                    "SCRATCH": False,
+                },
             }
         ),
         encoding="utf-8",
@@ -513,12 +526,15 @@ def test_gaussian_td_requires_workspace_td_block(tmp_path) -> None:
         ),
         encoding="utf-8",
     )
-    assert _issues(
-        "gaussian",
-        "td",
-        program_tokens=["-p", "paper"],
-        cwd=tmp_path,
-    ) == ()
+    assert (
+        _issues(
+            "gaussian",
+            "td",
+            program_tokens=["-p", "paper"],
+            cwd=tmp_path,
+        )
+        == ()
+    )
 
 
 def test_direct_qmmm_is_rejected_before_click_or_subprocess(
