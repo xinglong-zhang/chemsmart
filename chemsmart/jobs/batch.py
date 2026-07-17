@@ -557,16 +557,29 @@ def run_child_jobs_as_batch(
 ) -> BatchJobT:
     """Run sibling jobs through an engine ``BatchJob``.
 
-    Children run serially, each with the parent jobrunner's full resources.
+    Nested children always run serially, each with the parent jobrunner's
+    full ``num_cores`` and ``mem_gb``. Concurrent nested children are not
+    used. Independent parent jobs may still run concurrently when submitted
+    as a top-level batch via ``chemsmart sub``.
+
     ``fail_fast`` controls whether execution stops after the first
     unsuccessful child (default: run all children, then raise on failures).
 
     Returns the completed ``BatchJob`` instance.
     """
+    runner = parent.jobrunner
+    if runner is not None:
+        cores = runner.num_cores
+        mem_gb = runner.mem_gb
+    else:
+        cores = None
+        mem_gb = None
     logger.info(
         "Running nested batch of %s child job(s) serially "
-        "(full parent resources per child).",
+        "(full parent resources per child: cores=%s, mem_gb=%s).",
         len(jobs),
+        cores,
+        mem_gb,
     )
     batch_job = batch_cls(
         jobs=jobs,
@@ -575,5 +588,6 @@ def run_child_jobs_as_batch(
         label=f"{parent.label}{label_suffix}",
         jobrunner=parent.jobrunner,
     )
+    batch_job.enable_serial_local_execution()
     batch_job.run()
     return batch_job

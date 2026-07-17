@@ -152,8 +152,8 @@ class ORCAQRCJob(ORCAJob):
         """
         Execute both QRC jobs (forward and reverse) via ``OrcaBatchJob``.
 
-        Serial vs parallel follows the jobrunner policy; failure policy is
-        run-all-then-raise.
+        Forward and reverse children run serially, each with the parent
+        jobrunner's full resources. Failure policy is run-all-then-raise.
         """
         logger.info("Running QRC jobs using OrcaBatchJob")
         run_child_jobs_as_batch(

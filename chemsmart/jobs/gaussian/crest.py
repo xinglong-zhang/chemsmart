@@ -229,8 +229,9 @@ class GaussianCrestJob(GaussianJob):
         """
         Execute all conformer optimization jobs up to the specified limit.
 
-        Runs conformer jobs through ``GaussianBatchJob``. Serial vs parallel
-        follows the jobrunner policy; failure policy is run-all-then-raise.
+        Runs conformer jobs serially through ``GaussianBatchJob``, each with
+        the parent jobrunner's full resources. Failure policy is
+        run-all-then-raise.
         """
         jobs_to_run = self.all_conformers_jobs[: self.num_confs_to_opt]
         logger.info("Running conformer jobs using GaussianBatchJob")

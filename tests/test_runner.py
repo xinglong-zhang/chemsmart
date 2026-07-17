@@ -375,24 +375,31 @@ class TestBatchJobRefactor:
         ok_job.run.assert_called_once()
 
     def test_run_child_jobs_as_batch_always_serial(self, pbs_server):
-        """Nested batches always run children serially."""
+        """Nested batches always run children serially with full resources."""
         from chemsmart.jobs.batch import run_child_jobs_as_batch
 
         dummy_batch_cls = self._dummy_batch_cls()
         runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=False
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=16,
+            mem_gb=32,
         )
         parent = Mock()
         parent.label = "parent"
         parent.jobrunner = runner
 
-        ok_job = Mock(label="child")
-        ok_job.run.return_value = None
-        ok_job.is_complete.return_value = True
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
 
         batch = run_child_jobs_as_batch(
             batch_cls=dummy_batch_cls,
-            jobs=[ok_job],
+            jobs=[child_a, child_b],
             parent=parent,
             label_suffix="_batch",
             fail_fast=False,
@@ -401,7 +408,12 @@ class TestBatchJobRefactor:
         assert batch.no_run_in_parallel is True
         assert batch.fail_fast is False
         assert batch.label == "parent_batch"
-        ok_job.run.assert_called_once()
+        child_a.run.assert_called_once()
+        child_b.run.assert_called_once()
+        assert child_a.jobrunner.num_cores == 16
+        assert child_a.jobrunner.mem_gb == 32
+        assert child_b.jobrunner.num_cores == 16
+        assert child_b.jobrunner.mem_gb == 32
 
     def test_batch_run_multi_node_records_node_future_exception(
         self, pbs_server, mocker
@@ -596,6 +608,44 @@ class TestGaussianBatchDelegation:
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
+        mock_batch.run.assert_called_once()
+
+    def test_qrc_job_nested_batch_always_serial(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [Mock(label="qrc_f"), Mock(label="qrc_r")]
+        mocker.patch.object(
+            type(job),
+            "both_qrc_jobs",
+            new_callable=mocker.PropertyMock,
+            return_value=mock_jobs,
+        )
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_both_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args.kwargs
+        assert call_kwargs["jobs"] == mock_jobs
+        assert call_kwargs["no_run_in_parallel"] is True
+        assert call_kwargs["fail_fast"] is False
+        assert call_kwargs["label"] == "test_qrc_batch"
         mock_batch.run.assert_called_once()
 
 

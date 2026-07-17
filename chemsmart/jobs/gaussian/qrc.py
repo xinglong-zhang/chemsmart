@@ -152,8 +152,8 @@ class GaussianQRCJob(GaussianJob):
         """
         Execute both QRC jobs (forward and reverse) via ``GaussianBatchJob``.
 
-        Serial vs parallel follows the jobrunner policy; failure policy is
-        run-all-then-raise.
+        Forward and reverse children run serially, each with the parent
+        jobrunner's full resources. Failure policy is run-all-then-raise.
         """
         logger.info(
             f"Running QRC jobs using GaussianBatchJob for {self.label}"

@@ -347,9 +347,9 @@ class GaussianDIASJob(GaussianJob):
         """
         Execute all complete molecule calculation jobs.
 
-        Runs all jobs for complete molecular structures at sampled
-        points along the reaction coordinate. These calculations
-        provide reference energies for DI-AS analysis.
+        Runs molecule jobs serially through ``GaussianBatchJob``, each with
+        the parent jobrunner's full resources. These calculations provide
+        reference energies for DI-AS analysis.
         """
         logger.info("Running molecule jobs using GaussianBatchJob")
         run_child_jobs_as_batch(
@@ -364,9 +364,10 @@ class GaussianDIASJob(GaussianJob):
         """
         Execute all fragment 1 calculation jobs.
 
-        Runs all jobs for fragment 1 structures at sampled points.
-        Fragment 1 energies are used with fragment 2 and complete
-        molecule energies to compute dissociation energies.
+        Runs fragment 1 jobs serially through ``GaussianBatchJob``, each
+        with the parent jobrunner's full resources. Energies are used with
+        fragment 2 and complete molecule energies to compute dissociation
+        energies.
         """
         logger.info("Running fragment 1 jobs using GaussianBatchJob")
         run_child_jobs_as_batch(
@@ -381,9 +382,9 @@ class GaussianDIASJob(GaussianJob):
         """
         Execute all fragment 2 calculation jobs.
 
-        Runs all jobs for fragment 2 structures at sampled points.
-        These calculations complete the energy data needed for
-        DI-AS fragmentation analysis.
+        Runs fragment 2 jobs serially through ``GaussianBatchJob``, each
+        with the parent jobrunner's full resources. These calculations
+        complete the energy data needed for DI-AS fragmentation analysis.
         """
         logger.info("Running fragment 2 jobs using GaussianBatchJob")
         run_child_jobs_as_batch(

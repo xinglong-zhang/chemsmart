@@ -349,9 +349,10 @@ class GaussianTrajJob(GaussianJob):
         """
         Execute structure calculation jobs based on configuration.
 
-        Runs either all available jobs or a specified subset based
-        on the num_structures_to_run setting. Handles both complete
-        processing and selective structure optimization.
+        Runs either all available jobs or a specified subset based on
+        ``num_structures_to_run``. Nested structure jobs run serially
+        through ``GaussianBatchJob``, each with the parent jobrunner's
+        full resources.
         """
         if self.num_structures_to_run is None:
             # run all jobs if num_structures_to_run is not specified
