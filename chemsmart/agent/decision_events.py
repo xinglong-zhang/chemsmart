@@ -154,7 +154,25 @@ def parse_decision_event(
 ) -> _AGENT_EVENT_TYPES:
     kind = str(entry.get("kind") or "")
     payload = entry.get("payload") or {}
+    for parser in (
+        _parse_conversation_event,
+        _parse_tool_lifecycle_event,
+        _parse_tool_result_event,
+        _parse_terminal_event,
+    ):
+        event = parser(kind, payload, session_dir=session_dir)
+        if event is not None:
+            return event
+    return IgnoredEvent(kind=kind, payload=payload)
 
+
+def _parse_conversation_event(
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    session_dir: Path | None = None,
+) -> _AGENT_EVENT_TYPES | None:
+    del session_dir
     if kind == "request":
         return RequestEvent(
             kind=kind, request=str(payload.get("request") or "")
@@ -174,7 +192,16 @@ def parse_decision_event(
                 else None
             ),
         )
+    return None
 
+
+def _parse_tool_lifecycle_event(
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    session_dir: Path | None = None,
+) -> _AGENT_EVENT_TYPES | None:
+    del session_dir
     if kind == "tool_call":
         return ToolCallEvent(
             kind=kind,
@@ -256,7 +283,15 @@ def parse_decision_event(
                 else None
             ),
         )
+    return None
 
+
+def _parse_tool_result_event(
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    session_dir: Path | None = None,
+) -> _AGENT_EVENT_TYPES | None:
     if kind in {"tool_result", "tool_preview_result"}:
         tool = payload.get("tool")
         tool_payload = payload.get("payload") or {}
@@ -329,7 +364,16 @@ def parse_decision_event(
                     molecule=molecule,
                     session_dir=str(session_dir) if session_dir else None,
                 )
+    return None
 
+
+def _parse_terminal_event(
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    session_dir: Path | None = None,
+) -> _AGENT_EVENT_TYPES | None:
+    del session_dir
     if kind == "critic_verdict":
         return CriticVerdictEvent(
             kind=kind,
@@ -352,8 +396,7 @@ def parse_decision_event(
             total_steps_executed=int(payload.get("total_steps_executed") or 0),
             total_steps_planned=int(payload.get("total_steps_planned") or 0),
         )
-
-    return IgnoredEvent(kind=kind, payload=payload)
+    return None
 
 
 def session_completed(session_dir: Path) -> bool:
