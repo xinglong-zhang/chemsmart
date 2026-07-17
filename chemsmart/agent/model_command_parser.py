@@ -65,6 +65,26 @@ class _OptionSpec:
     flag_value: str | None = None
 
 
+@dataclass(frozen=True)
+class _CommandLayout:
+    workspace: str
+    tokens: list[str]
+    entrypoint: str
+    action: str
+    action_index: int
+    program: str
+    program_index: int
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class _JobLayout:
+    job: str | None
+    subcommand_index: int
+    option_index: int
+    option_job: str | None
+
+
 _RUNNER_OPTIONS = {
     "-s": _OptionSpec("server"),
     "--server": _OptionSpec("server"),
@@ -288,7 +308,52 @@ def parse_model_command(
     command: str, *, cwd: str | os.PathLike[str] | None = None
 ) -> ParsedModelCommand:
     workspace = str(Path(cwd or os.getcwd()).resolve())
-    warnings: list[str] = []
+    prefix = _parse_command_layout(command, workspace)
+    if isinstance(prefix, ParsedModelCommand):
+        return prefix
+    job_layout = _locate_job_layout(prefix)
+    runner_opts, runner_warnings = _parse_options(
+        prefix.tokens[prefix.action_index + 1 : prefix.program_index],
+        _RUNNER_OPTIONS,
+    )
+    program_opts, program_warnings = _parse_options(
+        prefix.tokens[
+            prefix.program_index + 1 : job_layout.subcommand_index
+        ],
+        _PROGRAM_OPTIONS,
+    )
+    subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
+    subcommand_specs.update(
+        _JOB_OPTION_OVERRIDES.get(
+            (prefix.program, job_layout.option_job or ""),
+            {},
+        )
+    )
+    subcommand_opts, subcommand_warnings = _parse_options(
+        prefix.tokens[job_layout.option_index + 1 :], subcommand_specs
+    )
+    _normalize_job_options(prefix.program, job_layout.job, subcommand_opts)
+    warnings = [
+        *prefix.warnings,
+        *runner_warnings,
+        *program_warnings,
+        *subcommand_warnings,
+    ]
+    return _build_parsed_command(
+        command=command,
+        layout=prefix,
+        job=job_layout.job,
+        runner_opts=runner_opts,
+        program_opts=program_opts,
+        subcommand_opts=subcommand_opts,
+        warnings=warnings,
+    )
+
+
+def _parse_command_layout(
+    command: str,
+    workspace: str,
+) -> _CommandLayout | ParsedModelCommand:
     try:
         tokens = shlex.split(command)
     except ValueError as exc:
@@ -298,7 +363,6 @@ def parse_model_command(
             tokens=[],
             parse_error=f"tokenization failed: {exc}",
         )
-
     if not tokens:
         return ParsedModelCommand(
             command=command,
@@ -306,137 +370,119 @@ def parse_model_command(
             tokens=tokens,
             parse_error="empty command",
         )
-
     entrypoint = tokens[0]
+    warnings = []
     if entrypoint != "chemsmart":
         warnings.append("command does not start with the chemsmart entrypoint")
-
     action_index = _find_first(tokens, _TOP_LEVEL_COMMANDS, start=1)
     if action_index is None:
-        return ParsedModelCommand(
-            command=command,
-            workspace=workspace,
-            tokens=tokens,
-            entrypoint=entrypoint,
-            parse_error="missing chemsmart run/sub action",
-            warnings=warnings,
+        return _layout_error(
+            command, workspace, tokens, entrypoint, warnings,
+            "missing chemsmart run/sub action",
         )
     action = tokens[action_index]
-
     program_index = _find_program_index(tokens, action_index + 1)
     if program_index is None:
-        return ParsedModelCommand(
-            command=command,
-            workspace=workspace,
-            tokens=tokens,
-            entrypoint=entrypoint,
+        return _layout_error(
+            command, workspace, tokens, entrypoint, warnings,
+            "missing computational program after run/sub options",
             action=action,
-            parse_error="missing computational program after run/sub options",
-            warnings=warnings,
         )
-    program = tokens[program_index]
-
-    runner_opts, runner_warnings = _parse_options(
-        tokens[action_index + 1 : program_index], _RUNNER_OPTIONS
+    return _CommandLayout(
+        workspace=workspace,
+        tokens=tokens,
+        entrypoint=entrypoint,
+        action=action,
+        action_index=action_index,
+        program=tokens[program_index],
+        program_index=program_index,
+        warnings=warnings,
     )
-    warnings.extend(runner_warnings)
 
-    subcommand_index = _find_subcommand_index(
-        tokens, program, program_index + 1
-    )
-    if subcommand_index is None:
-        subcommand_index = len(tokens)
-        job = None
-        warnings.append(f"no recognized {program} job subcommand was found")
-    else:
-        job = tokens[subcommand_index]
 
-    # The real CLI nests ``qmmm`` under a parent job (``opt qmmm``, ``ts qmmm``,
-    # ``sp qmmm`` …). ``_find_subcommand_index`` stops at the parent token, so
-    # the parent remains the job (and ``qmmm`` is detected as a required token
-    # by the intent oracle), but the per-layer charge/mult/region options that
-    # follow the nested ``qmmm`` token must be parsed with the qmmm option specs
-    # so they land in ``structural_options`` instead of being reported as
-    # unrecognized parent-job options. Source:
-    # ``chemsmart/cli/{gaussian,orca}/qmmm.py``.
-    subcommand_option_index = subcommand_index
-    subcommand_specs_job = job
-    if job is not None and job != "qmmm":
-        nested_qmmm_index = _find_first(
-            tokens, {"qmmm"}, start=subcommand_index + 1
-        )
-        if nested_qmmm_index is not None:
-            subcommand_specs_job = "qmmm"
-            subcommand_option_index = nested_qmmm_index
-
-    program_opts, program_warnings = _parse_options(
-        tokens[program_index + 1 : subcommand_index], _PROGRAM_OPTIONS
-    )
-    warnings.extend(program_warnings)
-    subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
-    subcommand_specs.update(
-        _JOB_OPTION_OVERRIDES.get((program, subcommand_specs_job or ""), {})
-    )
-    subcommand_opts, subcommand_warnings = _parse_options(
-        tokens[subcommand_option_index + 1 :], subcommand_specs
-    )
-    warnings.extend(subcommand_warnings)
-    if (
-        program == "gaussian"
-        and job == "traj"
-        and "dist_start" in subcommand_opts
-    ):
-        # ``traj`` owns its post-subcommand ``-x`` as a selection proportion;
-        # ORCA scan retains the distinct distance-start meaning.
-        subcommand_opts["proportion_structures_to_use"] = subcommand_opts.pop(
-            "dist_start"
-        )
-
-    project = program_opts.get("project")
-    resolved, resolve_warning = _resolve_project_method(
-        program=program,
-        project=project,
-        job=job,
-        overrides=program_opts,
-    )
-    if resolve_warning:
-        warnings.append(resolve_warning)
-
-    server = runner_opts.get("server")
-    dry_run = (
-        runner_opts.get("fake") == "true" or runner_opts.get("test") == "true"
-    )
-    structural_options = {
-        key: value
-        for key, value in subcommand_opts.items()
-        if value is not None
-        and key not in {"skip_completed", "route_parameters"}
-    }
-    resources = {
-        key: value
-        for key, value in runner_opts.items()
-        if key
-        in {
-            "num_cores",
-            "num_gpus",
-            "mem_gb",
-            "queue",
-            "time_hours",
-            "scratch",
-            "delete_scratch",
-        }
-    }
-
+def _layout_error(
+    command: str,
+    workspace: str,
+    tokens: list[str],
+    entrypoint: str,
+    warnings: list[str],
+    parse_error: str,
+    *,
+    action: str | None = None,
+) -> ParsedModelCommand:
     return ParsedModelCommand(
         command=command,
         workspace=workspace,
         tokens=tokens,
         entrypoint=entrypoint,
         action=action,
-        program=program,
+        parse_error=parse_error,
+        warnings=warnings,
+    )
+
+
+def _locate_job_layout(layout: _CommandLayout) -> _JobLayout:
+    index = _find_subcommand_index(
+        layout.tokens,
+        layout.program,
+        layout.program_index + 1,
+    )
+    if index is None:
+        layout.warnings.append(
+            f"no recognized {layout.program} job subcommand was found"
+        )
+        return _JobLayout(None, len(layout.tokens), len(layout.tokens), None)
+    job = layout.tokens[index]
+    option_index = index
+    option_job = job
+    if job != "qmmm":
+        nested = _find_first(layout.tokens, {"qmmm"}, start=index + 1)
+        if nested is not None:
+            option_index = nested
+            option_job = "qmmm"
+    return _JobLayout(job, index, option_index, option_job)
+
+
+def _normalize_job_options(
+    program: str,
+    job: str | None,
+    options: dict[str, str],
+) -> None:
+    if program == "gaussian" and job == "traj" and "dist_start" in options:
+        options["proportion_structures_to_use"] = options.pop("dist_start")
+
+
+def _build_parsed_command(
+    *,
+    command: str,
+    layout: _CommandLayout,
+    job: str | None,
+    runner_opts: dict[str, str],
+    program_opts: dict[str, str],
+    subcommand_opts: dict[str, str],
+    warnings: list[str],
+) -> ParsedModelCommand:
+    project = program_opts.get("project")
+    resolved, resolve_warning = _resolve_project_method(
+        program=layout.program,
+        project=project,
         job=job,
-        server=server,
-        dry_run=dry_run,
+        overrides=program_opts,
+    )
+    if resolve_warning:
+        warnings.append(resolve_warning)
+    structural_options = _structural_options(subcommand_opts)
+    resources = _resource_options(runner_opts)
+    return ParsedModelCommand(
+        command=command,
+        workspace=layout.workspace,
+        tokens=layout.tokens,
+        entrypoint=layout.entrypoint,
+        action=layout.action,
+        program=layout.program,
+        job=job,
+        server=runner_opts.get("server"),
+        dry_run=_dry_run_requested(runner_opts),
         project=project,
         project_p_flag_meaning=(
             "program-level -p/--project for gaussian/orca project settings"
@@ -472,6 +518,27 @@ def parse_model_command(
         resources=resources,
         warnings=warnings,
     )
+
+
+def _dry_run_requested(options: dict[str, str]) -> bool:
+    return options.get("fake") == "true" or options.get("test") == "true"
+
+
+def _structural_options(options: dict[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in options.items()
+        if value is not None
+        and key not in {"skip_completed", "route_parameters"}
+    }
+
+
+def _resource_options(options: dict[str, str]) -> dict[str, str]:
+    resource_keys = {
+        "num_cores", "num_gpus", "mem_gb", "queue", "time_hours",
+        "scratch", "delete_scratch",
+    }
+    return {key: value for key, value in options.items() if key in resource_keys}
 
 
 def format_model_command_explanation(
