@@ -6,17 +6,13 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
-from typing import Iterable
 
-from click.testing import CliRunner
-from rich.table import Table
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import OptionList
 from textual.worker import Worker
 
-from chemsmart.agent.cli_commands import agent
 from chemsmart.agent.core import CriticVerdict, DecisionLog, Plan
 from chemsmart.agent.permissions import (
     ApprovalDecision,
@@ -48,7 +44,6 @@ from chemsmart.agent.tui.screens.jobs_panel import JobsPanel
 from chemsmart.agent.tui.screens.calculations import (
     CalculationMonitor,
 )
-from chemsmart.agent.tui.screens.sessions import SessionsScreen
 from chemsmart.agent.tui.services.job_poller import (
     JobPollerError,
     JobPollerMixin,
@@ -60,7 +55,6 @@ from chemsmart.agent.tui.services.job_poller import (
     queue_snapshot,
 )
 from chemsmart.agent.tui.services.log_tailer import LogTailer
-from chemsmart.agent.tui.services.session_index import agent_session_dirs
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
 from chemsmart.agent.tui.mixins.decision_log import DecisionLogMixin
 from chemsmart.agent.tui.mixins.calculations import CalculationMixin
@@ -77,16 +71,14 @@ from chemsmart.agent.tui.mixins.synthesis_presentation import (
 from chemsmart.agent.tui.mixins.job_interaction import JobInteractionMixin
 from chemsmart.agent.tui.mixins.project_write import ProjectWriteMixin
 from chemsmart.agent.tui.mixins.command_execution import CommandExecutionMixin
+from chemsmart.agent.tui.mixins.slash_commands import SlashCommandsMixin
 from chemsmart.agent.tui.tool_meta import (
     tool_description,
 )
 from chemsmart.agent.tui.widgets.cells import (
-    AgentMessageCell,
     CalculationReceiptCell,
-    CriticVerdictCell,
     JobStatusCell,
     MoleculeCell,
-    PlanCell,
     RunResultCell,
     ToolCallCell,
 )
@@ -99,7 +91,6 @@ from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
     ApprovalResult,
-    PermissionModeOverlay,
     PermissionModeResult,
     ProjectWriteOverlay,
     ProjectWriteResult,
@@ -126,6 +117,7 @@ class ChatScreen(
     JobInteractionMixin,
     ProjectWriteMixin,
     CommandExecutionMixin,
+    SlashCommandsMixin,
     JobPollerMixin,
     SessionRunnerMixin,
     Screen,
@@ -350,371 +342,6 @@ class ChatScreen(
             cell.apply_update(snapshot)
         if track_in_transcript and snapshot.get("status") == "done":
             self._maybe_render_run_result(message.job_id, snapshot)
-
-    def _handle_slash_command(self, raw: str) -> None:
-        command, _, remainder = raw.partition(" ")
-        argument = remainder.strip()
-
-        if command == "/help":
-            self._show_help()
-        elif command in {"/quit", "/exit"}:
-            self._reset_request_state(
-                clear_transcript=False, clear_session=True
-            )
-            self.app.exit()
-        elif command == "/clear":
-            if not self._guard_phase(command, {Phase.IDLE, Phase.FINISHED}):
-                return
-            self._stop_tailer()
-            self._reset_request_state(
-                clear_transcript=True, clear_session=True
-            )
-            self.notify("Transcript cleared.", timeout=3)
-            self.focus_composer()
-        elif command == "/sessions":
-            if not self._guard_phase(command, {Phase.IDLE}):
-                return
-            if self.app.plain:
-                self._show_sessions_snapshot()
-                return
-            self.app.push_screen(SessionsScreen(self.session_root))
-        elif command == "/resume":
-            if not self._guard_phase(command, {Phase.IDLE}):
-                return
-            if not argument:
-                if self.app.plain:
-                    self._show_sessions_snapshot()
-                    return
-                self.app.push_screen(SessionsScreen(self.session_root))
-                return
-            self._resume_or_prompt(argument)
-        elif command in {"/jobs", "/runs"}:
-            self.action_show_calculations()
-        elif command == "/queue":
-            self._show_queue_snapshot()
-        elif command == "/server":
-            self._switch_active_server(argument)
-        elif command == "/cancel":
-            job_id, confirmed = self._parse_cancel_argument(argument)
-            if not job_id:
-                self.post_error(
-                    "Missing job id",
-                    "Usage: /cancel <job-id> [yes]",
-                )
-                return
-            if confirmed:
-                self._handle_cancel_confirmation(job_id, "yes")
-                return
-            if self.app.plain:
-                self.post_error(
-                    "Confirmation required",
-                    "Plain mode uses /cancel <job-id> yes.",
-                )
-                return
-            self._confirm_cancel(job_id)
-        elif command == "/extract":
-            if not argument:
-                self.post_error(
-                    "Missing target",
-                    "Usage: /extract <job-id|inputfile>",
-                )
-                return
-            self._extract_job_result(argument)
-        elif command == "/molecule":
-            if not argument:
-                self.post_error("Missing path", "Usage: /molecule <path>")
-                return
-            self._show_molecule(argument)
-        elif command == "/tools":
-            self._run_inline_cli(["tools"], title="Tools")
-        elif command == "/doctor":
-            self._run_inline_cli(["doctor"], title="Doctor")
-        elif command == "/init":
-            self._handle_init_command(argument)
-        elif command == "/write-project":
-            self._handle_project_write_command(argument)
-        elif command == "/wizard":
-            self._handle_wizard_probe_command(argument)
-        elif command == "/wizard-verify":
-            self._handle_wizard_verify_command(argument)
-        elif command == "/wizard-refresh":
-            self._handle_wizard_refresh_command(argument)
-        elif command == "/wizard-write":
-            self._handle_wizard_write_command(argument)
-        elif command == "/dryrun":
-            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
-                return
-            if not self._current_request:
-                self.post_error("No request", "There is no active request.")
-                return
-            self.start_request(self._current_request)
-        elif command == "/critic":
-            if not self._guard_phase(
-                command, {Phase.PLANNING, Phase.DRY_RUN_READY}
-            ):
-                return
-            if self._current_verdict is None:
-                self.post_error(
-                    "No critic verdict", "The critic has not finished yet."
-                )
-                return
-            self.query_one(Transcript).add_cell(
-                CriticVerdictCell(self._current_verdict)
-            )
-        elif command == "/plan":
-            if not self._guard_phase(
-                command, {Phase.PLANNING, Phase.DRY_RUN_READY, Phase.RUNNING}
-            ):
-                return
-            if not self._current_plan_text:
-                self.post_error("No plan", "The planner has not finished yet.")
-                return
-            self.query_one(Transcript).add_cell(
-                PlanCell(self._current_plan_text)
-            )
-        elif command == "/rationale":
-            rationale = (
-                self._current_plan.rationale if self._current_plan else None
-            )
-            if not rationale:
-                self.post_error(
-                    "No rationale", "No planner rationale is available."
-                )
-                return
-            self.post_agent_message(rationale, title="Rationale")
-        elif command == "/allow":
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
-        elif command == "/allow-session":
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
-        elif command == "/deny":
-            self._resolve_pending_approval(ApprovalDecision.DENY)
-        elif command == "/permissions":
-            if argument:
-                if not self._apply_permission_command(argument):
-                    self.post_error(
-                        "Unknown permissions command",
-                        "Use /permissions permission|driving.",
-                    )
-                return
-            if self.app.plain:
-                self.post_agent_message(
-                    (
-                        "```\n"
-                        f"mode: {self._permission_mode.value}\n"
-                        f"yolo: {'on' if self._yolo_enabled else 'off'}\n"
-                        "Use /permissions permission|driving and /yolo on|off.\n"
-                        "```"
-                    ),
-                    title="Permissions",
-                )
-                return
-            self.app.push_screen(
-                PermissionModeOverlay(
-                    mode=self._permission_mode,
-                    yolo=self._yolo_enabled,
-                ),
-                self._handle_permission_mode_result,
-            )
-        elif command == "/yolo":
-            if not argument:
-                self.post_error(
-                    "Missing value",
-                    "Usage: /yolo on|off",
-                )
-                return
-            self._set_yolo(argument)
-        elif command == "/execute":
-            self._handle_execute_command(argument)
-        elif command == "/submit":
-            self._handle_ready_command_execution("sub", argument)
-        elif command == "/run":
-            self._handle_ready_command_execution("run", argument)
-        else:
-            self.post_error("Unknown command", raw)
-
-    def _show_help(self) -> None:
-        table = Table(show_header=True, box=None, padding=(0, 1))
-        table.add_column("Phase", style="dim", no_wrap=True)
-        table.add_column("Command", style="bold")
-        table.add_column("Description")
-        rows = [
-            ("[A]", "/help", "show this help"),
-            ("[A]", "/jobs", "open the jobs panel"),
-            ("[A]", "/runs · Ctrl+B", "monitor calculations and logs"),
-            ("[A]", "/queue", "show the current queue snapshot"),
-            ("[A]", "/server <name>", "switch the active HPC server"),
-            ("[A]", "/molecule <path>", "load and preview a molecule"),
-            ("[A]", "/cancel <job-id> [yes]", "cancel a queued/running job"),
-            ("[F]", "/extract <job-id|inputfile>", "parse a final result"),
-            ("[D]", "/dryrun", "regenerate the current dry-run"),
-            ("[A]", "/allow", "allow the focused tool request once"),
-            (
-                "[A]",
-                "/allow-session",
-                "allow the focused tool for the rest of this session",
-            ),
-            ("[A]", "/deny", "deny the focused tool request"),
-            ("[A]", "/permissions", "toggle permission/driving mode"),
-            ("[A]", "/yolo on|off", "toggle risky-tool autonomy"),
-            ("[F]", "/execute [yes]", "submit the dry-run to HPC for real"),
-            ("[F]", "/submit [yes]", "submit validated chemsmart sub command"),
-            ("[F]", "/run [yes]", "execute validated chemsmart run command"),
-            ("[P,D]", "/critic", "show the current critic verdict"),
-            ("[P,D,R]", "/plan", "show the current plan"),
-            ("[A]", "/rationale", "show planner rationale"),
-            ("[I,F]", "/clear", "clear the transcript"),
-            ("[I]", "/sessions", "browse recent sessions"),
-            ("[I]", "/resume <session-id>", "load or continue a session"),
-            ("[A]", "/tools", "list registered tools"),
-            ("[A]", "/wizard-refresh <name> [--force]", "refresh node cache"),
-            ("[A]", "/wizard-verify <name>", "verify server transport wiring"),
-            ("[A]", "/doctor", "run inline diagnostics"),
-            (
-                "[F]",
-                "/write-project [name]",
-                "write or replace the latest validated project YAML",
-            ),
-            ("[A]", "/quit", "exit the TUI"),
-        ]
-        for row in rows:
-            table.add_row(*row)
-        self.query_one(Transcript).add_cell(
-            AgentMessageCell(table, title="Help")
-        )
-
-    def _handle_init_command(self, argument: str) -> None:
-        if (
-            self._active_provider_config is not None
-            and self._active_provider_config.type == "local"
-        ):
-            self.post_error(
-                "Init unavailable for local provider",
-                "Project YAML build mode uses the tool-loop harness, which "
-                "needs a tool-calling provider (anthropic/openai).",
-            )
-            return
-        if self._current_worker and not self._current_worker.is_finished:
-            self.post_error(
-                "Session already running",
-                "Wait for the current request to finish before starting "
-                "project YAML build mode.",
-            )
-            return
-        argument = argument.strip()
-        self._build_mode = False
-        self._sync_footer_provider()
-        if argument:
-            self.start_request(
-                "Build a workspace project YAML from this reported method. "
-                "Validate and critique it before writing; ask for approval "
-                f"before write_project_yaml.\n\n{argument}"
-            )
-            return
-        self.post_agent_message(
-            (
-                "**Project YAML request helper**\n\n"
-                "Paste your reported computational method (a paper's "
-                "*Computational Details*, a method sentence, or a few facts) "
-                "as a normal message, and the unified agent will use the "
-                "project-YAML harness to "
-                "`extract → render → validate → critique` a chemsmart project "
-                "YAML, then `write` it into this workspace's "
-                "`.chemsmart/<program>/` folder once you approve.\n\n"
-                'Tip: name the project (e.g. "call it co2") and say the '
-                "program (Gaussian or ORCA)."
-            ),
-            title="Init: Project YAML",
-        )
-        self.query_one(FooterWidget).set_hint("Paste a project-YAML request")
-        self.focus_composer()
-
-    def _show_sessions_snapshot(self) -> None:
-        lines = ["Sessions", "", "Use /resume <session-id> to load one."]
-        if self.session_root.exists():
-            session_dirs = agent_session_dirs(self.session_root)
-        else:
-            session_dirs = []
-        if not session_dirs:
-            lines.extend(["", "No sessions found."])
-        for session_dir in session_dirs[:10]:
-            lines.append(f"- {session_dir.name}")
-        body = "\n".join(lines)
-        self.post_agent_message(f"```\n{body}\n```", title="Sessions")
-
-    def _parse_cancel_argument(self, argument: str) -> tuple[str | None, bool]:
-        if not argument:
-            return None, False
-        parts = argument.split(maxsplit=1)
-        if len(parts) == 1:
-            return parts[0], False
-        if parts[1].strip().lower() in {"y", "yes"}:
-            return parts[0], True
-        self.post_error(
-            "Unknown confirmation",
-            "Use /cancel <job-id> yes to confirm.",
-        )
-        return None, False
-
-    def _handle_inline_approval(self, argument: str) -> bool:
-        if not argument:
-            return False
-        keyword, _, remainder = argument.partition(" ")
-        keyword = keyword.strip().lower()
-        corrective_text = remainder.strip() or None
-        if keyword in {"y", "yes"}:
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
-            return True
-        if keyword in {"n", "no"}:
-            self._resolve_pending_approval(ApprovalDecision.DENY)
-            return True
-        if keyword in {"s", "session"}:
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
-            return True
-        if keyword in {"r", "revise"}:
-            if not corrective_text:
-                self.post_error(
-                    "Missing instruction",
-                    "Usage: /run revise <instruction> or /submit revise <instruction>.",
-                )
-                return True
-            self.start_request(self._corrected_request(corrective_text))
-            return True
-        self.post_error(
-            "Unknown approval response",
-            "Use yes, no, session, or revise <instruction>.",
-        )
-        return True
-
-    def _run_inline_cli(self, args: Iterable[str], *, title: str) -> None:
-        import threading
-
-        from chemsmart.agent.services.cli_presenters import (
-            sanitize_inline_cli_output,
-        )
-
-        command_args = list(args)
-
-        def run_inline() -> None:
-            try:
-                result = CliRunner().invoke(
-                    agent, command_args, catch_exceptions=False
-                )
-            except Exception as exc:
-                self.app.call_from_thread(self.post_error, title, str(exc))
-                return
-
-            text = sanitize_inline_cli_output(result.output)
-            text = text or f"{title} completed."
-
-            def publish() -> None:
-                if result.exit_code == 0:
-                    self.post_agent_message(f"```\n{text}\n```", title=title)
-                else:
-                    self.post_error(title, text)
-
-            self.app.call_from_thread(publish)
-
-        threading.Thread(target=run_inline, daemon=True).start()
 
     def _guard_phase(self, command: str, allowed: set[Phase]) -> bool:
         current = self.query_one(FooterWidget).phase

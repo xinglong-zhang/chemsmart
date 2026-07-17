@@ -48,7 +48,7 @@ def test_tools_slash_command_returns_immediately_and_off_main_thread(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.CliRunner.invoke",
+        "chemsmart.agent.tui.mixins.slash_commands.CliRunner.invoke",
         slow_invoke,
     )
 
@@ -95,7 +95,7 @@ def test_inline_slash_commands_use_semantic_assertions_and_strip_debug_hint(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.CliRunner.invoke",
+        "chemsmart.agent.tui.mixins.slash_commands.CliRunner.invoke",
         fake_invoke,
     )
 
@@ -137,7 +137,7 @@ def test_cancel_confirmation_returns_immediately_and_off_main_thread(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.cancel_job",
+        "chemsmart.agent.tui.mixins.job_interaction.cancel_job",
         slow_cancel,
     )
 
