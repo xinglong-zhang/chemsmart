@@ -38,7 +38,7 @@ from chemsmart.agent.services.session_listing import (
     load_session_snapshots,
     truncate_session_request,
 )
-from chemsmart.agent.tui._logging import (
+from chemsmart.agent.services.command_logging import (
     _apply_third_party_silence,
     _enable_console_logging,
     _flush_logging_handlers,
