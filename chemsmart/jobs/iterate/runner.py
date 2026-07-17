@@ -7,6 +7,7 @@ import sys
 import time
 import uuid
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import product
@@ -63,6 +64,30 @@ def _silence_rdkit_warnings() -> None:
         RDLogger.DisableLog("rdApp.warning")
     except Exception:
         pass
+
+
+@contextmanager
+def _silence_iterate_worker_logging():
+    """Keep Iterate worker logs out of the parent process terminal.
+
+    Worker outcomes are returned as :class:`CombinationResult` objects and
+    rendered in the run report, so worker processes do not need to write
+    directly to the CLI terminal.  Installing a temporary ``NullHandler`` on
+    the package logger also catches messages emitted by preprocessors and
+    analyzers in ``chemsmart.jobs.iterate.iterate``.  The original logger
+    state is restored for direct in-process calls made by tests or API users.
+    """
+    namespace_logger = logging.getLogger("chemsmart.jobs.iterate")
+    original_handlers = list(namespace_logger.handlers)
+    original_propagate = namespace_logger.propagate
+
+    namespace_logger.handlers = [logging.NullHandler()]
+    namespace_logger.propagate = False
+    try:
+        yield
+    finally:
+        namespace_logger.handlers = original_handlers
+        namespace_logger.propagate = original_propagate
 
 
 @dataclass
@@ -478,21 +503,22 @@ def _run_combination_worker(
         Stable 1-based combination number for the report.
     """
     _silence_rdkit_warnings()
-    try:
-        result = _run_combination_task(combination, pool, number)
-        result_queue.put(result)
-    except Exception as e:
-        logger.debug(f"Worker process panic for {combination.label}: {e}")
-        result_queue.put(
-            CombinationResult(
-                combination_number=number,
-                label=combination.label,
-                execution_status=STATUS_FAILED,
-                failure_stage=STAGE_ALGORITHM,
-                error_type=type(e).__name__,
-                error_message=str(e),
+    with _silence_iterate_worker_logging():
+        try:
+            result = _run_combination_task(combination, pool, number)
+            result_queue.put(result)
+        except Exception as e:
+            logger.debug(f"Worker process panic for {combination.label}: {e}")
+            result_queue.put(
+                CombinationResult(
+                    combination_number=number,
+                    label=combination.label,
+                    execution_status=STATUS_FAILED,
+                    failure_stage=STAGE_ALGORITHM,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                )
             )
-        )
 
 
 class IterateJobRunner(JobRunner):
@@ -1398,7 +1424,7 @@ class IterateJobRunner(JobRunner):
             raise
         except Exception as error:
             # Unexpected runtime failure: best-effort INTERNAL ERROR report.
-            logger.error(f"Unexpected error during iterate run: {error}")
+            logger.debug(f"Unexpected error during iterate run: {error}")
             logger.debug("Iterate run traceback", exc_info=True)
             finished_at = datetime.now()
             duration = time.perf_counter() - start_perf

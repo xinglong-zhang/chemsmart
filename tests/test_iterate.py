@@ -230,6 +230,109 @@ def test_run_combinations_progress_callback(
         os.chdir(original_cwd)
 
 
+def test_silence_iterate_worker_logging_restores_state(caplog):
+    """Worker logging is suppressed temporarily without polluting callers."""
+    import logging
+
+    from chemsmart.jobs.iterate.runner import _silence_iterate_worker_logging
+
+    namespace_logger = logging.getLogger("chemsmart.jobs.iterate")
+    worker_logger = logging.getLogger("chemsmart.jobs.iterate.iterate")
+    original_handlers = list(namespace_logger.handlers)
+    original_propagate = namespace_logger.propagate
+
+    caplog.set_level(logging.DEBUG)
+    with _silence_iterate_worker_logging():
+        worker_logger.error("hidden worker message")
+
+    assert "hidden worker message" not in caplog.text
+    assert namespace_logger.handlers == original_handlers
+    assert namespace_logger.propagate is original_propagate
+
+
+def test_run_combination_worker_silences_logs_and_queues_success(
+    caplog, monkeypatch
+):
+    """A successful silent worker still returns its structured result."""
+    import logging
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.iterate import runner as runner_module
+    from chemsmart.jobs.iterate.report import (
+        STATUS_SUCCESS,
+        CombinationResult,
+    )
+
+    class FakeQueue:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    def _task(combination, pool, number):
+        logging.getLogger("chemsmart.jobs.iterate.iterate").info(
+            "Substituent link atom worker noise"
+        )
+        return CombinationResult(number, combination.label, STATUS_SUCCESS)
+
+    monkeypatch.setattr(runner_module, "_silence_rdkit_warnings", lambda: None)
+    monkeypatch.setattr(runner_module, "_run_combination_task", _task)
+    caplog.set_level(logging.DEBUG)
+    result_queue = FakeQueue()
+
+    runner_module._run_combination_worker(
+        SimpleNamespace(label="combo_success"), None, result_queue, 1
+    )
+
+    assert "Substituent link atom worker noise" not in caplog.text
+    assert len(result_queue.items) == 1
+    assert result_queue.items[0].label == "combo_success"
+    assert result_queue.items[0].execution_status == STATUS_SUCCESS
+
+
+def test_run_combination_worker_silences_logs_and_queues_failure(
+    caplog, monkeypatch
+):
+    """A silent worker converts Python exceptions into FAILED results."""
+    import logging
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.iterate import runner as runner_module
+    from chemsmart.jobs.iterate.report import STATUS_FAILED
+
+    class FakeQueue:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    def _task(combination, pool, number):
+        logging.getLogger("chemsmart.jobs.iterate.iterate").error(
+            "worker failure noise"
+        )
+        raise RuntimeError("worker exploded")
+
+    monkeypatch.setattr(runner_module, "_silence_rdkit_warnings", lambda: None)
+    monkeypatch.setattr(runner_module, "_run_combination_task", _task)
+    caplog.set_level(logging.DEBUG)
+    result_queue = FakeQueue()
+
+    runner_module._run_combination_worker(
+        SimpleNamespace(label="combo_failure"), None, result_queue, 2
+    )
+
+    assert "worker failure noise" not in caplog.text
+    assert "Worker process panic" not in caplog.text
+    assert len(result_queue.items) == 1
+    result = result_queue.items[0]
+    assert result.label == "combo_failure"
+    assert result.execution_status == STATUS_FAILED
+    assert result.error_type == "RuntimeError"
+    assert result.error_message == "worker exploded"
+
+
 def test_iterate_timeout(
     iterate_timeout_config_file,
     iterate_input_directory,
