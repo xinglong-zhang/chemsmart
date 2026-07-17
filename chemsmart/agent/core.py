@@ -15,9 +15,6 @@ from chemsmart.agent.handles import (
 )
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
-from chemsmart.agent.harness.workflow_state import (
-    workflow_state_scope,
-)
 from chemsmart.agent.loop import (
     ToolLoopBudgets,
     registry_tool_defs_for_provider,
@@ -75,6 +72,13 @@ from chemsmart.agent.services.runtime_metrics import (
 )
 from chemsmart.agent.services.session_finalizer import SessionFinalizer
 from chemsmart.agent.services.session_store import load_current_session_state
+from chemsmart.agent.services.step_executor import (
+    StepExecutor,
+    is_submit_server_error,
+    is_tool_error,
+    run_local_failed,
+    run_local_failure_message,
+)
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 UTC = timezone.utc
@@ -374,83 +378,9 @@ class AgentSession:
         prior_results: list[Any],
         extra_kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        assert self.session_dir is not None
-        assert self.decision_log is not None
-        resolved_args = _resolve_refs(
-            step.args,
-            prior_results,
-            handle_store=self.handle_store,
+        return StepExecutor(self).execute(
+            step_index, step, prior_results, extra_kwargs
         )
-        if extra_kwargs:
-            resolved_args.update(extra_kwargs)
-        ts_start = _utc_now_iso()
-        step_start_time = time.perf_counter()
-        self.decision_log.write(
-            "tool_call",
-            {
-                "step_index": step_index,
-                "tool": step.tool,
-                "args": _preview_value(resolved_args),
-                "ts_start": ts_start,
-                "step_wall_time_ms": None,
-            },
-            rationale=step.rationale,
-        )
-        scope = self.state.session_id if self.state is not None else "default"
-        with workflow_state_scope(scope):
-            result = self.registry.call(step.tool, resolved_args)
-        if _is_tool_error(result):
-            error = result["error"]
-            self.decision_log.write(
-                "tool_error",
-                {
-                    "step_index": step_index,
-                    "tool": step.tool,
-                    "error_type": error.get("type", "RuntimeError"),
-                    "message": error.get("message", "Unknown tool error"),
-                    "payload": _preview_value(result),
-                    "ts_start": ts_start,
-                    "ts_end": _utc_now_iso(),
-                    "step_wall_time_ms": _elapsed_ms(step_start_time),
-                },
-                rationale=step.rationale,
-            )
-            raise RuntimeError(result["error"]["message"])
-        if _run_local_failed(step.tool, result):
-            artifact_path = self._write_result_artifact(step_index, result)
-            message = _run_local_failure_message(result)
-            self.decision_log.write(
-                "tool_error",
-                {
-                    "step_index": step_index,
-                    "tool": step.tool,
-                    "artifact": artifact_path.name,
-                    "error_type": "RuntimeError",
-                    "message": message,
-                    "payload": _preview_value(result),
-                    "ts_start": ts_start,
-                    "ts_end": _utc_now_iso(),
-                    "step_wall_time_ms": _elapsed_ms(step_start_time),
-                },
-                rationale=step.rationale,
-            )
-            raise RuntimeError(message)
-        artifact_path = self._write_result_artifact(step_index, result)
-        handle_id = self._store_result_handle(step.tool, result)
-        self.decision_log.write(
-            "tool_result",
-            {
-                "step_index": step_index,
-                "tool": step.tool,
-                "artifact": artifact_path.name,
-                "handle_id": handle_id,
-                "payload": _preview_value(result),
-                "ts_end": _utc_now_iso(),
-                "step_wall_time_ms": _elapsed_ms(step_start_time),
-            },
-            rationale=step.rationale,
-        )
-        return result
 
     def _preview_submit_step(
         self,
@@ -459,53 +389,9 @@ class AgentSession:
         prior_results: list[Any],
         dry_submit: bool,
     ) -> Any:
-        assert self.decision_log is not None
-        resolved_args = _resolve_refs(
-            step.args,
-            prior_results,
-            handle_store=self.handle_store,
+        return StepExecutor(self).preview_submit(
+            step_index, step, prior_results, dry_submit
         )
-        resolved_args["execute"] = False
-        self.decision_log.write(
-            "tool_preview",
-            {
-                "step_index": step_index,
-                "tool": step.tool,
-                "args": _preview_value(resolved_args),
-            },
-            rationale=step.rationale,
-        )
-        scope = self.state.session_id if self.state is not None else "default"
-        with workflow_state_scope(scope):
-            result = self.registry.call(step.tool, resolved_args)
-        if _is_tool_error(result):
-            message = result["error"]["message"]
-            if dry_submit and _is_submit_server_error(message):
-                result = {
-                    "transport": None,
-                    "script_path": None,
-                    "script_bytes": None,
-                    "command_executed": None,
-                    "job_id": None,
-                    "duplicate_check": {
-                        "duplicate": False,
-                        "message": None,
-                    },
-                    "skipped": True,
-                    "skip_reason": message,
-                }
-            else:
-                raise RuntimeError(message)
-        self.decision_log.write(
-            "tool_preview_result",
-            {
-                "step_index": step_index,
-                "tool": step.tool,
-                "payload": _preview_value(result),
-            },
-            rationale=step.rationale,
-        )
-        return result
 
     def _record_skipped_step(
         self,
@@ -513,16 +399,7 @@ class AgentSession:
         step: Step,
         reason: str,
     ) -> None:
-        assert self.decision_log is not None
-        self.decision_log.write(
-            "tool_skipped",
-            {
-                "step_index": step_index,
-                "tool": step.tool,
-                "reason": reason,
-            },
-            rationale=step.rationale,
-        )
+        StepExecutor(self).record_skipped(step_index, step, reason)
 
     def _finalize_session(
         self,
@@ -1180,13 +1057,7 @@ def _is_remote_unknown_issue(issue: str) -> bool:
     )
 
 
-def _is_submit_server_error(message: str) -> bool:
-    return (
-        "submit_hpc requires server when no configured servers are available"
-        in message
-        or "submit_hpc requires server when multiple configured servers are "
-        in message
-    )
+_is_submit_server_error = is_submit_server_error
 
 
 _stringify_response = stringify_response
@@ -1207,12 +1078,7 @@ _preview_value = preview_value
 _restore_json_result = restore_json_result
 
 
-def _is_tool_error(result: Any) -> bool:
-    return (
-        isinstance(result, dict)
-        and result.get("ok") is False
-        and "error" in result
-    )
+_is_tool_error = is_tool_error
 
 
 def _primary_dry_run_result(
@@ -1221,23 +1087,8 @@ def _primary_dry_run_result(
     return dry_run_results[0] if dry_run_results else None
 
 
-def _run_local_failed(tool_name: str, result: Any) -> bool:
-    return (
-        tool_name == "run_local"
-        and isinstance(result, dict)
-        and result.get("ok") is False
-    )
-
-
-def _run_local_failure_message(result: dict[str, Any]) -> str:
-    message = "run_local failed"
-    returncode = result.get("returncode")
-    if returncode is not None:
-        message += f" with returncode {returncode}"
-    stderr_path = result.get("stderr_path")
-    if isinstance(stderr_path, str) and stderr_path.strip():
-        message += f"; see {stderr_path}"
-    return message
+_run_local_failed = run_local_failed
+_run_local_failure_message = run_local_failure_message
 
 
 def _malformed_input_issue(
