@@ -81,7 +81,6 @@ def test_get_provider_builds_mlx_local_provider(monkeypatch):
         base_model_id=(
             "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
         ),
-        adapter_repo_id="",
         hf_token="hf-test",
         runtime="mlx",
         project="test",

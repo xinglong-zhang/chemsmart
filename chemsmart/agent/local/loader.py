@@ -4,8 +4,8 @@ Designed for Colab-T4/L4/A100 or a dedicated GPU box. The HF token must be
 supplied via the ``HF_TOKEN`` environment variable; never hardcode it.
 
 Example:
-    >>> from chemsmart.agent.local.loader import load_lora_model
-    >>> bundle = load_lora_model()
+    >>> from chemsmart.agent.local.loader import load_transformers_model
+    >>> bundle = load_transformers_model()
     >>> bundle.model, bundle.tokenizer
 """
 
@@ -17,7 +17,6 @@ from typing import Any
 
 MODEL_REPO_ID = "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1"
 BASE_MODEL_ID = MODEL_REPO_ID
-ADAPTER_REPO_ID = ""
 DEFAULT_MAX_SEQ_LENGTH = 4096
 
 
@@ -29,7 +28,6 @@ class LoadedModel:
     tokenizer: Any
     max_seq_length: int
     base_model_id: str
-    adapter_repo_id: str
     model_repo_id: str
 
 
@@ -46,26 +44,23 @@ def detect_runtime() -> str:
     return "cpu"
 
 
-def load_lora_model(
+def load_transformers_model(
     base_model_id: str = BASE_MODEL_ID,
-    adapter_repo_id: str = ADAPTER_REPO_ID,
     hf_token: str | None = None,
     max_seq_length: int = DEFAULT_MAX_SEQ_LENGTH,
     device_map: str | None = None,
     runtime: str | None = None,
 ) -> LoadedModel:
-    """Load a merged model, or base + LoRA when ``adapter_repo_id`` is set.
+    """Load a merged ChemSmart model for CUDA, MPS, or CPU inference.
 
     Loading strategy is chosen from the available hardware:
 
-    * **cuda** — bfloat16 merged model, or 4-bit NF4 for PEFT LoRA mode.
+    * **cuda** — bfloat16 merged model.
     * **mps** — Apple Silicon, fp16 weights (no bitsandbytes).
     * **cpu** — fp32 weights, very slow but functional for smoke tests.
 
     Args:
-        base_model_id: HF repo for the merged model, or base model in PEFT
-            mode.
-        adapter_repo_id: Optional HF repo for the LoRA adapter (PEFT format).
+        base_model_id: HF repo or local path for the merged model.
         hf_token: Optional explicit token. Falls back to ``HF_TOKEN`` env var.
             Only required for an initial download; ignored when the model is
             already in ``~/.cache/huggingface/hub/``.
@@ -95,63 +90,41 @@ def load_lora_model(
     tokenizer = AutoTokenizer.from_pretrained(base_model_id, token=token)
 
     if chosen_runtime == "cuda":
-        if adapter_repo_id:
-            from transformers import BitsAndBytesConfig
-
-            bnb = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.float16,
-            )
-            base = AutoModelForCausalLM.from_pretrained(
-                base_model_id,
-                quantization_config=bnb,
-                device_map=device_map or "auto",
-                token=token,
-            )
-        else:
-            base = AutoModelForCausalLM.from_pretrained(
-                base_model_id,
-                torch_dtype=torch.bfloat16,
-                device_map=device_map or "auto",
-                token=token,
-            )
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_id,
+            torch_dtype=torch.bfloat16,
+            device_map=device_map or "auto",
+            token=token,
+        )
     elif chosen_runtime == "mps":
-        base = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             base_model_id,
             torch_dtype=torch.float16,
             device_map=device_map,
             token=token,
         )
-        base = base.to("mps")
+        model = model.to("mps")
     else:
-        base = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             base_model_id,
             torch_dtype=torch.float32,
             device_map=device_map,
             token=token,
         )
 
-    model = base
-    if adapter_repo_id:
-        from peft import PeftModel
-
-        model = PeftModel.from_pretrained(
-            base,
-            adapter_repo_id,
-            is_trainable=False,
-            token=token,
-        )
     model.eval()
     return LoadedModel(
         model=model,
         tokenizer=tokenizer,
         max_seq_length=max_seq_length,
         base_model_id=base_model_id,
-        adapter_repo_id=adapter_repo_id,
-        model_repo_id=base_model_id if not adapter_repo_id else adapter_repo_id,
+        model_repo_id=base_model_id,
     )
+
+
+# Kept as a source-compatible import for one release. It loads only merged
+# models; the historical PEFT adapter path has been removed.
+load_lora_model = load_transformers_model
 
 
 def _enforce_huggingface_hub_compat() -> None:

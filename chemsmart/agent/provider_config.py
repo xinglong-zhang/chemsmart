@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,6 @@ class AgentProviderConfig:
     base_url: str
     extra_headers: dict[str, str]
     base_model_id: str = ""
-    adapter_repo_id: str = ""
     hf_token: str = ""
     runtime: str = ""
     project: str = ""
@@ -63,6 +63,14 @@ def _load_provider_environment() -> Path | None:
     )
     for candidate in candidates:
         if candidate is not None and candidate.is_file():
+            warnings.warn(
+                "api.env credential loading is deprecated and will be removed "
+                "after this compatibility release; keep provider selection in "
+                "~/.chemsmart/agent/agent.yaml and migrate secrets to the "
+                "environment or an external secret store.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
             _load_legacy_env(candidate)
             return candidate
     return None
@@ -86,7 +94,6 @@ def load_active_provider_config(
             provider, uses an unknown provider type, or does not resolve an API
             key.
     """
-    _load_provider_environment()
     path = Path(yaml_path) if yaml_path is not None else _default_yaml_path()
     if not path.is_file():
         return None
@@ -133,14 +140,23 @@ def load_active_provider_config(
     base_url = _optional_string_field(provider_entry, "base_url")
     extra_headers = _extra_headers(provider_entry, active)
     base_model_id = _optional_string_field(provider_entry, "base_model_id")
-    adapter_repo_id = _optional_string_field(provider_entry, "adapter_repo_id")
+    if "adapter_repo_id" in provider_entry:
+        raise AgentProviderConfigError(
+            "provider field 'adapter_repo_id' is no longer supported; publish "
+            "or select a merged model with 'base_model_id'"
+        )
     runtime = _optional_string_field(provider_entry, "runtime")
     project = _optional_string_field(provider_entry, "project")
 
     if provider_type == "local":
         api_key = _resolve_local_hf_token(provider_entry)
     else:
-        api_key = _resolve_api_key(provider_entry, active)
+        try:
+            api_key = _resolve_api_key(provider_entry, active)
+        except AgentProviderConfigError:
+            if _load_provider_environment() is None:
+                raise
+            api_key = _resolve_api_key(provider_entry, active)
 
     return AgentProviderConfig(
         name=active,
@@ -150,7 +166,6 @@ def load_active_provider_config(
         base_url=base_url,
         extra_headers=extra_headers,
         base_model_id=base_model_id,
-        adapter_repo_id=adapter_repo_id,
         hf_token=api_key if provider_type == "local" else "",
         runtime=runtime,
         project=project,

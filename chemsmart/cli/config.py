@@ -353,10 +353,8 @@ class Config:
         """Interactively configure ``~/.chemsmart/agent/agent.yaml``.
 
         Three provider choices: ``openai``, ``anthropic``, ``local``. The
-        ``local`` option targets the chemsmart V4 LoRA
-        (``Smilesjs/chemsmart-qwen2.5-7b-lora``); when selected, the model
-        artifacts are pre-fetched into the Hugging Face cache so the first
-        ``chemsmart agent ask`` call does not stall on a 15 GB download.
+        ``local`` option targets the merged v13.1 command synthesizer; when
+        selected, its artifact can be pre-fetched into the Hugging Face cache.
         """
         agent_yaml = self.chemsmart_agent_yaml
         if agent_yaml.exists() and not click.confirm(
@@ -393,10 +391,10 @@ class Config:
             ).strip()
         else:
             click.echo(
-                "Local provider serves Smilesjs/chemsmart-qwen2.5-7b-lora "
-                "(Qwen2.5-7B base + LoRA, ~15 GB)."
+                "Local provider serves the merged "
+                "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1 model."
             )
-            model = "chemsmart-qwen2.5-7b-lora"
+            model = "chemsmart-qwen2.5-coder-3b-instruct-v13_1"
             cached = _local_model_is_cached()
             if cached:
                 click.echo("Model artifacts already cached; skipping download.")
@@ -419,7 +417,9 @@ class Config:
 
         # Switch active to the canonical provider key in the template.
         active_provider_key = (
-            "local_chemsmart_v4" if active_name == "local" else active_name
+            "local_chemsmart_v13_1"
+            if active_name == "local"
+            else active_name
         )
 
         self.chemsmart_agent.mkdir(parents=True, exist_ok=True)
@@ -544,35 +544,27 @@ def _replace_in_file(path: Path, replacements: dict[str, str]) -> None:
 
 
 def _local_model_is_cached() -> bool:
-    """Return True if both the Qwen base and LoRA adapter are fully cached.
+    """Return True if the merged local model is fully cached.
 
     Looks for at least one safetensors file under each repo's snapshots
     directory; partial/incomplete downloads return False so the prefetch
     helper finishes them on a subsequent call.
     """
     cache = Path.home() / ".cache" / "huggingface" / "hub"
-    repos = (
-        "models--Qwen--Qwen2.5-7B-Instruct",
-        "models--Smilesjs--chemsmart-qwen2.5-7b-lora",
-    )
-    for repo in repos:
-        snapshots = cache / repo / "snapshots"
-        if not snapshots.is_dir():
-            return False
-        safetensors = list(snapshots.glob("*/*.safetensors"))
-        if not safetensors:
-            return False
-        incomplete = list((cache / repo / "blobs").glob("*.incomplete"))
-        if incomplete:
-            return False
-    return True
+    repo = "models--Smilesjs--chemsmart-qwen2.5-coder-3b-instruct-v13_1"
+    snapshots = cache / repo / "snapshots"
+    if not snapshots.is_dir():
+        return False
+    if not list(snapshots.glob("*/*.safetensors")):
+        return False
+    return not list((cache / repo / "blobs").glob("*.incomplete"))
 
 
 def _prefetch_local_model(hf_token: str | None) -> None:
-    """Download the Qwen2.5-7B base + chemsmart-qwen2.5-7b-lora adapter.
+    """Download the merged v13.1 local command-synthesis model.
 
     Uses the standard HF cache (``~/.cache/huggingface/hub``) so subsequent
-    ``transformers``/``peft`` loads pick it up automatically. Idempotent: if
+    ``transformers`` loads pick it up automatically. Idempotent: if
     the files are already present, the call returns quickly.
     """
     try:
@@ -588,14 +580,11 @@ def _prefetch_local_model(hf_token: str | None) -> None:
     # rate limits. Passing token=None falls back to anonymous access.
     token = hf_token or os.environ.get("HF_TOKEN") or None
 
-    base_repo = "Qwen/Qwen2.5-7B-Instruct"
-    adapter_repo = "Smilesjs/chemsmart-qwen2.5-7b-lora"
+    model_repo = "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1"
     try:
-        logger.info(f"Pre-fetching {adapter_repo} ...")
-        snapshot_download(repo_id=adapter_repo, token=token)
-        logger.info(f"Pre-fetching {base_repo} (~15 GB; one-time) ...")
+        logger.info(f"Pre-fetching {model_repo} ...")
         snapshot_download(
-            repo_id=base_repo,
+            repo_id=model_repo,
             token=token,
             allow_patterns=["*.json", "*.txt", "*.safetensors", "tokenizer*"],
         )

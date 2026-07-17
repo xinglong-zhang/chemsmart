@@ -17,8 +17,8 @@ user -> chemsmart agent ask
       -> chemsmart CLI validation
 ```
 
-- `loader.py` loads the merged v13.1 HF model by default. If
-  `adapter_repo_id` is set, it falls back to the older base+PEFT LoRA path.
+- `loader.py` loads the merged v13.1 HF model on CUDA, MPS, or CPU. Historical
+  base-plus-PEFT loading is intentionally unsupported; publish a merged model.
 - `mlx_loader.py` loads the converted 4-bit MLX model when `runtime: mlx`.
   This is the Apple Silicon path; it keeps the same compact SPEC,
   postprocessor, adapter, and harness.
@@ -41,7 +41,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
@@ -50,7 +49,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: mlx
@@ -62,12 +60,6 @@ Install runtime dependencies once:
 ```bash
 pip install "huggingface_hub>=0.34.0,<1.0" "transformers==4.56.2" \
     "accelerate==1.10.0"
-```
-
-For PEFT adapter experiments, also install:
-
-```bash
-pip install "peft==0.16.0" "bitsandbytes==0.47.0"
 ```
 
 For Apple Silicon MLX 4-bit inference, use a separate environment or accept
