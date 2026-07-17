@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -83,130 +84,10 @@ class ConversationMemory(BaseModel):
         cls,
         entries: list[dict[str, Any]],
     ) -> "ConversationMemory":
-        turns: list[ConversationTurn] = []
-        entities = EntityMemory()
-        current_turn: ConversationTurn | None = None
-        tool_calls: dict[int, dict[str, Any]] = {}
-
+        replay = _ReplayState()
         for entry in entries:
-            kind = entry.get("kind")
-            payload = entry.get("payload")
-            if kind == "request":
-                request = _string_value(
-                    (payload or {}).get("request")
-                    if isinstance(payload, dict)
-                    else None
-                ) or _string_value(entry.get("rationale"))
-                current_turn = ConversationTurn(
-                    turn_index=len(turns) + 1,
-                    request=request or "",
-                )
-                turns.append(current_turn)
-                tool_calls = {}
-                continue
-
-            if kind == "calculation_event" and isinstance(payload, dict):
-                run = payload.get("run")
-                if isinstance(run, dict):
-                    run_id = _string_value(run.get("run_id"))
-                    output_path = _string_value(run.get("output_path"))
-                    status = _string_value(run.get("status"))
-                    if run_id:
-                        entities.last_run_id = run_id
-                    if output_path:
-                        entities.last_output_path = output_path
-                        entities.last_log_path = output_path
-                    if status:
-                        entities.last_calculation_status = status
-                    if current_turn is not None and status in {
-                        "completed",
-                        "chemistry_failed",
-                        "process_failed",
-                        "cancelled",
-                        "timeout",
-                    }:
-                        summary = (
-                            f"Calculation {run_id or 'latest'} ended with "
-                            f"status={status}"
-                        )
-                        energy = run.get("energy")
-                        if isinstance(energy, (int, float)):
-                            summary += f", energy={float(energy):.12f} Eh"
-                        if output_path:
-                            summary += f", output={output_path}"
-                        current_turn.reusable_results.append(summary + ".")
-                continue
-
-            if current_turn is None or not isinstance(payload, dict):
-                continue
-
-            if kind == "plan":
-                current_turn.plan_rationale = (
-                    _string_value(payload.get("rationale"))
-                    or _string_value(entry.get("rationale"))
-                    or ""
-                )
-                current_turn.intent = _normalize_intent(payload.get("intent"))
-                continue
-
-            if kind == "tool_call":
-                step_index = _coerce_int(payload.get("step_index"))
-                if step_index is not None:
-                    tool_calls[step_index] = payload
-                continue
-
-            if kind == "tool_result":
-                step_index = _coerce_int(payload.get("step_index"))
-                req = (
-                    tool_calls.get(step_index)
-                    if step_index is not None
-                    else None
-                )
-                summary = _summarize_tool_result(
-                    payload,
-                    req,
-                )
-                if summary:
-                    current_turn.reusable_results.append(summary)
-                _apply_mva_entity_updates(payload, req, entities)
-                continue
-
-            if kind == "ask_user":
-                summary = _summarize_ask_user(payload)
-                if summary:
-                    current_turn.reusable_results.append(summary)
-                continue
-
-            if kind == "ask_user_answer":
-                summary = _summarize_ask_user_answer(payload)
-                if summary:
-                    current_turn.reusable_results.append(summary)
-                continue
-
-            # run_loop path: tool_use_request carries args; tool_use_result
-            # carries the handle-wrapped result. Both are keyed by step number.
-            if kind == "tool_use_request":
-                step = _coerce_int(payload.get("step"))
-                if step is not None:
-                    tool_calls[step] = payload
-                continue
-
-            if kind == "tool_use_result":
-                step = _coerce_int(payload.get("step"))
-                req = tool_calls.get(step) if step is not None else None
-                summary = _summarize_tool_use_result(payload, req)
-                if summary:
-                    current_turn.reusable_results.append(summary)
-                _apply_mva_entity_updates(payload, req, entities)
-                continue
-
-            if kind == "session_summary":
-                current_turn.status = "completed"
-                blocked = payload.get("blocked")
-                if isinstance(blocked, bool):
-                    current_turn.blocked = blocked
-
-        return cls(turns=turns, entities=entities)
+            replay.consume(entry)
+        return cls(turns=replay.turns, entities=replay.entities)
 
     def prompt_context(
         self,
@@ -264,6 +145,119 @@ class ConversationMemory(BaseModel):
             elif current_index > turn_index and selected:
                 break
         return selected
+
+
+@dataclass
+class _ReplayState:
+    turns: list[ConversationTurn] = dataclass_field(default_factory=list)
+    entities: EntityMemory = dataclass_field(default_factory=EntityMemory)
+    current_turn: ConversationTurn | None = None
+    tool_calls: dict[int, dict[str, Any]] = dataclass_field(
+        default_factory=dict
+    )
+
+    def consume(self, entry: dict[str, Any]) -> None:
+        kind = entry.get("kind")
+        payload = entry.get("payload")
+        if kind == "request":
+            self._start_turn(entry, payload)
+            return
+        if kind == "calculation_event" and isinstance(payload, dict):
+            self._consume_calculation(payload)
+            return
+        if self.current_turn is None or not isinstance(payload, dict):
+            return
+        if kind == "plan":
+            self.current_turn.plan_rationale = (
+                _string_value(payload.get("rationale"))
+                or _string_value(entry.get("rationale"))
+                or ""
+            )
+            self.current_turn.intent = _normalize_intent(payload.get("intent"))
+        elif kind in {"tool_call", "tool_use_request"}:
+            self._remember_tool_call(kind, payload)
+        elif kind in {"tool_result", "tool_use_result"}:
+            self._consume_tool_result(kind, payload)
+        elif kind == "ask_user":
+            self._append_summary(_summarize_ask_user(payload))
+        elif kind == "ask_user_answer":
+            self._append_summary(_summarize_ask_user_answer(payload))
+        elif kind == "session_summary":
+            self.current_turn.status = "completed"
+            blocked = payload.get("blocked")
+            if isinstance(blocked, bool):
+                self.current_turn.blocked = blocked
+
+    def _start_turn(self, entry: dict[str, Any], payload: Any) -> None:
+        request = _string_value(
+            payload.get("request") if isinstance(payload, dict) else None
+        ) or _string_value(entry.get("rationale"))
+        self.current_turn = ConversationTurn(
+            turn_index=len(self.turns) + 1,
+            request=request or "",
+        )
+        self.turns.append(self.current_turn)
+        self.tool_calls = {}
+
+    def _remember_tool_call(self, kind: Any, payload: dict[str, Any]) -> None:
+        key = "step_index" if kind == "tool_call" else "step"
+        step = _coerce_int(payload.get(key))
+        if step is not None:
+            self.tool_calls[step] = payload
+
+    def _consume_tool_result(self, kind: Any, payload: dict[str, Any]) -> None:
+        key = "step_index" if kind == "tool_result" else "step"
+        step = _coerce_int(payload.get(key))
+        req = self.tool_calls.get(step) if step is not None else None
+        summary = (
+            _summarize_tool_result(payload, req)
+            if kind == "tool_result"
+            else _summarize_tool_use_result(payload, req)
+        )
+        self._append_summary(summary)
+        _apply_mva_entity_updates(payload, req, self.entities)
+
+    def _consume_calculation(self, payload: dict[str, Any]) -> None:
+        run = payload.get("run")
+        if not isinstance(run, dict):
+            return
+        run_id = _string_value(run.get("run_id"))
+        output_path = _string_value(run.get("output_path"))
+        status = _string_value(run.get("status"))
+        if run_id:
+            self.entities.last_run_id = run_id
+        if output_path:
+            self.entities.last_output_path = output_path
+            self.entities.last_log_path = output_path
+        if status:
+            self.entities.last_calculation_status = status
+        if (
+            self.current_turn is None
+            or status not in _TERMINAL_CALCULATION_STATES
+        ):
+            return
+        summary = (
+            f"Calculation {run_id or 'latest'} ended with status={status}"
+        )
+        energy = run.get("energy")
+        if isinstance(energy, (int, float)):
+            summary += f", energy={float(energy):.12f} Eh"
+        if output_path:
+            summary += f", output={output_path}"
+        self.current_turn.reusable_results.append(summary + ".")
+
+    def _append_summary(self, summary: str | None) -> None:
+        if summary and self.current_turn is not None:
+            self.current_turn.reusable_results.append(summary)
+
+
+_TERMINAL_CALCULATION_STATES = {
+    "completed",
+    "chemistry_failed",
+    "process_failed",
+    "cancelled",
+    "timeout",
+}
 
 
 def _trim_context_to_budget(
@@ -392,104 +386,132 @@ def _apply_mva_entity_updates(
     req: dict[str, Any] | None,
     entities: EntityMemory,
 ) -> None:
-    tool = _string_value(payload.get("tool"))
+    tool, args, result = _entity_update_context(payload, req)
     if tool is None:
         return
-
-    args = req.get("args") if isinstance(req, dict) else {}
-    if not isinstance(args, dict):
-        args = {}
-
-    result = payload.get("payload")
-    if not isinstance(result, dict):
-        result = {}
-    result_summary = result.get("summary")
-    if isinstance(result_summary, dict):
-        result = result_summary
-
     if tool in {"synthesize_command", "repair_command", "dry_run_input"}:
         command = _string_value(result.get("command"))
         if command:
             entities.last_command = command
 
-    if tool in {"execute_chemsmart_command", "inspect_calculation"}:
-        calculation = result.get("calculation")
-        if isinstance(calculation, dict):
-            run_id = _string_value(calculation.get("run_id"))
-            output_path = _string_value(calculation.get("output_path"))
-            status = _string_value(calculation.get("status"))
-            if run_id:
-                entities.last_run_id = run_id
-            if output_path:
-                entities.last_output_path = output_path
-                entities.last_log_path = output_path
-            if status:
-                entities.last_calculation_status = status
-        if tool == "execute_chemsmart_command":
-            command = _string_value(result.get("command"))
-            if command:
-                entities.last_command = command
-
+    _apply_calculation_entity_updates(tool, result, entities)
     server = _string_value(args.get("server"))
     if tool == "ssh_probe":
-        if server:
-            entities.last_server = server
-
-        probe_name = _string_value(args.get("probe_name")) or _string_value(
-            result.get("probe")
-        )
-        scheduler = _normalize_scheduler_literal(result.get("scheduler"))
-        if probe_name and probe_name.startswith("scheduler.") and scheduler:
-            entities.last_scheduler = scheduler
-
-        if payload.get("status") != "ok":
-            error_summary = _summarize_entity_error(result.get("error"))
-            if error_summary is None:
-                error_summary = _summarize_entity_error(
-                    payload.get("reason")
-                ) or _summarize_entity_error(result)
-            if error_summary:
-                entities.last_probe_error = error_summary
+        _apply_ssh_entity_updates(payload, args, result, server, entities)
         return
-
     if tool == "scheduler_query":
-        if server:
-            entities.last_server = server
-
-        scheduler = _normalize_scheduler_literal(result.get("scheduler"))
-        if scheduler:
-            entities.last_scheduler = scheduler
-
-        job_id = _string_value(result.get("job_id")) or _string_value(
-            args.get("job_id")
-        )
-        if job_id:
-            entities.last_job_id = str(job_id)
+        _apply_scheduler_entity_updates(args, result, server, entities)
         return
-
     if tool == "log_tail":
-        if server:
-            entities.last_server = server
-
-        path = _string_value(args.get("path"))
-        if path:
-            entities.last_log_path = path
-
-        errors = result.get("errors")
-        if isinstance(errors, list) and errors:
-            error_summary = _summarize_entity_error(
-                errors[0].get("line")
-                if isinstance(errors[0], dict)
-                else errors[0]
-            )
-            if error_summary:
-                entities.last_probe_error = error_summary
+        _apply_log_entity_updates(args, result, server, entities)
         return
-
     if tool == "read":
         path = _string_value(args.get("path"))
         if path and _looks_like_log_path(path):
             entities.last_log_path = path
+
+
+def _entity_update_context(
+    payload: dict[str, Any], req: dict[str, Any] | None
+) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+    tool = _string_value(payload.get("tool"))
+    args = req.get("args") if isinstance(req, dict) else {}
+    if not isinstance(args, dict):
+        args = {}
+    result = payload.get("payload")
+    if not isinstance(result, dict):
+        result = {}
+    summary = result.get("summary")
+    if isinstance(summary, dict):
+        result = summary
+    return tool, args, result
+
+
+def _apply_calculation_entity_updates(
+    tool: str, result: dict[str, Any], entities: EntityMemory
+) -> None:
+    if tool not in {"execute_chemsmart_command", "inspect_calculation"}:
+        return
+    calculation = result.get("calculation")
+    if isinstance(calculation, dict):
+        run_id = _string_value(calculation.get("run_id"))
+        output_path = _string_value(calculation.get("output_path"))
+        status = _string_value(calculation.get("status"))
+        if run_id:
+            entities.last_run_id = run_id
+        if output_path:
+            entities.last_output_path = output_path
+            entities.last_log_path = output_path
+        if status:
+            entities.last_calculation_status = status
+    if tool == "execute_chemsmart_command":
+        command = _string_value(result.get("command"))
+        if command:
+            entities.last_command = command
+
+
+def _apply_ssh_entity_updates(
+    payload: dict[str, Any],
+    args: dict[str, Any],
+    result: dict[str, Any],
+    server: str | None,
+    entities: EntityMemory,
+) -> None:
+    if server:
+        entities.last_server = server
+    probe_name = _string_value(args.get("probe_name")) or _string_value(
+        result.get("probe")
+    )
+    scheduler = _normalize_scheduler_literal(result.get("scheduler"))
+    if probe_name and probe_name.startswith("scheduler.") and scheduler:
+        entities.last_scheduler = scheduler
+    if payload.get("status") == "ok":
+        return
+    error_summary = _summarize_entity_error(result.get("error"))
+    if error_summary is None:
+        error_summary = _summarize_entity_error(
+            payload.get("reason")
+        ) or _summarize_entity_error(result)
+    if error_summary:
+        entities.last_probe_error = error_summary
+
+
+def _apply_scheduler_entity_updates(
+    args: dict[str, Any],
+    result: dict[str, Any],
+    server: str | None,
+    entities: EntityMemory,
+) -> None:
+    if server:
+        entities.last_server = server
+    scheduler = _normalize_scheduler_literal(result.get("scheduler"))
+    if scheduler:
+        entities.last_scheduler = scheduler
+    job_id = _string_value(result.get("job_id")) or _string_value(
+        args.get("job_id")
+    )
+    if job_id:
+        entities.last_job_id = str(job_id)
+
+
+def _apply_log_entity_updates(
+    args: dict[str, Any],
+    result: dict[str, Any],
+    server: str | None,
+    entities: EntityMemory,
+) -> None:
+    if server:
+        entities.last_server = server
+    path = _string_value(args.get("path"))
+    if path:
+        entities.last_log_path = path
+    errors = result.get("errors")
+    if not isinstance(errors, list) or not errors:
+        return
+    first = errors[0].get("line") if isinstance(errors[0], dict) else errors[0]
+    error_summary = _summarize_entity_error(first)
+    if error_summary:
+        entities.last_probe_error = error_summary
 
 
 def _truncate(text: str, limit: int) -> str:
