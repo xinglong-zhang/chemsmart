@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Iterable
+from typing import Callable, Iterable
 
 from click.testing import CliRunner
 from rich.table import Table
@@ -30,183 +30,188 @@ class SlashCommandsMixin:
     def _handle_slash_command(self, raw: str) -> None:
         command, _, remainder = raw.partition(" ")
         argument = remainder.strip()
-
-        if command == "/help":
-            self._show_help()
-        elif command in {"/quit", "/exit"}:
-            self._reset_request_state(
-                clear_transcript=False, clear_session=True
-            )
-            self.app.exit()
-        elif command == "/clear":
-            if not self._guard_phase(command, {Phase.IDLE, Phase.FINISHED}):
-                return
-            self._stop_tailer()
-            self._reset_request_state(
-                clear_transcript=True, clear_session=True
-            )
-            self.notify("Transcript cleared.", timeout=3)
-            self.focus_composer()
-        elif command == "/sessions":
-            if not self._guard_phase(command, {Phase.IDLE}):
-                return
-            if self.app.plain:
-                self._show_sessions_snapshot()
-                return
-            self.app.push_screen(SessionsScreen(self.session_root))
-        elif command == "/resume":
-            if not self._guard_phase(command, {Phase.IDLE}):
-                return
-            if not argument:
-                if self.app.plain:
-                    self._show_sessions_snapshot()
-                    return
-                self.app.push_screen(SessionsScreen(self.session_root))
-                return
-            self._resume_or_prompt(argument)
-        elif command in {"/jobs", "/runs"}:
-            self.action_show_calculations()
-        elif command == "/queue":
-            self._show_queue_snapshot()
-        elif command == "/server":
-            self._switch_active_server(argument)
-        elif command == "/cancel":
-            job_id, confirmed = self._parse_cancel_argument(argument)
-            if not job_id:
-                self.post_error(
-                    "Missing job id",
-                    "Usage: /cancel <job-id> [yes]",
-                )
-                return
-            if confirmed:
-                self._handle_cancel_confirmation(job_id, "yes")
-                return
-            if self.app.plain:
-                self.post_error(
-                    "Confirmation required",
-                    "Plain mode uses /cancel <job-id> yes.",
-                )
-                return
-            self._confirm_cancel(job_id)
-        elif command == "/extract":
-            if not argument:
-                self.post_error(
-                    "Missing target",
-                    "Usage: /extract <job-id|inputfile>",
-                )
-                return
-            self._extract_job_result(argument)
-        elif command == "/molecule":
-            if not argument:
-                self.post_error("Missing path", "Usage: /molecule <path>")
-                return
-            self._show_molecule(argument)
-        elif command == "/tools":
-            self._run_inline_cli(["tools"], title="Tools")
-        elif command == "/doctor":
-            self._run_inline_cli(["doctor"], title="Doctor")
-        elif command == "/init":
-            self._handle_init_command(argument)
-        elif command == "/write-project":
-            self._handle_project_write_command(argument)
-        elif command == "/wizard":
-            self._handle_wizard_probe_command(argument)
-        elif command == "/wizard-verify":
-            self._handle_wizard_verify_command(argument)
-        elif command == "/wizard-refresh":
-            self._handle_wizard_refresh_command(argument)
-        elif command == "/wizard-write":
-            self._handle_wizard_write_command(argument)
-        elif command == "/dryrun":
-            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
-                return
-            if not self._current_request:
-                self.post_error("No request", "There is no active request.")
-                return
-            self.start_request(self._current_request)
-        elif command == "/critic":
-            if not self._guard_phase(
-                command, {Phase.PLANNING, Phase.DRY_RUN_READY}
-            ):
-                return
-            if self._current_verdict is None:
-                self.post_error(
-                    "No critic verdict", "The critic has not finished yet."
-                )
-                return
-            self.query_one(Transcript).add_cell(
-                CriticVerdictCell(self._current_verdict)
-            )
-        elif command == "/plan":
-            if not self._guard_phase(
-                command, {Phase.PLANNING, Phase.DRY_RUN_READY, Phase.RUNNING}
-            ):
-                return
-            if not self._current_plan_text:
-                self.post_error("No plan", "The planner has not finished yet.")
-                return
-            self.query_one(Transcript).add_cell(
-                PlanCell(self._current_plan_text)
-            )
-        elif command == "/rationale":
-            rationale = (
-                self._current_plan.rationale if self._current_plan else None
-            )
-            if not rationale:
-                self.post_error(
-                    "No rationale", "No planner rationale is available."
-                )
-                return
-            self.post_agent_message(rationale, title="Rationale")
-        elif command == "/allow":
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
-        elif command == "/allow-session":
-            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
-        elif command == "/deny":
-            self._resolve_pending_approval(ApprovalDecision.DENY)
-        elif command == "/permissions":
-            if argument:
-                if not self._apply_permission_command(argument):
-                    self.post_error(
-                        "Unknown permissions command",
-                        "Use /permissions permission|driving.",
-                    )
-                return
-            if self.app.plain:
-                self.post_agent_message(
-                    (
-                        "```\n"
-                        f"mode: {self._permission_mode.value}\n"
-                        f"yolo: {'on' if self._yolo_enabled else 'off'}\n"
-                        "Use /permissions permission|driving and /yolo on|off.\n"
-                        "```"
-                    ),
-                    title="Permissions",
-                )
-                return
-            self.app.push_screen(
-                PermissionModeOverlay(
-                    mode=self._permission_mode,
-                    yolo=self._yolo_enabled,
-                ),
-                self._handle_permission_mode_result,
-            )
-        elif command == "/yolo":
-            if not argument:
-                self.post_error(
-                    "Missing value",
-                    "Usage: /yolo on|off",
-                )
-                return
-            self._set_yolo(argument)
-        elif command == "/execute":
-            self._handle_execute_command(argument)
-        elif command == "/submit":
-            self._handle_ready_command_execution("sub", argument)
-        elif command == "/run":
-            self._handle_ready_command_execution("run", argument)
-        else:
+        handler = self._slash_command_handlers().get(command)
+        if handler is None:
             self.post_error("Unknown command", raw)
+            return
+        handler(argument)
+
+    def _slash_command_handlers(self) -> dict[str, Callable[[str], None]]:
+        return {
+            "/help": lambda _arg: self._show_help(),
+            "/quit": self._slash_quit,
+            "/exit": self._slash_quit,
+            "/clear": self._slash_clear,
+            "/sessions": self._slash_sessions,
+            "/resume": self._slash_resume,
+            "/jobs": lambda _arg: self.action_show_calculations(),
+            "/runs": lambda _arg: self.action_show_calculations(),
+            "/queue": lambda _arg: self._show_queue_snapshot(),
+            "/server": self._switch_active_server,
+            "/cancel": self._slash_cancel,
+            "/extract": self._slash_extract,
+            "/molecule": self._slash_molecule,
+            "/tools": lambda _arg: self._run_inline_cli(
+                ["tools"], title="Tools"
+            ),
+            "/doctor": lambda _arg: self._run_inline_cli(
+                ["doctor"], title="Doctor"
+            ),
+            "/init": self._handle_init_command,
+            "/write-project": self._handle_project_write_command,
+            "/wizard": self._handle_wizard_probe_command,
+            "/wizard-verify": self._handle_wizard_verify_command,
+            "/wizard-refresh": self._handle_wizard_refresh_command,
+            "/wizard-write": self._handle_wizard_write_command,
+            "/dryrun": self._slash_dryrun,
+            "/critic": self._slash_critic,
+            "/plan": self._slash_plan,
+            "/rationale": self._slash_rationale,
+            "/allow": lambda _arg: self._resolve_pending_approval(
+                ApprovalDecision.ALLOW_ONCE
+            ),
+            "/allow-session": lambda _arg: self._resolve_pending_approval(
+                ApprovalDecision.ALLOW_SESSION
+            ),
+            "/deny": lambda _arg: self._resolve_pending_approval(
+                ApprovalDecision.DENY
+            ),
+            "/permissions": self._slash_permissions,
+            "/yolo": self._slash_yolo,
+            "/execute": self._handle_execute_command,
+            "/submit": lambda arg: self._handle_ready_command_execution(
+                "sub", arg
+            ),
+            "/run": lambda arg: self._handle_ready_command_execution(
+                "run", arg
+            ),
+        }
+
+    def _slash_quit(self, _argument: str) -> None:
+        self._reset_request_state(clear_transcript=False, clear_session=True)
+        self.app.exit()
+
+    def _slash_clear(self, _argument: str) -> None:
+        if not self._guard_phase("/clear", {Phase.IDLE, Phase.FINISHED}):
+            return
+        self._stop_tailer()
+        self._reset_request_state(clear_transcript=True, clear_session=True)
+        self.notify("Transcript cleared.", timeout=3)
+        self.focus_composer()
+
+    def _slash_sessions(self, _argument: str) -> None:
+        if not self._guard_phase("/sessions", {Phase.IDLE}):
+            return
+        if self.app.plain:
+            self._show_sessions_snapshot()
+            return
+        self.app.push_screen(SessionsScreen(self.session_root))
+
+    def _slash_resume(self, argument: str) -> None:
+        if not self._guard_phase("/resume", {Phase.IDLE}):
+            return
+        if argument:
+            self._resume_or_prompt(argument)
+            return
+        self._slash_sessions("")
+
+    def _slash_cancel(self, argument: str) -> None:
+        job_id, confirmed = self._parse_cancel_argument(argument)
+        if not job_id:
+            self.post_error("Missing job id", "Usage: /cancel <job-id> [yes]")
+            return
+        if confirmed:
+            self._handle_cancel_confirmation(job_id, "yes")
+            return
+        if self.app.plain:
+            self.post_error(
+                "Confirmation required",
+                "Plain mode uses /cancel <job-id> yes.",
+            )
+            return
+        self._confirm_cancel(job_id)
+
+    def _slash_extract(self, argument: str) -> None:
+        if argument:
+            self._extract_job_result(argument)
+            return
+        self.post_error("Missing target", "Usage: /extract <job-id|inputfile>")
+
+    def _slash_molecule(self, argument: str) -> None:
+        if argument:
+            self._show_molecule(argument)
+            return
+        self.post_error("Missing path", "Usage: /molecule <path>")
+
+    def _slash_dryrun(self, _argument: str) -> None:
+        if not self._guard_phase("/dryrun", {Phase.DRY_RUN_READY}):
+            return
+        if self._current_request:
+            self.start_request(self._current_request)
+            return
+        self.post_error("No request", "There is no active request.")
+
+    def _slash_critic(self, _argument: str) -> None:
+        if not self._guard_phase(
+            "/critic", {Phase.PLANNING, Phase.DRY_RUN_READY}
+        ):
+            return
+        if self._current_verdict is None:
+            self.post_error(
+                "No critic verdict", "The critic has not finished yet."
+            )
+            return
+        self.query_one(Transcript).add_cell(
+            CriticVerdictCell(self._current_verdict)
+        )
+
+    def _slash_plan(self, _argument: str) -> None:
+        allowed = {Phase.PLANNING, Phase.DRY_RUN_READY, Phase.RUNNING}
+        if not self._guard_phase("/plan", allowed):
+            return
+        if not self._current_plan_text:
+            self.post_error("No plan", "The planner has not finished yet.")
+            return
+        self.query_one(Transcript).add_cell(PlanCell(self._current_plan_text))
+
+    def _slash_rationale(self, _argument: str) -> None:
+        rationale = (
+            self._current_plan.rationale if self._current_plan else None
+        )
+        if rationale:
+            self.post_agent_message(rationale, title="Rationale")
+            return
+        self.post_error("No rationale", "No planner rationale is available.")
+
+    def _slash_permissions(self, argument: str) -> None:
+        if argument:
+            if not self._apply_permission_command(argument):
+                self.post_error(
+                    "Unknown permissions command",
+                    "Use /permissions permission|driving.",
+                )
+            return
+        if self.app.plain:
+            self.post_agent_message(
+                "```\n"
+                f"mode: {self._permission_mode.value}\n"
+                f"yolo: {'on' if self._yolo_enabled else 'off'}\n"
+                "Use /permissions permission|driving and /yolo on|off.\n```",
+                title="Permissions",
+            )
+            return
+        self.app.push_screen(
+            PermissionModeOverlay(
+                mode=self._permission_mode, yolo=self._yolo_enabled
+            ),
+            self._handle_permission_mode_result,
+        )
+
+    def _slash_yolo(self, argument: str) -> None:
+        if argument:
+            self._set_yolo(argument)
+            return
+        self.post_error("Missing value", "Usage: /yolo on|off")
 
     def _show_help(self) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
