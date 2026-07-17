@@ -56,10 +56,11 @@ from chemsmart.agent.services.plan_support import (
     classify_intent,
     is_chitchat_request,
     is_project_yaml_workflow,
-    render_plan,
+    render_plan as render_plan,
     resolve_plan_intent,
     synthetic_plan_from_tool_requests,
 )
+from chemsmart.agent.services.planned_session import PlannedSessionRunner
 from chemsmart.agent.services.result_codec import (
     REFERENCE_RE,
     json_safe,
@@ -72,7 +73,6 @@ from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 UTC = timezone.utc
 
-_RISKY_TOOLS = {"run_local", "submit_hpc"}
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
 _ORCA_ROUTE_RE = re.compile(r"^\s*!\s*\S+", re.MULTILINE)
 _REFERENCE_RE = REFERENCE_RE
@@ -283,224 +283,14 @@ class AgentSession:
         allow_critic_override: bool,
         rerender_plan: bool,
     ) -> dict[str, Any]:
-        assert self.state is not None
-        assert self.state.plan is not None
-        assert self.session_dir is not None
-        assert self.decision_log is not None
-
-        plan = self.state.plan
-        results = list(completed_results)
-        dry_run_results = self._collect_prior_results(results, "dry_run_input")
-        runtime_result = self._find_prior_result(results, "validate_runtime")
-        verdict: CriticVerdict | None = self._get_logged_verdict()
-        blocked = False
-        block_reason: str | None = None
-        run_error: Exception | None = None
-        paused_for_approval = False
-
-        if not plan.steps:
-            is_chitchat = plan.is_chitchat()
-            self._finalize_session(
-                verdict=None,
-                blocked=False,
-                block_reason=None,
-                dry_run_results=dry_run_results,
-                advisory_only=True,
-                is_chitchat=is_chitchat,
-                rationale=plan.rationale,
-            )
-            return {
-                "session_id": self.state.session_id,
-                "session_dir": str(self.session_dir),
-                "plan": plan,
-                "plan_text": render_plan(plan) if rerender_plan else None,
-                "critic_verdict": None,
-                "completed_steps": self.state.current_step_index,
-                "blocked": False,
-                "dry_run_result": None,
-                "dry_run_results": dry_run_results,
-                "runtime_result": runtime_result,
-                "preview_submit": None,
-                "results": results,
-                "advisory_only": True,
-                "is_chitchat": is_chitchat,
-            }
-        if (
-            self.state.current_step_index >= len(plan.steps)
-            and self._get_logged_summary() is not None
-        ):
-            return {
-                "session_id": self.state.session_id,
-                "session_dir": str(self.session_dir),
-                "plan": plan,
-                "plan_text": render_plan(plan) if rerender_plan else None,
-                "critic_verdict": verdict,
-                "completed_steps": self.state.current_step_index,
-                "blocked": False,
-                "dry_run_result": _primary_dry_run_result(dry_run_results),
-                "dry_run_results": dry_run_results,
-                "runtime_result": runtime_result,
-                "preview_submit": None,
-                "results": results,
-            }
-
-        preview_submit = None
-        risky_start = len(plan.steps)
-        try:
-            for step_index in range(
-                self.state.current_step_index, len(plan.steps)
-            ):
-                step = plan.steps[step_index]
-                if step.tool in _RISKY_TOOLS:
-                    risky_start = step_index
-                    break
-                result = self._execute_step(step_index, step, results)
-                results.append(result)
-                self.state.current_step_index = step_index + 1
-                self._save_state()
-                if step.tool == "dry_run_input":
-                    dry_run_results.append(result)
-                elif step.tool == "validate_runtime":
-                    runtime_result = result
-
-            if (
-                risky_start < len(plan.steps)
-                and plan.steps[risky_start].tool == "submit_hpc"
-                and not dry_submit
-            ):
-                preview_submit = self._preview_submit_step(
-                    risky_start,
-                    plan.steps[risky_start],
-                    results,
-                    dry_submit=dry_submit,
-                )
-
-            if verdict is None and not _is_project_yaml_workflow(plan):
-                verdict = self._critic_call(
-                    plan=plan,
-                    dry_run_results=dry_run_results,
-                    dry_submit=dry_submit,
-                )
-                verdict = self._apply_deterministic_gates(
-                    plan=plan,
-                    verdict=verdict,
-                    runtime_result=runtime_result,
-                    dry_run_results=dry_run_results,
-                    preview_submit=preview_submit,
-                    dry_submit=dry_submit,
-                )
-                self.decision_log.write(
-                    "critic_verdict",
-                    verdict.model_dump(),
-                    rationale=verdict.rationale,
-                )
-
-            block_reason = (
-                self._block_reason(
-                    verdict=verdict,
-                    dry_submit=dry_submit,
-                    allow_remote_unknown=allow_remote_unknown,
-                    allow_critic_override=allow_critic_override,
-                )
-                if verdict is not None
-                else None
-            )
-            blocked = block_reason is not None
-            if blocked:
-                return {
-                    "session_id": self.state.session_id,
-                    "session_dir": str(self.session_dir),
-                    "plan": plan,
-                    "plan_text": render_plan(plan) if rerender_plan else None,
-                    "critic_verdict": verdict,
-                    "completed_steps": self.state.current_step_index,
-                    "blocked": True,
-                    "dry_run_result": _primary_dry_run_result(dry_run_results),
-                    "dry_run_results": dry_run_results,
-                    "runtime_result": runtime_result,
-                    "preview_submit": preview_submit,
-                }
-
-            if (
-                pause_before_risky
-                and risky_start < len(plan.steps)
-                and not (
-                    dry_submit and plan.steps[risky_start].tool == "submit_hpc"
-                )
-            ):
-                paused_for_approval = True
-                return {
-                    "session_id": self.state.session_id,
-                    "session_dir": str(self.session_dir),
-                    "plan": plan,
-                    "plan_text": render_plan(plan) if rerender_plan else None,
-                    "critic_verdict": verdict,
-                    "completed_steps": self.state.current_step_index,
-                    "blocked": False,
-                    "dry_run_result": _primary_dry_run_result(dry_run_results),
-                    "dry_run_results": dry_run_results,
-                    "runtime_result": runtime_result,
-                    "preview_submit": preview_submit,
-                    "pending_approval": True,
-                    "next_risky_tool": plan.steps[risky_start].tool,
-                }
-
-            for step_index in range(risky_start, len(plan.steps)):
-                if step_index < self.state.current_step_index:
-                    continue
-                step = plan.steps[step_index]
-                if step.tool == "submit_hpc" and dry_submit:
-                    self._record_skipped_step(
-                        step_index,
-                        step,
-                        reason="dry-submit skips remote submission",
-                    )
-                    preview_submit = {
-                        "skipped": True,
-                        "skip_reason": "dry-submit skips remote submission",
-                    }
-                    break
-                extra_kwargs = {}
-                if step.tool == "submit_hpc":
-                    extra_kwargs["execute"] = not dry_submit
-                    if self.transport is not None:
-                        extra_kwargs["transport"] = self.transport
-                result = self._execute_step(
-                    step_index,
-                    step,
-                    results,
-                    extra_kwargs=extra_kwargs,
-                )
-                results.append(result)
-                self.state.current_step_index = step_index + 1
-                self._save_state()
-
-            return {
-                "session_id": self.state.session_id,
-                "session_dir": str(self.session_dir),
-                "plan": plan,
-                "plan_text": render_plan(plan) if rerender_plan else None,
-                "critic_verdict": verdict,
-                "completed_steps": self.state.current_step_index,
-                "blocked": False,
-                "dry_run_result": _primary_dry_run_result(dry_run_results),
-                "dry_run_results": dry_run_results,
-                "runtime_result": runtime_result,
-                "preview_submit": preview_submit,
-                "results": results,
-            }
-        except Exception as exc:
-            run_error = exc
-            raise
-        finally:
-            if not paused_for_approval:
-                self._finalize_session(
-                    verdict=verdict,
-                    blocked=blocked,
-                    block_reason=block_reason,
-                    dry_run_results=dry_run_results,
-                    run_error=run_error,
-                )
+        return PlannedSessionRunner(self).run(
+            completed_results,
+            dry_submit=dry_submit,
+            pause_before_risky=pause_before_risky,
+            allow_remote_unknown=allow_remote_unknown,
+            allow_critic_override=allow_critic_override,
+            rerender_plan=rerender_plan,
+        )
 
     def _provider_instance(self) -> Any:
         if self._provider is None:
