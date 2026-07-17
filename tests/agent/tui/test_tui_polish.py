@@ -420,8 +420,14 @@ def test_response_copy_view_supports_selection(monkeypatch, tmp_path: Path):
             )
             transcript = app.query_one(Transcript)
             transcript.add_cell(response)
-            transcript.scroll_end(animate=False)
-            await pilot.pause()
+            # The welcome markdown cell reflows after the first layout pass,
+            # racing the deferred scroll_end; keep re-scrolling until the
+            # transcript actually rests at the bottom before clicking.
+            for _ in range(5):
+                transcript.scroll_end(animate=False)
+                await pilot.pause()
+                if transcript.scroll_offset.y == transcript.max_scroll_y:
+                    break
             assert await pilot.click(response, offset=(2, 0))
             await pilot.pause()
             assert isinstance(app.screen, ResponseCopyOverlay)
