@@ -10,7 +10,10 @@ coordinates by computing energies of fragments and whole molecules.
 
 import logging
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch
+from chemsmart.jobs.batch import (
+    run_child_jobs_as_batch,
+    run_selected_array_child,
+)
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.utils import get_list_from_string_range
@@ -343,6 +346,19 @@ class GaussianDIASJob(GaussianJob):
                 )
             ]
 
+    def get_array_child_jobs(self):
+        """Return molecule + fragment jobs for scheduler array submission.
+
+        Flattens the three DI-AS phases into one list. Array tasks may run
+        across phases concurrently; final analysis still waits on all
+        children via ``is_complete``.
+        """
+        return (
+            list(self.all_molecules_jobs)
+            + list(self.fragment1_jobs)
+            + list(self.fragment2_jobs)
+        )
+
     def _run_all_molecules_jobs(self):
         """
         Execute all complete molecule calculation jobs.
@@ -404,9 +420,14 @@ class GaussianDIASJob(GaussianJob):
         2. Fragment 1 structures at the same points
         3. Fragment 2 structures at the same points
 
+        When submitted as a scheduler array with
+        ``chemsmart sub --run-in-parallel``, only the selected child runs.
+
         Args:
             **kwargs: Additional keyword arguments for job execution.
         """
+        if run_selected_array_child(self.get_array_child_jobs(), parent=self):
+            return
         self._run_all_molecules_jobs()
         self._run_fragment1_jobs()
         self._run_fragment2_jobs()

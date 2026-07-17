@@ -297,6 +297,14 @@ class GaussianTrajJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
+    def get_array_child_jobs(self):
+        """Return structure jobs for scheduler array submission."""
+        if self.num_structures_to_run is None:
+            return list(self.all_structures_run_jobs)
+        return list(
+            self.incomplete_structure_run_jobs[: self.num_structures_to_run]
+        )
+
     @property
     def last_run_job_index(self):
         """

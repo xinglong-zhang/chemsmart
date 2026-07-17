@@ -698,11 +698,25 @@ def run_child_jobs_as_batch(
     used. Independent parent jobs may still run concurrently when submitted
     as a top-level batch via ``chemsmart sub``.
 
+    When a scheduler array task id is set (nestable parent submitted with
+    ``chemsmart sub --run-in-parallel``), only the selected child runs.
+
     ``fail_fast`` controls whether execution stops after the first
     unsuccessful child (default: run all children, then raise on failures).
 
-    Returns the completed ``BatchJob`` instance.
+    Returns the completed ``BatchJob`` instance (or ``None``-like unused
+    when array mode runs a single child without building a batch).
     """
+    if run_selected_array_child(jobs, parent=parent):
+        return batch_cls(
+            jobs=list(jobs),
+            no_run_in_parallel=True,
+            fail_fast=fail_fast,
+            label=f"{parent.label}{label_suffix}",
+            jobrunner=parent.jobrunner,
+            nested_serial=True,
+        )
+
     runner = parent.jobrunner
     if runner is not None:
         cores = runner.num_cores
@@ -728,3 +742,70 @@ def run_child_jobs_as_batch(
     batch_job.enable_serial_local_execution()
     batch_job.run()
     return batch_job
+
+
+def run_selected_array_child(
+    jobs: Sequence[Job],
+    *,
+    parent: Job,
+) -> bool:
+    """Run one nested child when a scheduler array task id is set.
+
+    Used when a nestable parent (crest/QRC/dias/traj) was submitted with
+    ``chemsmart sub --run-in-parallel``: each array task re-invokes the
+    parent CLI, and this helper runs only ``jobs[task_id - 1]`` with the
+    parent's full resources.
+
+    Returns:
+        True if an array task was handled; False if no array env is set
+        (caller should run the full nested batch).
+    """
+    task_id = resolve_array_task_id()
+    if task_id is None:
+        return False
+    children = list(jobs)
+    total = len(children)
+    if total == 0:
+        raise ValueError(
+            f"Nestable job {parent.label!r} has no child jobs for array task."
+        )
+    child_index = task_id - 1
+    if child_index < 0 or child_index >= total:
+        raise ValueError(
+            f"Array task id {task_id} out of range for {total} "
+            f"nested child job(s) of {parent.label!r}; expected 1..{total}."
+        )
+    child = children[child_index]
+    runner = parent.jobrunner
+    if runner is not None:
+        child.jobrunner = runner
+        cores = runner.num_cores
+        mem_gb = runner.mem_gb
+    else:
+        cores = None
+        mem_gb = None
+    logger.info(
+        "Nestable job %r: execution=%s, task=%s/%s, cores=%s, "
+        "mem_gb=%s, child=%s",
+        parent.label,
+        BatchExecutionMode.ARRAY_TASK.value,
+        task_id,
+        total,
+        cores,
+        mem_gb,
+        child.label,
+    )
+    child.run()
+    return True
+
+
+def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
+    """Return nestable children for array submit, or ``None`` if not nestable."""
+    try:
+        get_children = job.get_array_child_jobs
+    except AttributeError:
+        return None
+    children = list(get_children())
+    if not children:
+        return None
+    return children

@@ -6,8 +6,10 @@ import click
 logger = logging.getLogger(__name__)
 
 PARALLEL_HELP_SUB = (
-    "Max concurrent SLURM array tasks when submitting a batch. "
-    "Use --no-run-in-parallel to run one array task at a time."
+    "Max concurrent SLURM array tasks when submitting a batch, and expand "
+    "nestable jobs (crest/QRC/dias/traj) into one array task per child. "
+    "Use --no-run-in-parallel for one array task at a time, or a single "
+    "parent job with nested serial children."
 )
 
 PARALLEL_HELP_RUN = (

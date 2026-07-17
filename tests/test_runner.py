@@ -658,6 +658,45 @@ class TestGaussianBatchDelegation:
         assert call_kwargs["label"] == "test_qrc_batch"
         mock_batch.run.assert_called_once()
 
+    def test_qrc_array_task_runs_selected_child_only(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """SLURM_ARRAY_TASK_ID selects one QRC child via nestable helper."""
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        gaussian_jobrunner_no_scratch.num_cores = 16
+        gaussian_jobrunner_no_scratch.mem_gb = 32
+
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        mocker.patch.object(
+            type(job),
+            "both_qrc_jobs",
+            new_callable=mocker.PropertyMock,
+            return_value=[child_f, child_r],
+        )
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+
+        job._run_both_jobs()
+
+        child_f.run.assert_not_called()
+        child_r.run.assert_called_once()
+        assert child_r.jobrunner is gaussian_jobrunner_no_scratch
+        mock_batch_cls.return_value.run.assert_not_called()
+
 
 class TestRunListFailureAggregation:
     """List execution aggregates failures like BatchJob."""

@@ -13,9 +13,15 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.batch import BatchJob, warn_legacy_job_list
+from chemsmart.jobs.batch import (
+    BatchJob,
+    get_nestable_array_children,
+    warn_legacy_job_list,
+)
 from chemsmart.jobs.batch_manifest import get_job_batch_entry
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.batch import OrcaBatchJob
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import SchedulerArrayPolicy, Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -187,6 +193,46 @@ def process_pipeline(ctx, *args, **kwargs):
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
+    def _process_nestable_array_job(parent_job):
+        """Expand nestable children and submit as a scheduler array.
+
+        Each array task re-runs the parent CLI; the parent selects one child
+        via ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``.
+        """
+        if kwargs.get("test"):
+            logger.warning('Not submitting as "test" flag specified.')
+
+        children = get_nestable_array_children(parent_job)
+        if not children:
+            raise ValueError(
+                f"Nestable job {parent_job} has no children to array-submit."
+            )
+
+        program = (parent_job.PROGRAM or "").lower()
+        batch_cls = OrcaBatchJob if program == "orca" else GaussianBatchJob
+
+        batch_job = batch_cls(
+            jobs=children,
+            no_run_in_parallel=jobrunner.no_run_in_parallel,
+            label=f"{parent_job.label}_array",
+            jobrunner=jobrunner,
+        )
+        shared_cli_args = _reconstruct_cli_args(ctx)
+        logger.info(
+            "Expanding nestable job %r into array of %s child task(s) "
+            "(--run-in-parallel)",
+            parent_job.label,
+            len(children),
+        )
+        server = Server.from_servername(kwargs.get("server"))
+        server.submit_batch(
+            batch_job,
+            policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
+            test=kwargs.get("test"),
+            cli_args=shared_cli_args,
+            rewrite_cli=None,
+        )
+
     def _process_batch_job(batch_job):
         """Submit a top-level BatchJob via ``Server.submit_batch``."""
         if kwargs.get("test"):
@@ -233,7 +279,13 @@ def process_pipeline(ctx, *args, **kwargs):
         _process_batch_job(job)
     else:
         job.jobrunner = jobrunner
-        _process_single_job(job=job)
+        nestable_children = get_nestable_array_children(job)
+        # --run-in-parallel (default): expand nestable parents to an array.
+        # --no-run-in-parallel: one parent job with nested serial children.
+        if nestable_children is not None and not jobrunner.no_run_in_parallel:
+            _process_nestable_array_job(job)
+        else:
+            _process_single_job(job=job)
 
 
 for subcommand in subcommands:

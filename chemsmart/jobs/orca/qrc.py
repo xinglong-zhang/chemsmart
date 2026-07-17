@@ -91,6 +91,10 @@ class ORCAQRCJob(ORCAJob):
         """
         return self._prepare_both_qrc_jobs()
 
+    def get_array_child_jobs(self):
+        """Return forward/reverse children for scheduler array submission."""
+        return list(self.both_qrc_jobs)
+
     @property
     def qrcf_molecule(self):
         """

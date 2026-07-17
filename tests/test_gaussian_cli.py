@@ -984,6 +984,124 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_submit_array.call_args.kwargs["num_nodes"] == 2
         assert len(mock_submit_array.call_args.kwargs["jobs"]) == 3
 
+    def test_sub_run_in_parallel_expands_qrc_to_array(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """`sub --run-in-parallel ... qrc` expands forward/reverse to an array."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_not_called()
+        assert mock_submit_array.call_count == 1
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 2
+        assert (
+            mock_submit_array.call_args.kwargs["batch_label"] == "ts_qrc_array"
+        )
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert "qrc" in cli_args
+
+    def test_sub_no_run_in_parallel_submits_qrc_as_single_parent(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel ... qrc` submits one nestable parent job."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit_array.assert_not_called()
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["job"] is mock_qrc
+        assert "qrc" in mock_submit.call_args.kwargs["cli_args"]
+
     def test_scan_settings_from_project(
         self,
         single_molecule_xyz_file,

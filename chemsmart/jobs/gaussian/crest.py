@@ -166,6 +166,10 @@ class GaussianCrestJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
+    def get_array_child_jobs(self):
+        """Return conformer jobs (up to num_confs_to_opt) for array submission."""
+        return list(self.all_conformers_jobs[: self.num_confs_to_opt])
+
     @property
     def incomplete_conformers_jobs(self):
         """
