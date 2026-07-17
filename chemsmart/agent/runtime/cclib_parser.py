@@ -6,8 +6,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from cclib.io import ccopen
-from cclib.parser.utils import convertor
+try:
+    from cclib.io import ccopen
+    from cclib.parser.utils import convertor
+except ImportError:  # Optional ``result-parsers`` extra.
+    ccopen = None
+    convertor = None
 
 MAX_CCLIB_FILE_SIZE = 32 * 1024 * 1024
 
@@ -27,6 +31,15 @@ def parse_cclib_output(output_path: str | Path) -> dict[str, Any]:
         return {
             "status": "skipped",
             "warning": "Output is larger than the bounded cclib parse limit.",
+        }
+    if ccopen is None or convertor is None:
+        return {
+            "status": "unavailable",
+            "warning": (
+                "cclib is not installed; using the built-in result parser. "
+                "Install chemsmart[result-parsers] for normalized advanced "
+                "properties."
+            ),
         }
 
     try:

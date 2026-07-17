@@ -15,10 +15,9 @@ import warnings
 from pathlib import Path
 from typing import Any, Optional
 
-from dotenv import load_dotenv
-
 from chemsmart.agent.provider_config import (
     AgentProviderConfigError,
+    _load_legacy_env,
     load_active_provider_config,
 )
 
@@ -375,7 +374,7 @@ def get_provider(
     legacy ``api.env``/``AI_PROVIDER`` path for backwards compatibility.
     """
     if isinstance(env_path, str) and env_path.strip():
-        load_dotenv(env_path.strip(), override=False)
+        _load_legacy_env(Path(env_path.strip()))
 
     try:
         config = load_active_provider_config()
@@ -421,7 +420,7 @@ def get_provider(
     # Load api.env first so AI_PROVIDER and ai_api_key can both come from the
     # file — the user should not need to export AI_PROVIDER in their shell.
     if env_path is not None:
-        load_dotenv(env_path, override=False)
+        _load_legacy_env(Path(env_path))
 
     provider_name = os.environ.get("AI_PROVIDER")
     if not provider_name or not provider_name.strip():

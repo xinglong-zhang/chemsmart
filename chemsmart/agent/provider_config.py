@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
 
 from chemsmart.io.yaml import YAMLFile
 
@@ -36,6 +35,19 @@ class AgentProviderConfigError(Exception):
     """Raised when ``~/.chemsmart/agent/agent.yaml`` is invalid."""
 
 
+def _load_legacy_env(path: Path) -> None:
+    """Load the one-release ``api.env`` compatibility path lazily."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError as exc:
+        raise AgentProviderConfigError(
+            "Legacy api.env loading requires the agent extra. Install with "
+            "`pip install 'chemsmart[agent]'`, or move the provider settings "
+            "to ~/.chemsmart/agent/agent.yaml."
+        ) from exc
+    load_dotenv(path, override=False)
+
+
 def _default_yaml_path() -> Path:
     """Return the default agent provider YAML path."""
     return Path.home() / ".chemsmart" / "agent" / "agent.yaml"
@@ -51,7 +63,7 @@ def _load_provider_environment() -> Path | None:
     )
     for candidate in candidates:
         if candidate is not None and candidate.is_file():
-            load_dotenv(candidate, override=False)
+            _load_legacy_env(candidate)
             return candidate
     return None
 

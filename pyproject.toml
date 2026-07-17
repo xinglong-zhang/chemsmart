@@ -18,19 +18,16 @@ classifiers = [
 dependencies = [
     "ase==3.24.0",
     "basis_set_exchange==0.11",
-    "cclib>=1.8.1,<2",
     "click==8.1.8",
     "dictdiffer==0.9.0",
     "filelock",
     "joblib==1.4.2",
     "networkx==3.4.2",
     "numpy~=1.26.4",  # rdkit and pymol require numpy 1.x
-    "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.10.7",
     "rdkit>=2024",
     "tomlkit==0.13.2",
-    "types-PyYAML",
     "scipy==1.15.2",
     "pandas==2.2.3",
     "openpyxl==3.1.5",
@@ -39,25 +36,22 @@ dependencies = [
     "tenacity>=9.1.2",
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
-    "pytest_mock>=3.14.0",
     "spyrmsd>=0.8.0",
     "lockfile>=0.12.2",
     "contextlib2>=21.6.0",
     "pillow>=12.1.1",
     "ipython>=8.12.3",
     "image>=1.5.33",
-    "anthropic>=0.40",
-    "openai>=1",
-    "python-dotenv>=1",
     "pydantic>=2",
 ]
 
 [project.optional-dependencies]
 test = [
-    "pytest",
-    "pytest-mock",
+    "pytest==8.3.4",
+    "pytest-mock>=3.14.0",
     "coverage",
     "pytest-cov",
+    "types-PyYAML",
 ]
 dev = [
     "pre-commit>=3.6.0",
@@ -83,13 +77,27 @@ agent-tui = [
     "watchdog>=3,<5",
     "pyperclip",
 ]
-local-agent = [
+agent = [
+    "anthropic>=0.40",
+    "openai>=1",
+    "python-dotenv>=1",
+]
+local-transformers = [
     "huggingface_hub>=0.34.0,<1.0",
     "transformers==4.56.2",
     "accelerate==1.10.0",
+    "torch>=2.2,<3",
 ]
 local-mlx = [
-    "mlx-lm==0.31.3",
+    "huggingface_hub>=0.34.0,<1.0",
+    "mlx-lm==0.31.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+result-parsers = [
+    "cclib>=1.8,<2",
+]
+local-server = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.urls]
@@ -101,7 +109,8 @@ homepage = "https://github.com/xinglong-zhang/chemsmart/"
 chemsmart = "chemsmart.cli.main:main"
 
 [tool.setuptools.packages.find]
-exclude = [".github"]
+include = ["chemsmart*"]
+exclude = ["tests*", "scripts*", "docs*"]
 
 [tool.setuptools.package-data]
 "chemsmart" = [
@@ -111,6 +120,7 @@ exclude = [".github"]
     "agent/prompts/*.md",
     "agent/local/*.md",
     "agent/local/*.yaml.example",
+    "agent/harness/basis_sets/*.json",
     "agent/tui/*.tcss",
 ]
 

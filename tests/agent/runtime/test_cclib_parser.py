@@ -73,3 +73,24 @@ def test_cclib_parser_failure_is_evidence_not_calculation_failure(
     assert summary["parser_warnings"] == [
         "cclib IndexError: ORCA 6 SCF layout"
     ]
+
+
+def test_missing_cclib_keeps_native_result_parser(tmp_path, monkeypatch):
+    output = tmp_path / "orca.out"
+    output.write_text(
+        "FINAL SINGLE POINT ENERGY -76.269459371830\n"
+        "ORCA TERMINATED NORMALLY\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cclib_parser, "ccopen", None)
+    monkeypatch.setattr(cclib_parser, "convertor", None)
+
+    summary = inspect_output(output, program="orca", kind="sp")
+
+    assert summary["normal_termination"] is True
+    assert summary["energy"] == pytest.approx(-76.269459371830)
+    assert summary["parser_backend"] == "native"
+    assert summary["parser_warnings"] == [
+        "cclib is not installed; using the built-in result parser. Install "
+        "chemsmart[result-parsers] for normalized advanced properties."
+    ]
