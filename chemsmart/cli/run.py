@@ -1,6 +1,6 @@
 import logging
 import platform
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import warnings
 from multiprocessing import set_start_method
 
 import click
@@ -10,11 +10,7 @@ from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import BatchExecutionError, BatchJob
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import (
-    JobRunner,
-    get_serial_mode,
-    get_submitter_worker_count,
-)
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
@@ -136,48 +132,34 @@ def process_pipeline(ctx, *args, **kwargs):
             num_nodes=getattr(jobrunner, "num_nodes", None),
         )
 
-    # Handle list of jobs (legacy multi-molecule return path)
+    # Handle list of jobs
     if isinstance(job, list):
         if not job:
             logger.debug("Empty job list. Skipping job execution.")
             return None
         if not all(isinstance(single_job, Job) for single_job in job):
             raise ValueError("Expected a list of Job instances.")
-        logger.info(f"Running {len(job)} jobs")
-        serial_mode = get_serial_mode(jobrunner)
+        warnings.warn(
+            "Returning a bare list of Job instances from CLI is deprecated; "
+            "return a BatchJob instead. chemsmart run executes list children "
+            "serially with full resources.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.info(f"Running {len(job)} jobs serially")
 
-        if serial_mode.no_run_in_parallel:
-            logger.info("Running jobs in serial mode (one after another)")
-            for single_job in job:
-                logger.info(f"Running job: {single_job.label}")
-                single_job.jobrunner = _prepare_runner(single_job)
-                single_job.run()
-            return None
-
-        logger.info("Running jobs in parallel mode")
-        max_workers = get_submitter_worker_count(jobrunner, len(job))
-        logger.info(f"Using up to {max_workers} parallel submitter workers")
         failures = []
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_job = {}
-            for single_job in job:
-                single_job.jobrunner = _prepare_runner(single_job)
-                future = executor.submit(single_job.run)
-                future_to_job[future] = single_job
-
-            for future in as_completed(future_to_job):
-                single_job = future_to_job[future]
-                try:
-                    future.result()
-                except Exception as exc:
-                    logger.error(
-                        f"Job {single_job.label} failed in list execution: {exc}",
-                        exc_info=True,
-                    )
-                    failures.append(
-                        {"label": single_job.label, "error": str(exc)}
-                    )
-
+        for single_job in job:
+            logger.info(f"Running job: {single_job.label}")
+            single_job.jobrunner = _prepare_runner(single_job)
+            try:
+                single_job.run()
+            except Exception as exc:
+                logger.error(
+                    f"Job {single_job.label} failed in list execution: {exc}",
+                    exc_info=True,
+                )
+                failures.append({"label": single_job.label, "error": str(exc)})
         if failures:
             lines = [
                 f"- {item['label']}: {item['error']}" for item in failures
@@ -188,11 +170,18 @@ def process_pipeline(ctx, *args, **kwargs):
             )
         return None
 
-    # BatchJob has no runner TYPE; bind an engine runner from the first child
-    # so BatchJob can propagate copies onto each child job.
+    # Bind an engine runner from the first child so BatchJob can propagate
+    # copies onto each child job.
     if isinstance(job, BatchJob):
         if not job.jobs:
             raise ValueError(f"BatchJob {job} has no child jobs to run.")
+        if not job.no_run_in_parallel:
+            logger.info(
+                "chemsmart run executes BatchJob children serially with full "
+                "resources; --run-in-parallel does not enable concurrent "
+                "children here. Use chemsmart sub for cluster concurrency."
+            )
+        job.no_run_in_parallel = True
         job.jobrunner = _prepare_runner(job.jobs[0])
         job.run()
         return None

@@ -1,9 +1,4 @@
-"""
-ORCA batch job implementation.
-
-This module provides the ORCA-specific thin batch wrapper around the shared
-``BatchJob`` orchestration layer.
-"""
+"""ORCA ``BatchJob`` for running a collection of ORCA jobs."""
 
 from typing import Any
 
@@ -11,12 +6,7 @@ from chemsmart.jobs.batch import BatchJob
 
 
 class OrcaBatchJob(BatchJob):
-    """
-    Generic ORCA batch job class for running a collection of ORCA jobs.
-
-    Shared batch orchestration is inherited from ``BatchJob``; this subclass
-    only applies ORCA runner node-pinning behavior when needed.
-    """
+    """Batch controller for a collection of ORCA child jobs."""
 
     PROGRAM = "orca"
 
@@ -26,7 +16,7 @@ class OrcaBatchJob(BatchJob):
         node: str,
         job: Any,
     ) -> Any:
-        """Apply ORCA runner node pinning through shared batch helper."""
+        """Pin child commands to a SLURM node via srun --nodelist."""
         return self._wrap_runner_command_for_node(runner=runner, node=node)
 
 

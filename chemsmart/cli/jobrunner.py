@@ -65,8 +65,14 @@ def click_jobrunner_options(f):
         "--run-in-parallel/--no-run-in-parallel",
         default=True,
         type=bool,
-        help="If true, run list of jobs in parallel when supported. "
-        "If false, run in serial (one after another).",
+        help=(
+            "On chemsmart sub: max concurrent SLURM array tasks for a "
+            "top-level batch (--run-in-parallel) or one-at-a-time (%1) with "
+            "--no-run-in-parallel. On chemsmart run: BatchJob / nested "
+            "children always run serially with full resources; "
+            "--no-run-in-parallel is the default behavior and "
+            "--run-in-parallel does not enable concurrent QC children."
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

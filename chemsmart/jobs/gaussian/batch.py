@@ -1,9 +1,4 @@
-"""
-Gaussian batch job implementation.
-
-This module provides the Gaussian-specific ``GaussianBatchJob`` thin wrapper
-around the shared batch orchestration provided by ``BatchJob``.
-"""
+"""Gaussian ``BatchJob`` for running a collection of Gaussian jobs."""
 
 import logging
 from typing import Any
@@ -14,12 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class GaussianBatchJob(BatchJob):
-    """
-    Generic Gaussian job class for running a batch of calculations.
-
-    Shared batch orchestration is inherited from ``BatchJob``; this subclass
-    only applies Gaussian-specific node-pinning behavior when needed.
-    """
+    """Batch controller for a collection of Gaussian child jobs."""
 
     PROGRAM = "gaussian"
 
@@ -29,5 +19,5 @@ class GaussianBatchJob(BatchJob):
         node: str,
         job: Any,
     ) -> Any:
-        """Apply Gaussian runner node pinning through shared batch helper."""
+        """Pin child commands to a SLURM node via srun --nodelist."""
         return self._wrap_runner_command_for_node(runner=runner, node=node)

@@ -1,16 +1,16 @@
 """
 Shared batch job infrastructure.
 
-This module provides the abstract ``BatchJob`` base class for orchestrating
-collections of engine-specific jobs. It centralizes engine-agnostic behavior
-such as:
-- serial vs parallel submission
-- fault-tolerant execution of child jobs
+Provides the abstract ``BatchJob`` base class for orchestrating collections
+of engine-specific jobs. Engine-agnostic behavior includes:
+
+- serial and parallel child-job scheduling
+- fault-tolerant execution with aggregated failures
 - scheduler/node allocation detection (SLURM/PBS)
 - distribution of child jobs across allocated nodes
 
-Concrete subclasses only need to implement engine-specific runner adaptation,
-for example pinning a copied runner to a scheduler node.
+Subclasses implement engine-specific runner adaptation (for example,
+pinning a copied runner to a scheduler node).
 """
 
 import logging
@@ -45,13 +45,12 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     """
     Abstract controller for running a batch of child jobs.
 
-    ``BatchJob`` intentionally keeps orchestration logic engine-agnostic and
-    delegates engine-specific execution details to subclasses via
-    ``_configure_runner_for_node``.
+    Orchestration is engine-agnostic. Subclasses implement
+    ``_configure_runner_for_node`` for engine-specific node adaptation.
 
-    ``no_run_in_parallel`` controls scheduling only. ``fail_fast`` controls
-    whether serial mode stops submitting remaining siblings after the first
-    unsuccessful outcome (ignored in parallel mode).
+    ``no_run_in_parallel`` selects serial vs parallel child scheduling.
+    ``fail_fast`` stops serial submission after the first unsuccessful
+    outcome (ignored in parallel mode).
     """
 
     PROGRAM: Optional[str] = None
@@ -96,13 +95,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._jobs_not_started: int = 0
 
     def run(self, **kwargs: Any) -> None:
-        """
-        Run the batch of jobs.
-
-        This intentionally preserves the historical batch-job behavior of
-        executing child jobs directly instead of relying on ``Job.run()``'s
-        completion short-circuit at the batch container level.
-        """
+        """Run all child jobs in this batch."""
         self._invalidate_status_cache()
         self._jobs_not_started = 0
         self._run(**kwargs)
@@ -521,16 +514,22 @@ def run_child_jobs_as_batch(
     label_suffix: str = "_batch",
     fail_fast: bool = False,
 ) -> BatchJobT:
-    """Run independent sibling jobs through an engine ``BatchJob``.
+    """Run sibling jobs through an engine ``BatchJob``.
 
-    Forwards the parent jobrunner's serial/parallel policy so CLI
-    ``--no-run-in-parallel`` only controls concurrency. Failure policy is
-    controlled separately by ``fail_fast`` (default: run all, then raise).
+    Children run serially, each with the parent jobrunner's full resources.
+    ``fail_fast`` controls whether execution stops after the first
+    unsuccessful child (default: run all children, then raise on failures).
+
+    Returns the completed ``BatchJob`` instance.
     """
-    serial_mode = get_serial_mode(parent.jobrunner)
+    logger.info(
+        "Running nested batch of %s child job(s) serially "
+        "(full parent resources per child).",
+        len(jobs),
+    )
     batch_job = batch_cls(
         jobs=jobs,
-        no_run_in_parallel=serial_mode.no_run_in_parallel,
+        no_run_in_parallel=True,
         fail_fast=fail_fast,
         label=f"{parent.label}{label_suffix}",
         jobrunner=parent.jobrunner,

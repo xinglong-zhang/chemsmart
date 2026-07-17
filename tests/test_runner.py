@@ -130,7 +130,7 @@ class TestSerialExecution:
 
 
 class TestBatchJobRefactor:
-    """Regression tests for the shared BatchJob orchestration layer."""
+    """Tests for shared BatchJob orchestration."""
 
     @staticmethod
     def _dummy_batch_cls():
@@ -374,12 +374,13 @@ class TestBatchJobRefactor:
         fail_job.run.assert_called_once()
         ok_job.run.assert_called_once()
 
-    def test_run_child_jobs_as_batch_forwards_serial_mode(self, pbs_server):
+    def test_run_child_jobs_as_batch_always_serial(self, pbs_server):
+        """Nested batches always run children serially."""
         from chemsmart.jobs.batch import run_child_jobs_as_batch
 
         dummy_batch_cls = self._dummy_batch_cls()
         runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=True
+            server=pbs_server, fake=True, no_run_in_parallel=False
         )
         parent = Mock()
         parent.label = "parent"
@@ -454,7 +455,7 @@ class TestBatchJobRefactor:
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""
 
-    def test_crest_job_uses_batch_parallel(
+    def test_crest_job_nested_batch_always_serial(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.crest import GaussianCrestJob
@@ -463,6 +464,7 @@ class TestGaussianBatchDelegation:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
+        # Nested crest children run serially regardless of runner policy.
         gaussian_jobrunner_no_scratch.no_run_in_parallel = False
         job = GaussianCrestJob(
             molecules=mock_molecules,
@@ -484,13 +486,13 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is False
+        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_crest_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
 
-    def test_traj_job_uses_batch_parallel(
+    def test_traj_job_nested_batch_always_serial(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -521,7 +523,7 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is False
+        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_traj_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
@@ -598,9 +600,9 @@ class TestGaussianBatchDelegation:
 
 
 class TestRunListFailureAggregation:
-    """Legacy list path should still aggregate failures like BatchJob."""
+    """List execution aggregates failures like BatchJob."""
 
-    def test_parallel_list_execution_raises_aggregated_failures(
+    def test_serial_list_execution_raises_aggregated_failures(
         self, pbs_server, mocker
     ):
         import click
@@ -624,9 +626,53 @@ class TestRunListFailureAggregation:
 
         mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
 
-        with pytest.raises(BatchExecutionError, match="fail_job") as exc_info:
-            process_pipeline.__wrapped__(ctx, [ok_job, fail_job])
+        with pytest.warns(DeprecationWarning, match="BatchJob"):
+            with pytest.raises(
+                BatchExecutionError, match="fail_job"
+            ) as exc_info:
+                process_pipeline.__wrapped__(ctx, [ok_job, fail_job])
 
         assert "1 of 2 list job(s) failed" in str(exc_info.value)
         ok_job.run.assert_called_once()
         fail_job.run.assert_called_once()
+
+    def test_run_forces_batchjob_serial_despite_parallel_flag(
+        self, pbs_server, mocker
+    ):
+        """chemsmart run serializes top-level BatchJob children."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.batch import BatchJob
+
+        jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        from chemsmart.jobs.job import Job
+
+        child = Mock(spec=Job, label="child", TYPE="g16opt")
+        child.run.return_value = None
+        child.is_complete.return_value = True
+
+        class _DummyBatch(BatchJob):
+            PROGRAM = "test"
+
+            def _configure_runner_for_node(self, runner, node, job):
+                return runner
+
+        batch = _DummyBatch(
+            jobs=[child],
+            no_run_in_parallel=False,
+            jobrunner=jobrunner,
+            label="top_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        assert batch.no_run_in_parallel is True
+        child.run.assert_called_once()
