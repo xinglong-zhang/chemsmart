@@ -44,7 +44,7 @@ from chemsmart.agent.tui._logging import (
     _flush_logging_handlers,
     _silence_console_logging,
 )
-from chemsmart.agent.tui.events import (
+from chemsmart.agent.decision_events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
     DryRunInputEvent,

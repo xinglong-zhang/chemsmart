@@ -57,7 +57,7 @@ from chemsmart.settings.workspace_project import (
     resolve_workspace_project,
     workspace_project_path,
 )
-from chemsmart.agent.tui.events import (
+from chemsmart.agent.decision_events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
     DryRunInputEvent,
