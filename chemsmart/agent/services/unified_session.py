@@ -29,6 +29,7 @@ from chemsmart.agent.services.plan_support import (
     render_plan,
     synthetic_plan_from_tool_requests,
 )
+from chemsmart.agent.services.runtime_metrics import elapsed_ms
 
 from chemsmart.agent.runtime.orchestrator import RuntimeController
 
@@ -431,7 +432,7 @@ class UnifiedSessionRunner:
                 "resolved_model": getattr(setup.provider, "default_model", None),
                 "input_tokens": loop_result["total_input_tokens"],
                 "output_tokens": loop_result["total_output_tokens"],
-                "latency_ms": _elapsed_ms(session._run_start_time),
+                "latency_ms": elapsed_ms(session._run_start_time),
                 "success": True,
             }
         ]
@@ -556,12 +557,6 @@ def _primary_dry_run_result(
     dry_run_results: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     return dry_run_results[0] if dry_run_results else None
-
-
-def _elapsed_ms(start_time: float | None) -> int:
-    if start_time is None:
-        return 0
-    return max(0, int(round((time.perf_counter() - start_time) * 1000)))
 
 
 __all__ = ["UnifiedSessionRunner"]

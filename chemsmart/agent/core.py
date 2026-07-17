@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
-import subprocess
 import time
 import uuid
 from datetime import datetime, timezone
@@ -19,7 +17,6 @@ from chemsmart.agent.handles import (
 )
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
-from chemsmart.agent.harness.trace import write_harness_result
 from chemsmart.agent.harness.workflow_state import (
     workflow_state_scope,
 )
@@ -68,6 +65,12 @@ from chemsmart.agent.services.result_codec import (
     resolve_refs,
     restore_json_result,
 )
+from chemsmart.agent.services.runtime_metrics import (
+    elapsed_ms,
+    git_sha,
+    schema_hash,
+)
+from chemsmart.agent.services.session_finalizer import SessionFinalizer
 from chemsmart.agent.services.session_store import load_current_session_state
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
@@ -680,140 +683,15 @@ class AgentSession:
         is_chitchat: bool = False,
         rationale: str = "",
     ) -> None:
-        assert self.state is not None
-        assert self.session_dir is not None
-        assert self.decision_log is not None
-
-        ended_at = _utc_now_iso()
-        effective_blocked = blocked or run_error is not None
-        effective_block_reason = block_reason
-        if run_error is not None and effective_block_reason is None:
-            effective_block_reason = (
-                f"exception:{run_error.__class__.__name__}"
-            )
-
-        wall_time_ms = _elapsed_ms(
-            self._run_start_time,
-            started_at=self.state.request_started_at,
-            ended_at=ended_at,
-        )
-        summary = {
-            "total_steps_executed": self.state.current_step_index,
-            "total_steps_planned": self.state.total_steps_planned,
-            "blocked": effective_blocked,
-            "block_reason": effective_block_reason or "unknown",
-            "wall_time_ms": wall_time_ms,
-            "tools_called": self._tools_called(),
-            "critic_confidence": (
-                verdict.confidence if verdict is not None else 0.0
-            ),
-            "request_intent": self.state.request_intent,
-            "provider_name": self._metadata_provider_name(),
-            "resolved_model": self._metadata_resolved_model(),
-            "total_input_tokens": self._total_llm_tokens("input_tokens"),
-            "total_output_tokens": self._total_llm_tokens("output_tokens"),
-            "exit_status": (
-                "error"
-                if run_error is not None
-                else "blocked"
-                if blocked
-                else "ok"
-            ),
-            "advisory_only": advisory_only,
-            "is_chitchat": is_chitchat,
-            "rationale": rationale or "",
-        }
-        self.decision_log.write(
-            "session_summary",
-            summary,
-            rationale=rationale or "",
-        )
-        self._refresh_conversation_history()
-
-        primary_dry_run_result = _primary_dry_run_result(dry_run_results)
-        schema_hash = _schema_hash(self.registry.openai_tool_defs())
-        harness_result = self._last_harness_result
-        if harness_result is not None:
-            write_harness_result(self.session_dir, harness_result)
-        metadata = {
-            "session_id": self.state.session_id,
-            "request": self.state.request or "unknown",
-            "intent": self.state.request_intent,
-            "request_intent": self.state.request_intent,
-            "plan_steps": self.state.total_steps_planned,
-            "executed_steps": self.state.current_step_index,
-            "total_steps_planned": summary["total_steps_planned"],
-            "total_steps_executed": summary["total_steps_executed"],
-            "input_file": (
-                str(primary_dry_run_result.get("inputfile"))
-                if primary_dry_run_result
-                and primary_dry_run_result.get("inputfile")
-                else "unknown"
-            ),
-            "input_files": [
-                str(result.get("inputfile"))
-                for result in dry_run_results
-                if result.get("inputfile")
-            ],
-            "generated_commands": [
-                str(result.get("command"))
-                for result in dry_run_results
-                if result.get("command")
-            ],
-            "critic_verdict": (
-                verdict.verdict if verdict is not None else "unknown"
-            ),
-            "critic_confidence": summary["critic_confidence"],
-            "blocked": summary["blocked"],
-            "block_reason": summary["block_reason"],
-            "wall_time_ms": wall_time_ms,
-            "started_at": self.state.started_at,
-            "request_started_at": self.state.request_started_at,
-            "ended_at": ended_at,
-            "provider_name": summary["provider_name"],
-            "resolved_model": summary["resolved_model"],
-            "git_sha": _git_sha() or "unknown",
-            "schema_hash": schema_hash,
-            "total_input_tokens": summary["total_input_tokens"],
-            "total_output_tokens": summary["total_output_tokens"],
-            "tools_called": summary["tools_called"],
-            "harness_verdict": (
-                harness_result.verdict
-                if harness_result is not None
-                else "not_run"
-            ),
-            "harness_issue_count": (
-                len(harness_result.issues) if harness_result is not None else 0
-            ),
-            "harness_failed_rule_ids": (
-                harness_result.failed_rule_ids
-                if harness_result is not None
-                else []
-            ),
-            "runtime_v2_mode": self.runtime_v2_mode.value,
-            "runtime_v2_phase": (
-                self._runtime_controller.state.phase.value
-                if self._runtime_controller is not None
-                else "not_run"
-            ),
-            "runtime_v2_event_count": (
-                self._runtime_controller.state.latest_sequence
-                if self._runtime_controller is not None
-                else 0
-            ),
-            "runtime_v2_shadow_violations": (
-                list(self._runtime_controller.state.shadow_violations)
-                if self._runtime_controller is not None
-                else []
-            ),
-            "exit_status": summary["exit_status"],
-            "advisory_only": advisory_only,
-            "is_chitchat": is_chitchat,
-            "rationale": rationale or "",
-        }
-        (self.session_dir / "session_metadata.json").write_text(
-            json.dumps(metadata, indent=2, sort_keys=True),
-            encoding="utf-8",
+        SessionFinalizer(self, module_path=Path(__file__)).finalize(
+            verdict=verdict,
+            blocked=blocked,
+            block_reason=block_reason,
+            dry_run_results=dry_run_results,
+            run_error=run_error,
+            advisory_only=advisory_only,
+            is_chitchat=is_chitchat,
+            rationale=rationale,
         )
 
     def _tools_called(self) -> list[str]:
@@ -1383,19 +1261,7 @@ def _env_snapshot() -> dict[str, str | None]:
     }
 
 
-def _elapsed_ms(
-    start_time: float | None,
-    *,
-    started_at: str | None = None,
-    ended_at: str | None = None,
-) -> int:
-    if started_at is not None and ended_at is not None:
-        started = datetime.fromisoformat(started_at)
-        ended = datetime.fromisoformat(ended_at)
-        return max(0, int(round((ended - started).total_seconds() * 1000)))
-    if start_time is not None:
-        return max(0, int(round((time.perf_counter() - start_time) * 1000)))
-    return 0
+_elapsed_ms = elapsed_ms
 
 
 def _parse_json_response(response: Any) -> dict[str, Any]:
@@ -1530,25 +1396,11 @@ def _resolved_model_for_response(provider: Any, response: Any) -> str | None:
     return fallback
 
 
-def _schema_hash(tool_defs: list[dict[str, Any]]) -> str:
-    payload = json.dumps(tool_defs, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+_schema_hash = schema_hash
 
 
 def _git_sha() -> str | None:
-    repo_root = Path(__file__).resolve().parents[2]
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_root,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    git_sha = result.stdout.strip()
-    return git_sha or None
+    return git_sha(Path(__file__))
 
 
 _resolve_refs = resolve_refs
