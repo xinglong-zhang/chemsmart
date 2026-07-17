@@ -13,8 +13,9 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.batch import BatchJob
+from chemsmart.jobs.batch import BatchJob, warn_legacy_job_list
 from chemsmart.jobs.batch_manifest import get_job_batch_entry
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import SchedulerArrayPolicy, Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -210,9 +211,18 @@ def process_pipeline(ctx, *args, **kwargs):
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
+    # Handle list of jobs (legacy path; prefer BatchJob from CLI fan-out)
     if isinstance(job, list):
-        logger.info(f"Processing {len(job)} jobs")
+        if not job:
+            logger.debug("Empty job list. Skipping job submission.")
+            return
+        if not all(isinstance(single_job, Job) for single_job in job):
+            raise ValueError("Expected a list of Job instances.")
+        warn_legacy_job_list(stacklevel=2)
+        logger.info(
+            "Processing %s jobs individually (legacy list path; prefer BatchJob)",
+            len(job),
+        )
         for single_job in job:
             single_job.jobrunner = jobrunner
             _process_single_job(job=single_job)

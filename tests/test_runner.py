@@ -686,7 +686,7 @@ class TestRunListFailureAggregation:
 
         mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
 
-        with pytest.warns(DeprecationWarning, match="BatchJob"):
+        with pytest.warns(DeprecationWarning, match="bare list of Job"):
             with pytest.raises(
                 BatchExecutionError, match="fail_job"
             ) as exc_info:
@@ -695,6 +695,71 @@ class TestRunListFailureAggregation:
         assert "1 of 2 list job(s) failed" in str(exc_info.value)
         ok_job.run.assert_called_once()
         fail_job.run.assert_called_once()
+
+    def test_sub_list_emits_deprecation_and_submits_individually(
+        self, pbs_server, monkeypatch
+    ):
+        import click
+
+        from chemsmart.cli.sub import process_pipeline, sub
+        from chemsmart.jobs.job import Job
+        from chemsmart.settings.server import Server
+
+        jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        ctx = click.Context(sub)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+        ctx.obj["subcommand"] = [
+            {
+                "name": "sub",
+                "kwargs": {
+                    "server": "dummy",
+                    "test": True,
+                    "print_command": False,
+                    "time_hours": None,
+                    "queue": None,
+                    "verbose": False,
+                },
+                "args": (),
+                "params": {},
+            }
+        ]
+
+        captured = {"submissions": []}
+        fake_server = Server(name="dummy")
+
+        def _fake_submit(job, test=False, cli_args=None, **kw):
+            captured["submissions"].append((job, test, cli_args))
+
+        fake_server.submit = _fake_submit
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+        monkeypatch.setattr(
+            "chemsmart.cli.sub.CtxObjArguments.reconstruct_command_line",
+            lambda self: ["sub", "gaussian", "opt"],
+        )
+
+        job_a = Mock(spec=Job, label="a", TYPE="g16opt")
+        job_b = Mock(spec=Job, label="b", TYPE="g16opt")
+
+        with pytest.warns(DeprecationWarning, match="bare list of Job"):
+            process_pipeline.__wrapped__(
+                ctx,
+                [job_a, job_b],
+                server="dummy",
+                test=True,
+                print_command=False,
+            )
+
+        assert len(captured["submissions"]) == 2
+        assert captured["submissions"][0][0] is job_a
+        assert captured["submissions"][1][0] is job_b
+        assert job_a.jobrunner is jobrunner
+        assert job_b.jobrunner is jobrunner
 
     def test_run_forces_batchjob_serial_despite_parallel_flag(
         self, pbs_server, mocker

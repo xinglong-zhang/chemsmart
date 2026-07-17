@@ -93,6 +93,23 @@ class BatchExecutionError(RuntimeError):
     """Raised when one or more child jobs fail in a batch run."""
 
 
+_LEGACY_JOB_LIST_DEPRECATION = (
+    "Returning a bare list of Job instances from CLI is deprecated; "
+    "return a BatchJob instead."
+)
+
+
+def warn_legacy_job_list(*, stacklevel: int = 2) -> None:
+    """Emit the deprecation warning for bare ``list[Job]`` CLI results."""
+    import warnings
+
+    warnings.warn(
+        _LEGACY_JOB_LIST_DEPRECATION,
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+
+
 class BatchJobMeta(RegistryMeta, ABCMeta):
     """Metaclass combining registry support with abstract-base semantics."""
 

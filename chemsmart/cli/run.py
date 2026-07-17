@@ -1,6 +1,5 @@
 import logging
 import platform
-import warnings
 from multiprocessing import set_start_method
 
 import click
@@ -8,7 +7,11 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.batch import BatchExecutionError, BatchJob
+from chemsmart.jobs.batch import (
+    BatchExecutionError,
+    BatchJob,
+    warn_legacy_job_list,
+)
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
@@ -139,14 +142,11 @@ def process_pipeline(ctx, *args, **kwargs):
             return None
         if not all(isinstance(single_job, Job) for single_job in job):
             raise ValueError("Expected a list of Job instances.")
-        warnings.warn(
-            "Returning a bare list of Job instances from CLI is deprecated; "
-            "return a BatchJob instead. chemsmart run executes list children "
-            "serially with full resources.",
-            DeprecationWarning,
-            stacklevel=2,
+        warn_legacy_job_list(stacklevel=2)
+        logger.info(
+            "Running %s jobs serially (legacy list path; prefer BatchJob)",
+            len(job),
         )
-        logger.info(f"Running {len(job)} jobs serially")
 
         failures = []
         for single_job in job:
