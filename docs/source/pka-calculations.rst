@@ -32,10 +32,8 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
--  Use ``chemsmart run`` for local preparation and execution; use ``chemsmart sub`` on HPC clusters to generate
-   scheduler scripts (see :ref:`pka-hpc-batch-submission`).
--  A single structure yields one job; batch input (CSV table or multi-molecule CDXML) expands into multiple pKa child
-   jobs wrapped in one ``BatchJob``. On ``chemsmart run``, those children execute serially with full resources each.
+-  Use ``chemsmart run`` locally; use ``chemsmart sub`` on an HPC cluster (see :ref:`pka-hpc-batch-submission`).
+-  One structure → one pKa job. A CSV table or multi-molecule CDXML → one job per row or fragment.
 -  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
    runs.
 
@@ -135,15 +133,10 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
 
 .. note::
 
-   **Intra-molecule phases are always sequential.** Within one pKa job (one target molecule), gas-phase optimizations
-   (HA, A⁻), solvent single-points, and reference legs run one after another. The ``--run-in-parallel`` /
-   ``--no-run-in-parallel`` flags do **not** submit HA and A⁻ concurrently inside a single pKa calculation.
-
-   **Across separate targets (``BatchJob``), ``chemsmart run`` is also serial.** When multiple molecules, table rows, or
-   CDXML fragments are wrapped in one ``BatchJob``, children run one after another on the compute node, each with the
-   full ``-n`` / memory allocation. On ``chemsmart run``, ``--no-run-in-parallel`` is the default behaviour;
-   ``--run-in-parallel`` does **not** enable concurrent QC children. Concurrent targets belong on the scheduler via
-   ``chemsmart sub`` (see :ref:`pka-hpc-batch-submission`), not as in-process parallel jobs on one node.
+   Within one pKa calculation (one molecule), the HA / A⁻ optimizations, solvent single-points, and any reference legs
+   always run one after another. Parallelism across different molecules or table rows belongs on the cluster: use
+   ``chemsmart sub`` so each target can run as its own scheduler task (see :ref:`pka-hpc-batch-submission`). Locally,
+   ``chemsmart run`` with a batch table or CDXML still processes targets one after another.
 
 Job submission is backend-specific. Use the dedicated pages for full examples and parameter tables:
 
@@ -322,10 +315,10 @@ the stem (e.g. ``acid1_pka_HA_opt.out``). The output-analysis autodiscovery conv
  HPC Cluster Submission (``chemsmart sub``)
 ********************************************
 
-On a cluster, use ``chemsmart sub`` instead of ``chemsmart run`` to write scheduler scripts and per-job run wrappers.
-The pKa workflow is unchanged at the chemistry level; only the launch path differs.
+On a cluster, use ``chemsmart sub`` instead of ``chemsmart run``. The chemistry is the same; ``sub`` writes and queues
+scheduler scripts for you.
 
-**Single job**
+**Single molecule**
 
 .. code:: bash
 
@@ -333,8 +326,8 @@ The pKa workflow is unchanged at the chemistry level; only the launch path diffe
 
 **Batch table or multi-fragment CDXML**
 
-``pka batch`` expands the table or CDXML file into multiple child pKa jobs and wraps them in one ``BatchJob``.
-``chemsmart sub`` packages that batch for the scheduler; the compute-node entry point is always ``chemsmart run``.
+Submit the whole table or ChemDraw file once. CHEMSMART creates **one** scheduler array job with **one task per table
+row or ChemDraw fragment**, so different acids can run at the same time on the cluster (subject to your queue limits).
 
 .. code:: bash
 
@@ -342,49 +335,32 @@ The pKa workflow is unchanged at the chemistry level; only the launch path diffe
 
    chemsmart sub gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-CHEMSMART writes scheduler scripts and a run wrapper that replays the batch command (including ``pka batch`` and the
-original ``-f`` table or CDXML path).
+How many tasks run at once
+==========================
 
-What runs on the compute node
-=============================
-
-When the scheduler starts the job, the run wrapper invokes ``chemsmart run`` with the reconstructed batch command.
-``run.py`` receives the ``BatchJob`` and executes child pKa jobs as follows:
-
-#. **Parse batch input again** — ``pka batch`` re-reads the CSV table or multi-fragment CDXML and rebuilds the same
-   child pKa jobs (HA/A opt+SP, reference legs, etc.) as during local preparation.
-
-#. **Serial across targets** — separate pKa targets (table rows or CDXML fragments) run **one after another**, each with
-   the full ``-n`` / memory allocation. On ``chemsmart run``, ``--no-run-in-parallel`` matches this default;
-   ``--run-in-parallel`` does **not** launch concurrent full-width QC children on one node. Multi-node allocations may
-   still distribute children across nodes when the scheduler provides more than one node.
-
-#. **Sequential intra-molecule phases** — within each individual pKa job, gas-phase optimizations (HA, A⁻), solvent
-   single-points, and reference legs always run sequentially (see the intra-molecule note under **Job Submission**
-   above).
-
-Across-target concurrency therefore belongs at the **scheduler** layer (``chemsmart sub``), not as in-process parallel
-QC on a single node. Prefer separate submissions or scheduler array tasks when you need multiple targets running at once
-with full resources each.
-
-Example: a two-row CSV batch submitted with ``chemsmart sub ... pka batch`` yields a run wrapper equivalent to:
+By default, several array tasks may run concurrently. To force one task at a time:
 
 .. code:: bash
 
-   chemsmart run gaussian -p my_project -f pka_input.csv pka -s direct batch
+   chemsmart sub --no-run-in-parallel gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-On the compute node, both row targets run serially through the ``BatchJob`` orchestrator. Child output files still
-follow per-target naming (e.g. ``acid1_HA_opt.log``, ``acid2_HA_opt.log`` for Gaussian, or ``acid1_pka_HA_opt.out`` for
-ORCA).
+You can also limit concurrency with ``-N`` / ``--num-nodes`` when that option is set for your server.
 
-Example: a five-fragment CDXML file ``pka_scale.cdxml`` still creates child labels such as ``pka_scale_frag1_pka``, …,
-``pka_scale_frag5_pka``, executed serially under the batch run script.
+Checking scripts before queueing
+================================
 
-Use ``--test`` with ``chemsmart sub`` to inspect the generated scripts without queueing. Use ``--print-command`` to
-print the reconstructed ``chemsmart run`` arguments.
+.. code:: bash
 
-See also :doc:`cli-overview` for general ``chemsmart sub`` usage and :doc:`configuration-server-settings` for scheduler
-configuration.
+   chemsmart sub --test gaussian -p my_project -f pka_input.csv pka -s direct batch
+
+This writes the submit and run scripts without submitting them. Add ``--print-command`` if you want to see the
+reconstructed ``chemsmart run`` arguments.
+
+Output file names are unchanged from local runs (for example ``acid1_HA_opt.log`` for Gaussian, or
+``acid1_pka_HA_opt.out`` for ORCA).
+
+For general ``chemsmart sub`` usage and server configuration, see :doc:`cli-overview` and
+:doc:`configuration-server-settings`.
 
 *****************************************
  Output Analysis (``chemsmart run pka``)

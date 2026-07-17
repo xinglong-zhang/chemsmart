@@ -6,13 +6,21 @@ various queuing systems and cluster schedulers.
 """
 
 import logging
+from pathlib import Path
 
 import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
+from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import BatchJob
+from chemsmart.jobs.batch_manifest import (
+    build_manifest_children,
+    get_job_batch_entry,
+    resolve_array_cli_args,
+    write_batch_manifest,
+)
 from chemsmart.jobs.runner import JobRunner, get_configured_max_submitters
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -203,9 +211,39 @@ def process_pipeline(ctx, *args, **kwargs):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
-        cli_args = _reconstruct_cli_args(ctx)
-        # Shared CLI for every array task: chemsmart run replays the full
-        # batch command; BatchJob.run() selects the child via array env.
+        shared_cli_args = _reconstruct_cli_args(ctx)
+        # Homogeneous batches keep a shared CLI; BatchJob.run() selects the
+        # child via array env. Heterogeneous pKa rows use per-task CLI lists
+        # (one submit command per child) from job.batch_entry.
+        has_batch_entries = any(
+            get_job_batch_entry(job) is not None for job in batch_job.jobs
+        )
+        # Currently only pKa attaches batch_entry; use its CLI rewriter.
+        rewrite_cli = rewrite_pka_batch_cli_args if has_batch_entries else None
+        array_cli_args = resolve_array_cli_args(
+            batch_job.jobs, shared_cli_args, rewrite_cli=rewrite_cli
+        )
+        if has_batch_entries:
+            program = batch_job.PROGRAM or (
+                batch_job.jobs[0].PROGRAM if batch_job.jobs else None
+            )
+            first_folder = getattr(batch_job.jobs[0], "folder", None)
+            try:
+                manifest_dir = (
+                    Path(first_folder) if first_folder else Path(".")
+                )
+            except TypeError:
+                manifest_dir = Path(".")
+            write_batch_manifest(
+                batch_label=batch_job.label,
+                program=str(program).lower() if program else "unknown",
+                children=build_manifest_children(
+                    batch_job.jobs,
+                    shared_cli_args,
+                    rewrite_cli=rewrite_cli,
+                ),
+                directory=manifest_dir,
+            )
         throttle = _array_throttle(jobrunner, len(batch_job.jobs))
         logger.info(
             "Submitting BatchJob %r as array with %s task(s), "
@@ -219,7 +257,7 @@ def process_pipeline(ctx, *args, **kwargs):
             jobs=batch_job.jobs,
             num_nodes=throttle,
             test=kwargs.get("test"),
-            cli_args=cli_args,
+            cli_args=array_cli_args,
             batch_label=batch_job.label,
         )
 

@@ -23,6 +23,7 @@ import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
+from pathlib import Path
 from typing import Any, Literal, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
@@ -193,6 +194,28 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         else:
             cores = None
             mem_gb = None
+
+        from chemsmart.jobs.batch_manifest import (
+            batch_manifest_filename,
+            load_batch_manifest_entry,
+        )
+
+        folder = getattr(child, "folder", None)
+        try:
+            manifest_path = Path(folder) / batch_manifest_filename(self.label)
+        except TypeError:
+            manifest_path = None
+        if manifest_path is not None and manifest_path.is_file():
+            try:
+                entry = load_batch_manifest_entry(manifest_path, task_id)
+                logger.debug(
+                    "Loaded batch manifest entry for task %s: %s",
+                    task_id,
+                    entry.get("label"),
+                )
+            except KeyError as exc:
+                logger.warning("%s", exc)
+
         logger.info(
             "BatchJob %r: execution=array_task, task=%s/%s, "
             "cores=%s, mem_gb=%s, child=%s",

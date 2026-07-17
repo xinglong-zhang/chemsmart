@@ -127,12 +127,8 @@ Direct cycle (``-s direct`` must be set explicitly):
 
 .. note::
 
-   In batch mode, each table row becomes an independent pKa child job inside one ``BatchJob`` container. With
-   ``chemsmart run``, those children execute **serially**, each with the full ``-n`` / memory allocation
-   (``--no-run-in-parallel`` is the default behaviour; ``--run-in-parallel`` does not enable concurrent QC children).
-
-   On HPC clusters, use ``chemsmart sub`` instead of ``chemsmart run`` so the scheduler owns concurrency across targets.
-   See :ref:`pka-hpc-batch-submission`.
+   In batch mode, each table row is an independent pKa job. Locally (``chemsmart run``), rows run one after another. On
+   a cluster, use ``chemsmart sub`` so each row can run as its own array task. See :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -188,8 +184,7 @@ A CSV table may list single-molecule ``.cdxml`` paths per row (see Table Format 
 coloured-proton auto-detection for that row. ``charge`` and ``multiplicity`` still come from the table columns for CSV
 rows; for multi-fragment CDXML passed directly as ``-f``, see :ref:`pka-calculations` (Charge and multiplicity).
 
-On clusters, ``chemsmart sub ... pka batch`` with a CDXML file submits a ``BatchJob`` whose run script replays the full
-``pka batch`` command; on the compute node, fragments run serially with full resources each. See
+On clusters, submit the CDXML batch with ``chemsmart sub ... pka batch`` (one array task per fragment). See
 :ref:`pka-hpc-batch-submission`.
 
 ******************************************

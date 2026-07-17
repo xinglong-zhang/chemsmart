@@ -158,9 +158,21 @@ def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
 
     fake_server = Server(name="dummy")
     captured = {"submissions": []}
-    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
-        "submissions"
-    ].append((job, test, cli_args))
+
+    def _fake_submit_array(
+        jobs, num_nodes=None, test=False, cli_args=None, batch_label=None, **kw
+    ):
+        captured["submissions"].append(
+            {
+                "jobs": list(jobs),
+                "test": test,
+                "cli_args": cli_args,
+                "batch_label": batch_label,
+                "num_nodes": num_nodes,
+            }
+        )
+
+    fake_server.submit_array_job = _fake_submit_array
     monkeypatch.setattr(
         "chemsmart.settings.server.Server.from_servername",
         lambda _name: fake_server,
@@ -170,22 +182,81 @@ def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
 
 def _submitted_jobs(captured):
     """Return job objects recorded by fake submit handlers."""
-    return [entry[0] for entry in captured["submissions"]]
+    jobs = []
+    for entry in captured["submissions"]:
+        if isinstance(entry, dict):
+            jobs.extend(entry["jobs"])
+        else:
+            jobs.append(entry[0])
+    return jobs
 
 
 def _submitted_pka_child_jobs(captured):
     """Unwrap a submitted pKa batch container into its child jobs."""
     from chemsmart.jobs.batch import BatchJob
 
-    jobs = _submitted_jobs(captured)
-    if not jobs:
+    if not captured["submissions"]:
         return []
-    job = jobs[0]
+    first = captured["submissions"][0]
+    if isinstance(first, dict):
+        return list(first["jobs"])
+    job = first[0]
     if isinstance(job, BatchJob):
         return list(job.jobs)
     if isinstance(job, list):
         return job
     return [job]
+
+
+def _submitted_cli_args(captured):
+    """Return cli_args from the first captured array/single submission."""
+    if not captured["submissions"]:
+        return None
+    first = captured["submissions"][0]
+    if isinstance(first, dict):
+        return first["cli_args"]
+    return first[2]
+
+
+def _attach_fake_array_server(monkeypatch, captured=None):
+    """Patch Server.from_servername to capture submit_array_job calls."""
+    from chemsmart.settings.server import Server
+
+    if captured is None:
+        captured = {"submissions": []}
+    fake_server = Server(name="dummy")
+
+    def _fake_submit_array(
+        jobs, num_nodes=None, test=False, cli_args=None, batch_label=None, **kw
+    ):
+        captured["submissions"].append(
+            {
+                "jobs": list(jobs),
+                "test": test,
+                "cli_args": cli_args,
+                "batch_label": batch_label,
+                "num_nodes": num_nodes,
+            }
+        )
+
+    def _fake_submit(job, test=False, cli_args=None, **kw):
+        captured["submissions"].append(
+            {
+                "jobs": [job],
+                "test": test,
+                "cli_args": cli_args,
+                "batch_label": None,
+                "num_nodes": None,
+            }
+        )
+
+    fake_server.submit_array_job = _fake_submit_array
+    fake_server.submit = _fake_submit
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+    return fake_server, captured
 
 
 def _build_pka_batch_table(tmp_path):
@@ -201,6 +272,39 @@ def _build_pka_batch_table(tmp_path):
         f"{acid2},2,1,2\n"
     )
     return table
+
+
+def test_rewrite_pka_batch_cli_args_replaces_table_with_submit_row():
+    from chemsmart.cli.pka import rewrite_pka_batch_cli_args
+
+    shared = [
+        "gaussian",
+        "-f",
+        "table.csv",
+        "pka",
+        "--scheme",
+        "proton exchange",
+        "--reference",
+        "ref.xyz",
+        "batch",
+    ]
+    entry = {
+        "filepath": "acid2.xyz",
+        "proton_index": 3,
+        "charge": 1,
+        "multiplicity": 2,
+        "scheme": "direct",
+        "label": "acid2",
+    }
+    rewritten = rewrite_pka_batch_cli_args(shared, entry)
+    assert "batch" not in rewritten
+    assert "submit" in rewritten
+    assert "acid2.xyz" in rewritten
+    assert "table.csv" not in rewritten
+    assert rewritten[rewritten.index("--proton-index") + 1] == "3"
+    assert rewritten[rewritten.index("--charge") + 1] == "1"
+    assert rewritten[rewritten.index("--scheme") + 1] == "direct"
+    assert "--reference" not in rewritten
 
 
 class TestPKa:
@@ -474,7 +578,6 @@ class TestPKa:
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
         from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.settings.server import Server
 
         acid1 = tmp_path / "acid1.xyz"
         acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -506,7 +609,9 @@ class TestPKa:
 
         captured = {"submissions": []}
 
-        fake_server = Server(name="dummy")
+        fake_server, captured = _attach_fake_array_server(
+            monkeypatch, captured
+        )
         real_from_filepath = Molecule.from_filepath
 
         def _fake_from_filepath(filepath, *args, **kwargs):
@@ -522,14 +627,6 @@ class TestPKa:
                 return placeholder
             return real_from_filepath(filepath, *args, **kwargs)
 
-        def _fake_submit(job, test=False, cli_args=None, **kwargs):
-            captured["submissions"].append((job, test, cli_args))
-
-        monkeypatch.setattr(fake_server, "submit", _fake_submit)
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
         monkeypatch.setattr(
             orca_cli.Molecule, "from_filepath", _fake_from_filepath
         )
@@ -555,14 +652,16 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
-        batch_job, first_test, first_args = captured["submissions"][0]
-        assert first_test is True
-        assert isinstance(first_args, list)
-        assert "batch" in first_args
-        from chemsmart.jobs.batch import BatchJob
-
-        assert isinstance(batch_job, BatchJob)
-        assert len(batch_job.jobs) == 2
+        submission = captured["submissions"][0]
+        assert submission["test"] is True
+        cli_args = submission["cli_args"]
+        assert isinstance(cli_args, list)
+        assert len(cli_args) == 2
+        assert all("submit" in args for args in cli_args)
+        assert str(acid1) in cli_args[0]
+        assert str(acid2) in cli_args[1]
+        children = _submitted_pka_child_jobs(captured)
+        assert len(children) == 2
 
     def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
         self, tmp_path, monkeypatch
@@ -571,7 +670,6 @@ class TestPKa:
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
         from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.settings.server import Server
 
         acid1 = tmp_path / "acid1.xyz"
         acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -602,8 +700,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-
-        fake_server = Server(name="dummy")
+        _attach_fake_array_server(monkeypatch, captured)
         real_from_filepath = Molecule.from_filepath
 
         def _fake_from_filepath(filepath, *args, **kwargs):
@@ -619,14 +716,6 @@ class TestPKa:
                 return placeholder
             return real_from_filepath(filepath, *args, **kwargs)
 
-        def _fake_submit(job, test=False, cli_args=None, **kwargs):
-            captured["submissions"].append((job, test, cli_args))
-
-        monkeypatch.setattr(fake_server, "submit", _fake_submit)
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
         monkeypatch.setattr(
             orca_cli.Molecule, "from_filepath", _fake_from_filepath
         )
@@ -652,15 +741,15 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
-        batch_job, _, cli_args = captured["submissions"][0]
-        from chemsmart.jobs.batch import BatchJob
-
-        assert isinstance(batch_job, BatchJob)
-        assert len(batch_job.jobs) == 2
-        assert str(table) in cli_args
-        assert "batch" in cli_args
-        assert str(acid1) not in cli_args
-        assert str(acid2) not in cli_args
+        children = _submitted_pka_child_jobs(captured)
+        assert len(children) == 2
+        cli_args = _submitted_cli_args(captured)
+        assert len(cli_args) == 2
+        assert str(acid1) in cli_args[0]
+        assert str(acid2) in cli_args[1]
+        assert "submit" in cli_args[0]
+        assert "batch" not in cli_args[0]
+        assert str(table) not in cli_args[0]
 
     def test_sub_orca_pka_batch_shared_reference_loaded_once(
         self, tmp_path, monkeypatch
@@ -670,7 +759,6 @@ class TestPKa:
 
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-        from chemsmart.settings.server import Server
 
         acid1 = tmp_path / "acid1.xyz"
         acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -705,7 +793,7 @@ class TestPKa:
         captured = {"submissions": []}
         reference_pair_call_count = {"count": 0}
 
-        fake_server = Server(name="dummy")
+        _attach_fake_array_server(monkeypatch, captured)
         real_from_filepath = Molecule.from_filepath
         real_reference_pair_molecules = (
             ORCApKaJobSettings.reference_pair_molecules
@@ -728,14 +816,6 @@ class TestPKa:
             reference_pair_call_count["count"] += 1
             return real_reference_pair_molecules(self)
 
-        def _fake_submit(job, test=False, cli_args=None, **kwargs):
-            captured["submissions"].append((job, test, cli_args))
-
-        monkeypatch.setattr(fake_server, "submit", _fake_submit)
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
         monkeypatch.setattr(
             orca_cli.Molecule, "from_filepath", _fake_from_filepath
         )
@@ -785,7 +865,6 @@ class TestPKa:
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
         from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.settings.server import Server
 
         acid1 = tmp_path / "acid1.xyz"
         acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -819,7 +898,7 @@ class TestPKa:
 
         captured = {"submissions": []}
 
-        fake_server = Server(name="dummy")
+        _attach_fake_array_server(monkeypatch, captured)
         real_from_filepath = Molecule.from_filepath
 
         def _fake_from_filepath(filepath, *args, **kwargs):
@@ -835,14 +914,6 @@ class TestPKa:
                 return placeholder
             return real_from_filepath(filepath, *args, **kwargs)
 
-        def _fake_submit(job, test=False, cli_args=None, **kwargs):
-            captured["submissions"].append((job, test, cli_args))
-
-        monkeypatch.setattr(fake_server, "submit", _fake_submit)
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
         monkeypatch.setattr(
             orca_cli.Molecule, "from_filepath", _fake_from_filepath
         )
@@ -876,13 +947,19 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
-        batch_job, _, cli_args = captured["submissions"][0]
         children = _submitted_pka_child_jobs(captured)
+        cli_args = _submitted_cli_args(captured)
 
         assert children[0].settings.scheme == "proton exchange"
         assert children[1].settings.scheme == "direct"
-        assert "batch" in cli_args
-        assert "--reference" in cli_args
+        assert len(cli_args) == 2
+        assert "submit" in cli_args[0]
+        assert "submit" in cli_args[1]
+        assert "--reference" in cli_args[0]
+        assert "--reference" not in cli_args[1]
+        assert "--scheme" in cli_args[1]
+        scheme_idx = cli_args[1].index("--scheme")
+        assert cli_args[1][scheme_idx + 1] == "direct"
 
     def test_run_gaussian_pka_help_is_submission_only(
         self, single_molecule_xyz_file
@@ -1084,25 +1161,31 @@ class TestPKa:
         assert result.exit_code == 0, result.output
         assert captured["submissions"]
 
-        cli_args = captured["submissions"][0][2]
-        assert "batch" in cli_args
-        assert str(table) in cli_args
+        cli_args = _submitted_cli_args(captured)
+        assert len(cli_args) == 2
+        assert all("submit" in args for args in cli_args)
+        children = _submitted_pka_child_jobs(captured)
+        assert len(children) == 2
+        assert children[0].batch_entry["filepath"] in cli_args[0]
+        assert children[1].batch_entry["filepath"] in cli_args[1]
 
-        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-        from chemsmart.jobs.orca.batch import OrcaBatchJob
+        from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+        from chemsmart.jobs.orca.pka import ORCApKaJob
 
         run_labels = []
 
-        def _fake_batch_run(self, **kwargs):
-            for child in self.jobs:
-                run_labels.append(child.label)
+        def _fake_pka_run(self, **kwargs):
+            run_labels.append(self.label)
 
-        monkeypatch.setattr(GaussianBatchJob, "run", _fake_batch_run)
-        monkeypatch.setattr(OrcaBatchJob, "run", _fake_batch_run)
+        monkeypatch.setattr(GaussianpKaJob, "run", _fake_pka_run)
+        monkeypatch.setattr(ORCApKaJob, "run", _fake_pka_run)
 
-        run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
-        assert run_result.exit_code == 0, run_result.output
-        assert "proton-index is required" not in run_result.output
+        for task_cli in cli_args:
+            run_result = runner.invoke(
+                run, ["--no-scratch", "--fake"] + list(task_cli)
+            )
+            assert run_result.exit_code == 0, run_result.output
+            assert "proton-index is required" not in run_result.output
         assert len(run_labels) == 2
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
@@ -1118,19 +1201,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1176,19 +1248,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1241,19 +1302,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1282,25 +1332,35 @@ class TestPKa:
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
 
-        batch_job, _test, cli_args = captured["submissions"][0]
-        assert "batch" in cli_args
-        assert str(colored_proton_two_molecule_cdxml_file) in cli_args
+        cli_args = _submitted_cli_args(captured)
+        assert len(cli_args) == 2
+        assert all("submit" in args for args in cli_args)
+        assert all(
+            str(colored_proton_two_molecule_cdxml_file) in args
+            for args in cli_args
+        )
+        assert "--index" in cli_args[0]
+        assert cli_args[0][cli_args[0].index("--index") + 1] == "1"
+        assert "--index" in cli_args[1]
+        assert cli_args[1][cli_args[1].index("--index") + 1] == "2"
 
-        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-        from chemsmart.jobs.orca.batch import OrcaBatchJob
+        from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+        from chemsmart.jobs.orca.pka import ORCApKaJob
 
         run_labels = []
 
-        def _fake_batch_run(self, **kwargs):
-            for child in self.jobs:
-                run_labels.append(child.label)
+        def _fake_pka_run(self, **kwargs):
+            run_labels.append(self.label)
 
-        monkeypatch.setattr(GaussianBatchJob, "run", _fake_batch_run)
-        monkeypatch.setattr(OrcaBatchJob, "run", _fake_batch_run)
+        monkeypatch.setattr(GaussianpKaJob, "run", _fake_pka_run)
+        monkeypatch.setattr(ORCApKaJob, "run", _fake_pka_run)
 
-        run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
-        assert run_result.exit_code == 0, run_result.output
-        assert "proton-index is required" not in run_result.output
+        for task_cli in cli_args:
+            run_result = runner.invoke(
+                run, ["--no-scratch", "--fake"] + list(task_cli)
+            )
+            assert run_result.exit_code == 0, run_result.output
+            assert "proton-index is required" not in run_result.output
         assert len(run_labels) == 2
         assert all("_frag" in label for label in run_labels)
 
@@ -1325,19 +1385,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1434,19 +1483,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1470,8 +1508,9 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
-        job = captured["submissions"][0][0]
-        assert job.settings.proton_index == 8
+        children = _submitted_pka_child_jobs(captured)
+        assert len(children) == 1
+        assert children[0].settings.proton_index == 8
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_cdxml_explicit_proton_index_overrides(
@@ -1489,19 +1528,8 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        from chemsmart.settings.server import Server
-
-        fake_server = Server(name="dummy")
         captured = {"submissions": []}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured[
-                "submissions"
-            ].append((job, test, cli_args))
-        )
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
+        _attach_fake_array_server(monkeypatch, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1525,8 +1553,9 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
-        job = captured["submissions"][0][0]
-        assert job.settings.proton_index == 8
+        children = _submitted_pka_child_jobs(captured)
+        assert len(children) == 1
+        assert children[0].settings.proton_index == 8
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_rejects_multi_molecule_cdxml_row(

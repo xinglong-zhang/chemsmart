@@ -34,6 +34,7 @@ from chemsmart.cli.pka import (
     wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
+from chemsmart.jobs.batch_manifest import set_job_batch_entry
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
@@ -352,16 +353,26 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             sp_settings=project_settings.sp_settings(),
         )
 
-        jobs.append(
-            GaussianpKaJob(
-                molecule=molecule,
-                settings=pka_settings,
-                label=label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = GaussianpKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        set_job_batch_entry(
+            job,
+            {
+                "filepath": str(filepath),
+                "proton_index": row_proton_index,
+                "charge": int(entry.charge),
+                "multiplicity": int(entry.multiplicity),
+                "scheme": row_shared["scheme"],
+                "label": label,
+            },
+        )
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
     table_label = Path(input_table_path).stem or "pka_batch"
@@ -414,16 +425,27 @@ def _create_pka_jobs_from_molecules(
             f"proton_index={pka_mol.proton_index}, label={label}"
         )
 
-        jobs.append(
-            GaussianpKaJob(
-                molecule=pka_mol,
-                settings=pka_settings,
-                label=label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = GaussianpKaJob(
+            molecule=pka_mol,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        set_job_batch_entry(
+            job,
+            {
+                "filepath": str(filename),
+                "proton_index": pka_mol.proton_index,
+                "charge": int(pka_settings.charge),
+                "multiplicity": int(pka_settings.multiplicity),
+                "scheme": shared["scheme"],
+                "fragment_index": idx,
+                "label": label,
+            },
+        )
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML")
     basename = Path(filename).stem or "pka"

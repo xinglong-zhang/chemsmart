@@ -113,9 +113,8 @@ Direct cycle:
    For proton exchange with multiple batch rows, only the first row uses the reference acid; subsequent rows switch to
    the direct cycle (same behaviour as Gaussian batch).
 
-   With ``chemsmart run``, batch children execute serially with full resources each (``--no-run-in-parallel`` is the
-   default; ``--run-in-parallel`` does not enable concurrent QC children). On HPC clusters, use ``chemsmart sub`` so the
-   scheduler owns concurrency across targets. See :ref:`pka-hpc-batch-submission`.
+   Locally (``chemsmart run``), batch rows run one after another. On a cluster, use ``chemsmart sub`` so each row or
+   fragment can run as its own array task. See :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -138,8 +137,7 @@ per-fragment coloured-proton detection. Labels are ``<basename>_frag<N>_pka`` (o
 
    chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-For cluster submission of multi-fragment CDXML (``BatchJob`` run script; serial children with full resources on the
-compute node), see :ref:`pka-hpc-batch-submission`.
+For cluster submission of multi-fragment CDXML, see :ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files
