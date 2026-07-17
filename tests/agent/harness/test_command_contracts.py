@@ -4,7 +4,10 @@ import subprocess
 
 import yaml
 
-from chemsmart.agent.harness.command_contracts import check_command_contracts
+from chemsmart.agent.harness.command_contracts import (
+    CommandContractIssue,
+    check_command_contracts,
+)
 from chemsmart.agent.harness.command_semantics import evaluate_command_semantics
 
 
@@ -22,6 +25,13 @@ def _issues(
         program_tokens=program_tokens or [],
         job_tokens=job_tokens or [job],
         cwd=cwd,
+    )
+
+
+def test_command_contract_issue_keeps_public_module_identity() -> None:
+    assert (
+        CommandContractIssue.__module__
+        == "chemsmart.agent.harness.command_contracts"
     )
 
 
