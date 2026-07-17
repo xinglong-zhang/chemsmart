@@ -5,12 +5,12 @@ from __future__ import annotations
 import importlib
 import re
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.serialization import generic_json_safe
 
 REFERENCE_RE = re.compile(
     r"^\$step(?P<index>\d+)(?P<path>(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$"
@@ -56,17 +56,7 @@ def json_safe(value: Any) -> Any:
         return _serialize_job(value)
     if isinstance(value, BaseModel):
         return json_safe(value.model_dump())
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, bytes):
-        return {"type": "bytes", "length": len(value)}
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return {"type": value.__class__.__name__, "repr": repr(value)}
+    return generic_json_safe(value, recurse=json_safe)
 
 
 def preview_value(value: Any) -> Any:

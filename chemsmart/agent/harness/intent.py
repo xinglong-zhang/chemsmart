@@ -8,7 +8,6 @@ benchmark fixtures may provide a complete :class:`IntentSpec` directly.
 
 from __future__ import annotations
 
-import ast
 import re
 import shlex
 from dataclasses import asdict, dataclass, field
@@ -16,9 +15,25 @@ from pathlib import PurePath
 from typing import Any, Literal
 
 from chemsmart.agent.harness.workflow_state import project_name_from_request
+from chemsmart.agent.harness.value_equivalence import (
+    structured_sequence,
+    unwrap_singleton_group,
+)
 from chemsmart.agent.model_command_parser import parse_model_command
 
 IntentVerdict = Literal["ok", "reject"]
+INTENT_CORE_FIELDS = (
+    "action",
+    "program",
+    "kind",
+    "project",
+    "server",
+    "input_path",
+    "output_path",
+    "charge",
+    "multiplicity",
+    "execution_mode",
+)
 
 
 @dataclass(frozen=True)
@@ -39,18 +54,7 @@ class IntentSpec:
     def from_dict(cls, value: dict[str, Any]) -> "IntentSpec":
         known = {
             key: value.get(key)
-            for key in (
-                "action",
-                "program",
-                "kind",
-                "project",
-                "server",
-                "input_path",
-                "output_path",
-                "charge",
-                "multiplicity",
-                "execution_mode",
-            )
+            for key in INTENT_CORE_FIELDS
         }
         chemistry = value.get("chemistry")
         known["chemistry"] = dict(chemistry) if isinstance(chemistry, dict) else {}
@@ -311,18 +315,7 @@ def evaluate_intent(
     spec = expected if isinstance(expected, IntentSpec) else IntentSpec.from_dict(expected)
     observed = ObservedIntent.from_command(command, cwd=cwd)
     rows: list[IntentAssertion] = []
-    for field_name in (
-        "action",
-        "program",
-        "kind",
-        "project",
-        "server",
-        "input_path",
-        "output_path",
-        "charge",
-        "multiplicity",
-        "execution_mode",
-    ):
+    for field_name in INTENT_CORE_FIELDS:
         expected_value = getattr(spec, field_name)
         if expected_value is None:
             continue
@@ -358,15 +351,15 @@ def _equivalent(expected: Any, observed: Any, *, path: bool = False) -> bool:
     if path and expected is not None and observed is not None:
         return str(PurePath(str(expected))) == str(PurePath(str(observed)))
     if isinstance(expected, (list, tuple)):
-        left = _structured_sequence(expected)
-        right = _structured_sequence(observed)
+        left = structured_sequence(expected, allow_numeric_text=True)
+        right = structured_sequence(observed, allow_numeric_text=True)
         if left == right:
             return True
         # The Gaussian/ORCA CLIs legitimately expose one coordinate either as
         # ``[1, 2]`` or ``[[1, 2]]``.  Treat only that singleton wrapper as
         # equivalent; flattening two or more coordinate groups would erase
         # chemically meaningful grouping and remains a hard intent failure.
-        return _unwrap_singleton_group(left) == right or left == _unwrap_singleton_group(right)
+        return unwrap_singleton_group(left) == right or left == unwrap_singleton_group(right)
     if isinstance(expected, bool):
         return expected is _as_bool(observed)
     try:
@@ -375,44 +368,6 @@ def _equivalent(expected: Any, observed: Any, *, path: bool = False) -> bool:
         left = re.sub(r"[\s\[\](){}]", "", str(expected).lower())
         right = re.sub(r"[\s\[\](){}]", "", str(observed).lower())
         return left == right
-
-
-def _number_list(value: Any) -> list[str]:
-    return re.findall(r"-?\d+(?:\.\d+)?", str(value))
-
-
-def _structured_sequence(value: Any) -> tuple[Any, ...] | None:
-    """Preserve nested coordinate grouping instead of comparing flat numbers."""
-    if isinstance(value, str):
-        try:
-            value = ast.literal_eval(value)
-        except (SyntaxError, ValueError):
-            tokens = re.findall(r"-?\d+(?:\.\d+)?", value)
-            if not tokens:
-                return None
-            value = [float(token) for token in tokens]
-    if not isinstance(value, (list, tuple)):
-        return None
-    normalized: list[Any] = []
-    for item in value:
-        if isinstance(item, (list, tuple)):
-            nested = _structured_sequence(item)
-            if nested is None:
-                return None
-            normalized.append(nested)
-        elif isinstance(item, bool):
-            normalized.append(item)
-        elif isinstance(item, (int, float)):
-            normalized.append(float(item))
-        else:
-            normalized.append(str(item).strip().lower())
-    return tuple(normalized)
-
-
-def _unwrap_singleton_group(value: tuple[Any, ...] | None) -> tuple[Any, ...] | None:
-    if value is not None and len(value) == 1 and isinstance(value[0], tuple):
-        return value[0]
-    return value
 
 
 def _as_bool(value: Any) -> bool | None:
@@ -622,6 +577,7 @@ _CHEMISTRY_OPTIONS = (
 
 
 __all__ = [
+    "INTENT_CORE_FIELDS",
     "IntentAssertion",
     "IntentResult",
     "IntentSpec",

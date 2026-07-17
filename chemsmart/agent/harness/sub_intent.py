@@ -9,12 +9,12 @@ program, job type, state, or server.
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import PurePath
 from typing import Any
 
 from chemsmart.agent.harness.intent import ObservedIntent
+from chemsmart.agent.harness.value_equivalence import structured_sequence
 from chemsmart.agent.model_command_parser import parse_model_command
 
 JsonDict = dict[str, Any]
@@ -51,9 +51,9 @@ def _equivalent_value(expected: Any, observed: Any) -> bool:
         return expected == observed
     expected_text = str(expected).strip()
     observed_text = str(observed).strip()
-    expected_sequence = _structured_sequence(expected)
+    expected_sequence = structured_sequence(expected)
     if expected_sequence is not None:
-        return expected_sequence == _structured_sequence(observed)
+        return expected_sequence == structured_sequence(observed)
     try:
         return float(expected_text) == float(observed_text)
     except ValueError:
@@ -64,30 +64,6 @@ def _equivalent_value(expected: Any, observed: Any) -> bool:
             return expected_numbers == observed_numbers
         observed_compact = re.sub(r"[\s\[\](){}]", "", observed_text)
         return expected_compact == observed_compact
-
-
-def _structured_sequence(value: Any) -> tuple[Any, ...] | None:
-    if isinstance(value, str):
-        try:
-            value = ast.literal_eval(value)
-        except (SyntaxError, ValueError):
-            return None
-    if not isinstance(value, (list, tuple)):
-        return None
-    normalized: list[Any] = []
-    for item in value:
-        if isinstance(item, (list, tuple)):
-            nested = _structured_sequence(item)
-            if nested is None:
-                return None
-            normalized.append(nested)
-        elif isinstance(item, bool):
-            normalized.append(item)
-        elif isinstance(item, (int, float)):
-            normalized.append(float(item))
-        else:
-            normalized.append(str(item).strip().lower())
-    return tuple(normalized)
 
 
 def build_sub_intent_assertions(

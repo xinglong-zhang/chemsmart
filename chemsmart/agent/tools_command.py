@@ -13,6 +13,7 @@ from chemsmart.agent.harness.command_semantics import (
     evaluate_command_semantics,
 )
 from chemsmart.agent.harness.intent import (
+    INTENT_CORE_FIELDS,
     IntentResult,
     IntentSpec,
     evaluate_intent,
@@ -337,18 +338,7 @@ def _expected_intent_for_repair(
     if (
         not any(
             values.get(name)
-            for name in (
-                "action",
-                "program",
-                "kind",
-                "project",
-                "server",
-                "input_path",
-                "output_path",
-                "charge",
-                "multiplicity",
-                "execution_mode",
-            )
+            for name in INTENT_CORE_FIELDS
         )
         and not spec.chemistry
     ):

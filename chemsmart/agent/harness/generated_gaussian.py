@@ -17,6 +17,7 @@ from chemsmart.agent.harness.generated_common import (
     sequence_value,
 )
 from chemsmart.agent.harness.models import InvariantIssue
+from chemsmart.agent.harness.scan_values import scan_value_matches
 from chemsmart.settings.workspace_project import workspace_project_path
 
 
@@ -260,12 +261,7 @@ def _scan_value_issues(
             expected = sequence_value(expected_values, index)
             if expected is None:
                 continue
-            matches = (
-                int(expected) == int(observed)
-                if key == "num_steps"
-                else abs(float(expected) - float(observed)) <= 1e-9
-            )
-            if not matches:
+            if not scan_value_matches(key, expected, observed):
                 issues.append(
                     reject(
                         f"input.gaussian.scan.{key}",
