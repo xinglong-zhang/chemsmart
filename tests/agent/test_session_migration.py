@@ -79,7 +79,7 @@ def test_cli_migrates_session_id_under_configured_root(
     session_root = tmp_path / "sessions"
     source = _write_legacy_session(session_root)
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(session_root),
     )
 

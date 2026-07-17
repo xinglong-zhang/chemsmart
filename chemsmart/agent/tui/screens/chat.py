@@ -22,7 +22,7 @@ from textual.screen import Screen
 from textual.widgets import OptionList
 from textual.worker import Worker, WorkerState
 
-from chemsmart.agent.cli import agent
+from chemsmart.agent.cli_commands import agent
 from chemsmart.agent.core import AgentSession, CriticVerdict, DecisionLog, Plan
 from chemsmart.agent.permissions import (
     ApprovalDecision,
@@ -3817,7 +3817,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def _run_inline_cli(self, args: Iterable[str], *, title: str) -> None:
         import threading
 
-        from chemsmart.agent.cli import sanitize_inline_cli_output
+        from chemsmart.agent.services.cli_presenters import (
+            sanitize_inline_cli_output,
+        )
 
         command_args = list(args)
 

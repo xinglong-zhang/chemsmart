@@ -739,7 +739,7 @@ def test_agent_ask_e2e_uses_synthesis_session(
         ),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._agent_log_root",
+        "chemsmart.agent.cli_commands._agent_log_root",
         lambda: tmp_path,
     )
 

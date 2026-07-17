@@ -7,7 +7,7 @@ from chemsmart.agent.cli import agent, sanitize_inline_cli_output
 
 def test_agent_wizard_refresh_prints_rich_summary(monkeypatch):
     monkeypatch.setattr(
-        "chemsmart.agent.cli.run_wizard_refresh",
+        "chemsmart.agent.cli_commands.run_wizard_refresh",
         lambda name, force=False: {
             "server_name": name,
             "cache_path": "/tmp/perlmutter.cache.json",

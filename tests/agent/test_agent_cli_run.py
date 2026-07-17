@@ -56,14 +56,14 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
@@ -94,7 +94,7 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
 
 def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
@@ -118,7 +118,7 @@ def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
 
 def test_resume_missing_emits_friendly_error(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -137,7 +137,7 @@ def test_agent_run_resume_missing_emits_friendly_error(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -155,7 +155,7 @@ def test_agent_run_resume_missing_emits_friendly_error(
 def test_agent_sessions_lists_recent(monkeypatch, tmp_path: Path):
     session_root = tmp_path / "sessions"
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(session_root),
     )
 
@@ -216,7 +216,7 @@ def test_agent_cli_run_wraps_runtime_errors_as_click_exceptions(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
 
     runner = CliRunner()
@@ -274,14 +274,14 @@ def test_agent_cli_run_surfaces_advisory_only_answers(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -331,7 +331,7 @@ def test_ask_renders_advisory_plan(
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(

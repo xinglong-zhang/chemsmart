@@ -142,7 +142,7 @@ def test_doctor_valid_local(monkeypatch):
 def test_doctor_default_output_has_no_debug_or_warnings(monkeypatch, tmp_path):
     """Default doctor output stays quiet; logs are captured to the tui log."""
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
