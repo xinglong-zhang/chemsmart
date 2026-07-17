@@ -100,6 +100,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._jobs_not_started = 0
         self._run(**kwargs)
 
+    def enable_serial_local_execution(self) -> None:
+        """Configure this batch for serial local execution with full resources.
+
+        Children run one at a time. Each child receives the batch jobrunner's
+        full ``num_cores`` and ``mem_gb`` (no core/memory splitting).
+        """
+        if not self.no_run_in_parallel:
+            logger.info(
+                "BatchJob local execution is serial with full resources; "
+                "concurrent children are disabled. Use chemsmart sub for "
+                "cluster concurrency."
+            )
+        self.no_run_in_parallel = True
+
     def _run(self, **kwargs: Any) -> None:
         """Dispatch execution to multi-node, serial, or parallel mode."""
         nodes = self._get_allocated_nodes()
@@ -108,7 +122,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         if nodes and len(nodes) > 1:
             outcomes = self._run_multi_node(nodes, **kwargs)
         elif self.no_run_in_parallel:
-            logger.info(f"Running batch of {total_jobs} jobs serially.")
+            runner = self.jobrunner
+            if runner is not None:
+                cores = runner.num_cores
+                mem_gb = runner.mem_gb
+            else:
+                cores = None
+                mem_gb = None
+            logger.info(
+                "Running batch of %s jobs serially "
+                "(full resources per child: cores=%s, mem_gb=%s).",
+                total_jobs,
+                cores,
+                mem_gb,
+            )
             outcomes = self._run_jobs_serially(self.jobs, **kwargs)
         else:
             if self.fail_fast:
@@ -259,10 +286,10 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         job: Job,
         node: Optional[str] = None,
     ) -> Any:
-        """Copy the runner onto *job* and apply optional node adaptation.
+        """Copy the batch runner onto *job* with full resource allocation.
 
-        Uses ``Job._propagate_runner`` for the safe copy-and-assign step,
-        then applies node-specific configuration if a *node* is given.
+        Serial local batches do not split ``num_cores`` or ``mem_gb`` across
+        children. Optional *node* adaptation is applied after the copy.
         """
         child_runner = Job._propagate_runner(self.jobrunner, job)
         if child_runner is not None and node is not None:
@@ -417,16 +444,30 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def _backup_files(self) -> None:
         pass
 
+    @staticmethod
+    def _append_str_path(candidates: list[str], path: Any) -> None:
+        """Append *path* to *candidates* when it is a non-empty string."""
+        if isinstance(path, str) and path:
+            candidates.append(path)
+
     def _job_status_signature(
         self,
         job: Job,
     ) -> Optional[tuple[tuple[str, float], ...]]:
         """Return file-mtime signature used to validate cached status."""
         candidates: list[str] = []
-        for attr in ("outputfile", "joblog", "errfile"):
-            path = getattr(job, attr, None)
-            if isinstance(path, str) and path:
-                candidates.append(path)
+        try:
+            self._append_str_path(candidates, job.outputfile)
+        except AttributeError:
+            pass
+        try:
+            self._append_str_path(candidates, job.joblog)
+        except AttributeError:
+            pass
+        try:
+            self._append_str_path(candidates, job.errfile)
+        except AttributeError:
+            pass
 
         signature: list[tuple[str, float]] = []
         for path in candidates:
@@ -483,10 +524,10 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         if not os.environ.get("SLURM_JOB_NODELIST"):
             return runner
 
-        if not hasattr(runner, "_get_command"):
+        try:
+            original_get_command = runner._get_command
+        except AttributeError:
             return runner
-
-        original_get_command = runner._get_command
 
         def patched_get_command_slurm(self_runner: Any, job_obj: Job) -> str:
             command = original_get_command(job_obj)

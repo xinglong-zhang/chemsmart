@@ -129,7 +129,7 @@ def process_pipeline(ctx, *args, **kwargs):
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
-            num_nodes=getattr(jobrunner, "num_nodes", None),
+            num_nodes=jobrunner.num_nodes,
         )
 
     # Handle list of jobs
@@ -175,14 +175,8 @@ def process_pipeline(ctx, *args, **kwargs):
     if isinstance(job, BatchJob):
         if not job.jobs:
             raise ValueError(f"BatchJob {job} has no child jobs to run.")
-        if not job.no_run_in_parallel:
-            logger.info(
-                "chemsmart run executes BatchJob children serially with full "
-                "resources; --run-in-parallel does not enable concurrent "
-                "children here. Use chemsmart sub for cluster concurrency."
-            )
-        job.no_run_in_parallel = True
         job.jobrunner = _prepare_runner(job.jobs[0])
+        job.enable_serial_local_execution()
         job.run()
         return None
 

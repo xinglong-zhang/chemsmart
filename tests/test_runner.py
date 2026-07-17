@@ -646,7 +646,11 @@ class TestRunListFailureAggregation:
         from chemsmart.jobs.batch import BatchJob
 
         jobrunner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=False
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=16,
+            mem_gb=32,
         )
         ctx = click.Context(run)
         ctx.ensure_object(dict)
@@ -676,3 +680,45 @@ class TestRunListFailureAggregation:
 
         assert batch.no_run_in_parallel is True
         child.run.assert_called_once()
+        assert child.jobrunner.num_cores == 16
+        assert child.jobrunner.mem_gb == 32
+
+    def test_serial_batch_propagates_full_cores_and_memory(self, pbs_server):
+        """Serial BatchJob children receive full parent num_cores / mem_gb."""
+        from chemsmart.jobs.batch import BatchJob
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        class _DummyBatch(BatchJob):
+            PROGRAM = "test"
+
+            def _configure_runner_for_node(self, runner, node, job):
+                return runner
+
+        batch = _DummyBatch(
+            jobs=[child_a, child_b],
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="resource_batch",
+        )
+        batch.run()
+
+        assert child_a.jobrunner.num_cores == 16
+        assert child_a.jobrunner.mem_gb == 32
+        assert child_b.jobrunner.num_cores == 16
+        assert child_b.jobrunner.mem_gb == 32
+        assert child_a.jobrunner is not child_b.jobrunner
+        assert child_a.jobrunner is not runner
