@@ -245,7 +245,7 @@ def test_slash_palette_lists_and_filters_commands(tmp_path: Path):
 def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
@@ -314,7 +314,7 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
 ):
     monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _openai_config(),
     )
     monkeypatch.setattr(
@@ -356,7 +356,7 @@ def test_command_tool_result_renders_synthesis_trace(
 ):
     monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _openai_config(),
     )
 
@@ -432,7 +432,7 @@ def test_semantic_reject_is_rendered_for_infeasible_synthesis(
 ):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
@@ -473,7 +473,7 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
 ):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
@@ -510,7 +510,7 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
 def test_removed_mode_command_is_rejected(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
 

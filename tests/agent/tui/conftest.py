@@ -16,7 +16,7 @@ def _isolate_tui_provider_config(monkeypatch):
     """
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: None,
         raising=False,
     )
