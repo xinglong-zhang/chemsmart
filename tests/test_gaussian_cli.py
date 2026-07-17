@@ -921,6 +921,65 @@ class TestGaussianRunSubNoParallelIntegration:
             in mock_submit_array.call_args.kwargs["cli_args"]
         )
 
+    def test_sub_default_is_serial_array_throttle(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Default ``sub`` (no parallel flag) uses %1 array throttle."""
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+
+        runner = CliRunner()
+        mock_batch_job = GaussianBatchJob(
+            jobs=[MagicMock(label="j1"), MagicMock(label="j2")],
+            label="mols_batch",
+        )
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob"),
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=mock_batch_job,
+            ) as mock_batch_cls,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "4",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+        assert mock_submit_array.call_count == 1
+        # -N 4 ignored for throttle when serial default applies
+        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
+
     def test_sub_run_in_parallel_uses_num_nodes_as_array_throttle(
         self,
         multiple_molecules_xyz_file,
@@ -1101,6 +1160,61 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_submit.call_count == 1
         assert mock_submit.call_args.kwargs["job"] is mock_qrc
         assert "qrc" in mock_submit.call_args.kwargs["cli_args"]
+
+    def test_sub_default_submits_qrc_as_single_parent(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """Default ``sub ... qrc`` (no parallel flag) is one nestable parent."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit_array.assert_not_called()
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["job"] is mock_qrc
 
     def test_scan_settings_from_project(
         self,

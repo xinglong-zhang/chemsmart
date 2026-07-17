@@ -106,7 +106,7 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        no_run_in_parallel=not kwargs.get("run_in_parallel", True),
+        no_run_in_parallel=not kwargs.get("run_in_parallel", False),
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -280,8 +280,8 @@ def process_pipeline(ctx, *args, **kwargs):
     else:
         job.jobrunner = jobrunner
         nestable_children = get_nestable_array_children(job)
-        # --run-in-parallel (default): expand nestable parents to an array.
-        # --no-run-in-parallel: one parent job with nested serial children.
+        # Default / --no-run-in-parallel: one parent job with nested serial
+        # children. --run-in-parallel: expand nestable parents to an array.
         if nestable_children is not None and not jobrunner.no_run_in_parallel:
             _process_nestable_array_job(job)
         else:

@@ -8,8 +8,9 @@ logger = logging.getLogger(__name__)
 PARALLEL_HELP_SUB = (
     "Max concurrent SLURM array tasks when submitting a batch, and expand "
     "nestable jobs (crest/QRC/dias/traj) into one array task per child. "
-    "Use --no-run-in-parallel for one array task at a time, or a single "
-    "parent job with nested serial children."
+    "Default is serial: top-level batches use one array task at a time (%1), "
+    "and nestable jobs submit as a single parent with nested serial children. "
+    "Pass --run-in-parallel to enable concurrent array tasks / nestable expansion."
 )
 
 PARALLEL_HELP_RUN = (
@@ -87,7 +88,7 @@ def click_jobrunner_options(f=None, *, entry_point=None):
         )
         @click.option(
             "--run-in-parallel/--no-run-in-parallel",
-            default=True,
+            default=False,
             type=bool,
             help=parallel_help,
         )
