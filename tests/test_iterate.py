@@ -19,7 +19,7 @@ from click.testing import CliRunner
 
 from chemsmart.cli.iterate.yaml_cmd import yaml_cmd
 from chemsmart.jobs.iterate.job import IterateJob
-from chemsmart.jobs.iterate.report import ERROR_CODE_TIMEOUT
+from chemsmart.jobs.iterate.report import ERROR_CODE_INPUT, ERROR_CODE_TIMEOUT
 from chemsmart.jobs.iterate.settings import (
     IterateJobSettings,
     resolve_algorithm_config,
@@ -364,6 +364,92 @@ def test_iterate_cli_rejects_missing_config_file(tmp_path: Path):
 
     assert result.exit_code == 2
     assert "does not exist" in result.output
+
+
+def test_iterate_cli_missing_molecule_file_is_input_error(tmp_path: Path):
+    """Absent molecule files fail as an input error (exit 1, ITR-INPUT-001).
+
+    The config is structurally valid, so validation passes, but every declared
+    molecule file is missing.  No structure can be produced, so the run is an
+    error termination that honours the input-error contract: a non-zero exit
+    and the ``ITR-INPUT-001`` code in both the terminal and the run report.
+    """
+    config_path = tmp_path / "missing_molecule.yaml"
+    config_path.write_text("""\
+skeletons:
+  - file_path: does_not_exist.xyz
+    label: skeleton
+    link_index: 1
+substituents:
+  - file_path: also_missing.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""")
+    output_base = tmp_path / "missing_out"
+
+    result = CliRunner().invoke(
+        yaml_cmd,
+        ["-f", str(config_path), "-np", "1", "-o", str(output_base)],
+        obj={},
+    )
+
+    assert result.exit_code == 1, result.output
+    assert ERROR_CODE_INPUT in result.output
+    # Nothing was generated, so the merged output file is never created.
+    assert not output_base.with_suffix(".xyz").exists()
+    # The best-effort report records the input error and error termination.
+    report_path = tmp_path / "missing_molecule_iterate.out"
+    assert report_path.exists()
+    report_text = report_path.read_text()
+    assert ERROR_CODE_INPUT in report_text
+    assert "Error termination of ChemSmart Iterate" in report_text
+
+
+def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
+    """A partial input failure exits 1 yet keeps the successful structure.
+
+    One substituent loads and is placed while a second substituent's file is
+    missing.  The run is an error termination (exit 1, ITR-INPUT-001), but the
+    structure that did generate is still written to the merged output file.
+    """
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    missing = tmp_path / "missing.xyz"
+    config_path = tmp_path / "partial_failure.yaml"
+    config_path.write_text(
+        "skeletons:\n"
+        f'  - file_path: "{benzene}"\n'
+        "    label: benzene\n"
+        '    skeleton_indices: "1-6"\n'
+        "    slots:\n"
+        "      - group: 1\n"
+        "        link_indices: 1\n"
+        "substituents:\n"
+        f'  - file_path: "{methane}"\n'
+        "    label: Me\n"
+        "    link_index: 1\n"
+        "    groups: [1]\n"
+        f'  - file_path: "{missing}"\n'
+        "    label: Bad\n"
+        "    link_index: 1\n"
+        "    groups: [1]\n"
+    )
+    output_base = tmp_path / "partial_out"
+
+    result = CliRunner().invoke(
+        yaml_cmd,
+        ["-f", str(config_path), "-np", "1", "-o", str(output_base)],
+        obj={},
+    )
+
+    assert result.exit_code == 1, result.output
+    assert ERROR_CODE_INPUT in result.output
+    assert "Successful combinations:" in result.output
+    # The single loadable substituent still produced and retained its output.
+    output_path = output_base.with_suffix(".xyz")
+    assert output_path.exists()
+    assert set(_read_xyz(output_path)) == {"benzene_1Me"}
 
 
 def test_iterate_three_site_combination_traversal(
