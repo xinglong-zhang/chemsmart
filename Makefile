@@ -209,7 +209,7 @@ endif
 
 .PHONY: test
 test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
+	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short tests/
 # Portable error ignoring: - so a bad shard cannot fail the job 
 	-$(ENV_PREFIX)coverage combine .coverage*  # combine all partial files if present  
 	-$(ENV_PREFIX)coverage xml

@@ -360,8 +360,11 @@ def cancel_calculation(run_id: str, pid: int | None = None) -> bool:
         return True
     if pid:
         try:
-            os.killpg(pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
+            if os.name == "nt":
+                os.kill(pid, signal.SIGTERM)
+            else:
+                os.killpg(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
             return False
         return True
     return False
@@ -468,6 +471,14 @@ def _consume_cancelled(run_id: str) -> bool:
 
 def _terminate_process(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
+        return
+    if os.name == "nt":
+        # Windows has no process groups addressable via killpg.
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
         return
     try:
         os.killpg(process.pid, signal.SIGTERM)
