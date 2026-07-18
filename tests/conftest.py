@@ -379,14 +379,14 @@ def chemsmart_templates_config(mocker):
 
     # Patch the Class attribute
     mocker.patch(
-        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        "chemsmart.settings.user.CHEMSMARTUserSettings.USER_CONFIG_DIR",
         str(template_dir),
     )
 
     # Patch the global instance in runner.py
-    from chemsmart.settings.user import ChemsmartUserSettings
+    from chemsmart.settings.user import CHEMSMARTUserSettings
 
-    new_settings = ChemsmartUserSettings()
+    new_settings = CHEMSMARTUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
     # Patch other module-level user_settings singletons used by the CLI path
     mocker.patch("chemsmart.settings.server.user_settings", new_settings)
