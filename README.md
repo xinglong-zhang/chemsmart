@@ -233,6 +233,40 @@ Finally one can clean up by running
 make clean
 ``` -->
 
+## Installing from PyPI
+
+If you prefer a pure pip installation without conda, chemsmart is available on PyPI:
+
+```bash
+pip install chemsmart
+```
+
+This covers all core functionality. To also enable OpenBabel-dependent features (file format conversion, InChI/InChIKey calculation), install the optional extra:
+
+```bash
+pip install chemsmart[openbabel]
+```
+
+> **Note on platform support for `[openbabel]`**: The PyPI OpenBabel wheels include the C++ library on Linux. On macOS and Windows, you need to install the system OpenBabel library first (`brew install open-babel` on macOS, or use conda).
+
+For everything pip can deliver in one command:
+
+```bash
+pip install chemsmart[full]
+```
+
+**PyMOL features are not available via pip.** PyMOL (used for molecular visualisation and PyMOL RMSD grouping) is only distributed via conda-forge and is not on PyPI. For full functionality including PyMOL, use the conda-based installation above:
+
+```bash
+conda install -c conda-forge pymol-open-source
+```
+
+| Feature | `pip install chemsmart` | `pip install chemsmart[full]` | conda setup |
+|---------|------------------------|-------------------------------|-------------|
+| Core CLI, job creation, analysis | ✅ | ✅ | ✅ |
+| OpenBabel format conversion / InChI | ❌ | ✅ (Linux) / ⚠️ (macOS/Win) | ✅ |
+| PyMOL visualisation & RMSD grouping | ❌ | ❌ | ✅ |
+
 ## Testing Installations
 
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 

@@ -416,7 +416,8 @@ class Molecule:
         except ImportError as exc:
             raise ImportError(
                 "Calculating InChIKey requires Open Babel. "
-                "Use 'conda install -c conda-forge openbabel' to install."
+                "Install via pip: 'pip install chemsmart[openbabel]' (Linux) "
+                "or conda: 'conda install -c conda-forge openbabel' (all platforms)."
             ) from exc
 
         # Build an XYZ string in memory for topological perception
@@ -477,7 +478,8 @@ class Molecule:
         except ImportError as exc:
             raise ImportError(
                 "Calculating InChI requires Open Babel. "
-                "Use 'conda install -c conda-forge openbabel' to install."
+                "Install via pip: 'pip install chemsmart[openbabel]' (Linux) "
+                "or conda: 'conda install -c conda-forge openbabel' (all platforms)."
             ) from exc
 
         lines = [str(self.num_atoms), "Created for InChI via Open Babel"]
@@ -1750,8 +1752,9 @@ class Molecule:
                 except OSError:
                     pass
             raise ImportError(
-                "Converting to PDB via Open Babel requires openbabel. "
-                "Install with: ``conda install -c conda-forge openbabel``"
+                "Converting to PDB requires Open Babel. "
+                "Install via pip: 'pip install chemsmart[openbabel]' (Linux) "
+                "or conda: 'conda install -c conda-forge openbabel' (all platforms)."
             ) from exc
 
         xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)

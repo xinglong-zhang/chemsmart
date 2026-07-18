@@ -333,7 +333,8 @@ class FileConverter:
                 os.remove(xyz_filename)
             raise ImportError(
                 "xyz_to_pdb requires Open Babel. "
-                "Use 'conda install -c conda-forge openbabel' to install it."
+                "Install via pip: 'pip install chemsmart[openbabel]' (Linux) "
+                "or conda: 'conda install -c conda-forge openbabel' (all platforms)."
             ) from exc
 
         xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)

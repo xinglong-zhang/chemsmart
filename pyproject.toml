@@ -48,6 +48,12 @@ dependencies = [
 voronoi = [
     "scipy==1.15.2",
 ]
+openbabel = [
+    "openbabel>=3.1.1",
+]
+full = [
+    "chemsmart[voronoi,openbabel]",
+]
 test = [
     "pytest==8.3.4",
     "pytest-mock>=3.14.0",
