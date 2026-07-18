@@ -1,4 +1,4 @@
-# Chemsmart Iterate Configuration Template (YAML)
+# CHEMSMART Iterate Configuration Template (YAML)
 # ================================================
 #
 # The configuration is split into two independent layers:
@@ -6,10 +6,10 @@
 #      This file *is* the YAML input; it lists skeletons and substituents.
 #   2. Algorithm layer      -> how substituent positions are optimized.
 #      Configured via the optional top-level 'algorithm' block below, and/or
-#      via a CLI algorithm subcommand ('yaml lagrange', 'yaml etkdg').
+#      via a CLI algorithm subcommand ('yaml jlgo', 'yaml etkdg').
 #
 # ALGORITHM PRIORITY (low -> high):
-#   built-in default (lagrange_multipliers)
+#   built-in default (etkdg)
 #     < 'algorithm' block in this file
 #     < CLI algorithm subcommand name
 #     < CLI algorithm options explicitly passed on the command line.
@@ -29,35 +29,28 @@
 #   - Atom indices are 1-based (first atom is index 1).
 #   - If skeleton_indices is specified, it must include all link atoms.
 
-# === Algorithm layer (optional; default is lagrange_multipliers) ===
+# === Algorithm layer (optional; default is etkdg) ===
 algorithm:
-  name: lagrange_multipliers      # or 'etkdg'
+  name: etkdg                     # or 'jlgo'
   options:
-    # Joint Lagrange places one or more substituents in a single 6K-dim
-    # optimization. With adaptive sampling on (default), a fixed coarse stage
-    # runs first and the six sampling/pruning parameters (n_link_sphere,
-    # n_orientation_sphere, n_axial, candidate_pool_size, preselect,
-    # beam_width) only take effect when the coarse stage does not yield
-    # an acceptable optimized structure; max_starts and slsqp_maxiter always
-    # apply. Set
-    # use_adaptive_sampling: false to always apply the full sampling values.
-    use_adaptive_sampling: true
-    n_link_sphere: 48
-    n_orientation_sphere: 24
-    n_axial: 4
-    candidate_pool_size: 20
-    preselect: 48
-    beam_width: 4096
-    max_starts: 8
-    slsqp_maxiter: 200
-  # --- ETKDG (RDKit ETKDGv3; local by default) ---
-  # name: etkdg
+    # RDKit ETKDGv3 embedding; local mode keeps the skeleton fixed.
+    use_global_optimization: false  # true re-embeds every atom
+    num_conformers: 10              # best (lowest-energy) one is kept
+    random_seed: 42
+    max_iterations: 2000
+    force_field: none               # or uff / mmff94 / mmff94s
+  # --- JLGO (Joint Lagrange Geometry Optimization) ---
+  # name: jlgo
   # options:
-  #   use_global_optimization: false  # true re-embeds every atom
-  #   num_conformers: 10              # best (lowest-energy) one is kept
-  #   random_seed: 42
-  #   max_iterations: 2000
-  #   force_field: none               # or uff / mmff94 / mmff94s
+  #   use_adaptive_sampling: true
+  #   n_link_sphere: 48
+  #   n_orientation_sphere: 24
+  #   n_axial: 4
+  #   candidate_pool_size: 20
+  #   preselect: 48
+  #   beam_width: 4096
+  #   max_starts: 8
+  #   slsqp_maxiter: 200
 
 skeletons:
   # === link_index shorthand (auto-assigned group 1) ===

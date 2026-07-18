@@ -19,7 +19,7 @@ public numerical behavior is controlled through ``JointLagrangeConfig``.
 The Version 2 numerical core is ported from the standalone
 ``joint_lagrange_optimizer`` (only the test-only ``write_xyz`` helper is
 dropped, and storage-only internal records are compacted without changing
-the numerical path). ``IterateJointLagrangeAnalyzer`` provides the ChemSmart
+the numerical path). ``IterateJointLagrangeAnalyzer`` provides the CHEMSMART
 integration at the end of this algorithm module. The registry imports this
 module lazily, so the ETKDG path never loads the Joint-Lagrange SciPy core.
 """
@@ -1984,7 +1984,7 @@ def optimize_joint_lagrange(
 
 
 class IterateJointLagrangeAnalyzer:
-    """ChemSmart adapter for the Version 2 Joint-Lagrange optimizer.
+    """CHEMSMART adapter for the Version 2 Joint-Lagrange optimizer.
 
     Joins a skeleton and one *or more* substituents into a single molecule via
     one 6K-dimensional joint optimization. The same path is used for a single
@@ -1996,7 +1996,7 @@ class IterateJointLagrangeAnalyzer:
 
     The heavy algorithm lives in :class:`JointLagrangeOptimizer` in this
     module, which the registry imports lazily so the ETKDG path never loads the
-    Joint-Lagrange SciPy core. This class only performs the ChemSmart <->
+    Joint-Lagrange SciPy core. This class only performs the CHEMSMART <->
     Version 2 translation: it converts each :class:`Molecule` into the
     lightweight :class:`Mol` container, converts the 1-based iterate link
     indices to the 0-based indices the optimizer expects (exactly once), runs
@@ -2093,7 +2093,7 @@ class IterateJointLagrangeAnalyzer:
 
     @staticmethod
     def _to_joint_mol(molecule: Molecule) -> Mol:
-        """Convert a ChemSmart Molecule into the Version 2 ``Mol``."""
+        """Convert a CHEMSMART Molecule into the Version 2 ``Mol``."""
         return Mol(
             positions=molecule.positions,
             elements=list(molecule.chemical_symbols),

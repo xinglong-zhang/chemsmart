@@ -139,16 +139,18 @@ def _build_job(
 
 
 @pytest.mark.parametrize(
-    ("config_name", "expected_name"),
+    ("config_name", "expected_name", "algorithm_args"),
     [
         pytest.param(
-            "lagrange_generation.yaml",
-            "lagrange_generation.xyz",
-            id="joint-lagrange",
+            "jlgo_generation.yaml",
+            "jlgo_generation.xyz",
+            ["jlgo"],
+            id="jlgo",
         ),
         pytest.param(
             "etkdg_generation.yaml",
             "etkdg_generation.xyz",
+            ["etkdg"],
             id="etkdg",
         ),
     ],
@@ -156,6 +158,7 @@ def _build_job(
 def test_iterate_cli_generation_matches_golden(
     config_name: str,
     expected_name: str,
+    algorithm_args: list[str],
     tmp_path: Path,
 ):
     """Both algorithms reproduce their manually generated eight structures."""
@@ -171,6 +174,7 @@ def test_iterate_cli_generation_matches_golden(
             "1",
             "-o",
             str(output_base),
+            *algorithm_args,
         ],
         obj={},
     )
@@ -191,7 +195,7 @@ def test_iterate_cli_generation_matches_golden(
     assert "CHEMSMART ITERATE JOB REPORT" in report_text
     assert "Total combinations:      8" in report_text
     assert "Generated successfully:      8" in report_text
-    assert "Normal termination of ChemSmart Iterate" in report_text
+    assert "Normal termination of CHEMSMART Iterate" in report_text
 
 
 def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
@@ -224,7 +228,7 @@ def test_iterate_template_matches_golden(tmp_path: Path):
 
     assert generated_text.strip() == TEMPLATE_GOLDEN.read_text().strip()
     parsed = yaml.safe_load(generated_text)
-    assert parsed["algorithm"]["name"] == "lagrange_multipliers"
+    assert parsed["algorithm"]["name"] == "etkdg"
     assert len(parsed["skeletons"]) == 1
     assert len(parsed["substituents"]) == 1
 
@@ -403,7 +407,7 @@ substituents:
     assert report_path.exists()
     report_text = report_path.read_text()
     assert ERROR_CODE_INPUT in report_text
-    assert "Error termination of ChemSmart Iterate" in report_text
+    assert "Error termination of CHEMSMART Iterate" in report_text
 
 
 def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):

@@ -6,11 +6,11 @@ configuration file). The position-optimization *algorithm* is a separate
 layer, selected via an optional algorithm subcommand:
 
 \b
-    yaml lagrange   Joint Lagrange algorithm (joint multi-substituent).
-    yaml etkdg      RDKit ETKDGv3 algorithm (local by default; --global).
+    yaml etkdg   RDKit ETKDGv3 algorithm (local by default; --global).
+    yaml jlgo    Joint Lagrange Geometry Optimization (multi-substituent).
 
 When no algorithm subcommand is given, the algorithm declared in the YAML
-``algorithm`` block (or the built-in default ``lagrange_multipliers``) is
+``algorithm`` block (or the built-in default ``etkdg``) is
 used. Algorithm parameters live only on their respective subcommands so that
 different algorithms cannot share the same option namespace.
 """
@@ -427,7 +427,7 @@ def yaml_cmd(
 
     The YAML file defines skeletons and substituents. The optimization
     algorithm can be declared in the YAML ``algorithm`` block or selected
-    via an algorithm subcommand (``lagrange``, ``etkdg``). When both are
+    via an algorithm subcommand (``jlgo``, ``etkdg``). When both are
     given, the CLI takes precedence.
 
     All skeletons participate in global contiguous group numbering;
@@ -438,8 +438,8 @@ def yaml_cmd(
 
     \b
     chemsmart run iterate yaml -f config.yaml
-    chemsmart run iterate yaml -f config.yaml lagrange
-    chemsmart run iterate yaml -f config.yaml lagrange \\
+    chemsmart run iterate yaml -f config.yaml jlgo
+    chemsmart run iterate yaml -f config.yaml jlgo \\
         --no-adaptive-sampling \\
         --link-sphere-samples 48 \\
         --axial-samples 4
@@ -495,7 +495,7 @@ def yaml_cmd(
         _execute_iterate_job(ctx)
 
 
-@yaml_cmd.command(name="lagrange")
+@yaml_cmd.command(name="jlgo")
 @click.option(
     "--adaptive-sampling/--no-adaptive-sampling",
     "use_adaptive_sampling",
@@ -574,7 +574,7 @@ def yaml_cmd(
     help="Maximum SLSQP iterations per start.",
 )
 @click.pass_context
-def lagrange(
+def jlgo(
     ctx,
     use_adaptive_sampling,
     n_link_sphere,
@@ -587,7 +587,7 @@ def lagrange(
     slsqp_maxiter,
 ):
     """
-    Optimize substituent positions with the Joint Lagrange algorithm.
+    Run Joint Lagrange Geometry Optimization (JLGO).
 
     Attaches one or more substituents to the skeleton in a single joint
     (6K-dimensional) optimization. Options passed here override the matching
@@ -605,8 +605,8 @@ def lagrange(
     Examples:
 
     \b
-    chemsmart run iterate yaml -f config.yaml lagrange
-    chemsmart run iterate yaml -f config.yaml lagrange \\
+    chemsmart run iterate yaml -f config.yaml jlgo
+    chemsmart run iterate yaml -f config.yaml jlgo \\
         --no-adaptive-sampling \\
         --max-starts 16 \\
         --slsqp-maxiter 300
@@ -627,7 +627,7 @@ def lagrange(
     )
     _execute_iterate_job(
         ctx,
-        cli_algorithm_name="lagrange_multipliers",
+        cli_algorithm_name="jlgo",
         cli_options=cli_options,
     )
 

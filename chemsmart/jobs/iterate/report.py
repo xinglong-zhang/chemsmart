@@ -1,4 +1,4 @@
-"""Plain-text run report for ChemSmart Iterate jobs.
+"""Plain-text run report for CHEMSMART Iterate jobs.
 
 This module renders a Gaussian-log-style ``.out`` report describing an
 iterate run: the input structures, the resolved algorithm configuration,
@@ -252,7 +252,7 @@ class IterateReport:
         lines = ["", " GENERAL INFORMATION", ""]
         lines += [
             f" Run ID:                  {self.run_id}",
-            f" ChemSmart version:       {self.chemsmart_version}",
+            f" CHEMSMART version:       {self.chemsmart_version}",
             f" RDKit version:           {self.rdkit_version}",
             "",
             f" Start time:              {started}",
@@ -535,8 +535,8 @@ class IterateReport:
         """Return the fixed-format final termination line."""
         ts = self.finished_at.strftime("%Y-%m-%d %H:%M:%S")
         if exit_code == 0:
-            return f"Normal termination of ChemSmart Iterate at {ts}."
-        return f"Error termination of ChemSmart Iterate at {ts}."
+            return f"Normal termination of CHEMSMART Iterate at {ts}."
+        return f"Error termination of CHEMSMART Iterate at {ts}."
 
 
 def _numbers(results: list, status: str) -> str:

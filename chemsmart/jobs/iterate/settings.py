@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default algorithm used when neither YAML nor CLI specify one.
-DEFAULT_ALGORITHM_NAME = "lagrange_multipliers"
+DEFAULT_ALGORITHM_NAME = "etkdg"
 
 # Valid slot-combination strategies for IterateJobSettings.
 _VALID_COMBINATION_MODES = ("independent", "global")
@@ -45,7 +45,7 @@ class IterateAlgorithmConfig:
     Attributes
     ----------
     name : str
-        Canonical algorithm name (e.g. ``lagrange_multipliers``).
+        Canonical algorithm name (e.g. ``etkdg``).
     options : dict
         Algorithm-specific options (e.g. ``n_link_sphere``).
     """
@@ -179,7 +179,7 @@ def _build_lagrange_analyzer(
     skeleton,
     substituents,
 ):
-    from chemsmart.jobs.iterate.joint_lagrange import (
+    from chemsmart.jobs.iterate.jlgo import (
         IterateJointLagrangeAnalyzer,
     )
 
@@ -241,8 +241,8 @@ def _build_alias_map(specs):
 # chemsmart/cli/iterate/yaml_cmd.py.
 _ALGORITHM_SPECS = (
     AlgorithmSpec(
-        canonical_name="lagrange_multipliers",
-        aliases=("lagrange", "lagrange_multipliers"),
+        canonical_name="jlgo",
+        aliases=("jlgo", "lagrange", "lagrange_multipliers"),
         default_options={
             # Adaptive sampling first runs a fixed coarse stage; the six
             # full-stage sampling/pruning parameters (n_link_sphere,
@@ -356,7 +356,7 @@ def get_algorithm_spec(name: str) -> AlgorithmSpec:
 def normalize_algorithm_name(name: str) -> str:
     """Normalize an algorithm name/alias to its canonical form.
 
-    E.g. ``lagrange`` -> ``lagrange_multipliers``, ``etkdg`` -> ``etkdg``.
+    E.g. ``lagrange_multipliers`` -> ``jlgo``, ``etkdg`` -> ``etkdg``.
     """
     return get_algorithm_spec(name).canonical_name
 
@@ -415,7 +415,7 @@ def resolve_algorithm_config(
 
     Priority (lowest to highest):
 
-    1. Built-in default (``lagrange_multipliers`` + spec default options).
+    1. Built-in default (``etkdg`` + spec default options).
     2. YAML ``algorithm`` block (name and options).
     3. CLI algorithm subcommand (name only).
     4. CLI explicitly-provided options.
@@ -489,7 +489,7 @@ class IterateJobSettings:
             Path to the YAML configuration file.
         algorithm_config : IterateAlgorithmConfig, optional
             Resolved algorithm configuration (name + options). When omitted,
-            it falls back to the built-in default (``lagrange_multipliers``
+            it falls back to the built-in default (``etkdg``
             with its default options). This is the single source of truth for
             the algorithm and its parameters.
         combination_mode : str, optional

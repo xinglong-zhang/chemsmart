@@ -1,5 +1,5 @@
 algorithm:
-  name: lagrange_multipliers
+  name: jlgo
 
 skeletons:
   - file_path: "../input/benzene.xyz"
