@@ -159,7 +159,7 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-Linux
+          name: coverage-${{ runner.os }}
           path: |
             coverage.xml
             htmlcov/
