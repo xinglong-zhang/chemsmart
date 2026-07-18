@@ -1,16 +1,25 @@
 import logging
 import re
 from functools import cached_property
-from itertools import islice
 
 import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.constants import (
+    cal_to_joules,
+    energy_conversion,
+    joule_per_mol_to_hartree,
+    kcal_per_mol_to_hartree,
+)
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
+    basis_primitive_line_pattern,
+    basis_shell_header_pattern,
+    ecp_center_header_pattern,
+    ecp_term_pattern,
     eV_pattern,
     f_pattern,
     float_pattern,
@@ -76,38 +85,361 @@ class Gaussian16Output(GaussianFileMixin):
         if len(contents) == 0:
             return False
 
-        last_line = contents[-1]
-        if "Normal termination of Gaussian" in last_line:
-            logger.debug(f"File {self.filename} terminated normally.")
-            return True
+        for line in reversed(contents):
+            if not line:
+                continue
+            if "Normal termination of Gaussian" in line:
+                logger.debug(f"File {self.filename} terminated normally.")
+                return True
+            break
 
         logger.debug(f"File {self.filename} has error termination.")
         return False
 
     @property
     def heavy_elements(self):
-        """TODO"""
-        return None
+        """List of element symbols that use an explicitly defined basis set
+        in the gen/genecp section.
+        """
+        return self._genecp_info["heavy_elements"]
 
     @property
     def heavy_elements_basis(self):
-        """TODO"""
-        return None
+        """
+        Structured basis specification for heavy elements.
+        When the route string starts with #p, Gaussian prints the expanded
+        orbital exponents and coefficients for elements that use an explicitly
+        defined gen/genecp basis.  This property parses that information into
+        a dict keyed by element symbol, where each value is an ordered list of
+        shell dicts:
+            {
+                'Br': [
+                    {'shell': 'S', 'primitives': [(exp, coef), ...]},
+                    ...
+                    {'shell': 'F', 'primitives': [(exp, coef)]},
+                ],
+            }
+        Returns None when the information is unavailable.
+        """
+        return self._genecp_info["heavy_elements_basis"]
+
+    @property
+    def heavy_elements_ecp(self):
+        """
+        ECP (effective core potential) specification for heavy elements.
+        Only available for genecp calculations with #p verbose output.
+        Returns a dict keyed by element symbol:
+            {
+                'Ag': {
+                    'n_valence_electrons': 19,
+                    'channels': [
+                        {
+                            'name': 'F and up',
+                            'terms': [(r_power, exponent, coefficient, so_coefficient), ...],
+                        },
+                        ...
+                    ],
+                }
+            }
+        Returns None when not a genecp calculation or information is unavailable.
+        """
+        return self._genecp_info["heavy_elements_ecp"]
 
     @property
     def light_elements(self):
-        """TODO"""
-        return None
+        """List of element symbols that use a standard basis set
+        in the gen/genecp section.
+        """
+        return self._genecp_info["light_elements"]
 
     @property
     def light_elements_basis(self):
-        """TODO"""
-        return None
+        """Basis set used for light elements."""
+        return self._genecp_info["light_elements_basis"]
+
+    @cached_property
+    def _genecp_info(self):
+        """
+        Parse gen/genecp basis set information from the output file.
+        Only available when the route string starts with #p.
+        """
+        result = {
+            "light_elements": None,
+            "light_elements_basis": None,
+            "heavy_elements": None,
+            "heavy_elements_basis": None,
+            "heavy_elements_ecp": None,
+        }
+        if self.gen_genecp is None:
+            return result
+        try:
+            atom_symbols = self.symbols
+        except Exception:
+            return result
+        if not atom_symbols:
+            return result
+        shell_header = re.compile(basis_shell_header_pattern)
+        light_elements_set = set()
+        light_elements_basis = None
+        heavy_basis_by_element: dict[str, list[dict]] = {}
+
+        for i, line in enumerate(self.contents):
+            if not line.startswith("General basis read from cards:"):
+                continue
+            j = i + 1
+            while j < len(self.contents):
+                line_j = self.contents[j].strip()
+                if not line_j:
+                    j += 1
+                    continue
+                if not line_j.startswith("Centers:"):
+                    break
+                # Parse "Centers: N1 N2 ..." -> list of 1-based center indices
+                center_nums = []
+                for token in line_j.split()[1:]:
+                    try:
+                        center_nums.append(int(token))
+                    except ValueError:
+                        pass
+                j += 1
+                # Skip blank lines
+                while j < len(self.contents) and not self.contents[j].strip():
+                    j += 1
+                if j >= len(self.contents):
+                    break
+                content_line = self.contents[j].strip()
+                if shell_header.match(content_line):
+                    # Explicit orbital specification -> heavy element
+                    # Collect every line of this block up to "****"
+                    block_lines = []
+                    while (
+                        j < len(self.contents)
+                        and self.contents[j].strip() != "****"
+                    ):
+                        block_lines.append(self.contents[j].strip())
+                        j += 1
+                    shells = self._parse_explicit_basis_block(block_lines)
+                    for cn in center_nums:
+                        if 1 <= cn <= len(atom_symbols):
+                            sym = atom_symbols[cn - 1]
+                            heavy_basis_by_element[sym] = shells
+                else:
+                    # Named basis set -> light element
+                    basis_name = content_line
+                    if light_elements_basis is None:
+                        light_elements_basis = basis_name
+                    for cn in center_nums:
+                        if 1 <= cn <= len(atom_symbols):
+                            light_elements_set.add(atom_symbols[cn - 1])
+                    # Advance to the next "****" separator
+                    while (
+                        j < len(self.contents)
+                        and self.contents[j].strip() != "****"
+                    ):
+                        j += 1
+                j += 1  # move past "****"
+            break
+
+        if light_elements_set:
+            result["light_elements"] = p.sorted_periodic_table_list(
+                list(light_elements_set)
+            )
+            result["light_elements_basis"] = light_elements_basis
+        if heavy_basis_by_element:
+            result["heavy_elements"] = p.sorted_periodic_table_list(
+                list(heavy_basis_by_element.keys())
+            )
+            result["heavy_elements_basis"] = heavy_basis_by_element
+        ecp = self._parse_pseudopotential_section()
+        if ecp:
+            result["heavy_elements_ecp"] = ecp
+
+        return result
+
+    @staticmethod
+    def _parse_explicit_basis_block(block_lines):
+        """
+        Parse lines of an explicitly printed Gaussian basis block into a
+        list of shell dictionaries.
+        Each dict has the keys:
+            shell – angular-momentum letter ('S', 'P', 'D', 'F', 'H')
+            primitives – list of (exponent, coefficient) float tuples
+        """
+        shell_header = re.compile(basis_shell_header_pattern)
+        primitive_line = re.compile(basis_primitive_line_pattern)
+        shells = []
+        current_shell = None
+        for raw in block_lines:
+            line = raw.strip()
+            m_shell = shell_header.match(line)
+            m_prim = primitive_line.search(line)
+            if m_shell:
+                if current_shell is not None:
+                    shells.append(current_shell)
+                current_shell = {"shell": m_shell.group(1), "primitives": []}
+            elif m_prim and current_shell is not None:
+                exp = float(m_prim.group(1).upper().replace("D", "E"))
+                coef = float(m_prim.group(2).upper().replace("D", "E"))
+                current_shell["primitives"].append((exp, coef))
+        if current_shell is not None:
+            shells.append(current_shell)
+        return shells
+
+    def _parse_pseudopotential_section(self):
+        """
+        Parse the Pseudopotential Parameters section into an element ->
+        ECP information dictionary.
+        Each ECP dict has the keys:
+            n_valence_electrons – number of explicitly treated valence electrons
+            channels – list of ECP channel dictionaries
+        Each channel dict has the keys:
+            name – channel label (e.g. 'F and up', 'S - F')
+            terms – list of
+                (r_power, exponent, coefficient, spin_orbit_coefficient)
+                float tuples
+        Elements with "No pseudopotential on this center." are omitted.
+        Returns an empty dict if the section is not found.
+        """
+        try:
+            atom_symbols = self.symbols
+        except Exception:
+            return {}
+        center_re = re.compile(ecp_center_header_pattern)
+        term_re = re.compile(ecp_term_pattern)
+        result = {}
+        eq_count = 0
+        current = None
+
+        def _flush_channel():
+            if (
+                current
+                and current["_channel_name"]
+                and current["_channel_terms"]
+            ):
+                current["channels"].append(
+                    {
+                        "name": current["_channel_name"],
+                        "terms": current["_channel_terms"],
+                    }
+                )
+            if current:
+                current["_channel_name"] = None
+                current["_channel_terms"] = []
+
+        def _flush_center():
+            nonlocal current
+            if current and current["channels"]:
+                sym = atom_symbols[current["center_num"] - 1]
+                result[sym] = {
+                    "n_valence_electrons": current["n_valence_electrons"],
+                    "channels": current["channels"],
+                }
+            current = None
+
+        for line in self.contents:
+            if not line:
+                continue
+            if "Pseudopotential Parameters" in line:
+                eq_count = 0
+                continue
+            if line.startswith("="):
+                eq_count += 1
+                if eq_count == 3:
+                    _flush_channel()
+                    _flush_center()
+                    break
+                continue
+            if eq_count < 2:
+                continue
+
+            tokens = line.split()
+            is_center = len(tokens) in (2, 3) and all(
+                t.isdigit() for t in tokens
+            )
+            is_term = (
+                len(tokens) == 4 and tokens[0].isdigit() and "." in tokens[1]
+            )
+            if is_center:
+                _flush_channel()
+                _flush_center()
+                current = {
+                    "center_num": int(tokens[0]),
+                    "n_valence_electrons": (
+                        int(tokens[2]) if len(tokens) == 3 else None
+                    ),
+                    "channels": [],
+                    "_channel_name": None,
+                    "_channel_terms": [],
+                }
+            elif "No pseudopotential on this center" in line:
+                pass  # light element, skip
+            elif is_term and current is not None:
+                r_power = int(tokens[0])
+                exp = float(tokens[1].upper().replace("D", "E"))
+                coef = float(tokens[2].upper().replace("D", "E"))
+                so_coef = float(tokens[3].upper().replace("D", "E"))
+                current["_channel_terms"].append((r_power, exp, coef, so_coef))
+            elif (
+                current is not None
+                and not center_re.match(line)
+                and not term_re.match(line)
+            ):
+                _flush_channel()
+                current["_channel_name"] = line
+                current["_channel_terms"] = []
+        return result
 
     @property
     def custom_solvent(self):
-        """TODO"""
-        return None
+        """
+        Parse custom/generic solvent parameters from the verbose Gaussian
+        PCM/SMD section into a structured dictionary with standardized keys.
+        Returns a stuctured representation of the custom/generic solvent
+        parameters:
+            {
+                "SolventName": "1,1,1,3,3,3-hexafluoropropan-2-ol",
+                "Eps": 16.7,
+                "EpsInf": 1.625625,
+                "HbondAcidity": 0.77,
+                "HbondBasicity": 0.1,
+                "SurfaceTensionAtInterface": 23.23,
+                "CarbonAromaticity": 0.0,
+                "ElectronegativeHalogenicity": 0.6,
+            }
+            or None if no custom solvent section is found.
+        """
+        non_standard_marker = "Using the following non-standard input for PCM:"
+        if not any(
+            line.startswith(non_standard_marker) for line in self.contents
+        ):
+            return None
+        key_map = [
+            ("Eps(infinity)", "EpsInf"),
+            ("Eps ", "Eps"),
+            ("Hydrogen bond acidity", "HbondAcidity"),
+            ("Hydrogen bond basicity", "HbondBasicity"),
+            ("Surface tension at interface", "SurfaceTensionAtInterface"),
+            ("Carbon aromaticity", "CarbonAromaticity"),
+            ("Electronegative halogenicity", "ElectronegativeHalogenicity"),
+        ]
+        params = {}
+        inside = False
+        for line in self.contents:
+            if line.startswith("Solvent") and ":" in line:
+                name = line.split(":", 1)[1].strip().rstrip(",").strip()
+                params["SolventName"] = name
+                inside = True
+                continue
+            if not inside:
+                continue
+            if line.startswith("---"):
+                break
+            for prefix, key in key_map:
+                if line.startswith(prefix):
+                    value_str = line.split("=", 1)[1].strip().split()[0]
+                    params[key] = float(value_str)
+                    break
+        return params if params else None
 
     @cached_property
     def num_steps(self):
@@ -179,6 +511,36 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain the coordinate block from the
         input that is printed in the outputfile."""
         coordinates_block_lines_list = []
+
+        def _is_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            if len(elements) < 5:
+                return False
+
+            atom = elements[0]
+            if atom in p.PERIODIC_TABLE:
+                pass
+            else:
+                try:
+                    atom_float = float(atom)
+                    if not atom_float.is_integer():
+                        return False
+                except ValueError:
+                    return False
+
+            try:
+                float(elements[2])
+                float(elements[3])
+                float(elements[4])
+            except ValueError:
+                return False
+
+            return True
+
+        def _normalize_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            return f"{elements[0]} {elements[2]} {elements[3]} {elements[4]}"
+
         for i, line in enumerate(self.contents):
             if line.startswith("Symbolic Z-matrix:"):
                 for j_line in self.contents[i + 2 :]:
@@ -195,6 +557,25 @@ class Gaussian16Output(GaussianFileMixin):
                         # elif j_line.startswith("TV"):
                         # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
+                if len(coordinates_block_lines_list) > 0:
+                    break
+            elif "Redundant internal coordinates found in file." in line:
+                for j_line in self.contents[i + 1 :]:
+                    if len(j_line) == 0:
+                        if len(coordinates_block_lines_list) > 0:
+                            break
+                        continue
+                    if j_line.startswith("Charge ="):
+                        logger.debug(f"Skipping line: {j_line}")
+                        continue
+                    if _is_oldform_coordinate_line(j_line):
+                        coordinates_block_lines_list.append(
+                            _normalize_oldform_coordinate_line(j_line)
+                        )
+                    elif len(coordinates_block_lines_list) > 0:
+                        break
+                if len(coordinates_block_lines_list) > 0:
+                    break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
@@ -205,6 +586,20 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the
         structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
+
+        Each structure additionally carries these attributes when available:
+          - point_group and rotational_constants — attached per step,
+            aligned 1:1 with structures.
+          - dipole_moment and dipole_moment_magnitude — attached to the
+            final structure only.
+          - mulliken_atomic_charges and mulliken_spin_densities — attached
+            to the final structure only.
+          - The following are attached to the final structure only, and only
+            when a frequency section is present:
+              vibrational_frequencies, vibrational_reduced_masses,
+              vibrational_force_constants, vibrational_ir_intensities,
+              vibrational_mode_symmetries, vibrational_modes,
+              rotational_symmetry_number.
         """
         return self._get_all_molecular_structures()
 
@@ -245,16 +640,24 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
+        rot_consts = (
+            list(self.all_rotational_constants(mode="physical")) or None
+        )
+        point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
         def drop_first():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             if orientations:
                 orientations = orientations[1:]
             if orientations_pbc:
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
+            if rot_consts:
+                rot_consts = rot_consts[1:]
+            if point_groups:
+                point_groups = point_groups[1:]
             # Forces do not need to be dropped here because no
             # force computation occurs at the first link job.
             # This is intentional: the forces array is
@@ -262,7 +665,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             orientations = orientations[-1:] if orientations else []
             orientations_pbc = (
                 orientations_pbc[-1:] if orientations_pbc else []
@@ -271,11 +674,15 @@ class Gaussian16Output(GaussianFileMixin):
                 energies = energies[-1:]
             if forces:
                 forces = forces[-1:]
+            if rot_consts:
+                rot_consts = rot_consts[-1:]
+            if point_groups:
+                point_groups = point_groups[-1:]
 
         # Right-trim auxiliaries to the number of
         # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             n = len(orientations)
             if orientations_pbc and len(orientations_pbc) > n:
                 orientations_pbc = orientations_pbc[:n]
@@ -283,6 +690,10 @@ class Gaussian16Output(GaussianFileMixin):
                 energies = energies[:n]
             if forces and len(forces) > n:
                 forces = forces[:n]
+            if rot_consts and len(rot_consts) > n:
+                rot_consts = rot_consts[:n]
+            if point_groups and len(point_groups) > n:
+                point_groups = point_groups[:n]
 
         # 2) Handle link jobs
         if self.is_link:
@@ -346,6 +757,24 @@ class Gaussian16Output(GaussianFileMixin):
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
+        # Calculate is_optimized_structure_list
+        is_optimized = [False] * num_structures_to_use
+        if self.optimized_steps_indices and self.include_intermediate:
+            for idx in self.optimized_steps_indices:
+                if 0 <= idx < len(is_optimized):
+                    is_optimized[idx] = True
+        elif self.normal_termination:
+            is_optimized[-1] = True
+
+        # For opt+freq-like tails, keep both optimized tags when the final
+        # frame is a duplicate of the previous optimized geometry.
+        if num_structures_to_use >= 2 and is_optimized[-1]:
+            idx_last = num_structures_to_use - 1
+            if np.allclose(
+                orientations[idx_last], orientations[idx_last - 1], rtol=1e-5
+            ):
+                is_optimized[idx_last - 1] = True
+
         # 5) Build Molecule list
         create_kwargs = dict(
             orientations=orientations,
@@ -357,6 +786,9 @@ class Gaussian16Output(GaussianFileMixin):
             multiplicity=self.multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=self.list_of_pbc_conditions,
+            is_optimized_structure_list=is_optimized,
+            rotational_constants_list=rot_consts,
+            point_groups_list=point_groups,
         )
 
         if self.normal_termination:
@@ -369,16 +801,16 @@ class Gaussian16Output(GaussianFileMixin):
             )
 
         # 6) Keep only optimized steps if requested
-        if (
-            getattr(self, "optimized_steps_indices", None)
-            and not self.include_intermediate
-        ):
+        if self.optimized_steps_indices and not self.include_intermediate:
             logger.debug(
                 "Ignoring intermediate optimization steps (constrained opt)."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+            # Since we filtered to only optimized steps, mark all as optimized
+            for mol in all_structures:
+                mol.is_optimized_structure = True
 
         logger.debug(
             "Attaching vibrational data to the final structure if available..."
@@ -388,8 +820,17 @@ class Gaussian16Output(GaussianFileMixin):
         # Attach vibrational data to the final structure if available
         if self.num_vib_frequencies:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
+        # Attach Mulliken charges/spin densities and dipole moments to the final structure
+        if self.mulliken_atomic_charges is not None:
+            last_mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        if self.mulliken_spin_densities is not None:
+            last_mol.mulliken_spin_densities = self.mulliken_spin_densities
+        if self.has_dipole_moment:
+            last_mol.dipole_moment = self.all_dipole_moments[-1]
+            last_mol.dipole_moment_magnitude = (
+                self.all_dipole_moment_magnitudes[-1]
+            )
 
-        logger.debug("Total structures returned: %d", len(all_structures))
         return all_structures
 
     @cached_property
@@ -411,7 +852,9 @@ class Gaussian16Output(GaussianFileMixin):
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
         """
-        return self.all_structures[-1]
+        if self.all_structures:
+            return self.all_structures[-1]
+        return self.input_coordinates_block.molecule
 
     @property
     def molecule(self):
@@ -770,6 +1213,9 @@ class Gaussian16Output(GaussianFileMixin):
         setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
         setattr(mol, "vibrational_modes", vib["modes"])
 
+        # Attach rotational symmetry number
+        mol.rotational_symmetry_number = self.rotational_symmetry_number
+
         return mol
 
     #### FREQUENCY CALCULATIONS
@@ -948,6 +1394,253 @@ class Gaussian16Output(GaussianFileMixin):
                 return float(line.split()[2])
         return None
 
+    @cached_property
+    def thermal_vibration_correction(self):
+        """
+        Thermal vibration correction in Hartree.
+        """
+        if self.zero_point_energy is not None:
+            for i, line_i in enumerate(self.contents):
+                if "E (Thermal)" in line_i and "CV" in line_i:
+                    for line_j in self.contents[i + 1 :]:
+                        if "Vibrational" in line_j:
+                            return (
+                                float(line_j.split()[1])
+                                * kcal_per_mol_to_hartree
+                                - self.zero_point_energy
+                            )
+        return None
+
+    @cached_property
+    def thermal_rotation_correction(self):
+        """
+        Thermal rotation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_translation_correction(self):
+        """
+        Thermal translation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_energy_correction(self):
+        """
+        thermal correction to energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_enthalpy_correction(self):
+        """
+        thermal correction to enthalpy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Enthalpy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_gibbs_free_energy_correction(self):
+        """
+        thermal correction to Gibbs free energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Gibbs Free Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def internal_energy(self):
+        """
+        Sum of electronic and thermal energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Energies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def enthalpy(self):
+        """
+        Sum of electronic and thermal enthalpies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Enthalpies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def electronic_entropy_no_temperature_in_SI(self):
+        """
+        Electronic entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Electronic" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def electronic_entropy(self):
+        """
+        Electronic entropy in Hartree/K.
+        """
+        if self.electronic_entropy_no_temperature_in_SI is not None:
+            electronic_entropy_hartree = (
+                self.electronic_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return electronic_entropy_hartree
+        return None
+
+    @cached_property
+    def vibrational_entropy_no_temperature_in_SI(self):
+        """
+        Vibrational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Vibrational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def vibrational_entropy(self):
+        """
+        Vibrational entropy in Hartree/K.
+        """
+        if self.vibrational_entropy_no_temperature_in_SI is not None:
+            vibrational_entropy_hartree = (
+                self.vibrational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return vibrational_entropy_hartree
+        return None
+
+    @cached_property
+    def rotational_entropy_no_temperature_in_SI(self):
+        """
+        Rotational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def rotational_entropy(self):
+        """
+        Rotational entropy in Hartree/K.
+        """
+        if self.rotational_entropy_no_temperature_in_SI is not None:
+            rotational_entropy_hartree = (
+                self.rotational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return rotational_entropy_hartree
+        return None
+
+    @cached_property
+    def translational_entropy_no_temperature_in_SI(self):
+        """
+        Translational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def translational_entropy(self):
+        """
+        Translational entropy in Hartree/K.
+        """
+        if self.translational_entropy_no_temperature_in_SI is not None:
+            translational_entropy_hartree = (
+                self.translational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return translational_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_in_J_per_mol_per_K(self):
+        """
+        Total entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Total" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def entropy(self):
+        """
+        Total entropy in Hartree/K.
+        """
+        if self.entropy_in_J_per_mol_per_K is not None:
+            total_entropy_hartree = (
+                self.entropy_in_J_per_mol_per_K * joule_per_mol_to_hartree
+            )
+            return total_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_times_temperature(self):
+        """
+        The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
+        Return value in Hartree.
+        """
+        if (
+            self.temperature_in_K
+            and self.entropy_in_J_per_mol_per_K is not None
+        ):
+            entropy_ts_hartree = (
+                self.entropy_in_J_per_mol_per_K
+                * joule_per_mol_to_hartree
+                * self.temperature_in_K
+            )
+            return entropy_ts_hartree
+        return None
+
+    @cached_property
+    def gibbs_free_energy(self):
+        """
+        Sum of electronic and thermal free energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Free Energies=" in line:
+                return float(line.split()[-1])
+        return None
+
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
@@ -1008,6 +1701,61 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def num_forces(self):
         return len(self.forces)
+
+    @cached_property
+    def has_dipole_moment(self):
+        """Check if the output file contains dipole moment calculations."""
+        for line in self.contents:
+            if "Dipole moment (field-independent basis, Debye):" in line:
+                return True
+        return False
+
+    @cached_property
+    def all_dipole_moments(self):
+        """Obtain all dipole moments from the output file as [X, Y, Z] arrays in Debye."""
+        list_of_all_dipole_moments, _ = (
+            self._get_dipole_moments_for_molecules()
+        )
+        return list_of_all_dipole_moments
+
+    @cached_property
+    def all_dipole_moment_magnitudes(self):
+        """Obtain all dipole moment magnitudes (total) from the output file in Debye."""
+        _, list_of_all_dipole_moment_magnitudes = (
+            self._get_dipole_moments_for_molecules()
+        )
+        return list_of_all_dipole_moment_magnitudes
+
+    def _get_dipole_moments_for_molecules(self):
+        """
+        Obtain a list of dipole moments for all molecular geometries.
+        Each dipole moment is stored as a np array of shape (3,) containing
+        [X, Y, Z] components in Debye units.
+        """
+        all_dipole_moments = []
+        all_dipole_moment_magnitudes = []
+        for i, line in enumerate(self.contents):
+            if "Dipole moment (field-independent basis, Debye):" in line:
+                next_line = self.contents[i + 1]
+                parts = next_line.split()
+                x_idx = parts.index("X=") + 1
+                y_idx = parts.index("Y=") + 1
+                z_idx = parts.index("Z=") + 1
+                tot_idx = parts.index("Tot=") + 1
+                x_val = float(parts[x_idx])
+                y_val = float(parts[y_idx])
+                z_val = float(parts[z_idx])
+                tot_val = float(parts[tot_idx])
+                dipole_moment = np.array([x_val, y_val, z_val])
+                all_dipole_moment_magnitudes.append(tot_val)
+                all_dipole_moments.append(dipole_moment)
+        if len(all_dipole_moments) == 0:
+            return [], []
+        return all_dipole_moments, all_dipole_moment_magnitudes
+
+    @cached_property
+    def num_dipole_moments(self):
+        return len(self.all_dipole_moments)
 
     @cached_property
     def input_orientations(self):
@@ -1176,33 +1924,94 @@ class Gaussian16Output(GaussianFileMixin):
         return cc
 
     def _read_transitions_and_contribution_coefficients(self):
+        from chemsmart.utils.repattern import gaussian_tddft_transition_pattern
+
         transitions = []
         contribution_coefficients = []
-        for i, line in enumerate(self.contents):
-            if line.startswith("Excited State"):
+        td_transition_pattern = re.compile(gaussian_tddft_transition_pattern)
+
+        i = 0
+        n = len(self.contents)
+
+        while i < n:
+            line = self.contents[i]
+            if line.lstrip().startswith("Excited State"):
                 each_state_transitions = []
                 each_state_contribution_coefficients = []
-                # parse the lines that follow until
-                # an empty line is encountered
-                j = 1
-                while len(self.contents[i + j]) != 0:
-                    line_element = self.contents[i + j].split()
-                    if len(line_element) <= 4:
-                        mo_transition = " ".join(
-                            list(islice(line_element, len(line_element) - 1))
+
+                j = i + 1
+                while j < n:
+                    current = self.contents[j]
+
+                    # stop on truly blank line
+                    if not current.strip():
+                        break
+
+                    match = td_transition_pattern.match(current)
+                    if match:
+                        from_mo, arrow, to_mo, coeff = match.groups()
+                        each_state_transitions.append(
+                            f"{from_mo} {arrow} {to_mo}"
                         )
-                        contribution_coefficient = float(line_element[-1])
-                        each_state_transitions.append(mo_transition)
                         each_state_contribution_coefficients.append(
-                            contribution_coefficient
+                            float(coeff)
                         )
+                        j += 1
+                        continue
+
+                    # once transition lines have started, stop at first non-transition line
+                    if each_state_transitions:
+                        break
+
                     j += 1
+
                 transitions.append(each_state_transitions)
                 contribution_coefficients.append(
                     each_state_contribution_coefficients
                 )
 
+                i = j
+            else:
+                i += 1
         return transitions, contribution_coefficients
+
+    @cached_property
+    def contributions(self):
+        """
+        Return the contributions of each molecular orbital excitation
+        to an excited state.
+
+        The base value for each contribution coefficient is calculated as
+        ``(coef**2) * 100``.
+
+        The returned values then depend on ``self.spin``:
+
+        - ``"restricted"``: the base percentages are doubled.
+        - ``"unrestricted"``: the base percentages are unchanged.
+        - any other value: a ``ValueError`` is raised.
+        """
+        contribution_percentage = [
+            [(coef**2) * 100 for coef in cc]
+            for cc in self.contribution_coefficients
+        ]
+
+        if self.spin == "restricted":
+            logger.debug(
+                "Closed-shell system: contribution percentage is doubled."
+            )
+            factor = 2
+        elif self.spin == "unrestricted":
+            logger.debug(
+                "Unrestricted system: contribution percentage uses base values."
+            )
+            factor = 1
+        else:
+            raise ValueError(f"Unknown spin type: {self.spin!r}")
+
+        return [
+            [round(value * factor, 1) for value in percentage]
+            for percentage in contribution_percentage
+        ]
 
     @cached_property
     def alpha_occ_eigenvalues(self):
@@ -1645,10 +2454,22 @@ class Gaussian16Output(GaussianFileMixin):
         index = string2index_1based(index)
         return self.all_structures[index]
 
+    @cached_property
+    def temperature_in_K(self):
+        for line in self.contents:
+            if "Temperature" in line and "Kelvin." in line:
+                return float(line.split()[1])
+
+    @cached_property
+    def pressure_in_atm(self):
+        for line in self.contents:
+            if "Pressure" in line and "Atm." in line:
+                return float(line.split()[-2])
+
     @property
     def mass(self):
         for line in self.contents:
-            if "Molecular mass:" and "amu." in line:
+            if "Molecular mass:" in line and "amu." in line:
                 return float(line.split()[2])
 
     @cached_property
@@ -1721,29 +2542,132 @@ class Gaussian16Output(GaussianFileMixin):
     def rotational_temperatures(self):
         """
         Rotational temperatures in Kelvin, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        temperature along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational temperature is returned.
         """
         rot_temps = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational temperature" in line and "(Kelvin)" in line:
+                has_overflow = False
                 for rot_temp in line.split("(Kelvin)")[-1].split():
                     # linear molecules may have only one rot temp,
-                    # non-linear has three
-                    rot_temps.append(float(rot_temp))
+                    # non-linear has three; skip overflow tokens ('***...')
+                    if "*" in rot_temp:
+                        has_overflow = True
+                    else:
+                        rot_temps.append(float(rot_temp))
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_temps:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_temps = seen
                 return rot_temps
 
     @cached_property
     def rotational_constants_in_Hz(self):
         """
         Rotational constants in Hz, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        constant along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational constant is returned.
         """
         rot_consts = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational constant" in line and "(GHZ):" in line:
+                has_overflow = False
                 for rot_const in line.split("(GHZ):")[-1].split():
-                    rot_consts.append(float(rot_const) * 1e9)
+                    # skip overflow tokens ('***...') for linear molecules
+                    if "*" in rot_const:
+                        has_overflow = True
+                    else:
+                        rot_consts.append(float(rot_const) * 1e9)
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_consts:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_consts = seen
                 return rot_consts
+
+    def all_rotational_constants(self, mode="gaussian", return_status=False):
+        """
+        List of rotational constants for each geometry step, in the order they
+        appear in the Gaussian output.
+
+        Parameters
+        ----------
+        mode : {"gaussian", "physical"}, optional
+            ``"gaussian"`` preserves the printed Gaussian values for each step,
+            except that overflow tokens become ``np.inf``. ``"physical"``
+            collapses effectively linear or quasi-linear triples to one
+            perpendicular rotational constant.
+
+        Gaussian may print '********' when the axial rotational constant overflows.
+        Such tokens are replaced with np.inf and then cleaned according to the
+        molecular geometry.
+        Return rotational constants in Hz.
+        """
+
+        from chemsmart.utils.geometry import (
+            clean_rotational_constants_by_geometry,
+        )
+
+        result = []
+
+        for line in self.contents:
+            if "Rotational constants (GHZ):" in line:
+                vals = line.split("(GHZ):", 1)[-1].split()
+
+                vals_ghz = np.array(
+                    [np.inf if "*" in v else float(v) for v in vals],
+                    dtype=float,
+                )
+
+                if return_status:
+                    vals_ghz, status = clean_rotational_constants_by_geometry(
+                        vals_ghz,
+                        mode=mode,
+                        return_status=True,
+                    )
+                    result.append((vals_ghz * 1e9, status))
+                else:
+                    vals_ghz = clean_rotational_constants_by_geometry(
+                        vals_ghz, mode=mode
+                    )
+                    result.append(vals_ghz * 1e9)
+
+        return result
+
+    @cached_property
+    def all_point_groups(self):
+        """
+        List of point group strings for each geometry step,
+        in the order they appear in the file.
+        """
+        result = []
+        for line in self.contents:
+            if line.strip().startswith("Full point group"):
+                parts = line.split()
+                # format: Full point group  <PG>  NOp  <n>
+                pg_idx = parts.index("group") + 1
+                result.append(parts[pg_idx].upper())
+        return result
 
     def to_dataset(self, **kwargs):
         """
@@ -2135,3 +3059,419 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
                         all_cells.append(tv_vector)
                 return np.array(all_cells)
         return None
+
+
+class Gaussian16pKaOutput(Gaussian16Output):
+    """
+    Extended Gaussian16Output for pKa calculations with thermochemistry support.
+
+    This class provides methods to extract electronic energy and quasi-harmonic
+    Gibbs free energy from Gaussian optimization output files, which are essential
+    for pKa calculations using thermodynamic cycles.
+
+    The thermochemistry calculations use Grimme's quasi-RRHO method for entropy
+    and Head-Gordon's quasi-RRHO method for enthalpy corrections, matching the
+    behavior of:
+        chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+    Attributes:
+        filename (str): Path to the Gaussian output file.
+        temperature (float): Temperature in Kelvin for thermochemistry. Default 298.15 K.
+        concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+        pressure (float): Pressure in atm. Default 1.0 atm.
+        cutoff_entropy_grimme (float): Cutoff frequency for entropy (cm^-1). Default 100.0.
+        cutoff_enthalpy (float): Cutoff frequency for enthalpy (cm^-1). Default 100.0.
+        energy_units (str): Energy units for output. Default 'hartree'.
+
+    Example:
+        output = Gaussian16pKaOutput(
+            "acetic_acid_opt.log",
+            temperature=333.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100,
+            cutoff_enthalpy=100
+        )
+        E = output.electronic_energy_in_units  # E in hartree
+        G = output.qh_gibbs_free_energy  # qh-G(T) in hartree
+    """
+
+    def __init__(
+        self,
+        filename,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        energy_units="hartree",
+    ):
+        """
+        Initialize Gaussian16pKaOutput with thermochemistry settings.
+
+        Args:
+            filename (str): Path to Gaussian output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy
+                in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy
+                in cm^-1 using Head-Gordon's method. Default 100.0.
+            entropy_method (str): Entropy quasi-RRHO method ('grimme' or
+                'truhlar'). Default 'grimme'.
+            energy_units (str): Energy units for output values.
+                Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol'. Default 'hartree'.
+        """
+        super().__init__(filename=filename)
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.entropy_method = entropy_method
+        self.energy_units = energy_units.lower()
+        self._thermochemistry = None
+
+    @property
+    def thermochemistry(self):
+        """
+        Get or create the Thermochemistry analysis object.
+
+        Returns:
+            Thermochemistry: Configured thermochemistry analysis object.
+
+        Raises:
+            ValueError: If the output file did not terminate normally.
+        """
+        if self._thermochemistry is None:
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
+            self._thermochemistry = Thermochemistry(
+                filename=self.filename,
+                temperature=self.temperature,
+                concentration=self.concentration,
+                pressure=self.pressure,
+                use_weighted_mass=False,
+                alpha=4,
+                s_freq_cutoff=self.cutoff_entropy_grimme,
+                entropy_method=self.entropy_method,
+                h_freq_cutoff=self.cutoff_enthalpy,
+                energy_units=self.energy_units,
+                check_imaginary_frequencies=True,
+            )
+        return self._thermochemistry
+
+    @property
+    def electronic_energy_in_units(self):
+        """
+        Get the electronic energy (E) in specified units.
+
+        This is the raw SCF energy from the Gaussian calculation,
+        converted to the specified energy units.
+
+        Returns:
+            float: Electronic energy in specified units (default: hartree).
+        """
+        # Get electronic energy in J/mol from thermochemistry
+        electronic_energy_j_mol = self.thermochemistry.electronic_energy
+        # Convert to specified units
+        return energy_conversion(
+            "j/mol", self.energy_units, electronic_energy_j_mol
+        )
+
+    @property
+    def qh_gibbs_free_energy(self):
+        """
+        Get the quasi-harmonic Gibbs free energy qh-G(T) in specified units.
+
+        This uses Grimme's quasi-RRHO method for entropy and Head-Gordon's
+        quasi-RRHO method for enthalpy corrections, which is equivalent to
+        running:
+            chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+        The qh-G(T) value corresponds to the quasi-RRHO corrected Gibbs free energy
+        that accounts for low-frequency vibrations using interpolation to free rotor
+        entropy and enthalpy.
+
+        Returns:
+            float: Quasi-harmonic Gibbs free energy in specified units (default: hartree).
+
+        Raises:
+            ValueError: If the file doesn't contain frequency data.
+        """
+        # Get qh-G in J/mol from thermochemistry
+        qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
+        if qh_gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        # Convert to specified units
+        return energy_conversion("j/mol", self.energy_units, qh_gibbs_j_mol)
+
+    @property
+    def zero_point_energy_in_units(self):
+        """
+        Get the zero-point energy (ZPE) in specified units.
+
+        Returns:
+            float: Zero-point energy in specified units (default: hartree).
+        """
+        zpe_j_mol = self.thermochemistry.zero_point_energy
+        if zpe_j_mol is None:
+            raise ValueError(
+                f"Cannot compute zero-point energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, zpe_j_mol)
+
+    @property
+    def enthalpy_in_units(self):
+        """
+        Get the enthalpy (H) in specified units.
+
+        Returns:
+            float: Enthalpy in specified units (default: hartree).
+        """
+        enthalpy_j_mol = self.thermochemistry.enthalpy
+        if enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, enthalpy_j_mol)
+
+    @property
+    def qh_enthalpy_in_units(self):
+        """
+        Get the quasi-harmonic enthalpy qh-H(T) in specified units.
+
+        Returns:
+            float: Quasi-harmonic enthalpy in specified units (default: hartree).
+        """
+        qh_enthalpy_j_mol = self.thermochemistry.qrrho_enthalpy
+        if qh_enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_enthalpy_j_mol)
+
+    @property
+    def gibbs_free_energy_in_units(self):
+        """
+        Get the standard Gibbs free energy G(T) in specified units.
+
+        This is the uncorrected Gibbs free energy without quasi-RRHO corrections.
+
+        Returns:
+            float: Gibbs free energy in specified units (default: hartree).
+        """
+        gibbs_j_mol = self.thermochemistry.gibbs_free_energy
+        if gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, gibbs_j_mol)
+
+    @property
+    def thermochemical_properties(self):
+        """
+        Compute and return all thermochemical properties.
+
+        Returns:
+            dict: Dictionary containing thermochemical properties:
+                - electronic_energy: Electronic energy in specified units
+                - zero_point_energy: Zero-point energy in specified units
+                - enthalpy: Enthalpy in specified units
+                - qh_enthalpy: Quasi-harmonic enthalpy in specified units
+                - gibbs_free_energy: Gibbs free energy in specified units
+                - qh_gibbs_free_energy: Quasi-harmonic Gibbs free energy in specified units
+        """
+        return {
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    def compute_thermochemistry(self):
+        """
+        Compute all thermochemistry properties.
+
+        Returns:
+            dict: Dictionary containing all thermochemistry values:
+                - structure: Base filename
+                - electronic_energy: E in specified units
+                - zero_point_energy: ZPE in specified units
+                - enthalpy: H in specified units
+                - qh_enthalpy: qh-H(T) in specified units
+                - entropy_times_temperature: T*S in specified units
+                - qh_entropy_times_temperature: T*qh-S in specified units
+                - gibbs_free_energy: G(T) in specified units
+                - qh_gibbs_free_energy: qh-G(T) in specified units
+        """
+        import os
+
+        thermo = self.thermochemistry
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+
+        return {
+            "structure": structure,
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.entropy_times_temperature,
+                )
+                if thermo.entropy_times_temperature
+                else None
+            ),
+            "qh_entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.qrrho_entropy_times_temperature,
+                )
+                if thermo.qrrho_entropy_times_temperature
+                else None
+            ),
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    # =========================================================================
+    # Multi-file pKa thermochemistry support
+    # =========================================================================
+
+    @staticmethod
+    def compute_pka_thermochemistry(
+        ha_file=None,
+        a_file=None,
+        href_file=None,
+        ref_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
+
+        return compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            href_file=href_file,
+            ref_file=ref_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+    @staticmethod
+    def compute_pka(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file=None,
+        ref_gas_file=None,
+        ha_solv_file=None,
+        a_solv_file=None,
+        href_solv_file=None,
+        ref_solv_file=None,
+        pka_reference=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """
+        Compute pKa using a dual-level thermodynamic cycle.
+
+        **Proton exchange** (default): HA + Ref⁻ → A⁻ + HRef
+            pKa = pKa_ref + ΔG_soln / (RT × ln10)
+
+        **Direct dissociation** (``scheme='direct'``): HA → A⁻ + H⁺
+            ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)
+            pKa = ΔG_diss / (2.303 × R × T)
+        """
+        from chemsmart.cli.pka import compute_pka
+
+        return compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )
+
+    @staticmethod
+    def print_pka_summary(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file,
+        ref_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        href_solv_file,
+        ref_solv_file,
+        pka_reference,
+        temperature: float = 298.15,
+        concentration: float = 1.0,
+        pressure: float = 1.0,
+        cutoff_entropy_grimme: float = 100.0,
+        cutoff_enthalpy: float = 100.0,
+        entropy_method: str = "grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """Print a formatted summary of a dual-level pKa calculation."""
+        from chemsmart.cli.pka import print_pka_summary as _print_pka_summary
+
+        return _print_pka_summary(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )

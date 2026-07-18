@@ -15,6 +15,7 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
+from chemsmart.utils.geometry import clean_rotational_constants_by_geometry
 from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
@@ -52,6 +53,11 @@ class Thermochemistry:
             results.
         check_imaginary_frequencies: bool. If True, checks for imaginary
             frequencies in the vibrational analysis.
+        rotational_mode: str. ``"physical"`` treats linear and quasi-linear
+            rotors physically from geometry-derived constants, while
+            ``"gaussian"`` preserves Gaussian-style constants when possible
+            and falls back to geometry-derived constants if Gaussian printed
+            overflow tokens.
     """
 
     def __init__(
@@ -67,10 +73,17 @@ class Thermochemistry:
         h_freq_cutoff=None,
         energy_units="hartree",
         check_imaginary_frequencies=True,
+        rotational_mode="physical",
         **kwargs,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
+        self.energy_units = energy_units
+        self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.rotational_mode = rotational_mode
+        # Keep original cm^-1 values for replacing imaginary frequencies
+        self.s_freq_cutoff_cm = s_freq_cutoff
+        self.h_freq_cutoff_cm = h_freq_cutoff
         self.temperature = temperature
         self.pressure = pressure
         self.use_weighted_mass = use_weighted_mass
@@ -115,11 +128,12 @@ class Thermochemistry:
             else None
         )
 
-        # convert the unit of vibrational frequencies
-        # from cm^-1 to Hz
+        # convert the unit of vibrational frequencies from cm^-1 to Hz
+        # avoid calling self.cleaned_frequencies twice
+        cleaned_frequencies = self.cleaned_frequencies
         self.v = (
-            [k * units._c * 1e2 for k in self.cleaned_frequencies]
-            if self.cleaned_frequencies is not None
+            [k * units._c * 1e2 for k in cleaned_frequencies]
+            if cleaned_frequencies is not None
             else None
         )
 
@@ -130,9 +144,6 @@ class Thermochemistry:
             if self.v is not None
             else None
         )
-
-        self.energy_units = energy_units
-        self.check_imaginary_frequencies = check_imaginary_frequencies
 
     @cached_property
     def file_object(self):
@@ -178,17 +189,97 @@ class Thermochemistry:
     def average_rotational_constant(self):
         if self.molecule.is_monoatomic:
             return None
-        if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I[-1])
-
-        assert len(self.I) == 3, (
-            "Number of moments of inertia should be 3 for nonlinear "
-            "molecules."
-        )
-        rotational_constants = [
-            units._hplanck / (8 * np.pi**2 * i) for i in self.I
-        ]
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        if rotational_constants is None or len(rotational_constants) == 0:
+            return None
         return sum(rotational_constants) / len(rotational_constants)
+
+    @cached_property
+    def geometry_rotational_constants_in_Hz(self):
+        if self.molecule.is_monoatomic:
+            return None
+        rotational_constants = []
+        for moment in self.I:
+            if moment == 0.0:
+                rotational_constants.append(np.inf)
+            else:
+                rotational_constants.append(
+                    units._hplanck / (8 * np.pi**2 * moment)
+                )
+        return np.array(rotational_constants, dtype=float)
+
+    @cached_property
+    def gaussian_rotational_constants_in_Hz(self):
+        if not isinstance(self.file_object, Gaussian16Output):
+            return None
+        all_constants = self.file_object.all_rotational_constants(
+            mode="gaussian"
+        )
+        if not all_constants:
+            return None
+        return np.asarray(all_constants[-1], dtype=float)
+
+    @cached_property
+    def effective_rotational_constants_in_Hz(self):
+        if self.molecule.is_monoatomic:
+            return None
+        if self.rotational_mode == "physical":
+            return clean_rotational_constants_by_geometry(
+                self.geometry_rotational_constants_in_Hz,
+                mode="physical",
+            )
+        if self.rotational_mode == "gaussian":
+            if self.gaussian_rotational_constants_in_Hz is None:
+                logger.warning(
+                    "Gaussian rotational constants are unavailable; using "
+                    "geometry-derived rotational constants instead."
+                )
+                return np.asarray(
+                    self.geometry_rotational_constants_in_Hz, dtype=float
+                )
+            if np.isinf(self.gaussian_rotational_constants_in_Hz).any():
+                logger.warning(
+                    "Cannot recompute Gaussian-style nonlinear rotational "
+                    "thermochemistry from printed rotational constants "
+                    "because Gaussian overflowed one or more values as "
+                    "********."
+                )
+                logger.info(
+                    "Recomputing Gaussian-mode rotational constants from "
+                    "molecular geometry."
+                )
+                return np.asarray(
+                    self.geometry_rotational_constants_in_Hz, dtype=float
+                )
+            return np.asarray(
+                self.gaussian_rotational_constants_in_Hz, dtype=float
+            )
+        raise ValueError(
+            f"Unsupported rotational thermochemistry mode: "
+            f"{self.rotational_mode!r}."
+        )
+
+    @cached_property
+    def effective_rotational_temperatures(self):
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        if rotational_constants is None:
+            return None
+        rotational_temperatures = []
+        for rotational_constant in rotational_constants:
+            if np.isinf(rotational_constant):
+                rotational_temperatures.append(np.inf)
+            else:
+                rotational_temperatures.append(
+                    units._hplanck * rotational_constant / units._k
+                )
+        return np.array(rotational_temperatures, dtype=float)
+
+    @property
+    def is_linear_rotor(self):
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        return (
+            rotational_constants is not None and len(rotational_constants) == 1
+        )
 
     @property
     def rotational_symmetry_number(self):
@@ -220,37 +311,113 @@ class Thermochemistry:
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
-        For transition states (jobtype == "ts"), the first imaginary
-        frequency is assumed to correspond to the reaction coordinate and is
-        excluded from thermochemical calculation.
-        For optimization, only geometries without imaginary frequencies are
-        parsed for thermochemical calculations.
+        Frequencies returned by this property remain in cm^-1.
+
+        When rotational_mode="physical" and the molecule is treated as a linear
+        rotor but has fewer than 3N-5 vibrational frequencies (quasi-linear case),
+        the lowest positive frequency is duplicated to supply the missing
+        degenerate bending mode(s).
+
+        If self.check_imaginary_frequencies is True:
+            - TS jobs must have exactly one imaginary frequency.
+            - Non-TS jobs must have no imaginary frequencies.
+
+        If self.check_imaginary_frequencies is False:
+            - TS jobs remove the first imaginary frequency as the reaction coordinate.
+            - Extra imaginary frequencies are replaced by a positive cutoff.
+            - Non-TS jobs replace all imaginary frequencies by a positive cutoff.
+
+        The replacement cutoff is:
+            - s_freq_cutoff if provided
+            - otherwise h_freq_cutoff if provided
+            - otherwise 100.0 cm^-1
         """
         if self.vibrational_frequencies is None:
             return None
-        if self.imaginary_frequencies:
-            if self.jobtype == "ts":
-                if (
-                    len(self.imaginary_frequencies) == 1
-                    and self.vibrational_frequencies[0] < 0.0
-                ):
-                    return self.vibrational_frequencies[1:]
-                else:
-                    raise ValueError(
-                        f"!! ERROR: Detected multiple imaginary frequencies in "
-                        f"TS calculation for {self.filename}. Only one "
-                        f"imaginary frequency is allowed for a valid TS. "
-                        f"Please re-optimize the geometry to locate a true TS."
-                    )
-            else:
-                raise ValueError(
-                    f"!! ERROR: Detected imaginary frequencies in geometry "
-                    f"optimization for {self.filename}. A valid optimized "
-                    f"geometry should not contain imaginary frequencies. "
-                    f"Please re-optimize the geometry to locate a true "
-                    f"minimum."
+
+        frequencies = list(self.vibrational_frequencies)
+
+        # Quasi-linear correction: Gaussian gives 3N-6 frequencies for
+        # non-linear molecules; pad to 3N-5 for linear treatment.
+        if self.rotational_mode == "physical" and self.is_linear_rotor:
+            expected = 3 * self.molecule.num_atoms - 5
+            if frequencies and len(frequencies) == expected - 1:
+                lowest = min(f for f in frequencies if f > 0)
+                frequencies.append(lowest)
+                logger.info(
+                    f"Quasi-linear molecule: padded one degenerate bending "
+                    f"mode at {lowest:.1f} cm^-1 for linear treatment."
                 )
-        return self.vibrational_frequencies
+
+        imaginary_indices = [
+            i for i, freq in enumerate(frequencies) if freq < 0.0
+        ]
+
+        if not imaginary_indices:
+            return frequencies
+
+        # IMPORTANT:
+        # cleaned_frequencies is still in cm^-1.
+        # Do not use self.s_freq_cutoff/self.h_freq_cutoff here because those
+        # have already been converted to Hz.
+        if self.s_freq_cutoff_cm is not None:
+            freq_cutoff = self.s_freq_cutoff_cm
+        elif self.h_freq_cutoff_cm is not None:
+            freq_cutoff = self.h_freq_cutoff_cm
+        else:
+            freq_cutoff = 100.0
+
+        # check against non-positive cutoff value
+        # before using it to replace imaginary frequencies
+        if freq_cutoff <= 0.0:
+            raise ValueError(
+                f"Imaginary-frequency replacement cutoff must be positive. "
+                f"Got {freq_cutoff} cm^-1."
+            )
+
+        if self.jobtype == "ts":
+            # Valid TS: exactly one imaginary frequency.
+            # Remove it from thermochemistry.
+            if len(imaginary_indices) == 1:
+                reaction_coordinate_index = imaginary_indices[0]
+                return [
+                    freq
+                    for i, freq in enumerate(frequencies)
+                    if i != reaction_coordinate_index
+                ]
+
+            # Invalid TS: more than one imaginary frequency.
+            if self.check_imaginary_frequencies:
+                raise ValueError(
+                    f"!! ERROR: Detected multiple imaginary frequencies in "
+                    f"TS calculation for {self.filename}. Only one "
+                    f"imaginary frequency is allowed for a valid TS. "
+                    f"Please re-optimize the geometry to locate a true TS."
+                )
+
+            # Permissive mode:
+            # remove first imaginary frequency as reaction coordinate;
+            # replace all remaining imaginary frequencies by cutoff.
+            reaction_coordinate_index = imaginary_indices[0]
+
+            return [
+                freq_cutoff if freq < 0.0 else freq
+                for i, freq in enumerate(frequencies)
+                if i != reaction_coordinate_index
+            ]
+
+        # Non-TS jobs: any imaginary frequency is invalid in strict mode.
+        if self.check_imaginary_frequencies:
+            raise ValueError(
+                f"!! ERROR: Detected imaginary frequencies in geometry "
+                f"optimization for {self.filename}. A valid optimized "
+                f"geometry should not contain imaginary frequencies. "
+                f"Please re-optimize the geometry to locate a true minimum."
+            )
+
+        # Permissive mode:
+        # replace all imaginary frequencies by cutoff.
+        return [freq_cutoff if freq < 0.0 else freq for freq in frequencies]
 
     @property
     def electronic_energy(self):
@@ -367,7 +534,8 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[-1] * units._k)
+        theta_r = self.effective_rotational_temperatures[0]
+        logger.debug(f"Rotational temperature Θ_r = {theta_r:.4f} K")
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -382,9 +550,7 @@ class Thermochemistry:
             σ_r = symmetry number for rotation
             Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
         """
-        theta_ri = [
-            units._hplanck**2 / (8 * np.pi**2 * i * units._k) for i in self.I
-        ]
+        theta_ri = self.effective_rotational_temperatures
         return (
             np.pi ** (1 / 2)
             / self.rotational_symmetry_number
@@ -401,11 +567,17 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
+            logger.debug(
+                "Calculate rotational partition function for linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_linear_molecule()
             )
         else:
+            logger.debug(
+                "Calculate rotational partition function for non-linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule()
             )
@@ -421,9 +593,13 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
+            logger.debug("Calculate rotational entropy for linear molecule.")
             return R * (np.log(self.rotational_partition_function) + 1)
         else:
+            logger.debug(
+                "Calculate rotational entropy for non-linear molecule."
+            )
             return R * (np.log(self.rotational_partition_function) + 3 / 2)
 
     @property
@@ -436,7 +612,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
             return R * self.T
         else:
             return 3 / 2 * R * self.T
@@ -453,7 +629,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
             return R
         else:
             return 3 / 2 * R

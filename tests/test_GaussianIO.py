@@ -1,6 +1,7 @@
 import os.path
 
 import numpy as np
+import pytest
 from ase import units
 from ase.symbols import Symbols
 
@@ -9,10 +10,12 @@ from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
     Gaussian16OutputWithPBC,
+    Gaussian16pKaOutput,
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestRouteString:
@@ -30,7 +33,7 @@ class TestRouteString:
     def test_read_route_string_standard2(self):
         s1b = "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-311+G(d,p) empiricaldispersion=gd3bj"
         r1b = GaussianRoute(s1b)
-        assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert r1b.functional == "b3lyp-d3bj"
         assert r1b.basis == "6-311+g(d,p)"
         assert r1b.jobtype == "ts"
         assert r1b.solv is False
@@ -80,7 +83,7 @@ class TestRouteString:
     def test_read_route_string_standard5(self):
         s1e = "#p opt=modred freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
         r1e = GaussianRoute(s1e)
-        assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
+        assert r1e.functional == "tpsstpss-d3bj"
         assert (
             r1e.basis == "def2tzvp/fit"
         )  # density fitting basis set (for pure functionals)
@@ -117,6 +120,20 @@ class TestRouteString:
         assert r1g.solvent_id == "dichloroethane"
         assert r1g.additional_opt_options_in_route is None
         # TODO: TD-DFT route to be specified
+
+    def test_read_route_string_oniom_layer_methods_and_bases(self):
+        s1qmmm = "# oniom(b3lyp/6-31g(d,p):uff) opt"
+        r1qmmm = GaussianRoute(s1qmmm)
+        assert r1qmmm.functional == "b3lyp:uff"
+        assert r1qmmm.basis == "6-31g(d,p):none"
+        s2qmmm = "# oniom(mp2/6-31g:hf/6-31g:am1) geom=connectivity"
+        r2qmmm = GaussianRoute(s2qmmm)
+        assert r2qmmm.functional == "mp2:hf:am1"
+        assert r2qmmm.basis == "6-31g:6-31g:none"
+        s3qmmm = "# oniom(mp2/6-31g:hf/6-31g) geom=connectivity"
+        r3qmmm = GaussianRoute(s3qmmm)
+        assert r3qmmm.functional == "mp2:hf"
+        assert r3qmmm.basis == "6-31g:6-31g"
 
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
@@ -382,7 +399,7 @@ class TestGaussian16Input:
         )
         assert g16_link_opt.additional_opt_options_in_route is None
         assert g16_link_opt.jobtype == "opt"
-        assert g16_link_opt.functional == "um062x"
+        assert g16_link_opt.functional == "m062x"
         assert g16_link_opt.basis == "def2svp"
         assert g16_link_opt.molecule.frozen_atoms is None
 
@@ -400,7 +417,7 @@ class TestGaussian16Input:
         )
         assert g16_link_ts.additional_opt_options_in_route is None
         assert g16_link_ts.jobtype == "ts"
-        assert g16_link_ts.functional == "um062x"
+        assert g16_link_ts.functional == "m062x"
         assert g16_link_ts.basis == "def2svp"
         assert g16_link_ts.molecule.frozen_atoms is None
 
@@ -418,7 +435,7 @@ class TestGaussian16Input:
         )
         assert g16_link_sp.additional_opt_options_in_route is None
         assert g16_link_sp.jobtype == "sp"
-        assert g16_link_sp.functional == "um062x"
+        assert g16_link_sp.functional == "m062x"
         assert g16_link_sp.basis == "def2tzvp"
         assert g16_link_sp.molecule.frozen_atoms is None
 
@@ -511,13 +528,14 @@ class TestGaussian16Output:
         assert len(g16_output.excitation_energies_eV) == 50
         assert len(g16_output.transitions) == 50
         assert len(g16_output.contribution_coefficients) == 50
+        assert len(g16_output.contributions) == 50
         assert g16_output.transitions[0] == [
-            "104A ->108A",
-            "105A ->107A",
-            "106A ->107A",
-            "106A ->108A",
-            "105B ->106B",
-            "106A <-107A",
+            "104A -> 108A",
+            "105A -> 107A",
+            "106A -> 107A",
+            "106A -> 108A",
+            "105B -> 106B",
+            "106A <- 107A",
         ]
         assert g16_output.contribution_coefficients[0] == [
             0.15573,
@@ -535,6 +553,22 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+        assert g16_output.contributions[0] == [
+            2.4,
+            1.5,
+            87.5,
+            1.1,
+            6.8,
+            1.5,
+        ]
+        assert g16_output.contributions[-1] == [
+            3.0,
+            2.2,
+            1.9,
+            9.7,
+            62.5,
+            3.2,
+        ]
 
         assert (
             g16_output.total_core_hours
@@ -545,9 +579,25 @@ class TestGaussian16Output:
         mol = g16_output.molecule
         assert not mol.has_vibrations
 
+    def test_contribution_percentage_spin_scaling(self):
+        output = type("Output", (), {})()
+        output.contribution_coefficients = [[0.5, -0.3]]
+
+        output.spin = "restricted"
+        assert Gaussian16Output.contributions.func(output) == [[50.0, 18.0]]
+
+        output.spin = "unrestricted"
+        assert Gaussian16Output.contributions.func(output) == [[25.0, 9.0]]
+
+        output.spin = None
+        with pytest.raises(ValueError, match="Unknown spin type"):
+            Gaussian16Output.contributions.func(output)
+
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.version == "G16RevB.01"
+        assert g16_output.file_date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
         assert g16_output.molecule.num_atoms == 40
         assert g16_output.spin == "restricted"
@@ -568,6 +618,8 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.temperature_in_K == 298.15
+        assert g16_output.pressure_in_atm == 1.0
         assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
@@ -627,6 +679,63 @@ class TestGaussian16Output:
             mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
         )
         assert mol.vibrational_frequencies[0] == 11.9481
+        assert g16_output.zero_point_energy == 0.284336
+        assert np.isclose(
+            g16_output.thermal_vibration_correction,
+            190.931 * kcal_per_mol_to_hartree - 0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_rotation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_translation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert g16_output.thermal_energy_correction == 0.307101
+        assert g16_output.thermal_enthalpy_correction == 0.308045
+        assert g16_output.thermal_gibbs_free_energy_correction == 0.225790
+        assert g16_output.internal_energy == -1863.733079
+        assert g16_output.enthalpy == -1863.732135
+        assert g16_output.gibbs_free_energy == -1863.814390
+        assert np.isclose(
+            g16_output.electronic_entropy,
+            0.000 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.vibrational_entropy,
+            90.556 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.rotational_entropy,
+            37.462 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.translational_entropy,
+            45.103 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert g16_output.has_dipole_moment
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([4.7915, -0.1097, 0.4554]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 4.8143, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9]),
+            rtol=1e-4,
+        )
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
@@ -685,6 +794,22 @@ class TestGaussian16Output:
             g16_output.beta_fmo_gap,
             (-0.05025 - (-0.18923)) * units.Hartree,
             rtol=1e-6,
+        )
+        assert g16_output.has_dipole_moment
+        assert g16_output.num_dipole_moments == 3
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([-1.6500, -5.4954, -2.3627]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 6.2052, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.06229 * 1e9, 0.05513 * 1e9, 0.04690 * 1e9]),
+            rtol=1e-4,
         )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
@@ -757,6 +882,7 @@ class TestGaussian16Output:
         assert g16_link_opt.is_link
         assert g16_link_opt.jobtype == "opt"
         assert g16_link_opt.normal_termination
+        assert g16_link_opt.spin == "unrestricted"
         assert isinstance(g16_link_opt.molecule, Molecule)
         assert g16_link_opt.tddft_transitions == []
         assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
@@ -801,6 +927,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_link_ts_outputfile)
         g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
         assert not g16_link_ts.normal_termination  # Error termination
+        assert g16_link_ts.spin == "unrestricted"
         assert (
             g16_link_ts.route_string
             == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
@@ -849,6 +976,7 @@ class TestGaussian16Output:
             filename=gaussian_link_modred_output
         )
         assert g16_link_modred.normal_termination
+        assert g16_link_modred.spin == "unrestricted"
         assert (
             g16_link_modred.route_string
             == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
@@ -1351,6 +1479,10 @@ class TestGaussian16Output:
         assert (
             len(g16_genecp.all_structures) == 11
         )  # 11 structures altogether, as shown in GaussView
+        optimized_flags = [
+            mol.is_optimized_structure for mol in g16_genecp.all_structures
+        ]
+        assert optimized_flags == [False] * 9 + [True, True]
         assert g16_genecp.optimized_structure.positions.shape == (48, 3)
         assert np.allclose(
             g16_genecp.optimized_structure.positions,
@@ -1378,6 +1510,145 @@ class TestGaussian16Output:
         assert np.allclose(
             mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
         )
+
+    def test_read_full_gen_outputfile(self, gaussian_full_gen_outfile):
+        assert os.path.exists(gaussian_full_gen_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_gen_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "gen"
+        # Light elements use named basis
+        assert g16.light_elements == ["H", "C"]
+        assert g16.light_elements_basis == "6-31g(d)"
+        # Heavy elements has explicit orbital basis
+        assert g16.heavy_elements == ["Cl", "Br"]
+        heavy_basis = g16.heavy_elements_basis
+
+        cl_shells = heavy_basis["Cl"]
+        assert [shell["shell"] for shell in cl_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+        ]
+        cl_first_shell = cl_shells[0]
+        assert cl_first_shell["shell"] == "S"
+        assert len(cl_first_shell["primitives"]) == 6
+        cl_first_exp, cl_first_coeff = cl_first_shell["primitives"][0]
+        assert np.isclose(cl_first_exp, 1.0581900000e05)
+        assert np.isclose(cl_first_coeff, 7.3800000000e-04)
+        cl_last_shell = cl_shells[-1]
+        assert cl_last_shell["shell"] == "P"
+        assert len(cl_last_shell["primitives"]) == 1
+        cl_last_exp, cl_last_coeff = cl_last_shell["primitives"][0]
+        assert np.isclose(cl_last_exp, 1.0943700000e-01)
+        assert np.isclose(cl_last_coeff, 1.0000000000e00)
+
+        br_shells = heavy_basis["Br"]
+        assert [shell["shell"] for shell in br_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+        ]
+        br_first_shell = br_shells[0]
+        assert br_first_shell["shell"] == "S"
+        assert len(br_first_shell["primitives"]) == 6
+        br_first_exp, br_first_coeff = br_first_shell["primitives"][0]
+        assert np.isclose(br_first_exp, 4.3970000000e05)
+        assert np.isclose(br_first_coeff, 8.1300000000e-04)
+        br_last_shell = br_shells[-1]
+        assert br_last_shell["shell"] == "D"
+        assert len(br_last_shell["primitives"]) == 1
+        br_last_exp, br_last_coeff = br_last_shell["primitives"][0]
+        assert np.isclose(br_last_exp, 1.5350000000e00)
+        assert np.isclose(br_last_coeff, 1.0000000000e00)
+
+    def test_read_full_genecp_outputfile(self, gaussian_full_genecp_outfile):
+        assert os.path.exists(gaussian_full_genecp_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "genecp"
+        # Light element (Cl) uses named basis
+        assert g16.light_elements == ["Cl"]
+        assert g16.light_elements_basis == "def2svp"
+        # Heavy element (Ag) has explicit orbital basis
+        assert g16.heavy_elements == ["Ag"]
+
+        ag_shells = g16.heavy_elements_basis["Ag"]
+        assert [s["shell"] for s in ag_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+            "D",
+            "F",
+        ]
+        ag_first_shell = ag_shells[0]
+        assert ag_first_shell["shell"] == "S"
+        assert len(ag_first_shell["primitives"]) == 2
+        ag_first_exp, ag_first_coef = ag_first_shell["primitives"][0]
+        assert np.isclose(ag_first_exp, 1.9000000000e01)
+        assert np.isclose(ag_first_coef, -1.6600104141e-01)
+        ag_last_shell = ag_shells[-1]
+        assert ag_last_shell["shell"] == "F"
+        assert len(ag_last_shell["primitives"]) == 1
+        ag_last_exp, ag_last_coeff = ag_last_shell["primitives"][0]
+        assert np.isclose(ag_last_exp, 1.3971100000e00)
+        assert np.isclose(ag_last_coeff, 1.0000000000e00)
+
+        ecp = g16.heavy_elements_ecp
+        ag_ecp = ecp["Ag"]
+        assert ag_ecp["n_valence_electrons"] == 19
+        channel_names = [ch["name"] for ch in ag_ecp["channels"]]
+        assert channel_names == ["F and up", "S - F", "P - F", "D - F"]
+        ag_first_channel = ag_ecp["channels"][0]
+        assert ag_first_channel["name"] == "F and up"
+        assert len(ag_first_channel["terms"]) == 2
+        r_pow, ag_first_exp, ag_first_coef, spin_orbit_coef = ag_first_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_first_exp, 14.22)
+        assert np.isclose(ag_first_coef, -33.68992012)
+        assert np.isclose(spin_orbit_coef, 0.0)
+        ag_last_channel = ag_ecp["channels"][-1]
+        assert ag_last_channel["name"] == "D - F"
+        assert len(ag_last_channel["terms"]) == 4
+        r_pow, ag_last_exp, ag_last_coef, spin_orbit_coef = ag_last_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_last_exp, 10.21)
+        assert np.isclose(ag_last_coef, 73.71926087)
+        assert np.isclose(spin_orbit_coef, 0.0)
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
@@ -1887,6 +2158,84 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
+    def test_oldform_redundant_coordinates_atomic_numbers(self, tmp_path):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16_output = Gaussian16Output(filename=str(outputfile))
+        assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.all_structures == []
+        assert g16_output.last_structure.chemical_symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
+
+    def test_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
+    def test_energy_extraction_from_gaussian_output_file(
+        self, gaussian_quintet_opt_outfile
+    ):
+        g16_out = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        h_from_file = g16_out.enthalpy
+        assert np.isclose(h_from_file, -7521.416016, rtol=1e-4)
+        g_from_file = g16_out.gibbs_free_energy
+        assert np.isclose(g_from_file, -7521.548653, rtol=1e-4)
+
+    def test_custom_solvent_smd_generic(self, gaussian_smd_generic_outfile):
+        g16_generic = Gaussian16Output(filename=gaussian_smd_generic_outfile)
+        assert g16_generic.normal_termination
+        custom_solvent = g16_generic.custom_solvent
+        assert (
+            custom_solvent["SolventName"]
+            == "1,1,1,3,3,3-HEXAFLUOROPROPAN-2-OL"
+        )
+        assert custom_solvent["Eps"] == 16.7
+        assert custom_solvent["EpsInf"] == 1.625625
+        assert custom_solvent["HbondAcidity"] == 0.77
+        assert custom_solvent["HbondBasicity"] == 0.10
+        assert custom_solvent["SurfaceTensionAtInterface"] == 23.23
+        assert custom_solvent["CarbonAromaticity"] == 0.0
+        assert custom_solvent["ElectronegativeHalogenicity"] == 0.60
+
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
@@ -2088,3 +2437,616 @@ class TestGaussianPBCOutputFile:
         # has only "Input orientation:" but no "Standard orientation:"
         assert g16_pbc_2d.standard_orientations is None
         assert g16_pbc_2d.standard_orientations_pbc is None
+
+
+class TestGaussian16pKaOutput:
+    """Tests for Gaussian16pKaOutput class for pKa thermochemistry calculations.
+
+    Reference values are from .dat files in tests/data/GaussianTests/outputs/
+    Generated at T=373.15K, c=1.0 mol/L, csg=100 cm^-1, ch=100 cm^-1
+
+    5PQ_Me_ts1_no_pd_opt.dat values (HA - protonated acid):
+        E = -345.741944 hartree
+        ZPE = 0.133804 hartree
+        H = -345.595097 hartree
+        qh-H = -345.596472 hartree
+        T.S = 0.053929 hartree
+        T.qh-S = 0.052278 hartree
+        G(T) = -345.649026 hartree
+        qh-G(T) = -345.648751 hartree
+
+    5PQ_Me_ts1_b_no_pd_opt.dat values (A- - conjugate base):
+        E = -344.915399 hartree
+        ZPE = 0.115987 hartree
+        H = -344.786580 hartree
+        qh-H = -344.787739 hartree
+        T.S = 0.052926 hartree
+        T.qh-S = 0.051766 hartree
+        G(T) = -344.839506 hartree
+        qh-G(T) = -344.839505 hartree
+    """
+
+    # Reference values from 5PQ_Me_ts1_no_pd_opt.dat at T=373.15K
+    HA_E = -345.741944
+    HA_ZPE = 0.133804
+    HA_H = -345.595097
+    HA_QH_H = -345.596472
+    HA_TS = 0.053929
+    HA_QH_TS = 0.052278
+    HA_G = -345.649026
+    HA_QH_G = -345.648751
+
+    # Reference values from 5PQ_Me_ts1_b_no_pd_opt.dat at T=373.15K
+    A_E = -344.915399
+    A_ZPE = 0.115987
+    A_H = -344.786580
+    A_QH_H = -344.787739
+    A_TS = 0.052926
+    A_QH_TS = 0.051766
+    A_G = -344.839506
+    A_QH_G = -344.839505
+
+    # Reference pKa for collidine (2,4,6-trimethylpyridine)
+    PKA_COLLIDINE_REFERENCE = 6.75
+
+    def test_init_with_default_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with default thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile
+        )
+        assert output.filename == gaussian_pKa_HA_optimization_outputfile
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.pressure == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_init_with_custom_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with custom thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            pressure=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        assert output.temperature == 373.15
+        assert output.concentration == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test electronic energy for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.HA_E, rtol=1e-6)
+
+    def test_zero_point_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test ZPE for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        zpe = output.zero_point_energy_in_units
+        assert np.isclose(zpe, self.HA_ZPE, rtol=1e-4)
+
+    def test_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test enthalpy for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        H = output.enthalpy_in_units
+        assert np.isclose(H, self.HA_H, rtol=1e-5)
+
+    def test_qh_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test qh-H for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_H = output.qh_enthalpy_in_units
+        assert np.isclose(qh_H, self.HA_QH_H, rtol=1e-5)
+
+    def test_gibbs_free_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test G(T) for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        G = output.gibbs_free_energy_in_units
+        assert np.isclose(G, self.HA_G, rtol=1e-5)
+
+    def test_qh_gibbs_free_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test qh-G(T) for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.HA_QH_G, rtol=1e-5)
+
+    def test_electronic_energy_a(self, gaussian_pKa_A_optimization_outputfile):
+        """Test electronic energy for A- matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.A_E, rtol=1e-6)
+
+    def test_qh_gibbs_free_energy_a(
+        self, gaussian_pKa_A_optimization_outputfile
+    ):
+        """Test qh-G(T) for A- matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.A_QH_G, rtol=1e-5)
+
+    def test_compute_thermochemistry_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test compute_thermochemistry returns all values for HA."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        result = output.compute_thermochemistry()
+
+        # Check structure name
+        assert result["structure"] == "5PQ_Me_ts1_no_pd_opt"
+
+        # Check all values match reference
+        assert np.isclose(result["electronic_energy"], self.HA_E, rtol=1e-6)
+        assert np.isclose(result["zero_point_energy"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(result["enthalpy"], self.HA_H, rtol=1e-5)
+        assert np.isclose(result["qh_enthalpy"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(result["gibbs_free_energy"], self.HA_G, rtol=1e-5)
+        assert np.isclose(
+            result["qh_gibbs_free_energy"], self.HA_QH_G, rtol=1e-5
+        )
+
+    def test_compute_pka_thermochemistry_ha_and_a(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test compute_pka_thermochemistry with exact reference values."""
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+
+        # Check settings
+        assert results["settings"]["temperature"] == 373.15
+        assert results["settings"]["concentration"] == 1.0
+        assert results["settings"]["cutoff_entropy_grimme"] == 100.0
+        assert results["settings"]["cutoff_enthalpy"] == 100.0
+        assert results["settings"]["energy_units"] == "hartree"
+
+        # Check HA values
+        assert results["HA"]["name"] == "HA"
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
+        assert np.isclose(results["HA"]["ZPE"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(results["HA"]["H"], self.HA_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["qh_H"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["G"], self.HA_G, rtol=1e-5)
+
+        # Check A- values
+        assert results["A"]["name"] == "A-"
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
+        assert np.isclose(results["A"]["ZPE"], self.A_ZPE, rtol=1e-4)
+        assert np.isclose(results["A"]["H"], self.A_H, rtol=1e-5)
+        assert np.isclose(results["A"]["qh_H"], self.A_QH_H, rtol=1e-5)
+        assert np.isclose(results["A"]["G"], self.A_G, rtol=1e-5)
+
+    def test_deprotonation_energy_difference(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test that deprotonation energy difference is calculated correctly.
+
+        ΔE = E(A-) - E(HA) should be positive (deprotonation is endothermic)
+        Δqh-G = qh-G(A-) - qh-G(HA) should also be positive
+        """
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        delta_E = results["A"]["E"] - results["HA"]["E"]
+        delta_qh_G = results["A"]["qh_G"] - results["HA"]["qh_G"]
+
+        # Expected values from .dat files
+        expected_delta_E = self.A_E - self.HA_E
+        expected_delta_qh_G = self.A_QH_G - self.HA_QH_G
+
+        assert np.isclose(delta_E, expected_delta_E, rtol=1e-6)
+        assert np.isclose(delta_qh_G, expected_delta_qh_G, rtol=1e-5)
+
+        # Deprotonation should be endothermic (ΔE > 0)
+        assert delta_E > 0
+        assert delta_qh_G > 0
+
+    def test_print_pka_thermochemistry_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        capsys,
+    ):
+        """Test thermochemistry output for pKa calculation shows correct values.
+
+        This test verifies that individual thermochemistry values can be
+        extracted from the output objects for HA and A- species.
+        """
+        # Get thermochemistry for HA and A-
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        # Verify HA values match reference
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
+
+        # Verify A- values match reference
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
+
+    def test_thermochemistry_property_caching(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test that thermochemistry object is cached."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+        )
+
+        # Access thermochemistry twice
+        thermo1 = output.thermochemistry
+        thermo2 = output.thermochemistry
+
+        # Should be the same object (cached)
+        assert thermo1 is thermo2
+
+    def test_energy_units_conversion_kcal_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kcal/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kcal = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kcal/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kcal = output_kcal.electronic_energy_in_units
+
+        # 1 hartree ≈ 627.5094740631 kcal/mol
+        assert np.isclose(E_kcal / E_hartree, 627.5094740631, rtol=0.001)
+
+    def test_energy_units_conversion_kj_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kJ/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kj = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kJ/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kj = output_kj.electronic_energy_in_units
+
+        # 1 hartree ≈ 2625.5002 kJ/mol
+        assert np.isclose(E_kj / E_hartree, 2625.5002, rtol=0.001)
+
+    # =========================================================================
+    # pKa Calculation Tests - Dual-level Proton Exchange Scheme
+    # =========================================================================
+
+    def test_compute_pka(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test pKa calculation using Dual-level Proton Exchange scheme.
+
+        Uses 5PQ_Me_ts1 as target acid (HA/A-) and collidine as reference (HB/B-).
+        Reference pKa of collidine = 6.75
+
+        The dual-level approach uses:
+        1. Gas-phase frequency calculations for thermal corrections (G_corr)
+        2. Solvent single-point calculations for E_solv
+        3. G_soln = E_solv + G_corr for solution free energy (in Hartree/au)
+        4. Proton exchange scheme: HA + B⁻ → A⁻ + HB
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        # Check that result contains expected keys
+        assert "pKa" in result
+        assert "pKa_reference" in result
+        assert "delta_G_soln_kcal_mol" in result
+        assert "delta_G_soln_au" in result
+        assert "temperature" in result
+
+        # Check solution free energies are present (in Hartree/au)
+        assert "G_soln_HA_au" in result
+        assert "G_soln_A_au" in result
+        assert "G_soln_HRef_au" in result
+        assert "G_soln_Ref_au" in result
+
+        # Check solvent SP energies are present (in Hartree/au)
+        assert "E_solv_HA_au" in result
+        assert "E_solv_A_au" in result
+        assert "E_solv_HRef_au" in result
+        assert "E_solv_Ref_au" in result
+
+        # Check thermal corrections are present (in Hartree/au)
+        assert "G_corr_HA_au" in result
+        assert "G_corr_A_au" in result
+        assert "G_corr_HRef_au" in result
+        assert "G_corr_Ref_au" in result
+
+        # Check gas-phase electronic energies are present (in Hartree/au)
+        assert "E_gas_HA_au" in result
+        assert "E_gas_A_au" in result
+        assert "E_gas_HRef_au" in result
+        assert "E_gas_Ref_au" in result
+
+        # Verify reference pKa is stored correctly
+        assert result["pKa_reference"] == self.PKA_COLLIDINE_REFERENCE
+
+        # Verify temperature is stored correctly
+        assert result["temperature"] == 373.15
+
+        assert np.isclose(result["pKa"], 52.7025859, rtol=1e-6)
+
+    def test_compute_pka_direct_scheme(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+    ):
+        """Test direct dissociation via unified compute_pka(scheme='direct')."""
+        delta_G_proton = -265.9
+        temperature = 373.15
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            scheme="direct",
+            delta_G_proton=delta_G_proton,
+            temperature=temperature,
+        )
+
+        HARTREE_TO_KCAL = 627.5094740631
+        G_soln_HA_kcal = result["G_soln_HA_au"] * HARTREE_TO_KCAL
+        G_soln_A_kcal = result["G_soln_A_au"] * HARTREE_TO_KCAL
+        expected_delta_G_diss = G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
+
+        assert result["scheme"] == "direct"
+        assert np.isclose(
+            result["delta_G_diss_kcal_mol"], expected_delta_G_diss, rtol=1e-6
+        )
+
+    def test_compute_pka_energy_values(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test that dual-level calculation uses correct energy values.
+
+        All energies are in Hartree (au) except ΔG_soln which is also
+        provided in kcal/mol for the pKa formula.
+
+        Verifies:
+        - E_solv values from solvent SP files (Hartree)
+        - G_corr = qh-G(T) - E_gas from gas-phase files (Hartree)
+        - G_soln = E_solv + G_corr (Hartree)
+        - ΔG_soln in both au and kcal/mol
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        HARTREE_TO_KCAL = 627.5094740631
+
+        # Verify G_soln = E_solv + G_corr for each species (all in Hartree/au)
+        for species in ["HA", "A", "HRef", "Ref"]:
+            E_solv_au = result[f"E_solv_{species}_au"]
+            G_corr_au = result[f"G_corr_{species}_au"]
+            G_soln_au = result[f"G_soln_{species}_au"]
+            expected_G_soln_au = E_solv_au + G_corr_au
+            assert np.isclose(
+                G_soln_au, expected_G_soln_au, rtol=1e-10
+            ), f"G_soln_{species}_au mismatch: {G_soln_au} vs {expected_G_soln_au}"
+
+        # Verify ΔG_soln in Hartree (au)
+        # ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]
+        expected_delta_G_au = (
+            result["G_soln_A_au"] + result["G_soln_HRef_au"]
+        ) - (result["G_soln_HA_au"] + result["G_soln_Ref_au"])
+        assert np.isclose(
+            result["delta_G_soln_au"], expected_delta_G_au, rtol=1e-10
+        )
+
+        # Verify ΔG_soln conversion to kcal/mol
+        expected_delta_G_kcal = expected_delta_G_au * HARTREE_TO_KCAL
+        assert np.isclose(
+            result["delta_G_soln_kcal_mol"], expected_delta_G_kcal, rtol=1e-6
+        )
+
+    def test_print_pka_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+        capsys,
+    ):
+        """Test that print_pka_summary outputs correct format.
+
+        All energies should be displayed in Hartree (au) except ΔG_soln
+        which is shown in both au and kcal/mol.
+        """
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        # Check header
+        assert "Dual-level Proton Exchange Scheme" in output
+        assert "HA + Ref⁻ → A⁻ + HRef" in output
+
+        # Check method description is present
+        assert "G_corr = qh-G(T) - E_gas" in output
+        assert "G_soln = E_solv + G_corr" in output
+
+        # Check sections are present with correct units (au)
+        assert "Gas-Phase Electronic Energies (E_gas, au)" in output
+        assert "Thermal Corrections" in output
+        assert "Solvent Single-Point Energies (E_solv, au)" in output
+        assert (
+            "Solution Free Energies (G_soln = E_solv + G_corr, au)" in output
+        )
+
+        # Check ΔG_soln is shown in both units
+        assert "ΔG_soln" in output
+        assert "kcal/mol" in output
+
+        # Check computed pKa is displayed
+        assert "Computed pKa(HA)" in output

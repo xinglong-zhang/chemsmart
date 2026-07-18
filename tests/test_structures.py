@@ -10,13 +10,15 @@ from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
-from chemsmart.io.file import CDXFile
+from chemsmart.io.file import CDXFile, PKaCDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
     CoordinateBlock,
     Molecule,
+    PKaMolecule,
     QMMMMolecule,
 )
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
@@ -128,6 +130,35 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
 
         # TODO:
+
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
+
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
 
 
 class TestStructures:
@@ -464,6 +495,61 @@ class TestMoleculeAdvanced:
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
 
+    def test_is_aromatic_non_aromatic_molecules(self):
+        """Regression test: non-aromatic molecules must not be reported as aromatic.
+
+        Bond-order heuristics can assign order 1.5 to bonds like O-H or Mg-I,
+        which previously caused ``is_aromatic`` to return ``True`` for H2O and
+        MgI2.  The property must use ring membership to validate aromaticity.
+        """
+        # H2O – no rings at all
+        mol_h2o = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.757, -0.476],
+                    [0.0, -0.757, -0.476],
+                ]
+            ),
+        )
+        assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
+
+        # MgI2 – linear, no rings
+        mol_mgi2 = Molecule(
+            symbols=["Mg", "I", "I"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]
+            ),
+        )
+        assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
+
+        # Benzene – should still be aromatic
+        import math
+
+        r_c, r_h = 1.39, 2.46
+        pos_c = [
+            [
+                r_c * math.cos(2 * math.pi * i / 6),
+                r_c * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        pos_h = [
+            [
+                r_h * math.cos(2 * math.pi * i / 6),
+                r_h * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        mol_benz = Molecule(
+            symbols=["C"] * 6 + ["H"] * 6,
+            positions=np.array(pos_c + pos_h),
+        )
+        assert mol_benz.is_aromatic, "Benzene must be aromatic"
+
     def test_molecule_graph_generation(self):
         """Test molecular graph creation with bond detection."""
         mol = Molecule(
@@ -480,6 +566,7 @@ class TestMoleculeAdvanced:
         )
 
         assert not mol.is_chiral, "CH4 is not chiral"
+        assert not mol.chiral_centers
         graph = mol.to_graph()
 
         assert isinstance(graph, nx.Graph)
@@ -523,6 +610,91 @@ class TestMoleculeAdvanced:
 
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
+
+    def test_to_ase_energy_unit_conversion(self):
+        """Test that to_ase() converts energy from Hartree to eV."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+
+    def test_to_ase_forces_unit_conversion(self):
+        """Test that to_ase() converts forces from Hartree/Bohr to eV/Å."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
+            rtol=1e-5,
+        )
+
+    def test_to_ase_none_energy_and_forces(self):
+        """Test that to_ase() preserves None for energy and forces."""
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        assert ase_atoms.forces is None
+
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
 
     def test_convert_ase_atoms_with_constraints_to_molecule(
         self, constrained_atoms
@@ -887,6 +1059,261 @@ class TestMoleculeAdvanced:
         assert len(distances) == 1
         assert np.isclose(distances[0], 1.0)
 
+    def test_to_pdb_conversion(self, single_molecule_xyz_file):
+        """Test conversion of Molecule to PDB format."""
+        # Load a molecule from XYZ file
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test to_pdb() method
+        pdb_string = mol.to_pdb()
+        assert isinstance(pdb_string, str)
+        assert len(pdb_string) > 0
+
+        # Check that PDB format contains expected elements
+        assert "HETATM" in pdb_string or "ATOM" in pdb_string
+        assert "END" in pdb_string
+
+        # Check that all atoms are represented in the PDB
+        lines = pdb_string.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
+        """Test writing Molecule to PDB file."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write_pdb method
+        pdb_file = os.path.join(tmpdir, "test_molecule.pdb")
+        mol.write_pdb(pdb_file)
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+            assert "END" in content
+
+    def test_write_generic_method_with_pdb_format(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test generic write() method with PDB format."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write method with format='pdb'
+        pdb_file = os.path.join(tmpdir, "test_generic.pdb")
+        mol.write(pdb_file, format="pdb")
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+
+    def test_pdb_with_different_flavors(self, single_molecule_xyz_file):
+        """Test PDB conversion with different flavor options."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test with default flavor (with CONECT records)
+        pdb_default = mol.to_pdb(flavor=0)
+
+        # Test with flavor=2 (no CONECT records)
+        pdb_no_conect = mol.to_pdb(flavor=2)
+
+        # Both should contain atom records
+        assert "HETATM" in pdb_default or "ATOM" in pdb_default
+        assert "HETATM" in pdb_no_conect or "ATOM" in pdb_no_conect
+
+        # flavor=0 should have CONECT records (unless bonds fail), flavor=2 should not
+        # Note: CONECT might not be present if bonds fail and fallback is used
+        # So we just verify the PDB is valid
+        assert len(pdb_default) > 0
+        assert len(pdb_no_conect) > 0
+
+    def test_pdb_with_no_bonds(self, single_molecule_xyz_file):
+        """Test PDB conversion without bond detection."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test without bonds
+        pdb_no_bonds = mol.to_pdb(add_bonds=False)
+
+        assert isinstance(pdb_no_bonds, str)
+        assert len(pdb_no_bonds) > 0
+        assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
+
+        # When bonds are not added, CONECT records will be empty
+        # We verify the PDB is valid without expecting specific CONECT content
+        lines = pdb_no_bonds.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_rejects_unexpected_keyword_argument(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test write_pdb rejects unexpected kwargs instead of ignoring them."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+        pdb_file = os.path.join(tmpdir, "unexpected_kwarg.pdb")
+
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            mol.write_pdb(pdb_file, unexpected_option=True)
+
+    def test_to_pdb_strict_columns_and_final_end_record(self):
+        """Test strict PDB 3.3 atom-column formatting and final END line."""
+        mol = Molecule(
+            symbols=["C", "Cl"],
+            positions=np.array([[0.0, 1.234, -2.5], [3.0, -4.0, 5.0]]),
+            info={
+                "record_type": ["HETATM", "ATOM"],
+                "atom_name": ["C1", "CL1"],
+                "residue_name": ["LIG", "SOL"],
+                "residue_number": [1, 2],
+                "chain_id": ["A", "B"],
+            },
+        )
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        lines = pdb_string.splitlines()
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 2
+        assert lines[-1] == "END"
+
+        first, second = atom_lines
+        assert first.startswith("HETATM")
+        assert second.startswith("ATOM  ")
+
+        # PDB v3.3 fixed columns (1-based): chainID=22, resSeq=23-26, element=77-78
+        assert first[21] == "A"
+        assert second[21] == "B"
+        assert first[22:26] == "   1"
+        assert second[22:26] == "   2"
+        assert first[76:78] == " C"
+        assert second[76:78] == "Cl"
+
+        # Ensure standard atom-record width is preserved.
+        assert len(first) >= 78
+        assert len(second) >= 78
+
+    def test_to_pdb_uses_molecule_attributes_for_chain_and_residue_metadata(
+        self,
+    ):
+        """Test chain/residue metadata taken directly from Molecule attributes."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        mol.chain_ids = ["A", "A", "A"]
+        mol.residue_numbers = [7, 7, 7]
+        mol.residue_names = ["HOH", "HOH", "HOH"]
+        mol.atom_names = ["O", "H1", "H2"]
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        atom_lines = [
+            line
+            for line in pdb_string.splitlines()
+            if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 3
+        for line, element in zip(atom_lines, ["O", "H", "H"]):
+            assert line[17:20] == "HOH"
+            assert line[21] == "A"
+            assert line[22:26] == "   7"
+            assert line[76:78] == f"{element:>2}"
+
+    def test_from_pdb_file_preserves_atom_and_residue_metadata(self, tmpdir):
+        """Test native PDB import preserves atom names and residue metadata."""
+        pdb_content = (
+            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "water.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert mol.symbols == ["O", "H", "H"]
+        assert mol.atom_names == ["O", "H1", "H2"]
+        assert mol.residue_names == ["HOH", "HOH", "HOH"]
+        assert mol.residue_numbers == [7, 7, 7]
+        assert mol.chain_ids == ["A", "A", "A"]
+        assert np.allclose(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_infer_pdb_element_from_uppercase_atom_names(self):
+        """Test uppercase PDB atom names can still infer two-letter elements."""
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
+        self, tmpdir
+    ):
+        """Test blank PDB element columns fall back to uppercase atom-name inference."""
+        pdb_content = (
+            "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+            "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "blank_elements.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+        assert mol.atom_names == ["FE", "ZN", "CL", "CA"]
+        assert mol.residue_names == ["HEM", "ZN", "CL", "ALA"]
+
+    def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
+        """Test PDB MODEL/ENDMDL parsing and index selection."""
+        pdb_content = (
+            "MODEL        1\n"
+            "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "MODEL        2\n"
+            "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "models.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        models = Molecule.from_filepath(pdb_file, index=":", return_list=True)
+        assert len(models) == 2
+        assert models[0].chain_ids == ["A"]
+        assert models[1].chain_ids == ["B"]
+
+        last_model = Molecule.from_filepath(pdb_file, index="-1")
+        assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
+        assert last_model.residue_numbers == [2]
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
@@ -961,6 +1388,7 @@ class TestGraphFeatures:
         )
 
         assert not mol.is_chiral
+        assert not mol.chiral_centers
 
         # H has covalent radius of 0.31 Å from ase.data
 
@@ -1007,6 +1435,7 @@ class TestChemicalFeatures:
         assert len(methyl_3_hexane.bond_orders) == 22
         assert all([i == 1 for i in methyl_3_hexane.bond_orders])
         assert methyl_3_hexane.is_chiral
+        assert methyl_3_hexane.chiral_centers == {1: "R"}
         chiral_mol = Molecule(
             symbols=["C", "Cl", "F", "Br", "I"],
             positions=np.array(
@@ -1056,6 +1485,7 @@ class TestChemicalFeatures:
             1.5,
         ]  # correctly gets bond order of ozone as 1.5
         assert not ozone.is_chiral
+        assert not ozone.chiral_centers
         rdkit_mol = ozone.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) == []
         assert ozone.chemical_symbols == ["O", "O", "O"]
@@ -1110,7 +1540,7 @@ class TestChemicalFeatures:
         """Test volume calculation for molecules.
 
         Tests various volume calculation methods:
-        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - voronoi_dirichlet_occupied_volume
         - crude_volume_by_vdw_radii
         - crude_volume_by_atomic_radii
         - vdw_volume
@@ -1119,16 +1549,11 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional,
-        # may not be available in Python 3.12+)
-        try:
-            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
-            assert ozone_vd_vol > 0
-            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
-        # Test other volume methods that don't require pyvoro
+        # Test other volume methods
         assert np.isclose(
             ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
         )
@@ -1151,13 +1576,9 @@ class TestChemicalFeatures:
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
 
-        # Test pyvoro-based method (optional)
-        try:
-            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
-            assert acetone_vd_vol > 0
-            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
@@ -1516,6 +1937,40 @@ class TestQMMMinMolecule:
             ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
         if os.path.exists("tmp.xyz"):
             os.remove("tmp.xyz")
+
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
 
 
 class TestSDFFile:
@@ -1892,51 +2347,465 @@ class TestCDXFile:
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
 
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
 
-def test_qmmm_partition_overlap_raises():
-    """Creating a QMMMMolecule with overlapping
-    partitions should raise a ValueError."""
-    # Create a small dummy molecule
-    symbols = ["C"] * 5
-    positions = np.zeros((5, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # High and medium overlap (atom index 2 appears in both)
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1, 2],
-        medium_level_atoms=[2, 3],
-        low_level_atoms=None,
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "Overlap" in str(exc.value)
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
+
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
+        assert mol.is_ring
+
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
+        assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
 
 
-def test_qmmm_partition_out_of_range_raises():
-    """Specifying out-of-range atom indices should raise a ValueError."""
-    symbols = ["C"] * 4
-    positions = np.zeros((4, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # index 10 out of range
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1],
-        medium_level_atoms=[2],
-        low_level_atoms=[10],
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "out of range" in str(exc.value)
+class TestpKaCDXFile:
+    # ------------------------------------------------------------------
+    # CDXML atom-colour parsing and proton detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_atom_colors(self, colored_implicit_proton_cdxml_file):
+        """Test that atom colours are parsed correctly from phenol.cdxml.
+
+        Phenol has 7 CDXML atoms (6 C + 1 O).  The O node carries the
+        label ``<s color="0">O</s><s color="4">H</s>`` – the "H" is
+        rendered in colour 4 while the heavy atom keeps colour 0.
+        ``parse_cdxml_atom_colors`` must record this in ``implicit_h_color``.
+        """
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        atoms = cdx_file.parse_cdxml_element_colors()
+
+        assert len(atoms) == 7  # 6C + 1O
+        # First six atoms are carbons with default colour
+        for a in atoms[:6]:
+            assert a["symbol"] == "C"
+            assert a["color"] == 0
+            assert a["implicit_h_color"] is None
+
+        # Last atom is O with a coloured H in its label
+        o_atom = atoms[6]
+        assert o_atom["symbol"] == "O"
+        assert o_atom["color"] == 0
+        assert o_atom["num_hydrogens"] == 1
+        assert o_atom["implicit_h_color"] == 4  # the "H" in "OH"
+
+    def test_parse_cdxml_atom_colors_benzene_no_color(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test parsing benzene CDXML where all atoms have the same colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        atoms = cdx_file.parse_cdxml_element_colors()
+
+        assert len(atoms) == 6  # 6 carbons, no explicit H
+        # All should have colour 0
+        for a in atoms:
+            assert a["color"] == 0
+            assert a["symbol"] == "C"
+
+    def test_get_colored_proton_index_auto_detect(
+        self, colored_proton_cdxml_file
+    ):
+        """Test auto-detection of uniquely coloured proton when that proton appears as an explicit node (default mode)."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        proton_index = cdx_file.get_colored_proton_index()
+        list_of_elements = cdx_file.parse_cdxml_element_colors()
+
+        assert proton_index == 8
+
+        # Verify get_pka_molecules returns PKaMolecule with proton_index
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+        assert list_of_elements[-1]["color"] == 4
+
+    def test_get_colored_proton_index_user_specified(
+        self, colored_proton_cdxml_file
+    ):
+        """Test user-specified colour mode with phenol functional-group H.
+
+        Colour 4 is the implicit-H span colour in the phenol OH label.
+        """
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+
+        # Via get_pka_molecules with color_code
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecule_explicit_proton_index(
+        self, colored_proton_cdxml_file
+    ):
+        """Test that an explicit proton_index bypasses colour detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mol = cdx_file.get_molecules(index="-1")
+
+        # Find any H atom to use as explicit index
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        assert len(h_indices) > 0
+        explicit_idx = h_indices[0]
+
+        pka_mol = cdx_file.get_pka_molecules(
+            index="-1", proton_index=explicit_idx
+        )
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == explicit_idx
+        assert pka_mol.symbols[explicit_idx - 1] == "H"
+
+    def test_get_colored_proton_index_no_unique_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test that auto-detect raises when all atoms share the same colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_no_hydrogen_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that auto-detect raises when coloured atoms are not hydrogen."""
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_invalid_color_code_raises(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Test that specifying a non-existent colour code raises."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        with pytest.raises(ValueError, match="No atoms with color code"):
+            cdx_file.get_colored_proton_index(color_code=99)
+
+    def test_get_colored_proton_index_multiple_atoms_same_color_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that specifying a colour shared by non-H atoms raises."""
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
+        # colour 10 labels 9 carbon/nitrogen atoms, none are hydrogen
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index(color_code=10)
+
+    def test_proton_removal_phenol(self, colored_proton_cdxml_file):
+        """Test that the coloured proton can be removed from the molecule.
+        The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
+        )
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
+
+    def test_implicit_proton_removal_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """End-to-end: detect phenol OH proton by colour, remove it.
+
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms).
+        The OH hydrogen is an implicit H on the O node, identified
+        via the coloured "H" span in the label.
+        """
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
+        )
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
+
+    def test_functional_group_proton_user_color_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """User-specified colour for phenol implicit OH hydrogen."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+
+        # colour 4 is the H span colour in phenol.cdxml
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    # ------------------------------------------------------------------
+    # Per-fragment proton auto-detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_fragment_colors_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns one sub-list for single-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        # Phenol: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(fragments[0]) == 8
+
+    def test_parse_cdxml_fragment_colors_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns two sub-lists for two-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+        mol1 = fragments[0]
+        mol2 = fragments[1]
+
+        assert len(fragments) == 2
+        # Each phenol fragment: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(mol1) == 8
+        assert mol1[-1]["symbol"] == "H"
+        assert mol1[-1]["color"] == 5
+        assert len(mol2) == 8
+        assert mol2[-1]["symbol"] == "H"
+        assert mol2[-1]["color"] == 5
+        print(mol1)
+        print(mol2)
+
+    def test_detect_proton_in_fragment_explicit_h(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """_detect_proton_in_fragment finds explicit H in each fragment."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        for frag_idx, frag_atoms in enumerate(fragments):
+            detection = cdx_file._detect_proton_in_fragment(
+                frag_atoms, fragment_index=frag_idx + 1
+            )
+            assert detection["type"] == "explicit"
+            assert detection["atom"]["symbol"] == "H"
+            # The H is the last atom in each fragment (index 7, 0-based)
+            assert detection["local_idx"] == 7
+
+    def test_detect_proton_in_fragment_uniform_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """_detect_proton_in_fragment raises when all atoms share a colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file._detect_proton_in_fragment(fragments[0], fragment_index=1)
+
+    def test_get_pka_molecules_auto_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """get_pka_molecules_auto returns one PKaMolecule for a single-fragment file."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        assert isinstance(pka_mols[0], PKaMolecule)
+        # Proton should be H
+        assert pka_mols[0].symbols[pka_mols[0].proton_index - 1] == "H"
+
+    def test_get_pka_molecules_auto_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules_auto returns two PKaMolecules with independent proton detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.proton_index >= 1
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_delegates_to_auto(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules() with index=':' and no proton args delegates to get_pka_molecules_auto()."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # No proton_index, no color_code → auto mode; index=":" → all fragments
+        pka_mols = cdx_file.get_pka_molecules(index=":")
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_with_explicit_proton_index(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules with explicit proton_index applies the same index to all fragments."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # Find a valid H index in the first molecule
+        mol = cdx_file.molecules[0]
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        pi = h_indices[0]
+
+        pka_mols = cdx_file.get_pka_molecules(index=":", proton_index=pi)
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert pka_mol.proton_index == pi
+
+    def test_get_pka_molecules_auto_implicit_h(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Auto-detection handles implicit/functional-group H (phenol OH)."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        pka_mol = pka_mols[0]
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_auto_nested_fragment_groups(self):
+        """Nested ChemDraw fragment groups resolve coloured acidic protons."""
+        from pathlib import Path
+
+        cdxml = Path(__file__).resolve().parents[1] / "pka_scale.cdxml"
+        if not cdxml.is_file():
+            pytest.skip("pka_scale.cdxml not available in workspace")
+
+        cdx_file = PKaCDXFile(filename=str(cdxml))
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 5
+        for pka_mol in pka_mols:
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_fragment_colors_match_flat_colors(
+        self, colored_proton_cdxml_file
+    ):
+        """Fragment colours concatenated should match the flat parse_cdxml_element_colors output."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        flat = cdx_file.parse_cdxml_element_colors()
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        # Concatenate fragment atoms
+        concatenated = []
+        for frag in fragments:
+            concatenated.extend(frag)
+
+        assert len(concatenated) == len(flat)
+        for a, b in zip(concatenated, flat):
+            assert a["cdxml_id"] == b["cdxml_id"]
+            assert a["color"] == b["color"]
+            assert a["symbol"] == b["symbol"]
+
+
+class TestQMMMMolecule:
+    """Tests for QMMMMolecule partitioning and related functionality."""
+
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
 
 
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""
 
+
+class TestInChI:
+    """Tests for Molecule.inchi and Molecule.inchikey properties (Open Babel backend)."""
+
+    # InChIKey constants
     EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
     EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
     EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
     EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
     EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+
+    # InChI constants (full InChI strings)
+    EXPECTED_INCHI_NORMAL = "InChI=1S/C4H10O3P/c1-3-6-8(5)7-4-2/h3-4H2,1-2H3"
+    EXPECTED_INCHI_R_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m1/s1"
+    EXPECTED_INCHI_S_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m0/s1"
 
     @staticmethod
     def _load_molecule(filepath):
@@ -1951,31 +2820,36 @@ class TestInChIKey:
         mol = self._load_molecule(inchikey_normal_file)
         for _ in range(3):
             assert mol.inchikey == self.EXPECTED_NORMAL
+            assert mol.inchi == self.EXPECTED_INCHI_NORMAL
 
     def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
         """InChIKey for the R-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_r_enantiomer_file)
         assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_R_ENANTIOMER
 
     def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
         """InChIKey for the S-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_s_enantiomer_file)
         assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_S_ENANTIOMER
 
     def test_enantiomers_share_connectivity_layer(
         self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
     ):
         """R and S enantiomers share the same first (connectivity) layer of
-        the InChIKey (identical constitution) but differ in the stereo layer,
+        the InChI and InChIKey (identical constitution) but differ in the stereo layer,
         confirming that Open Babel correctly resolves the axial chirality."""
         mol_r = self._load_molecule(inchikey_r_enantiomer_file)
         mol_s = self._load_molecule(inchikey_s_enantiomer_file)
-        # First 14-character block: same connectivity
+        # First 14-character block: same connectivity in InChIKey
         assert mol_r.inchikey.split("-")[0] == mol_s.inchikey.split("-")[0]
-        # Second block: stereo layer must differ for a chiral pair
+        # Second block: stereo layer must differ for a chiral pair in InChIKey
         assert mol_r.inchikey.split("-")[1] != mol_s.inchikey.split("-")[1]
         # Overall InChIKeys are distinct
         assert mol_r.inchikey != mol_s.inchikey
+        # InChI strings are also distinct (stereo layer differs at /t flag)
+        assert mol_r.inchi != mol_s.inchi
 
     def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
         """InChIKey for a large molecule (c3) should match the expected value."""
@@ -1990,10 +2864,11 @@ class TestInChIKey:
     def test_large_molecules_differ(
         self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
     ):
-        """Two different large molecules should produce different InChIKeys."""
+        """Two different large molecules should produce different InChIKeys and InChI strings."""
         mol_c3 = self._load_molecule(inchikey_large_molecule_c3_file)
         mol_c2 = self._load_molecule(inchikey_large_molecule_c2_file)
         assert mol_c3.inchikey != mol_c2.inchikey
+        assert mol_c3.inchi != mol_c2.inchi
 
 
 class TestCXSMILES:
@@ -2214,3 +3089,214 @@ class TestCXSMILES:
         mol_c2 = self._load_molecule(cxsmiles_large_molecule_c2_file)
         mol_c3 = self._load_molecule(cxsmiles_large_molecule_c3_file)
         assert mol_c2.cxsmiles != mol_c3.cxsmiles
+
+
+class TestMoleculeAndStructureIdentifiers:
+    """Tests for Molecule.canonical_geometry, Molecule.structure_id,
+    Molecule.structure_label, Molecule.molecule_id, and Molecule.molecule_label.
+
+    canonical_geometry: string encoding of the geometry invariant under
+        translation, rotation, and atom-index permutation.
+    structure_id: SHA-256 hex digest of (canonical_geometry, charge, multiplicity).
+    structure_label: "str-{chemical_formula}-{structure_id[:12]}".
+    molecule_id:  Unique chemical species identifier (InChIKey string).
+                  Topology- and stereochemistry-based; geometry-independent.
+    molecule_label: "mol-{chemical_formula}-{molecule_id}".
+    """
+
+    # ── Format / determinism ──
+
+    def test_structure_label_format(self, canonical_formaldehyde_file):
+        """structure_label must follow 'str-{chemical_formula}-{structure_id[:12]}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.structure_label
+            == f"str-{mol.chemical_formula}-{mol.structure_id[:12]}"
+        )
+
+    def test_molecule_label_format(self, canonical_formaldehyde_file):
+        """molecule_label must follow 'mol-{chemical_formula}-{molecule_id}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.molecule_label
+            == f"mol-{mol.chemical_formula}-{mol.molecule_id}"
+        )
+
+    def test_ids_are_deterministic(self, canonical_formaldehyde_file):
+        """Loading the same file twice must give identical structure_id,
+        structure_label, molecule_id, and molecule_label."""
+        mol_a = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_b = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert mol_a.structure_id == mol_b.structure_id
+        assert mol_a.structure_label == mol_b.structure_label
+        assert mol_a.molecule_id == mol_b.molecule_id
+        assert mol_a.molecule_label == mol_b.molecule_label
+
+    # ── Rigid transformations: both ids preserved ──
+
+    def test_rigid_transform_preserves_both_ids_formaldehyde(
+        self,
+        canonical_formaldehyde_file,
+        canonical_formaldehyde_trans_rot_file,
+    ):
+        """Translating and rotating formaldehyde (C2v) must preserve both
+        structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_tr = Molecule.from_filepath(canonical_formaldehyde_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "Methane is a spherical top (Td symmetry): all three principal moments "
+            "of inertia are theoretically equal, making the eigenvectors of the "
+            "inertia tensor numerically arbitrary. The canonicalization algorithm "
+            "cannot guarantee a unique frame for such molecules. This test currently "
+            "passes only because the stored coordinates contain a small numerical "
+            "asymmetry (moments: ~3.2312, ~3.2314, ~3.2327 amu·Å^2) that makes the "
+            "three eigenvalues distinguishable at machine precision. For ideally "
+            "symmetric Td coordinates the test would fail."
+        ),
+    )
+    def test_rigid_transform_preserves_both_ids_methane(
+        self, canonical_methane_file, canonical_methane_trans_rot_file
+    ):
+        """Translating and rotating methane (Td, spherical top) should preserve
+        both structure_id and molecule_id (xfail: canonicalization not guaranteed
+        for degenerate inertia tensors)."""
+        mol_ref = Molecule.from_filepath(canonical_methane_file)
+        mol_tr = Molecule.from_filepath(canonical_methane_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+
+    def test_rigid_transform_preserves_both_ids_3b(
+        self, canonical_3b_file, canonical_3b_trans_rot_file
+    ):
+        """Translating and rotating 3b (C17H17NOS, C1 symmetry, 37 atoms) must
+        preserve both structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_3b_file)
+        mol_tr = Molecule.from_filepath(canonical_3b_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
+
+    def test_atom_permutation_preserves_both_ids(
+        self, canonical_3b_file, canonical_3b_permuted_file
+    ):
+        """Permuting atom input order must preserve both structure_id and
+        molecule_id (invariance to atom-listing order)."""
+        mol_ref = Molecule.from_filepath(canonical_3b_file)
+        mol_perm = Molecule.from_filepath(canonical_3b_permuted_file)
+        assert mol_ref.canonical_geometry == mol_perm.canonical_geometry
+        assert mol_ref.structure_id == mol_perm.structure_id
+        assert mol_ref.structure_label == mol_perm.structure_label
+        assert mol_ref.molecule_id == mol_perm.molecule_id
+        assert mol_ref.molecule_label == mol_perm.molecule_label
+
+    # ── Geometry vs topology: structure_id changes, molecule_id unchanged ──
+
+    def test_sub_threshold_perturbation_preserves_both_ids(
+        self,
+        canonical_formaldehyde_file,
+        canonical_formaldehyde_perturbed_file,
+    ):
+        """A coordinate perturbation of ~1e-7 Å (well below the 1e-4 Å rounding
+        threshold) must preserve both structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_pert = Molecule.from_filepath(
+            canonical_formaldehyde_perturbed_file
+        )
+        assert mol_ref.canonical_geometry == mol_pert.canonical_geometry
+        assert mol_ref.structure_id == mol_pert.structure_id
+        assert mol_ref.structure_label == mol_pert.structure_label
+        assert mol_ref.molecule_id == mol_pert.molecule_id
+        assert mol_ref.molecule_label == mol_pert.molecule_label
+
+    def test_geometry_distortion_changes_structure_id_not_molecule_id(
+        self, canonical_methane_file, canonical_methane_distorted_file
+    ):
+        """Elongating one C-H bond by ~2e-3 Å must change structure_id
+        (geometry changed) but leave molecule_id unchanged (same topology)."""
+        mol_ref = Molecule.from_filepath(canonical_methane_file)
+        mol_dist = Molecule.from_filepath(canonical_methane_distorted_file)
+        assert mol_ref.canonical_geometry != mol_dist.canonical_geometry
+        assert mol_ref.structure_id != mol_dist.structure_id
+        assert mol_ref.structure_label != mol_dist.structure_label
+        assert mol_ref.molecule_id == mol_dist.molecule_id
+        assert mol_ref.molecule_label == mol_dist.molecule_label
+
+    # ── Electronic state: structure_id changes, molecule_id unchanged ──
+
+    def test_different_electronic_state_changes_structure_id_not_molecule_id(
+        self, canonical_formaldehyde_file
+    ):
+        """The same geometry with different charge or multiplicity must produce
+        a different structure_id (electronic state is part of the structure hash)
+        but the same molecule_id (topology is unchanged)."""
+        mol_neutral = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_cation = Molecule(
+            symbols=mol_neutral.symbols,
+            positions=mol_neutral.positions,
+            charge=1,
+            multiplicity=2,
+        )
+        assert mol_neutral.structure_id != mol_cation.structure_id
+        assert mol_neutral.structure_label != mol_cation.structure_label
+        assert mol_neutral.molecule_id == mol_cation.molecule_id
+        assert mol_neutral.molecule_label == mol_cation.molecule_label
+
+    # ── Stereochemistry: both ids differ for enantiomers ──
+
+    def test_enantiomers_differ_in_both_ids(
+        self,
+        canonical_r_bromochlorofluoromethane_file,
+        canonical_s_bromochlorofluoromethane_file,
+    ):
+        """R- and S-bromochlorofluoromethane are non-superimposable mirror images:
+        both structure_id (different geometry) and molecule_id (InChIKey encodes
+        stereochemistry) must differ.
+        The first InChIKey block (connectivity layer) is shared; the stereo
+        layer (second block) differs."""
+        mol_r = Molecule.from_filepath(
+            canonical_r_bromochlorofluoromethane_file
+        )
+        mol_s = Molecule.from_filepath(
+            canonical_s_bromochlorofluoromethane_file
+        )
+        assert mol_r.canonical_geometry != mol_s.canonical_geometry
+        assert mol_r.structure_id != mol_s.structure_id
+        assert mol_r.structure_label != mol_s.structure_label
+        assert mol_r.molecule_id != mol_s.molecule_id
+        assert mol_r.molecule_label != mol_s.molecule_label
+        # Connectivity layer is shared; stereo layer differs; protonation layer is shared
+        assert (
+            mol_r.molecule_id.split("-")[0] == mol_s.molecule_id.split("-")[0]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[1] != mol_s.molecule_id.split("-")[1]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[2] == mol_s.molecule_id.split("-")[2]
+        )
+
+    # ── Different species: both ids differ ──
+
+    def test_different_species_differ_in_both_ids(
+        self, canonical_formaldehyde_file, canonical_methane_file
+    ):
+        """Two chemically distinct molecules must differ in both structure_id
+        and molecule_id."""
+        mol_ch2o = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_ch4 = Molecule.from_filepath(canonical_methane_file)
+        assert mol_ch2o.canonical_geometry != mol_ch4.canonical_geometry
+        assert mol_ch2o.structure_id != mol_ch4.structure_id
+        assert mol_ch2o.structure_label != mol_ch4.structure_label
+        assert mol_ch2o.molecule_id != mol_ch4.molecule_id
+        assert mol_ch2o.molecule_label != mol_ch4.molecule_label

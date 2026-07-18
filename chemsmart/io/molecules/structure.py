@@ -1,10 +1,10 @@
 import ast
 import copy
+import hashlib
 import inspect
 import logging
 import os
 import re
-import tempfile
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -18,8 +18,7 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.utils.geometry import is_collinear
-from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.geometry import canonicalize_positions, is_collinear
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
 
@@ -50,9 +49,9 @@ class Molecule:
     translation_vectors: list of lists
         The translation vectors for the molecule.
     energy: float
-        The energy of the molecule in eV.
+        The energy of the molecule in Hartree.
     forces: numpy array
-        The forces on the atoms in the molecule in eV/Å.
+        The forces on the atoms in the molecule in Hartree/Bohr.
     velocities: numpy array
         The velocities of the atoms in the molecule.
     qm high/medium/low_level_atoms：list of integers to define QM/MM layers
@@ -62,6 +61,24 @@ class Molecule:
     scale factors: a dictionary of scale factors for QM/MM calculations,
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
+    structure_index_in_file: int | None
+        1-based index of this structure within the source file, if applicable.
+    rotational_symmetry_number: int | None
+        Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
+    mulliken_atomic_charges: dict[str, float] | None
+        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+    mulliken_spin_densities: dict[str, float] | None
+        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges), if available.
+    is_optimized_structure: bool | None
+        Whether this structure corresponds to an optimized step/final optimized geometry.
+    dipole_moment: numpy array | None
+        Dipole moment [X, Y, Z] components in Debye, if available.
+    dipole_moment_magnitude: float | None
+        Total dipole moment magnitude in Debye, if available.
+    rotational_constants: numpy array | None
+        Rotational constants [A, B, C] in Hz, if available.
+    point_group: str | None
+        Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
     """
@@ -84,6 +101,15 @@ class Molecule:
         vibrational_ir_intensities=None,
         vibrational_mode_symmetries=None,
         vibrational_modes=None,
+        structure_index_in_file=None,
+        rotational_symmetry_number=None,
+        mulliken_atomic_charges=None,
+        mulliken_spin_densities=None,
+        is_optimized_structure=None,
+        dipole_moment=None,
+        dipole_moment_magnitude=None,
+        rotational_constants=None,
+        point_group=None,
         info=None,
     ):
         """
@@ -103,7 +129,18 @@ class Molecule:
             # initialise info as empty dict if it is None
             info = dict()
         self.info = info
+        self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
+        self.rotational_symmetry_number = rotational_symmetry_number
+        self.is_optimized_structure = is_optimized_structure
+        self.mulliken_atomic_charges = mulliken_atomic_charges
+        self.mulliken_spin_densities = mulliken_spin_densities
+        self.dipole_moment = dipole_moment  # np.array([x, y, z]) in Debye
+        self.dipole_moment_magnitude = (
+            dipole_moment_magnitude  # float in Debye
+        )
+        self.rotational_constants = rotational_constants
+        self.point_group = point_group
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond
@@ -193,7 +230,7 @@ class Molecule:
     @property
     def energy(self):
         """
-        Total molecular energy in eV.
+        Total molecular energy in Hartree.
         """
         return self._energy
 
@@ -224,6 +261,17 @@ class Molecule:
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
             mode="hill", empirical=True
         )
+
+    @property
+    def elements(self):
+        return sorted(set(self.symbols))
+
+    @property
+    def element_counts(self):
+        counts = {}
+        for s in self.symbols:
+            counts[s] = counts.get(s, 0) + 1
+        return counts
 
     @property
     def mass(self):
@@ -286,6 +334,67 @@ class Molecule:
         """
         return np.average(self.positions, axis=0, weights=self.masses)
 
+    @cached_property
+    def canonical_positions(self):
+        """Canonical atomic positions.
+        The positions are translated to the centre of mass and rotated into
+        the principal-axes frame of the moment-of-inertia tensor, with a
+        deterministic sign convention applied to each axis. The result is
+        invariant under translation and rotation of the original coordinates.
+        """
+        return canonicalize_positions(self.masses, self.positions)
+
+    @cached_property
+    def canonical_geometry(self):
+        """Canonical string representation of the molecular geometry.
+        Atoms are sorted lexicographically by (symbol, x, y, z) after
+        canonicalization, yielding a representation that is invariant under
+        translation, rotation and atom-index permutation.
+
+        Note on precision: coordinates are rounded to 4 decimal places
+        (~1e-4 Å) to absorb sub-threshold numerical noise in the canonical
+        positions (e.g. floating-point differences across platforms or
+        minor coordinate perturbations). This is an engineering compromise:
+        in rare cases (e.g. perfectly symmetric spherical-top molecules),
+        the canonical frame is not uniquely defined due to degeneracy of the
+        inertia tensor. As a result, canonical_positions may differ across
+        input orientations. While rounding often mitigates this in practice,
+        canonical_geometry (and thus structure_id) is not strictly guaranteed
+        to be invariant in such cases.
+        """
+        decimals = 4
+        rounded = np.round(self.canonical_positions, decimals=decimals)
+        atoms = sorted(zip(self.chemical_symbols, rounded.tolist()))
+        parts = [
+            f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
+            for sym, (x, y, z) in atoms
+        ]
+        return ";".join(parts)
+
+    @cached_property
+    def structure_id(self):
+        """Unique structural identifier (SHA-256 hex digest).
+        Computed from canonical_geometry, charge and multiplicity.
+        Two molecules with identical canonicalized geometry
+        (up to translation/rotation/atom-ordering) and electronic
+        state will produce the same structure_id.
+        """
+        components = [
+            self.canonical_geometry,
+            str(self.charge),
+            str(self.multiplicity),
+        ]
+        payload = "|".join(components)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    @property
+    def structure_label(self):
+        """Human-readable short label for the structure.
+        Combines the chemical formula with the first 12 characters of
+        structure_id, e.g. "str-C6H6-a1b2c3d4e5f6".
+        """
+        return f"str-{self.chemical_formula}-{self.structure_id[:12]}"
+
     @property
     def chemical_formula(self):
         """
@@ -293,14 +402,16 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
-    @property
+    @cached_property
     def inchikey(self):
-        """
-        Return the InChIKey string for the molecule using Open Babel.
-        This provides robust topological perception avoiding artifacts
-        from distance-based bond guessing.
+        """InChIKey string for the molecule (27-character).
+        Computed via Open Babel for robust topological perception,
+        avoiding artifacts from distance-based bond guessing.
+        Two molecules with identical connectivity and stereochemistry
+        will produce the same InChIKey.
         """
         try:
+            from openbabel import openbabel as ob
             from openbabel import pybel
         except ImportError as exc:
             raise ImportError(
@@ -316,8 +427,31 @@ class Molecule:
             )
         xyz_string = "\n".join(lines)
 
-        ob_mol = pybel.readstring("xyz", xyz_string)
-        return ob_mol.write("inchikey").strip()
+        # Suppress Open Babel C-level warnings during InChIKey generation
+        ob.obErrorLog.SetOutputLevel(ob.obError)
+        try:
+            ob_mol = pybel.readstring("xyz", xyz_string)
+            result = ob_mol.write("inchikey").strip()
+        finally:
+            ob.obErrorLog.SetOutputLevel(ob.obWarning)
+
+        return result
+
+    @cached_property
+    def molecule_id(self):
+        """Unique molecular identifier (InChIKey string).
+        Two molecules with identical connectivity and stereochemistry
+        will produce the same molecule_id.
+        """
+        return self.inchikey
+
+    @cached_property
+    def molecule_label(self):
+        """Unique, human-readable label for the molecule.
+        Combines the chemical formula with the molecule_id, e.g.
+        "mol-C6H6-UHOVQNZJYSORNB-UHFFFAOYSA-N".
+        """
+        return f"mol-{self.chemical_formula}-{self.inchikey}"
 
     @property
     def cxsmiles(self):
@@ -329,6 +463,45 @@ class Molecule:
         appended in a ``|...|`` block after the SMILES string.
         """
         return Chem.MolToCXSmiles(self.to_rdkit())
+
+    @cached_property
+    def inchi(self):
+        """Full InChI string for the molecule.
+        Computed via Open Babel (same XYZ-based pipeline as ``inchikey``).
+        Encodes connectivity, hydrogen counts, charge, and stereochemistry
+        in a layered string, e.g. ``InChI=1S/C6H6/c1-2-4-6-5-3-1/h1-6H``.
+        """
+        try:
+            from openbabel import openbabel as ob
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Calculating InChI requires Open Babel. "
+                "Use 'conda install -c conda-forge openbabel' to install."
+            ) from exc
+
+        lines = [str(self.num_atoms), "Created for InChI via Open Babel"]
+        for s, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{s:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}"
+            )
+        xyz_string = "\n".join(lines)
+
+        ob.obErrorLog.SetOutputLevel(ob.obError)
+        try:
+            ob_mol = pybel.readstring("xyz", xyz_string)
+            result = ob_mol.write("inchi").strip()
+        finally:
+            ob.obErrorLog.SetOutputLevel(ob.obWarning)
+
+        return result
+
+    @cached_property
+    def smiles(self):
+        """SMILES string for the molecule (convenience property).
+        Equivalent to calling ``to_smiles()``.
+        """
+        return self.to_smiles()
 
     @cached_property
     def chemical_symbols(self):
@@ -351,38 +524,25 @@ class Molecule:
 
     @property
     def estimated_dispersion(self):
-        """Estimated dispersion parameter for Voronoi tessellation.
+        """Bounding box padding for Voronoi-Dirichlet tessellation.
+
+        Returns the maximum VDW radius of the molecule's atoms. This is the
+        physically rigorous choice: the bounding box extends by one VDW radius
+        beyond the outermost atomic centres, so edge atoms' Voronoi cells reach
+        exactly to their VDW surface. Any positive padding guarantees bounded
+        cells (mirrors bound every region), and using max(r_vdw) keeps cells
+        tight enough that the overlap correction in
+        ``calculate_voronoi_dirichlet_occupied_volume`` is meaningful.
+
         Returns:
-        - dispersion (float): Estimated maximum distance for adjacent points.
+        - dispersion (float): Maximum VDW radius across all atoms (Å).
         """
-        n_points = self.distance_matrix.shape[0]
-        max_distance = np.max(
-            self.distance_matrix[np.triu_indices(n_points, k=1)]
-        )
-
-        max_radii_sum = 0.0
-        radii = np.array(self.vdw_radii_list)
-        if len(radii) != n_points:
-            raise ValueError("Number of radii must match number of points.")
-        for i in range(n_points):
-            for j in range(i + 1, n_points):
-                radii_sum = radii[i] + radii[j]
-                max_radii_sum = max(max_radii_sum, radii_sum)
-
-        # Use a factor of 1.5 to ensure sufficient
-        # dispersion for Voronoi tessellation
-        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
-        return dispersion
+        return max(self.vdw_radii_list)
 
     @property
     def voronoi_dirichlet_occupied_volume(self):
         """Calculate the occupied volume of the
         molecule using Voronoi-Dirichlet tessellation.
-
-        Note: This method requires the pyvoro
-        package, which can be installed with:
-            pip install chemsmart[voronoi]
-        Note: pyvoro requires Python < 3.12
         """
         from chemsmart.utils.geometry import (
             calculate_voronoi_dirichlet_occupied_volume,
@@ -398,9 +558,7 @@ class Molecule:
     def voronoi_dirichlet_polyhedra_occupied_volume(self):
         """Calculate the occupied volume of the molecule
         using Voronoi-Dirichlet Polyhedra (VDP)."""
-        from chemsmart.utils.geometry import (
-            calculate_molecular_volume_vdp,
-        )
+        from chemsmart.utils.geometry import calculate_molecular_volume_vdp
 
         return calculate_molecular_volume_vdp(
             coordinates=self.positions,
@@ -515,19 +673,80 @@ class Molecule:
         return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
 
     @property
+    def chiral_centers(self):
+        """Dict mapping 1-based atom index to CIP stereodescriptor.
+
+        Uses RDKit ``FindMolChiralCenters`` with ``includeUnassigned=True``
+        so that atoms whose configuration could not be assigned from the
+        3D geometry are still listed (with descriptor ``"?"``).
+
+        Returns:
+            dict[int, str]: e.g. ``{3: "R", 7: "S"}`` or ``{}`` for
+            achiral molecules.  Keys are 1-based atom indices.
+        """
+        centers = Chem.FindMolChiralCenters(
+            self.to_rdkit(), force=True, includeUnassigned=True
+        )
+        # RDKit returns 0-based indices; convert to 1-based for consistency
+        return {idx + 1: descriptor for idx, descriptor in centers}
+
+    @property
+    def is_multicomponent(self):
+        """True if the molecule consists of more than one disconnected fragment.
+
+        Detects salt forms, solvent complexes, or ion pairs by counting
+        the number of connected components in the molecular graph.
+        """
+        from rdkit.Chem import GetMolFrags
+
+        frags = GetMolFrags(self.to_rdkit())
+        return len(frags) > 1
+
+    @property
+    def num_components(self):
+        """Number of disconnected molecular fragments (components).
+
+        Returns 1 for a normal single-component molecule, >1 for salts,
+        solvent complexes, or ion pairs.
+        """
+        from rdkit.Chem import GetMolFrags
+
+        return len(GetMolFrags(self.to_rdkit()))
+
+    @property
     def is_aromatic(self):
         """
         Check if molecule is aromatic or not.
+
+        Uses ring membership to validate aromaticity so that bond-order
+        heuristics (which may assign 1.5 to non-ring bonds such as O-H)
+        do not produce false positives.  An atom is only considered
+        aromatic when it both carries the aromatic flag *and* belongs to
+        at least one ring.
+
+        .. note::
+            **Limitations:** Bond orders are inferred from 3D geometry, not
+            from an electronic structure calculation, so this check is
+            model-dependent.  Edge cases such as the cyclopropenyl cation
+            versus the cyclopropenyl radical may not be distinguished
+            correctly.  For borderline or unusual systems the result should
+            be treated as a heuristic estimate.
         """
         mol = self.to_rdkit()
-        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+        Chem.FastFindRings(mol)
+        ring_info = mol.GetRingInfo()
+        ring_atoms = {idx for ring in ring_info.AtomRings() for idx in ring}
+        return any(
+            atom.GetIsAromatic() and atom.GetIdx() in ring_atoms
+            for atom in mol.GetAtoms()
+        )
 
     @property
     def is_ring(self):
         """
         Check if molecule is a ring or not.
         """
-        return Chem.GetSymmSSSR(self.to_rdkit()) != []
+        return len(Chem.GetSymmSSSR(self.to_rdkit())) > 0
 
     @property
     def is_monoatomic(self):
@@ -596,6 +815,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
     @property
@@ -607,6 +827,9 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            logger.debug(
+                f"Moments of inertia (most abundant mass): {eigenvalues}."
+            )
             return eigenvalues
 
     @property
@@ -668,15 +891,27 @@ class Molecule:
         """
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
+
+        For linear molecules the moment of inertia along the molecular axis is
+         (effectively) zero, so the axial rotational temperature is infinite. For
+         linear molecules this property returns only the finite perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
             for i in self.moments_of_inertia
         ]
-        return [
-            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
-            for i in range(3)
-        ]
+        result = []
+        for moi in moi_in_SI_units:
+            if moi == 0.0:
+                result.append(np.inf)
+            else:
+                result.append(
+                    units._hplanck**2 / (8 * np.pi**2 * moi * units._k)
+                )
+        if self.is_linear:
+            # for linear molecule, has only one rotational temperature
+            return [result[-1]]
+        return result
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
@@ -766,7 +1001,9 @@ class Molecule:
         return len(self.vibrational_modes)
 
     @classmethod
-    def from_coordinate_block_text(cls, coordinate_block):
+    def from_coordinate_block_text(
+        cls, coordinate_block, structure_index_in_file=None
+    ):
         """
         Create molecule from coordinate block text.
         """
@@ -776,6 +1013,7 @@ class Molecule:
             positions=cb.positions,
             frozen_atoms=cb.constrained_atoms,
             translation_vectors=cb.translation_vectors,
+            structure_index_in_file=structure_index_in_file,
         )
 
     @classmethod
@@ -830,6 +1068,13 @@ class Molecule:
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
+        if basename.endswith(".pdb"):
+            return cls._read_pdb_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         if basename.endswith((".com", ".gjf")):
             return cls._read_gaussian_inputfile(filepath)
 
@@ -867,6 +1112,32 @@ class Molecule:
                 index=index,
                 return_list=return_list,
             )
+
+        if basename.endswith(".db"):
+            from chemsmart.database.utils import is_chemsmart_database
+
+            if is_chemsmart_database(filepath):
+                return cls._read_chemsmart_dbfile(
+                    filepath=filepath,
+                    structure_index=index,
+                    return_list=return_list,
+                    **kwargs,
+                )
+            # Non-chemsmart .db: try ASE database reader, raise a friendly
+            # error if the file is also not a valid ASE database.
+            try:
+                result = cls._read_other(filepath, index, **kwargs)
+            except Exception as exc:
+                raise ValueError(
+                    f"File {filepath} is neither a valid chemsmart database "
+                    "nor an ASE database file."
+                ) from exc
+            if isinstance(result, list) and len(result) == 0:
+                raise ValueError(
+                    f"File {filepath} is neither a valid chemsmart database "
+                    "nor an ASE database file."
+                )
+            return result
 
         return cls._read_other(filepath, index, **kwargs)
 
@@ -990,6 +1261,57 @@ class Molecule:
             index=index, return_list=return_list
         )
 
+    @classmethod
+    def _read_chemsmart_dbfile(
+        cls,
+        filepath,
+        return_list=False,
+        record_index=None,
+        record_id=None,
+        structure_index="-1",
+        structure_id=None,
+        molecule_id=None,
+    ):
+        """Read molecules from a chemsmart database file (.db).
+
+        Args:
+            filepath (str): Path to the chemsmart .db file.
+            return_list (bool): If True, always return a list.
+            record_index (int, optional): 1-based record index to select.
+            record_id (str, optional): Full record ID or unique prefix.
+            structure_index (str or int): 1-based index or slice string
+                applied within the resolved record(s). Only used together
+                with record_index or record_id.
+            structure_id (str, optional): Full structure ID or unique
+                prefix; returns the corresponding single structure.
+            molecule_id (str, optional): Full molecule ID or unique
+                prefix; returns every conformer of that molecule.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from the database.
+        """
+        from chemsmart.io.database import DatabaseFile
+
+        database_file = DatabaseFile(filename=filepath)
+        if structure_id is not None:
+            return database_file.get_molecule_by_structure_id(
+                structure_id=structure_id,
+                return_list=return_list,
+            )
+        if molecule_id is not None:
+            return database_file.get_molecules_by_molecule_id(
+                molecule_id=molecule_id,
+                return_list=return_list,
+            )
+        if record_index is not None or record_id is not None:
+            return database_file.get_molecules_by_record(
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=structure_index,
+                return_list=return_list,
+            )
+        return database_file.get_all_molecules(return_list=return_list)
+
     # @staticmethod
     # @file_cache()
     # def _read_gromacs_gro(filepath, index, **kwargs):
@@ -1006,6 +1328,15 @@ class Molecule:
     #
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
+
+    @classmethod
+    @file_cache()
+    def _read_pdb_file(cls, filepath, index="-1", return_list=False):
+        """Read PDB format molecular structure file preserving residue metadata."""
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        pdb_file = PDBFile(filename=filepath)
+        return pdb_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod
     @file_cache()
@@ -1185,7 +1516,7 @@ class Molecule:
 
         Args:
             filename (str): Output file path
-            format (str): File format ('xyz' or 'com'). Default 'xyz'
+            format (str): File format ('xyz', 'com', or 'pdb'). Default 'xyz'
             mode (str): File write mode. Default 'w'
             **kwargs: Additional keyword arguments for format-specific writers
 
@@ -1194,8 +1525,12 @@ class Molecule:
         """
         if format.lower() == "xyz":
             self.write_xyz(filename, mode=mode, **kwargs)
+        elif format.lower() == "extxyz":
+            self.write_extxyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
+        elif format.lower() == "pdb":
+            self.write_pdb(filename, mode=mode, **kwargs)
         # elif format.lower() == "mol":
         #     self.write_mol(filename, **kwargs)
         else:
@@ -1227,6 +1562,53 @@ class Molecule:
             f.write(f"{xyz_info}\n")
             self._write_orca_coordinates(f)
 
+    def write_extxyz(self, filename, mode="w", **kwargs):
+        """Write molecule to extended-XYZ format file.
+
+        Args:
+            filename (str): Output file path.
+            mode (str): File write mode. Default 'w'.
+            **kwargs: Additional keyword arguments (unused).
+        """
+        # Validate forces shape when present.
+        forces_list = None
+        if self.forces is not None:
+            try:
+                forces_arr = np.asarray(self.forces, dtype=float)
+                if forces_arr.ndim == 2 and forces_arr.shape == (
+                    self.num_atoms,
+                    3,
+                ):
+                    forces_list = forces_arr.tolist()
+            except (TypeError, ValueError):
+                pass
+        properties = "species:S:1:pos:R:3"
+        if forces_list is not None:
+            properties += ":forces:R:3"
+        parts = [f"Properties={properties}"]
+        if self.energy is not None:
+            parts.append(f"energy={float(self.energy):.10f}")
+            parts.append('energy_units="Hartree"')
+        if forces_list is not None:
+            parts.append('forces_units="Hartree/Bohr"')
+        header = " ".join(parts)
+
+        logger.info(f"Writing extended XYZ to {filename}")
+        with open(filename, mode) as f:
+            f.write(f"{self.num_atoms}\n")
+            f.write(f"{header}\n")
+            if forces_list is None:
+                self._write_orca_coordinates(f)
+            else:
+                for i, (s, (x, y, z)) in enumerate(
+                    zip(self.chemical_symbols, self.positions)
+                ):
+                    fx, fy, fz = forces_list[i]
+                    f.write(
+                        f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f} "
+                        f"{fx:15.10f} {fy:15.10f} {fz:15.10f}\n"
+                    )
+
     def write_com(
         self,
         filename,
@@ -1253,6 +1635,140 @@ class Molecule:
                 f.write(f"{charge} {multiplicity}\n")
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
+
+    def write_pdb(
+        self,
+        filename,
+        mode="w",
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+        **kwargs,
+    ):
+        """
+        Write molecule to PDB format file.
+
+        Args:
+            filename (str): Output PDB file path
+            mode (str): File write mode. Default 'w'
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+            **kwargs: No additional keyword arguments are accepted.
+                Legacy conformer-selection arguments like ``confId`` and
+                ``conf_id`` raise :class:`TypeError`, and any other unexpected
+                keyword arguments also raise :class:`TypeError`.
+        """
+        if kwargs:
+            # Explicitly reject unsupported legacy conformer-selection arguments
+            legacy_keys = {"confId", "conf_id"}
+            provided_keys = set(kwargs.keys())
+            legacy_provided = legacy_keys & provided_keys
+            if legacy_provided:
+                provided_str = ", ".join(sorted(legacy_provided))
+                raise TypeError(
+                    f"Legacy conformer-selection arguments not supported in "
+                    f"write_pdb(): {provided_str}"
+                )
+            # Reject any other unexpected keyword arguments to avoid silently ignoring them
+            unexpected_str = ", ".join(sorted(provided_keys))
+            raise TypeError(
+                f"write_pdb() got unexpected keyword argument(s): {unexpected_str}"
+            )
+        pdb_block = self.to_pdb(
+            flavor=flavor,
+            add_bonds=add_bonds,
+            bond_cutoff_buffer=bond_cutoff_buffer,
+            adjust_H=adjust_H,
+        )
+        with open(filename, mode) as f:
+            logger.info(f"Writing PDB file to {filename}")
+            f.write(pdb_block)
+
+    def write_pdb_pybabel(
+        self,
+        pdb_filename,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+    ):
+        """
+        Convert molecule to PDB format using Open Babel.
+
+        This is an alternative to ``write_pdb`` for cases where Open Babel's
+        interpretation of connectivity or atom typing is preferred over
+        RDKit-based path.
+
+        Parameters
+        ----------
+        pdb_filename : str
+            Destination PDB file path.
+        mode : str, default 'w'
+            File mode passed to ``write_xyz`` when the XYZ file must be created.
+        overwrite : bool, default True
+            Whether to overwrite *pdb_filename* if it already exists.
+        cleanup : bool, default True
+            Remove any auto-generated temporary XYZ file after the conversion.
+
+        Raises
+        ------
+        ImportError
+            If Open Babel (``openbabel``) is not installed.
+        ValueError
+            If the XYZ file cannot be parsed by Open Babel.
+
+        Examples
+        --------
+        >>> molecule.write_pdb_openbabel("output.pdb")
+        """
+        import tempfile
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+        tmp.close()
+        xyz_filename = tmp.name
+        logger.debug(
+            f"Created temporary XYZ {xyz_filename} for PDB conversion."
+        )
+        self.write_xyz(xyz_filename, mode=mode)
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            if cleanup:
+                try:
+                    os.remove(xyz_filename)
+                except OSError:
+                    pass
+            raise ImportError(
+                "Converting to PDB via Open Babel requires openbabel. "
+                "Install with: ``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+        if xyz_mol is None:
+            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+
+        logger.info(
+            f"Converting Molecule {self.__repr__()} to PDB {pdb_filename} via "
+            f"Open Babel (overwrite={overwrite})"
+        )
+        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+        if cleanup:
+            try:
+                os.remove(xyz_filename)
+                logger.debug(f"Removed temporary XYZ file {xyz_filename}")
+            except OSError as exc:
+                logger.warning(f"Failed to remove temporary file: {exc}")
 
     def _write_gaussian_coordinates(self, f):
         """
@@ -1414,6 +1930,30 @@ class Molecule:
                 )
         return bond_distances
 
+    def to_cosmorsxyz(self):
+        """
+        Convert Molecule to COSMORSXYZ format string.
+        """
+        lines = [f"{self.num_atoms}", f"{self.charge} {self.multiplicity}"]
+        for symbol, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{symbol:>4} {pos[0]:12.6f} {pos[1]:12.6f} {pos[2]:12.6f}"
+            )
+        return "\n".join(lines)
+
+    def write_cosmorsxyz(self, filename, mode="w", **kwargs):
+        """
+        Write molecule to .cosmorsxyz format file.
+
+        Args:
+            filename (str): Output cosmorsxyz file path
+            mode (str): File write mode
+            **kwargs: Additional keyword arguments (unused)
+        """
+        with open(filename, mode) as f:
+            for line in self.to_cosmorsxyz():
+                f.write(line)
+
     def to_smiles(self):
         """
         Convert molecule to SMILES string.
@@ -1423,6 +1963,185 @@ class Molecule:
 
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
+
+    def to_pdb(
+        self,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+    ):
+        """
+        Convert molecule to PDB format string.
+
+        Args:
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+                If bond detection fails, will retry without bonds.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+
+        Returns:
+            str: PDB format string representation of the molecule
+
+        Note:
+            If bond detection fails due to kekulization issues, the method
+            will automatically retry without bonds and log a warning.
+            ``Molecule`` exports its single stored geometry; conformer
+            selection is not supported.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        # Try to create an RDKit molecule with bonds first
+        try:
+            rdkit_mol = self.to_rdkit(
+                add_bonds=add_bonds,
+                bond_cutoff_buffer=bond_cutoff_buffer,
+                adjust_H=adjust_H,
+            )
+            pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
+            return PDBFile.format_pdb_block(self, pdb_block)
+        except (
+            Chem.AtomKekulizeException,
+            Chem.KekulizeException,
+        ) as kekulize_error:
+            # If kekulization fails, retry without bonds
+            if add_bonds:
+                logger.warning(
+                    f"Bond detection failed with kekulization error: {kekulize_error}. "
+                    "Retrying PDB conversion without bonds."
+                )
+                rdkit_mol = self.to_rdkit(add_bonds=False)
+                pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
+                return PDBFile.format_pdb_block(self, pdb_block)
+            else:
+                raise
+
+    def delete_atoms_by_indices(self, atom_indices, *, one_based=True):
+        """Return a new :class:`Molecule` with the specified atoms removed.
+
+        Accepts one or more atom indices, builds a boolean keep-mask, and
+        constructs a fresh ``Molecule`` containing only the retained atoms.
+        Per-atom arrays (``frozen_atoms``, ``forces``, ``velocities``,
+        ``vibrational_modes``) are filtered accordingly; per-mode scalars
+        (frequencies, reduced masses, …) are passed as-is since
+        ``Molecule.__init__`` wraps them in a new ``list`` internally.
+
+        Args:
+            atom_indices (int | Iterable[int]): Index or indices of atoms
+                to delete.
+            one_based (bool): If ``True`` (default) the indices are
+                interpreted as 1-based (matching Gaussian / ORCA
+                conventions).  Set to ``False`` for 0-based indexing.
+
+        Returns:
+            Molecule: A new molecule without the deleted atoms.
+
+        Raises:
+            ValueError: If *atom_indices* is ``None``, any index is out of
+                range, or removing the atoms would leave an empty molecule.
+            TypeError: If *atom_indices* is neither ``int`` nor iterable.
+
+        Example::
+
+            mol = Molecule.from_filepath("phenol.xyz")
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=13)        # 1-based
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=[13])
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=12, one_based=False)
+        """
+        if atom_indices is None:
+            raise ValueError(
+                "atom_indices must be provided when deleting atoms"
+            )
+
+        if isinstance(atom_indices, int):
+            indices = [atom_indices]
+        else:
+            try:
+                indices = list(atom_indices)
+            except TypeError as exc:
+                raise TypeError(
+                    "atom_indices must be an int or iterable of ints"
+                ) from exc
+
+        if not indices:
+            return copy.deepcopy(self)
+
+        zero_indices = []
+        for idx in indices:
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Atom index '{idx}' is not a valid integer"
+                ) from exc
+            zero_indices.append(idx_int - 1 if one_based else idx_int)
+
+        zero_indices = sorted(set(zero_indices))
+        total_atoms = len(self.symbols)
+
+        for idx in zero_indices:
+            if idx < 0 or idx >= total_atoms:
+                label = idx + 1 if one_based else idx
+                raise ValueError(
+                    f"Atom index {label} out of range for molecule "
+                    f"with {total_atoms} atoms"
+                )
+
+        keep_mask = np.ones(total_atoms, dtype=bool)
+        keep_mask[zero_indices] = False
+
+        if not keep_mask.any():
+            raise ValueError(
+                "Deleting the requested atoms would leave an empty molecule"
+            )
+
+        def _filter(seq):
+            """Filter a per-atom list/array; return None if input is None."""
+            if seq is None:
+                return None
+            arr = np.asarray(seq)
+            if arr.shape[0] == total_atoms:
+                return (
+                    arr[keep_mask].tolist()
+                    if isinstance(seq, list)
+                    else arr[keep_mask].copy()
+                )
+            return seq
+
+        new_vib_modes = (
+            [np.asarray(m)[keep_mask].copy() for m in self.vibrational_modes]
+            if self.vibrational_modes
+            else None
+        )
+
+        return Molecule(
+            symbols=[s for s, k in zip(self.symbols, keep_mask) if k],
+            positions=np.asarray(self.positions)[keep_mask],
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=_filter(self.frozen_atoms),
+            pbc_conditions=self.pbc_conditions,
+            translation_vectors=self.translation_vectors,
+            energy=self.energy,
+            forces=_filter(self.forces),
+            velocities=_filter(self.velocities),
+            vibrational_frequencies=self.vibrational_frequencies,
+            vibrational_reduced_masses=self.vibrational_reduced_masses,
+            vibrational_force_constants=self.vibrational_force_constants,
+            vibrational_ir_intensities=self.vibrational_ir_intensities,
+            vibrational_mode_symmetries=self.vibrational_mode_symmetries,
+            vibrational_modes=new_vib_modes,
+            info=self.info,
+        )
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
@@ -1742,9 +2461,31 @@ class Molecule:
 
     def to_ase(self):
         """
-        Convert molecule object to ASE atoms object.
+        Convert molecule object to ASE atoms object, with
+        energy and forces in eV and eV per Angstrom, respectively.
         """
+        from ase import units
+
         from .atoms import AtomsChargeMultiplicity
+
+        logger.info("Converting molecule to ASE Atoms object.")
+
+        # convert energy and forces to ASE-compatible
+        # units if they are not None
+        energy = self.energy
+        if energy is not None:
+            logger.debug(f"Converting energy from {energy} Hartree to eV")
+            energy = energy * units.Hartree
+            logger.debug(f"Converted energy from Hartree to eV: {energy} eV")
+        forces = self.forces
+        if forces is not None:
+            logger.debug(
+                f"Converting forces from {forces} Hartree/Bohr to eV/Å."
+            )
+            forces = forces * units.Hartree / units.Bohr
+            logger.debug(
+                f"Converted forces from Hartree/Bohr to eV/Å: {forces} eV/Å."
+            )
 
         return AtomsChargeMultiplicity(
             symbols=self.chemical_symbols,
@@ -1754,8 +2495,8 @@ class Molecule:
             charge=self.charge,
             multiplicity=self.multiplicity,
             frozen_atoms=self.frozen_atoms,
-            energy=self.energy,
-            forces=self.forces,
+            energy=energy,
+            forces=forces,
             velocities=self.velocities,
             info=self.info,
         )
@@ -1899,72 +2640,6 @@ class Molecule:
 
         return frames
 
-    def xyz_to_pdb(
-        self,
-        pdb_filename,
-        xyz_filename=None,
-        mode="w",
-        overwrite=True,
-        cleanup=True,
-    ):
-        """
-        Convert an XYZ representation of the molecule to PDB using Open Babel.
-
-        Args:
-            pdb_filename (str): Destination PDB file path.
-            xyz_filename (str, optional): Source
-            XYZ file path; if omitted or missing, a
-                temporary XYZ is written via ``write_xyz``.
-            mode (str): File mode passed to
-            ``write_xyz`` when creating the XYZ file.
-            overwrite (bool): Whether to overwrite an existing PDB file.
-            cleanup (bool): Remove auto-generated XYZ files after conversion.
-        """
-        auto_xyz = False
-        if xyz_filename is None:
-            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
-            tmp.close()
-            xyz_filename = tmp.name
-            auto_xyz = True
-            logger.debug(
-                f"Created temporary XYZ {xyz_filename} for PDB conversion. "
-            )
-            self.write_xyz(xyz_filename, mode=mode)
-        elif not os.path.isfile(xyz_filename):
-            logger.debug(
-                f"XYZ {xyz_filename} missing; writing coordinates before conversion."
-            )
-            self.write_xyz(xyz_filename, mode=mode)
-
-        try:
-            from openbabel import pybel
-        except ImportError as exc:  # pragma: no cover
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ImportError(
-                "xyz_to_pdb requires Open Babel. Use 'conda install -c conda-forge openbabel' to install Openbabel and to enable this conversion."
-            ) from exc
-
-        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
-        if xyz_mol is None:
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ValueError(f"Unable to read molecule from {xyz_filename}")
-
-        logger.info(
-            f"Converting XYZ {xyz_filename} to PDB {pdb_filename} using Open Babel (overwrite={overwrite})"
-        )
-        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
-
-        if auto_xyz and cleanup:
-            try:
-                os.remove(xyz_filename)
-                logger.debug(f"Removed temporary XYZ {xyz_filename}")
-            except OSError as exc:
-                logger.warning(
-                    f"Could not remove temporary XYZ {xyz_filename}: {exc}"
-                )
-
 
 class CoordinateBlock:
     """
@@ -2046,7 +2721,10 @@ class CoordinateBlock:
         supplied as text or as a list of lines into
         Molecule class.
         """
-        if not self.partitions:
+        partitions, high_level_atoms, medium_level_atoms, low_level_atoms = (
+            self.partitions
+        )
+        if not partitions:
             return Molecule(
                 symbols=self.symbols,
                 positions=self.positions,
@@ -2061,13 +2739,33 @@ class CoordinateBlock:
                 frozen_atoms=self.constrained_atoms,
                 pbc_conditions=self.pbc_conditions,
                 translation_vectors=self.translation_vectors,
-                high_level_atoms=self.partitions[1],
-                medium_level_atoms=self.partitions[2],
-                low_level_atoms=self.partitions[3],
+                high_level_atoms=high_level_atoms,
+                medium_level_atoms=medium_level_atoms,
+                low_level_atoms=low_level_atoms,
             )
 
     def _get_symbols(self):
         symbols = []
+
+        def _token_to_symbol(token):
+            token = str(token).strip()
+            try:
+                return p.to_symbol(atomic_number=int(token))
+            except ValueError:
+                pass
+
+            try:
+                float_token = float(token)
+                if float_token.is_integer():
+                    return p.to_symbol(atomic_number=int(float_token))
+            except ValueError:
+                pass
+
+            m = re.match(r"^([A-Za-z][a-z]?)", token)
+            if m:
+                return p.to_element(element_str=m.group(1))
+            return p.to_element(element_str=token)
+
         for line in self.coordinate_block:
             line_elements = line.split()
             # assert len(line_elements) == 4, (
@@ -2098,47 +2796,11 @@ class CoordinateBlock:
                 continue
 
             try:
-                logger.debug(
-                    f"Converting atomic number {line_elements[0]} to symbol."
-                )
-                atomic_number = int(
-                    line_elements[0]
-                )  # Could raise ValueError if not an integer
-                chemical_symbol = p.to_symbol(
-                    atomic_number=atomic_number
-                )  # Could raise KeyError or similar
-                logger.debug(
-                    f"Successfully converted {line_elements[0]} to {chemical_symbol}."
-                )
-                symbols.append(chemical_symbol)
-            except ValueError:
-                # Handle case where line_elements[0] isn’t a valid integer
-                logger.debug(
-                    f"{line_elements[0]} is not a valid atomic number; treating as symbol."
-                )
-                try:
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to convert {line_elements[0]} to element: {str(e)}"
-                    )
+                symbols.append(_token_to_symbol(line_elements[0]))
             except Exception as e:
-                # Catch any other unexpected errors
                 logger.error(
                     f"Unexpected error processing {line_elements[0]}: {str(e)}"
                 )
-                try:
-                    # Fallback attempt
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as fallback_e:
-                    logger.error(
-                        f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
-                    )
-
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -2165,12 +2827,24 @@ class CoordinateBlock:
                 # line of QM/MM coordinate block
                 continue
 
+            token = str(line_elements[0]).strip()
             try:
-                atomic_number = int(line_elements[0])
+                atomic_number = int(token)
             except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
+                try:
+                    float_token = float(token)
+                    if float_token.is_integer():
+                        atomic_number = int(float_token)
+                    else:
+                        raise ValueError
+                except ValueError:
+                    # sanitize token similar to _get_symbols to handle annotated tokens
+                    m = re.match(r"^([A-Za-z][a-z]?)", token)
+                    if m:
+                        atomic_symbol = p.to_element(m.group(1))
+                    else:
+                        atomic_symbol = p.to_element(token)
+                    atomic_number = p.to_atomic_number(atomic_symbol)
             atomic_numbers.append(atomic_number)
 
             # Decide how to interpret the second
@@ -2361,42 +3035,96 @@ class CoordinateBlock:
             return None
 
 
-class SDFFile(FileMixin):
+class PKaMolecule(Molecule):
+    """Molecule subclass for pKa calculations.
+
+    Wraps an existing ``Molecule`` and attaches a resolved
+    ``proton_index`` (1-based) that identifies the acidic proton to
+    be removed during deprotonation.
+
+    The proton index can be supplied explicitly by the user or
+    determined automatically from ChemDraw (CDXML) colour coding.
+
+    Parameters
+    ----------
+    molecule : Molecule
+        The parent molecule whose data is inherited.
+    proton_index : int
+        1-based index of the acidic proton in *molecule*.
+
+    Examples
+    --------
+    >>> mol = Molecule(symbols=["O", "H", "H"],
+    ...                positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    >>> pka_mol = PKaMolecule(molecule=mol, proton_index=2)
+    >>> pka_mol.proton_index
+    2
+    >>> pka_mol.chemical_formula
+    'H2O'
     """
-    SDF file object.
-    """
 
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self, molecule: "Molecule", proton_index: int):
+        if molecule is None:
+            raise ValueError(
+                "A parent Molecule must be provided to PKaMolecule."
+            )
+        if proton_index is None or proton_index < 1:
+            raise ValueError(
+                "proton_index must be a positive 1-based integer."
+            )
+        if proton_index > molecule.num_atoms:
+            raise ValueError(
+                f"proton_index {proton_index} is out of range for a "
+                f"molecule with {molecule.num_atoms} atoms."
+            )
+        atom_symbol = molecule.symbols[proton_index - 1]
+        if atom_symbol != "H":
+            raise ValueError(
+                f"Atom at index {proton_index} is '{atom_symbol}', not 'H'. "
+                "Only hydrogen atoms can be marked as the acidic proton."
+            )
 
-    @property
-    def molecule(self):
-        return self.get_molecule()
+        # Collect valid Molecule.__init__ params from source instance state.
+        sig = inspect.signature(Molecule.__init__)
+        valid_params = set(sig.parameters.keys()) - {"self"}
+        alias_keys = {"positions": "_positions", "energy": "_energy"}
 
-    def get_molecule(self):
-        list_of_symbols = []
-        cart_coords = []
-        # sdf line pattern containing coordinates and element type
-        from chemsmart.utils.repattern import sdf_pattern
+        init_params = {}
+        mol_state = molecule.__dict__
+        for key in valid_params:
+            if key in mol_state:
+                init_params[key] = copy.copy(mol_state[key])
+            else:
+                alias = alias_keys.get(key)
+                if alias is not None and alias in mol_state:
+                    init_params[key] = copy.copy(mol_state[alias])
 
-        for line in self.contents:
-            match = re.match(sdf_pattern, line)
-            if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                z = float(match.group(3))
-                atom_type = str(match.group(4))
-                list_of_symbols.append(atom_type)
-                cart_coords.append((x, y, z))
+        super().__init__(**init_params)
 
-        cart_coords = np.array(cart_coords)
+        # Preserve any additional source attributes not part of __init__.
+        for key, value in mol_state.items():
+            if (
+                key not in {"_positions", "_energy"}
+                and key not in valid_params
+            ):
+                self.__dict__[key] = copy.copy(value)
 
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
+        self.proton_index = proton_index
 
-        return Molecule.from_symbols_and_positions_and_pbc_conditions(
-            list_of_symbols=list_of_symbols, positions=cart_coords
-        )
+    @classmethod
+    def from_molecule_and_proton_index(
+        cls, molecule: "Molecule", proton_index: int
+    ):
+        """Create a ``PKaMolecule`` from an existing ``Molecule``.
+
+        Parameters
+        ----------
+        molecule : Molecule
+            Source molecule.
+        proton_index : int
+            1-based index of the acidic proton.
+        """
+        return cls(molecule=molecule, proton_index=proton_index)
 
 
 class QMMMMolecule(Molecule):

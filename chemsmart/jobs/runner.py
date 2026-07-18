@@ -3,18 +3,148 @@ import logging
 import os
 from abc import abstractmethod
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
+from typing import Callable, Optional, Sequence
 
+from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
+
+
+def run_phase_jobs(
+    *,
+    parent_runner,
+    jobs: Optional[Sequence] = None,
+    jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+    stop_on_incomplete: bool = False,
+    before_run: Optional[Callable[[], None]] = None,
+    logger_obj=None,
+    phase_label: str = "phase",
+) -> None:
+    """Shared phase runner wrapper."""
+    Job._execute_phase_jobs(
+        parent_runner=parent_runner,
+        jobs=jobs,
+        jobs_factory=jobs_factory,
+        stop_on_incomplete=stop_on_incomplete,
+        before_run=before_run,
+        logger_obj=logger_obj,
+        phase_label=phase_label,
+    )
+
+
+def _positive_int_or_none(value) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def get_configured_max_submitters(jobrunner=None) -> int:
+    """Return configured submitter concurrency limit.
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+    4. ``jobrunner.num_cores``
+    5. ``jobrunner.server.num_cores``
+    6. ``os.cpu_count()``
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    runner_value = _positive_int_or_none(
+        getattr(jobrunner, "max_submitters", None)
+    )
+    if runner_value is not None:
+        return runner_value
+
+    server = getattr(jobrunner, "server", None)
+    server_value = _positive_int_or_none(
+        getattr(server, "max_submitters", None)
+    )
+    if server_value is not None:
+        return server_value
+
+    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
+    if cores_value is not None:
+        return cores_value
+
+    server_cores_value = _positive_int_or_none(
+        getattr(server, "num_cores", None)
+    )
+    if server_cores_value is not None:
+        return server_cores_value
+
+    cpu_count = _positive_int_or_none(os.cpu_count())
+    return cpu_count if cpu_count is not None else 1
+
+
+def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
+    """Return bounded worker count for batch/list submitter threads."""
+    if num_jobs <= 0:
+        return 1
+    configured_max_submitters = get_configured_max_submitters(jobrunner)
+    return max(1, min(num_jobs, configured_max_submitters))
+
+
+def decide_phase_transition(
+    *,
+    phase_name: str,
+    failures: Optional[Sequence[str]] = None,
+    require_complete: bool = False,
+    is_complete: Optional[bool] = None,
+    stop_message: Optional[str] = None,
+) -> PhaseTransitionDecision:
+    """Return a shared decision for whether a workflow should enter next phase."""
+    phase_failures = [f for f in (failures or []) if f]
+    if phase_failures:
+        summary = (
+            f"{phase_name} phase failed in {len(phase_failures)} worker(s):\n"
+            + "\n".join(f"  - {item}" for item in phase_failures)
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=True,
+            message=summary,
+        )
+
+    if require_complete and is_complete is False:
+        message = (
+            stop_message or f"{phase_name} jobs incomplete, halting execution."
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=False,
+            message=message,
+        )
+
+    return PhaseTransitionDecision(proceed=True, should_raise=False)
 
 
 class JobRunner(RegistryMixin):
@@ -256,6 +386,7 @@ class JobRunner(RegistryMixin):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
+        candidate_runners = []
 
         for runner in runners:
             logger.debug(f"Checking runner: {runner} for job: {job}")
@@ -266,19 +397,32 @@ class JobRunner(RegistryMixin):
                 runner_jobtypes = []
 
             if jobtype in runner_jobtypes:
-                logger.info(f"Using job runner: {runner} for job: {job}")
+                candidate_runners.append(runner)
 
-                # If scratch is None, use the runner's default scratch value
-                scratch = (
-                    scratch
-                    if scratch is not None
-                    else getattr(runner, "SCRATCH", None)
-                )
-                logger.info(
-                    f"Using scratch={scratch} for job runner: {runner}"
-                )
+        if candidate_runners:
+            selected_runner = None
+            for runner in candidate_runners:
+                if runner.FAKE == fake:
+                    selected_runner = runner
+                    break
 
-                return runner(server=server, scratch=scratch, **kwargs)
+            if selected_runner is None:
+                selected_runner = candidate_runners[0]
+
+            logger.info(f"Using job runner: {selected_runner} for job: {job}")
+
+            # If scratch is None, use the runner's default scratch value
+            if scratch is not None:
+                scratch = scratch
+            else:
+                scratch = selected_runner.SCRATCH
+            logger.info(
+                f"Using scratch={scratch} for job runner: {selected_runner}"
+            )
+
+            return selected_runner(
+                server=server, scratch=scratch, fake=fake, **kwargs
+            )
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
@@ -306,6 +450,12 @@ class JobRunner(RegistryMixin):
         """Get the base filepath for the job to assist in file removal."""
         return Path(job.folder) / job.label
 
+    def _append_suffix_to_job_label(self, job, suffix):
+        """Append ``suffix`` to ``job.label`` once."""
+        if suffix and not job.label.endswith(suffix):
+            job.label = f"{job.label}{suffix}"
+        logger.debug(f"Job label: {job.label}")
+
     def _delete_scratch_directory(self):
         """
         Delete the scratch directory if it exists.
@@ -330,13 +480,12 @@ class JobRunner(RegistryMixin):
             # Basic sanity checks
             if not sd.exists() or not sd.is_dir():
                 logger.error(
-                    "scratch_dir %s doesn't exist or is not a directory; "
-                    "refusing to proceed.",
-                    sd,
+                    f"scratch_dir {sd} doesn't exist or is not a directory; "
+                    "refusing to proceed."
                 )
             elif rd == sd:
                 logger.warning(
-                    "Refusing to delete the scratch root itself: %s", sd
+                    f"Refusing to delete the scratch root itself: {sd}"
                 )
             # Python 3.9+: Path.is_relative_to
             elif rd.is_relative_to(sd):

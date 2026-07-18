@@ -36,7 +36,7 @@ Link Options
 
    -  -  ``-g, --guess``
       -  string
-      -  Guess options (default: mix)
+      -  Guess options (default: mix). Separate multiple options with a comma, e.g. ``mix,always``.
 
    -  -  ``--route``
       -  string
@@ -76,11 +76,27 @@ This creates a multi-step workflow:
    ...
    #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
+To use multiple guess options, separate them with a comma:
+
+.. code:: bash
+
+   chemsmart sub -s SLURM gaussian -p project -f dimer.gjf -c 0 -m 1 link -j opt -g mix,always
+
+This sets ``guess=(mix,always)`` in the route string:
+
+.. code:: text
+
+   # um062x def2svp stable=opt guess=(mix,always)
+   ...
+   # opt freq um062x def2svp geom=check guess=read
+   ...
+   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
+
 ******************
  Custom User Jobs
 ******************
 
-Run custom calculations not built into Chemsmart.
+Run custom calculations not built into CHEMSMART.
 
 .. code:: bash
 

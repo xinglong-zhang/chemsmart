@@ -1,4 +1,3 @@
-import functools
 import logging
 
 import click
@@ -6,93 +5,137 @@ import click
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filenames_options,
+    click_folder_options,
     click_job_options,
-    click_output_folder_options,
 )
 from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.io import (
+    check_program_availability_in_chemsmart,
+    get_program_type_from_file,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def thermochemistry_cutoff_options(
+    f,
+    entropy_grimme_default=None,
+    entropy_truhlar_default=None,
+    enthalpy_default=None,
+):
+    """Reusable quasi-RRHO cutoff options."""
+    f = click.option(
+        "-csg",
+        "--cutoff-entropy-grimme",
+        default=entropy_grimme_default,
+        type=float,
+        show_default=True,
+        help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
+        "quasi-RRHO method.",
+    )(f)
+    f = click.option(
+        "-cst",
+        "--cutoff-entropy-truhlar",
+        default=entropy_truhlar_default,
+        type=float,
+        show_default=True,
+        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
+        "quasi-RRHO method.",
+    )(f)
+    f = click.option(
+        "-ch",
+        "--cutoff-enthalpy",
+        default=enthalpy_default,
+        type=float,
+        show_default=True,
+        help="Cutoff frequency for enthalpy in wavenumbers, using "
+        "Head-Gordon's quasi-RRHO method.",
+    )(f)
+    return f
+
+
+def resolve_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
+    """Resolve entropy cutoff and method from CLI options."""
+    if (
+        cutoff_entropy_grimme is not None
+        and cutoff_entropy_truhlar is not None
+    ):
+        raise ValueError(
+            "Cannot specify both --cutoff-entropy-grimme and "
+            "--cutoff-entropy-truhlar. Please choose one."
+        )
+    if cutoff_entropy_truhlar is not None:
+        return cutoff_entropy_truhlar, "truhlar"
+    if cutoff_entropy_grimme is not None:
+        return cutoff_entropy_grimme, "grimme"
+    return None, None
+
+
+def thermochemistry_temp_pressure_conc_options(
+    f,
+    temperature_required=True,
+    temperature_default=None,
+    concentration_default=None,
+    pressure_default=1.0,
+    include_pressure=True,
+    concentration_short="-c",
+):
+    """Reusable temperature, pressure, and concentration options."""
+    f = click.option(
+        concentration_short,
+        "--concentration",
+        default=concentration_default,
+        type=float,
+        show_default=True,
+        help="Concentration in mol/L.",
+    )(f)
+    if include_pressure:
+        f = click.option(
+            "-P",
+            "--pressure",
+            default=pressure_default,
+            type=float,
+            show_default=True,
+            help="Pressure in atm.",
+        )(f)
+    f = click.option(
+        "-T",
+        "--temperature",
+        required=temperature_required,
+        default=temperature_default,
+        type=float,
+        help="Temperature in Kelvin.",
+    )(f)
+    return f
 
 
 def click_thermochemistry_options(f):
     """
     Common click options for Thermochemistry.
     """
-
-    @click.option(
-        "-csg",
-        "--cutoff-entropy-grimme",
-        default=None,
-        type=float,
-        show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
-        "quasi-RRHO method.",
-    )
-    @click.option(
-        "-cst",
-        "--cutoff-entropy-truhlar",
-        default=None,
-        type=float,
-        show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
-        "quasi-RRHO method.",
-    )
-    @click.option(
-        "-ch",
-        "--cutoff-enthalpy",
-        default=None,
-        type=float,
-        show_default=True,
-        help="Cutoff frequency for enthalpy in wavenumbers, using "
-        "Head-Gordon's quasi-RRHO method.",
-    )
-    @click.option(
-        "-c",
-        "--concentration",
-        default=None,
-        type=float,
-        show_default=True,
-        help="Concentration in mol/L.",
-    )
-    @click.option(
-        "-P",
-        "--pressure",
-        default=1.0,
-        type=float,
-        show_default=True,
-        help="Pressure in atm.",
-    )
-    @click.option(
-        "-T",
-        "--temperature",
-        required=True,
-        default=None,
-        type=float,
-        help="Temperature in Kelvin.",
-    )
-    @click.option(
+    f = thermochemistry_temp_pressure_conc_options(f)
+    f = thermochemistry_cutoff_options(f)
+    f = click.option(
         "-a",
         "--alpha",
         default=4,
         type=int,
         show_default=True,
         help="Interpolator exponent used in the quasi-RRHO approximation.",
-    )
-    @click.option(
-        "-w",
-        "--weighted",
-        is_flag=True,
-        default=False,
+    )(f)
+    f = click.option(
+        "-w/",
+        "--weighted/--no-weighted",
+        default=True,
         show_default=True,
-        help="Use natural abundance weighted masses (True) or use most "
-        "abundant masses (False).\nDefault to False, i.e., use single "
-        "isotopic mass.",
-    )
-    @click.option(
+        help="Use natural abundance weighted masses (True) or use most abundant "
+        "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
+        "abundance weighted masses, which is the real world scenario.",
+    )(f)
+    f = click.option(
         "-u",
         "--energy-units",
         default="hartree",
@@ -101,8 +144,8 @@ def click_thermochemistry_options(f):
             ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
         ),
         help="Units of energetic values.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-o",
         "--outputfile",
         default=None,
@@ -110,41 +153,37 @@ def click_thermochemistry_options(f):
         help="Output file to save the thermochemistry results. Defaults to "
         "None, which will save results to file_basename.dat.\nIf "
         "specified, it will save all thermochemistry results to this file.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-O",
         "--overwrite",
         is_flag=True,
         default=False,
         show_default=True,
         help="Overwrite existing output files if they already exist.",
-    )
-    @click.option(
-        "-i",
-        "--check-imaginary-frequencies",
-        is_flag=True,
+    )(f)
+    f = click.option(
+        "-i/",
+        "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
         default=True,
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
+    )(f)
+    return f
 
 
 # use MyGroup to allow potential subcommands in the future
 @click.group(cls=MyGroup, invoke_without_command=True)
 @click_thermochemistry_options
 @click_job_options
-@click_output_folder_options
+@click_folder_options
 @click_filenames_options
 @click_file_label_and_index_options
 @click.pass_context
 def thermochemistry(
     ctx,
     directory,
+    filetype,
     program,
     filenames,
     cutoff_entropy_grimme,
@@ -185,24 +224,16 @@ def thermochemistry(
         raise ValueError(
             "Cannot specify both --directory and --filenames. Choose one."
         )
-    if directory and not program:
-        raise ValueError("Must specify --program when using --directory.")
-    if cutoff_entropy_grimme and cutoff_entropy_truhlar:
+    if directory and not program and not filetype:
         raise ValueError(
-            "Cannot specify both --cutoff-entropy-grimme and "
-            "--cutoff-entropy-truhlar. Please choose one."
+            "Must specify --program or --filetype when using --directory."
         )
+    if program:
+        check_program_availability_in_chemsmart(program)
 
-    # choose entropy cutoff
-    if cutoff_entropy_grimme is not None:
-        cutoff_entropy = cutoff_entropy_grimme
-        entropy_method = "grimme"
-    elif cutoff_entropy_truhlar is not None:
-        cutoff_entropy = cutoff_entropy_truhlar
-        entropy_method = "truhlar"
-    else:
-        cutoff_entropy = None
-        entropy_method = None
+    cutoff_entropy, entropy_method = resolve_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
 
     # Create job settings
     job_settings = ThermochemistryJobSettings(
@@ -225,16 +256,29 @@ def thermochemistry(
     files = []
 
     if directory:
-        if program.lower() not in {"gaussian", "orca"}:
-            raise ValueError(
-                f"Unsupported program '{program}' for thermochemistry.\n"
-                f"Please choose one of ['gaussian', 'orca']."
+        if program and not filetype:
+            # obtain all output files belonging to a program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_output_files_in_current_folder_by_program(
+                program=program.lower()
             )
-        files = BaseFolder(
-            folder=directory
-        ).get_all_output_files_in_current_folder_by_program(
-            program=program.lower()
-        )
+        elif filetype and not program:
+            # obtain all files of a specific type, regardless of program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
+        elif program and filetype:
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_program_and_suffix(
+                program=program.lower(), filetype=filetype
+            )
+        else:
+            raise ValueError(
+                "Must specify either --program or --filetype when using --directory."
+            )
+
         files = sorted(files)
         for file in files:
             job = ThermochemistryJob.from_filename(

@@ -81,6 +81,22 @@ Custom style:
 
    chemsmart run mol -f molecule.log visualize -f custom_style.py
 
+Batch visualization from a directory (by file type):
+
+.. code:: bash
+
+   chemsmart run mol -d /path/to/outputs -t log visualize
+
+This creates a single PyMOL session visualizing the last structure of every ``.log`` file in the directory.
+
+Batch visualization from a directory (by program):
+
+.. code:: bash
+
+   chemsmart run mol -d /path/to/outputs -p gaussian visualize
+
+This creates a single PyMOL session visualizing the last structure of all Gaussian output files in the directory.
+
 ************
  Movie Jobs
 ************
@@ -212,8 +228,8 @@ Align all files of the same type:
 
 .. note::
 
-   When using ``-i n``, ensure every input file contains the nth structure. File extensions are used to determine the
-   file type ``-t``.
+   When using ``-i n``, ensure every input file contains the nth structure. Here ``-t/--filetype`` is extension-based:
+   it filters filenames such as ``.xyz`` or ``.log`` and does not infer a Gaussian or ORCA program identity.
 
 Align multiple structures in one file:
 

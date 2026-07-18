@@ -1,8 +1,8 @@
 
 ---
-# chemsmart - Chemistry Simulation and Modeling Automation Toolkit
+# CHEMSMART - Chemistry Simulation and Modeling Automation Toolkit
 
-[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
+[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/graph/badge.svg?token=L01DRALL5E)](https://codecov.io/gh/xinglong-zhang/chemsmart)
 [![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
 
 ---
@@ -13,7 +13,7 @@
 ---
 Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
 
-Chemsmart is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
+CHEMSMART is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
 It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
 
@@ -34,9 +34,6 @@ First, cd into chemsmart folder. For linux and MacOS systems which support `make
 make env
 ```
 to create a running environment.
-
-**Note (HPC users):** Some dependencies (e.g. `pyvoro`) require a C++ compiler.
-On HPC systems, you may need to load a compiler module (e.g. `module load gcc`) before running `make env`.
 
 By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 

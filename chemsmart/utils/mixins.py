@@ -18,12 +18,14 @@ Key mixin classes:
 import inspect
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
 
 
 class FileMixin:
@@ -392,6 +394,55 @@ class FileMixin:
         else:
             return None
 
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
+
 
 class GaussianFileMixin(FileMixin):
     """
@@ -401,6 +452,39 @@ class GaussianFileMixin(FileMixin):
     route string parsing, job type detection, and settings extraction.
     Handles Gaussian input/output file formats and job parameters.
     """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def file_date(self):
+        if not self.contents:
+            return None
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
 
     def _get_chk(self):
         """
@@ -718,6 +802,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def method(self):
+        """Get the computational method from route string."""
+        return self.route_object.method
+
+    @property
     def basis(self):
         """
         Get basis set from route string.
@@ -889,6 +978,32 @@ class ORCAFileMixin(FileMixin):
     extraction. Handles ORCA input/output file formats and job settings.
     """
 
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
     @cached_property
     def contents_string(self):
         """
@@ -950,28 +1065,31 @@ class ORCAFileMixin(FileMixin):
         return None
 
     @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
+
+    @property
     def solvent_model(self):
         """
         Determine solvent model type from ORCA input file.
 
-        Scans the "%cpcm" block to detect CPCM/SMD usage. Returns "smd" if a
-        "%cpcm" block is present and contains "smd true"; returns "cpcm" if a
-        "%cpcm" block is present without the SMD flag; returns None otherwise.
-        Note: the route line is not parsed for solvent specification here.
+        First checks the ``%cpcm`` block (old-style ORCA inputs with
+        ``SMD true``/``SMDsolvent``): returns ``"smd"`` if the block contains
+        ``smd true``, ``"cpcm"`` if the block exists without the SMD flag.
+
+        If no ``%cpcm`` block is found, falls back to checking the route line
+        for ORCA 6.0 style simple-input keywords: ``COSMORS``, ``CPCMC``,
+        ``SMD``, or ``CPCM`` (matched as whole words, case-insensitively).
 
         Returns:
-            str or None: "cpcm", "smd", or None if no solvent model found.
+            str or None: One of ``"cpcm"``, ``"cpcmc"``, ``"smd"``,
+            ``"cosmors"``, or ``None`` if no solvent model is found.
         """
         cpcm = False
         smd = False
 
         for i, line in enumerate(self.contents):
-            # not even needed to test the route string for solvent
-            # if '!' in line and 'cpcm' in line:
-            #    cpcm = True
-
-            # solvent specification not in the route string
-            # but in the %cpcm block (ORCA_Test_0829.inp)
+            # solvent specification in the %cpcm block (old-style ORCA)
             if "%cpcm" in line.lower():
                 cpcm = True
                 next_lines = self.contents[i + 1 :]
@@ -983,6 +1101,23 @@ class ORCAFileMixin(FileMixin):
             if smd:
                 return "smd"
             return "cpcm"
+
+        # Fallback: detect ORCA 6.0 style keyword from the route line.
+        # Check in priority order (most specific first).
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        if re.search(r"\bcosmors\b", route_lower):
+            return "cosmors"
+        if re.search(r"\bcpcmc\b", route_lower):
+            return "cpcmc"
+        if re.search(r"\bsmd\b", route_lower):
+            return "smd"
+        if re.search(r"\bcpcm\b", route_lower):
+            return "cpcm"
         return None
 
     @property
@@ -990,35 +1125,43 @@ class ORCAFileMixin(FileMixin):
         """
         Extract solvent identifier from ORCA input file.
 
-        Searches for solvent specification in quoted strings and
-        validates that exactly one solvent is specified.
+        First searches for a solvent name in lines that contain a solvent
+        keyword (``solvent``, ``SMDsolvent``), explicitly excluding
+        ``solventfilename`` lines (which point to a file, not a solvent name).
+
+        If no match is found in the file body, falls back to extracting the
+        solvent name from the route line using ``MODEL(solvent)`` patterns
+        (e.g. ``COSMORS(water)``, ``SMD(cyclohexane)``).
 
         Returns:
             str or None: Solvent identifier or None if not found.
-
-        Raises:
-            Exception: If solvent not in quotes or multiple solvents found.
         """
-        pattern = re.compile(
-            r'"([^"]*)"'
-        )  # pattern to find text between double quotes
         for line in self.contents:
-            line_lower = line.lower()
-            if "solvent" in line_lower:
-                if not pattern.search(line_lower):
-                    raise Exception(
-                        "Your input file specifies solvent but solvent is not in quotes, "
-                        "thus, your input file is not valid to run for ORCA!"
-                    )
-
-                # Find all matches of the pattern in the line
-                matches = pattern.findall(line_lower)
+            if line.startswith("Solvent name"):
+                return line.split()[-1]
+        for line in self.contents:
+            if "solvent" in line.lower() and not re.search(
+                r"\bsolventfilename\b", line.lower()
+            ):
+                pattern = re.compile(r'"([^"]*)"')
+                matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
-
                 raise Exception(
-                    f"{len(matches)} solvents found! Only can specify 1 solvent!"
+                    "Your input file specifies solvent but solvent is not in quotes, "
+                    "thus, your input file is not valid to run for ORCA!"
                 )
+
+        # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
+        if m:
+            return m.group(1)
         return None
 
     # properties from orca route string
@@ -1081,6 +1224,11 @@ class ORCAFileMixin(FileMixin):
             str or None: Ab initio method name or None if not specified.
         """
         return self.route_object.ab_initio
+
+    @property
+    def method(self):
+        """Get the computational method from ORCA route string."""
+        return self.route_object.method
 
     @property
     def dispersion(self):
@@ -1640,6 +1788,63 @@ class FolderMixin:
             for file in files:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in the current folder matching a program.
+
+        Non-recursively lists files in `self.folder` whose names end with
+        `filetype` and are detected as output files from the specified
+        program. Empty files are excluded.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        all_files = []
+        for file in os.listdir(self.folder):
+            filepath = os.path.join(self.folder, file)
+            # Check that the file is not empty:
+            if not os.path.isfile(filepath) or os.stat(filepath).st_size == 0:
+                continue
+            # Collect files of specified type and program
+            if file.endswith(filetype):
+                detected_program = get_program_type_from_file(filepath)
+                if detected_program == program:
+                    all_files.append(filepath)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in folder and subfolders matching a program.
+
+        Recursively searches `self.folder` for files whose names end with
+        `filetype` and are detected as output files from the specified
+        program. Unlike the non-recursive variant, empty files are not
+        filtered out here.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if file.endswith(filetype):
+                    filepath = os.path.join(subdir, file)
+                    detected_program = get_program_type_from_file(filepath)
+                    if detected_program == program:
+                        all_files.append(filepath)
         return all_files
 
     def get_all_files_in_current_folder_and_subfolders_matching_regex(

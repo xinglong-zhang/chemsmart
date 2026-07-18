@@ -5,7 +5,7 @@ contact our team if you have questions or feedback.
  ORCA QM/MM Multiscale Calculations Guide
 ##########################################
 
-ChemSmart provides comprehensive tools for multiscale QM/MM calculations using ORCA. This section covers various QM/MM
+CHEMSMART provides comprehensive tools for multiscale QM/MM calculations using ORCA. This section covers various QM/MM
 schemes including additive, subtractive ONIOM, and crystal QM/MM methods for large molecular systems.
 
 **********
@@ -13,7 +13,7 @@ schemes including additive, subtractive ONIOM, and crystal QM/MM methods for lar
 **********
 
 ORCA QM/MM calculations allow you to treat large systems by combining quantum mechanical (QM) methods for chemically
-important regions with molecular mechanical (MM) force fields for the environment. ChemSmart supports five types of
+important regions with molecular mechanical (MM) force fields for the environment. CHEMSMART supports five types of
 multiscale calculations:
 
 #. **Additive QM/MM** - Traditional QM/MM with electrostatic embedding
@@ -849,4 +849,4 @@ Common Issues and Solutions
    -  Balance QM region size with available computational resources
    -  Use mechanical embedding for very large systems to reduce computational cost
 
-For additional support and examples, see the ChemSmart community forums and documentation repository.
+For additional support and examples, see the CHEMSMART community forums and documentation repository.

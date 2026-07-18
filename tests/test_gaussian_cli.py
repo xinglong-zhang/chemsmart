@@ -17,6 +17,49 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+from unittest.mock import MagicMock, patch
+
+
+class TestGaussianCLIPubChemOptCommand:
+    """CLI tests for ``--pubchem`` structure loading without ``-f``."""
+
+    def test_pubchem_only_opt_passes_molecule_to_job(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--pubchem <cid> opt`` loads a structure and passes it to the job."""
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ) as mock_from_pubchem:
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-l",
+                    "ammonia",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_from_pubchem.assert_called_once_with(
+            identifier="222", return_list=True
+        )
+        assert settings is not None, "GaussianOptJob was never instantiated"
+
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
@@ -695,6 +738,72 @@ class TestGaussianCLIScanCommand:
         assert result.exit_code == 0, result.output
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
+
+    def test_scan_multiple_coords_single_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with a single step_size and num_steps broadcasts them."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "-0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.1]
+        assert settings.modred["num_steps"] == [10, 10]
+
+    def test_scan_multiple_coords_explicit_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with explicit per-coordinate step_size and num_steps."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "[-0.1,-0.2]",
+                "-n",
+                "[10,15]",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.2]
+        assert settings.modred["num_steps"] == [10, 15]
 
 
 class TestGaussianCLICrestCommand:

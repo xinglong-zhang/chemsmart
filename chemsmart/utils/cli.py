@@ -1,7 +1,7 @@
 """
-CLI utilities for ChemSmart.
+CLI utilities for CHEMSMART.
 
-Provides helpers and Click integrations used by the ChemSmart command line
+Provides helpers and Click integrations used by the CHEMSMART command line
 tools, including:
 
 - Custom Click `Group`/`Command` that persist subcommand metadata on the
@@ -439,6 +439,15 @@ def get_setting_from_jobtype_for_gaussian(
             step_size_info = [float(size) for size in step_size_info]
             num_steps_info = [int(num) for num in num_steps_info]
 
+            # broadcast single step_size/num_steps to all coordinates
+            coords_num = (
+                len(modred_info) if isinstance(modred_info[0], list) else 1
+            )
+            if len(step_size_info) == 1 and coords_num > 1:
+                step_size_info = step_size_info * coords_num
+            if len(num_steps_info) == 1 and coords_num > 1:
+                num_steps_info = num_steps_info * coords_num
+
             check_scan_parameters_consistency_gaussian(
                 modred_info, step_size_info, num_steps_info
             )
@@ -603,6 +612,17 @@ def get_setting_from_jobtype_for_orca(
             dist_end_info = [float(dist) for dist in dist_end_info]
             num_steps_info = [int(num) for num in num_steps_info]
 
+            # broadcast single dist_start/dist_end/num_steps to all coordinates
+            coords_num = (
+                len(modred_info) if isinstance(modred_info[0], list) else 1
+            )
+            if len(dist_start_info) == 1 and coords_num > 1:
+                dist_start_info = dist_start_info * coords_num
+            if len(dist_end_info) == 1 and coords_num > 1:
+                dist_end_info = dist_end_info * coords_num
+            if len(num_steps_info) == 1 and coords_num > 1:
+                num_steps_info = num_steps_info * coords_num
+
             check_scan_parameters_consistency_orca(
                 modred_info, dist_start_info, dist_end_info, num_steps_info
             )
@@ -707,7 +727,12 @@ def update_irc_label(label, direction, flat_irc):
     Update the job label based on IRC direction and flat IRC flag.
 
     Appends 'f' for forward direction, 'r' for reverse direction,
-    and '_flat' if flat_irc is True.
+    and '_flat' if flat_irc is True and a direction is specified.
+
+    When direction is None (both forward and reverse IRC sub-jobs will be
+    created), the '_flat' suffix is not added here because the sub-jobs
+    created by ``_ircf_job()`` / ``_ircr_job()`` append the direction and
+    '_flat' suffix themselves, avoiding double-application.
 
     Args:
         label (str): Original job label.
@@ -726,8 +751,8 @@ def update_irc_label(label, direction, flat_irc):
             raise ValueError(
                 "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
             )
-    if flat_irc:
-        label += "_flat"
+        if flat_irc:
+            label += "_flat"
     return label
 
 

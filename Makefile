@@ -1,8 +1,15 @@
 # Detect the operating system
-OS := $(shell uname -s 2>/dev/null || echo Windows)
-ifeq ($(OS),Windows)
+RAW_OS := $(shell uname -s 2>/dev/null || echo $(OS))
+
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(RAW_OS)),)
+    OS_FAMILY := Windows
+else
+    OS_FAMILY := Unix
+endif
+
+ifeq ($(OS_FAMILY),Windows)
     SHELL := cmd
-    ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda activate chemsmart && ,)
+    ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda run -n chemsmart --no-capture-output ,)
     SEP := \\
     RM := del /Q
     RMDIR := rmdir /S /Q
@@ -10,7 +17,7 @@ ifeq ($(OS),Windows)
     NULL := nul
 else
     SHELL := /bin/bash
-    ENV_PREFIX := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart "; fi)
+    ENV_PREFIX := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
     SEP := /
     RM := rm -f
     RMDIR := rm -rf
@@ -26,7 +33,7 @@ CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platfo
 # === Help messages for make ===
 
 .PHONY: help
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 help:             ## Show the help menu.
 	@echo "Usage: make <target>"
 	@echo ""
@@ -45,7 +52,7 @@ endif
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
 	@echo Debug: USE_CONDA=$(USE_CONDA)
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@if "$(USE_CONDA)"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
 	) else ( \
@@ -64,7 +71,7 @@ endif
 .PHONY: conda-env
 conda-env:  ## Create or update the Conda environment using environment.yml.
 	@echo Managing Conda environment 'chemsmart' with environment.yml...
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@if not exist environment.yml ( \
 		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first." && exit 1 \
 	)
@@ -92,7 +99,7 @@ endif
 
 .PHONY: virtualenv
 virtualenv:  ## Create a virtual environment using virtualenv.
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@where python3 >$(NULL) 2>&1 || ( $(ECHO) "Python 3 is required but not installed. Exiting." && exit 1 )
 	@if not exist "venv" ( python3 -m venv venv )
 	@call venv\Scripts\activate.bat && pip install -U pip
@@ -110,8 +117,8 @@ endif
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in user mode.
-	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
+install:          ## Install the project in user mode. Normal users (runtime only)
+	$(ENV_PREFIX)pip install .
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
@@ -127,48 +134,45 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@echo "Interactive path prompts are not implemented for Windows shell in this Makefile."
-	@echo "Please run these manually if needed:"
-	@echo "  chemsmart config gaussian --folder <path>"
-	@echo "  chemsmart config orca --folder <path>"
-	@echo "  chemsmart config nciplot --folder <path>"
+	@echo.
+	@echo ===========================================================
+	@echo  Configuration complete!
+	@echo  chemsmart paths have been registered in your shell profile.
+	@echo  To activate chemsmart in your current session:
+	@echo    Git Bash:        source ~/.bashrc
+	@echo    Conda PowerShell: . $$PROFILE
+	@echo  Or open a new terminal window.
+	@echo ===========================================================
 else
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
-	if [ -n "$$gaussian_folder" ]; then \
-		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
-	else \
-		$(ECHO) "Skipping Gaussian configuration."; \
-	fi; \
-	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
-	if [ -n "$$orca_folder" ]; then \
-		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
-	else \
-		$(ECHO) "Skipping ORCA configuration."; \
-	fi; \
-	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
-	if [ -n "$$nciplot_folder" ]; then \
-		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
-	else \
-		$(ECHO) "Skipping NCIPLOT configuration."; \
-	fi
+	@echo ""
+	@echo "==========================================================="
+	@echo " Configuration complete!"
+	@echo " chemsmart paths have been written to your shell config."
+	@echo "==========================================================="
+	@for rc in "$${HOME}/.bashrc" "$${HOME}/.zshrc" "$${HOME}/.profile"; do \
+		if [ -f "$$rc" ]; then . "$$rc" 2>/dev/null || true; fi; \
+	done; \
+	echo "chemsmart is now active for the current make session."; \
+	echo "To activate chemsmart in your current terminal, run:"; \
+	if [ -f "$${HOME}/.bashrc" ]; then echo "  source ~/.bashrc  (bash / Git Bash)"; fi; \
+	if [ -f "$${HOME}/.zshrc" ]; then echo "  source ~/.zshrc   (zsh)"; fi; \
+	if [ -f "$${HOME}/.profile" ]; then echo "  source ~/.profile (sh / other)"; fi; \
+	echo "Or simply open a new terminal window."
 endif
 
 .PHONY: show
 show: ## Display the current environment information.
 	@echo Current environment:
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@if "$(USE_CONDA)"=="true" conda env list ^| findstr "*"
 else
 	@if [ "$(USE_CONDA)" = "true" ]; then conda env list | grep '*'; fi
@@ -195,22 +199,32 @@ lint:             ## Run linters (ruff).
 	$(ENV_PREFIX)ruff check . --fix
 
 # === Testing ===
-
 .PHONY: coverage-clean
-coverage-clean:   ## Remove any stale coverage files prior to running tests.
-ifeq ($(OS),Windows)
-	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+coverage-clean:   ## Remove stale coverage files before running tests.
+ifeq ($(OS_FAMILY),Windows)
+	-@if exist .coverage $(RM) .coverage 2>$(NULL)
+	-@for /R . %%f in (.coverage.*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist coverage.xml $(RM) coverage.xml 2>$(NULL)
+	-@if exist htmlcov $(RMDIR) htmlcov 2>$(NULL)
 else
-	-@rm -f .coverage .coverage.* 2>/dev/null
+	-@rm -f .coverage .coverage.* coverage.xml 2>/dev/null
+	-@rm -rf htmlcov 2>/dev/null
 endif
 
 .PHONY: test
-test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
-# Portable error ignoring: - so a bad shard cannot fail the job 
-	-$(ENV_PREFIX)coverage combine .coverage*  # combine all partial files if present  
-	-$(ENV_PREFIX)coverage xml
-	-$(ENV_PREFIX)coverage html
+test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
+	$(ENV_PREFIX)pytest \
+		-v \
+                --cov-config=pyproject.toml \
+		--cov=chemsmart \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage.xml \
+		--cov-report=html:htmlcov \
+		-l \
+		--tb=short \
+		--maxfail=1 \
+		tests/
 
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
@@ -219,7 +233,7 @@ docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	$(ENV_PREFIX)rstcheck -r docs\source
 else
 	$(ENV_PREFIX)rstcheck -r docs/source
@@ -242,7 +256,7 @@ docs-clean: ## Clean documentation artifacts.
 
 .PHONY: clean
 clean: ## Remove temporary and unnecessary files.
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@for /R . %%f in (*.pyc) do @$(RM) "%%f" 2>$(NULL)
 	@for /D /R . %%d in (__pycache__) do @if exist "%%d" $(RMDIR) "%%d" 2>$(NULL)
 	@for /R . %%f in (Thumbs.db) do @$(RM) "%%f" 2>$(NULL)
@@ -262,7 +276,7 @@ REPOSITORY ?= testpypi
 PACKAGE_NAME := chemsmart
 VERSION_FILE := chemsmart$(SEP)VERSION
 
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
     VERSION := $(shell type $(VERSION_FILE))
     GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
@@ -288,7 +302,7 @@ build: clean ## Build source and wheel distributions.
 
 .PHONY: check-clean
 check-clean: ## Fail if git working tree is not clean.
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@$(GIT_STATUS_CLEAN_CMD) || ( \
 		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first." && \
 		exit 1 \
@@ -302,7 +316,7 @@ endif
 
 .PHONY: check-git-tag
 check-git-tag: ## Fail if git tag v<VERSION> already exists.
-ifeq ($(OS),Windows)
+ifeq ($(OS_FAMILY),Windows)
 	@$(GIT_TAG_EXISTS_CMD) && ( \
 		$(ECHO) "Error: git tag v$(VERSION) already exists." && \
 		exit 1 \
@@ -330,15 +344,19 @@ release-test: build ## Build and upload to TestPyPI.
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 
 .PHONY: release
-release: build ## Build and upload to PyPI. Use REPOSITORY=pypi or REPOSITORY=testpypi.
+release: build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
+	@echo "WARNING: This is a manual upload."
+	@echo "Do not use this target for a version that will also be published by GitHub Actions."
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
 ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
 	@echo ""
 	@echo "Test install with:"
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
 	@echo ""
 	@echo "Install with:"
 	@echo "python -m pip install $(PACKAGE_NAME)==$(VERSION)"
@@ -347,19 +365,9 @@ else
 	@exit 1
 endif
 
-.PHONY: release-tagged
-release-tagged: check-clean check-git-tag build tag ## Build, tag, and upload to PyPI/TestPyPI.
-	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
-ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
-else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
-else
-	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
-	@exit 1
-endif
-	@echo "Release complete for version $(VERSION)"
-	@echo "Remember to push commits and tags:"
-	@echo "  git push"
-	@echo "  git push origin v$(VERSION)"
-
+## # Normal production release
+## make test
+## make build
+## make tag
+## git push origin main
+## git push origin v$(make version)
