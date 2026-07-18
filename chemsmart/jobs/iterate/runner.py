@@ -238,86 +238,6 @@ class IterateCombination:
         return "_".join(parts)
 
 
-def _batch_preprocess_skeleton(
-    skeleton: Molecule,
-    link_indices: list[int],
-    skeleton_indices: Optional[list[int]],
-) -> tuple[Molecule, dict[int, int]]:
-    """Remove old substituent groups at one or more link positions in one pass.
-
-    For each link position, checks whether there is already an available
-    bonding position. If not, detects and removes the existing substituent
-    group. All removals are batched so that atom index remapping happens
-    only once.
-
-    Parameters
-    ----------
-    skeleton : Molecule
-        Original skeleton molecule.
-    link_indices : list[int]
-        All 1-based link indices to preprocess.
-    skeleton_indices : list[int] or None
-        1-based skeleton atom indices (for SkeletonPreprocessor).
-
-    Returns
-    -------
-    tuple[Molecule, dict[int, int]]
-        (processed skeleton, mapping from original 1-based index
-        to new 1-based index).
-    """
-    all_remove_indices = set()  # 0-based
-
-    for link_idx in link_indices:
-        prep = SkeletonPreprocessor(skeleton, link_idx, skeleton_indices)
-        if not prep._has_available_bonding_position():
-            if skeleton_indices is not None:
-                # Precise path: DFS + skeleton_indices
-                branches = prep._find_non_skeleton_branches()
-                for branch in branches:
-                    all_remove_indices.update(branch)
-            else:
-                # Fallback: no skeleton_indices, use smallest-branch heuristic
-                removed = prep.detect_substituent()  # 0-based indices
-                all_remove_indices.update(removed)
-
-    keep_indices = sorted(set(range(len(skeleton))) - all_remove_indices)
-
-    if not keep_indices:
-        raise ValueError(
-            "All skeleton atoms would be removed during preprocessing."
-        )
-
-    # Verify all link atoms are kept
-    for link_idx in link_indices:
-        if (link_idx - 1) not in keep_indices:
-            raise ValueError(
-                f"Link atom at index {link_idx} (1-based) was removed during "
-                f"batch preprocessing."
-            )
-
-    # Build processed skeleton
-    symbols = [skeleton.chemical_symbols[i] for i in keep_indices]
-    positions = skeleton.positions[keep_indices]
-    frozen = None
-    if skeleton.frozen_atoms is not None:
-        frozen = [skeleton.frozen_atoms[i] for i in keep_indices]
-
-    processed = Molecule(
-        symbols=symbols,
-        positions=positions,
-        charge=skeleton.charge,
-        multiplicity=skeleton.multiplicity,
-        frozen_atoms=frozen,
-    )
-
-    # Build index map: original 1-based -> new 1-based
-    index_map = {}
-    for new_0, orig_0 in enumerate(keep_indices):
-        index_map[orig_0 + 1] = new_0 + 1
-
-    return processed, index_map
-
-
 def build_analyzer(
     algorithm_config: IterateAlgorithmConfig,
     skeleton: Molecule,
@@ -395,9 +315,12 @@ def _run_combination_task(
         all_link_indices = [
             a.skeleton_link_index for a in combination.assignments
         ]
-        processed_skeleton, index_map = _batch_preprocess_skeleton(
-            skeleton, all_link_indices, combination.skeleton_indices
+        skeleton_preprocessor = SkeletonPreprocessor(
+            molecule=skeleton,
+            link_indices=all_link_indices,
+            skeleton_indices=combination.skeleton_indices,
         )
+        processed_skeleton, index_map = skeleton_preprocessor.run()
 
         # Preprocess every substituent, mapping each link index onto the
         # preprocessed skeleton. Descending link_index keeps the attachment
@@ -413,12 +336,12 @@ def _run_combination_task(
                 molecule=substituent,
                 link_index=assignment.substituent_link_index,
             )
-            processed_sub = sub_prep.run()
+            processed_sub, sub_index_map = sub_prep.run()
             substituents.append(
                 (
                     processed_sub,
                     index_map[assignment.skeleton_link_index],
-                    sub_prep.get_new_link_index(),
+                    sub_index_map[assignment.substituent_link_index],
                 )
             )
 
