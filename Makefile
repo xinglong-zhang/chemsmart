@@ -213,14 +213,14 @@ endif
 
 .PHONY: test
 test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
-	$(ENV_PREFIX)pytest \
+	$(ENV_PREFIX)python -m pytest \
 		-v \
 		--cov-config=pyproject.toml \
 		--cov=chemsmart \
 		--cov-branch \
 		--cov-report=term-missing \
-		--cov-report=xml:coverage.xml \
-		--cov-report=html:htmlcov \
+		--cov-report=xml:"$(MAKEFILE_DIR)coverage.xml"
+		--cov-report=html:"$(MAKEFILE_DIR)htmlcov"
 		-l \
 		--tb=short \
 		--maxfail=1 \
