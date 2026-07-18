@@ -145,6 +145,17 @@ jobs:
         shell: bash -l {0}
         run: make test
 
+      - name: Create coverage report
+        if: >
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
+        uses: orgoro/coverage@v3
+        with:
+          coverageFile: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Verify coverage report
         if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash
