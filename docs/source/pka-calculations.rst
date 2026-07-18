@@ -338,13 +338,12 @@ row or ChemDraw fragment**, so different acids can run at the same time on the c
 How many tasks run at once
 ==========================
 
-By default, several array tasks may run concurrently. To force one task at a time:
+By default, one array task runs at a time. Pass ``--run-in-parallel`` (and optionally ``-N`` / ``--num-nodes``) for
+concurrent array tasks:
 
 .. code:: bash
 
-   chemsmart sub --no-run-in-parallel gaussian -p my_project -f pka_input.csv pka -s direct batch
-
-You can also limit concurrency with ``-N`` / ``--num-nodes`` when that option is set for your server.
+   chemsmart sub --run-in-parallel -N 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
 
 Checking scripts before queueing
 ================================
