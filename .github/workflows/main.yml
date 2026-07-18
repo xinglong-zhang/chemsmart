@@ -24,8 +24,6 @@ jobs:
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
-          python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
 
@@ -68,8 +66,6 @@ jobs:
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
-          python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
 
@@ -130,8 +126,6 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
 
