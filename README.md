@@ -64,7 +64,7 @@ For developers, one may run
 ```bash
 make install-dev
 ```
-which installs additional packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing the `chemsmart` package.
+which installs additional packages and dependencies (voronoi, dev, test, docs optional dependencies in pyproject.toml) required for developing the `chemsmart` package.
 
 Next, run
 ```bash
