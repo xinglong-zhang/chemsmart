@@ -196,7 +196,7 @@ CHEMSMART Database Files (.db)
 ==============================
 
 CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
-:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, chemsmart first selects the requested
+:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, CHEMSMART first selects the requested
 record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
 (see :doc:`database-workflow`).
 
