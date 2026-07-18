@@ -9,4 +9,4 @@ dependencies:
   - openbabel          # includes Python bindings on conda-forge
   - pip
   - pip:
-      - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
+      - -e .[voronoi,dev,test,docs]   # pulls all Python deps from pyproject.toml

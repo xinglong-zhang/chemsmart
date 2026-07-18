@@ -24,7 +24,6 @@ dependencies = [
     "joblib==1.4.2",
     "networkx==3.4.2",
     "numpy~=1.26.4",  # rdkit and pymol require numpy 1.x
-    "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.10.7",
     "rdkit==2025.3.3",
@@ -37,7 +36,6 @@ dependencies = [
     "tenacity>=9.1.2",
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
-    "pytest_mock>=3.14.0",
     "spyrmsd>=0.8.0",
     "lockfile>=0.12.2",
     "contextlib2>=21.6.0",
@@ -51,8 +49,8 @@ voronoi = [
     "scipy==1.15.2",
 ]
 test = [
-    "pytest",
-    "pytest-mock",
+    "pytest==8.3.4",
+    "pytest-mock>=3.14.0",
     "coverage",
     "pytest-cov",
 ]
@@ -64,7 +62,6 @@ dev = [
     "isort==7.0.0",
     "gitchangelog",
     "pipreqs",
-    "types-PyYAML",
 ]
 docs = [
     "sphinx",
@@ -122,3 +119,15 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+omit = [
+    "tests/*",
+    "docs/*",
+]
