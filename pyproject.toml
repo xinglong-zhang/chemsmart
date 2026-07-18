@@ -47,6 +47,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+voronoi = [
+    "scipy==1.15.2",
+]
 test = [
     "pytest",
     "pytest-mock",
