@@ -115,6 +115,9 @@ def prepare_safe_runtime_environment(
         encoding="utf-8",
     )
     env["HOME"] = str(gate_home)
+    # Windows resolves ``~`` through USERPROFILE, not HOME; keep the gate
+    # home authoritative on every platform.
+    env["USERPROFILE"] = str(gate_home)
     return env
 
 
