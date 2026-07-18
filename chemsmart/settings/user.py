@@ -10,7 +10,7 @@ for computational chemistry software
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:
-    ChemsmartUserSettings: Main class for user configuration management
+    CHEMSMARTUserSettings: Main class for user configuration management
 
 Dependencies:
     - chemsmart.io.yaml: YAML file handling utilities
@@ -36,7 +36,7 @@ from chemsmart.io.yaml import YAMLFile
 logger = logging.getLogger(__name__)
 
 
-class ChemsmartUserSettings:
+class CHEMSMARTUserSettings:
     """
     User configuration settings manager for CHEMSMART.
 

@@ -11,10 +11,10 @@ from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
