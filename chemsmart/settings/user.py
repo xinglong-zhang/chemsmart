@@ -1,5 +1,5 @@
 """
-User configuration management for ChemSmart computational chemistry software.
+User configuration management for CHEMSMART computational chemistry software.
 
 This module provides comprehensive user
 settings management including configuration
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class ChemsmartUserSettings:
     """
-    User configuration settings manager for ChemSmart.
+    User configuration settings manager for CHEMSMART.
 
     Manages user-specific configuration files, directories, and settings for
     computational chemistry software. Provides access to configuration paths,

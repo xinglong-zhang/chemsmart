@@ -3,7 +3,7 @@ Periodic table utilities for element properties and conversions.
 
 Provides a comprehensive interface for accessing element data including
 atomic numbers, masses, radii, and isotope information. Integrates with
-ASE data sources and ChemSmart isotope data for complete element handling.
+ASE data sources and CHEMSMART isotope data for complete element handling.
 """
 
 import re

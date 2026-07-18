@@ -1,7 +1,7 @@
 """
-CLI utilities for ChemSmart.
+CLI utilities for CHEMSMART.
 
-Provides helpers and Click integrations used by the ChemSmart command line
+Provides helpers and Click integrations used by the CHEMSMART command line
 tools, including:
 
 - Custom Click `Group`/`Command` that persist subcommand metadata on the

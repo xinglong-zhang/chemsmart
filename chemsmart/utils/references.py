@@ -2,7 +2,7 @@
 Reference strings and citations for computational chemistry methods.
 
 Contains formatted reference strings for various thermochemistry and
-quantum chemistry methods used in ChemSmart. Includes citations for
+quantum chemistry methods used in CHEMSMART. Includes citations for
 QRRHO approximations, damping functions, and entropy calculations.
 """
 

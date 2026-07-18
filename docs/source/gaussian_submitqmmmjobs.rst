@@ -5,7 +5,7 @@ contact our team if you have questions or feedback.
  Gaussian QM/MM ONIOM Calculations Guide
 #########################################
 
-ChemSmart provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
+CHEMSMART provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
 Integrated molecular Orbital and molecular Mechanics) methodology. This section covers various QM/MM schemes for
 accurate treatment of large molecular systems including enzymes, organometallic complexes, and materials.
 
@@ -14,7 +14,7 @@ accurate treatment of large molecular systems including enzymes, organometallic 
 **********
 
 Gaussian ONIOM calculations enable efficient treatment of large molecular systems by partitioning them into multiple
-layers with different levels of theory. ChemSmart supports flexible ONIOM calculation setups:
+layers with different levels of theory. CHEMSMART supports flexible ONIOM calculation setups:
 
 **2-Layer ONIOM**: High(QM):Low(MM) - **High level**: Quantum mechanics (DFT, ab initio, MP2, etc.) - **Low level**:
 Molecular mechanics force fields (AMBER, UFF, DREIDING)

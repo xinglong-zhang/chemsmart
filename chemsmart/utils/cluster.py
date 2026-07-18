@@ -2,7 +2,7 @@
 Cluster utilities for job monitoring and connectivity checks.
 
 Helpers for interacting with common HPC schedulers and network services
-used by ChemSmart workflows. Currently supports SLURM (via `squeue`/`sacct`)
+used by CHEMSMART workflows. Currently supports SLURM (via `squeue`/`sacct`)
 and PBS/Torque (via `qstat`) to discover running Gaussian jobs, along with a
 simple PubChem reachability check.
 
