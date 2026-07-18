@@ -144,7 +144,9 @@ jobs:
         run: make test
 
       - name: Verify coverage report
-        if: steps.changed-files.outputs.only_changed != 'true'
+        if: >
+          success() &&
+          steps.changed-files.outputs.only_changed != 'true'
         shell: bash
         run: |
           echo "Working directory: $(pwd)"
@@ -154,6 +156,7 @@ jobs:
 
       - name: Create coverage report
         if: >
+          success() &&
           github.event_name == 'pull_request' &&
           !github.event.pull_request.head.repo.fork &&
           steps.changed-files.outputs.only_changed != 'true' &&
@@ -164,7 +167,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload coverage artifacts
-        if: steps.changed-files.outputs.only_changed != 'true'
+        if: >
+          success() &&
+          steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ runner.os }}
@@ -175,6 +180,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: >
+          success() &&
           steps.changed-files.outputs.only_changed != 'true' &&
           hashFiles('coverage.xml') != ''
         uses: codecov/codecov-action@v5

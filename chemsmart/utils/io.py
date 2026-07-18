@@ -662,33 +662,89 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
     return " or ".join(f"id {part}" for part in parts)
 
 
+def _filter_wildcard_mols(
+    mols: List[Chem.Mol], source: str, filename: str
+) -> List[Chem.Mol]:
+    """Remove RDKit mols that contain wildcard (*) atoms (atomic number 0).
+
+    Wildcard atoms appear when Open Babel's CDX reader encounters unknown atom
+    types or when the wrong format reader is dispatched (e.g. the CDXML XML
+    reader is invoked for a binary CDX file and emits "expected < at line: 1").
+    Propagating such molecules downstream causes cryptic KeyErrors in ASE's
+    atomic_numbers lookup.
+
+    Raises ValueError if every molecule was discarded.
+    """
+    valid = [
+        mol
+        for mol in mols
+        if not any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms())
+    ]
+    if not valid:
+        n_bad = len(mols) - len(valid)
+        detail = (
+            f"all {n_bad} molecule(s) contained wildcard (*) atoms"
+            if n_bad
+            else "no molecules were produced"
+        )
+        raise ValueError(
+            f"Open Babel ({source}) could not cleanly read CDX file "
+            f"{filename!r}: {detail}. "
+            f"Save the file as CDXML for guaranteed cross-platform support."
+        )
+    return valid
+
+
 def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
     """
-    Use the Open Babel CLI ('obabel') to convert a CDX file to SDF and
-    return a list of RDKit Mol objects.
+    Use Open Babel to convert a binary CDX file to a list of RDKit Mol objects.
 
-    This implementation writes no temporary files; it streams SDF from
-    stdout into RDKit, which avoids Windows path issues.
+    Strategy (in order):
+    1. **pybel Python API** — uses the conda-env openbabel library directly,
+       bypassing PATH lookup and guaranteeing the correct CDX format reader.
+    2. **obabel CLI** — subprocess fallback for environments where the Python
+       bindings are unavailable.
+
+    Molecules containing wildcard (*) atoms are discarded; they indicate that
+    Open Babel dispatched the wrong reader (e.g. CDXML XML reader on a binary
+    CDX file) and produced corrupt output.
 
     Args:
-        filename: Path to the .cdx file.
+        filename: Path to the binary .cdx file.
 
     Returns:
-        List of RDKit Mol objects.
+        List of RDKit Mol objects with sanitize=False and removeHs=False.
 
     Raises:
-        ValueError: If 'obabel' is not available or no molecules can be read.
-        RuntimeError: If the obabel subprocess fails.
+        ValueError: If no valid molecules can be read by either method.
     """
+    # --- attempt 1: pybel Python API ---
+    try:
+        from openbabel import pybel
+
+        ob_mols = list(pybel.readfile("cdx", filename))
+        if ob_mols:
+            rdkit_mols = []
+            for ob_mol in ob_mols:
+                sdf_str = ob_mol.write("sdf")
+                rdkit_mol = Chem.MolFromMolBlock(
+                    sdf_str, sanitize=False, removeHs=False
+                )
+                if rdkit_mol is not None:
+                    rdkit_mols.append(rdkit_mol)
+            if rdkit_mols:
+                return _filter_wildcard_mols(rdkit_mols, "pybel", filename)
+    except Exception as e:
+        logger.debug(f"pybel CDX read failed for {filename!r}: {e}")
+
+    # --- attempt 2: obabel CLI ---
     obabel = shutil.which("obabel")
     if obabel is None:
         raise ValueError(
-            "Open Babel CLI ('obabel') is not available on PATH. "
-            "Install Open Babel or save the ChemDraw file as CDXML instead."
+            "Open Babel is not available (neither pybel bindings nor 'obabel' "
+            "CLI found). Install Open Babel or save the ChemDraw file as CDXML."
         )
 
-    # Run: obabel -icdx input.cdx -osdf
-    # This writes SDF directly to stdout.
     result = subprocess.run(
         [obabel, "-icdx", filename, "-osdf"],
         check=False,
@@ -697,25 +753,17 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"obabel failed to convert {filename!r} to SDF "
-            f"(exit code {result.returncode}). stderr:\n{result.stderr.decode(errors='replace')}"
+            f"obabel CLI failed to convert {filename!r} to SDF "
+            f"(exit code {result.returncode}).\n"
+            f"stderr: {result.stderr.decode(errors='replace')}"
         )
 
-    # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
-    # Use sanitize=False to avoid kekulization errors for organometallic complexes
     sdf_stream = BytesIO(result.stdout)
     suppl = Chem.ForwardSDMolSupplier(
         sdf_stream, sanitize=False, removeHs=False
     )
-
-    mols = [mol for mol in suppl if mol is not None]
-
-    if not mols:
-        raise ValueError(
-            f"Open Babel produced no valid molecules from CDX file: {filename}"
-        )
-
-    return mols
+    cli_mols = [mol for mol in suppl if mol is not None]
+    return _filter_wildcard_mols(cli_mols, "obabel CLI", filename)
 
 
 def safe_sanitize(mol, skip_kekulize=False):
