@@ -39,6 +39,14 @@ thermochemistry_cli_module = importlib.import_module(
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
+############ IO Fixtures ####################################
+@pytest.fixture
+def temporary_working_dir(tmp_path, monkeypatch):
+    """Run a test in an isolated temporary working directory."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
 ############ Thermochemistry Mock Fixtures ##################
 @pytest.fixture()
 def make_thermochemistry_mock():
@@ -371,14 +379,14 @@ def chemsmart_templates_config(mocker):
 
     # Patch the Class attribute
     mocker.patch(
-        "chemsmart.settings.user.CHEMSMARTUserSettings.USER_CONFIG_DIR",
+        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
         str(template_dir),
     )
 
     # Patch the global instance in runner.py
-    from chemsmart.settings.user import CHEMSMARTUserSettings
+    from chemsmart.settings.user import ChemsmartUserSettings
 
-    new_settings = CHEMSMARTUserSettings()
+    new_settings = ChemsmartUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
     # Patch other module-level user_settings singletons used by the CLI path
     mocker.patch("chemsmart.settings.server.user_settings", new_settings)

@@ -200,6 +200,7 @@ class TestThermochemistry:
     def test_thermochemistry_co2(
         self,
         tmpdir,
+        monkeypatch,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_scratch,
         orca_co2_output,
@@ -210,7 +211,7 @@ class TestThermochemistry:
         mol = Molecule.from_filepath(orca_co2_output)
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
-        os.chdir(tmpdir)
+        monkeypatch.chdir(tmpdir)
         mol.write_com(tmp_path)
 
         # get project settings
