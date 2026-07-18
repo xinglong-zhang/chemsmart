@@ -145,36 +145,35 @@ jobs:
         shell: bash -l {0}
         run: make test
 
+      - name: Verify coverage report
+        if: steps.changed-files.outputs.only_changed != 'true'
+        shell: bash
+        run: |
+          echo "Working directory: $(pwd)"
+          ls -lah
+          test -s coverage.xml
+          echo "Coverage report generated:"
+          ls -lh coverage.xml
+
       - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
+        if: steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ runner.os }}
+          name: coverage-Linux
           path: |
             coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Create coverage report
-        if: >
-          github.event_name == 'pull_request' &&
-          !github.event.pull_request.head.repo.fork &&
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: orgoro/coverage@v3
-        with:
-          coverageFile: coverage.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
+            htmlcov/
+          if-no-files-found: error
 
       - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
+        if: steps.changed-files.outputs.only_changed != 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          files: ./coverage.xml
+          disable_search: true
           fail_ci_if_error: true
+          verbose: true
 
   tests_mac:
     needs: [pre-commit, build]
