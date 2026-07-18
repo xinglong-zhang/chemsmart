@@ -39,6 +39,14 @@ thermochemistry_cli_module = importlib.import_module(
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
+############ IO Fixtures ####################################
+@pytest.fixture
+def temporary_working_dir(tmp_path, monkeypatch):
+    """Run a test in an isolated temporary working directory."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
 ############ Thermochemistry Mock Fixtures ##################
 @pytest.fixture()
 def make_thermochemistry_mock():
