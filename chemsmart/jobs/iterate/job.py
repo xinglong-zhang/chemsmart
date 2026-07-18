@@ -1,8 +1,11 @@
 import logging
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 from chemsmart.jobs.job import Job
+
+if TYPE_CHECKING:
+    from chemsmart.jobs.iterate.runner import IterateRunSummary
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class IterateJob(Job):
         outputfile="iterate_out",
         separate_outputs=False,
         output_directory=None,
+        command_line=None,
         **kwargs,
     ):
         """
@@ -51,6 +55,8 @@ class IterateJob(Job):
             If True, save each structure as a separate file. Default False.
         output_directory : str, optional
             Directory for output files if separate_outputs is True.
+        command_line : str, optional
+            The original CLI command, recorded verbatim in the run report.
         **kwargs
             Additional keyword arguments
         """
@@ -73,6 +79,7 @@ class IterateJob(Job):
         self._outputfile = outputfile
         self.separate_outputs = separate_outputs
         self.output_directory = output_directory
+        self.command_line = command_line
 
     @classmethod
     def settings_class(cls) -> Type[IterateJobSettings]:
@@ -94,7 +101,7 @@ class IterateJob(Job):
             return self._outputfile
         return f"{self._outputfile}.xyz"
 
-    def run(self) -> str:
+    def run(self, progress_callback=None) -> "IterateRunSummary":
         """
         Run the iterate job by delegating to IterateJobRunner.
 
@@ -104,12 +111,19 @@ class IterateJob(Job):
         - Running combinations with multiprocessing
         - Writing results to output xyz file
 
+        Parameters
+        ----------
+        progress_callback : callable, optional
+            ``callback(completed, total)`` forwarded to the runner for
+            display-only progress reporting. When ``None`` (the default) the
+            run behaves exactly as before.
+
         Returns
         -------
-        str
-            Path to the output xyz file
+        IterateRunSummary
+            Success/failure/timeout counts and the paths actually written.
         """
-        logger.info(f"Running IterateJob with {self.nprocs} process(es)")
+        logger.debug(f"Running IterateJob with {self.nprocs} process(es)")
 
         # Use jobrunner if available, otherwise create a temporary one
         if self.jobrunner is not None:
@@ -119,7 +133,5 @@ class IterateJob(Job):
 
             runner = IterateJobRunner()
 
-        # Delegate all execution to runner
-        runner.run(self)
-
-        return self.outputfile
+        # Delegate all execution to runner and surface its run summary.
+        return runner.run(self, progress_callback=progress_callback)

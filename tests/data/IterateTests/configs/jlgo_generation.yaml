@@ -1,0 +1,20 @@
+algorithm:
+  name: jlgo
+
+skeletons:
+  - file_path: "../input/benzene.xyz"
+    label: "benzene"
+    skeleton_indices: "1-6"
+    slots:
+      - group: 1
+        link_indices: "1,3"
+
+substituents:
+  - file_path: "../input/methane.xyz"
+    label: "Me"
+    link_index: 1
+    groups: [1]
+  - file_path: "../input/water.xyz"
+    label: "OH"
+    link_index: 1
+    groups: [1]
