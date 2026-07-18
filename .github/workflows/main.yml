@@ -283,7 +283,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
-          channels: conda-forge,defaults
+          channels: defaults,conda-forge
+          channel-priority: strict
 
       - name: Show conda version
         if: steps.changed-files.outputs.only_changed != 'true'
