@@ -219,8 +219,8 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		--cov=chemsmart \
 		--cov-branch \
 		--cov-report=term-missing \
-		--cov-report=xml:"$(MAKEFILE_DIR)coverage.xml"
-		--cov-report=html:"$(MAKEFILE_DIR)htmlcov"
+		--cov-report=xml:"$(MAKEFILE_DIR)coverage.xml" \
+		--cov-report=html:"$(MAKEFILE_DIR)htmlcov" \
 		-l \
 		--tb=short \
 		--maxfail=1 \
