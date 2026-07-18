@@ -1,5 +1,5 @@
 """
-General utility functions and classes for Chemsmart.
+General utility functions and classes for CHEMSMART.
 
 Provides a collection of utility functions for file handling, caching,
 data structures, text processing, and system operations. Includes

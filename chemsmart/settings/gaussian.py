@@ -175,7 +175,7 @@ class GaussianProjectSettings(RegistryMixin):
 
         Searches for project configuration in the following order:
         1. User-defined project settings directory
-        2. Chemsmart test project configurations
+        2. CHEMSMART test project configurations
 
         Args:
             project (str): Name of the project configuration to load.
