@@ -1847,6 +1847,12 @@ def colored_proton_two_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def pka_scale_cdxml_file(chemdraw_directory):
+    """Multi-fragment CDXML with nested groups and coloured acidic protons."""
+    return os.path.join(chemdraw_directory, "pka_scale.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
