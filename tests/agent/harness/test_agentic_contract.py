@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.harness.evaluation import (
@@ -97,7 +98,11 @@ def test_project_read_uses_session_selection_with_multiple_workspace_yaml(
 
     assert loaded["ok"] is True
     assert loaded["project_name"] == "beta"
-    assert loaded["path"].endswith("/.chemsmart/gaussian/beta.yaml")
+    assert (
+        Path(loaded["path"])
+        .as_posix()
+        .endswith("/.chemsmart/gaussian/beta.yaml")
+    )
 
 
 def test_project_read_and_stringified_update_refresh_state(
