@@ -177,11 +177,15 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
-        if: steps.changed-files.outputs.only_changed != 'true'
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
+          disable_search: true
+          fail_ci_if_error: false
           verbose: true
 
   tests_mac:
