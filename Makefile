@@ -215,7 +215,7 @@ endif
 test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
 	$(ENV_PREFIX)pytest \
 		-v \
-                --cov-config=pyproject.toml \
+		--cov-config=pyproject.toml \
 		--cov=chemsmart \
 		--cov-branch \
 		--cov-report=term-missing \
