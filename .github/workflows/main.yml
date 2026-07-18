@@ -257,7 +257,7 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
+          auto-update-conda: false
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
