@@ -223,26 +223,6 @@ jobs:
         shell: bash -l {0}
         run: make test
 
-      - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
-
   tests_win:
     needs: [pre-commit, build]
     if: ${{ success() }}
@@ -302,24 +282,4 @@ jobs:
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make test
-
-      - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
 
