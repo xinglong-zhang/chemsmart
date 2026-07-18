@@ -9,10 +9,13 @@ import logging
 
 import click
 
+from chemsmart.cli.job import click_filename_options
+
 logger = logging.getLogger(__name__)
 
 
 @click.command(name="cdxml")
+@click_filename_options
 @click.pass_context
 def cdxml(ctx, **kwargs):
     """
@@ -25,5 +28,6 @@ def cdxml(ctx, **kwargs):
     """
     raise click.ClickException(
         "The 'iterate cdxml' command is not yet implemented. "
-        "Please use 'chemsmart run iterate toml' with a TOML configuration file."
+        "Please define the skeletons and substituents in a YAML configuration "
+        "file and use 'chemsmart run iterate yaml -f config.yaml'."
     )
