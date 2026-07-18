@@ -144,9 +144,10 @@ def test_existing_completed_output_is_reused_without_false_failure(
         encoding="utf-8",
     )
     source = (
-        "print('ORCASinglePointJob<folder="
-        + str(tmp_path)
-        + ", label=h2o_sp, jobrunner=ORCAJobRunner> is already complete, not running.')"
+        "print('ORCASinglePointJob<folder=' + "
+        + repr(str(tmp_path))
+        + " + ', label=h2o_sp, jobrunner=ORCAJobRunner> "
+        "is already complete, not running.')"
     )
 
     run = execute_observed_process(
