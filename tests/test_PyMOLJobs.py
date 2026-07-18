@@ -22,8 +22,8 @@ from chemsmart.jobs.mol.runner import (
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
-from chemsmart.jobs.mol.templates import scientific_styles
-from chemsmart.jobs.mol.templates.scientific_styles import (
+from chemsmart.jobs.mol.templates import zhang_group_scientific_styles
+from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
     SCIENTIFIC_STYLE_CLASSES,
     ComicMetallicStyle,
     GlossyStyle,
@@ -998,7 +998,9 @@ class TestPyMOLStyleCommands:
         assert job_pymol.label == "mol"
 
     def test_scientific_style_registry_matches_classes(self):
-        template_commands = scientific_styles.PYMOL_SCIENTIFIC_STYLE_COMMANDS
+        template_commands = (
+            zhang_group_scientific_styles.PYMOL_SCIENTIFIC_STYLE_COMMANDS
+        )
 
         assert PYMOL_SCIENTIFIC_STYLE_COMMANDS == template_commands
         assert len(SCIENTIFIC_STYLE_CLASSES) == len(template_commands)
@@ -1008,7 +1010,7 @@ class TestPyMOLStyleCommands:
         ]
         for style_cls in SCIENTIFIC_STYLE_CLASSES:
             assert template_commands[style_cls.command] == style_cls.command
-            wrapper = getattr(scientific_styles, style_cls.command)
+            wrapper = getattr(zhang_group_scientific_styles, style_cls.command)
             assert wrapper.__name__ == style_cls.command
 
     def test_select_coordination_uses_command_as_prefix(self, mocker):
@@ -1027,9 +1029,11 @@ class TestPyMOLStyleCommands:
         assert ComicMetallicStyle.colors is GlossyStyle.colors
         assert ComicMetallicStyle.DONOR_ROLES
 
-    def test_scientific_styles_hide_distance_value_labels(self, mocker):
+    def test_zhang_group_scientific_styles_hide_distance_value_labels(
+        self, mocker
+    ):
         mock_cmd = mocker.patch(
-            "chemsmart.jobs.mol.templates.scientific_styles.cmd"
+            "chemsmart.jobs.mol.templates.zhang_group_scientific_styles.cmd"
         )
         mocker.patch.object(
             ScientificStyle,
@@ -1075,12 +1079,12 @@ class TestPyMOLStyleCommands:
 
     def test_style_wrapper_ignores_pymol_self_kwarg(self, mocker):
         mock_render = mocker.patch.object(ComicMetallicStyle, "render")
-        getattr(scientific_styles, "comic")("sel", _self="ignored")
+        getattr(zhang_group_scientific_styles, "comic")("sel", _self="ignored")
         mock_render.assert_called_once_with(selection="sel")
 
     def test_build_coordination_atoms_uses_geometry_helpers(self):
-        assert hasattr(scientific_styles, "get_coordinating_atoms")
-        assert hasattr(scientific_styles, "is_metal")
+        assert hasattr(zhang_group_scientific_styles, "get_coordinating_atoms")
+        assert hasattr(zhang_group_scientific_styles, "is_metal")
         assert hasattr(ScientificStyle, "_role_pymol_indices")
 
     def test_element_category_helpers_are_centralized(self):
@@ -1162,7 +1166,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         job.run()
 
         assert job.is_complete()
-        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (
@@ -1219,7 +1225,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         job.run()
 
         assert job.is_complete()
-        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (
@@ -1245,7 +1253,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         job.run()
 
         assert job.is_complete()
-        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (
@@ -1271,7 +1281,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         job.run()
 
         assert job.is_complete()
-        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (

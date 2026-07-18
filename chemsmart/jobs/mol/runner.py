@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.mol.templates.scientific_styles import (
+from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
 )
 from chemsmart.jobs.runner import JobRunner
@@ -43,7 +43,7 @@ pt = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-_SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
+_SCIENTIFIC_STYLE_TEMPLATE = "zhang_group_scientific_styles.py"
 
 # Hyphenated CLI names derived from the registry (insertion order preserved).
 PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
@@ -70,7 +70,7 @@ def normalize_pymol_style(style):
 
 
 def is_pymol_derived_style(style):
-    """Return True when ``style`` maps to ``scientific_styles.py``."""
+    """Return True when ``style`` maps to ``zhang_group_scientific_styles.py``."""
     if style is None:
         return False
     return normalize_pymol_style(style) in PYMOL_SCIENTIFIC_STYLE_COMMANDS
@@ -1062,7 +1062,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
 
 class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
-    """PyMOL job runner for derived scientific_styles.py visualization jobs."""
+    """PyMOL job runner for derived zhang_group_scientific_styles.py jobs."""
 
     JOBTYPES = ["pymol_scientific_style_visualization"]
 
@@ -1075,7 +1075,7 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         measurements), matching plain ``visualize -c`` on the main branch.
         Style commands themselves only select the look; they do not re-encode
         bond pairs. Numeric distance labels are hidden inside
-        ``scientific_styles.py`` after distances are created.
+        ``zhang_group_scientific_styles.py`` after distances are created.
         """
         style = normalize_pymol_style(job.style)
         render_command = PYMOL_SCIENTIFIC_STYLE_COMMANDS.get(style)
@@ -1085,7 +1085,7 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         return f"{render_command} {selection}"
 
     def _generate_visualization_style_script(self, job):
-        """Copy scientific_styles.py for derived ``-s`` visualization jobs."""
+        """Copy zhang_group_scientific_styles.py for derived ``-s`` jobs."""
         template_filename = PYMOL_STYLE_TEMPLATES[
             normalize_pymol_style(job.style)
         ]

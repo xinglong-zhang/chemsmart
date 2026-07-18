@@ -59,7 +59,7 @@ def visualize(
     chemsmart run mol -f 'structure_file' visualize
     -G '233,468-512' -G '308,397-414,416-423'
 
-    Derived styles from scientific_styles.py are selected with -s. Examples:
+    Derived styles from zhang_group_scientific_styles.py are selected with -s. Examples:
         chemsmart run mol -f complex.xyz visualize -s glossy
         chemsmart run mol -f complex.xyz visualize -s comic
         chemsmart run mol -f complex.xyz visualize -s editorial-minimal

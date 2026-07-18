@@ -79,7 +79,7 @@ class PyMOLJob(Job):
             style: Visualization style: ``pymol``, ``cylview``, or
                 ``cylview_flat`` (default: None).
                 Use :class:`PyMOLScientificStyleVisualizationJob` for derived
-                ``scientific_styles.py`` options such as ``glossy`` or
+                ``zhang_group_scientific_styles.py`` options such as ``glossy`` or
                 ``editorial_minimal``.
             trace: Whether to trace molecular paths (default: None).
             vdw: Van der Waals representation settings (default: None).

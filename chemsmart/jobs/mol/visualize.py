@@ -151,7 +151,7 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
 
 class PyMOLScientificStyleVisualizationJob(PyMOLVisualizationJob):
     """
-    PyMOL job for derived ``scientific_styles.py`` visualization.
+    PyMOL job for derived ``zhang_group_scientific_styles.py`` visualization.
 
     Applies bundled styles selected via ``-s`` on the ``visualize`` subcommand,
     including ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,

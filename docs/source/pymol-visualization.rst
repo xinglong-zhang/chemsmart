@@ -208,7 +208,7 @@ Example
 **********************
 
 Use ``-s/--style`` on the ``visualize`` subcommand to select a render style. Base styles use
-``zhang_group_pymol_style.py``; scientific styles use ``scientific_styles.py`` and are routed through
+``zhang_group_pymol_style.py``; scientific styles use ``zhang_group_scientific_styles.py`` and are routed through
 :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. list-table::
@@ -228,43 +228,43 @@ Use ``-s/--style`` on the ``visualize`` subcommand to select a render style. Bas
       -  Cylindrical stick representation
 
    -  -  ``glossy``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Glossy semi-metallic rendering with transparent PNG export
 
    -  -  ``comic``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Comic ball-and-stick rendering with black outlines and element labels
 
    -  -  ``soft-cartoon``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Soft pastel ball-and-stick with radius-ratio coordination spheres and illustrated outlines
 
    -  -  ``editorial-minimal``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Matte minimal ball-and-stick style for main-text mechanistic figures
 
    -  -  ``soft-ceramic``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Soft ceramic / studio ball-and-stick style for coordination complexes
 
    -  -  ``neon-coordination-core``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Neon coordination-core emphasis using radius-ratio shells and a transparent background
 
    -  -  ``matte-clay``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Matte clay ball-and-stick using radius-ratio coordination spheres and core hydrogens
 
    -  -  ``xray-wire``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Monochrome wireframe style for SI structure verification
 
    -  -  ``steric-surface``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Transparent molecular surface for steric / space-filling views
 
    -  -  ``quasi-chemdraw-bold``
-      -  ``scientific_styles.py``
+      -  ``zhang_group_scientific_styles.py``
       -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
 
 Basic Usage

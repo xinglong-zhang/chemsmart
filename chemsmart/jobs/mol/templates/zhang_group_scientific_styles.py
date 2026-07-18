@@ -3,12 +3,12 @@ Xinglong ZHANG Group PyMOL Scientific Style Settings and Functions.
 
 PyMOL visualization styles for publication, cover, and presentation figures.
 
-CHEMSMART applies this template for ``visualize -s`` choices including
-``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
-``soft-ceramic``, and other scientific styles.
+CHEMSMART applies this template (``zhang_group_scientific_styles.py``) for
+``visualize -s`` choices including ``glossy``, ``comic``, ``soft-cartoon``,
+``editorial-minimal``, ``soft-ceramic``, and other scientific styles.
 In PyMOL directly::
 
-    run scientific_styles.py
+    run zhang_group_scientific_styles.py
     glossy all
     comic all
     soft_cartoon all
