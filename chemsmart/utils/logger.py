@@ -1,5 +1,5 @@
 """
-Logging utilities for ChemSmart applications.
+Logging utilities for CHEMSMART applications.
 
 Provides customized logging functionality with deduplication capabilities
 and configurable output streams. Supports both file and console logging
