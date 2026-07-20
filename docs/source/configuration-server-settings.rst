@@ -203,9 +203,9 @@ SCRATCH_DIR
 
 **Type:** String or Null
 
-**Description:** Path to the scratch directory for temporary files. Set to ``null`` if not using a specific scratch
-location. Note that both Gaussian and ORCA calculations are by default run in scratch directory, thus, it is recommended
-to set up the path to scratch directory. See the section on setting up scratch directory.
+**Description:** Path to the scratch directory for temporary files when ``--scratch`` is passed on ``chemsmart run`` or
+``chemsmart sub``. Set to ``null`` if not using a server-level scratch path. See :ref:`scratch-behavior` and the section
+on setting up scratch directories.
 
 **Examples:**
 
@@ -314,17 +314,19 @@ uses serial execution commands; when ``False``, uses parallel execution commands
 SCRATCH
 ^^^^^^^
 
-**Type:** Boolean
+**Type:** Boolean (legacy; not used)
 
-**Description:** Whether to use a scratch directory for temporary Gaussian files. When ``True``, Gaussian will write
-temporary files to the scratch directory specified in ENVARS.
+**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
+``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`). The scratch directory
+**path** for Gaussian is set by ``export SCRATCH=...`` under ``ENVARS`` (and ``SERVER.SCRATCH_DIR`` / ``usersettings``
+``SCRATCH`` as fallbacks).
 
 **Example:**
 
 .. code:: yaml
 
-   SCRATCH: True   # Use scratch directory
-   SCRATCH: False  # Run in job directory
+   SCRATCH: True   # ignored by CHEMSMART; kept for reference in some templates
+   SCRATCH: False  # ignored by CHEMSMART
 
 CONDA_ENV
 ^^^^^^^^^
@@ -425,16 +427,18 @@ in parallel mode (``False``).
 SCRATCH
 ^^^^^^^
 
-**Type:** Boolean
+**Type:** Boolean (legacy; not used)
 
-**Description:** Whether to use a scratch directory for temporary ORCA files.
+**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
+``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`). The scratch directory
+**path** for ORCA is set by ``export SCRATCH=...`` under ``ENVARS``.
 
 **Example:**
 
 .. code:: yaml
 
-   SCRATCH: True   # Use scratch directory
-   SCRATCH: False  # Run in job directory
+   SCRATCH: True   # ignored by CHEMSMART
+   SCRATCH: False  # ignored by CHEMSMART
 
 CONDA_ENV
 ^^^^^^^^^
@@ -518,15 +522,16 @@ LOCAL_RUN
 SCRATCH
 ^^^^^^^
 
-**Type:** Boolean
+**Type:** Boolean (legacy; not used)
 
-**Description:** Whether to use a scratch directory for temporary NCIPLOT files.
+**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
+``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`).
 
 **Example:**
 
 .. code:: yaml
 
-   SCRATCH: True
+   SCRATCH: True   # ignored by CHEMSMART
 
 CONDA_ENV
 ^^^^^^^^^
@@ -765,10 +770,16 @@ Complete example for a local workstation without a job scheduler:
 Scratch Behavior
 ================
 
-Scratch mode is controlled by ``--scratch`` and ``--no-scratch`` on ``chemsmart run`` and ``chemsmart sub``. When the
-flag is omitted, scratch is off. When scratch is enabled, the scratch directory path is taken from program ``ENVARS``,
-then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH``. If scratch is requested but no valid directory exists,
-CHEMSMART falls back to the job folder.
+.. _scratch-behavior:
+
+Whether a job runs in a scratch directory or in ``job.folder`` is controlled **only** by ``--scratch`` and
+``--no-scratch`` on ``chemsmart run`` and ``chemsmart sub``. These flags apply to all programs (Gaussian, ORCA, NCIPLOT,
+PyMOL, and others). Omitting the flag is the same as ``--no-scratch``.
+
+Program-block ``SCRATCH: True/False`` keys in server YAML and job-runner class defaults are **not** used. When
+``--scratch`` is passed, CHEMSMART resolves the scratch directory **path** from program ``ENVARS`` (``export
+SCRATCH=...``), then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH``. If no valid directory exists, CHEMSMART
+falls back to the job folder.
 
 .. list-table::
    :header-rows: 1
@@ -816,8 +827,10 @@ When customizing server configuration files:
 #. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
    will be automatically updated when configuring CHEMSMART during the configuration phase.
 
-#. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
-   node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
+#. **Scratch directories**: Configure ``export SCRATCH=...`` in program ``ENVARS`` (and optionally
+   ``SERVER.SCRATCH_DIR`` or ``usersettings`` ``SCRATCH``) so a valid path exists when users pass ``--scratch``. Scratch
+   mode itself is enabled only via ``--scratch`` on ``chemsmart run`` / ``chemsmart sub`` (see :ref:`scratch-behavior`).
+   Some HPC systems provide node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
 
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.
 
