@@ -1106,7 +1106,7 @@ class Molecule:
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
-        if basename.endswith((".cdx", ".cdxml")):
+        if basename.lower().endswith((".cdx", ".cdxml")):
             return cls._read_chemdraw_file(
                 filepath=filepath,
                 index=index,
