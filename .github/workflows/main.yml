@@ -97,6 +97,10 @@ jobs:
     needs: [pre-commit, build]
     if: ${{ success() }}
 
+    permissions:
+      contents: read
+      pull-requests: write
+
     strategy:
       fail-fast: false
       matrix:
