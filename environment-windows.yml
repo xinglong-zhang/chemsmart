@@ -12,11 +12,12 @@
 # packaging defect, not a ChemSmart one, and it reproduces on both the
 # 2.44.x and the older 2.42.12 builds.
 #
-# ffmpeg only provides movie export for PyMOL rendering, which the test
-# suite never exercises, so the Windows CI environment drops it. Every
-# other dependency is identical to environment.yml, and
-# tests/test_environment_files.py fails if the two files diverge in any
-# other way.
+# ffmpeg itself is fine; only its conda dependency chain is broken. The
+# PyMOL movie tests do need an ffmpeg binary, so the Windows CI job
+# installs one with Chocolatey (see .github/workflows/main.yml) instead of
+# pulling it through conda. Every other dependency is identical to
+# environment.yml, and tests/test_environment_files.py fails if the two
+# files diverge in any other way.
 #
 # Remove this file and point the Windows job back at environment.yml once
 # conda-forge ships a win-64 gdk-pixbuf whose post-link step succeeds.

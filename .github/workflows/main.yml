@@ -250,6 +250,15 @@ jobs:
         run: |
           choco install make --force
 
+      # environment-windows.yml omits conda's ffmpeg (its librsvg ->
+      # gdk-pixbuf chain breaks env creation), but the PyMOL movie tests
+      # need an ffmpeg binary on PATH. Chocolatey provides one without
+      # touching the conda environment.
+      - name: Install ffmpeg
+        shell: cmd
+        run: |
+          choco install ffmpeg --force
+
       - name: Install project
         shell: cmd
         run: |
