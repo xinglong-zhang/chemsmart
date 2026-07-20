@@ -6,6 +6,10 @@ dependencies:
   - python=3.10
   - cclib=1.8.1
   - pymol-open-source=3.1.0
+  # Transitive GTK image library: conda-forge 2.44.x Windows builds fail
+  # their post-link loader-cache step with STATUS_DLL_NOT_FOUND, aborting
+  # env creation on windows-latest. Hold the long-stable 2.42 series.
+  - gdk-pixbuf <2.44
   - ffmpeg=7.1.1  # movie support for pymol
   - openbabel          # includes Python bindings on conda-forge
   - anthropic>=0.40
