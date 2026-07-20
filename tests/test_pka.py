@@ -888,9 +888,11 @@ class TestPKa:
         assert "--reference-multiplicity" not in second_args
 
     def test_run_gaussian_pka_help_is_submission_only(
-        self, single_molecule_xyz_file
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         _require_backend_pka_subcommand(run, "gaussian")
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
         runner = CliRunner()
         result = runner.invoke(
             run,
@@ -915,9 +917,11 @@ class TestPKa:
         assert "\n  batch-analyze" not in result.output
 
     def test_run_orca_pka_help_is_submission_only(
-        self, single_molecule_xyz_file
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         _require_backend_pka_subcommand(run, "orca")
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
         runner = CliRunner()
         result = runner.invoke(
             run,
