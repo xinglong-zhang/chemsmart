@@ -176,26 +176,27 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
 
-def _write_gaussian_project(tmp_path):
-    config_root = tmp_path / "chemsmart_cfg"
-    gaussian_cfg = config_root / "gaussian"
-    gaussian_cfg.mkdir(parents=True)
-    (gaussian_cfg / "test.yaml").write_text(
-        "gas:\n  functional: B3LYP\n  basis: def2-SVP\n"
-        "solv:\n  functional: B3LYP\n  basis: def2-SVP\n"
-        "  solvent_model: smd\n  solvent_id: water\n"
-    )
-    return config_root
-
-
 class TestScratchCLIDefaults:
     """CLI scratch flag and from_job scratch_from_cli policy."""
+
+    @staticmethod
+    def _write_gaussian_project(tmp_path):
+        config_root = tmp_path / "chemsmart_cfg"
+        gaussian_cfg = config_root / "gaussian"
+        gaussian_cfg.mkdir(parents=True)
+        (gaussian_cfg / "test.yaml").write_text(
+            "gas:\n  functional: B3LYP\n  basis: def2-SVP\n"
+            "solv:\n  functional: B3LYP\n  basis: def2-SVP\n"
+            "  solvent_model: smd\n  solvent_id: water\n"
+        )
+        return config_root
 
     def test_run_omitted_scratch_passes_from_cli_false(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
         )
         observed = {}
 
@@ -242,7 +243,8 @@ class TestScratchCLIDefaults:
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
         )
         fake_server = Server(name="dummy")
         captured = {"cli_args": None}
@@ -283,7 +285,8 @@ class TestScratchCLIDefaults:
     ):
         """Placeholder must not clear --scratch before from_job."""
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
         )
         observed = {}
 
@@ -331,7 +334,8 @@ class TestScratchCLIDefaults:
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
         )
         fake_server = Server(name="dummy")
         captured = {"job": None, "cli_args": None}
