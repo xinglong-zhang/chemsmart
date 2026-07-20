@@ -17,7 +17,11 @@ ifeq ($(OS_FAMILY),Windows)
     NULL := nul
 else
     SHELL := /bin/bash
-    ENV_PREFIX := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
+    # Skip the "conda run" wrapper when the chemsmart env is already active
+    # (e.g. in CI via `conda-incubator/setup-miniconda`'s activate-environment):
+    # some conda versions fail to propagate the wrapped command's exit code,
+    # which let a failing test suite report as a passing CI step.
+    ENV_PREFIX := $(shell if [ "$$CONDA_DEFAULT_ENV" = "chemsmart" ]; then echo ""; elif conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
     SEP := /
     RM := rm -f
     RMDIR := rm -rf
@@ -219,7 +223,6 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		--cov-report=html:htmlcov \
 		-l \
 		--tb=short \
-		--maxfail=1 \
 		tests/
 
 # === Docs ===
