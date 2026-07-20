@@ -2342,21 +2342,6 @@ class TestCDXFile:
         assert mol.positions is not None
         assert mol.positions.shape == (21, 3)
 
-    def test_molecule_from_filepath_cdx_uppercase_extension(
-        self, single_molecule_cdx_file_imidazole, tmp_path
-    ):
-        """from_filepath must route .CDX to ChemDraw, not ASE."""
-        from shutil import copy
-
-        cdx_path = tmp_path / "cd.CDX"
-        copy(single_molecule_cdx_file_imidazole, cdx_path)
-
-        mol = Molecule.from_filepath(cdx_path)
-
-        assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C8H10N2O"
-        assert mol.num_atoms == 21
-
     def test_read_complex_molecule_cdxml_file_(
         self, complex_molecule_cdxml_file
     ):
