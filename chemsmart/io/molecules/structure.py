@@ -815,6 +815,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
     @property
@@ -826,6 +827,9 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            logger.debug(
+                f"Moments of inertia (most abundant mass): {eigenvalues}."
+            )
             return eigenvalues
 
     @property
@@ -887,15 +891,27 @@ class Molecule:
         """
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
+
+        For linear molecules the moment of inertia along the molecular axis is
+         (effectively) zero, so the axial rotational temperature is infinite. For
+         linear molecules this property returns only the finite perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
             for i in self.moments_of_inertia
         ]
-        return [
-            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
-            for i in range(3)
-        ]
+        result = []
+        for moi in moi_in_SI_units:
+            if moi == 0.0:
+                result.append(np.inf)
+            else:
+                result.append(
+                    units._hplanck**2 / (8 * np.pi**2 * moi * units._k)
+                )
+        if self.is_linear:
+            # for linear molecule, has only one rotational temperature
+            return [result[-1]]
+        return result
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
@@ -1035,6 +1051,37 @@ class Molecule:
             return molecule
 
     @classmethod
+    def from_directorypath(cls, folder, program="xtb", index="-1", **kwargs):
+        """
+        Create molecule from a directory containing calculation output files.
+
+        Args:
+            folder (str): Path to directory containing output files.
+            program (str): Program type ('xtb', 'gaussian', 'orca'). Default is 'xtb'.
+            index (str or int): Index for multi-structure files. Default is "-1" (last).
+
+        Returns:
+            Molecule: Molecule object from the calculation output.
+        """
+        folder = os.path.abspath(folder)
+        if not os.path.exists(folder):
+            raise FileNotFoundError(f"{folder} could not be found!")
+
+        if not os.path.isdir(folder):
+            raise NotADirectoryError(f"{folder} is not a directory!")
+
+        if program.lower() == "xtb":
+            from chemsmart.io.xtb.output import XTBOutput
+
+            output = XTBOutput(folder)
+            return output.get_molecule(index=index)
+        else:
+            raise ValueError(
+                f"Unsupported program '{program}' for from_directorypath. "
+                "Currently only 'xtb' is supported."
+            )
+
+    @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
         """
         Internal method to read molecular data from various file formats.
@@ -1074,7 +1121,9 @@ class Molecule:
             program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
-            if program == "gaussian":
+            elif program == "xtb":
+                return cls._read_xtb_outfile(filepath, index, **kwargs)
+            elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
@@ -1217,6 +1266,24 @@ class Molecule:
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.get_molecule(index=index)
+
+    @staticmethod
+    @file_cache()
+    def _read_xtb_outfile(filepath, index, **kwargs):
+        """
+        Read XTB output from a calculation directory.
+
+        Args:
+            filepath (str): Path to xTB calculation directory
+            index (str or int): Index for multi-structure files
+
+        Returns:
+            Molecule: Molecule object from xTB output
+        """
+        from chemsmart.io.xtb.output import XTBOutput
+
+        xtb_output = XTBOutput(folder=filepath)
+        return xtb_output.get_molecule(index=index)
 
     @classmethod
     def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):

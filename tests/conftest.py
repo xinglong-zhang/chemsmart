@@ -105,6 +105,7 @@ def make_thermochemistry_mock():
         check_imaginary_frequencies=True,
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
+        rotational_mode="gaussian",
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -112,7 +113,9 @@ def make_thermochemistry_mock():
         mock.check_imaginary_frequencies = check_imaginary_frequencies
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
+        mock.target = "dummy.log"
         return mock
 
     return _factory
@@ -822,6 +825,22 @@ def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_koh_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH.log"
+    )
+    return gaussian_koh_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_koh_linear_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_linear_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH_linear.log"
+    )
+    return gaussian_koh_linear_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
     gaussian_he_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "he.log"
@@ -1392,6 +1411,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_koh_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "KOH.out")
+
+
+@pytest.fixture()
 def orca_sn2_ts_output(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "sn2_ts.out")
 
@@ -1620,6 +1644,69 @@ def orca_yaml_settings_custom_solv_cosmors_project_name(
     orca_yaml_settings_directory,
 ):
     return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
+
+
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_co2_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_ohess")
+
+
+@pytest.fixture()
+def xtb_water_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
+
+
+@pytest.fixture()
+def xtb_cyclopentadienyl_anion_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "cyclopentadienyl_anion_opt")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_opt_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_opt_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_sp_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_sp_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_acetaldehyde_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "acetaldehyde_hess")
+
+
+@pytest.fixture()
+def xtb_he_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "he_hess")
 
 
 # test for structure.py
