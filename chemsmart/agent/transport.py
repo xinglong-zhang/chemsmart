@@ -198,10 +198,26 @@ def build_submit_command(script_path, working_dir, server) -> str:
     return executed
 
 
+def _target_absolute_path(value: str) -> str:
+    """Absolutise a scheduler path without breaking POSIX target paths.
+
+    Submit paths belong to the host that will run the job: a remote
+    cluster over ssh, or a local POSIX scheduler. ``os.path.abspath``
+    rewrote an already-absolute ``/tmp/job.sh`` into ``D:\\tmp\\job.sh``
+    when the agent ran on Windows, so the emitted ``qsub``/``ssh`` command
+    named a path the target could never resolve. Leave POSIX-absolute
+    values untouched and absolutise only genuinely relative ones.
+    """
+
+    if str(value).startswith("/"):
+        return str(value)
+    return os.path.abspath(value)
+
+
 def build_submit_invocation(script_path, working_dir, server):
     submit_command = getattr(server, "submit_command", None) or "qsub"
-    script_path = os.path.abspath(script_path)
-    working_dir = os.path.abspath(working_dir)
+    script_path = _target_absolute_path(script_path)
+    working_dir = _target_absolute_path(working_dir)
     host = _server_host(server)
 
     if _is_local_host(host):

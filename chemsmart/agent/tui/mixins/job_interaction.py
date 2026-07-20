@@ -104,7 +104,14 @@ class JobInteractionMixin:
             )
             return
         current_cwd = os.path.abspath(os.getcwd())
-        recorded_cwd = os.path.abspath(state.cwd)
+        # state.cwd is a value recorded by an earlier session, possibly on
+        # another platform. Absolutising it locally rewrote a recorded
+        # '/tmp/session' into 'D:\\tmp\\session' on Windows, so the resume
+        # prompt reported a directory that was never recorded and then
+        # chdir'd somewhere unrelated. Only relative values need resolving.
+        recorded_cwd = state.cwd
+        if not (recorded_cwd.startswith("/") or os.path.isabs(recorded_cwd)):
+            recorded_cwd = os.path.abspath(recorded_cwd)
         if recorded_cwd != current_cwd:
             if self.app.plain:
                 self.post_error(

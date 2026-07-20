@@ -27,7 +27,7 @@ import tempfile
 from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Iterable
 
 from chemsmart.agent.harness.terminal_state import (
@@ -1763,10 +1763,19 @@ def _load_prompt(training_dir: Path, digest: str) -> str:
 
 
 def _portable_path(path: Path, base: Path) -> str:
+    """Return ``path`` relative to ``base`` with POSIX separators.
+
+    The value lands in an export manifest that is compared and shared
+    across machines, so it must not carry the exporting host's separator:
+    the same export produced ``../out`` on Linux and ``..\\out`` on
+    Windows, which made manifests differ for no real reason.
+    """
+
     try:
-        return os.path.relpath(path.resolve(), base.resolve())
+        relative = os.path.relpath(path.resolve(), base.resolve())
     except OSError:
         return str(path)
+    return PurePath(relative).as_posix()
 
 
 def _load_json_object(value: Any) -> JsonDict | None:
