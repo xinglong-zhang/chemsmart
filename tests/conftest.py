@@ -31,6 +31,7 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 
 thermochemistry_cli_module = importlib.import_module(
@@ -1889,6 +1890,18 @@ def orca_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def orca_jobrunner_scratch(tmpdir, pbs_server):
     return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def xtb_jobrunner_no_scratch(pbs_server):
+    return FakeXTBJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def xtb_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeXTBJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 
