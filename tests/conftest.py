@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 import click
 import numpy as np
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from _pytest.monkeypatch import MonkeyPatch
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
