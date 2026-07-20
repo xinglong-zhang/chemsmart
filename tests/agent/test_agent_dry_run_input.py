@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 from chemsmart.agent.harness.workflow_state import (
@@ -129,7 +130,11 @@ class TestDryRunInput:
         assert result["cli_grounded"] is True
         assert result["command"] == (
             "chemsmart run gaussian -c 0 -m 1 -x B3LYP -b '6-31G(d)' "
-            f"-f {single_molecule_xyz_file} -l h2o_scan scan --coordinates "
+            # The builder shell-quotes each argument, which is visible only
+            # when the fixture path contains characters a POSIX shell would
+            # treat specially - as a Windows path's backslashes do.
+            f"-f {shlex.quote(str(single_molecule_xyz_file))} "
+            "-l h2o_scan scan --coordinates "
             "'[[1,2]]' --num-steps 10 --step-size 0.05 "
             "--constrained-coordinates '[[1,3]]'"
         )
@@ -181,7 +186,8 @@ class TestDryRunInput:
         assert "B 1 3 F" in result["content"]
         assert result["command"] == (
             "chemsmart run gaussian -p water_demo -c 0 -m 1 "
-            f"-f {single_molecule_xyz_file} -l h2o_bond_scan scan "
+            f"-f {shlex.quote(str(single_molecule_xyz_file))} "
+            "-l h2o_bond_scan scan "
             "--coordinates '[[1,2]]' --num-steps 10 --step-size 0.05 "
             "--constrained-coordinates '[[1,3]]'"
         )

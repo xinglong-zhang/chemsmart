@@ -106,7 +106,15 @@ def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
     )
 
     runner = CliRunner()
-    result = runner.invoke(agent, ["tools"], catch_exceptions=False)
+    # The tool table is rendered by Rich, which wraps to the terminal
+    # width. CI runners report different widths per platform, so pin one
+    # wide enough for the description column to stay on a single line.
+    result = runner.invoke(
+        agent,
+        ["tools"],
+        catch_exceptions=False,
+        env={"COLUMNS": "200"},
+    )
 
     assert result.exit_code == 0, result.output
     assert "Registered tools" in result.output
