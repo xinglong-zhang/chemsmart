@@ -158,8 +158,7 @@ class JobRunner(RegistryMixin):
             job finishes normally.
         fake (bool): Whether to use fake job runner.
         scratch_from_cli (bool): True if ``--scratch``/``--no-scratch`` was
-            passed; when False, ``from_job`` uses the program ``SCRATCH``
-            default.
+            passed; when False, ``from_job`` uses the runner class ``SCRATCH``.
         **kwargs: Additional keyword arguments.
     """
 
@@ -197,7 +196,9 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        # Skip scratch setup on the CLI placeholder (no executable yet).
+        # CLI builds a placeholder JobRunner before the typed runner exists.
+        # Resolving scratch here has no executable and would set scratch=False,
+        # defeating --scratch. Typed runners resolve in their __init__.
         if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
@@ -269,12 +270,14 @@ class JobRunner(RegistryMixin):
             )
             self.scratch = False
         else:
-            # check that the scratch folder exists
             scratch_dir = os.path.expanduser(scratch_dir)
-            if not os.path.exists(scratch_dir):
-                raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch_dir}"
+            if not os.path.isdir(scratch_dir):
+                logger.warning(
+                    f"Scratch dir {scratch_dir!r} is missing or not a directory "
+                    f"for {self}. Not using scratch."
                 )
+                self.scratch = False
+                scratch_dir = None
         return scratch_dir
 
     def __repr__(self):
@@ -425,7 +428,7 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # Omit → program SCRATCH; CLI flag → honor scratch bool.
+            # Omit → class SCRATCH; CLI flag → honor scratch bool.
             if not scratch_from_cli:
                 scratch = selected_runner.SCRATCH
             logger.info(
