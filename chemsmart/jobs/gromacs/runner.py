@@ -1,12 +1,13 @@
-"""GROMACS job runner for executing molecular dynamics workflows."""
-
 from __future__ import annotations
+
+"""
+GROMACS job runner for executing molecular dynamics workflows.
+"""
 
 import logging
 import os
 import shlex
 import subprocess
-from functools import lru_cache
 from pathlib import Path
 
 from chemsmart.jobs.gromacs.state import GromacsWorkflowState
@@ -71,10 +72,9 @@ class GromacsJobRunner(JobRunner):
         self.gmx_source_scripts = list(gmx_source_scripts or [])
 
     @property
-    @lru_cache(maxsize=12)
     def executable(self):
         """
-        Return the GROMACS executable configuration for the current server.
+        Return the configured GROMACS executable.
         """
         return GromacsExecutable.from_servername(servername=self.server.name)
 
@@ -142,7 +142,7 @@ class GromacsJobRunner(JobRunner):
         if self.gmx_executable is not None:
             return self.gmx_executable
 
-        return self.executable.get_executable()
+        return GromacsExecutable().get_executable()
 
     def _get_grompp_command(
         self,
@@ -195,7 +195,7 @@ class GromacsJobRunner(JobRunner):
         if job.mdrun_ntomp is not None:
             command.extend(["-ntomp", str(job.mdrun_ntomp)])
 
-        command.extend(job.mdrun_extra_args)
+        command.extend(job.mdrun_extra_args or [])
 
         return command
 
@@ -646,7 +646,8 @@ class GromacsJobRunner(JobRunner):
 
         if missing:
             raise FileNotFoundError(
-                "Missing required GROMACS input files: " + ", ".join(missing)
+                "Missing required GROMACS input files: "
+                + ", ".join(missing)
             )
 
     def _validate_full_setup_inputs(self, job):

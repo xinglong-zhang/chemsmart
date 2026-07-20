@@ -53,6 +53,7 @@ class GromacsProjectSettings:
     constraints: Optional[str] = None
     constraint_algorithm: Optional[str] = None
 
+
     box_type: Optional[str] = "cubic"
     box_distance: Optional[float] = 1.0
     solvent_file: Optional[Path] = None
@@ -214,8 +215,9 @@ class GromacsProjectSettings:
         """
         Validate the minimum inputs for a prepared workflow.
 
-        A prepared workflow starts from user-provided mdp, structure and topology
-        files, then runs grompp -> mdrun.
+        A prepared workflow requires structure and topology files, then runs
+        grompp -> mdrun. The MDP file is optional because it can be generated
+        automatically by GromacsInputWriter.
         """
         missing = []
 
@@ -235,7 +237,8 @@ class GromacsProjectSettings:
         Validate the minimum inputs for a full setup workflow.
 
         The first full setup implementation covers the common non-interactive
-        happy path only.
+        happy path only. The MDP file is optional because it can be generated
+        automatically by GromacsInputWriter.
         """
         missing = []
 
