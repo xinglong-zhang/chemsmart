@@ -192,7 +192,10 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        if self.scratch:
+        # CLI creates a placeholder JobRunner before the typed runner exists.
+        # Resolving scratch here would fail (no executable) and silently set
+        # scratch=False, defeating --scratch. Typed runners resolve in __init__.
+        if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
         self.fake = fake
