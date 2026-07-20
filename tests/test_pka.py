@@ -1845,10 +1845,10 @@ class TestPKa:
             assert set(captured["runs"]) == {"acid1_pka", "acid2_pka"}
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
-    def test_run_pka_batch_defaults_to_no_scratch(
+    def test_run_pka_batch_with_no_scratch(
         self, tmp_path, monkeypatch, backend
     ):
-        """run should not require a scratch directory when --scratch is omitted."""
+        """Explicit --no-scratch should not require a scratch directory."""
         _require_backend_pka_subcommand(run, backend)
         table = _build_pka_batch_table(tmp_path)
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1875,6 +1875,7 @@ class TestPKa:
             run,
             [
                 "--fake",
+                "--no-scratch",
                 backend,
                 "-p",
                 "test",
