@@ -762,6 +762,77 @@ Complete example for a local workstation without a job scheduler:
            export SCRATCH=~/scratch
            export NCIPLOT_HOME=~/bin/nciplot
 
+Scratch Behavior
+================
+
+CHEMSMART resolves scratch mode from the CLI, program ``SCRATCH`` in server YAML, and the runner class default (when the
+CLI flag is omitted). When scratch is enabled, the scratch directory path is taken from program ``ENVARS``, then
+``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH``. If scratch is requested but no valid directory exists,
+CHEMSMART falls back to the job folder.
+
+.. list-table::
+   :header-rows: 1
+
+   -  -  CLI
+      -  YAML ``SCRATCH``
+      -  Scratch path configured & valid?
+      -  Final ``scratch``
+      -  Runs in
+
+   -  -  ``--no-scratch``
+      -  any
+      -  any
+      -  ``False``
+      -  ``job.folder``
+
+   -  -  ``--scratch``
+      -  any
+      -  yes
+      -  ``True``
+      -  ``scratch_dir/job.label``
+
+   -  -  ``--scratch``
+      -  any
+      -  no / not a directory
+      -  ``False``
+      -  ``job.folder``
+
+   -  -  omit
+      -  ``False``
+      -  any
+      -  ``False``
+      -  ``job.folder``
+
+   -  -  omit
+      -  ``True``
+      -  yes
+      -  ``True``
+      -  ``scratch_dir/job.label``
+
+   -  -  omit
+      -  ``True``
+      -  no / not a directory
+      -  ``False``
+      -  ``job.folder``
+
+   -  -  omit
+      -  absent *(class ``False``, e.g. PyMOL)*
+      -  any
+      -  ``False``
+      -  ``job.folder``
+
+   -  -  omit
+      -  absent *(class ``True``, e.g. Gaussian, ORCA)*
+      -  yes
+      -  ``True``
+      -  ``scratch_dir/job.label``
+
+   -  -  omit
+      -  absent *(class ``True``, e.g. Gaussian, ORCA)*
+      -  no / not a directory
+      -  ``False``
+      -  ``job.folder``
+
 Customization Tips
 ==================
 
