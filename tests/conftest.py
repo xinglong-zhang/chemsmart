@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import click
 import numpy as np
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
 from click.testing import CliRunner
@@ -37,6 +38,43 @@ thermochemistry_cli_module = importlib.import_module(
 )
 
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+
+
+class _HomeAwareMonkeyPatch(MonkeyPatch):
+    """``MonkeyPatch`` that keeps ``~`` consistent with a patched ``HOME``.
+
+    ``Path.home()`` and ``os.path.expanduser`` read ``HOME`` on POSIX but
+    ``USERPROFILE`` on Windows. Dozens of tests redirect the user
+    configuration tree with ``monkeypatch.setenv("HOME", tmp_path)``; on
+    Windows those tests silently escaped the sandbox and wrote into the real
+    profile, which both corrupted the developer/runner home and made the
+    assertions fail. Mirroring the value keeps one call site honest on every
+    platform, including tests written later.
+    """
+
+    _HOME_ALIASES = ("USERPROFILE",)
+
+    def setenv(self, name, value, prepend=None):
+        super().setenv(name, value, prepend=prepend)
+        if name == "HOME" and prepend is None:
+            for alias in self._HOME_ALIASES:
+                super().setenv(alias, value)
+
+    def delenv(self, name, raising=True):
+        super().delenv(name, raising=raising)
+        if name == "HOME":
+            for alias in self._HOME_ALIASES:
+                super().delenv(alias, raising=False)
+
+
+@pytest.fixture
+def monkeypatch():
+    """Replace pytest's builtin fixture with the home-aware variant."""
+    patcher = _HomeAwareMonkeyPatch()
+    try:
+        yield patcher
+    finally:
+        patcher.undo()
 
 
 ############ Thermochemistry Mock Fixtures ##################

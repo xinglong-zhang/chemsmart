@@ -209,8 +209,11 @@ endif
 
 .PHONY: test
 test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short tests/
-# Portable error ignoring: - so a bad shard cannot fail the job 
+# `|| exit 1` is required, not decorative: on the Windows runner a failing
+# pytest did not abort this recipe, so the job reported success while tests
+# were red. Both cmd and sh honour this form.
+	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short tests/ || exit 1
+# Portable error ignoring: - so a bad shard cannot fail the job
 	-$(ENV_PREFIX)coverage combine .coverage*  # combine all partial files if present  
 	-$(ENV_PREFIX)coverage xml
 	-$(ENV_PREFIX)coverage html
