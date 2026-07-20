@@ -735,6 +735,19 @@ def _refresh_recovered_run(run: CalculationRun) -> bool:
 
 
 def _pid_is_alive(pid: int) -> bool:
+    """Report whether a detached calculation's process still exists.
+
+    ``os.kill(pid, 0)`` is the POSIX existence probe; on Windows the
+    signal argument is not a signal number and the call raises
+    ``OSError: [WinError 87]``, so recovering a detached run always
+    errored instead of answering the question. Windows gets an
+    OpenProcess-based probe with the same fail-safe contract: report
+    alive when the answer is genuinely unknown, so a running calculation
+    is never declared dead.
+    """
+
+    if os.name == "nt":
+        return _windows_pid_is_alive(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -742,6 +755,31 @@ def _pid_is_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _windows_pid_is_alive(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    _STILL_ACTIVE = 259
+    _ERROR_ACCESS_DENIED = 5
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.OpenProcess(
+        _PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+    )
+    if not handle:
+        # A live process owned by another user answers ACCESS_DENIED; only
+        # an unknown pid means the process is gone.
+        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _recovered_output_candidate(run: CalculationRun) -> str:
