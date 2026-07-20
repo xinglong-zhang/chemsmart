@@ -77,7 +77,7 @@ Execution Control Options
 
    -  -  ``--scratch/--no-scratch``
       -  bool
-      -  Force scratch on/off, or omit to use program YAML ``SCRATCH`` and class default
+      -  Run in scratch space or working directory (default: no scratch)
 
 .. note::
 

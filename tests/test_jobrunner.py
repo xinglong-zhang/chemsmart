@@ -62,7 +62,6 @@ class TestJobRunnerSelection:
             job=job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=True,
             fake=True,
         )
         assert isinstance(runner, FakeGaussianJobRunner)
@@ -74,7 +73,6 @@ class TestJobRunnerSelection:
             job=job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=True,
             fake=True,
         )
         assert isinstance(runner, FakeORCAJobRunner)
@@ -86,7 +84,6 @@ class TestJobRunnerSelection:
             job=gaussian_job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=True,
             fake=False,
         )
         assert isinstance(gaussian_runner, GaussianJobRunner)
@@ -96,7 +93,6 @@ class TestJobRunnerSelection:
             job=orca_job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=True,
             fake=False,
         )
         assert isinstance(orca_runner, ORCAJobRunner)
@@ -107,7 +103,6 @@ class TestJobRunnerSelection:
             job=job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=True,
             fake=True,
         )
         assert isinstance(runner, IterateJobRunner)
@@ -176,8 +171,8 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
 
-class TestScratchCLIDefaults:
-    """CLI scratch flag and from_job scratch_from_cli policy."""
+class TestScratchCLI:
+    """CLI scratch flag is passed through to from_job."""
 
     @staticmethod
     def _write_gaussian_project(tmp_path):
@@ -191,7 +186,7 @@ class TestScratchCLIDefaults:
         )
         return config_root
 
-    def test_run_omitted_scratch_passes_from_cli_false(
+    def test_run_omitted_scratch_defaults_to_false(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
@@ -200,17 +195,8 @@ class TestScratchCLIDefaults:
         )
         observed = {}
 
-        def _from_job(
-            cls,
-            job,
-            server,
-            scratch=False,
-            fake=False,
-            scratch_from_cli=False,
-            **kwargs,
-        ):
+        def _from_job(cls, job, server, scratch=False, fake=False, **kwargs):
             observed["scratch"] = scratch
-            observed["scratch_from_cli"] = scratch_from_cli
             return type("R", (), {"scratch": scratch})()
 
         monkeypatch.setattr(
@@ -237,9 +223,8 @@ class TestScratchCLIDefaults:
         )
         assert result.exit_code == 0, result.output
         assert observed["scratch"] is False
-        assert observed["scratch_from_cli"] is False
 
-    def test_sub_omitted_scratch_does_not_force_no_scratch(
+    def test_sub_omitted_scratch_defaults_to_false(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
@@ -247,12 +232,13 @@ class TestScratchCLIDefaults:
             str(self._write_gaussian_project(tmp_path)),
         )
         fake_server = Server(name="dummy")
-        captured = {"cli_args": None}
-        fake_server.submit = (
-            lambda job, test=False, cli_args=None, **kw: captured.update(
-                cli_args=cli_args
-            )
-        )
+        captured = {"job": None, "cli_args": None}
+
+        def _submit(job, test=False, cli_args=None, **kw):
+            captured["job"] = job
+            captured["cli_args"] = cli_args
+
+        fake_server.submit = _submit
         monkeypatch.setattr(
             "chemsmart.settings.server.Server.from_servername",
             lambda _name: fake_server,
@@ -277,8 +263,7 @@ class TestScratchCLIDefaults:
             ],
         )
         assert result.exit_code == 0, result.output
-        assert "--no-scratch" not in captured["cli_args"]
-        assert "--scratch" not in captured["cli_args"]
+        assert captured["job"].jobrunner.scratch is False
 
     def test_run_explicit_scratch_is_not_silently_disabled(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
@@ -290,17 +275,8 @@ class TestScratchCLIDefaults:
         )
         observed = {}
 
-        def _from_job(
-            cls,
-            job,
-            server,
-            scratch=False,
-            fake=False,
-            scratch_from_cli=False,
-            **kwargs,
-        ):
+        def _from_job(cls, job, server, scratch=False, fake=False, **kwargs):
             observed["scratch"] = scratch
-            observed["scratch_from_cli"] = scratch_from_cli
             return type("R", (), {"scratch": scratch})()
 
         monkeypatch.setattr(
@@ -328,7 +304,6 @@ class TestScratchCLIDefaults:
         )
         assert result.exit_code == 0, result.output
         assert observed["scratch"] is True
-        assert observed["scratch_from_cli"] is True
 
     def test_sub_explicit_scratch_keeps_jobrunner_scratch_true(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
@@ -372,48 +347,25 @@ class TestScratchCLIDefaults:
         assert result.exit_code == 0, result.output
         assert "--scratch" in captured["cli_args"]
         assert captured["job"].jobrunner.scratch is True
-        assert captured["job"].jobrunner.scratch_from_cli is True
 
-    def test_from_job_omitted_uses_yaml_scratch(self, pbs_server, tmp_path):
-        scratch_dir = tmp_path / "scratch"
-        scratch_dir.mkdir()
+    def test_from_job_passes_scratch_through(self, pbs_server, tmp_path):
         job = SimpleNamespace(TYPE="g16opt")
         runner = JobRunner.from_job(
             job=job,
             server=pbs_server,
             scratch=False,
-            scratch_from_cli=False,
             fake=True,
-            scratch_dir=str(scratch_dir),
         )
-        assert runner.scratch_from_cli is False
+        assert runner.scratch is False
+
+        runner = JobRunner.from_job(
+            job=job,
+            server=pbs_server,
+            scratch=True,
+            fake=True,
+            scratch_dir=str(tmp_path),
+        )
         assert runner.scratch is True
-
-    def test_from_job_omitted_orca_uses_yaml_scratch_false(self, pbs_server):
-        job = SimpleNamespace(TYPE="orcaopt")
-        runner = JobRunner.from_job(
-            job=job,
-            server=pbs_server,
-            scratch=False,
-            scratch_from_cli=False,
-            fake=True,
-        )
-        assert runner.scratch_from_cli is False
-        assert runner.scratch is False
-
-    def test_from_job_explicit_no_scratch_ignores_program_default(
-        self, pbs_server
-    ):
-        job = SimpleNamespace(TYPE="g16opt")
-        runner = JobRunner.from_job(
-            job=job,
-            server=pbs_server,
-            scratch=False,
-            scratch_from_cli=True,
-            fake=True,
-        )
-        assert runner.scratch is False
-        assert runner.scratch_from_cli is True
 
 
 class TestScratchPathFallback:
