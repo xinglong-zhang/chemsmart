@@ -22,20 +22,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
-          auto-update-conda: true
+          miniforge-version: latest
           python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
+          conda-solver: libmamba
+          channel-priority: strict
 
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda activate chemsmart
           python -m pip install --upgrade pip
           pip install pre-commit
-          pip install .[dev,test,docs]
+          pip install -e .[dev,test,docs]
 
       - name: Show formatter versions
         run: |
@@ -58,20 +59,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Clear existing cache
-        shell: bash
-        run: |
-          rm -rf ~/.cache/pip
-          rm -rf ./.gradle/caches/
-          rm -rf ~/.m2/repository/
-
       - name: Set up Conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
-          auto-update-conda: true
+          miniforge-version: latest
           python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
+          conda-solver: libmamba
+          channel-priority: strict
 
       - name: Install build tools
         shell: bash -l {0}
@@ -128,12 +124,14 @@ jobs:
 
       - name: Set up Conda
         if: steps.changed-files.outputs.only_changed != 'true'
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
-          auto-update-conda: true
+          miniforge-version: latest
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
+          conda-solver: libmamba
+          channel-priority: strict
 
       - name: Install project
         if: steps.changed-files.outputs.only_changed != 'true'
@@ -145,18 +143,20 @@ jobs:
         shell: bash -l {0}
         run: make test
 
-      - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
+      - name: Verify coverage report
+        if: >
+          success() &&
+          steps.changed-files.outputs.only_changed != 'true'
+        shell: bash
+        run: |
+          echo "Working directory: $(pwd)"
+          test -s coverage.xml
+          echo "Coverage report generated:"
+          ls -lh coverage.xml
 
       - name: Create coverage report
         if: >
+          success() &&
           github.event_name == 'pull_request' &&
           !github.event.pull_request.head.repo.fork &&
           steps.changed-files.outputs.only_changed != 'true' &&
@@ -166,15 +166,30 @@ jobs:
           coverageFile: coverage.xml
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload coverage artifacts
+        if: >
+          success() &&
+          steps.changed-files.outputs.only_changed != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ runner.os }}
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: ignore
+
       - name: Upload coverage to Codecov
         if: >
+          success() &&
           steps.changed-files.outputs.only_changed != 'true' &&
           hashFiles('coverage.xml') != ''
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
+          files: ./coverage.xml
+          disable_search: true
+          fail_ci_if_error: false
+          verbose: true
 
   tests_mac:
     needs: [pre-commit, build]
@@ -207,12 +222,14 @@ jobs:
 
       - name: Set up Conda
         if: steps.changed-files.outputs.only_changed != 'true'
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
-          auto-update-conda: true
+          miniforge-version: latest
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
+          conda-solver: libmamba
+          channel-priority: strict
 
       - name: Install project
         if: steps.changed-files.outputs.only_changed != 'true'
@@ -223,26 +240,6 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: make test
-
-      - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
 
   tests_win:
     needs: [pre-commit, build]
@@ -276,51 +273,21 @@ jobs:
 
       - name: Set up Conda
         if: steps.changed-files.outputs.only_changed != 'true'
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
-          auto-update-conda: false
+          miniforge-version: latest
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
-          channels: conda-forge,defaults
-
-      - name: Install make
-        if: steps.changed-files.outputs.only_changed != 'true'
-        shell: cmd
-        run: |
-          choco install make --force
+          conda-solver: libmamba
+          channel-priority: strict
 
       - name: Install project
         if: steps.changed-files.outputs.only_changed != 'true'
-        shell: cmd
-        run: |
-          call "%CONDA%\Scripts\activate.bat" chemsmart
-          make install-dev
+        shell: bash -l {0}
+        run: make install-dev
 
       - name: Run tests
         if: steps.changed-files.outputs.only_changed != 'true'
-        shell: cmd
-        run: |
-          call "%CONDA%\Scripts\activate.bat" chemsmart
-          make test
-
-      - name: Upload coverage artifacts
-        if: always() && steps.changed-files.outputs.only_changed != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
-
+        shell: bash -l {0}
+        run: make test

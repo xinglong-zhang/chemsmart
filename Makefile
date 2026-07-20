@@ -51,7 +51,6 @@ endif
 
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
-	@echo Debug: USE_CONDA=$(USE_CONDA)
 ifeq ($(OS_FAMILY),Windows)
 	@if "$(USE_CONDA)"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
@@ -119,13 +118,10 @@ endif
 .PHONY: install
 install:          ## Install the project in user mode. Normal users (runtime only)
 	$(ENV_PREFIX)pip install .
-	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[voronoi]
-	$(ENV_PREFIX)pip install -e .[dev,test,docs]
-	$(ENV_PREFIX)pip install types-PyYAML
+	$(ENV_PREFIX)pip install -e .[voronoi,dev,test,docs]
 
 .PHONY: pre-commit
 pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
@@ -187,7 +183,7 @@ update-deps:          ## Automatically update new packages that are added in the
 	@echo Updating additional dependencies to pyproject.toml file...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) update deps
 	@echo Reinstalling chemsmart package...
-	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install -e .[dev,test]
 
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
@@ -215,7 +211,7 @@ endif
 test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
 	$(ENV_PREFIX)pytest \
 		-v \
-                --cov-config=pyproject.toml \
+		--cov-config=pyproject.toml \
 		--cov=chemsmart \
 		--cov-branch \
 		--cov-report=term-missing \
@@ -276,13 +272,13 @@ REPOSITORY ?= testpypi
 PACKAGE_NAME := chemsmart
 VERSION_FILE := chemsmart$(SEP)VERSION
 
+GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
+
 ifeq ($(OS_FAMILY),Windows)
     VERSION := $(shell type $(VERSION_FILE))
-    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
 else
     VERSION := $(shell cat $(VERSION_FILE))
-    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >/dev/null 2>&1
 endif
 
@@ -336,7 +332,7 @@ tag: check-clean check-git-tag ## Create git tag v<VERSION>.
 	@echo "To push it: git push origin v$(VERSION)"
 
 .PHONY: release-test
-release-test: build ## Build and upload to TestPyPI.
+release-test: check-clean check-git-tag build ## Build and upload to TestPyPI.
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to TestPyPI..."
 	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
 	@echo ""
@@ -344,7 +340,7 @@ release-test: build ## Build and upload to TestPyPI.
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 
 .PHONY: release
-release: build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
+release: check-clean build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
 	@echo "WARNING: This is a manual upload."
 	@echo "Do not use this target for a version that will also be published by GitHub Actions."
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
