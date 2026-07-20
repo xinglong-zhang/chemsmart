@@ -153,7 +153,9 @@ def _parse_sge_settings(sge_root: str, sge_cell: str) -> dict[str, str]:
     if not settings.exists():
         return result
     try:
-        for raw in settings.read_text(errors="replace").splitlines():
+        for raw in settings.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines():
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue

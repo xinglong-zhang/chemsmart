@@ -64,11 +64,15 @@ class SessionState(BaseModel):
     env_snapshot: dict[str, str | None] = Field(default_factory=dict)
 
     def save(self, path: Path) -> None:
-        path.write_text(self.model_dump_json(indent=2))
+        # Session state routinely holds non-Latin-1 text (tool output,
+        # chemistry symbols, spinner glyphs). Without an explicit encoding
+        # Windows writes cp1252 and the save raises UnicodeEncodeError,
+        # losing the turn.
+        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path) -> "SessionState":
-        return cls.model_validate_json(path.read_text())
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 __all__ = [

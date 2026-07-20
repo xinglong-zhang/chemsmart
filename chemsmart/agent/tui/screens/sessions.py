@@ -111,10 +111,10 @@ class SessionsScreen(ModalScreen[str | None]):
         metadata_path = session_dir / "session_metadata.json"
         session_path = session_dir / "session.json"
         if metadata_path.exists():
-            data = json.loads(metadata_path.read_text())
+            data = json.loads(metadata_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         elif session_path.exists():
-            data = json.loads(session_path.read_text())
+            data = json.loads(session_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         request = request.strip().replace("\n", " ")
         if len(request) > 48:

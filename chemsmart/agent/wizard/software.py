@@ -263,6 +263,8 @@ def _resolve_conda_executable(runner, topology: Topology) -> str | None:
     home = _probe_env_values(runner, topology, ["HOME"])[0]
     for candidate in _WELL_KNOWN_CONDA_PATHS:
         expanded = _expand_home_path(candidate, home=home, topology=topology)
+        if expanded is None:
+            continue
         result = _run_probe(
             runner,
             topology,
@@ -503,14 +505,29 @@ def _expand_home_path(
     path: str,
     home: str | None,
     topology: Topology,
-) -> str:
+) -> str | None:
+    """Expand a leading ``~/`` for a probe that runs on a POSIX host.
+
+    The joined value is handed to a POSIX shell probe, so it must keep
+    POSIX separators. Building it with the local ``Path`` flavour turned
+    ``/home/ubuntu`` into ``\\home\\ubuntu`` when the wizard ran on
+    Windows, and the slot validator then rejected the backslashes as a
+    shell-injection risk — so a Windows user could not configure a remote
+    Linux cluster at all.
+
+    Returns ``None`` when no POSIX home is available (a Windows local
+    host in mode A), so the caller skips that candidate instead of
+    probing a path the remote shell could never resolve.
+    """
+
     if not path.startswith("~/"):
         return path
-    if home:
-        return str(Path(home) / path[2:])
-    if topology.mode == "A":
-        return str(Path.home() / path[2:])
-    return path
+    candidate_home = home
+    if not candidate_home and topology.mode == "A":
+        candidate_home = Path.home().as_posix()
+    if not candidate_home or not candidate_home.startswith(("/", "~")):
+        return None
+    return f"{candidate_home.rstrip('/')}/{path[2:]}"
 
 
 def _merge_output(result) -> str:

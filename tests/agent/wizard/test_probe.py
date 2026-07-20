@@ -1,12 +1,23 @@
 import shlex
 import subprocess
+import sys
 
 import pytest
 
 from chemsmart.agent.wizard import ALL_PROBE_SPECS, ProbeError, ProbeRunner
 from chemsmart.agent.wizard.probe import MAX_OUTPUT_BYTES, TRUNCATION_MARKER
 
+#: Wizard probes are POSIX shell commands (``printenv``, ``test -x``) run on
+#: the compute host. A local probe therefore requires the machine running
+#: the wizard to be that POSIX host, which Windows never is; remote (mode B)
+#: probing stays covered on every platform.
+requires_posix_local_host = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="local wizard probes need a POSIX host shell",
+)
 
+
+@requires_posix_local_host
 def test_run_local_printenv():
     result = ProbeRunner.run_local(ALL_PROBE_SPECS["common.printenv_all"])
 
