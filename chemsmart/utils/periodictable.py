@@ -65,6 +65,40 @@ METALLOIDS = frozenset(
 NON_METALS_AND_METALLOIDS = NONMETALS | METALLOIDS
 
 
+def is_metal_atomic_number(atomic_number):
+    """Return True when ``atomic_number`` is classified as a metal."""
+    return int(atomic_number) not in NON_METALS_AND_METALLOIDS
+
+
+def is_metal(symbol):
+    """Return True when ``symbol`` is classified as a metal."""
+    text = str(symbol).strip()
+    if not text:
+        return False
+
+    pt = PeriodicTable()
+    try:
+        element = pt.to_element(text)
+        if element not in PeriodicTable.PERIODIC_TABLE:
+            return False
+        if element.lower() != text.lower():
+            return False
+        atomic_number = pt.to_atomic_number(element)
+    except ValueError:
+        return False
+    return is_metal_atomic_number(atomic_number)
+
+
+def metal_element_symbols():
+    """Return element symbols classified as metals."""
+    pt = PeriodicTable()
+    return [
+        pt.to_symbol(atomic_number)
+        for atomic_number in range(1, len(PeriodicTable.PERIODIC_TABLE))
+        if is_metal_atomic_number(atomic_number)
+    ]
+
+
 class PeriodicTable:
     """
     Periodic table interface for element data and conversions.
@@ -263,3 +297,7 @@ class PeriodicTable:
         # Elements with atomic number > 36 require genecp (ECP)
         # Elements with atomic number <= 36 use gen (no ECP)
         return self.to_atomic_number(symbol) > 36
+
+    def is_metal(self, symbol):
+        """Return True when ``symbol`` is classified as a metal."""
+        return is_metal(symbol)

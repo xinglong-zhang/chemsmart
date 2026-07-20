@@ -26,6 +26,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
@@ -1735,6 +1736,11 @@ def dna_hybrid_visualized_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def visualized_1_mer_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "1-mer.xyz")
+
+
+@pytest.fixture()
 def chemdraw_directory(structure_test_directory):
     return os.path.join(structure_test_directory, "chemdraw")
 
@@ -1841,6 +1847,12 @@ def colored_proton_two_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def pka_scale_cdxml_file(chemdraw_directory):
+    """Multi-fragment CDXML with nested groups and coloured acidic protons."""
+    return os.path.join(chemdraw_directory, "pka_scale.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -1890,6 +1902,13 @@ def pymol_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_hybrid_visualization_jobrunner(pbs_server):
     return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_scientific_style_visualization_jobrunner(pbs_server):
+    return PyMOLScientificStyleVisualizationJobRunner(
+        server=pbs_server, scratch=False
+    )
 
 
 @pytest.fixture()
