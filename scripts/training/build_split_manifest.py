@@ -95,7 +95,11 @@ class _UnionFind:
 
 def _skeleton(text: str) -> str:
     value = str(text or "").lower()
-    value = re.sub(r"[A-Za-z0-9_./+-]+\.(?:xyz|log|out|inp|com|gjf|yaml|yml)", "<file>", value)
+    value = re.sub(
+        r"[A-Za-z0-9_./+-]+\.(?:xyz|log|out|inp|com|gjf|yaml|yml)",
+        "<file>",
+        value,
+    )
     value = re.sub(r"\b\d+(?:\.\d+)?\b", "#", value)
     value = re.sub(r"\s+", " ", value).strip()
     return value
@@ -157,7 +161,11 @@ def _record_key(family: str, index: int) -> str:
 
 def _record_info(family: str, index: int, record: JsonDict) -> JsonDict:
     skeletons = sorted(
-        {skeleton for text in _all_user_texts(record) if (skeleton := _skeleton(text))}
+        {
+            skeleton
+            for text in _all_user_texts(record)
+            if (skeleton := _skeleton(text))
+        }
     )
     sessions = _sessions(record)
     families = _scenario_families(record)
@@ -185,7 +193,9 @@ def _load_records(export_dir: Path) -> list[JsonDict]:
         path = export_dir / f"{family}.jsonl"
         if not path.exists():
             continue
-        for index, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
+        for index, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines()
+        ):
             if line.strip():
                 records.append(_record_info(family, index, json.loads(line)))
     return records
@@ -233,10 +243,14 @@ def _write_split(export_dir: Path, records: list[JsonDict]) -> dict[str, Any]:
         path = out_dir / f"{family}.jsonl"
         with path.open("a", encoding="utf-8") as handle:
             handle.write(
-                json.dumps(info["record"], ensure_ascii=False, sort_keys=True) + "\n"
+                json.dumps(info["record"], ensure_ascii=False, sort_keys=True)
+                + "\n"
             )
         counts[split][family] += 1
-    return {split: dict(sorted(counter.items())) for split, counter in counts.items()}
+    return {
+        split: dict(sorted(counter.items()))
+        for split, counter in counts.items()
+    }
 
 
 def _cross_split(
@@ -252,7 +266,9 @@ def _cross_split(
 def _leakage(records: list[JsonDict]) -> dict[str, Any]:
     session_leaks = _cross_split(records, lambda info: info["session_ids"])
     skeleton_leaks = _cross_split(records, lambda info: info["skeletons"])
-    family_leaks = _cross_split(records, lambda info: info["scenario_families"])
+    family_leaks = _cross_split(
+        records, lambda info: info["scenario_families"]
+    )
     return {
         "session_leaks": session_leaks,
         "all_turn_skeleton_leaks": skeleton_leaks,
@@ -266,7 +282,9 @@ def _leakage(records: list[JsonDict]) -> dict[str, Any]:
 def _command_template(command: str) -> str:
     value = command.lower()
     value = re.sub(
-        r"[a-z0-9_./+-]+\.(?:xyz|log|out|inp|com|gjf|yaml|yml)", "<file>", value
+        r"[a-z0-9_./+-]+\.(?:xyz|log|out|inp|com|gjf|yaml|yml)",
+        "<file>",
+        value,
     )
     value = re.sub(r"\b\d+(?:\.\d+)?\b", "#", value)
     value = re.sub(r"\s+", " ", value).strip()
@@ -349,8 +367,12 @@ def _provenance_coverage(records: list[JsonDict]) -> dict[str, Any]:
         "records": total,
         "with_dataset_provenance": with_provenance,
         "with_scenario_family": with_family,
-        "dataset_provenance_ratio": round(with_provenance / total, 4) if total else 0.0,
-        "scenario_family_ratio": round(with_family / total, 4) if total else 0.0,
+        "dataset_provenance_ratio": (
+            round(with_provenance / total, 4) if total else 0.0
+        ),
+        "scenario_family_ratio": (
+            round(with_family / total, 4) if total else 0.0
+        ),
         "by_family": by_family,
     }
 
@@ -382,7 +404,9 @@ def _terminal_state_counts(records: list[JsonDict]) -> dict[str, Any]:
     }
 
 
-def build_split_manifest(export_dir: Path, eval_fraction: int) -> dict[str, Any]:
+def build_split_manifest(
+    export_dir: Path, eval_fraction: int
+) -> dict[str, Any]:
     """Assign splits, (re)write split JSONL files, and return the manifest."""
 
     export_dir = Path(export_dir).expanduser().resolve()
@@ -424,7 +448,8 @@ def build_split_manifest(export_dir: Path, eval_fraction: int) -> dict[str, Any]
         },
     }
     (export_dir / "split_manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
     return manifest

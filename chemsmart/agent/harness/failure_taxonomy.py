@@ -22,7 +22,10 @@ def classify_runtime_failure(
 ) -> RuntimeFailure:
     text = f"{stderr}\n{stdout}".strip()
     lowered = text.lower()
-    if "no project settings implemented" in lowered or "currently available projects:" in lowered:
+    if (
+        "no project settings implemented" in lowered
+        or "currently available projects:" in lowered
+    ):
         missing = ["valid chemsmart project configuration"]
         available = _available_line(text, "Currently available projects:")
         if available:
@@ -33,7 +36,10 @@ def classify_runtime_failure(
             "selected ChemSmart project YAML could not be resolved",
             tuple(missing),
         )
-    if "no server implemented" in lowered or "currently available servers:" in lowered:
+    if (
+        "no server implemented" in lowered
+        or "currently available servers:" in lowered
+    ):
         missing = ["valid chemsmart server configuration"]
         available = _available_line(text, "Currently available servers:")
         if available:
@@ -44,26 +50,52 @@ def classify_runtime_failure(
             "selected ChemSmart server YAML could not be resolved",
             tuple(missing),
         )
-    if any(marker in lowered for marker in ("no such file or directory", "filenotfounderror", "does not exist")):
+    if any(
+        marker in lowered
+        for marker in (
+            "no such file or directory",
+            "filenotfounderror",
+            "does not exist",
+        )
+    ):
         return RuntimeFailure(
             "cmd.runtime.input_not_found",
             "input",
             "requested local input or endpoint file does not exist",
             ("existing local input file path",),
         )
-    if any(marker in lowered for marker in ("no such option", "invalid value for", "usageerror", "badparameter")):
+    if any(
+        marker in lowered
+        for marker in (
+            "no such option",
+            "invalid value for",
+            "usageerror",
+            "badparameter",
+        )
+    ):
         return RuntimeFailure(
             "cmd.runtime.cli_value_error",
             "command",
             "ChemSmart rejected an option name, position, or value",
         )
-    if any(marker in lowered for marker in ("open babel", "openbabel", "modulenotfounderror", "importerror")):
+    if any(
+        marker in lowered
+        for marker in (
+            "open babel",
+            "openbabel",
+            "modulenotfounderror",
+            "importerror",
+        )
+    ):
         return RuntimeFailure(
             "cmd.runtime.dependency_missing",
             "environment",
             "runtime dependency required by this workflow is unavailable",
         )
-    if any(marker in lowered for marker in ("could not find any runners", "no runner", "runner")):
+    if any(
+        marker in lowered
+        for marker in ("could not find any runners", "no runner", "runner")
+    ):
         return RuntimeFailure(
             "cmd.runtime.runner_unavailable",
             "environment",

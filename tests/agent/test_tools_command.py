@@ -173,6 +173,7 @@ def test_submit_terminal_state_records_server_yaml_and_scheduler(
         "_gate_command",
         lambda command: CommandSemanticResult(verdict="ok", command=command),
     )
+
     def fake_run(*args, **kwargs):
         (tmp_path / "chemsmart_sub_h2o_opt.sh").write_text(
             "#!/bin/sh\n#PBS -N h2o\n", encoding="utf-8"

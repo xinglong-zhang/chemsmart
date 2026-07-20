@@ -1,0 +1,640 @@
+{
+  "clean_after_cap": 1154,
+  "diversity": {
+    "capped_out_episodes": 0,
+    "distinct_query_skeleton_ratio": 0.4055,
+    "distinct_query_skeletons": 468,
+    "over_frequent_skeletons": {},
+    "semantic_trajectory_duplicates": 1012,
+    "top_query_skeletons": [
+      [
+        "explain the current project yaml settings briefly.",
+        20
+      ],
+      [
+        "write the project yaml.",
+        20
+      ],
+      [
+        "write the project yaml to the workspace.",
+        14
+      ],
+      [
+        "tddft absorption spectrum of <file> with gaussian, # excited states, charge # multiplicity #",
+        10
+      ],
+      [
+        "hey! what kinds of calculations can you set up for me?",
+        10
+      ],
+      [
+        "optimize <file>, charge # multiplicity #",
+        10
+      ],
+      [
+        "\uc548\ub155! \ub108 \ubb58 \ud560 \uc218 \uc788\uc5b4?",
+        10
+      ],
+      [
+        "geometry optimization of <file> with gaussian, charge # multiplicity #",
+        10
+      ],
+      [
+        "\u4f60\u597d\uff0c\u4f60\u80fd\u5e2e\u6211\u505a\u4ec0\u4e48\uff1f",
+        9
+      ],
+      [
+        "frequency calculation of <file> with gaussian, charge # multiplicity #",
+        9
+      ]
+    ],
+    "trajectory_entropy": 4.2639
+  },
+  "episodes_after_dedup": 1154,
+  "episodes_raw": 1154,
+  "health_failures": [],
+  "pipelines": {
+    "by_job_kind": {
+      "gaussian.crest": 3,
+      "gaussian.dias": 1,
+      "gaussian.irc": 14,
+      "gaussian.modred": 26,
+      "gaussian.nci": 8,
+      "gaussian.opt": 89,
+      "gaussian.resp": 13,
+      "gaussian.scan": 15,
+      "gaussian.sp": 40,
+      "gaussian.td": 3,
+      "gaussian.ts": 45,
+      "gaussian.userjob": 1,
+      "gaussian.wbi": 30,
+      "orca.irc": 4,
+      "orca.modred": 1,
+      "orca.neb": 10,
+      "orca.opt": 14,
+      "orca.scan": 5,
+      "orca.sp": 10,
+      "orca.ts": 5
+    },
+    "by_provider": {
+      "openai:deepseek-v3.2": 29,
+      "openai:deepseek-v4-flash": 46,
+      "openai:deepseek-v4-pro": 37,
+      "openai:glm-5.1": 23,
+      "openai:glm-5.2": 29,
+      "openai:kimi-k2.7-code": 21,
+      "openai:qwen-coder-plus": 95,
+      "openai:qwen-flash": 5,
+      "openai:qwen-max": 34,
+      "openai:qwen-plus": 6,
+      "openai:qwen-plus-2025-12-01": 11,
+      "openai:qwen-turbo": 8,
+      "openai:qwen3-14b": 48,
+      "openai:qwen3-235b-a22b": 7,
+      "openai:qwen3-235b-a22b-instruct-2507": 28,
+      "openai:qwen3-235b-a22b-thinking-2507": 32,
+      "openai:qwen3-30b-a3b": 33,
+      "openai:qwen3-30b-a3b-instruct-2507": 24,
+      "openai:qwen3-30b-a3b-thinking-2507": 34,
+      "openai:qwen3-32b": 54,
+      "openai:qwen3-8b": 40,
+      "openai:qwen3-coder-480b-a35b-instruct": 5,
+      "openai:qwen3-coder-flash": 17,
+      "openai:qwen3-coder-next": 25,
+      "openai:qwen3-coder-plus": 7,
+      "openai:qwen3-coder-plus-2025-07-22": 10,
+      "openai:qwen3-max": 30,
+      "openai:qwen3-max-2026-01-23": 4,
+      "openai:qwen3-next-80b-a3b-instruct": 51,
+      "openai:qwen3-next-80b-a3b-thinking": 20,
+      "openai:qwen3-vl-235b-a22b-thinking": 7,
+      "openai:qwen3.5-122b-a10b": 11,
+      "openai:qwen3.5-27b": 35,
+      "openai:qwen3.5-35b-a3b": 18,
+      "openai:qwen3.5-397b-a17b": 20,
+      "openai:qwen3.5-flash": 19,
+      "openai:qwen3.5-plus": 26,
+      "openai:qwen3.6-27b": 4,
+      "openai:qwen3.6-35b-a3b": 33,
+      "openai:qwen3.6-flash": 3,
+      "openai:qwen3.6-plus": 9,
+      "openai:qwen3.7-max": 3,
+      "openai:qwen3.7-max-2026-06-08": 8,
+      "openai:qwen3.7-plus": 62,
+      "openai:qwq-plus": 83
+    },
+    "by_trajectory": {
+      "(no tools)": 172,
+      "ask_user": 27,
+      "execute_chemsmart_command -> repair_command -> ask_user": 1,
+      "extract_project_protocol": 1,
+      "extract_project_protocol -> ask_user": 6,
+      "extract_project_protocol -> render_project_yaml": 3,
+      "extract_project_protocol -> render_project_yaml -> critic_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> search_basis_sets -> validate_project_yaml": 2,
+      "extract_project_protocol -> render_project_yaml -> search_basis_sets -> validate_project_yaml -> critic_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> update_project_yaml": 2,
+      "extract_project_protocol -> render_project_yaml -> update_project_yaml -> write_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml": 135,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> ask_user": 9,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml": 8,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml -> search_basis_sets -> update_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml -> search_basis_sets -> write_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml -> update_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml -> write_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> search_basis_sets": 3,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> search_basis_sets -> ask_user": 2,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> search_basis_sets -> synthesize_command -> write_project_yaml -> read_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> search_basis_sets -> write_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command": 2,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> repair_command": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> update_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> write_project_yaml": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> write_project_yaml -> read_project_yaml": 4,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> write_project_yaml -> read_project_yaml -> ask_user": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> update_project_yaml": 8,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> update_project_yaml -> write_project_yaml": 3,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> update_project_yaml -> write_project_yaml -> synthesize_command": 1,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml": 28,
+      "extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml -> synthesize_command": 10,
+      "extract_project_protocol -> render_project_yaml -> write_project_yaml": 1,
+      "extract_project_protocol -> search_basis_sets": 1,
+      "extract_project_protocol -> search_basis_sets -> ask_user": 2,
+      "extract_project_protocol -> search_basis_sets -> render_project_yaml -> read_project_yaml": 1,
+      "extract_project_protocol -> search_basis_sets -> render_project_yaml -> validate_project_yaml": 6,
+      "extract_project_protocol -> search_basis_sets -> render_project_yaml -> validate_project_yaml -> critic_project_yaml": 1,
+      "read": 2,
+      "read_project_yaml": 35,
+      "read_project_yaml -> ask_user": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> search_basis_sets -> validate_project_yaml -> write_project_yaml": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> update_project_yaml -> validate_project_yaml -> write_project_yaml": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 5,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> ask_user": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command -> write_project_yaml": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> update_project_yaml -> write_project_yaml": 1,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml": 6,
+      "read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml -> update_project_yaml": 1,
+      "read_project_yaml -> read -> ask_user": 1,
+      "read_project_yaml -> read -> synthesize_command": 1,
+      "read_project_yaml -> repair_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> synthesize_command": 1,
+      "read_project_yaml -> synthesize_command": 4,
+      "read_project_yaml -> synthesize_command -> ask_user": 1,
+      "read_project_yaml -> synthesize_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml": 2,
+      "read_project_yaml -> update_project_yaml": 1,
+      "read_project_yaml -> update_project_yaml -> validate_project_yaml": 1,
+      "read_project_yaml -> write_project_yaml -> update_project_yaml": 1,
+      "render_project_yaml -> validate_project_yaml": 2,
+      "repair_command": 13,
+      "repair_command -> ask_user": 1,
+      "repair_command -> search_basis_sets -> ask_user": 1,
+      "repair_command -> synthesize_command": 7,
+      "repair_command -> synthesize_command -> extract_project_protocol -> ask_user": 1,
+      "search_basis_sets": 2,
+      "search_basis_sets -> ask_user": 1,
+      "search_basis_sets -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "search_basis_sets -> synthesize_command": 1,
+      "synthesize_command": 461,
+      "synthesize_command -> ask_user": 76,
+      "synthesize_command -> execute_chemsmart_command": 5,
+      "synthesize_command -> execute_chemsmart_command -> ask_user": 2,
+      "synthesize_command -> extract_project_protocol": 3,
+      "synthesize_command -> extract_project_protocol -> ask_user": 1,
+      "synthesize_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "synthesize_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> ask_user": 2,
+      "synthesize_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> critic_project_yaml": 1,
+      "synthesize_command -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> update_project_yaml": 1,
+      "synthesize_command -> read_project_yaml": 4,
+      "synthesize_command -> read_project_yaml -> ask_user": 7,
+      "synthesize_command -> read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "synthesize_command -> read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml": 3,
+      "synthesize_command -> read_project_yaml -> update_project_yaml -> ask_user": 1,
+      "synthesize_command -> read_project_yaml -> write_project_yaml -> ask_user": 1,
+      "synthesize_command -> read_project_yaml -> write_project_yaml -> repair_command": 1,
+      "synthesize_command -> repair_command": 7,
+      "update_project_yaml": 6,
+      "update_project_yaml -> ask_user": 1,
+      "update_project_yaml -> read_project_yaml": 2,
+      "update_project_yaml -> read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "update_project_yaml -> read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml -> write_project_yaml -> synthesize_command": 1,
+      "write_project_yaml": 5,
+      "write_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "write_project_yaml -> read_project_yaml -> extract_project_protocol -> render_project_yaml -> validate_project_yaml": 1,
+      "write_project_yaml -> read_project_yaml -> render_project_yaml -> validate_project_yaml": 1,
+      "write_project_yaml -> read_project_yaml -> validate_project_yaml -> render_project_yaml": 2,
+      "write_project_yaml -> validate_project_yaml": 3,
+      "write_project_yaml -> validate_project_yaml -> read_project_yaml": 1,
+      "write_project_yaml -> validate_project_yaml -> render_project_yaml": 1
+    }
+  },
+  "quality": {
+    "clean_episodes": 1154,
+    "exact_duplicate_pairs": 61,
+    "flag_counts": {},
+    "flagged_episodes": [
+      {
+        "quality": [],
+        "session_id": "20260707T052507Z-9e447536",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T061226Z-11a68257",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 3
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T143721Z-c2a508ce",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T150057Z-af533ab8",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 2
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T154246Z-fa9fe8ad",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T154246Z-fa9fe8ad",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 2
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T155019Z-b1629f2e",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T061248Z-97772a78",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 3
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T070654Z-da2cebac",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T070718Z-b67b2414",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T070751Z-b9c9404c",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T070822Z-6660af92",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043620Z-4cafa662",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043631Z-ad76ebb2",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043658Z-86cc75e4",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043715Z-c7e25a93",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043741Z-55656278",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043834Z-1478f9b2",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043900Z-12b25c2e",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043917Z-ebcb5780",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T053725Z-184ecb7c",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T053734Z-61363c67",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T061256Z-58788ca8",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 3
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T072122Z-10af83d4",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T082302Z-e667915c",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T140023Z-89679898",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T140915Z-633dc26f",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T042821Z-bb90237f",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T042855Z-619eb21a",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T042919Z-9767e6eb",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T042930Z-63e22a50",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043010Z-1f360328",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043040Z-e4b4cbb4",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043055Z-7ba53117",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043122Z-b6830375",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043155Z-dce62b6e",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043201Z-37317a64",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T072056Z-b22eace1",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T144900Z-71dc1257",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T145429Z-a98394f1",
+        "stability": [
+          "execute_without_synthesize",
+          "tool_error_unresolved"
+        ],
+        "turn": 2
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T145824Z-c735f1ce",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 2
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T061359Z-94aa9ab7",
+        "stability": [
+          "repeated_identical_tool_call"
+        ],
+        "turn": 3
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T080117Z-28f6984b",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T082302Z-b37212c7",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T131156Z-a7958f66",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260708T132753Z-fdd88653",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260709T152225Z-af13dc49",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043040Z-2d67c49d",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      },
+      {
+        "quality": [],
+        "session_id": "20260707T043109Z-bb94cb78",
+        "stability": [
+          "tool_error_unresolved"
+        ],
+        "turn": 1
+      }
+    ]
+  },
+  "stability": {
+    "average_schema_efficiency_score": 0.7647,
+    "flag_counts": {
+      "execute_without_synthesize": 1,
+      "repeated_identical_tool_call": 23,
+      "tool_error_unresolved": 26
+    },
+    "multi_turn_episodes": 32,
+    "multi_turn_share": 0.0277,
+    "unresolved_ask_user_pauses": 147
+  }
+}

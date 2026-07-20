@@ -11,6 +11,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  agent-install-matrix:
+    name: Agent install / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+      - name: Verify core-only install
+        run: |
+          wheel=$(find dist -maxdepth 1 -name 'chemsmart-*.whl' -print -quit)
+          python -m pip install "$wheel"
+          cd /tmp
+          python "$GITHUB_WORKSPACE/scripts/review/verify_agent_install.py" \
+            --profile core --require-installed
+      - name: Verify agent and TUI extras
+        run: |
+          wheel=$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 \
+            -name 'chemsmart-*.whl' -print -quit)
+          python -m pip install "${wheel}[agent,agent-tui]"
+          cd /tmp
+          python "$GITHUB_WORKSPACE/scripts/review/verify_agent_install.py" \
+            --profile tui --require-installed
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -206,7 +239,9 @@ jobs:
         with:
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
-          environment-file: environment.yml
+          # environment.yml minus ffmpeg: its gdk-pixbuf dependency has a
+          # broken win-64 post-link script upstream. See the file header.
+          environment-file: environment-windows.yml
           activate-environment: chemsmart
           channels: conda-forge,defaults
 
@@ -214,6 +249,15 @@ jobs:
         shell: cmd
         run: |
           choco install make --force
+
+      # environment-windows.yml omits conda's ffmpeg (its librsvg ->
+      # gdk-pixbuf chain breaks env creation), but the PyMOL movie tests
+      # need an ffmpeg binary on PATH. Chocolatey provides one without
+      # touching the conda environment.
+      - name: Install ffmpeg
+        shell: cmd
+        run: |
+          choco install ffmpeg --force
 
       - name: Install project
         shell: cmd
@@ -240,4 +284,3 @@ jobs:
       - name: Upload coverage to Codecov
         if: ${{ hashFiles('coverage.xml') != '' }}
         uses: codecov/codecov-action@v5
-

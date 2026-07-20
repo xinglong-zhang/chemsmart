@@ -22,6 +22,7 @@ def normalize_svg(svg: str) -> str:
 
 def assert_matches_snapshot(name: str, actual: str) -> None:
     import os
+
     path = SNAPSHOT_ROOT / f"{name}.svg"
     if os.environ.get("UPDATE_SNAPSHOTS") == "1":
         path.write_text(actual, encoding="utf-8")

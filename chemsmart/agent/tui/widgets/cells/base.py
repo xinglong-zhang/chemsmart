@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from rich.text import Text
+from textual.message import Message
 from textual.widgets import Static
 
 
@@ -26,6 +27,12 @@ class BaseCell(Static):
         background-tint: $accent 8%;
     }
     """
+
+    class CopyRequested(Message):
+        def __init__(self, text: str, title: str) -> None:
+            super().__init__()
+            self.text = text
+            self.title = title
 
     def __init__(
         self,

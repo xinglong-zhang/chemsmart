@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from chemsmart.agent.wizard.probe import (
-    ALL_PROBE_SPECS,
-    ProbeSpec,
-    run_local_probe,
-    run_ssh_probe,
+from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS
+from chemsmart.agent.wizard.probe_values import (
+    first_nonempty_line as _first_nonempty_line,
 )
+from chemsmart.agent.wizard.probe_values import (
+    normalize_shell_value as _normalize_shell_value,
+)
+from chemsmart.agent.wizard.probe_values import run_probe as _run_probe
 from chemsmart.agent.wizard.topology import Topology
 
 
@@ -140,28 +142,3 @@ def _is_writable(runner, topology: Topology, path: str) -> bool:
         path=path,
     )
     return result.returncode == 0
-
-
-def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
-    if topology.mode == "A":
-        return run_local_probe(runner, spec, **slots)
-    if topology.mode == "B" and topology.host:
-        return run_ssh_probe(runner, topology.host, spec, **slots)
-    raise ValueError(f"Unsupported topology: {topology}")
-
-
-def _first_nonempty_line(text: str) -> str | None:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped
-    return None
-
-
-def _normalize_shell_value(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    if not stripped or stripped.startswith("$"):
-        return None
-    return stripped

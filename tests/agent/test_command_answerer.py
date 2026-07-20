@@ -12,9 +12,7 @@ from chemsmart.agent.command_answerer import (
 )
 from chemsmart.agent.model_command_parser import parse_model_command
 
-_COMMAND = (
-    "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 -x B3LYP opt"
-)
+_COMMAND = "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 -x B3LYP opt"
 
 
 class _FakeProvider:

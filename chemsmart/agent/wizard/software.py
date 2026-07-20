@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-import os
 import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
-from chemsmart.agent.wizard.probe import (
-    ALL_PROBE_SPECS,
-    ProbeSpec,
-    run_local_probe,
-    run_ssh_probe,
+from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS
+from chemsmart.agent.wizard.probe_values import (
+    first_nonempty_line as _first_nonempty_line,
 )
+from chemsmart.agent.wizard.probe_values import (
+    normalize_shell_value as _normalize_shell_value,
+)
+from chemsmart.agent.wizard.probe_values import (
+    probe_env_values as _probe_env_values,
+)
+from chemsmart.agent.wizard.probe_values import run_probe as _run_probe
 from chemsmart.agent.wizard.topology import Topology
 
 _WELL_KNOWN_CONDA_PATHS = (
@@ -259,6 +263,8 @@ def _resolve_conda_executable(runner, topology: Topology) -> str | None:
     home = _probe_env_values(runner, topology, ["HOME"])[0]
     for candidate in _WELL_KNOWN_CONDA_PATHS:
         expanded = _expand_home_path(candidate, home=home, topology=topology)
+        if expanded is None:
+            continue
         result = _run_probe(
             runner,
             topology,
@@ -400,26 +406,6 @@ def _parse_tcl_module_show_line(
     return parts[0], parts[1:]
 
 
-def _probe_env_values(
-    runner,
-    topology: Topology,
-    names: list[str],
-) -> list[str | None]:
-    values: list[str | None] = []
-    for name in names:
-        result = _run_probe(
-            runner,
-            topology,
-            ALL_PROBE_SPECS["common.printenv_var"],
-            env_name=name,
-        )
-        value = _normalize_shell_value(_first_nonempty_line(result.stdout))
-        if value is None and topology.mode == "A":
-            value = _normalize_shell_value(os.environ.get(name))
-        values.append(value)
-    return values
-
-
 def _probe_conda_base(
     runner,
     topology: Topology,
@@ -519,22 +505,29 @@ def _expand_home_path(
     path: str,
     home: str | None,
     topology: Topology,
-) -> str:
+) -> str | None:
+    """Expand a leading ``~/`` for a probe that runs on a POSIX host.
+
+    The joined value is handed to a POSIX shell probe, so it must keep
+    POSIX separators. Building it with the local ``Path`` flavour turned
+    ``/home/ubuntu`` into ``\\home\\ubuntu`` when the wizard ran on
+    Windows, and the slot validator then rejected the backslashes as a
+    shell-injection risk — so a Windows user could not configure a remote
+    Linux cluster at all.
+
+    Returns ``None`` when no POSIX home is available (a Windows local
+    host in mode A), so the caller skips that candidate instead of
+    probing a path the remote shell could never resolve.
+    """
+
     if not path.startswith("~/"):
         return path
-    if home:
-        return str(Path(home) / path[2:])
-    if topology.mode == "A":
-        return str(Path.home() / path[2:])
-    return path
-
-
-def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
-    if topology.mode == "A":
-        return run_local_probe(runner, spec, **slots)
-    if topology.mode == "B" and topology.host:
-        return run_ssh_probe(runner, topology.host, spec, **slots)
-    raise ValueError(f"Unsupported topology: {topology}")
+    candidate_home = home
+    if not candidate_home and topology.mode == "A":
+        candidate_home = Path.home().as_posix()
+    if not candidate_home or not candidate_home.startswith(("/", "~")):
+        return None
+    return f"{candidate_home.rstrip('/')}/{path[2:]}"
 
 
 def _merge_output(result) -> str:
@@ -543,23 +536,6 @@ def _merge_output(result) -> str:
     if stdout and stderr:
         return f"{stdout}\n{stderr}"
     return stdout or stderr
-
-
-def _first_nonempty_line(text: str) -> str | None:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped
-    return None
-
-
-def _normalize_shell_value(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    if not stripped or stripped.startswith("$"):
-        return None
-    return stripped
 
 
 def _derive_conda_env_name(

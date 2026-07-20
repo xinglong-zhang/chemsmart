@@ -389,9 +389,7 @@ def audit(
         )
         if episode_key in recovered_cross_turn_rejects:
             q_flags = [
-                flag
-                for flag in q_flags
-                if flag != "gate_reject_unrepaired"
+                flag for flag in q_flags if flag != "gate_reject_unrepaired"
             ]
         s_flags = stability_flags(episode)
         for flag in q_flags:
@@ -416,7 +414,9 @@ def audit(
         for chain in chains
         if export._user_message_count(export._merge_chain_messages(chain)) >= 2
     ]
-    episodes_in_multi_turn_chains = sum(len(chain) for chain in multi_turn_chains)
+    episodes_in_multi_turn_chains = sum(
+        len(chain) for chain in multi_turn_chains
+    )
     chain_skip_reasons: Counter[str] = Counter()
     trainable_chains = 0
     for chain in chains:
@@ -500,9 +500,7 @@ def audit(
             "flagged_episodes": flagged[:200],
             "clean_episodes": len(clean_indices),
             "exact_duplicate_pairs": duplicate_pairs,
-            "recovered_cross_turn_rejects": len(
-                recovered_cross_turn_rejects
-            ),
+            "recovered_cross_turn_rejects": len(recovered_cross_turn_rejects),
             "trainable_session_chains": trainable_chains,
             "review_session_chains": len(chains) - trainable_chains,
             "session_chain_skip_reasons": dict(
@@ -550,7 +548,9 @@ def audit(
         },
         "terminal_state": {
             "counts": dict(sorted(terminal_state_counts.items())),
-            "failure_rule_counts": dict(sorted(terminal_state_failures.items())),
+            "failure_rule_counts": dict(
+                sorted(terminal_state_failures.items())
+            ),
         },
         "clean_after_cap": len(clean_after_cap),
     }
@@ -581,7 +581,10 @@ def _kind_of_command(command: str) -> str | None:
         scan_definition = str(
             (parsed.structural_options or {}).get("scan_definition") or ""
         )
-        if any(" S " in f" {line.strip()} " for line in scan_definition.splitlines()):
+        if any(
+            " S " in f" {line.strip()} "
+            for line in scan_definition.splitlines()
+        ):
             job = "scan"
     return f"{parsed.program}.{job}"
 

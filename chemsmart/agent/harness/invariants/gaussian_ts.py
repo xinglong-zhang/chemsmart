@@ -37,6 +37,28 @@ def check_gaussian_ts_route(
         issues.append(_reject("Gaussian TS route line is missing", evidence))
         return _result(issues, evidence)
 
+    issues.extend(_route_form_issues(route, evidence))
+
+    match = _OPT_BLOCK_RE.search(route)
+    if match is None:
+        issues.append(
+            _reject("Gaussian TS route missing opt=(...) block", evidence)
+        )
+        return _result(issues, evidence)
+
+    tokens = _opt_tokens(match.group("body"))
+    token_counts = Counter(tokens)
+    evidence = {**evidence, "opt_tokens": tokens}
+
+    issues.extend(_opt_token_issues(token_counts, evidence))
+
+    return _result(issues, evidence)
+
+
+def _route_form_issues(
+    route: str, evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    issues: list[InvariantIssue] = []
     if "[" in route or "]" in route:
         issues.append(
             _reject(
@@ -45,9 +67,6 @@ def check_gaussian_ts_route(
             )
         )
 
-    # A ts job renders exactly one runtime-owned opt=(...) block. A second one
-    # (or bare ts/calcfc/noeigentest tokens outside the block) is a model leak
-    # via --additional-route-parameters that would corrupt the route.
     opt_blocks = _OPT_BLOCK_RE.findall(route)
     opt_keyword_count = len(re.findall(r"\bopt\b", route, re.IGNORECASE))
     if opt_keyword_count > 1:
@@ -73,21 +92,15 @@ def check_gaussian_ts_route(
                 {**evidence, "leaked_tokens": sorted(leaked_outside)},
             )
         )
+    return issues
 
-    match = _OPT_BLOCK_RE.search(route)
-    if match is None:
-        issues.append(
-            _reject("Gaussian TS route missing opt=(...) block", evidence)
-        )
-        return _result(issues, evidence)
 
-    tokens = _opt_tokens(match.group("body"))
-    token_counts = Counter(tokens)
-    evidence = {**evidence, "opt_tokens": tokens}
-
+def _opt_token_issues(
+    token_counts: Counter[str], evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    issues: list[InvariantIssue] = []
     if "ts" not in token_counts:
         issues.append(_reject("Gaussian TS route missing ts option", evidence))
-
     duplicate_tokens = [
         token for token, count in token_counts.items() if count > 1
     ]
@@ -98,7 +111,6 @@ def check_gaussian_ts_route(
                 {**evidence, "duplicate_tokens": duplicate_tokens},
             )
         )
-
     if "calcfc" in token_counts and "calcall" in token_counts:
         issues.append(
             _reject(
@@ -106,12 +118,10 @@ def check_gaussian_ts_route(
                 evidence,
             )
         )
-
     if "noeigentest" not in token_counts:
         issues.append(
             _reject("Gaussian TS route missing noeigentest option", evidence)
         )
-
     bad_extras = [
         token
         for token in token_counts
@@ -124,8 +134,7 @@ def check_gaussian_ts_route(
                 {**evidence, "bad_extras": sorted(bad_extras)},
             )
         )
-
-    return _result(issues, evidence)
+    return issues
 
 
 def _opt_tokens(body: str) -> list[str]:

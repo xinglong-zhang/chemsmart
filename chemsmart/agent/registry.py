@@ -150,6 +150,171 @@ _MODEL_EXCLUDED_FIELDS = frozenset(
     }
 )
 
+_DEFAULT_TOOL_SOURCES = (
+    ("build_molecule", "chemsmart.agent.tools", None, None),
+    ("recommend_method", "chemsmart.agent.tools", None, None),
+    (
+        "extract_project_protocol",
+        "chemsmart.agent.project_yaml",
+        "Extract chemsmart project-YAML method facts from a literature protocol or natural-language method description.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Extract project protocol facts",
+        ),
+    ),
+    (
+        "render_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Render a chemsmart Gaussian/ORCA project YAML candidate from extracted method facts.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Render project YAML {project_name}",
+        ),
+    ),
+    (
+        "validate_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Validate project YAML by loading it through chemsmart project settings.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Validate project YAML {project_name}",
+        ),
+    ),
+    (
+        "critic_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Critique whether project YAML matches a literature protocol and chemsmart runtime semantics.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Critique project YAML {project_name}",
+        ),
+    ),
+    (
+        "write_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Write a validated project YAML into the current workspace .chemsmart/<program> after explicit approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Write project YAML {project_name}",
+            side_effect="writes a user project YAML file",
+        ),
+    ),
+    (
+        "read_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Read the active workspace project YAML and summarize the chemsmart runtime settings it loads.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read project YAML {project_name}",
+        ),
+    ),
+    (
+        "update_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Patch an existing workspace project YAML by dotted path, validate it, and write only after approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Update project YAML {project_name}",
+            side_effect="writes a workspace project YAML file",
+        ),
+    ),
+    (
+        "search_basis_sets",
+        "chemsmart.agent.harness.basis_sets.catalog",
+        "Search BSE-backed basis-set names for a short user phrase; returns top candidates only, never the full catalog.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Search basis sets {query}",
+        ),
+    ),
+    (
+        "synthesize_command",
+        "chemsmart.agent.tools_command",
+        "Synthesize one grounded chemsmart CLI command using the CLI schema, project YAML check, adapter, and runtime semantic gate.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Synthesize chemsmart command",
+        ),
+    ),
+    (
+        "repair_command",
+        "chemsmart.agent.tools_command",
+        "Repair a failed chemsmart CLI command and re-run runtime semantic validation.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Repair chemsmart command",
+        ),
+    ),
+    (
+        "execute_chemsmart_command",
+        "chemsmart.agent.tools_command",
+        "Execute an already semantic-gated chemsmart CLI command after explicit approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Execute chemsmart command",
+            side_effect="runs a local chemsmart command",
+        ),
+    ),
+    (
+        "inspect_calculation",
+        "chemsmart.agent.runtime.calculations",
+        "Inspect the latest or named Gaussian/ORCA calculation receipt and output using deterministic chemistry parsers.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Inspect calculation {run_id}",
+        ),
+    ),
+    ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
+    ("build_orca_settings", "chemsmart.agent.tools", None, None),
+    ("build_job", "chemsmart.agent.tools", None, None),
+    ("dry_run_input", "chemsmart.agent.tools", None, None),
+    ("validate_runtime", "chemsmart.agent.tools", None, None),
+    ("run_local", "chemsmart.agent.tools", None, None),
+    (
+        "read",
+        "chemsmart.agent.tools_fs",
+        "Read a local text file with 1-based line numbers. Use start_line/limit to page large files.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read {path} L{start_line}-{end_line}",
+            side_effect=None,
+        ),
+    ),
+    (
+        "ssh_probe",
+        "chemsmart.agent.tools_hpc",
+        "Run a predefined read-only probe on a remote HPC server. probe_name must be one of the catalog entries; free-form commands are not allowed.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="SSH probe {probe_name} on {server}",
+        ),
+    ),
+    (
+        "scheduler_query",
+        "chemsmart.agent.tools_hpc",
+        "Inspect HPC scheduler state — queue/partition aggregates (job_id omitted) or per-job status (with job_id). slurm/pbs/sge/lsf. Read-only.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Scheduler query {scheduler} on {server}",
+        ),
+    ),
+    (
+        "log_tail",
+        "chemsmart.agent.tools_hpc",
+        "Tail a remote log file with optional grep filter. Returns last N lines + summary of detected error signatures (OOM, walltime, missing module, node failure, scheduler reject, segfault). Read-only.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Tail {path} on {server} ({lines}L)",
+        ),
+    ),
+    ("extract_optimized_geometry", "chemsmart.agent.tools", None, None),
+    ("submit_hpc", "chemsmart.agent.tools", None, None),
+    ("wizard_probe", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_refresh", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_verify", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_write", "chemsmart.agent.wizard.tools", None, None),
+)
+
 
 def tool_group(tool_name: str) -> str | None:
     """Return the module group a registered tool belongs to."""
@@ -258,177 +423,6 @@ class ToolRegistry:
         groups: Iterable[str] | None = None,
     ) -> "ToolRegistry":
         enabled_tools = resolve_tool_groups(groups)
-        tool_sources = [
-            ("build_molecule", "chemsmart.agent.tools", None, None),
-            ("recommend_method", "chemsmart.agent.tools", None, None),
-            (
-                "extract_project_protocol",
-                "chemsmart.agent.project_yaml",
-                "Extract chemsmart project-YAML method facts from a literature protocol or natural-language method description.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Extract project protocol facts",
-                ),
-            ),
-            (
-                "render_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Render a chemsmart Gaussian/ORCA project YAML candidate from extracted method facts.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Render project YAML {project_name}",
-                ),
-            ),
-            (
-                "validate_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Validate project YAML by loading it through chemsmart project settings.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Validate project YAML {project_name}",
-                ),
-            ),
-            (
-                "critic_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Critique whether project YAML matches a literature protocol and chemsmart runtime semantics.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Critique project YAML {project_name}",
-                ),
-            ),
-            (
-                "write_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Write a validated project YAML into the current workspace .chemsmart/<program> after explicit approval.",
-                RuntimeToolMetadata(
-                    read_only=False,
-                    ui_summary_template="Write project YAML {project_name}",
-                    side_effect="writes a user project YAML file",
-                ),
-            ),
-            (
-                "read_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Read the active workspace project YAML and summarize the chemsmart runtime settings it loads.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Read project YAML {project_name}",
-                ),
-            ),
-            (
-                "update_project_yaml",
-                "chemsmart.agent.project_yaml",
-                "Patch an existing workspace project YAML by dotted path, validate it, and write only after approval.",
-                RuntimeToolMetadata(
-                    read_only=False,
-                    ui_summary_template="Update project YAML {project_name}",
-                    side_effect="writes a workspace project YAML file",
-                ),
-            ),
-            (
-                "search_basis_sets",
-                "chemsmart.agent.harness.basis_sets.catalog",
-                "Search BSE-backed basis-set names for a short user phrase; returns top candidates only, never the full catalog.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Search basis sets {query}",
-                ),
-            ),
-            (
-                "synthesize_command",
-                "chemsmart.agent.tools_command",
-                "Synthesize one grounded chemsmart CLI command using the CLI schema, project YAML check, adapter, and runtime semantic gate.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Synthesize chemsmart command",
-                ),
-            ),
-            (
-                "repair_command",
-                "chemsmart.agent.tools_command",
-                "Repair a failed chemsmart CLI command and re-run runtime semantic validation.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Repair chemsmart command",
-                ),
-            ),
-            (
-                "execute_chemsmart_command",
-                "chemsmart.agent.tools_command",
-                "Execute an already semantic-gated chemsmart CLI command after explicit approval.",
-                RuntimeToolMetadata(
-                    read_only=False,
-                    ui_summary_template="Execute chemsmart command",
-                    side_effect="runs a local chemsmart command",
-                ),
-            ),
-            (
-                "inspect_calculation",
-                "chemsmart.agent.runtime.calculations",
-                "Inspect the latest or named Gaussian/ORCA calculation receipt and output using deterministic chemistry parsers.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Inspect calculation {run_id}",
-                ),
-            ),
-            ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
-            ("build_orca_settings", "chemsmart.agent.tools", None, None),
-            ("build_job", "chemsmart.agent.tools", None, None),
-            ("dry_run_input", "chemsmart.agent.tools", None, None),
-            ("validate_runtime", "chemsmart.agent.tools", None, None),
-            ("run_local", "chemsmart.agent.tools", None, None),
-            (
-                "read",
-                "chemsmart.agent.tools_fs",
-                "Read a local text file with 1-based line numbers. Use start_line/limit to page large files.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Read {path} L{start_line}-{end_line}",
-                    side_effect=None,
-                ),
-            ),
-            (
-                "ssh_probe",
-                "chemsmart.agent.tools_hpc",
-                "Run a predefined read-only probe on a remote HPC server. probe_name must be one of the catalog entries; free-form commands are not allowed.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=("SSH probe {probe_name} on {server}"),
-                ),
-            ),
-            (
-                "scheduler_query",
-                "chemsmart.agent.tools_hpc",
-                "Inspect HPC scheduler state — queue/partition aggregates (job_id omitted) or per-job status (with job_id). slurm/pbs/sge/lsf. Read-only.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=(
-                        "Scheduler query {scheduler} on {server}"
-                    ),
-                ),
-            ),
-            (
-                "log_tail",
-                "chemsmart.agent.tools_hpc",
-                "Tail a remote log file with optional grep filter. Returns last N lines + summary of detected error signatures (OOM, walltime, missing module, node failure, scheduler reject, segfault). Read-only.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=("Tail {path} on {server} ({lines}L)"),
-                ),
-            ),
-            (
-                "extract_optimized_geometry",
-                "chemsmart.agent.tools",
-                None,
-                None,
-            ),
-            ("submit_hpc", "chemsmart.agent.tools", None, None),
-            ("wizard_probe", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_refresh", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_verify", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_write", "chemsmart.agent.wizard.tools", None, None),
-        ]
         return cls(
             [
                 _build_tool_spec(
@@ -437,7 +431,7 @@ class ToolRegistry:
                     description=description,
                     metadata=metadata,
                 )
-                for name, module_name, description, metadata in tool_sources
+                for name, module_name, description, metadata in _DEFAULT_TOOL_SOURCES
                 if enabled_tools is None or name in enabled_tools
             ]
         )

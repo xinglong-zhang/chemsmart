@@ -1,8 +1,8 @@
 """
 Provider adapters for chemsmart agent.
 
-Reads api.env via python-dotenv (key: ai_api_key).
-Dispatches on AI_PROVIDER env var; v1 supports Anthropic and OpenAI.
+Uses ``agent.yaml`` as provider truth. A deprecated ``api.env`` fallback is
+retained for one compatibility release.
 """
 
 from __future__ import annotations
@@ -15,10 +15,9 @@ import warnings
 from pathlib import Path
 from typing import Any, Optional
 
-from dotenv import load_dotenv
-
 from chemsmart.agent.provider_config import (
     AgentProviderConfigError,
+    _load_legacy_env,
     load_active_provider_config,
 )
 
@@ -171,7 +170,7 @@ class LocalProvider:
 
     Loads :mod:`chemsmart.agent.local` lazily on the first ``chat`` call so
     ``chemsmart agent doctor`` / ``chemsmart config agent`` stay fast and do
-    not require torch/peft at import time.
+    not require torch at import time.
     """
 
     name = "local"
@@ -185,7 +184,6 @@ class LocalProvider:
         base_url: str | None = None,
         extra_headers: dict[str, str] | None = None,
         base_model_id: str = "",
-        adapter_repo_id: str = "",
         runtime: str = "",
         project: str = "",
     ) -> None:
@@ -193,7 +191,6 @@ class LocalProvider:
         self.default_model = model or type(self).default_model
         self._hf_token = api_key or os.environ.get("HF_TOKEN", "")
         self._base_model_id = base_model_id
-        self._adapter_repo_id = adapter_repo_id
         self._runtime = runtime or None
         self._project = project
         self._bundle: Any = None
@@ -214,14 +211,12 @@ class LocalProvider:
             return self._bundle
 
         from chemsmart.agent.local.loader import (
-            ADAPTER_REPO_ID,
             BASE_MODEL_ID,
-            load_lora_model,
+            load_transformers_model,
         )
 
-        self._bundle = load_lora_model(
+        self._bundle = load_transformers_model(
             base_model_id=self._base_model_id or BASE_MODEL_ID,
-            adapter_repo_id=self._adapter_repo_id or ADAPTER_REPO_ID,
             hf_token=self._hf_token or None,
             runtime=self._runtime,
         )
@@ -259,7 +254,9 @@ class LocalProvider:
         try:
             plan = generate_plan(bundle, user_query, history=history)
         except ValueError as exc:
-            raise ProviderError(f"local provider decode failed: {exc}") from exc
+            raise ProviderError(
+                f"local provider decode failed: {exc}"
+            ) from exc
         from chemsmart.agent.kind_disambiguator import disambiguate
 
         plan, _changed = disambiguate(user_query, plan)
@@ -303,8 +300,7 @@ class LocalProvider:
             from transformers import AutoTokenizer  # type: ignore[import-not-found]
         except ImportError as exc:
             raise ProviderError(
-                "local provider requires transformers; PEFT/bitsandbytes are "
-                "only needed when adapter_repo_id is set. "
+                "local provider requires transformers. "
                 "Install with: pip install 'huggingface_hub>=0.34.0,<1.0' "
                 "'transformers==4.56.2' 'accelerate==1.10.0'"
             ) from exc
@@ -327,10 +323,13 @@ class LocalProvider:
 
     def _ping_mlx(self, started: float) -> dict[str, Any]:
         try:
-            from chemsmart.agent.local.mlx_loader import MODEL_REPO_ID
             from huggingface_hub import HfApi
+
+            from chemsmart.agent.local.mlx_loader import MODEL_REPO_ID
         except Exception as exc:  # pragma: no cover - optional runtime guard
-            raise ProviderError(f"MLX local provider ping failed: {exc}") from exc
+            raise ProviderError(
+                f"MLX local provider ping failed: {exc}"
+            ) from exc
 
         repo_id = self._base_model_id or MODEL_REPO_ID
         token = self._hf_token or None
@@ -374,9 +373,6 @@ def get_provider(
     Prefer ``~/.chemsmart/agent/agent.yaml``. If it is absent, fall back to the
     legacy ``api.env``/``AI_PROVIDER`` path for backwards compatibility.
     """
-    if isinstance(env_path, str) and env_path.strip():
-        load_dotenv(env_path.strip(), override=False)
-
     try:
         config = load_active_provider_config()
     except AgentProviderConfigError as exc:
@@ -403,7 +399,6 @@ def get_provider(
                 api_key=config.hf_token or config.api_key,
                 model=config.model,
                 base_model_id=config.base_model_id,
-                adapter_repo_id=config.adapter_repo_id,
                 runtime=config.runtime,
                 project=config.project,
             )
@@ -421,7 +416,7 @@ def get_provider(
     # Load api.env first so AI_PROVIDER and ai_api_key can both come from the
     # file — the user should not need to export AI_PROVIDER in their shell.
     if env_path is not None:
-        load_dotenv(env_path, override=False)
+        _load_legacy_env(Path(env_path))
 
     provider_name = os.environ.get("AI_PROVIDER")
     if not provider_name or not provider_name.strip():

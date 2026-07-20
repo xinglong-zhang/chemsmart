@@ -14,8 +14,8 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.jobs.gaussian.runner import FakeGaussian
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian.runner import FakeGaussian
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
@@ -326,9 +326,9 @@ class TestGaussian16Input:
         fake = FakeGaussian(input_file)
         fake.run()
 
-        assert "Normal termination" in (tmp_path / "three_layer_oniom.log").read_text(
-            encoding="utf-8"
-        )
+        assert "Normal termination" in (
+            tmp_path / "three_layer_oniom.log"
+        ).read_text(encoding="utf-8")
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)

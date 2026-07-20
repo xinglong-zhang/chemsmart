@@ -53,7 +53,9 @@ class TuiState:
             return ""
         if self.current_step is None or self.total_steps is None:
             return self.current_tool
-        return f"tool {self.current_step}/{self.total_steps} {self.current_tool}"
+        return (
+            f"tool {self.current_step}/{self.total_steps} {self.current_tool}"
+        )
 
 
 class TuiStateReducer:
@@ -69,7 +71,9 @@ class TuiStateReducer:
             setattr(self.state, name, value)
         return self.state
 
-    def set_phase(self, phase: Phase, operation: str | None = None) -> TuiState:
+    def set_phase(
+        self, phase: Phase, operation: str | None = None
+    ) -> TuiState:
         self.state.set_phase(phase, operation)
         return self.state
 

@@ -31,7 +31,9 @@ def main(argv: list[str] | None = None) -> int:
         started = time.perf_counter()
         result = _ping_model(client, model, timeout=args.timeout)
         result["latency_s"] = round(time.perf_counter() - started, 2)
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True), flush=True)
+        print(
+            json.dumps(result, ensure_ascii=False, sort_keys=True), flush=True
+        )
     return 0
 
 

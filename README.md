@@ -262,17 +262,20 @@ available commands.
 ### Setup
 
 ```bash
-pip install -e ".[agent-tui]"            # interactive TUI extra (Textual/Rich)
-cp api.env.example api.env               # then set ai_api_key=...
+pip install -e ".[agent,agent-tui]"      # providers + interactive TUI
+# Configure ~/.chemsmart/agent/agent.yaml
 chemsmart agent doctor                   # verify provider, SSH, permissions
 ```
 
-Modern provider configuration is read from
-`~/.chemsmart/agent/agent.yaml`. The active provider may be API-backed
-(`openai`/`anthropic`) or local (`local` with PyTorch or MLX). If a provider
-entry sets `project: test`, that project is runtime-owned and automatically
-attached to generated commands unless the user explicitly chooses another
-project.
+Provider configuration is read from `~/.chemsmart/agent/agent.yaml`. A legacy
+`api.env` credential is accepted with a deprecation warning for one release,
+but is not a second configuration source. The active provider may be API-backed
+(`openai`/`anthropic`/OpenAI-compatible) or local (`local` with PyTorch or
+MLX). Project settings used by the interactive agent are workspace-local:
+start CHEMSMART from the research directory and keep project files under
+`.chemsmart/gaussian/` or `.chemsmart/orca/`. A provider `project:` value may
+select a matching workspace candidate, but it does not replace a missing
+workspace YAML.
 
 ### Entry points
 
@@ -290,8 +293,10 @@ The TUI has one provider-aware interface: local providers synthesize commands,
 while API providers use the unified tool loop automatically. After semantic,
 intent, generated-input, and workspace-project checks pass, use `/run` for a
 validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
-command. `/mode` is informational only. Use `/init` to build a project YAML
-from a reported computational method.
+command. Use `/init` to build a project YAML
+from a reported computational method, then `/write-project` to approve writing
+it into the current workspace. `Shift+Tab` previews the active YAML and cycles
+between multiple workspace projects.
 
 ### Current agent behavior
 
@@ -308,7 +313,8 @@ from a reported computational method.
   `opt=(...)` blocks.
 - **Project YAML harness.** The agent can extract a literature protocol, render
   CHEMSMART `gas:`/`solv:` YAML, validate it through project settings, critique
-  it, and write it only after approval.
+  it, and write it only after approval. Existing settings are never silently
+  replaced: the TUI asks whether to overwrite or create a new project name.
 - **Basis-set lookup.** The `search_basis_sets` tool uses a local
   Basis-Set-Exchange-derived catalog and returns only top-k candidates. It
   handles common phrases such as "Karlsruhe triple zeta diffuse",
@@ -318,6 +324,10 @@ from a reported computational method.
   trace with action, confidence, observable evidence, rejected action classes,
   and caveats. This is user-auditable routing evidence, not hidden
   chain-of-thought.
+- **Completion-focused transcript.** Tool calls, deterministic parsing,
+  semantic/intent evidence, repair attempts, and intermediate responses remain
+  visible while a turn runs, then collapse behind one toggle. The final command
+  or user-facing answer stays visible and clickable for text selection.
 
 ### Permission modes
 
@@ -333,14 +343,14 @@ much autonomy you want:
 
 ### Tool catalog
 
-The default registry currently exposes 24 tools:
+The default registry currently exposes 29 tools:
 
 | Group | Tools | What they do |
 |---|---|---|
 | Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA jobs from natural language |
-| Command grounding | `search_basis_sets` | Resolve basis-set phrases to compact BSE-backed top-k candidates |
-| Project YAML | `extract_project_protocol`, `render_project_yaml`, `validate_project_yaml`, `critic_project_yaml`, `write_project_yaml` | Build and audit CHEMSMART project settings from reported methods |
-| Execution | `run_local`, `submit_hpc`, `wizard_probe`, `wizard_refresh`, `wizard_verify`, `wizard_write` | Run locally, submit to HPC, or profile server YAMLs interactively |
+| Command grounding | `search_basis_sets`, `synthesize_command`, `repair_command` | Resolve basis phrases and produce or repair CLI-grounded commands |
+| Project YAML | `extract_project_protocol`, `render_project_yaml`, `validate_project_yaml`, `critic_project_yaml`, `write_project_yaml`, `read_project_yaml`, `update_project_yaml` | Build, select, audit, and update workspace project settings |
+| Execution | `execute_chemsmart_command`, `run_local`, `submit_hpc`, `wizard_probe`, `wizard_refresh`, `wizard_verify`, `wizard_write` | Execute approved commands, submit to HPC, or profile server YAMLs interactively |
 | HPC inspection | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | Read local files, run safelisted SSH probes, query schedulers, and tail remote logs |
 | Control flow | `ask_user` (virtual) | Ask for missing structured slots such as server, job ID, log path, or scheduler kind |
 

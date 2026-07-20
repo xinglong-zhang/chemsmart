@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-import os
-import shlex
 import contextlib
 import io
 import logging
-from dataclasses import dataclass, field
+import os
+import shlex
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from chemsmart.agent.command_models import (
+    ParsedModelCommand as ParsedModelCommand,
+)
+from chemsmart.agent.services.command_explanation import (
+    format_parsed_model_command as format_parsed_model_command,
+)
 
 _TOP_LEVEL_COMMANDS = {"run", "sub"}
 _PROGRAMS = {"gaussian", "orca", "nciplot", "mol"}
@@ -52,92 +59,30 @@ _SUBCOMMANDS_BY_PROGRAM = {
 
 
 @dataclass(frozen=True)
-class ParsedModelCommand:
-    command: str
-    workspace: str
-    tokens: list[str]
-    parse_error: str | None = None
-    entrypoint: str | None = None
-    action: str | None = None
-    program: str | None = None
-    job: str | None = None
-    server: str | None = None
-    dry_run: bool = False
-    project: str | None = None
-    project_p_flag_meaning: str | None = None
-    top_level_program: str | None = None
-    filename: str | None = None
-    record_index: str | None = None
-    record_id: str | None = None
-    structure_index: str | None = None
-    structure_id: str | None = None
-    molecule_id: str | None = None
-    label: str | None = None
-    charge: str | None = None
-    multiplicity: str | None = None
-    functional: str | None = None
-    ab_initio: str | None = None
-    basis: str | None = None
-    aux_basis: str | None = None
-    extrapolation_basis: str | None = None
-    defgrid: str | None = None
-    scf_tol: str | None = None
-    scf_algorithm: str | None = None
-    solvent_model: str | None = None
-    solvent_id: str | None = None
-    route_parameters: str | None = None
-    opt_options: str | None = None
-    structural_options: dict[str, str] = field(default_factory=dict)
-    resources: dict[str, str] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "command": self.command,
-            "workspace": self.workspace,
-            "tokens": self.tokens,
-            "parse_error": self.parse_error,
-            "entrypoint": self.entrypoint,
-            "action": self.action,
-            "program": self.program,
-            "job": self.job,
-            "server": self.server,
-            "dry_run": self.dry_run,
-            "project": self.project,
-            "project_p_flag_meaning": self.project_p_flag_meaning,
-            "top_level_program": self.top_level_program,
-            "filename": self.filename,
-            "record_index": self.record_index,
-            "record_id": self.record_id,
-            "structure_index": self.structure_index,
-            "structure_id": self.structure_id,
-            "molecule_id": self.molecule_id,
-            "label": self.label,
-            "charge": self.charge,
-            "multiplicity": self.multiplicity,
-            "functional": self.functional,
-            "ab_initio": self.ab_initio,
-            "basis": self.basis,
-            "aux_basis": self.aux_basis,
-            "extrapolation_basis": self.extrapolation_basis,
-            "defgrid": self.defgrid,
-            "scf_tol": self.scf_tol,
-            "scf_algorithm": self.scf_algorithm,
-            "solvent_model": self.solvent_model,
-            "solvent_id": self.solvent_id,
-            "route_parameters": self.route_parameters,
-            "opt_options": self.opt_options,
-            "structural_options": dict(self.structural_options),
-            "resources": dict(self.resources),
-            "warnings": list(self.warnings),
-        }
-
-
-@dataclass(frozen=True)
 class _OptionSpec:
     name: str
     takes_value: bool = True
     flag_value: str | None = None
+
+
+@dataclass(frozen=True)
+class _CommandLayout:
+    workspace: str
+    tokens: list[str]
+    entrypoint: str
+    action: str
+    action_index: int
+    program: str
+    program_index: int
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class _JobLayout:
+    job: str | None
+    subcommand_index: int
+    option_index: int
+    option_job: str | None
 
 
 _RUNNER_OPTIONS = {
@@ -275,7 +220,9 @@ _SUBCOMMAND_OPTIONS = {
     "--num-structures-to-run": _OptionSpec("num_structures_to_run"),
     "-g": _OptionSpec("grouping_strategy"),
     "--grouping-strategy": _OptionSpec("grouping_strategy"),
-    "--proportion-structures-to-use": _OptionSpec("proportion_structures_to_use"),
+    "--proportion-structures-to-use": _OptionSpec(
+        "proportion_structures_to_use"
+    ),
     "--skip-completed": _OptionSpec(
         "skip_completed", takes_value=False, flag_value="true"
     ),
@@ -356,35 +303,55 @@ _JOB_OPTION_OVERRIDES: dict[tuple[str, str], dict[str, _OptionSpec]] = {
     },
 }
 
-_JOB_LABELS = {
-    "com": "Gaussian input regeneration",
-    "crest": "CREST conformer search",
-    "dias": "distortion-interaction analysis",
-    "inp": "ORCA input handling",
-    "irc": "intrinsic reaction coordinate",
-    "link": "Gaussian linked job",
-    "modred": "constrained optimization",
-    "neb": "nudged elastic band",
-    "nci": "non-covalent interaction analysis",
-    "opt": "geometry optimization",
-    "qmmm": "QM/MM calculation",
-    "qrc": "quasi-reaction coordinate scan",
-    "resp": "RESP charge calculation",
-    "scan": "coordinate scan",
-    "sp": "single-point energy",
-    "td": "TD-DFT excited-state calculation",
-    "traj": "trajectory frame workflow",
-    "ts": "transition-state search",
-    "userjob": "user-defined Gaussian job",
-    "wbi": "Wiberg bond index calculation",
-}
-
 
 def parse_model_command(
     command: str, *, cwd: str | os.PathLike[str] | None = None
 ) -> ParsedModelCommand:
     workspace = str(Path(cwd or os.getcwd()).resolve())
-    warnings: list[str] = []
+    prefix = _parse_command_layout(command, workspace)
+    if isinstance(prefix, ParsedModelCommand):
+        return prefix
+    job_layout = _locate_job_layout(prefix)
+    runner_opts, runner_warnings = _parse_options(
+        prefix.tokens[prefix.action_index + 1 : prefix.program_index],
+        _RUNNER_OPTIONS,
+    )
+    program_opts, program_warnings = _parse_options(
+        prefix.tokens[prefix.program_index + 1 : job_layout.subcommand_index],
+        _PROGRAM_OPTIONS,
+    )
+    subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
+    subcommand_specs.update(
+        _JOB_OPTION_OVERRIDES.get(
+            (prefix.program, job_layout.option_job or ""),
+            {},
+        )
+    )
+    subcommand_opts, subcommand_warnings = _parse_options(
+        prefix.tokens[job_layout.option_index + 1 :], subcommand_specs
+    )
+    _normalize_job_options(prefix.program, job_layout.job, subcommand_opts)
+    warnings = [
+        *prefix.warnings,
+        *runner_warnings,
+        *program_warnings,
+        *subcommand_warnings,
+    ]
+    return _build_parsed_command(
+        command=command,
+        layout=prefix,
+        job=job_layout.job,
+        runner_opts=runner_opts,
+        program_opts=program_opts,
+        subcommand_opts=subcommand_opts,
+        warnings=warnings,
+    )
+
+
+def _parse_command_layout(
+    command: str,
+    workspace: str,
+) -> _CommandLayout | ParsedModelCommand:
     try:
         tokens = shlex.split(command)
     except ValueError as exc:
@@ -394,7 +361,6 @@ def parse_model_command(
             tokens=[],
             parse_error=f"tokenization failed: {exc}",
         )
-
     if not tokens:
         return ParsedModelCommand(
             command=command,
@@ -402,132 +368,127 @@ def parse_model_command(
             tokens=tokens,
             parse_error="empty command",
         )
-
     entrypoint = tokens[0]
+    warnings = []
     if entrypoint != "chemsmart":
         warnings.append("command does not start with the chemsmart entrypoint")
-
     action_index = _find_first(tokens, _TOP_LEVEL_COMMANDS, start=1)
     if action_index is None:
-        return ParsedModelCommand(
-            command=command,
-            workspace=workspace,
-            tokens=tokens,
-            entrypoint=entrypoint,
-            parse_error="missing chemsmart run/sub action",
-            warnings=warnings,
+        return _layout_error(
+            command,
+            workspace,
+            tokens,
+            entrypoint,
+            warnings,
+            "missing chemsmart run/sub action",
         )
     action = tokens[action_index]
-
     program_index = _find_program_index(tokens, action_index + 1)
     if program_index is None:
-        return ParsedModelCommand(
-            command=command,
-            workspace=workspace,
-            tokens=tokens,
-            entrypoint=entrypoint,
+        return _layout_error(
+            command,
+            workspace,
+            tokens,
+            entrypoint,
+            warnings,
+            "missing computational program after run/sub options",
             action=action,
-            parse_error="missing computational program after run/sub options",
-            warnings=warnings,
         )
-    program = tokens[program_index]
-
-    runner_opts, runner_warnings = _parse_options(
-        tokens[action_index + 1 : program_index], _RUNNER_OPTIONS
+    return _CommandLayout(
+        workspace=workspace,
+        tokens=tokens,
+        entrypoint=entrypoint,
+        action=action,
+        action_index=action_index,
+        program=tokens[program_index],
+        program_index=program_index,
+        warnings=warnings,
     )
-    warnings.extend(runner_warnings)
 
-    subcommand_index = _find_subcommand_index(
-        tokens, program, program_index + 1
-    )
-    if subcommand_index is None:
-        subcommand_index = len(tokens)
-        job = None
-        warnings.append(f"no recognized {program} job subcommand was found")
-    else:
-        job = tokens[subcommand_index]
 
-    # The real CLI nests ``qmmm`` under a parent job (``opt qmmm``, ``ts qmmm``,
-    # ``sp qmmm`` …). ``_find_subcommand_index`` stops at the parent token, so
-    # the parent remains the job (and ``qmmm`` is detected as a required token
-    # by the intent oracle), but the per-layer charge/mult/region options that
-    # follow the nested ``qmmm`` token must be parsed with the qmmm option specs
-    # so they land in ``structural_options`` instead of being reported as
-    # unrecognized parent-job options. Source:
-    # ``chemsmart/cli/{gaussian,orca}/qmmm.py``.
-    subcommand_option_index = subcommand_index
-    subcommand_specs_job = job
-    if job is not None and job != "qmmm":
-        nested_qmmm_index = _find_first(
-            tokens, {"qmmm"}, start=subcommand_index + 1
-        )
-        if nested_qmmm_index is not None:
-            subcommand_specs_job = "qmmm"
-            subcommand_option_index = nested_qmmm_index
-
-    program_opts, program_warnings = _parse_options(
-        tokens[program_index + 1 : subcommand_index], _PROGRAM_OPTIONS
-    )
-    warnings.extend(program_warnings)
-    subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
-    subcommand_specs.update(
-        _JOB_OPTION_OVERRIDES.get((program, subcommand_specs_job or ""), {})
-    )
-    subcommand_opts, subcommand_warnings = _parse_options(
-        tokens[subcommand_option_index + 1 :], subcommand_specs
-    )
-    warnings.extend(subcommand_warnings)
-    if program == "gaussian" and job == "traj" and "dist_start" in subcommand_opts:
-        # ``traj`` owns its post-subcommand ``-x`` as a selection proportion;
-        # ORCA scan retains the distinct distance-start meaning.
-        subcommand_opts["proportion_structures_to_use"] = subcommand_opts.pop(
-            "dist_start"
-        )
-
-    project = program_opts.get("project")
-    resolved, resolve_warning = _resolve_project_method(
-        program=program,
-        project=project,
-        job=job,
-        overrides=program_opts,
-    )
-    if resolve_warning:
-        warnings.append(resolve_warning)
-
-    server = runner_opts.get("server")
-    dry_run = (
-        runner_opts.get("fake") == "true" or runner_opts.get("test") == "true"
-    )
-    structural_options = {
-        key: value
-        for key, value in subcommand_opts.items()
-        if value is not None and key not in {"skip_completed", "route_parameters"}
-    }
-    resources = {
-        key: value
-        for key, value in runner_opts.items()
-        if key
-        in {
-            "num_cores",
-            "num_gpus",
-            "mem_gb",
-            "queue",
-            "time_hours",
-            "scratch",
-            "delete_scratch",
-        }
-    }
-
+def _layout_error(
+    command: str,
+    workspace: str,
+    tokens: list[str],
+    entrypoint: str,
+    warnings: list[str],
+    parse_error: str,
+    *,
+    action: str | None = None,
+) -> ParsedModelCommand:
     return ParsedModelCommand(
         command=command,
         workspace=workspace,
         tokens=tokens,
         entrypoint=entrypoint,
         action=action,
-        program=program,
+        parse_error=parse_error,
+        warnings=warnings,
+    )
+
+
+def _locate_job_layout(layout: _CommandLayout) -> _JobLayout:
+    index = _find_subcommand_index(
+        layout.tokens,
+        layout.program,
+        layout.program_index + 1,
+    )
+    if index is None:
+        layout.warnings.append(
+            f"no recognized {layout.program} job subcommand was found"
+        )
+        return _JobLayout(None, len(layout.tokens), len(layout.tokens), None)
+    job = layout.tokens[index]
+    option_index = index
+    option_job = job
+    if job != "qmmm":
+        nested = _find_first(layout.tokens, {"qmmm"}, start=index + 1)
+        if nested is not None:
+            option_index = nested
+            option_job = "qmmm"
+    return _JobLayout(job, index, option_index, option_job)
+
+
+def _normalize_job_options(
+    program: str,
+    job: str | None,
+    options: dict[str, str],
+) -> None:
+    if program == "gaussian" and job == "traj" and "dist_start" in options:
+        options["proportion_structures_to_use"] = options.pop("dist_start")
+
+
+def _build_parsed_command(
+    *,
+    command: str,
+    layout: _CommandLayout,
+    job: str | None,
+    runner_opts: dict[str, str],
+    program_opts: dict[str, str],
+    subcommand_opts: dict[str, str],
+    warnings: list[str],
+) -> ParsedModelCommand:
+    project = program_opts.get("project")
+    resolved, resolve_warning = _resolve_project_method(
+        program=layout.program,
+        project=project,
         job=job,
-        server=server,
-        dry_run=dry_run,
+        overrides=program_opts,
+    )
+    if resolve_warning:
+        warnings.append(resolve_warning)
+    structural_options = _structural_options(subcommand_opts)
+    resources = _resource_options(runner_opts)
+    return ParsedModelCommand(
+        command=command,
+        workspace=layout.workspace,
+        tokens=layout.tokens,
+        entrypoint=layout.entrypoint,
+        action=layout.action,
+        program=layout.program,
+        job=job,
+        server=runner_opts.get("server"),
+        dry_run=_dry_run_requested(runner_opts),
         project=project,
         project_p_flag_meaning=(
             "program-level -p/--project for gaussian/orca project settings"
@@ -565,144 +526,40 @@ def parse_model_command(
     )
 
 
+def _dry_run_requested(options: dict[str, str]) -> bool:
+    return options.get("fake") == "true" or options.get("test") == "true"
+
+
+def _structural_options(options: dict[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in options.items()
+        if value is not None
+        and key not in {"skip_completed", "route_parameters"}
+    }
+
+
+def _resource_options(options: dict[str, str]) -> dict[str, str]:
+    resource_keys = {
+        "num_cores",
+        "num_gpus",
+        "mem_gb",
+        "queue",
+        "time_hours",
+        "scratch",
+        "delete_scratch",
+    }
+    return {
+        key: value for key, value in options.items() if key in resource_keys
+    }
+
+
 def format_model_command_explanation(
-    command: str, *, cwd: str | os.PathLike[str] | None = None
+    command: str,
+    *,
+    cwd: str | os.PathLike[str] | None = None,
 ) -> str:
-    parsed = parse_model_command(command, cwd=cwd)
-    return format_parsed_model_command(parsed)
-
-
-def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
-    if parsed.parse_error:
-        return "\n".join(
-            [
-                "deterministic command parser:",
-                f"- parse status: `error` ({parsed.parse_error})",
-                f"- workspace: `{parsed.workspace}`",
-                # Blank line so a Markdown renderer does not lazily glue the
-                # Summary line onto the preceding bullet list.
-                "",
-                f"Summary: This command could not be deterministically parsed: {parsed.parse_error}.",
-            ]
-        )
-
-    action_label = (
-        "submit to an HPC/server queue"
-        if parsed.action == "sub"
-        else "run locally"
-    )
-    dry_run_text = "yes" if parsed.dry_run else "no"
-    program_text = parsed.program or "unknown"
-    job_text = parsed.job or "unknown"
-    job_label = _JOB_LABELS.get(job_text, job_text)
-    project_text = parsed.project or "not specified"
-    server_text = parsed.server or (
-        "auto/default server" if parsed.action == "sub" else "local/default"
-    )
-    method_bits = []
-    if parsed.ab_initio:
-        method_bits.append(f"ab initio `{parsed.ab_initio}`")
-    if parsed.functional:
-        method_bits.append(f"functional `{parsed.functional}`")
-    if parsed.basis:
-        method_bits.append(f"basis `{parsed.basis}`")
-    if parsed.aux_basis:
-        method_bits.append(f"auxiliary basis `{parsed.aux_basis}`")
-    if parsed.extrapolation_basis:
-        method_bits.append(
-            f"extrapolation basis `{parsed.extrapolation_basis}`"
-        )
-    method_text = ", ".join(method_bits) if method_bits else "unresolved"
-
-    lines = [
-        "deterministic command parser:",
-        f"- workspace: `{parsed.workspace}`",
-        f"- execution: `{parsed.action}` ({action_label})",
-        f"- program: `{program_text}`",
-        f"- job: `{job_text}` ({job_label})",
-        f"- server: `{server_text}`",
-        f"- dry run requested by command: `{dry_run_text}`",
-        f"- molecule/input file: `{parsed.filename or 'not specified'}`",
-        f"- label: `{parsed.label or 'runtime-derived'}`",
-        f"- charge/multiplicity: `{parsed.charge or 'runtime/default'}` / `{parsed.multiplicity or 'runtime/default'}`",
-        f"- project: `{project_text}`",
-    ]
-    if parsed.project_p_flag_meaning:
-        lines.append(f"- `-p` meaning: {parsed.project_p_flag_meaning}")
-    if parsed.top_level_program:
-        lines.append(
-            "- top-level `-p/--program`: "
-            f"`{parsed.top_level_program}` (output-file processing target, not project)"
-        )
-    db_bits = []
-    if parsed.record_index:
-        db_bits.append(f"record_index={parsed.record_index}")
-    if parsed.record_id:
-        db_bits.append(f"record_id={parsed.record_id}")
-    if parsed.structure_index:
-        db_bits.append(f"structure_index={parsed.structure_index}")
-    if parsed.structure_id:
-        db_bits.append(f"structure_id={parsed.structure_id}")
-    if parsed.molecule_id:
-        db_bits.append(f"molecule_id={parsed.molecule_id}")
-    if db_bits:
-        lines.append(f"- database selection: `{', '.join(db_bits)}`")
-    lines.append(f"- resolved method: {method_text}")
-    if parsed.solvent_model or parsed.solvent_id:
-        lines.append(
-            "- resolved solvent: "
-            f"`{parsed.solvent_model or 'model default'}` / `{parsed.solvent_id or 'id default'}`"
-        )
-    route_control_bits = []
-    if parsed.defgrid:
-        route_control_bits.append(f"defgrid={parsed.defgrid}")
-    if parsed.scf_tol:
-        route_control_bits.append(f"scf_tol={parsed.scf_tol}")
-    if parsed.scf_algorithm:
-        route_control_bits.append(f"scf_algorithm={parsed.scf_algorithm}")
-    if route_control_bits:
-        lines.append(
-            f"- resolved route controls: `{', '.join(route_control_bits)}`"
-        )
-    if parsed.route_parameters:
-        lines.append(f"- route parameters: `{parsed.route_parameters}`")
-    if parsed.opt_options:
-        lines.append(f"- optimization route options: `{parsed.opt_options}`")
-    if parsed.resources:
-        resource_text = ", ".join(
-            f"{key}={value}" for key, value in sorted(parsed.resources.items())
-        )
-        lines.append(f"- resources: `{resource_text}`")
-    if parsed.structural_options:
-        option_text = ", ".join(
-            f"{key}={value}"
-            for key, value in sorted(parsed.structural_options.items())
-        )
-        lines.append(f"- job-specific options: `{option_text}`")
-    if parsed.warnings:
-        lines.append("- parser warnings:")
-        lines.extend(f"  - {warning}" for warning in parsed.warnings)
-
-    target = parsed.filename or "the selected input"
-    if parsed.action == "sub":
-        summary_action = (
-            f"submit a {program_text} {job_label} job for `{target}` "
-            f"to `{server_text}`"
-        )
-    else:
-        summary_action = (
-            f"run a {program_text} {job_label} job for `{target}` locally"
-        )
-    # Blank line so a Markdown renderer does not lazily glue the Summary line
-    # onto the preceding bullet list (the "explanation stuck to the command" bug).
-    lines.append("")
-    lines.append(
-        "Summary: This command will "
-        f"{summary_action} from `{parsed.workspace}` using project "
-        f"`{project_text}` with "
-        f"{method_text}; dry-run is {dry_run_text}."
-    )
-    return "\n".join(lines)
+    return format_parsed_model_command(parse_model_command(command, cwd=cwd))
 
 
 def _find_first(

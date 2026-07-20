@@ -87,7 +87,9 @@ class SessionsScreen(ModalScreen[str | None]):
     def _load_session_ids(self) -> list[str]:
         if not self.session_root.exists():
             return []
-        return [path.name for path in agent_session_dirs(self.session_root)[:10]]
+        return [
+            path.name for path in agent_session_dirs(self.session_root)[:10]
+        ]
 
     def _render_text(self) -> str:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
@@ -109,10 +111,10 @@ class SessionsScreen(ModalScreen[str | None]):
         metadata_path = session_dir / "session_metadata.json"
         session_path = session_dir / "session.json"
         if metadata_path.exists():
-            data = json.loads(metadata_path.read_text())
+            data = json.loads(metadata_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         elif session_path.exists():
-            data = json.loads(session_path.read_text())
+            data = json.loads(session_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         request = request.strip().replace("\n", " ")
         if len(request) > 48:

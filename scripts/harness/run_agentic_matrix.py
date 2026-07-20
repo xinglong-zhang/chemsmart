@@ -70,10 +70,14 @@ def run_batch(
     rows: list[dict[str, Any]] = []
     for trial in range(1, repeats + 1):
         for case in load_case_matrix(matrix)[offset : offset + limit]:
-            with tempfile.TemporaryDirectory(prefix="chemsmart-agentic-matrix-") as temp:
+            with tempfile.TemporaryDirectory(
+                prefix="chemsmart-agentic-matrix-"
+            ) as temp:
                 workspace = Path(temp) / "workspace"
                 home = Path(temp) / "home"
-                _materialize_fixture(workspace, home, case.fixture, case.intent.to_dict())
+                _materialize_fixture(
+                    workspace, home, case.fixture, case.intent.to_dict()
+                )
                 with _workspace_environment(workspace, home):
                     reset_workflow_state()
                     scope = f"matrix:{case.case_id}:{trial}"
@@ -133,7 +137,9 @@ def run_batch(
                 and isinstance(execution.get("terminal_state"), dict)
                 else None
             )
-            execution_stage = "completed" if execution is not None else "not_reached"
+            execution_stage = (
+                "completed" if execution is not None else "not_reached"
+            )
             terminal_rule_ids = (
                 validate_terminal_state(terminal)
                 if execution is not None
@@ -142,11 +148,10 @@ def run_batch(
             if case.expected_outcome == "valid_ask":
                 passed = outcome is OutcomeClass.VALID_ASK
             else:
-                passed = (
-                    outcome
-                    in {OutcomeClass.DIRECT_PASS, OutcomeClass.REPAIR_PASS}
-                    and terminal_state_is_positive(terminal)
-                )
+                passed = outcome in {
+                    OutcomeClass.DIRECT_PASS,
+                    OutcomeClass.REPAIR_PASS,
+                } and terminal_state_is_positive(terminal)
             rows.append(
                 {
                     "schema_version": 1,
@@ -193,7 +198,9 @@ def _materialize_fixture(
         encoding="utf-8",
     )
     program = str(intent.get("program") or "gaussian")
-    project_names = set(str(name) for name in fixture.get("workspace_projects") or [])
+    project_names = set(
+        str(name) for name in fixture.get("workspace_projects") or []
+    )
     if intent.get("project"):
         project_names.add(str(intent["project"]))
     for name in project_names:
@@ -213,19 +220,32 @@ def _project_yaml(program: str) -> str:
     base = "gas:\n  functional: b3lyp\n  basis: def2svp\nsolv:\n  functional: b3lyp\n  basis: def2svp\n"
     if program == "gaussian":
         return base + "td:\n  functional: cam-b3lyp\n  basis: def2svp\n"
-    return base + "qmmm:\n  high_level_functional: b3lyp\n  high_level_basis: def2svp\n  low_level_method: AMBER=HardFirst\n"
+    return (
+        base
+        + "qmmm:\n  high_level_functional: b3lyp\n  high_level_basis: def2svp\n  low_level_method: AMBER=HardFirst\n"
+    )
 
 
 def _write_xyz(path: Path, atom_count: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     coordinates = [str(max(atom_count, 3)), "matrix fixture"]
-    coordinates.extend(f"H {index * 0.7:.3f} 0.0 0.0" for index in range(max(atom_count, 3)))
+    coordinates.extend(
+        f"H {index * 0.7:.3f} 0.0 0.0" for index in range(max(atom_count, 3))
+    )
     path.write_text("\n".join(coordinates) + "\n", encoding="utf-8")
 
 
 def _public_turn_result(result: dict[str, Any]) -> dict[str, Any]:
-    semantic = result.get("semantic") if isinstance(result.get("semantic"), dict) else {}
-    intent = result.get("intent_assertion") if isinstance(result.get("intent_assertion"), dict) else {}
+    semantic = (
+        result.get("semantic")
+        if isinstance(result.get("semantic"), dict)
+        else {}
+    )
+    intent = (
+        result.get("intent_assertion")
+        if isinstance(result.get("intent_assertion"), dict)
+        else {}
+    )
     return {
         "status": result.get("status"),
         "command": result.get("command"),
@@ -238,7 +258,9 @@ def _has_repair(turns: list[dict[str, Any]]) -> bool:
     return any(turn.get("status") != "ready" for turn in turns[:-1])
 
 
-def _public_execution_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
+def _public_execution_result(
+    result: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     if not isinstance(result, dict):
         return None
     return {
@@ -286,11 +308,18 @@ def main() -> int:
     if not 1 <= args.limit <= 4:
         parser.error("--limit must be between 1 and 4")
     if args.offset < 0 or args.repeats < 1:
-        parser.error("--offset must be non-negative and --repeats must be positive")
+        parser.error(
+            "--offset must be non-negative and --repeats must be positive"
+        )
 
     if not args.live:
         rendered = json.dumps(
-            {"mode": "dry_run", "cases": planned_cases(args.matrix, offset=args.offset, limit=args.limit)},
+            {
+                "mode": "dry_run",
+                "cases": planned_cases(
+                    args.matrix, offset=args.offset, limit=args.limit
+                ),
+            },
             ensure_ascii=False,
             indent=2,
         )

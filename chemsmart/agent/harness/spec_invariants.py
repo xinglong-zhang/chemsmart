@@ -80,7 +80,11 @@ _COORD_SPEC = re.compile(r"\b[BAD]\s+\d+(?:\s+\d+)+\b")
 
 def query_specifies_atoms(query: str) -> bool:
     text = (query or "").replace("_", " ")
-    return bool(_CUE.search(text) or _ATOM_PAIR.search(text) or _COORD_SPEC.search(text))
+    return bool(
+        _CUE.search(text)
+        or _ATOM_PAIR.search(text)
+        or _COORD_SPEC.search(text)
+    )
 
 
 def check_spec(spec: dict[str, Any], query: str) -> list[InvariantIssue]:
@@ -88,8 +92,16 @@ def check_spec(spec: dict[str, Any], query: str) -> list[InvariantIssue]:
         return [_issue("spec.parse", "spec is not an object", {})]
     intent = spec.get("intent")
     if intent != "workflow":
-        if intent in {"advisory", "decline", "chitchat"} and not spec.get("message"):
-            return [_issue("spec.message.missing", f"intent={intent} requires a message", {})]
+        if intent in {"advisory", "decline", "chitchat"} and not spec.get(
+            "message"
+        ):
+            return [
+                _issue(
+                    "spec.message.missing",
+                    f"intent={intent} requires a message",
+                    {},
+                )
+            ]
         return []
 
     jobs = spec.get("jobs") or []
@@ -112,24 +124,43 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
         issues.append(
             _issue(
                 "spec.kind.canonical",
-                f"non-canonical kind {kind!r}" + (f" -> use {canon!r}" if canon else ""),
+                f"non-canonical kind {kind!r}"
+                + (f" -> use {canon!r}" if canon else ""),
                 {**evidence, "suggested": canon},
             )
         )
         return issues
 
-    if job.get("project") not in (None, ""):
-        issues.append(
-            _issue(
-                "spec.project.runtime_owned",
-                "project selection is runtime-owned and must not be model-emitted",
-                {**evidence, "project": job.get("project")},
-            )
-        )
-
+    issues.extend(_project_issues(job, evidence))
     issues.extend(_db_selector_issues(job, str(kind), evidence))
-
     settings = job.get("settings") or {}
+    issues.extend(_settings_issues(settings, str(kind), evidence))
+    issues.extend(_ts_issues(settings, str(kind), evidence))
+    issues.extend(_scan_route_issues(settings, str(kind), evidence))
+    issues.extend(_required_slot_issues(settings, str(kind), query, evidence))
+    issues.extend(_label_issues(job, query, evidence))
+    return issues
+
+
+def _project_issues(
+    job: dict[str, Any], evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    project = job.get("project")
+    if project in (None, ""):
+        return []
+    return [
+        _issue(
+            "spec.project.runtime_owned",
+            "project selection is runtime-owned and must not be model-emitted",
+            {**evidence, "project": project},
+        )
+    ]
+
+
+def _settings_issues(
+    settings: dict[str, Any], kind: str, evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    issues: list[InvariantIssue] = []
     leaked = sorted(key for key in settings if _is_runtime_owned(key))
     if leaked:
         issues.append(
@@ -140,104 +171,137 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
             )
         )
 
-    bad = sorted(
+    disallowed = sorted(
         key
         for key in settings
-        if key not in KI.KIND_SETTINGS.get(kind, {}) and not _is_runtime_owned(key)
+        if key not in KI.KIND_SETTINGS.get(kind, {})
+        and not _is_runtime_owned(key)
     )
-    if bad:
+    if disallowed:
         issues.append(
             _issue(
                 "spec.settings.allowed",
-                f"settings not allowed for {kind}: {bad}",
-                {**evidence, "disallowed": bad},
-            )
-        )
-
-    if isinstance(kind, str) and kind.endswith(".ts"):
-        if settings.get("freq") is not None:
-            issues.append(
-                _issue(
-                    "spec.ts.runtime_freq",
-                    "freq is runtime-owned for *.ts; do not emit it",
-                    evidence,
-                )
-            )
-        extras = settings.get("additional_opt_options_in_route") or []
-        if isinstance(extras, str):
-            extras = re.split(r"[,\s]+", extras)
-        tokens = [str(token).strip().lower() for token in extras if str(token).strip()]
-        canon_in_extras = sorted(set(tokens) & TS_RUNTIME_ROUTE)
-        if canon_in_extras:
-            issues.append(
-                _issue(
-                    "spec.ts.runtime_route",
-                    f"runtime-owned TS route token(s) emitted as extras: {canon_in_extras}",
-                    {**evidence, "tokens": canon_in_extras},
-                )
-            )
-        junk = sorted(
-            token
-            for token in tokens
-            if token not in TS_RUNTIME_ROUTE and not _ALLOWED_EXTRA.match(token)
-        )
-        if junk:
-            issues.append(
-                _issue(
-                    "spec.ts.bad_extra",
-                    f"non-allowlisted TS opt extra(s): {junk}",
-                    {**evidence, "tokens": junk},
-                )
-            )
-
-    if kind == "gaussian.scan":
-        route_value = settings.get("additional_opt_options_in_route")
-        route_directives, _ = _partition_coordinate_route_values(route_value)
-        if route_directives:
-            issues.append(
-                _issue(
-                    "spec.scan.coordinate_in_route",
-                    (
-                        "Gaussian scan constraints belong in scan_definition "
-                        "as F rows, not additional_opt_options_in_route"
-                    ),
-                    {**evidence, "directives": route_directives},
-                )
-            )
-    slot = REQUIRED_SLOT.get(kind)
-    if slot:
-        present = slot in settings and settings.get(slot) not in (None, [], "")
-        if not query_specifies_atoms(query):
-            issues.append(
-                _issue(
-                    "spec.decline_contract",
-                    f"{kind} needs {slot} but the query specifies no atoms/fragments",
-                    {**evidence, "slot": slot},
-                )
-            )
-        elif not present:
-            issues.append(
-                _issue(
-                    "spec.required_present",
-                    f"{kind} query specifies atoms but {slot} is missing",
-                    {**evidence, "slot": slot},
-                )
-            )
-
-    label = job.get("label")
-    if label and "label" not in (query or "").lower():
-        issues.append(
-            _issue(
-                "spec.label.runtime_owned",
-                "label is runtime-owned; omit unless the query asks for one",
-                {**evidence, "label": label},
-                severity="warn",
+                f"settings not allowed for {kind}: {disallowed}",
+                {**evidence, "disallowed": disallowed},
             )
         )
     return issues
 
 
-def _partition_coordinate_route_values(value: Any) -> tuple[list[str], list[str]]:
+def _ts_issues(
+    settings: dict[str, Any], kind: str, evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    if not kind.endswith(".ts"):
+        return []
+    issues: list[InvariantIssue] = []
+    if settings.get("freq") is not None:
+        issues.append(
+            _issue(
+                "spec.ts.runtime_freq",
+                "freq is runtime-owned for *.ts; do not emit it",
+                evidence,
+            )
+        )
+    extras = settings.get("additional_opt_options_in_route") or []
+    if isinstance(extras, str):
+        extras = re.split(r"[,\s]+", extras)
+    tokens = [
+        str(token).strip().lower() for token in extras if str(token).strip()
+    ]
+    canon_in_extras = sorted(set(tokens) & TS_RUNTIME_ROUTE)
+    if canon_in_extras:
+        issues.append(
+            _issue(
+                "spec.ts.runtime_route",
+                f"runtime-owned TS route token(s) emitted as extras: {canon_in_extras}",
+                {**evidence, "tokens": canon_in_extras},
+            )
+        )
+    junk = sorted(
+        token
+        for token in tokens
+        if token not in TS_RUNTIME_ROUTE and not _ALLOWED_EXTRA.match(token)
+    )
+    if junk:
+        issues.append(
+            _issue(
+                "spec.ts.bad_extra",
+                f"non-allowlisted TS opt extra(s): {junk}",
+                {**evidence, "tokens": junk},
+            )
+        )
+    return issues
+
+
+def _scan_route_issues(
+    settings: dict[str, Any], kind: str, evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    if kind != "gaussian.scan":
+        return []
+    route_value = settings.get("additional_opt_options_in_route")
+    route_directives, _ = _partition_coordinate_route_values(route_value)
+    if not route_directives:
+        return []
+    return [
+        _issue(
+            "spec.scan.coordinate_in_route",
+            (
+                "Gaussian scan constraints belong in scan_definition "
+                "as F rows, not additional_opt_options_in_route"
+            ),
+            {**evidence, "directives": route_directives},
+        )
+    ]
+
+
+def _required_slot_issues(
+    settings: dict[str, Any],
+    kind: str,
+    query: str,
+    evidence: dict[str, Any],
+) -> list[InvariantIssue]:
+    slot = REQUIRED_SLOT.get(kind)
+    if not slot:
+        return []
+    present = slot in settings and settings.get(slot) not in (None, [], "")
+    if not query_specifies_atoms(query):
+        return [
+            _issue(
+                "spec.decline_contract",
+                f"{kind} needs {slot} but the query specifies no atoms/fragments",
+                {**evidence, "slot": slot},
+            )
+        ]
+    if not present:
+        return [
+            _issue(
+                "spec.required_present",
+                f"{kind} query specifies atoms but {slot} is missing",
+                {**evidence, "slot": slot},
+            )
+        ]
+    return []
+
+
+def _label_issues(
+    job: dict[str, Any], query: str, evidence: dict[str, Any]
+) -> list[InvariantIssue]:
+    label = job.get("label")
+    if not label or "label" in (query or "").lower():
+        return []
+    return [
+        _issue(
+            "spec.label.runtime_owned",
+            "label is runtime-owned; omit unless the query asks for one",
+            {**evidence, "label": label},
+            severity="warn",
+        )
+    ]
+
+
+def _partition_coordinate_route_values(
+    value: Any,
+) -> tuple[list[str], list[str]]:
     values = value if isinstance(value, (list, tuple)) else [value]
     directives: list[str] = []
     remaining: list[str] = []

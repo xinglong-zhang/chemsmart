@@ -40,7 +40,9 @@ def _atoms_from_freeze(value: Any) -> list[int]:
     return []
 
 
-def disambiguate(query: str, spec: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+def disambiguate(
+    query: str, spec: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
     """Mutate and return ``spec`` when a high-confidence rule fires."""
     if not isinstance(spec, dict) or spec.get("intent") != "workflow":
         return spec, False
@@ -62,15 +64,15 @@ def disambiguate(query: str, spec: dict[str, Any]) -> tuple[dict[str, Any], bool
         if kind.endswith(".wbi") and _WIBERG.search(query or ""):
             job.pop("settings", None)
 
-        if program == "orca" and not kind.endswith(".ts") and _ORCA_TS.search(
-            query or ""
+        if (
+            program == "orca"
+            and not kind.endswith(".ts")
+            and _ORCA_TS.search(query or "")
         ):
             job["kind"] = "orca.ts"
             allowed = {"recalc_hess", "trust_radius", "tssearch_type"}
             job["settings"] = {
-                key: value
-                for key, value in settings.items()
-                if key in allowed
+                key: value for key, value in settings.items() if key in allowed
             }
             if not job["settings"]:
                 job.pop("settings", None)

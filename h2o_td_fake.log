@@ -1,0 +1,52 @@
+ Entering Gaussian System, FakeGaussianRunner
+ Input=/Users/hongjiseung/developer/chemsmart/h2o_td_fake.com
+ Output=/Users/hongjiseung/developer/chemsmart/h2o_td_fake.log
+ ******************************************
+ Fake Gaussian Executable
+ ******************************************
+ %chk=h2o_td_fake.chk
+ %nprocshared=1
+ %mem=40GB
+ -----------------------------------------------------------
+ # cam-b3lyp def2svp TD(singlets,nstates=3,root=1,noneqsolv)
+ -----------------------------------------------------------
+ -----------------------------------------------------------
+ Gaussian job with default settings
+ -----------------------------------------------------------
+ Symbolic Z-matrix:
+ Charge =  0 Multiplicity = 1
+ O        0.0000000000    0.0000000000    0.0000000000
+ H        0.7586020000    0.0000000000    0.5042840000
+ H       -0.7586020000    0.0000000000    0.5042840000
+
+                          Input orientation:                             
+ ------------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)       
+ Number     Number       Type             X           Y           Z      
+ ------------------------------------------------------------------------
+   1          8          0                  0.0           0.0           0.0
+   2          1          0             0.758602           0.0      0.504284
+   3          1          0            -0.758602           0.0      0.504284
+ ------------------------------------------------------------------------
+ Stoichiometry    H2O                       Standard orientation:                             
+ ------------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)       
+ Number     Number       Type             X           Y           Z      
+ ------------------------------------------------------------------------
+   1          8          0                  0.0           0.0           0.0
+   2          1          0             0.758602           0.0      0.504284
+   3          1          0            -0.758602           0.0      0.504284
+ ------------------------------------------------------------------------
+ ! Dummy Rotational constant values and dummy SCF energy value...
+ Rotational constants (GHZ):          11.4493930           9.4805599           5.3596246
+ Standard basis: def2svp (5D, 7F)
+ NAtoms=    3
+ SCF Done:  E(RCAM-B3LYP) =  -287.6505961772272  A.U. after   14 cycles
+ Mulliken charges:
+               1
+      1   O     0.022388
+      2   H     0.053344
+      3   H    -0.075732
+ Sum of Mulliken charges =  0.00000
+ Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.
+ Normal termination of Gaussian 16 (fake executable) at Tue Jul 14 09:27:14 2026.

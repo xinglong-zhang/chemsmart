@@ -6,7 +6,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
@@ -15,7 +14,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: mlx

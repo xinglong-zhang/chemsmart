@@ -27,7 +27,7 @@ import tempfile
 from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Iterable
 
 from chemsmart.agent.harness.terminal_state import (
@@ -464,9 +464,7 @@ def _legacy_counts(manifest: JsonDict) -> JsonDict:
         "compact_spec_written": written.get("compact_spec", 0),
         "compact_spec_skipped": compact_skipped,
         "reasoning_synthesis_written": written.get("reasoning_synthesis", 0),
-        "wrong_route_contrast_written": written.get(
-            "wrong_route_contrast", 0
-        ),
+        "wrong_route_contrast_written": written.get("wrong_route_contrast", 0),
         "command_answer_written": written.get("command_answer", 0),
         "project_yaml_written": written.get("project_yaml", 0),
         "repair_pairs_written": written.get("repair_pairs", 0),
@@ -609,7 +607,10 @@ def _merge_chain_messages(chain: list[JsonDict]) -> list[JsonDict]:
         merged.extend(messages[overlap:])
 
     final_answer = str(chain[-1].get("final_answer") or "").strip()
-    if final_answer and _last_assistant_content(merged).strip() != final_answer:
+    if (
+        final_answer
+        and _last_assistant_content(merged).strip() != final_answer
+    ):
         merged.append({"role": "assistant", "content": final_answer})
     return ([system_message] if system_message is not None else []) + merged
 
@@ -689,9 +690,7 @@ def _public_message(message: JsonDict) -> JsonDict:
     """Strip provider transport and hidden-reasoning fields before export."""
 
     return {
-        key: message[key]
-        for key in _PUBLIC_MESSAGE_KEYS
-        if key in message
+        key: message[key] for key in _PUBLIC_MESSAGE_KEYS if key in message
     }
 
 
@@ -787,11 +786,7 @@ def _tool_loop_review_record(
 def _chain_meta(chain: list[JsonDict], *, family: str) -> JsonDict:
     terminal = chain[-1]
     merged_messages = _merge_chain_messages(chain)
-    tools = [
-        tool
-        for episode in chain
-        for tool in _invoked_tools(episode)
-    ]
+    tools = [tool for episode in chain for tool in _invoked_tools(episode)]
     return {
         **_meta(terminal, family=family),
         "source_episode_count": len(chain),
@@ -1014,7 +1009,9 @@ def _has_generated_input_evidence(synthesis: JsonDict) -> bool:
 
 def _episode_has_generated_input_evidence(episode: JsonDict) -> bool:
     synthesis = episode.get("synthesis")
-    if isinstance(synthesis, dict) and _has_generated_input_evidence(synthesis):
+    if isinstance(synthesis, dict) and _has_generated_input_evidence(
+        synthesis
+    ):
         return True
     for event in _tool_events(episode):
         evidence = event.get("generated_input_evidence")
@@ -1619,9 +1616,11 @@ def _wrong_route_contrast_record(
             "route": "project_yaml",
             "tools": wrong_tools,
             "reason": "job command request was routed to project-YAML authoring",
-            "synthesis_status": (wrong.get("synthesis") or {}).get("status")
-            if isinstance(wrong.get("synthesis"), dict)
-            else None,
+            "synthesis_status": (
+                (wrong.get("synthesis") or {}).get("status")
+                if isinstance(wrong.get("synthesis"), dict)
+                else None
+            ),
         },
         "chosen": {
             "route": "synthesize_command",
@@ -1764,10 +1763,19 @@ def _load_prompt(training_dir: Path, digest: str) -> str:
 
 
 def _portable_path(path: Path, base: Path) -> str:
+    """Return ``path`` relative to ``base`` with POSIX separators.
+
+    The value lands in an export manifest that is compared and shared
+    across machines, so it must not carry the exporting host's separator:
+    the same export produced ``../out`` on Linux and ``..\\out`` on
+    Windows, which made manifests differ for no real reason.
+    """
+
     try:
-        return os.path.relpath(path.resolve(), base.resolve())
+        relative = os.path.relpath(path.resolve(), base.resolve())
     except OSError:
         return str(path)
+    return PurePath(relative).as_posix()
 
 
 def _load_json_object(value: Any) -> JsonDict | None:

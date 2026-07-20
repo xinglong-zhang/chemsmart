@@ -6,10 +6,10 @@ the local model with ``type: openai`` + a custom ``base_url`` in
 
 Usage (Colab):
 
-    from chemsmart.agent.local.loader import load_lora_model
+    from chemsmart.agent.local.loader import load_transformers_model
     from chemsmart.agent.local.server import build_app
     import uvicorn
-    bundle = load_lora_model()
+    bundle = load_transformers_model()
     app = build_app(bundle)
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -94,7 +94,7 @@ def build_app(bundle: Any) -> Any:
 
 
 def _extract_user_query(
-    messages: list[dict[str, Any]]
+    messages: list[dict[str, Any]],
 ) -> tuple[str, list[dict[str, str]]]:
     """Return the last user message and the prior non-system turns as history.
 

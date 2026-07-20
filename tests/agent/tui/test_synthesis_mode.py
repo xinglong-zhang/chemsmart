@@ -8,10 +8,12 @@ from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.events import ToolUseEvent
 from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
+    AgentMessageCell,
     CommandInterpretationCell,
     ErrorCell,
     FinalAnswerCell,
     SynthesisTraceCell,
+    ToolChainToggleCell,
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
@@ -126,9 +128,7 @@ class _InformationalSynthesisSession:
 
     def __init__(self) -> None:
         self._last_semantic_result = None
-        self._last_raw_response = (
-            '{"action":"explain_command","decision_summary":"explain previous"}'
-        )
+        self._last_raw_response = '{"action":"explain_command","decision_summary":"explain previous"}'
 
     def prepare_command(self, request: str) -> dict:
         self.requests.append(request)
@@ -240,14 +240,16 @@ def test_slash_palette_lists_and_filters_commands(tmp_path: Path):
     asyncio.run(scenario())
 
 
-def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
+def test_local_provider_can_use_tui_synthesis_mode(
+    monkeypatch, tmp_path: Path
+):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _FakeSynthesisSession,
     )
     _FakeSynthesisSession.requests = []
@@ -262,7 +264,9 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
             )
 
             composer = app.query_one(Composer)
-            composer.load_text("single-point on examples/h2o.xyz with Gaussian")
+            composer.load_text(
+                "single-point on examples/h2o.xyz with Gaussian"
+            )
             await pilot.press("enter")
             for _ in range(30):
                 await pilot.pause(0.1)
@@ -272,11 +276,15 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
             assert _FakeSynthesisSession.requests == [
                 "single-point on examples/h2o.xyz with Gaussian"
             ]
-            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
             assert [type(cell) for cell in cells] == [
                 UserMessageCell,
                 SynthesisTraceCell,
                 CommandInterpretationCell,
+                AgentMessageCell,
+                ToolChainToggleCell,
                 FinalAnswerCell,
             ]
             trace = cells[1]
@@ -289,14 +297,28 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
                 interpretation.border_title
                 == "Deterministic Harness: CLI Command Synthesis ▾"
             )
-            assert "deterministic command parser:" in interpretation.source_text
+            assert (
+                "deterministic command parser:" in interpretation.source_text
+            )
             assert "- program: `gaussian`" in interpretation.source_text
-            assert "- job: `sp` (single-point energy)" in interpretation.source_text
-            assert "- `-p` meaning: program-level -p/--project" in interpretation.source_text
-            assert interpretation.source_text.splitlines()[-1].startswith("Summary:")
-            final = cells[3]
+            assert (
+                "- job: `sp` (single-point energy)"
+                in interpretation.source_text
+            )
+            assert (
+                "- `-p` meaning: program-level -p/--project"
+                in interpretation.source_text
+            )
+            assert interpretation.source_text.splitlines()[-1].startswith(
+                "Summary:"
+            )
+            assert not cells[1].display
+            assert not cells[2].display
+            assert not cells[3].display
+            final = cells[5]
             assert final.border_title == "Final Command"
             assert "chemsmart run gaussian" in final.source_text
+            assert "confidence:" not in final.source_text
 
     asyncio.run(scenario())
 
@@ -306,11 +328,11 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
 ):
     monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _openai_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.AgentSession",
+        "chemsmart.agent.tui.mixins.session_workers.AgentSession",
         _FakeUnifiedAgentSession,
     )
     _FakeUnifiedAgentSession.requests = []
@@ -326,7 +348,9 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
             assert "project test" in footer_text
 
             composer = app.query_one(Composer)
-            composer.load_text("single-point on examples/h2o.xyz with Gaussian")
+            composer.load_text(
+                "single-point on examples/h2o.xyz with Gaussian"
+            )
             await pilot.press("enter")
             for _ in range(30):
                 await pilot.pause(0.1)
@@ -337,7 +361,9 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
                 "single-point on examples/h2o.xyz with Gaussian"
             ]
             assert _FakeUnifiedAgentSession.prompts == ["unified_agent.md"]
-            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
             assert [type(cell) for cell in cells] == [UserMessageCell]
 
     asyncio.run(scenario())
@@ -348,7 +374,7 @@ def test_command_tool_result_renders_synthesis_trace(
 ):
     monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _openai_config(),
     )
 
@@ -380,14 +406,18 @@ def test_command_tool_result_renders_synthesis_trace(
                             "action": "synthesize_command",
                             "confidence": "high",
                             "decision_summary": "The user requested a job.",
-                            "evidence": ["The request asks for command setup."],
+                            "evidence": [
+                                "The request asks for command setup."
+                            ],
                         },
                     },
                 )
             )
             await pilot.pause()
 
-            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
             assert any(
                 cell.__class__.__name__ == "ToolCallCell" for cell in cells
             )
@@ -411,7 +441,9 @@ def test_command_tool_result_renders_synthesis_trace(
             trace_cell = rendered[0]
             assert trace_cell.border_title == "Agent Trace"
             assert "lane: api synthesis" in trace_cell.source_text
-            assert "The request asks for command setup." in trace_cell.source_text
+            assert (
+                "The request asks for command setup." in trace_cell.source_text
+            )
             final = rendered[2]
             assert final.border_title == "Final Command"
             assert "chemsmart run gaussian" in final.source_text
@@ -424,11 +456,11 @@ def test_semantic_reject_is_rendered_for_infeasible_synthesis(
 ):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _RejectingSynthesisSession,
     )
     _RejectingSynthesisSession.requests = []
@@ -445,17 +477,26 @@ def test_semantic_reject_is_rendered_for_infeasible_synthesis(
                 if app.query_one(FooterWidget).phase == Phase.FINISHED:
                     break
 
-            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
             synthesis = next(
                 cell
                 for cell in cells
                 if isinstance(cell, FinalAnswerCell)
                 and cell.border_title == "Final Status"
             )
-            assert "Synthesized command failed validation" in synthesis.source_text
-            trace = next(cell for cell in cells if isinstance(cell, SynthesisTraceCell))
+            assert (
+                "Synthesized command failed validation"
+                in synthesis.source_text
+            )
+            trace = next(
+                cell for cell in cells if isinstance(cell, SynthesisTraceCell)
+            )
             assert "semantic gate: reject" in trace.source_text
-            assert "cmd.semantic.generated_input_missing" in synthesis.source_text
+            assert (
+                "cmd.semantic.generated_input_missing" in synthesis.source_text
+            )
 
     asyncio.run(scenario())
 
@@ -465,11 +506,11 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
 ):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _BrokenMLXSynthesisSession,
     )
 
@@ -477,18 +518,19 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.chat_screen._handle_slash_command("/mode ask")
-            await pilot.pause()
-
             composer = app.query_one(Composer)
-            composer.load_text("single-point on examples/h2o.xyz with Gaussian")
+            composer.load_text(
+                "single-point on examples/h2o.xyz with Gaussian"
+            )
             await pilot.press("enter")
             for _ in range(30):
                 await pilot.pause(0.1)
                 if app.query_one(FooterWidget).phase == Phase.FINISHED:
                     break
 
-            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
             assert not any(isinstance(cell, ErrorCell) for cell in cells)
             synthesis = next(
                 cell
@@ -502,10 +544,10 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
     asyncio.run(scenario())
 
 
-def test_mode_alias_does_not_change_local_provider_role(monkeypatch, tmp_path: Path):
+def test_removed_mode_command_is_rejected(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        "chemsmart.agent.tui.chat_helpers.load_active_provider_config",
         lambda: _local_config(),
     )
 
@@ -518,8 +560,14 @@ def test_mode_alias_does_not_change_local_provider_role(monkeypatch, tmp_path: P
                 app.query_one(FooterWidget).renderable
             )
 
-            app.chat_screen._handle_slash_command("/mode run")
+            app.chat_screen._handle_slash_command("/mode")
             await pilot.pause()
+            cells = list(
+                app.query_one(Transcript).query_one("#cells").children
+            )
+            error = next(cell for cell in cells if isinstance(cell, ErrorCell))
+            assert error.error_title == "Unknown command"
+            assert error.message == "/mode"
             assert app.chat_screen._interaction_mode == "synthesis"
             assert "synthesis:local" in str(
                 app.query_one(FooterWidget).renderable

@@ -42,7 +42,13 @@ _FAMILY_TERMS = {
     },
 }
 _QUALITY_TERMS = {
-    "double_zeta": {"double zeta", "double-zeta", "dz", "svp", "valence double"},
+    "double_zeta": {
+        "double zeta",
+        "double-zeta",
+        "dz",
+        "svp",
+        "valence double",
+    },
     "triple_zeta": {
         "triple zeta",
         "triple-zeta",
@@ -317,7 +323,9 @@ def _display_name_in_text(display_name: str, text: str) -> bool:
     )
 
 
-def _near_matches(normalized: str, catalog: dict[str, Any], limit: int = 6) -> tuple[str, ...]:
+def _near_matches(
+    normalized: str, catalog: dict[str, Any], limit: int = 6
+) -> tuple[str, ...]:
     if not normalized:
         return ()
     aliases = catalog.get("aliases", {})
@@ -329,7 +337,9 @@ def _near_matches(normalized: str, catalog: dict[str, Any], limit: int = 6) -> t
     return tuple(name for _, name in sorted(scored)[:limit])
 
 
-def _family_candidates(text: str, catalog: dict[str, Any], limit: int = 8) -> list[str]:
+def _family_candidates(
+    text: str, catalog: dict[str, Any], limit: int = 8
+) -> list[str]:
     lowered = (text or "").lower()
     family = None
     if "karlsruhe" in lowered or "def2" in lowered or "ahlrichs" in lowered:
@@ -402,30 +412,11 @@ def _score_entry(
 ) -> tuple[int, list[str]]:
     display = entry.get("display_name", "")
     normalized_display = normalize_basis_name(display)
-    score = 0
-    reasons: list[str] = []
+    score, reasons = _name_match_score(normalized_query, normalized_display)
 
-    if normalized_query:
-        if normalized_query == normalized_display:
-            score += 200
-            reasons.append("exact_name")
-        elif normalized_query in normalized_display:
-            score += 90
-            reasons.append("name_contains_query")
-        elif normalized_display in normalized_query:
-            score += 80
-            reasons.append("query_contains_name")
-        if "631" in normalized_query and normalized_display.startswith("631g"):
-            score += 70
-            reasons.append("pople_shorthand:6-31")
-        if normalized_query.startswith("631") and normalized_display == "631g*":
-            score += 80
-            reasons.append("spoken_name:six_thirty_one_star")
-        if "def2tzvp" in normalized_query and "def2tzvp" in normalized_display:
-            score += 90
-            reasons.append("base_basis:def2-tzvp")
-
-    query_tokens = set(_TOKEN_SPLIT_RE.split(_expand_common_spoken_forms(normalized_query)))
+    query_tokens = set(
+        _TOKEN_SPLIT_RE.split(_expand_common_spoken_forms(normalized_query))
+    )
     display_tokens = set(_TOKEN_SPLIT_RE.split(normalized_display))
     overlap = {token for token in query_tokens & display_tokens if token}
     if overlap:
@@ -461,25 +452,65 @@ def _score_entry(
     return score, reasons
 
 
+def _name_match_score(
+    normalized_query: str,
+    normalized_display: str,
+) -> tuple[int, list[str]]:
+    score = 0
+    reasons: list[str] = []
+    if not normalized_query:
+        return score, reasons
+    if normalized_query == normalized_display:
+        score += 200
+        reasons.append("exact_name")
+    elif normalized_query in normalized_display:
+        score += 90
+        reasons.append("name_contains_query")
+    elif normalized_display in normalized_query:
+        score += 80
+        reasons.append("query_contains_name")
+    if "631" in normalized_query and normalized_display.startswith("631g"):
+        score += 70
+        reasons.append("pople_shorthand:6-31")
+    if normalized_query.startswith("631") and normalized_display == "631g*":
+        score += 80
+        reasons.append("spoken_name:six_thirty_one_star")
+    if "def2tzvp" in normalized_query and "def2tzvp" in normalized_display:
+        score += 90
+        reasons.append("base_basis:def2-tzvp")
+    return score, reasons
+
+
 def _quality_score(
     normalized_display: str,
     quality: set[str],
 ) -> tuple[int, list[str]]:
     score = 0
     reasons: list[str] = []
-    if "double_zeta" in quality and any(tag in normalized_display for tag in ("svp", "dz")):
+    if "double_zeta" in quality and any(
+        tag in normalized_display for tag in ("svp", "dz")
+    ):
         score += 26
         reasons.append("quality:double_zeta")
-    if "triple_zeta" in quality and any(tag in normalized_display for tag in ("tzvp", "tzv", "tz")):
+    if "triple_zeta" in quality and any(
+        tag in normalized_display for tag in ("tzvp", "tzv", "tz")
+    ):
         score += 30
         reasons.append("quality:triple_zeta")
-    if "quadruple_zeta" in quality and any(tag in normalized_display for tag in ("qzvp", "qzv", "qz")):
+    if "quadruple_zeta" in quality and any(
+        tag in normalized_display for tag in ("qzvp", "qzv", "qz")
+    ):
         score += 30
         reasons.append("quality:quadruple_zeta")
-    if "diffuse" in quality and any(tag in normalized_display for tag in ("aug", "+", "svpd", "tzvpd", "qzvpd")):
+    if "diffuse" in quality and any(
+        tag in normalized_display
+        for tag in ("aug", "+", "svpd", "tzvpd", "qzvpd")
+    ):
         score += 26
         reasons.append("quality:diffuse")
-    if "polarized" in quality and any(tag in normalized_display for tag in ("*", "p", "d")):
+    if "polarized" in quality and any(
+        tag in normalized_display for tag in ("*", "p", "d")
+    ):
         score += 18
         reasons.append("quality:polarized")
     return score, reasons

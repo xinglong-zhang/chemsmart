@@ -16,16 +16,15 @@ providers:
         model: claude-sonnet-4-6
         base_url: ""
         extra_headers: {}
-    # Local LoRA-fine-tuned chemsmart synthesizer. Two deployment shapes:
-    #   - In-process (type: local) — loads Qwen2.5-7B + LoRA on this machine.
-    #     Requires CUDA for full speed; falls back to MPS/CPU for testing.
+    # Local merged chemsmart synthesizer. Two deployment shapes:
+    #   - In-process (type: local) — loads a merged model on this machine.
+    #     CUDA is fastest; MPS/CPU remain supported for local testing.
     #   - HTTP (type: openai with custom base_url) — point at a FastAPI shim
     #     running on Colab/another box; see chemsmart/agent/local/README.md.
-    local_chemsmart_v4:
+    local_chemsmart_v13_1:
         type: local
-        model: chemsmart-qwen2.5-7b-lora
-        base_model_id: Qwen/Qwen2.5-7B-Instruct
-        adapter_repo_id: Smilesjs/chemsmart-qwen2.5-7b-lora
+        model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
+        base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
         # hf_token / hf_token_env are only consulted when the model is NOT
         # already in ~/.cache/huggingface/hub/. Leave blank once the cache is
         # populated.

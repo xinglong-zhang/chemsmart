@@ -113,8 +113,6 @@ def _compact_type(value: Any) -> Any:
     if isinstance(choices, list) and choices:
         return {"type": kind, "choices": choices}
     bounds = {
-        key: value[key]
-        for key in ("min", "max")
-        if value.get(key) is not None
+        key: value[key] for key in ("min", "max") if value.get(key) is not None
     }
     return {"type": kind, **bounds} if bounds else kind

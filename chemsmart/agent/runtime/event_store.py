@@ -2,14 +2,37 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 from pathlib import Path
 from threading import RLock
-from typing import Any, Iterable
+from typing import IO, Any, Iterable
 
 from chemsmart.agent.runtime.events import EventKind, RuntimeEvent
+
+if os.name == "nt":  # Windows has no fcntl; use byte-range locks instead.
+    import msvcrt
+
+    def _lock_exclusive(handle: IO[str]) -> None:
+        position = handle.tell()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        handle.seek(position)
+
+    def _unlock(handle: IO[str]) -> None:
+        position = handle.tell()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        handle.seek(position)
+
+else:
+    import fcntl
+
+    def _lock_exclusive(handle: IO[str]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+    def _unlock(handle: IO[str]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 class EventStoreCorruptionError(RuntimeError):
@@ -32,7 +55,7 @@ class RuntimeEventStore:
         idempotency_key: str = "",
     ) -> RuntimeEvent:
         with self._lock, self.path.open("a+", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            _lock_exclusive(handle)
             try:
                 handle.seek(0)
                 events = self._parse_lines(handle)
@@ -56,7 +79,7 @@ class RuntimeEventStore:
                 os.fsync(handle.fileno())
                 return event
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _unlock(handle)
 
     def load(self) -> list[RuntimeEvent]:
         if not self.path.exists():

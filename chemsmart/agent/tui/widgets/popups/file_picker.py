@@ -67,7 +67,7 @@ class FilePickerOverlay(ModalScreen[str | None]):
     def _candidate_items(self) -> list[ListItem]:
         if self._candidates:
             return [
-                ListItem(Static(str(path.relative_to(self.cwd))))
+                ListItem(Static(path.relative_to(self.cwd).as_posix()))
                 for path in self._candidates[:20]
             ]
         message = (
@@ -118,7 +118,10 @@ class FilePickerOverlay(ModalScreen[str | None]):
         list_view = self.query_one("#file-picker-list", ListView)
         index = list_view.index or 0
         index = max(0, min(index, len(self._candidates) - 1))
-        self.dismiss(str(self._candidates[index].relative_to(self.cwd)))
+        # The chosen path is inserted into a chemsmart command line, which
+        # is parsed and gated as POSIX-style text; a Windows separator
+        # ('inputs\\h2o.xyz') would reach the CLI as an escape sequence.
+        self.dismiss(self._candidates[index].relative_to(self.cwd).as_posix())
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         event.stop()

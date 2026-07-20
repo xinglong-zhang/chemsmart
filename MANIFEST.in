@@ -2,5 +2,5 @@ include LICENSE
 include LICENSE.LESSER
 include README.md
 include CHANGELOG.md
-recursive-include chemsmart/data *
-recursive-include chemsmart/settings *
+recursive-include chemsmart/settings/templates *.yaml *.template
+recursive-include chemsmart/agent/harness/basis_sets *.json

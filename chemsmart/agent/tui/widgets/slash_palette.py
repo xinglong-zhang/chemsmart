@@ -52,21 +52,30 @@ class SlashCommandPalette(OptionList):
         matches: list[tuple[str, str]] | list[SlashPaletteItem],
     ) -> None:
         items = [
-            item
-            if isinstance(item, SlashPaletteItem)
-            else SlashPaletteItem(item[0], item[1])
+            (
+                item
+                if isinstance(item, SlashPaletteItem)
+                else SlashPaletteItem(item[0], item[1])
+            )
             for item in matches
         ]
         self.items = items
         self.matches = [(item.command, item.description) for item in items]
         self.clear_options()
         if not items:
-            self.add_option(Option(Text("No slash commands match.", style="dim"), disabled=True))
+            self.add_option(
+                Option(
+                    Text("No slash commands match.", style="dim"),
+                    disabled=True,
+                )
+            )
         else:
             self.add_options([self._option(item) for item in items])
             self.highlighted = self._first_enabled_index()
         title = "/" if not query else f"/{query}"
-        self.border_title = f"Commands: {title} · ↑↓ select · Tab complete · Enter run"
+        self.border_title = (
+            f"Commands: {title} · ↑↓ select · Tab complete · Enter run"
+        )
         self.remove_class("hidden")
 
     def _option(self, item: SlashPaletteItem) -> Option:
@@ -78,7 +87,9 @@ class SlashCommandPalette(OptionList):
         if item.shortcut:
             prompt.append(f"  [{item.shortcut}]", style="accent")
         if item.unavailable_reason:
-            prompt.append(f"  unavailable: {item.unavailable_reason}", style="warning")
+            prompt.append(
+                f"  unavailable: {item.unavailable_reason}", style="warning"
+            )
         return Option(prompt, id=item.command, disabled=not item.enabled)
 
     def _first_enabled_index(self) -> int | None:

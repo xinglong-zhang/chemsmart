@@ -7,8 +7,9 @@ import sys
 from types import SimpleNamespace
 from typing import Any
 
-from chemsmart.agent.local import generator, postprocessor
+from chemsmart.agent.local import generator
 from chemsmart.agent.local import postprocess as exported_postprocess
+from chemsmart.agent.local import postprocessor
 
 
 def test_generator_uses_local_postprocessor() -> None:
@@ -38,7 +39,9 @@ def test_generate_plan_calls_two_argument_local_postprocessor(
             return [1, 2, 3]
 
     class _Tokenizer:
-        def apply_chat_template(self, *_args: object, **_kwargs: object) -> str:
+        def apply_chat_template(
+            self, *_args: object, **_kwargs: object
+        ) -> str:
             return "prompt"
 
         def __call__(self, *_args: object, **_kwargs: object) -> _Inputs:
@@ -81,7 +84,9 @@ def test_generate_plan_calls_two_argument_local_postprocessor(
 
 def test_generate_plan_supports_mlx_backend(monkeypatch) -> None:
     class _Tokenizer:
-        def apply_chat_template(self, *_args: object, **_kwargs: object) -> str:
+        def apply_chat_template(
+            self, *_args: object, **_kwargs: object
+        ) -> str:
             return "mlx prompt"
 
     def _fake_mlx_generate(

@@ -20,9 +20,7 @@ DEFAULT_KEYBINDINGS = {
 }
 
 _ALLOWED_ACTIONS = frozenset(DEFAULT_KEYBINDINGS)
-_RESERVED_KEYS = frozenset(
-    {"ctrl+c", "ctrl+d", "ctrl+l", "y", "s", "n", "r"}
-)
+_RESERVED_KEYS = frozenset({"ctrl+c", "ctrl+d", "ctrl+l", "y", "s", "n", "r"})
 
 
 @dataclass(slots=True, frozen=True)
@@ -54,38 +52,54 @@ def load_tui_config(
     if configured is not None and not isinstance(configured, dict):
         issues.append("tui.keybindings must be a mapping")
     elif isinstance(configured, dict):
-        seen_keys: dict[str, str] = {}
-        modified: set[str] = set()
-        for raw_action, raw_key in configured.items():
-            action = str(raw_action).strip()
-            key = str(raw_key).strip().lower()
-            if action not in _ALLOWED_ACTIONS:
-                issues.append(f"unknown TUI action: {action}")
-                continue
-            if not key or key in _RESERVED_KEYS:
-                issues.append(f"reserved or empty TUI key: {key or '<empty>'}")
-                continue
-            previous = seen_keys.get(key)
-            if previous is not None and previous != action:
-                issues.append(f"duplicate TUI key {key}: {previous}, {action}")
-                continue
-            bindings[action] = key
-            modified.add(action)
-            seen_keys[key] = action
-
-        by_key: dict[str, list[str]] = {}
-        for action, key in bindings.items():
-            by_key.setdefault(key, []).append(action)
-        for key, actions in by_key.items():
-            if len(actions) < 2:
-                continue
-            issues.append(f"duplicate TUI key {key}: {', '.join(actions)}")
-            for action in actions:
-                if action in modified:
-                    bindings[action] = DEFAULT_KEYBINDINGS[action]
+        modified = _apply_keybindings(configured, bindings, issues)
+        _reset_colliding_keybindings(bindings, modified, issues)
 
     detail = str(block.get("tool_detail", "compact")).strip().lower()
     if detail not in {"compact", "full"}:
         issues.append("tui.tool_detail must be compact or full")
         detail = "compact"
     return TuiConfig(bindings, detail, tuple(issues))
+
+
+def _apply_keybindings(
+    configured: dict[Any, Any],
+    bindings: dict[str, str],
+    issues: list[str],
+) -> set[str]:
+    seen_keys: dict[str, str] = {}
+    modified: set[str] = set()
+    for raw_action, raw_key in configured.items():
+        action = str(raw_action).strip()
+        key = str(raw_key).strip().lower()
+        if action not in _ALLOWED_ACTIONS:
+            issues.append(f"unknown TUI action: {action}")
+            continue
+        if not key or key in _RESERVED_KEYS:
+            issues.append(f"reserved or empty TUI key: {key or '<empty>'}")
+            continue
+        previous = seen_keys.get(key)
+        if previous is not None and previous != action:
+            issues.append(f"duplicate TUI key {key}: {previous}, {action}")
+            continue
+        bindings[action] = key
+        modified.add(action)
+        seen_keys[key] = action
+    return modified
+
+
+def _reset_colliding_keybindings(
+    bindings: dict[str, str],
+    modified: set[str],
+    issues: list[str],
+) -> None:
+    by_key: dict[str, list[str]] = {}
+    for action, key in bindings.items():
+        by_key.setdefault(key, []).append(action)
+    for key, actions in by_key.items():
+        if len(actions) < 2:
+            continue
+        issues.append(f"duplicate TUI key {key}: {', '.join(actions)}")
+        for action in actions:
+            if action in modified:
+                bindings[action] = DEFAULT_KEYBINDINGS[action]

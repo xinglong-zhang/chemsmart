@@ -9,7 +9,7 @@ from pathlib import Path
 from textual.app import App
 
 from chemsmart.agent.core import _default_session_root
-from chemsmart.agent.tui._logging import _silence_console_logging
+from chemsmart.agent.services.command_logging import _silence_console_logging
 from chemsmart.agent.tui.bindings import BINDINGS
 from chemsmart.agent.tui.config import load_tui_config
 from chemsmart.agent.tui.screens.chat import ChatScreen

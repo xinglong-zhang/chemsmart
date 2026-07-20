@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-from time import monotonic
 from tempfile import NamedTemporaryFile
+from time import monotonic
 
 from textual import events
 from textual.binding import Binding
@@ -214,6 +214,10 @@ class Composer(TextArea):
         self._submitting = False
         self._paste_guard_text = ""
         super().load_text(text)
+        # Textual resets the selection to (0, 0) when replacing a document.
+        # Palette completion and history recall are insertion workflows, so the
+        # next printable character must be appended to the loaded value.
+        self.move_cursor(self.document.end)
 
     def _slash_palette(self):
         screen = getattr(self.app, "screen", None)

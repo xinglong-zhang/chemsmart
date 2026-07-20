@@ -9,8 +9,8 @@ import pytest
 from chemsmart.agent.tui._logging import (
     _THIRD_PARTY_LOGGERS,
     _AgentConsoleHandler,
-    _ThirdPartyConsoleFilter,
     _apply_third_party_silence,
+    _ThirdPartyConsoleFilter,
 )
 
 

@@ -361,9 +361,7 @@ def _jsonable(value: Any) -> Any:
 
 def _public_message(message: JsonDict) -> JsonDict:
     return {
-        key: message[key]
-        for key in _PUBLIC_MESSAGE_KEYS
-        if key in message
+        key: message[key] for key in _PUBLIC_MESSAGE_KEYS if key in message
     }
 
 
@@ -569,9 +567,7 @@ def _synthesis_summary(tool_records: list[JsonDict]) -> JsonDict | None:
             "schema_variant": result.get("schema_variant"),
             "decision_trace": result.get("decision_trace"),
             "reasoning": result.get("reasoning") or "",
-            "reasoning_provenance": (
-                result.get("reasoning_provenance") or ""
-            ),
+            "reasoning_provenance": (result.get("reasoning_provenance") or ""),
             "semantic_verdict": (
                 semantic.get("verdict") if isinstance(semantic, dict) else None
             ),
@@ -581,9 +577,11 @@ def _synthesis_summary(tool_records: list[JsonDict]) -> JsonDict | None:
             "alternatives": result.get("alternatives") or [],
             **(
                 {"raw_response": raw_response}
-                if (raw_response := _safe_compact_response(
-                    result.get("raw_response")
-                ))
+                if (
+                    raw_response := _safe_compact_response(
+                        result.get("raw_response")
+                    )
+                )
                 is not None
                 else {}
             ),

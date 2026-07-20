@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -22,15 +21,9 @@ from chemsmart.agent.permissions import (
 from chemsmart.agent.provider_adapter import (
     ToolOutcome,
     ToolRequest,
-    build_tool_result_messages,
-    normalize_response,
-    response_payload,
-)
-from chemsmart.agent.providers import (
-    DEFAULT_TIMEOUT_S,
-    extract_response_usage,
 )
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.tool_loop_runner import ToolLoopRunner
 
 ASK_USER_TOOL_NAME = "ask_user"
 ASK_USER_TOOL_DEF: dict[str, Any] = {
@@ -101,312 +94,9 @@ class ToolLoop:
         mode: RuntimePermissionMode | None = None,
         allowed_tool_names: set[str] | None = None,
     ) -> dict[str, Any]:
-        provider_name = getattr(self.provider, "name", None) or "openai"
-        wire_protocol = (
-            getattr(self.provider, "wire_protocol", None) or provider_name
+        return ToolLoopRunner(self).run(
+            messages, tool_defs, mode, allowed_tool_names
         )
-        if mode is not None:
-            tool_defs = self._tool_defs_for_mode(wire_protocol, mode)
-        elif tool_defs is None:
-            tool_defs = self._tool_defs_for_provider(wire_protocol)
-        if allowed_tool_names is not None:
-            tool_defs = _filter_tool_defs(
-                wire_protocol,
-                tool_defs,
-                allowed_tool_names,
-            )
-        history = [deepcopy(message) for message in messages]
-        assistant_text = ""
-        stop_reason = None
-        limit_reason = None
-        model_steps = 0
-        tool_calls = 0
-        consecutive_tool_errors = 0
-        total_input_tokens = 0
-        total_output_tokens = 0
-        signature_counts: Counter[tuple[str, str]] = Counter()
-        tool_requests: list[ToolRequest] = []
-        tool_outcomes: list[ToolOutcome] = []
-        approvals_count = 0
-        denials_count = 0
-        ask_user_outcome: dict[str, Any] | None = None
-        provider_errors = 0
-
-        while True:
-            if model_steps >= self.budgets.max_model_steps_per_turn:
-                limit_reason = "max_model_steps"
-                break
-
-            model_steps += 1
-            try:
-                response = self.provider.chat(
-                    history,
-                    tools=tool_defs,
-                    timeout_s=DEFAULT_TIMEOUT_S,
-                )
-            except Exception as exc:
-                provider_errors += 1
-                self.decision_log.write(
-                    "provider_turn_error",
-                    {
-                        "step": model_steps,
-                        "error_type": exc.__class__.__name__,
-                        "message": str(exc)[:500],
-                        "attempt": provider_errors,
-                    },
-                )
-                if (
-                    provider_errors
-                    >= self.budgets.max_provider_errors_per_turn
-                ):
-                    limit_reason = "provider_errors"
-                    break
-                continue
-            response_dict = response_payload(response)
-            if self.budgets.log_provider_turn_raw:
-                self.decision_log.write(
-                    "provider_turn_raw",
-                    {
-                        "step": model_steps,
-                        "response_dict": response_dict,
-                    },
-                )
-
-            assistant_message = _assistant_message(
-                wire_protocol, response_dict
-            )
-            assistant_text, requests, stop_reason = normalize_response(
-                wire_protocol,
-                response_dict,
-            )
-            usage = extract_response_usage(response_dict)
-            total_input_tokens += int(usage["input_tokens"] or 0)
-            total_output_tokens += int(usage["output_tokens"] or 0)
-            self.decision_log.write(
-                "assistant_turn",
-                {
-                    "step": model_steps,
-                    "assistant_text": assistant_text,
-                    "stop_reason": stop_reason,
-                    "usage": usage,
-                },
-            )
-
-            if not requests:
-                history.append(assistant_message)
-                break
-
-            history.append(assistant_message)
-            step_outcomes: list[ToolOutcome] = []
-            should_stop = False
-            asked_user = False
-
-            stop_index: int | None = None
-            for request_index, request in enumerate(requests):
-                tool_requests.append(request)
-                self.decision_log.write(
-                    "tool_use_request",
-                    {
-                        "step": model_steps,
-                        "provider_call_id": request.provider_call_id,
-                        "tool": request.name,
-                        "args": request.arguments,
-                        "normalized_args": self._normalized_args(request),
-                        "description": self._tool_description(request.name),
-                        "queue_index": request_index + 1,
-                        "queue_total": len(requests),
-                        "raw": request.raw,
-                    },
-                )
-
-                if request.name == ASK_USER_TOOL_NAME:
-                    question = request.arguments.get("question")
-                    if not isinstance(question, str):
-                        question = ""
-                    question = question.strip()
-                    raw_options = request.arguments.get("options")
-                    options = (
-                        [
-                            option.strip()
-                            for option in raw_options
-                            if isinstance(option, str) and option.strip()
-                        ]
-                        if isinstance(raw_options, list)
-                        else []
-                    )
-                    self.decision_log.write(
-                        "ask_user",
-                        {
-                            "step": model_steps,
-                            "question": question,
-                            "options": options,
-                            "provider_call_id": request.provider_call_id,
-                        },
-                    )
-                    outcome = ToolOutcome(
-                        request_id=request.request_id,
-                        provider_call_id=request.provider_call_id,
-                        name=request.name,
-                        status="ask_user",
-                        result={
-                            "question": question,
-                            "options": options,
-                        },
-                        display_result={
-                            "question": question,
-                            "options": options,
-                        },
-                        raw_result={
-                            "question": question,
-                            "options": options,
-                        },
-                    )
-                    self.decision_log.write(
-                        "tool_use_result",
-                        {
-                            "step": model_steps,
-                            "provider_call_id": request.provider_call_id,
-                            "tool": request.name,
-                            "status": outcome.status,
-                            "description": self._tool_description(
-                                request.name
-                            ),
-                            "payload": outcome.display_result,
-                            "handle_id": None,
-                        },
-                    )
-                    step_outcomes.append(outcome)
-                    tool_outcomes.append(outcome)
-                    ask_user_outcome = {
-                        "question": question,
-                        "options": options,
-                    }
-                    asked_user = True
-                    break
-
-                signature = (request.name, _canonical_args_json(request))
-                signature_counts[signature] += 1
-                if (
-                    signature_counts[signature]
-                    > self.budgets.max_same_signature_retries
-                ):
-                    limit_reason = "repeat_signature"
-                    outcome = self._skipped_outcome(
-                        model_steps,
-                        request,
-                        reason="repeat_signature",
-                    )
-                    step_outcomes.append(outcome)
-                    tool_outcomes.append(outcome)
-                    should_stop = True
-                    stop_index = request_index
-                    break
-
-                if tool_calls >= self.budgets.max_total_tool_calls_per_turn:
-                    limit_reason = "max_tool_calls"
-                    outcome = self._skipped_outcome(
-                        model_steps,
-                        request,
-                        reason="max_tool_calls",
-                    )
-                    step_outcomes.append(outcome)
-                    tool_outcomes.append(outcome)
-                    should_stop = True
-                    stop_index = request_index
-                    break
-
-                outcome, approved = self._run_one_request(
-                    model_steps,
-                    request,
-                )
-                step_outcomes.append(outcome)
-                tool_outcomes.append(outcome)
-                if approved:
-                    approvals_count += 1
-                    tool_calls += 1
-                elif outcome.status == "denied":
-                    denials_count += 1
-
-                if outcome.status == "error":
-                    consecutive_tool_errors += 1
-                else:
-                    consecutive_tool_errors = 0
-
-                if (
-                    consecutive_tool_errors
-                    >= self.budgets.max_consecutive_tool_errors
-                ):
-                    limit_reason = "max_consecutive_errors"
-                    should_stop = True
-                    stop_index = request_index
-                    break
-
-            if should_stop and stop_index is not None:
-                for queued_index, request in enumerate(
-                    requests[stop_index + 1 :],
-                    start=stop_index + 2,
-                ):
-                    tool_requests.append(request)
-                    self.decision_log.write(
-                        "tool_use_request",
-                        {
-                            "step": model_steps,
-                            "provider_call_id": request.provider_call_id,
-                            "tool": request.name,
-                            "args": request.arguments,
-                            "normalized_args": self._normalized_args(request),
-                            "description": self._tool_description(
-                                request.name
-                            ),
-                            "queue_index": queued_index,
-                            "queue_total": len(requests),
-                            "raw": request.raw,
-                        },
-                    )
-                    outcome = self._skipped_outcome(
-                        model_steps,
-                        request,
-                        reason=limit_reason or "loop_stopped",
-                    )
-                    step_outcomes.append(outcome)
-                    tool_outcomes.append(outcome)
-
-            if step_outcomes:
-                history.extend(
-                    build_tool_result_messages(wire_protocol, step_outcomes)
-                )
-
-            if asked_user:
-                break
-
-            if should_stop:
-                break
-
-        if limit_reason is not None:
-            self.decision_log.write(
-                "loop_limit_exceeded",
-                {
-                    "limit_reason": limit_reason,
-                    "model_steps": model_steps,
-                    "tool_calls": tool_calls,
-                },
-            )
-
-        return {
-            "assistant_text": assistant_text,
-            "tool_requests": tool_requests,
-            "tool_outcomes": tool_outcomes,
-            "stop_reason": stop_reason,
-            "model_steps": model_steps,
-            "limit_reason": limit_reason,
-            "total_input_tokens": total_input_tokens,
-            "total_output_tokens": total_output_tokens,
-            "messages": history,
-            "approvals_count": approvals_count,
-            "denials_count": denials_count,
-            "ask_user": ask_user_outcome,
-            "provider_errors": provider_errors,
-        }
 
     def _run_one_request(
         self,
@@ -813,6 +503,14 @@ class ToolLoop:
         provider_name: str,
     ) -> list[dict[str, Any]]:
         return registry_tool_defs_for_provider(self.registry, provider_name)
+
+    def _filter_tool_defs(
+        self,
+        provider_name: str,
+        tool_defs: list[dict[str, Any]],
+        allowed_tool_names: set[str],
+    ) -> list[dict[str, Any]]:
+        return _filter_tool_defs(provider_name, tool_defs, allowed_tool_names)
 
     def _store_result_handle(
         self,

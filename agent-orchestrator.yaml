@@ -1,0 +1,20 @@
+$schema: https://raw.githubusercontent.com/ComposioHQ/agent-orchestrator/main/schema/config.schema.json
+agentRules: |-
+  Always run tests before pushing.
+  Use conventional commits (feat:, fix:, chore:, docs:, refactor:, test:).
+  Link issue numbers in commit messages.
+  Write clear commit messages that explain WHY, not just WHAT.
+
+  Follow Python best practices:
+
+  - Use type hints for function parameters and return values
+  - Follow PEP 8 style guide
+  - Use f-strings for string formatting
+  - Use context managers (with statements) for resource management
+  - Write docstrings for classes and functions
+  - Prefer composition over inheritance
+
+  Before pushing, run these commands:
+  - pytest (run tests)
+  - black . (format code)
+  - mypy . (type checking)

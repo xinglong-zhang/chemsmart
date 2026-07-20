@@ -38,10 +38,10 @@ def test_format_jobs_table_handles_empty_rows():
     assert format_jobs_table([]) == "No jobs found."
 
 
-def test_collect_job_snapshot_raises_for_malformed_state(tmp_path: Path):
+def test_collect_job_snapshot_raises_for_malformed_session(tmp_path: Path):
     session_dir = tmp_path / "sessions" / "bad-session"
     session_dir.mkdir(parents=True)
-    (session_dir / "state.json").write_text("{", encoding="utf-8")
+    (session_dir / "session.json").write_text("{", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="Malformed session state"):
         collect_job_snapshot(tmp_path / "sessions")

@@ -240,17 +240,13 @@ def test_tool_loop_separates_provider_identity_from_wire_protocol(tmp_path):
         [
             {
                 "__raw_response__": openai_tool_call_response(
-                    tool_call(
-                        "call_1", "recommend_method", {"task": "opt"}
-                    )
+                    tool_call("call_1", "recommend_method", {"task": "opt"})
                 )
             },
             {"__raw_response__": openai_final_response("Completed.")},
         ]
     )
-    registry = ScriptedRegistry(
-        {"recommend_method": {"method": "b3lyp"}}
-    )
+    registry = ScriptedRegistry({"recommend_method": {"method": "b3lyp"}})
     loop = ToolLoop(
         provider=provider,
         registry=registry,

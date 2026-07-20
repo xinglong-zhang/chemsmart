@@ -81,7 +81,9 @@ def test_compact_signature_drops_verbose_schema_fields(schema) -> None:
     assert '"nargs"' not in prompt
 
 
-def test_orca_qmmm_signature_fits_budget_without_repeated_arg_keys(schema) -> None:
+def test_orca_qmmm_signature_fits_budget_without_repeated_arg_keys(
+    schema,
+) -> None:
     prompt = _prompt(
         schema,
         "Submit an ORCA QM/MM optimization for enzyme.xyz to hpc1 with "

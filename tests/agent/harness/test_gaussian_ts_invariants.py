@@ -103,8 +103,7 @@ def test_duplicate_opt_block_via_route_params_rejects():
 
 def test_second_parenthesized_opt_form_rejects():
     result = check_gaussian_ts_route(
-        "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-31g(d) "
-        "opt(maxstep=8)"
+        "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-31g(d) " "opt(maxstep=8)"
     )
 
     assert result.verdict == "reject"

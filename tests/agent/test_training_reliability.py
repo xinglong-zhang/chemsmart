@@ -106,10 +106,16 @@ def test_sub_can_require_request_intent_assertions():
             {"id": "sub.intent_filename", "status": "pass"},
         ],
     }
-    assert evaluate(
-        [row], source="sub_terminal", k=1, require_intent=True
-    )["groups"][0]["positive_trials"] == 1
+    assert (
+        evaluate([row], source="sub_terminal", k=1, require_intent=True)[
+            "groups"
+        ][0]["positive_trials"]
+        == 1
+    )
     row["intent_assertions"][0]["status"] = "fail"
-    assert evaluate(
-        [row], source="sub_terminal", k=1, require_intent=True
-    )["groups"][0]["positive_trials"] == 0
+    assert (
+        evaluate([row], source="sub_terminal", k=1, require_intent=True)[
+            "groups"
+        ][0]["positive_trials"]
+        == 0
+    )

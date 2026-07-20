@@ -28,9 +28,11 @@ class CommandInterpretationCell(BaseCell):
         self.expanded = expanded
         self.source_text = format_parsed_model_command(parsed)
         super().__init__(
-            _render_command_interpretation(parsed)
-            if expanded
-            else _render_collapsed_interpretation(parsed),
+            (
+                _render_command_interpretation(parsed)
+                if expanded
+                else _render_collapsed_interpretation(parsed)
+            ),
             title=(
                 "Deterministic Harness: CLI Command Synthesis ▾"
                 if expanded

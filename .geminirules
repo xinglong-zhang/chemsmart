@@ -1,0 +1,71 @@
+# ============================================================
+# chemsmart .clinerules — Cline agent behavior rules
+# Auto-generated from chemsmart agent documentation:
+#   agent-orchestrator.yaml, identity.py, planner.md, critic.md,
+#   tool_loop.md, planner_compact.md, CONTRIBUTING.md, pyproject.toml
+# ============================================================
+
+## Identity & Scope
+- This is the chemsmart project — an open-source computational chemistry planning & HPC automation toolkit.
+- The primary codebase is Python (3.10+), with tools for Gaussian and ORCA job generation, submission, and analysis.
+- Scope is strictly: computational chemistry workflows, HPC operations (queues, jobs, logs, schedulers), plus the agent/TUI layer.
+- chemsmart supports local (v13.1 model + MLX 4-bit on Apple Silicon) and cloud (OpenAI/Anthropic) agent providers.
+
+## Python Code Style
+- Target Python 3.10. Use type hints for function parameters and return values.
+- Follow PEP 8. Max line length: 79.
+- Use f-strings for string formatting.
+- Use context managers (`with` statements) for resource management.
+- Write docstrings for all public classes and functions.
+- Prefer composition over inheritance.
+- Formatting: `black` (line-length=79), `isort` (profile=black).
+- Linting: `ruff` (target-version=py310, line-length=79), `flake8` (ignore E226, W503, W504).
+- Before pushing, run: `make fmt`, `make lint`, `make test`.
+- Do NOT print shell installation commands (`pip install`, `apt install`, `brew install`, etc.) in code or docs. Refer to README/docs instead.
+
+## Commit Conventions
+- Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
+- Link issue numbers in commit messages when applicable.
+- Write clear commit messages that explain WHY, not just WHAT.
+- Pre-commit hooks run `make fmt` → `make lint` → `make clean` → `make docs-lint` → `make docs-fmt` → `make docs-clean` automatically.
+
+## Testing Discipline
+- Run `make test` before pushing. All tests must pass.
+- Test framework: `pytest` with `pytest-mock`, `pytest-cov`, coverage (branch=True).
+- Aim for 100% code coverage. Write tests for all new functionality.
+- Test paths: `tests/`. Agent-specific tests in `tests/agent/`.
+- Mark slow tests with `@pytest.mark.slow`.
+- Test markers: `slow`, `agent`, `integration`.
+- Run with: `pytest --strict-markers --disable-warnings`.
+
+## Project Architecture
+- CLI entry point: `chemsmart = "chemsmart.cli.main:main"` (Click-based).
+- Agent layer: `chemsmart/agent/` — prompts (`prompts/*.md`), local adapter (`local/`), TUI (`tui/`), registry, session management.
+- System prompt assembly: `chemsmart/agent/prompts/identity.py` → `build_system_prompt()`.
+- Local model: `Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1` emits compact SPEC JSON; deterministic postprocessor + adapter renders real CLI commands.
+- Agent config: `~/.chemsmart/agent/agent.yaml` or `agent.v13_1.yaml.example`.
+- MLX path (Apple Silicon): `mlx_loader.py` with `mlx-lm==0.31.3`.
+- Package data includes: `agent/prompts/*.md`, `agent/local/*.md`, `agent/local/*.yaml.example`, `agent/tui/*.tcss`.
+
+## Agent & Prompt Development Rules
+- Planner prompt (`planner.md`): returns JSON with `steps`, `rationale`, `estimated_cost`, `intent` (workflow|advisory|chitchat).
+- Tool kinds are canonical and exhaustive: `gaussian.sp|opt|ts|freq|irc|scan|modred|nci|resp|tddft|dias|crest|traj|wbi|qmmm|qrc`, `orca.sp|opt|ts|freq|irc|scan|modred|neb|qmmm|qrc`.
+- Task→kind mapping is strict: TS = `*.ts` (never `*.opt`), IRC = `*.irc` (never `*.opt`), SP = `*.sp` (never `*.opt`).
+- Critic prompt (`critic.md`): returns verdict (ok|warn|reject), confidence (0.0–1.0), issues, rationale. Be conservative — prefer warn over ok when unsure.
+- Tool loop (`tool_loop.md`): use registered tools only when materially helpful. Preview/validate before risky actions.
+- Compact planner (`planner_compact.md`): output-only JSON SPEC; never emit runtime-owned fields (project, functional, basis, solvent, etc.).
+- Step references use 1-based indexing: `"$step1"`, `"$stepN.field"`.
+
+## Chemistry Domain Guardrails (Critic Rules)
+- Reject kind-task mismatches (TS→opt, IRC→opt, SP→opt, opt+freq as standalone freq step).
+- Warn on: TS/IRC on small symmetric molecules without reaction context, minimal basis for production, IRC without prior freq-confirmed TS, open-shell without unrestricted method, anions without diffuse basis.
+- `geometry handoff missing`: warn when SP step uses raw `build_molecule` instead of `extract_optimized_geometry` result.
+- `dry_submit=true`: do NOT warn about missing server/queue/account/scratch/module fields.
+
+## Key Dependencies
+- Core: `ase`, `pymatgen`, `rdkit`, `numpy~=1.26.4`, `scipy`, `click`, `pyyaml`, `pydantic>=2`, `rich`, `tenacity`.
+- Agent cloud: `openai>=1`, `anthropic>=0.40`, `python-dotenv>=1`.
+- Agent local: `transformers==4.56.2`, `accelerate==1.10.0`, `huggingface_hub>=0.34.0`.
+- Agent MLX: `mlx-lm==0.31.3` (requires separate env; transformers>=5, huggingface_hub>=1.5).
+- Agent TUI: `textual>=0.80`, `watchdog>=3`, `pyperclip`.
+- Dev: `black==26.1.0`, `isort==7.0.0`, `ruff`, `pre-commit>=3.6.0`.

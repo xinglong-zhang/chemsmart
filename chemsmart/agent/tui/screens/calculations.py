@@ -78,9 +78,7 @@ class CalculationMonitor(ModalScreen[CalculationMonitorAction | None]):
 
     def on_mount(self) -> None:
         listing = self.query_one("#calculation-list", OptionList)
-        listing.border_title = (
-            "Calculations · Enter details · L log · / search · E extract · C cancel"
-        )
+        listing.border_title = "Calculations · Enter details · L log · / search · E extract · C cancel"
         self.query_one("#calculation-detail", Static).border_title = "Receipt"
         self._refresh_list()
         listing.focus()
@@ -145,7 +143,8 @@ class CalculationMonitor(ModalScreen[CalculationMonitorAction | None]):
         rows = sorted(
             self.runs.values(),
             key=lambda run: (
-                str(run.get("status")) not in {"validating", "starting", "running"},
+                str(run.get("status"))
+                not in {"validating", "starting", "running"},
                 str(run.get("updated_at") or run.get("started_at") or ""),
             ),
         )
@@ -167,11 +166,17 @@ class CalculationMonitor(ModalScreen[CalculationMonitorAction | None]):
         listing.clear_options()
         if options:
             listing.add_options(options)
-            target = self._ordered_ids.index(selected) if selected in self._ordered_ids else 0
+            target = (
+                self._ordered_ids.index(selected)
+                if selected in self._ordered_ids
+                else 0
+            )
             listing.highlighted = target
             self._render_detail(self._ordered_ids[target])
         else:
-            listing.add_option(Option("No calculations recorded.", disabled=True))
+            listing.add_option(
+                Option("No calculations recorded.", disabled=True)
+            )
             self.query_one("#calculation-detail", Static).update(
                 "Run a validated command with /run or submit with /submit."
             )
@@ -191,7 +196,9 @@ class CalculationMonitor(ModalScreen[CalculationMonitorAction | None]):
             detail.update(_job_detail(job))
             return
         run = self.runs.get(selected_id, {})
-        detail.border_title = "Live log" if self._show_log else "Calculation receipt"
+        detail.border_title = (
+            "Live log" if self._show_log else "Calculation receipt"
+        )
         detail.update(
             _log_detail(run, self._log_query)
             if self._show_log
@@ -241,7 +248,9 @@ def _run_detail(run: dict[str, Any]):
     ):
         value = run.get(key)
         if value not in {None, ""}:
-            table.add_row(label, _elapsed(value) if key == "elapsed_s" else str(value))
+            table.add_row(
+                label, _elapsed(value) if key == "elapsed_s" else str(value)
+            )
     if run.get("reused_output") is True:
         table.add_row("output source", "existing completed calculation")
     energy = run.get("energy")
@@ -283,7 +292,11 @@ def _run_detail(run: dict[str, Any]):
         total = run.get("scan_points_total")
         table.add_row(
             "scan points",
-            f"{scan_points}/{total}" if isinstance(total, int) else str(scan_points),
+            (
+                f"{scan_points}/{total}"
+                if isinstance(total, int)
+                else str(scan_points)
+            ),
         )
     neb_images = run.get("neb_images")
     if isinstance(neb_images, int):
@@ -300,7 +313,9 @@ def _run_detail(run: dict[str, Any]):
     if normal is not None:
         table.add_row("normal termination", "yes" if normal else "no")
     command = str(run.get("command") or "")
-    return Group(table, Text("\n" + command, style="dim") if command else Text())
+    return Group(
+        table, Text("\n" + command, style="dim") if command else Text()
+    )
 
 
 def _log_detail(run: dict[str, Any], query: str) -> Text:

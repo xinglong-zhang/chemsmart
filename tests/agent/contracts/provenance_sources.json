@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "commit": "800715d201651a2a07c2706dca10400109dae3d3",
+      "directory": "openai-codex",
+      "license_path": "LICENSE",
+      "license_sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "name": "openai-codex",
+      "review_posture": "Apache-2.0 evidence; preserve applicable notices for confirmed reuse",
+      "url": "https://github.com/openai/codex.git"
+    },
+    {
+      "commit": "cce059467af64f05d0a1521344847d2b558b6a80",
+      "directory": "openai-codex-research",
+      "license_path": "LICENSE",
+      "license_sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "name": "openai-codex-research",
+      "review_posture": "Historical Apache-2.0 snapshot cited by the TUI research note",
+      "url": "https://github.com/openai/codex.git"
+    },
+    {
+      "commit": "06dbeef4bb70fb718236aa418ed658ef4667a126",
+      "directory": "textual",
+      "license_path": "LICENSE",
+      "license_sha256": "94f290a762376dfdb7768e42070618b0abfd2a2799eab1b1c097816c3a39eb57",
+      "name": "textual",
+      "review_posture": "MIT evidence; preserve copyright and permission notice for substantial reuse",
+      "url": "https://github.com/Textualize/textual.git"
+    },
+    {
+      "commit": "c39cb0f14bfe8bb519bae5bfc55add6867c5e2ab",
+      "directory": "claude-code",
+      "license_path": "LICENSE.md",
+      "license_sha256": "728158fd1037143fad6907e8fa34804177e598b7326519503fe83cafdef849e6",
+      "name": "claude-code",
+      "review_posture": "All-rights-reserved evidence; matching code requires clean-room review",
+      "url": "https://github.com/anthropics/claude-code.git"
+    },
+    {
+      "commit": "5ef852a32c2c433386eb009bd92ca7c07359d0e6",
+      "directory": "oh-my-openagent",
+      "license_path": "LICENSE.md",
+      "license_sha256": "b61ac928f152d13517328263e6bee9175b928f9ab696a2d2ca2b6cfd961ddc32",
+      "name": "oh-my-openagent",
+      "review_posture": "Sustainable Use License evidence; matching code requires restrictive-license review",
+      "url": "https://github.com/code-yeongyu/oh-my-openagent.git"
+    }
+  ]
+}

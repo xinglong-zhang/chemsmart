@@ -207,7 +207,9 @@ def test_approval_popup_includes_mode_and_rollback_labels(tmp_path: Path):
     asyncio.run(scenario())
 
 
-def test_greeter_copy_mentions_unified_validation_and_execution(tmp_path: Path):
+def test_greeter_copy_mentions_unified_validation_and_execution(
+    tmp_path: Path,
+):
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:

@@ -138,31 +138,48 @@ class PlanCell(BaseCell):
             (row for row in self._rows if row.status == "failed"), None
         )
         active = failed or current
-        state = "failed" if failed is not None else (
-            active.status if active is not None else "done"
+        state = (
+            "failed"
+            if failed is not None
+            else (active.status if active is not None else "done")
         )
         header = Text.assemble(
             ("Workflow", "bold"),
             (f" · {completed}/{len(self._rows)}", "dim"),
             (
-                f" · {active.tool} {state}" if active is not None else " · complete",
+                (
+                    f" · {active.tool} {state}"
+                    if active is not None
+                    else " · complete"
+                ),
                 _status_style(state),
             ),
             ("  [enter expand]", "dim"),
         )
         if not self.expanded:
-            display = failed or (
-                active if active is not None and active.status == "running" else None
-            ) or self._last_changed or active
+            display = (
+                failed
+                or (
+                    active
+                    if active is not None and active.status == "running"
+                    else None
+                )
+                or self._last_changed
+                or active
+            )
             if display is None:
-                return Group(header, Text("All steps complete", style="success"))
+                return Group(
+                    header, Text("All steps complete", style="success")
+                )
             icon = _STATUS_ICON.get(display.status, "•")
             line = Text()
             line.append(f"{icon} ", style=_status_style(display.status))
             line.append(f"{display.index}. {display.tool}", style="bold")
             if display.detail:
                 line.append("  ", style="dim")
-                line.append(display.detail, style=_status_style(display.status))
+                line.append(
+                    display.detail, style=_status_style(display.status)
+                )
             return Group(header, line)
 
         lines = [header]

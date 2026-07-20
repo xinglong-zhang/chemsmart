@@ -4,12 +4,15 @@ import importlib.util
 import json
 from pathlib import Path
 
+from chemsmart.agent.harness.terminal_state import (
+    assertion,
+    build_terminal_state,
+)
 from chemsmart.agent.training_log import (
     TrainingEpisodeWriter,
     TrainingLogConfig,
     load_training_log_config,
 )
-from chemsmart.agent.harness.terminal_state import assertion, build_terminal_state
 
 
 def _load_export_module():
@@ -107,7 +110,9 @@ def test_training_episode_writer_masks_paths_and_stores_prompt(tmp_path):
     assert record["final_answer"] == "Prepared ./examples/h2o.xyz"
 
 
-def test_training_episode_writer_drops_hidden_provider_message_fields(tmp_path):
+def test_training_episode_writer_drops_hidden_provider_message_fields(
+    tmp_path,
+):
     writer = TrainingEpisodeWriter(
         TrainingLogConfig(enabled=True, dir=tmp_path / "training")
     )
@@ -132,9 +137,7 @@ def test_training_episode_writer_drops_hidden_provider_message_fields(tmp_path):
 
     assert written is not None
     record = _read_jsonl(written)[0]
-    assert record["messages"] == [
-        {"role": "user", "content": "prepare a job"}
-    ]
+    assert record["messages"] == [{"role": "user", "content": "prepare a job"}]
     assert "reasoning_content" not in json.dumps(record)
     assert "transport-only" not in json.dumps(record)
 
@@ -227,7 +230,9 @@ def test_export_routes_submission_without_terminal_state_to_review(tmp_path):
             "status": "ready",
             "command": "chemsmart sub -s cluster gaussian -f h2o.xyz -c 0 -m 1 opt",
             "semantic_verdict": "ok",
-            "generated_input_evidence": [{"path": "/tmp/h2o.com", "route": "# opt"}],
+            "generated_input_evidence": [
+                {"path": "/tmp/h2o.com", "route": "# opt"}
+            ],
         },
         "outcome": {"gate": "ok", "execute_rc": 0},
         "final_answer": "Submitted.",
@@ -275,9 +280,7 @@ def test_export_requires_one_system_prompt_and_strips_hidden_fields(tmp_path):
             ],
         },
         "outcome": {"gate": "ok", "execute_rc": None},
-        "tool_events": [
-            {"tool": "synthesize_command", "status": "ok"}
-        ],
+        "tool_events": [{"tool": "synthesize_command", "status": "ok"}],
         "final_answer": "Done.",
     }
     source = tmp_path / "episodes.jsonl"
@@ -292,8 +295,7 @@ def test_export_requires_one_system_prompt_and_strips_hidden_fields(tmp_path):
     exported = _read_jsonl(tmp_path / "out" / "tool_loop_sft.jsonl")[0]
     assert sum(m["role"] == "system" for m in exported["messages"]) == 1
     assert all(
-        "reasoning_content" not in message
-        and "annotations" not in message
+        "reasoning_content" not in message and "annotations" not in message
         for message in exported["messages"]
     )
 
@@ -420,12 +422,12 @@ def test_export_sft_recovers_compact_spec_from_semantic_command(tmp_path):
         "turn": 1,
         "provider": {"name": "openai", "model": "gpt-test"},
         "system_prompt_sha": "",
-            "messages": [
-                {"role": "system", "content": "public system"},
-                {
-                    "role": "user",
+        "messages": [
+            {"role": "system", "content": "public system"},
+            {
+                "role": "user",
                 "content": "Prepare Gaussian opt for examples/h2o.xyz.",
-            }
+            },
         ],
         "synthesis": {
             "status": "ready",
@@ -464,13 +466,13 @@ def test_export_sft_project_yaml_family(tmp_path):
         "v": 2,
         "session_id": "sess-yaml",
         "turn": 1,
-            "provider": {"name": "openai", "model": "gpt-test"},
-            "messages": [
-                {"role": "system", "content": "public system"},
-                {
-                    "role": "user",
+        "provider": {"name": "openai", "model": "gpt-test"},
+        "messages": [
+            {"role": "system", "content": "public system"},
+            {
+                "role": "user",
                 "content": "Build a project YAML for B3LYP/def2-SVP.",
-            }
+            },
         ],
         "tool_events": [
             {
@@ -514,7 +516,7 @@ def test_export_sft_command_answer_uses_episode_workspace_label(tmp_path):
             {
                 "role": "user",
                 "content": "Prepare Gaussian opt for examples/h2o.xyz.",
-            }
+            },
         ],
         "synthesis": {
             "status": "ready",
@@ -587,7 +589,7 @@ def test_export_sft_masks_runtime_temp_paths_at_write(tmp_path):
             {
                 "role": "user",
                 "content": "Prepare Gaussian opt for examples/h2o.xyz.",
-            }
+            },
         ],
         "synthesis": {
             "status": "ready",
@@ -768,10 +770,10 @@ def test_export_sft_dedups_paused_then_resumed_turn(tmp_path):
             "turn": 3,
             "provider": {"name": "openai", "model": "gpt-test"},
             "system_prompt_sha": "",
-                "messages": [
-                    {"role": "system", "content": "public system"},
-                    *messages,
-                ],
+            "messages": [
+                {"role": "system", "content": "public system"},
+                *messages,
+            ],
             "synthesis": None,
             "outcome": {"gate": "none"},
             "tool_events": [],
@@ -822,9 +824,9 @@ def test_export_sft_reconstructs_correction_chain_and_repair_pair(tmp_path):
         "session_id": "sess-correction",
         "turn": 1,
         "provider": {"name": "openai", "model": "teacher"},
-            "messages": [
-                {"role": "system", "content": "public system"},
-                {"role": "user", "content": "Keep bond 4-8 fixed."},
+        "messages": [
+            {"role": "system", "content": "public system"},
+            {"role": "user", "content": "Keep bond 4-8 fixed."},
             {"role": "assistant", "content": "I need charge and spin."},
         ],
         "synthesis": {
@@ -843,13 +845,16 @@ def test_export_sft_reconstructs_correction_chain_and_repair_pair(tmp_path):
         "session_id": "sess-correction",
         "turn": 2,
         "provider": {"name": "openai", "model": "teacher"},
-            "messages": [
-                {"role": "system", "content": "public system"},
-                {
+        "messages": [
+            {"role": "system", "content": "public system"},
+            {
                 "role": "user",
                 "content": "Use charge 0 and multiplicity 1; make it modred.",
             },
-            {"role": "assistant", "content": "Prepared the corrected command."},
+            {
+                "role": "assistant",
+                "content": "Prepared the corrected command.",
+            },
         ],
         "synthesis": {
             "status": "ready",
@@ -1152,16 +1157,14 @@ def test_export_sft_filters_short_form_runtime_owned_method_flags(tmp_path):
         assert counts["reasoning_synthesis_written"] == 0
         assert counts["tool_loop_written"] == 0
         manifest = json.loads((out / "manifest.json").read_text())
-        assert (
-            manifest["skipped"][f"command_answer:canonical_{reason}"] == 1
-        )
+        assert manifest["skipped"][f"command_answer:canonical_{reason}"] == 1
         # A clean command of the same shape still exports.
         clean = dict(episode)
         clean["session_id"] = f"sess-clean-{reason}"
         clean["synthesis"] = dict(episode["synthesis"])
-        clean["synthesis"]["command"] = (
-            "chemsmart run gaussian -p demo -f a.xyz -c 0 -m 1 opt"
-        )
+        clean["synthesis"][
+            "command"
+        ] = "chemsmart run gaussian -p demo -f a.xyz -c 0 -m 1 opt"
         source.write_text(json.dumps(clean) + "\n", encoding="utf-8")
         out2 = tmp_path / f"out2_{reason}"
         counts2 = export_sft.export_sft(
@@ -1264,7 +1267,7 @@ def test_export_sft_filters_empty_qmmm_layer_override(tmp_path):
             "status": "ready",
             "command": (
                 "chemsmart run gaussian -f a.xyz -c 0 -m 1 opt qmmm "
-                "-ha 1-8 -la 9-16 -mx \"\" -mb \"\""
+                '-ha 1-8 -la 9-16 -mx "" -mb ""'
             ),
             "semantic_verdict": "ok",
             "generated_input_evidence": [
@@ -1285,9 +1288,12 @@ def test_export_sft_filters_empty_qmmm_layer_override(tmp_path):
 
     assert counts["command_answer_written"] == 0
     manifest = json.loads((tmp_path / "out" / "manifest.json").read_text())
-    assert manifest["skipped"][
-        "command_answer:canonical_empty_qmmm_layer_override"
-    ] == 1
+    assert (
+        manifest["skipped"][
+            "command_answer:canonical_empty_qmmm_layer_override"
+        ]
+        == 1
+    )
 
 
 def test_export_sft_repair_pair_from_repair_tool_only(tmp_path):
@@ -1496,8 +1502,7 @@ def test_export_reasoning_synthesis_family(tmp_path):
     assert payload["status"] == "ready"
     assert records[0]["messages"][0]["role"] == "system"
     assert (
-        records[0]["meta"]["reasoning_provenance"]
-        == "public_decision_trace"
+        records[0]["meta"]["reasoning_provenance"] == "public_decision_trace"
     )
 
 
@@ -1552,13 +1557,9 @@ def test_export_reasoning_synthesis_routes_message_reasoning_to_review(
         ]
         == 1
     )
-    review = _read_jsonl(
-        tmp_path / "out" / "reasoning_synthesis_review.jsonl"
-    )
+    review = _read_jsonl(tmp_path / "out" / "reasoning_synthesis_review.jsonl")
     assert review[0]["meta"]["reasoning_source"] == "assistant_message"
-    assert review[0]["meta"]["skip_reason"].startswith(
-        "untrusted_reasoning"
-    )
+    assert review[0]["meta"]["skip_reason"].startswith("untrusted_reasoning")
     assert "reasoning" not in review[0]
 
 
@@ -1708,7 +1709,10 @@ def test_export_wrong_route_contrast_family(tmp_path):
             "reasoning": "This is a command request for Gaussian WBI.",
             "semantic_verdict": "ok",
             "generated_input_evidence": [
-                {"path": "/tmp/chemsmart-gate/wbi.com", "route": "# pop=nboread"}
+                {
+                    "path": "/tmp/chemsmart-gate/wbi.com",
+                    "route": "# pop=nboread",
+                }
             ],
         },
         "outcome": {"gate": "ok"},
@@ -1733,7 +1737,9 @@ def test_export_wrong_route_contrast_family(tmp_path):
     assert records[0]["meta"]["contrast_key"] == "gaussian:wbi"
 
 
-def test_export_wrong_route_contrast_accepts_oniom_yaml_then_cli_request(tmp_path):
+def test_export_wrong_route_contrast_accepts_oniom_yaml_then_cli_request(
+    tmp_path,
+):
     export_sft = _load_export_module()
     prompt = (
         "Create a project YAML for a two-layer Gaussian ONIOM optimization "
@@ -1818,7 +1824,9 @@ def test_write_episode_records_sanitized_dataset_provenance(tmp_path):
     assert fake_secret[:21] not in json.dumps(record)  # secret masked
 
 
-def test_write_episode_reads_dataset_provenance_from_env(tmp_path, monkeypatch):
+def test_write_episode_reads_dataset_provenance_from_env(
+    tmp_path, monkeypatch
+):
     from chemsmart.agent.training_log import DATASET_PROVENANCE_ENV
 
     monkeypatch.setenv(
@@ -1874,13 +1882,18 @@ def test_export_meta_propagates_dataset_provenance(tmp_path):
         "provider": {"name": "deepseek", "model": "deepseek-reasoner"},
         "dataset_provenance": {"scenario_family": "orca.qrc.multiturn"},
         "messages": [
-            {"role": "user", "content": "prepare an ORCA QRC job for a.xyz 0/1"}
+            {
+                "role": "user",
+                "content": "prepare an ORCA QRC job for a.xyz 0/1",
+            }
         ],
         "synthesis": {
             "status": "ready",
             "command": "chemsmart run orca -p demo -f a.xyz -c 0 -m 1 qrc",
             "semantic_verdict": "ok",
-            "generated_input_evidence": [{"path": "/tmp/a.inp", "route": "! qrc"}],
+            "generated_input_evidence": [
+                {"path": "/tmp/a.inp", "route": "! qrc"}
+            ],
         },
         "outcome": {"gate": "ok"},
         "tool_events": [],
@@ -1893,7 +1906,9 @@ def test_export_meta_propagates_dataset_provenance(tmp_path):
         training_dir=tmp_path / "training",
         out_dir=tmp_path / "out",
     )
-    command_records = _read_jsonl(tmp_path / "out" / "command_answer_sft.jsonl")
+    command_records = _read_jsonl(
+        tmp_path / "out" / "command_answer_sft.jsonl"
+    )
     assert command_records[0]["meta"]["dataset_provenance"] == {
         "scenario_family": "orca.qrc.multiturn"
     }
@@ -1953,7 +1968,5 @@ def test_export_wrong_route_prefers_same_session_correction(tmp_path):
 
     assert counts["wrong_route_contrast_written"] == 1
     record = _read_jsonl(tmp_path / "out" / "wrong_route_contrast.jsonl")[0]
-    assert record["chosen"]["command"].endswith(
-        "-lm AMBER=HardFirst"
-    )
+    assert record["chosen"]["command"].endswith("-lm AMBER=HardFirst")
     assert record["meta"]["wrong_session_id"] == "same-session-route"

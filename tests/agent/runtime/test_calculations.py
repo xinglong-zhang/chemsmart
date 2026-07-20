@@ -20,7 +20,6 @@ from chemsmart.agent.runtime.calculations import (
     load_calculation_runs,
 )
 
-
 COMMAND = "chemsmart run orca -p demo -f h2o.xyz -c 0 -m 1 sp"
 REPO_ROOT = Path(__file__).parents[3]
 
@@ -92,9 +91,7 @@ with path.open('a') as handle:
     assert receipt.is_file()
     assert load_calculation_runs(tmp_path)[-1].run_id == run["run_id"]
 
-    inspected = inspect_calculation(
-        run["run_id"], session_root=str(tmp_path)
-    )
+    inspected = inspect_calculation(run["run_id"], session_root=str(tmp_path))
     assert inspected["ok"] is True
     assert inspected["calculation"]["energy"] == pytest.approx(
         -76.269459371830
@@ -147,9 +144,10 @@ def test_existing_completed_output_is_reused_without_false_failure(
         encoding="utf-8",
     )
     source = (
-        "print('ORCASinglePointJob<folder="
-        + str(tmp_path)
-        + ", label=h2o_sp, jobrunner=ORCAJobRunner> is already complete, not running.')"
+        "print('ORCASinglePointJob<folder=' + "
+        + repr(str(tmp_path))
+        + " + ', label=h2o_sp, jobrunner=ORCAJobRunner> "
+        "is already complete, not running.')"
     )
 
     run = execute_observed_process(
@@ -171,7 +169,9 @@ def test_process_failure_and_timeout_are_distinct(tmp_path, monkeypatch):
     _workspace(tmp_path)
 
     failed = execute_observed_process(
-        _python_writer("import sys; print('ORCA error', file=sys.stderr); sys.exit(3)"),
+        _python_writer(
+            "import sys; print('ORCA error', file=sys.stderr); sys.exit(3)"
+        ),
         command=COMMAND,
         timeout_s=5,
         cwd=tmp_path,
@@ -337,14 +337,11 @@ def test_restart_recovers_live_pid_and_completed_detached_run(
     store.write_run(done)
 
     recovered = {
-        run.run_id: run
-        for run in load_calculation_runs(tmp_path / "sessions")
+        run.run_id: run for run in load_calculation_runs(tmp_path / "sessions")
     }
 
     assert recovered["calc-live"].status == "running"
     assert recovered["calc-live"].stage == "SCF cycle 7"
     assert recovered["calc-detached"].status == "completed"
     assert recovered["calc-detached"].normal_termination is True
-    assert recovered["calc-detached"].energy == pytest.approx(
-        -76.269459371830
-    )
+    assert recovered["calc-detached"].energy == pytest.approx(-76.269459371830)

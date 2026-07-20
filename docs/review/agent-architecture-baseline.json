@@ -1,0 +1,2068 @@
+{
+  "coverage": {
+    "covered_branches": 4988,
+    "covered_lines": 16048,
+    "num_branches": 7830,
+    "num_statements": 20356,
+    "percent_covered": 74.63279642375647
+  },
+  "dependency_hotspots": [
+    {
+      "fan_in": 1,
+      "fan_out": 33,
+      "module": "chemsmart.agent.tui.screens.chat"
+    },
+    {
+      "fan_in": 8,
+      "fan_out": 17,
+      "module": "chemsmart.agent.core"
+    },
+    {
+      "fan_in": 1,
+      "fan_out": 19,
+      "module": "chemsmart.agent.tui.widgets.cells"
+    },
+    {
+      "fan_in": 19,
+      "fan_out": 0,
+      "module": "chemsmart.agent.tui.widgets.cells.base"
+    },
+    {
+      "fan_in": 3,
+      "fan_out": 15,
+      "module": "chemsmart.agent.synthesis"
+    },
+    {
+      "fan_in": 1,
+      "fan_out": 16,
+      "module": "chemsmart.agent.wizard"
+    },
+    {
+      "fan_in": 1,
+      "fan_out": 12,
+      "module": "chemsmart.agent.cli"
+    },
+    {
+      "fan_in": 1,
+      "fan_out": 11,
+      "module": "chemsmart.agent.tools_command"
+    },
+    {
+      "fan_in": 2,
+      "fan_out": 9,
+      "module": "chemsmart.agent.wizard.orchestrator"
+    },
+    {
+      "fan_in": 9,
+      "fan_out": 2,
+      "module": "chemsmart.agent.wizard.probe"
+    },
+    {
+      "fan_in": 4,
+      "fan_out": 6,
+      "module": "chemsmart.agent.providers"
+    },
+    {
+      "fan_in": 3,
+      "fan_out": 7,
+      "module": "chemsmart.agent.wizard.refresh"
+    },
+    {
+      "fan_in": 9,
+      "fan_out": 0,
+      "module": "chemsmart.agent.harness.workflow_state"
+    },
+    {
+      "fan_in": 2,
+      "fan_out": 7,
+      "module": "chemsmart.agent.runtime.orchestrator"
+    },
+    {
+      "fan_in": 1,
+      "fan_out": 8,
+      "module": "chemsmart.agent.tui.widgets.popups"
+    },
+    {
+      "fan_in": 4,
+      "fan_out": 4,
+      "module": "chemsmart.agent.harness.command_semantics"
+    },
+    {
+      "fan_in": 6,
+      "fan_out": 2,
+      "module": "chemsmart.agent.harness.intent"
+    },
+    {
+      "fan_in": 8,
+      "fan_out": 0,
+      "module": "chemsmart.agent.harness.models"
+    },
+    {
+      "fan_in": 8,
+      "fan_out": 0,
+      "module": "chemsmart.agent.model_command_parser"
+    },
+    {
+      "fan_in": 7,
+      "fan_out": 1,
+      "module": "chemsmart.agent.permissions"
+    },
+    {
+      "fan_in": 6,
+      "fan_out": 2,
+      "module": "chemsmart.agent.registry"
+    },
+    {
+      "fan_in": 7,
+      "fan_out": 1,
+      "module": "chemsmart.agent.wizard.topology"
+    },
+    {
+      "fan_in": 0,
+      "fan_out": 7,
+      "module": "chemsmart.agent.harness"
+    },
+    {
+      "fan_in": 7,
+      "fan_out": 0,
+      "module": "chemsmart.agent.runtime.contracts"
+    },
+    {
+      "fan_in": 3,
+      "fan_out": 4,
+      "module": "chemsmart.agent.wizard.survey"
+    }
+  ],
+  "files": {
+    "chemsmart/agent/__init__.py": 64,
+    "chemsmart/agent/cli.py": 962,
+    "chemsmart/agent/cli_schema.py": 232,
+    "chemsmart/agent/command_answerer.py": 349,
+    "chemsmart/agent/compact_cli_schema.py": 120,
+    "chemsmart/agent/core.py": 2621,
+    "chemsmart/agent/error_summary.py": 109,
+    "chemsmart/agent/handles.py": 173,
+    "chemsmart/agent/harness/__init__.py": 55,
+    "chemsmart/agent/harness/basis_sets/__init__.py": 19,
+    "chemsmart/agent/harness/basis_sets/build_bse_catalog.py": 112,
+    "chemsmart/agent/harness/basis_sets/catalog.py": 527,
+    "chemsmart/agent/harness/command_contracts.py": 818,
+    "chemsmart/agent/harness/command_semantics.py": 904,
+    "chemsmart/agent/harness/evaluation.py": 215,
+    "chemsmart/agent/harness/extractors.py": 149,
+    "chemsmart/agent/harness/failure_taxonomy.py": 91,
+    "chemsmart/agent/harness/generated_invariants.py": 883,
+    "chemsmart/agent/harness/intent.py": 630,
+    "chemsmart/agent/harness/invariants/__init__.py": 1,
+    "chemsmart/agent/harness/invariants/gaussian_ts.py": 167,
+    "chemsmart/agent/harness/invariants/route_checks.py": 99,
+    "chemsmart/agent/harness/models.py": 67,
+    "chemsmart/agent/harness/runner.py": 187,
+    "chemsmart/agent/harness/spec_invariants.py": 346,
+    "chemsmart/agent/harness/sub_intent.py": 230,
+    "chemsmart/agent/harness/terminal_state.py": 171,
+    "chemsmart/agent/harness/trace.py": 13,
+    "chemsmart/agent/harness/workflow_state.py": 350,
+    "chemsmart/agent/kind_disambiguator.py": 105,
+    "chemsmart/agent/local/__init__.py": 17,
+    "chemsmart/agent/local/adapter.py": 341,
+    "chemsmart/agent/local/generator.py": 147,
+    "chemsmart/agent/local/loader.py": 176,
+    "chemsmart/agent/local/mlx_loader.py": 72,
+    "chemsmart/agent/local/postprocessor.py": 234,
+    "chemsmart/agent/local/server.py": 147,
+    "chemsmart/agent/loop.py": 950,
+    "chemsmart/agent/model_command_parser.py": 927,
+    "chemsmart/agent/permissions.py": 257,
+    "chemsmart/agent/postprocess_v8.py": 165,
+    "chemsmart/agent/project_yaml.py": 1256,
+    "chemsmart/agent/prompts/__init__.py": 10,
+    "chemsmart/agent/prompts/identity.py": 174,
+    "chemsmart/agent/prompts/synthesis.py": 101,
+    "chemsmart/agent/provider_adapter.py": 266,
+    "chemsmart/agent/provider_config.py": 213,
+    "chemsmart/agent/providers.py": 489,
+    "chemsmart/agent/registry.py": 663,
+    "chemsmart/agent/runtime/__init__.py": 25,
+    "chemsmart/agent/runtime/calculations.py": 1136,
+    "chemsmart/agent/runtime/cclib_parser.py": 97,
+    "chemsmart/agent/runtime/contracts.py": 139,
+    "chemsmart/agent/runtime/event_store.py": 115,
+    "chemsmart/agent/runtime/events.py": 84,
+    "chemsmart/agent/runtime/lifecycle.py": 286,
+    "chemsmart/agent/runtime/orchestrator.py": 540,
+    "chemsmart/agent/runtime/receipts.py": 81,
+    "chemsmart/agent/runtime/reducer.py": 146,
+    "chemsmart/agent/runtime/repair_policy.py": 90,
+    "chemsmart/agent/runtime/tool_catalog.py": 164,
+    "chemsmart/agent/schema_prune.py": 289,
+    "chemsmart/agent/services/__init__.py": 1,
+    "chemsmart/agent/services/conversation_memory.py": 947,
+    "chemsmart/agent/synthesis.py": 1551,
+    "chemsmart/agent/tool_protocol.py": 46,
+    "chemsmart/agent/tools.py": 1633,
+    "chemsmart/agent/tools_command.py": 831,
+    "chemsmart/agent/tools_fs.py": 67,
+    "chemsmart/agent/tools_hpc.py": 646,
+    "chemsmart/agent/training_log.py": 719,
+    "chemsmart/agent/transport.py": 336,
+    "chemsmart/agent/tui/__init__.py": 12,
+    "chemsmart/agent/tui/_logging.py": 155,
+    "chemsmart/agent/tui/app.py": 107,
+    "chemsmart/agent/tui/bindings.py": 10,
+    "chemsmart/agent/tui/config.py": 91,
+    "chemsmart/agent/tui/events.py": 369,
+    "chemsmart/agent/tui/phase.py": 41,
+    "chemsmart/agent/tui/screens/__init__.py": 1,
+    "chemsmart/agent/tui/screens/calculations.py": 374,
+    "chemsmart/agent/tui/screens/chat.py": 4628,
+    "chemsmart/agent/tui/screens/jobs_panel.py": 153,
+    "chemsmart/agent/tui/screens/sessions.py": 120,
+    "chemsmart/agent/tui/services/__init__.py": 1,
+    "chemsmart/agent/tui/services/file_index.py": 119,
+    "chemsmart/agent/tui/services/job_poller.py": 731,
+    "chemsmart/agent/tui/services/log_tailer.py": 73,
+    "chemsmart/agent/tui/services/session_index.py": 29,
+    "chemsmart/agent/tui/services/session_runner.py": 101,
+    "chemsmart/agent/tui/state.py": 90,
+    "chemsmart/agent/tui/tool_meta.py": 619,
+    "chemsmart/agent/tui/widgets/__init__.py": 1,
+    "chemsmart/agent/tui/widgets/calculation_strip.py": 103,
+    "chemsmart/agent/tui/widgets/cells/__init__.py": 44,
+    "chemsmart/agent/tui/widgets/cells/_common.py": 32,
+    "chemsmart/agent/tui/widgets/cells/agent_message.py": 16,
+    "chemsmart/agent/tui/widgets/cells/base.py": 49,
+    "chemsmart/agent/tui/widgets/cells/calculation_receipt.py": 141,
+    "chemsmart/agent/tui/widgets/cells/command_interpretation.py": 224,
+    "chemsmart/agent/tui/widgets/cells/critic_verdict.py": 28,
+    "chemsmart/agent/tui/widgets/cells/decision_trace.py": 168,
+    "chemsmart/agent/tui/widgets/cells/dry_run_input.py": 117,
+    "chemsmart/agent/tui/widgets/cells/error.py": 160,
+    "chemsmart/agent/tui/widgets/cells/geometry_handoff.py": 67,
+    "chemsmart/agent/tui/widgets/cells/job_status.py": 68,
+    "chemsmart/agent/tui/widgets/cells/method.py": 61,
+    "chemsmart/agent/tui/widgets/cells/molecule.py": 88,
+    "chemsmart/agent/tui/widgets/cells/plan.py": 289,
+    "chemsmart/agent/tui/widgets/cells/run_result.py": 62,
+    "chemsmart/agent/tui/widgets/cells/runtime_validation.py": 99,
+    "chemsmart/agent/tui/widgets/cells/submission_preview.py": 55,
+    "chemsmart/agent/tui/widgets/cells/synthesis_trace.py": 220,
+    "chemsmart/agent/tui/widgets/cells/tool_call_cell.py": 212,
+    "chemsmart/agent/tui/widgets/cells/user_message.py": 65,
+    "chemsmart/agent/tui/widgets/cells/workflow.py": 76,
+    "chemsmart/agent/tui/widgets/composer.py": 229,
+    "chemsmart/agent/tui/widgets/footer.py": 298,
+    "chemsmart/agent/tui/widgets/header.py": 83,
+    "chemsmart/agent/tui/widgets/popups/__init__.py": 32,
+    "chemsmart/agent/tui/widgets/popups/activity.py": 85,
+    "chemsmart/agent/tui/widgets/popups/approval.py": 260,
+    "chemsmart/agent/tui/widgets/popups/cwd_mismatch.py": 68,
+    "chemsmart/agent/tui/widgets/popups/file_picker.py": 128,
+    "chemsmart/agent/tui/widgets/popups/history.py": 103,
+    "chemsmart/agent/tui/widgets/popups/project_yaml.py": 163,
+    "chemsmart/agent/tui/widgets/popups/shortcuts.py": 58,
+    "chemsmart/agent/tui/widgets/popups/text_prompt.py": 59,
+    "chemsmart/agent/tui/widgets/slash_palette.py": 112,
+    "chemsmart/agent/tui/widgets/transcript.py": 93,
+    "chemsmart/agent/v8_adapter.py": 462,
+    "chemsmart/agent/v8_kind_index.py": 214,
+    "chemsmart/agent/wizard/__init__.py": 117,
+    "chemsmart/agent/wizard/cache.py": 162,
+    "chemsmart/agent/wizard/normalize.py": 62,
+    "chemsmart/agent/wizard/orchestrator.py": 87,
+    "chemsmart/agent/wizard/parsers.py": 702,
+    "chemsmart/agent/wizard/paths.py": 83,
+    "chemsmart/agent/wizard/probe.py": 573,
+    "chemsmart/agent/wizard/project.py": 177,
+    "chemsmart/agent/wizard/refresh.py": 272,
+    "chemsmart/agent/wizard/render.py": 309,
+    "chemsmart/agent/wizard/scheduler_env.py": 362,
+    "chemsmart/agent/wizard/scratch.py": 167,
+    "chemsmart/agent/wizard/software.py": 607,
+    "chemsmart/agent/wizard/survey.py": 556,
+    "chemsmart/agent/wizard/tools.py": 90,
+    "chemsmart/agent/wizard/topology.py": 59,
+    "chemsmart/agent/wizard/validate.py": 73,
+    "chemsmart/agent/wizard/verify.py": 158,
+    "chemsmart/agent/wizard/write.py": 16
+  },
+  "git": {
+    "branch": "codex/agent-codebase-simplification",
+    "head": "95faa53cf1b231f96f0f075a977f46be1c6e1ebe"
+  },
+  "import_cycles": [
+    [
+      "chemsmart.agent.cli",
+      "chemsmart.agent.tui",
+      "chemsmart.agent.tui.app",
+      "chemsmart.agent.tui.screens.chat"
+    ]
+  ],
+  "long_classes": [
+    {
+      "end_line": 1987,
+      "kind": "class",
+      "lines": 1776,
+      "path": "chemsmart/agent/core.py",
+      "qualified_name": "AgentSession",
+      "start_line": 212
+    },
+    {
+      "end_line": 827,
+      "kind": "class",
+      "lines": 752,
+      "path": "chemsmart/agent/loop.py",
+      "qualified_name": "ToolLoop",
+      "start_line": 76
+    },
+    {
+      "end_line": 1003,
+      "kind": "class",
+      "lines": 862,
+      "path": "chemsmart/agent/synthesis.py",
+      "qualified_name": "SynthesisSession",
+      "start_line": 142
+    },
+    {
+      "end_line": 4164,
+      "kind": "class",
+      "lines": 3961,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen",
+      "start_line": 204
+    }
+  ],
+  "long_functions": [
+    {
+      "end_line": 708,
+      "kind": "function",
+      "lines": 357,
+      "path": "chemsmart/agent/core.py",
+      "qualified_name": "AgentSession.run_loop",
+      "start_line": 352
+    },
+    {
+      "end_line": 936,
+      "kind": "function",
+      "lines": 227,
+      "path": "chemsmart/agent/core.py",
+      "qualified_name": "AgentSession._continue_run",
+      "start_line": 710
+    },
+    {
+      "end_line": 1460,
+      "kind": "function",
+      "lines": 146,
+      "path": "chemsmart/agent/core.py",
+      "qualified_name": "AgentSession._finalize_session",
+      "start_line": 1315
+    },
+    {
+      "end_line": 219,
+      "kind": "function",
+      "lines": 170,
+      "path": "chemsmart/agent/harness/command_contracts.py",
+      "qualified_name": "check_command_contracts",
+      "start_line": 50
+    },
+    {
+      "end_line": 331,
+      "kind": "function",
+      "lines": 110,
+      "path": "chemsmart/agent/harness/command_contracts.py",
+      "qualified_name": "_coordinate_contract_issues",
+      "start_line": 222
+    },
+    {
+      "end_line": 559,
+      "kind": "function",
+      "lines": 175,
+      "path": "chemsmart/agent/harness/command_contracts.py",
+      "qualified_name": "_qmmm_contract_issues",
+      "start_line": 385
+    },
+    {
+      "end_line": 400,
+      "kind": "function",
+      "lines": 240,
+      "path": "chemsmart/agent/harness/command_semantics.py",
+      "qualified_name": "evaluate_command_semantics",
+      "start_line": 161
+    },
+    {
+      "end_line": 428,
+      "kind": "function",
+      "lines": 115,
+      "path": "chemsmart/agent/harness/generated_invariants.py",
+      "qualified_name": "_orca_coordinate_issues",
+      "start_line": 314
+    },
+    {
+      "end_line": 190,
+      "kind": "function",
+      "lines": 131,
+      "path": "chemsmart/agent/harness/intent.py",
+      "qualified_name": "IntentSpec.from_request",
+      "start_line": 60
+    },
+    {
+      "end_line": 128,
+      "kind": "function",
+      "lines": 105,
+      "path": "chemsmart/agent/harness/invariants/gaussian_ts.py",
+      "qualified_name": "check_gaussian_ts_route",
+      "start_line": 24
+    },
+    {
+      "end_line": 237,
+      "kind": "function",
+      "lines": 133,
+      "path": "chemsmart/agent/harness/spec_invariants.py",
+      "qualified_name": "check_job",
+      "start_line": 105
+    },
+    {
+      "end_line": 227,
+      "kind": "function",
+      "lines": 135,
+      "path": "chemsmart/agent/harness/sub_intent.py",
+      "qualified_name": "build_sub_intent_assertions",
+      "start_line": 93
+    },
+    {
+      "end_line": 162,
+      "kind": "function",
+      "lines": 107,
+      "path": "chemsmart/agent/local/adapter.py",
+      "qualified_name": "plan_to_synthesis_result",
+      "start_line": 56
+    },
+    {
+      "end_line": 154,
+      "kind": "function",
+      "lines": 106,
+      "path": "chemsmart/agent/local/loader.py",
+      "qualified_name": "load_lora_model",
+      "start_line": 49
+    },
+    {
+      "end_line": 409,
+      "kind": "function",
+      "lines": 313,
+      "path": "chemsmart/agent/loop.py",
+      "qualified_name": "ToolLoop.run_turn",
+      "start_line": 97
+    },
+    {
+      "end_line": 565,
+      "kind": "function",
+      "lines": 183,
+      "path": "chemsmart/agent/model_command_parser.py",
+      "qualified_name": "parse_model_command",
+      "start_line": 383
+    },
+    {
+      "end_line": 705,
+      "kind": "function",
+      "lines": 131,
+      "path": "chemsmart/agent/model_command_parser.py",
+      "qualified_name": "format_parsed_model_command",
+      "start_line": 575
+    },
+    {
+      "end_line": 595,
+      "kind": "function",
+      "lines": 108,
+      "path": "chemsmart/agent/project_yaml.py",
+      "qualified_name": "update_project_yaml",
+      "start_line": 488
+    },
+    {
+      "end_line": 443,
+      "kind": "function",
+      "lines": 188,
+      "path": "chemsmart/agent/registry.py",
+      "qualified_name": "ToolRegistry.default",
+      "start_line": 256
+    },
+    {
+      "end_line": 386,
+      "kind": "function",
+      "lines": 179,
+      "path": "chemsmart/agent/runtime/calculations.py",
+      "qualified_name": "execute_observed_process",
+      "start_line": 208
+    },
+    {
+      "end_line": 590,
+      "kind": "function",
+      "lines": 146,
+      "path": "chemsmart/agent/runtime/calculations.py",
+      "qualified_name": "inspect_output",
+      "start_line": 445
+    },
+    {
+      "end_line": 205,
+      "kind": "function",
+      "lines": 132,
+      "path": "chemsmart/agent/services/conversation_memory.py",
+      "qualified_name": "ConversationMemory.from_entries",
+      "start_line": 74
+    },
+    {
+      "end_line": 423,
+      "kind": "function",
+      "lines": 109,
+      "path": "chemsmart/agent/services/conversation_memory.py",
+      "qualified_name": "_summarize_tool_result",
+      "start_line": 315
+    },
+    {
+      "end_line": 599,
+      "kind": "function",
+      "lines": 103,
+      "path": "chemsmart/agent/services/conversation_memory.py",
+      "qualified_name": "_apply_mva_entity_updates",
+      "start_line": 497
+    },
+    {
+      "end_line": 918,
+      "kind": "function",
+      "lines": 235,
+      "path": "chemsmart/agent/services/conversation_memory.py",
+      "qualified_name": "_summarize_tool_use_result",
+      "start_line": 684
+    },
+    {
+      "end_line": 525,
+      "kind": "function",
+      "lines": 119,
+      "path": "chemsmart/agent/synthesis.py",
+      "qualified_name": "SynthesisSession.prepare_command",
+      "start_line": 407
+    },
+    {
+      "end_line": 637,
+      "kind": "function",
+      "lines": 111,
+      "path": "chemsmart/agent/synthesis.py",
+      "qualified_name": "SynthesisSession._route_frontier_request",
+      "start_line": 527
+    },
+    {
+      "end_line": 816,
+      "kind": "function",
+      "lines": 107,
+      "path": "chemsmart/agent/synthesis.py",
+      "qualified_name": "SynthesisSession._repair_ready_result",
+      "start_line": 710
+    },
+    {
+      "end_line": 643,
+      "kind": "function",
+      "lines": 166,
+      "path": "chemsmart/agent/tools_command.py",
+      "qualified_name": "_execution_terminal_state",
+      "start_line": 478
+    },
+    {
+      "end_line": 356,
+      "kind": "function",
+      "lines": 207,
+      "path": "chemsmart/agent/tui/events.py",
+      "qualified_name": "parse_decision_event",
+      "start_line": 150
+    },
+    {
+      "end_line": 933,
+      "kind": "function",
+      "lines": 139,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen.run_slash_tool_request",
+      "start_line": 795
+    },
+    {
+      "end_line": 1224,
+      "kind": "function",
+      "lines": 110,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen.on_worker_state_changed",
+      "start_line": 1115
+    },
+    {
+      "end_line": 2023,
+      "kind": "function",
+      "lines": 173,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen._publish_synthesis_result",
+      "start_line": 1851
+    },
+    {
+      "end_line": 2428,
+      "kind": "function",
+      "lines": 215,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen._apply_log_entry",
+      "start_line": 2214
+    },
+    {
+      "end_line": 2601,
+      "kind": "function",
+      "lines": 144,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen._apply_tool_use_event",
+      "start_line": 2458
+    },
+    {
+      "end_line": 2956,
+      "kind": "function",
+      "lines": 182,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen._handle_slash_command",
+      "start_line": 2775
+    },
+    {
+      "end_line": 3329,
+      "kind": "function",
+      "lines": 110,
+      "path": "chemsmart/agent/tui/screens/chat.py",
+      "qualified_name": "ChatScreen._handle_slash_tool_success",
+      "start_line": 3220
+    },
+    {
+      "end_line": 138,
+      "kind": "function",
+      "lines": 110,
+      "path": "chemsmart/agent/tui/widgets/cells/calculation_receipt.py",
+      "qualified_name": "CalculationReceiptCell._build_renderable",
+      "start_line": 29
+    },
+    {
+      "end_line": 138,
+      "kind": "function",
+      "lines": 109,
+      "path": "chemsmart/agent/wizard/verify.py",
+      "qualified_name": "verify_server_yaml",
+      "start_line": 30
+    }
+  ],
+  "oversized_files": [
+    {
+      "lines": 4628,
+      "path": "chemsmart/agent/tui/screens/chat.py"
+    },
+    {
+      "lines": 2621,
+      "path": "chemsmart/agent/core.py"
+    },
+    {
+      "lines": 1633,
+      "path": "chemsmart/agent/tools.py"
+    },
+    {
+      "lines": 1551,
+      "path": "chemsmart/agent/synthesis.py"
+    },
+    {
+      "lines": 1256,
+      "path": "chemsmart/agent/project_yaml.py"
+    },
+    {
+      "lines": 1136,
+      "path": "chemsmart/agent/runtime/calculations.py"
+    },
+    {
+      "lines": 962,
+      "path": "chemsmart/agent/cli.py"
+    },
+    {
+      "lines": 950,
+      "path": "chemsmart/agent/loop.py"
+    },
+    {
+      "lines": 947,
+      "path": "chemsmart/agent/services/conversation_memory.py"
+    },
+    {
+      "lines": 927,
+      "path": "chemsmart/agent/model_command_parser.py"
+    },
+    {
+      "lines": 904,
+      "path": "chemsmart/agent/harness/command_semantics.py"
+    },
+    {
+      "lines": 883,
+      "path": "chemsmart/agent/harness/generated_invariants.py"
+    },
+    {
+      "lines": 831,
+      "path": "chemsmart/agent/tools_command.py"
+    },
+    {
+      "lines": 818,
+      "path": "chemsmart/agent/harness/command_contracts.py"
+    }
+  ],
+  "root": "chemsmart/agent",
+  "schema_version": 1,
+  "summary": {
+    "classes": 202,
+    "classes_over_500_lines": 4,
+    "files_over_800_lines": 14,
+    "functions": 1694,
+    "functions_over_100_lines": 39,
+    "import_cycles": 1,
+    "physical_lines": 44691,
+    "pylint_duplicate_groups": 8,
+    "python_files": 151,
+    "ruff_c901_violations": 65,
+    "ruff_default_violations": 0
+  },
+  "tooling": {
+    "pylint_duplicates": [
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.cli:[667:687]\n==chemsmart.agent.tui.screens.chat:[3387:3407]\n    table.add_column(\"Field\", style=\"cyan\", no_wrap=True)\n    table.add_column(\"Value\")\n    table.add_row(\"cache_path\", str(result.get(\"cache_path\") or \"-\"))\n    table.add_row(\"status\", str(result.get(\"status\") or \"-\"))\n    table.add_row(\"host\", str(result.get(\"host\") or \"-\"))\n    table.add_row(\"mode\", str(result.get(\"mode\") or \"-\"))\n    table.add_row(\"scheduler\", str(result.get(\"scheduler\") or \"-\"))\n    table.add_row(\"probed_at\", str(result.get(\"probed_at\") or \"-\"))\n    node_summary = result.get(\"node_summary\")\n    if not isinstance(node_summary, dict):\n        node_summary = {}\n    table.add_row(\n        \"selected_queue\",\n        str(node_summary.get(\"selected_queue\") or \"-\"),\n    )\n    table.add_row(\n        \"resources\",\n        f\"cpu={node_summary.get('cpu')} mem_gb={node_summary.get('mem_gb')} gpu={node_summary.get('gpu')}\",\n    )\n    table.add_row(",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.local.adapter:[181:199]\n==chemsmart.agent.synthesis:[1150:1168]\n        status = \"infeasible\" if intent == \"decline\" else \"needs_clarification\"\n        if intent == \"chitchat\":\n            status = \"infeasible\"\n        return {\n            \"status\": status,\n            \"command\": \"\",\n            \"explanation\": message or \"No executable workflow was requested.\",\n            \"confidence\": \"high\",\n            \"missing_info\": [],\n            \"alternatives\": [],\n        }\n\n    commands = [\n        command\n        for command in adapted.get(\"commands\", [])\n        if isinstance(command, str) and command.strip()\n    ]\n    if not commands:",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.wizard.project:[155:177]\n==chemsmart.agent.wizard.scratch:[145:167]\n    if topology.mode == \"A\":\n        return run_local_probe(runner, spec, **slots)\n    if topology.mode == \"B\" and topology.host:\n        return run_ssh_probe(runner, topology.host, spec, **slots)\n    raise ValueError(f\"Unsupported topology: {topology}\")\n\n\ndef _first_nonempty_line(text: str) -> str | None:\n    for line in text.splitlines():\n        stripped = line.strip()\n        if stripped:\n            return stripped\n    return None\n\n\ndef _normalize_shell_value(value: str | None) -> str | None:\n    if value is None:\n        return None\n    stripped = value.strip()\n    if not stripped or stripped.startswith(\"$\"):\n        return None\n    return stripped",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.harness.intent:[393:412]\n==chemsmart.agent.harness.sub_intent:[74:107]\n    if not isinstance(value, (list, tuple)):\n        return None\n    normalized: list[Any] = []\n    for item in value:\n        if isinstance(item, (list, tuple)):\n            nested = _structured_sequence(item)\n            if nested is None:\n                return None\n            normalized.append(nested)\n        elif isinstance(item, bool):\n            normalized.append(item)\n        elif isinstance(item, (int, float)):\n            normalized.append(float(item))\n        else:\n            normalized.append(str(item).strip().lower())\n    return tuple(normalized)\n\n\ndef _unwrap_singleton_group(value: tuple[Any, ...] | None) -> tuple[Any, ...] | None:",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.wizard.project:[139:155]\n==chemsmart.agent.wizard.software:[407:427]\n    values: list[str | None] = []\n    for name in names:\n        result = _run_probe(\n            runner,\n            topology,\n            ALL_PROBE_SPECS[\"common.printenv_var\"],\n            env_name=name,\n        )\n        value = _normalize_shell_value(_first_nonempty_line(result.stdout))\n        if value is None and topology.mode == \"A\":\n            value = _normalize_shell_value(os.environ.get(name))\n        values.append(value)\n    return values\n\n\ndef _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.harness.intent:[42:53]\n==chemsmart.agent.tools_command:[331:342]\n            \"action\",\n            \"program\",\n            \"kind\",\n            \"project\",\n            \"server\",\n            \"input_path\",\n            \"output_path\",\n            \"charge\",\n            \"multiplicity\",\n            \"execution_mode\",\n        )",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.wizard.scratch:[153:167]\n==chemsmart.agent.wizard.software:[548:568]\n    for line in text.splitlines():\n        stripped = line.strip()\n        if stripped:\n            return stripped\n    return None\n\n\ndef _normalize_shell_value(value: str | None) -> str | None:\n    if value is None:\n        return None\n    stripped = value.strip()\n    if not stripped or stripped.startswith(\"$\"):\n        return None\n    return stripped\n\n\ndef _derive_conda_env_name(\n    base: str | None,\n    env_path: str | None,\n) -> str | None:",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      },
+      {
+        "column": 0,
+        "endColumn": null,
+        "endLine": null,
+        "line": 1,
+        "message": "Similar lines in 2 files\n==chemsmart.agent.harness.intent:[314:324]\n==chemsmart.agent.tools_command:[331:341]\n            \"action\",\n            \"program\",\n            \"kind\",\n            \"project\",\n            \"server\",\n            \"input_path\",\n            \"output_path\",\n            \"charge\",\n            \"multiplicity\",\n            \"execution_mode\",",
+        "message-id": "R0801",
+        "module": "chemsmart.agent.services.conversation_memory",
+        "obj": "",
+        "path": "chemsmart/agent/services/conversation_memory.py",
+        "symbol": "duplicate-code",
+        "type": "refactor"
+      }
+    ],
+    "ruff_c901": [
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 18,
+          "row": 907
+        },
+        "filename": "chemsmart/agent/cli.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 907
+        },
+        "message": "`_stream_event` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 907,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 352
+        },
+        "filename": "chemsmart/agent/core.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 352
+        },
+        "message": "`run_loop` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 352,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 22,
+          "row": 710
+        },
+        "filename": "chemsmart/agent/core.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 710
+        },
+        "message": "`_continue_run` is too complex (18 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 710,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 35,
+          "row": 1862
+        },
+        "filename": "chemsmart/agent/core.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 1862
+        },
+        "message": "`_apply_deterministic_gates` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 1862,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 15,
+          "row": 2370
+        },
+        "filename": "chemsmart/agent/core.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 2370
+        },
+        "message": "`_json_safe` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 2370,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 395
+        },
+        "filename": "chemsmart/agent/harness/basis_sets/catalog.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 395
+        },
+        "message": "`_score_entry` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 395,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 50
+        },
+        "filename": "chemsmart/agent/harness/command_contracts.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 50
+        },
+        "message": "`check_command_contracts` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 50,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 26,
+          "row": 385
+        },
+        "filename": "chemsmart/agent/harness/command_contracts.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 385
+        },
+        "message": "`_qmmm_contract_issues` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 385,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 30,
+          "row": 621
+        },
+        "filename": "chemsmart/agent/harness/command_contracts.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 621
+        },
+        "message": "`_parse_coordinate_literal` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 621,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 31,
+          "row": 161
+        },
+        "filename": "chemsmart/agent/harness/command_semantics.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 161
+        },
+        "message": "`evaluate_command_semantics` is too complex (20 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 161,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 37,
+          "row": 25
+        },
+        "filename": "chemsmart/agent/harness/generated_invariants.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 25
+        },
+        "message": "`check_generated_input_invariants` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 25,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 314
+        },
+        "filename": "chemsmart/agent/harness/generated_invariants.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 314
+        },
+        "message": "`_orca_coordinate_issues` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 314,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 21,
+          "row": 60
+        },
+        "filename": "chemsmart/agent/harness/intent.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 60
+        },
+        "message": "`from_request` is too complex (26 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 60,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 21,
+          "row": 211
+        },
+        "filename": "chemsmart/agent/harness/intent.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 211
+        },
+        "message": "`from_command` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 211,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 23,
+          "row": 474
+        },
+        "filename": "chemsmart/agent/harness/intent.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 474
+        },
+        "message": "`_kind_from_request` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 474,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 24
+        },
+        "filename": "chemsmart/agent/harness/invariants/gaussian_ts.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 24
+        },
+        "message": "`check_gaussian_ts_route` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 24,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 14,
+          "row": 105
+        },
+        "filename": "chemsmart/agent/harness/spec_invariants.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 105
+        },
+        "message": "`check_job` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 105,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 32,
+          "row": 93
+        },
+        "filename": "chemsmart/agent/harness/sub_intent.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 93
+        },
+        "message": "`build_sub_intent_assertions` is too complex (18 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 93,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 82
+        },
+        "filename": "chemsmart/agent/harness/terminal_state.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 82
+        },
+        "message": "`validate_terminal_state` is too complex (20 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 82,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 43
+        },
+        "filename": "chemsmart/agent/kind_disambiguator.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 43
+        },
+        "message": "`disambiguate` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 43,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 29,
+          "row": 56
+        },
+        "filename": "chemsmart/agent/local/adapter.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 56
+        },
+        "message": "`plan_to_synthesis_result` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 56,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 97
+        },
+        "filename": "chemsmart/agent/loop.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 97
+        },
+        "message": "`run_turn` is too complex (25 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 97,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 24,
+          "row": 383
+        },
+        "filename": "chemsmart/agent/model_command_parser.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 383
+        },
+        "message": "`parse_model_command` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 383,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 32,
+          "row": 575
+        },
+        "filename": "chemsmart/agent/model_command_parser.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 575
+        },
+        "message": "`format_parsed_model_command` is too complex (26 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 575,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 12,
+          "row": 155
+        },
+        "filename": "chemsmart/agent/permissions.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 155
+        },
+        "message": "`resolve` is too complex (14 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 155,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 16,
+          "row": 57
+        },
+        "filename": "chemsmart/agent/postprocess_v8.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 57
+        },
+        "message": "`_route_opts` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 57,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 16,
+          "row": 91
+        },
+        "filename": "chemsmart/agent/postprocess_v8.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 91
+        },
+        "message": "`postprocess` is too complex (22 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 91,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 25,
+          "row": 160
+        },
+        "filename": "chemsmart/agent/project_yaml.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 160
+        },
+        "message": "`_render_method_block` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 160,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 31,
+          "row": 947
+        },
+        "filename": "chemsmart/agent/project_yaml.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 947
+        },
+        "message": "`_protocol_alignment_issues` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 947,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 369
+        },
+        "filename": "chemsmart/agent/providers.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 369
+        },
+        "message": "`get_provider` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 369,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 29,
+          "row": 208
+        },
+        "filename": "chemsmart/agent/runtime/calculations.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 208
+        },
+        "message": "`execute_observed_process` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 208,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 22,
+          "row": 728
+        },
+        "filename": "chemsmart/agent/runtime/calculations.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 728
+        },
+        "message": "`_progress_summary` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 728,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 23,
+          "row": 15
+        },
+        "filename": "chemsmart/agent/runtime/cclib_parser.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 15
+        },
+        "message": "`parse_cclib_output` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 15,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 16,
+          "row": 52
+        },
+        "filename": "chemsmart/agent/runtime/reducer.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 52
+        },
+        "message": "`apply_event` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 52,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 21,
+          "row": 74
+        },
+        "filename": "chemsmart/agent/services/conversation_memory.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 74
+        },
+        "message": "`from_entries` is too complex (27 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 74,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 265
+        },
+        "filename": "chemsmart/agent/services/conversation_memory.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 265
+        },
+        "message": "`_trim_context_to_budget` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 265,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 27,
+          "row": 315
+        },
+        "filename": "chemsmart/agent/services/conversation_memory.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 315
+        },
+        "message": "`_summarize_tool_result` is too complex (29 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 315,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 30,
+          "row": 497
+        },
+        "filename": "chemsmart/agent/services/conversation_memory.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 497
+        },
+        "message": "`_apply_mva_entity_updates` is too complex (31 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 497,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 31,
+          "row": 684
+        },
+        "filename": "chemsmart/agent/services/conversation_memory.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 684
+        },
+        "message": "`_summarize_tool_use_result` is too complex (58 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 684,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 24,
+          "row": 407
+        },
+        "filename": "chemsmart/agent/synthesis.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 407
+        },
+        "message": "`prepare_command` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 407,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 32,
+          "row": 527
+        },
+        "filename": "chemsmart/agent/synthesis.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 527
+        },
+        "message": "`_route_frontier_request` is too complex (14 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 527,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 29,
+          "row": 710
+        },
+        "filename": "chemsmart/agent/synthesis.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 710
+        },
+        "message": "`_repair_ready_result` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 710,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 36,
+          "row": 453
+        },
+        "filename": "chemsmart/agent/tools.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 453
+        },
+        "message": "`_parse_gaussian_scan_definition` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 453,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 21,
+          "row": 849
+        },
+        "filename": "chemsmart/agent/tools.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 849
+        },
+        "message": "`validate_runtime` is too complex (22 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 849,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 159
+        },
+        "filename": "chemsmart/agent/tools_command.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 159
+        },
+        "message": "`_public_synthesis_trace` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 159,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 20,
+          "row": 37
+        },
+        "filename": "chemsmart/agent/tui/config.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 37
+        },
+        "message": "`load_tui_config` is too complex (15 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 37,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 25,
+          "row": 150
+        },
+        "filename": "chemsmart/agent/tui/events.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 150
+        },
+        "message": "`parse_decision_event` is too complex (22 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 150,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 16,
+          "row": 222
+        },
+        "filename": "chemsmart/agent/tui/screens/calculations.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 222
+        },
+        "message": "`_run_detail` is too complex (13 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 222,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 32,
+          "row": 1115
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 1115
+        },
+        "message": "`on_worker_state_changed` is too complex (21 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 1115,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 25,
+          "row": 2214
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 2214
+        },
+        "message": "`_apply_log_entry` is too complex (35 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 2214,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 30,
+          "row": 2458
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 2458
+        },
+        "message": "`_apply_tool_use_event` is too complex (18 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 2458,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 30,
+          "row": 2775
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 2775
+        },
+        "message": "`_handle_slash_command` is too complex (55 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 2775,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 35,
+          "row": 3220
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 3220
+        },
+        "message": "`_handle_slash_tool_success` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 3220,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 27,
+          "row": 3331
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 3331
+        },
+        "message": "`_tool_success_note` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 3331,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 35,
+          "row": 4231
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 4231
+        },
+        "message": "`_latest_project_yaml_candidate` is too complex (16 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 4231,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 28,
+          "row": 4565
+        },
+        "filename": "chemsmart/agent/tui/screens/chat.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 4565
+        },
+        "message": "`_format_semantic_result` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 4565,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 30,
+          "row": 324
+        },
+        "filename": "chemsmart/agent/tui/tool_meta.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 324
+        },
+        "message": "`render_tool_result_detail` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 324,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 26,
+          "row": 29
+        },
+        "filename": "chemsmart/agent/tui/widgets/cells/calculation_receipt.py",
+        "fix": null,
+        "location": {
+          "column": 9,
+          "row": 29
+        },
+        "message": "`_build_renderable` is too complex (17 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 29,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 35,
+          "row": 83
+        },
+        "filename": "chemsmart/agent/tui/widgets/cells/command_interpretation.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 83
+        },
+        "message": "`_render_command_interpretation` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 83,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 22,
+          "row": 235
+        },
+        "filename": "chemsmart/agent/tui/widgets/cells/plan.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 235
+        },
+        "message": "`_completed_detail` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 235,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 27,
+          "row": 154
+        },
+        "filename": "chemsmart/agent/v8_adapter.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 154
+        },
+        "message": "`_parse_scan_definition` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 154,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 17,
+          "row": 266
+        },
+        "filename": "chemsmart/agent/v8_adapter.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 266
+        },
+        "message": "`_job_command` is too complex (17 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 266,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 26,
+          "row": 293
+        },
+        "filename": "chemsmart/agent/wizard/parsers.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 293
+        },
+        "message": "`parse_pbs_pbsnodes_av` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 293,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 27,
+          "row": 613
+        },
+        "filename": "chemsmart/agent/wizard/parsers.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 613
+        },
+        "message": "`parse_duration_seconds` is too complex (11 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 613,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      },
+      {
+        "cell": null,
+        "code": "C901",
+        "end_location": {
+          "column": 15,
+          "row": 203
+        },
+        "filename": "chemsmart/agent/wizard/survey.py",
+        "fix": null,
+        "location": {
+          "column": 5,
+          "row": 203
+        },
+        "message": "`_probe_sge` is too complex (12 > 10)",
+        "name": "complex-structure",
+        "noqa_row": 203,
+        "severity": "error",
+        "url": "https://docs.astral.sh/ruff/rules/complex-structure"
+      }
+    ],
+    "ruff_default": []
+  }
+}

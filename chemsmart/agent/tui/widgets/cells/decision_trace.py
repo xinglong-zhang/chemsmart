@@ -78,12 +78,16 @@ def _render_trace(trace: dict[str, object], *, expanded: bool) -> Group:
     table.add_row("confidence", confidence)
     table.add_row("summary", summary)
     table.add_row("target command", target or "none")
-    table.add_row("default project", str(trace.get("default_project") or "none"))
+    table.add_row(
+        "default project", str(trace.get("default_project") or "none")
+    )
     table.add_row(
         "memory",
-        "previous command available"
-        if bool(trace.get("last_command_available"))
-        else "no previous command",
+        (
+            "previous command available"
+            if bool(trace.get("last_command_available"))
+            else "no previous command"
+        ),
     )
     table.add_row("request", str(trace.get("request_excerpt") or ""))
 

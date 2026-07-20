@@ -12,9 +12,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-MODEL_REPO_ID = (
-    "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
-)
+MODEL_REPO_ID = "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
 DEFAULT_MAX_SEQ_LENGTH = 4096
 
 
@@ -26,7 +24,6 @@ class LoadedMLXModel:
     tokenizer: Any
     max_seq_length: int
     base_model_id: str
-    adapter_repo_id: str
     model_repo_id: str
     backend: str = "mlx"
 
@@ -67,6 +64,5 @@ def load_mlx_model(
         tokenizer=tokenizer,
         max_seq_length=max_seq_length,
         base_model_id=model_id,
-        adapter_repo_id="",
         model_repo_id=model_id,
     )

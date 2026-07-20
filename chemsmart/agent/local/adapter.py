@@ -15,6 +15,11 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from chemsmart.agent.services.compact_spec import (
+    non_workflow_result,
+    project_compact_spec,
+)
+
 # build_job.kind -> (chemsmart program subcommand, job subcommand)
 _KIND_TO_CLI: dict[str, tuple[str, str]] = {
     "gaussian.sp": ("gaussian", "sp"),
@@ -79,6 +84,12 @@ def plan_to_synthesis_result(
             plan,
             default_project=default_project,
         )
+    return _legacy_plan_to_synthesis_result(plan, user_query, use_submit)
+
+
+def _legacy_plan_to_synthesis_result(
+    plan: dict[str, Any], user_query: str, use_submit: bool | None
+) -> dict[str, Any]:
 
     intent = str(plan.get("intent") or "").lower()
     if intent in {"decline", "infeasible", "out_of_scope"}:
@@ -164,9 +175,11 @@ def plan_to_synthesis_result(
 
 def _is_compact_spec(plan: dict[str, Any]) -> bool:
     intent = plan.get("intent")
-    return isinstance(intent, str) and (
-        intent in {"workflow", "advisory", "decline", "chitchat"}
-    ) and ("jobs" in plan or "message" in plan)
+    return (
+        isinstance(intent, str)
+        and (intent in {"workflow", "advisory", "decline", "chitchat"})
+        and ("jobs" in plan or "message" in plan)
+    )
 
 
 def _compact_spec_to_synthesis_result(
@@ -176,30 +189,16 @@ def _compact_spec_to_synthesis_result(
     from chemsmart.agent.v8_adapter import adapt
 
     adapted = adapt(plan, validate=True, default_project=default_project)
-    intent = str(adapted.get("intent") or plan.get("intent") or "")
-    if intent != "workflow":
-        message = str(adapted.get("message") or plan.get("message") or "")
-        status = "infeasible" if intent == "decline" else "needs_clarification"
-        if intent == "chitchat":
-            status = "infeasible"
-        return {
-            "status": status,
-            "command": "",
-            "explanation": message or "No executable workflow was requested.",
-            "confidence": "high",
-            "missing_info": [],
-            "alternatives": [],
-        }
+    projection = project_compact_spec(adapted, plan)
+    if projection.intent != "workflow":
+        return non_workflow_result(projection)
 
-    commands = [
-        command
-        for command in adapted.get("commands", [])
-        if isinstance(command, str) and command.strip()
-    ]
+    commands = list(projection.commands)
     if not commands:
         errors = adapted.get("errors") or ["no commands rendered"]
         return _needs_clarification(
-            "Planner SPEC could not be rendered: " + "; ".join(map(str, errors)),
+            "Planner SPEC could not be rendered: "
+            + "; ".join(map(str, errors)),
             ["jobs"],
         )
     if adapted.get("valid") is False:

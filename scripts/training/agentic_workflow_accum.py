@@ -10,11 +10,11 @@ collection plan before any provider call.
 from __future__ import annotations
 
 import argparse
-import signal
 import hashlib
 import json
 import logging
 import os
+import signal
 import sys
 import tempfile
 import time
@@ -23,9 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dotenv import dotenv_values
-
 import reasoning_accum
+from dotenv import dotenv_values
 
 REPO = Path(__file__).resolve().parents[2]
 BASE_URL = reasoning_accum.BASE_URL
@@ -57,7 +56,9 @@ def _scenario_provenance(
     fixture_id = hashlib.sha256(
         " ".join(scenario.turns).encode("utf-8")
     ).hexdigest()[:12]
-    family = scenario.workflow or f"{scenario.program}.{scenario.expected_kind}"
+    family = (
+        scenario.workflow or f"{scenario.program}.{scenario.expected_kind}"
+    )
     return {
         "scenario_id": scenario.name,
         "scenario_family": family,
@@ -2287,8 +2288,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    os.environ["PATH"] = (
-        "/opt/anaconda3/envs/chemsmart/bin:" + os.environ.get("PATH", "")
+    os.environ["PATH"] = "/opt/anaconda3/envs/chemsmart/bin:" + os.environ.get(
+        "PATH", ""
     )
     sys.path.insert(0, str(REPO))
     os.chdir(REPO)
@@ -2310,9 +2311,7 @@ def main(argv: list[str] | None = None) -> int:
         return REPO / "var" / "agent-training" / "runs" / name
 
     scenario_source = (
-        RARE4TURN_SCENARIOS
-        if args.scenario_set == "rare4turn"
-        else SCENARIOS
+        RARE4TURN_SCENARIOS if args.scenario_set == "rare4turn" else SCENARIOS
     )
     selected = [
         (position, scenario)
@@ -2371,7 +2370,9 @@ def main(argv: list[str] | None = None) -> int:
             run_dir = _run_dir_for(model)
             os.environ["CHEMSMART_AGENT_TRAINING_DIR"] = str(run_dir)
             provider = providers[model]
-            providers_mod.get_provider = lambda *a, _provider=provider, **k: _provider
+            providers_mod.get_provider = (
+                lambda *a, _provider=provider, **k: _provider
+            )
             record = _run_scenario(
                 scenario=scenario,
                 task_id=task_id,
@@ -2381,7 +2382,9 @@ def main(argv: list[str] | None = None) -> int:
                 provider=provider,
                 scenario_timeout_s=args.scenario_timeout_s,
                 registry_groups=[
-                    item.strip() for item in args.groups.split(",") if item.strip()
+                    item.strip()
+                    for item in args.groups.split(",")
+                    if item.strip()
                 ],
                 tools_command=tools_command,
                 AgentSession=AgentSession,
@@ -2397,7 +2400,10 @@ def main(argv: list[str] | None = None) -> int:
                 break
             time.sleep(1)
         if record and record["grade"] == "QUOTA":
-            print(f"{task_id}: all configured models exhausted or unavailable", flush=True)
+            print(
+                f"{task_id}: all configured models exhausted or unavailable",
+                flush=True,
+            )
 
     tally: dict[str, int] = {}
     for row in results:
@@ -2462,7 +2468,9 @@ def _run_scenario(
             session_root=work / "sessions" / task_id,
             stage_prompt="unified_agent.md",
         )
-        policy = PermissionPolicy(mode=PermissionMode.DRIVING, prompt_risky=True)
+        policy = PermissionPolicy(
+            mode=PermissionMode.DRIVING, prompt_risky=True
+        )
         last_synthesis: dict[str, Any] | None = None
         ask_count = 0
         with _scenario_timeout(scenario_timeout_s):
@@ -2495,10 +2503,14 @@ def _run_scenario(
         if last_synthesis:
             command = str(last_synthesis.get("command") or "").strip()
             semantic = last_synthesis.get("semantic") or {}
-            verdict = semantic.get("verdict") if isinstance(semantic, dict) else None
+            verdict = (
+                semantic.get("verdict") if isinstance(semantic, dict) else None
+            )
             record["command"] = command
             record["gate"] = verdict
-            record["reasoning_len"] = len(last_synthesis.get("reasoning") or "")
+            record["reasoning_len"] = len(
+                last_synthesis.get("reasoning") or ""
+            )
             if (
                 scenario.expected_kind != "decline"
                 and last_synthesis.get("status") == "ready"
@@ -2547,7 +2559,9 @@ def _write_collection_plans(
         run_dir = run_dir_for(model)
         plan_dir = run_dir / "collection_plans"
         plan_dir.mkdir(parents=True, exist_ok=True)
-        path = plan_dir / f"{batch_id}_agentic-workflow_{int(time.time())}.jsonl"
+        path = (
+            plan_dir / f"{batch_id}_agentic-workflow_{int(time.time())}.jsonl"
+        )
         with path.open("w", encoding="utf-8") as handle:
             for position, scenario in selected:
                 task_index = task_offset + position
@@ -2566,7 +2580,9 @@ def _write_collection_plans(
                     "workflow": scenario.workflow,
                     "workspace_yaml_policy": "one project YAML per task workspace",
                 }
-                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+                handle.write(
+                    json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+                )
         print(f"collection_plan[{model}]={path}", flush=True)
 
 
@@ -2574,7 +2590,9 @@ def _append_result(run_dir: Path, record: dict[str, Any]) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "agentic_workflow_results.jsonl"
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        handle.write(
+            json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+        )
 
 
 def _format_result(record: dict[str, Any]) -> str:

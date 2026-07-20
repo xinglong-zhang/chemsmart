@@ -7,6 +7,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from chemsmart.agent.serialization import generic_json_safe
+
 _HANDLE_PREFIXES = {
     "mol": "mol",
     "gset": "gset",
@@ -160,14 +162,4 @@ def store_result_handle(
 def json_safe(value: Any) -> Any:
     """Convert a generic tool result into a JSON-safe summary value."""
 
-    if isinstance(value, dict):
-        return {str(key): json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, bytes):
-        return {"type": "bytes", "length": len(value)}
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return {"type": value.__class__.__name__, "repr": repr(value)}
+    return generic_json_safe(value, recurse=json_safe)

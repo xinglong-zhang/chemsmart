@@ -61,6 +61,7 @@ def _install(
     provider_exc=None,
 ):
     """Drive doctor: control load_active_provider_config + get_provider."""
+
     def _load(*_args, **_kwargs):
         if config_exc is not None:
             raise config_exc
@@ -142,7 +143,7 @@ def test_doctor_valid_local(monkeypatch):
 def test_doctor_default_output_has_no_debug_or_warnings(monkeypatch, tmp_path):
     """Default doctor output stays quiet; logs are captured to the tui log."""
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -179,6 +180,7 @@ def test_doctor_default_output_has_no_debug_or_warnings(monkeypatch, tmp_path):
 
 def test_doctor_verbose_emits_debug(monkeypatch, caplog):
     """--verbose keeps DEBUG output on the console."""
+
     def verbose_ping():
         logging.getLogger("openai.http").debug("verbose doctor debug")
         return _PING_RESULT
@@ -196,6 +198,7 @@ def test_doctor_verbose_emits_debug(monkeypatch, caplog):
 
 def test_doctor_no_ping_reports_skip(monkeypatch):
     """doctor --no-ping prints skip and still succeeds (ping not called)."""
+
     def _ping_should_not_run():  # pragma: no cover - defensive
         raise AssertionError("ping should not run when --no-ping is used")
 

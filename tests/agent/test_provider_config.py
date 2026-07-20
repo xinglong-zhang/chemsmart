@@ -97,7 +97,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
@@ -128,7 +127,6 @@ providers:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
     base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
-    adapter_repo_id: ""
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: mlx
@@ -174,6 +172,24 @@ providers:
     assert config.type == "anthropic"
 
 
+def test_load_active_provider_config_rejects_legacy_peft_adapter(tmp_path):
+    yaml_path = _write_agent_yaml(
+        tmp_path / "agent.yaml",
+        """
+active: local
+providers:
+  local:
+    type: local
+    model: old-adapter
+    base_model_id: Qwen/base
+    adapter_repo_id: lab/adapter
+""",
+    )
+
+    with pytest.raises(AgentProviderConfigError, match="merged model"):
+        load_active_provider_config(yaml_path)
+
+
 def test_load_active_provider_config_loads_api_env_before_yaml(
     monkeypatch, tmp_path
 ):
@@ -195,7 +211,8 @@ providers:
     monkeypatch.setenv("CHEMSMART_API_ENV", str(env_path))
     monkeypatch.delenv("DEEPSEEK-api-key", raising=False)
 
-    config = load_active_provider_config(yaml_path)
+    with pytest.warns(DeprecationWarning, match="api.env credential"):
+        config = load_active_provider_config(yaml_path)
 
     assert config is not None
     assert config.name == "deepseek"

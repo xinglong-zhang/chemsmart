@@ -437,7 +437,9 @@ def _render_project_yaml_summary(
         return f"{program}:{project} written" + (f" to {path}" if path else "")
     if tool_name == "read_project_yaml":
         path = _string_or_none(payload.get("path"))
-        return f"{program}:{project} loaded" + (f" from {path}" if path else "")
+        return f"{program}:{project} loaded" + (
+            f" from {path}" if path else ""
+        )
     if tool_name == "update_project_yaml":
         return f"{program}:{project} updated"
     if verdict is not None:
@@ -576,7 +578,12 @@ def _render_command_tool_detail(payload: dict[str, Any]) -> list[Text] | None:
         failed = semantic.get("failed_rule_ids") or []
         lines.append(Text(f"semantic gate: {verdict}", style="dim"))
         if failed:
-            lines.append(Text(f"failed rules: {', '.join(map(str, failed))}", style="error"))
+            lines.append(
+                Text(
+                    f"failed rules: {', '.join(map(str, failed))}",
+                    style="error",
+                )
+            )
     stdout = _string_or_none(payload.get("stdout_tail"))
     stderr = _string_or_none(payload.get("stderr_tail"))
     if stdout is not None:

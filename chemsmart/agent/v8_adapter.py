@@ -115,11 +115,7 @@ def _range_value(value: Any, *, first_fragment_only: bool = False) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, list):
-        if (
-            first_fragment_only
-            and value
-            and isinstance(value[0], list)
-        ):
+        if first_fragment_only and value and isinstance(value[0], list):
             value = value[0]
         flattened: list[Any] = []
         for item in value:
@@ -263,31 +259,23 @@ def _fmt_setting(key: str, value: Any) -> str:
     return shlex.quote(str(value))
 
 
-def _job_command(
-    job: dict[str, Any],
-    geom_of: dict[Any, str],
-    default_project: str | None = None,
-) -> str:
-    kind = str(job["kind"])
-    program = kind.split(".", 1)[0]
-    verb = "sub" if job.get("execution") == "submit" else "run"
-    parts = ["chemsmart", verb]
-    if job.get("server"):
-        parts += ["-s", shlex.quote(str(job["server"]))]
-    parts.append(program)
-    project = job.get("project") or default_project
-    if project:
-        parts += ["-p", shlex.quote(str(project))]
+def _pop_qmmm_parent(
+    kind: str, program: str, settings: dict[str, Any]
+) -> str | None:
+    if not kind.endswith(".qmmm"):
+        return None
+    qmmm_parent = str(settings.pop("parent_job", "")).strip().lower()
+    if qmmm_parent not in _QMMM_PARENTS[program]:
+        allowed = ", ".join(sorted(_QMMM_PARENTS[program]))
+        raise ValueError(
+            f"{kind} requires settings.parent_job; allowed: {allowed}"
+        )
+    return qmmm_parent
 
-    settings = dict(job.get("settings", {}) or {})
-    qmmm_parent: str | None = None
-    if kind.endswith(".qmmm"):
-        qmmm_parent = str(settings.pop("parent_job", "")).strip().lower()
-        if qmmm_parent not in _QMMM_PARENTS[program]:
-            allowed = ", ".join(sorted(_QMMM_PARENTS[program]))
-            raise ValueError(
-                f"{kind} requires settings.parent_job; allowed: {allowed}"
-            )
+
+def _settings_flags(
+    kind: str, settings: dict[str, Any]
+) -> tuple[list[str], list[str]]:
     freq_true = settings.pop("freq", None) is True or kind.endswith(".freq")
     if freq_true:
         route = settings.get("additional_route_parameters")
@@ -308,11 +296,38 @@ def _job_command(
                 else group_flags
             )
             target += [flag, _fmt_setting(key, value)]
+    return group_flags, subcommand_flags
 
+
+def _db_selector_flags(job: dict[str, Any]) -> list[str]:
+    flags: list[str] = []
     for key, flag in _DB_SELECTOR_FLAG.items():
         value = job.get(key)
         if value is not None:
-            group_flags += [flag, shlex.quote(str(value))]
+            flags += [flag, shlex.quote(str(value))]
+    return flags
+
+
+def _job_command(
+    job: dict[str, Any],
+    geom_of: dict[Any, str],
+    default_project: str | None = None,
+) -> str:
+    kind = str(job["kind"])
+    program = kind.split(".", 1)[0]
+    verb = "sub" if job.get("execution") == "submit" else "run"
+    parts = ["chemsmart", verb]
+    if job.get("server"):
+        parts += ["-s", shlex.quote(str(job["server"]))]
+    parts.append(program)
+    project = job.get("project") or default_project
+    if project:
+        parts += ["-p", shlex.quote(str(project))]
+
+    settings = dict(job.get("settings", {}) or {})
+    qmmm_parent = _pop_qmmm_parent(kind, program, settings)
+    group_flags, subcommand_flags = _settings_flags(kind, settings)
+    group_flags += _db_selector_flags(job)
 
     parts += group_flags
     source = job.get("file") or geom_of.get(job.get("geom_from"))
@@ -378,7 +393,11 @@ def adapt(
         "message": None,
     }
     try:
-        spec = json.loads(model_text) if isinstance(model_text, str) else model_text
+        spec = (
+            json.loads(model_text)
+            if isinstance(model_text, str)
+            else model_text
+        )
     except Exception as exc:
         out["errors"].append(f"invalid JSON: {exc}")
         return out

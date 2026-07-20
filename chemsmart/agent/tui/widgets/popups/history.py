@@ -41,11 +41,15 @@ class HistorySearchOverlay(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="history-modal"):
-            yield Input(placeholder="Search request history", id="history-query")
+            yield Input(
+                placeholder="Search request history", id="history-query"
+            )
             yield OptionList(id="history-options")
 
     def on_mount(self) -> None:
-        self.query_one("#history-modal", Vertical).border_title = "Request history"
+        self.query_one("#history-modal", Vertical).border_title = (
+            "Request history"
+        )
         self._filter("")
         self.query_one("#history-query", Input).focus()
 
@@ -71,7 +75,9 @@ class HistorySearchOverlay(ModalScreen[str | None]):
         options.clear_options()
         if not self.filtered:
             options.add_option(
-                Option(Text("No matching requests.", style="dim"), disabled=True)
+                Option(
+                    Text("No matching requests.", style="dim"), disabled=True
+                )
             )
             return
         options.add_options(
