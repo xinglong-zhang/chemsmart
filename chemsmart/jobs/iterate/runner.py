@@ -185,19 +185,16 @@ class IterateJobRunner(JobRunner):
     JOBTYPES = ["iterate"]
     PROGRAM = "Iterate"
     FAKE = False
-    SCRATCH = False
 
     def __init__(
         self,
         server=None,
-        scratch=False,
         fake=False,
         scratch_dir=None,
         **kwargs,
     ):
         super().__init__(
             server=server,
-            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,

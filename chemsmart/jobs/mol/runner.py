@@ -89,7 +89,6 @@ class PyMOLJobRunner(JobRunner):
         JOBTYPES (list): Supported job type identifiers (set by subclasses).
         PROGRAM (str): Program identifier ('pymol').
         FAKE (bool): Whether this runner operates in fake/test mode.
-        SCRATCH (bool): Whether to use scratch directories by default.
         server: Server configuration used for execution.
         scratch (bool): Whether scratch is enabled for this runner.
         scratch_dir (str): Path to scratch directory, if used.
@@ -101,29 +100,20 @@ class PyMOLJobRunner(JobRunner):
     JOBTYPES = []
     PROGRAM = "pymol"
     FAKE = False
-    SCRATCH = False
 
-    def __init__(
-        self,
-        server,
-        scratch=False,
-        fake=False,
-        **kwargs,
-    ):
+    def __init__(self, server, fake=False, **kwargs):
         """
         Initialize the PyMOL job runner.
 
         Sets up the runner with server configuration and execution
-        parameters, defaulting to no scratch directory usage for
-        PyMOL jobs unless explicitly specified.
+        parameters for PyMOL jobs.
 
         Args:
             server: Server configuration for job execution.
-            scratch: Whether to use scratch directories (default: False).
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        super().__init__(server=server, fake=fake, **kwargs)
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")

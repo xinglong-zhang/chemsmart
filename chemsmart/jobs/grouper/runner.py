@@ -26,14 +26,10 @@ class GrouperJobRunner(JobRunner):
     JOBTYPES = ["grouper"]
     PROGRAM = "grouper"
     FAKE = False
-    SCRATCH = False
 
-    def __init__(
-        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
-    ):
+    def __init__(self, server, fake=False, scratch_dir=None, **kwargs):
         super().__init__(
             server=server,
-            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,

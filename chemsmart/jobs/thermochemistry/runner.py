@@ -29,7 +29,6 @@ class ThermochemistryJobRunner(JobRunner):
         (['thermochemistry', 'boltzmann']).
         PROGRAM (str): Program identifier ('Thermochemistry').
         FAKE (bool): Whether this runner operates in fake/test mode.
-        SCRATCH (bool): Whether to use scratch directories by default.
         server: Server configuration used for execution.
         scratch (bool): Whether scratch is enabled for this runner.
         scratch_dir (str): Path to scratch directory, if used.
@@ -42,25 +41,19 @@ class ThermochemistryJobRunner(JobRunner):
 
     PROGRAM = "Thermochemistry"
     FAKE = False
-    # Thermochemistry jobs are lightweight, scratch typically not needed
-    SCRATCH = False
 
-    def __init__(
-        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
-    ):
+    def __init__(self, server, fake=False, scratch_dir=None, **kwargs):
         """
         Initialize the thermochemistry job runner.
 
         Args:
             server: Server configuration for job execution
-            scratch (bool, optional): Whether to use scratch directory
             fake (bool): Whether to run in fake mode for testing
             scratch_dir (str, optional): Path to scratch directory
             **kwargs: Additional keyword arguments for parent class
         """
         super().__init__(
             server=server,
-            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,

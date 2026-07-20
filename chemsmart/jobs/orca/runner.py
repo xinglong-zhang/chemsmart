@@ -43,7 +43,6 @@ class ORCAJobRunner(JobRunner):
         JOBTYPES (list): Supported job types handled by this runner.
         PROGRAM (str): Program identifier ('orca').
         FAKE (bool): Whether this runner operates in fake/test mode.
-        SCRATCH (bool): Whether to use scratch directories by default.
         server: Server configuration used for execution.
         scratch (bool): Whether scratch is enabled for this runner.
         scratch_dir (str): Path to scratch directory, if used.
@@ -73,24 +72,19 @@ class ORCAJobRunner(JobRunner):
     PROGRAM = "orca"
 
     FAKE = False
-    SCRATCH = True
 
-    def __init__(
-        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
-    ):
+    def __init__(self, server, fake=False, scratch_dir=None, **kwargs):
         """
         Initialize the ORCA job runner.
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory (default: True)
             fake: Whether to use fake runner for testing
             scratch_dir: Path to scratch directory
             **kwargs: Additional keyword arguments
         """
         super().__init__(
             server=server,
-            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,
@@ -465,7 +459,6 @@ class FakeORCAJobRunner(ORCAJobRunner):
         JOBTYPES (list): Supported job types
         handled (inherits from ORCAJobRunner).
         FAKE (bool): True for this runner to indicate fake mode.
-        SCRATCH (bool): Whether to use scratch directories (inherits default).
         server: Server configuration used for execution.
         scratch (bool): Whether scratch is enabled for this runner.
         scratch_dir (str): Path to scratch directory, if used.
@@ -478,17 +471,16 @@ class FakeORCAJobRunner(ORCAJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=False, fake=True, **kwargs):
+    def __init__(self, server, fake=True, **kwargs):
         """
         Initialize the fake ORCA job runner.
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        super().__init__(server=server, fake=fake, **kwargs)
 
     def _set_up_variables_in_scratch(self, job):
         """Set fake ORCA file paths for scratch execution."""
