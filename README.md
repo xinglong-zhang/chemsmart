@@ -105,7 +105,6 @@ SERVER:
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True 
-    SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate chemsmart
@@ -116,7 +115,7 @@ GAUSSIAN:
     SCRIPTS: |
         tcsh -c "source ~/programs/g16/bsd/g16.login"
     ENVARS: |
-        export SCRATCH=/tmp # required if scratch is true
+        export SCRATCH=/tmp  # scratch path when using --scratch
         export GAUSS_EXEDIR=~/bin/g16
         export g16root=~/bin/g16
            

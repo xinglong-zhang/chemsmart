@@ -82,10 +82,9 @@ Execution Control Options
 .. note::
 
    Scratch mode is controlled **only** by ``--scratch`` and ``--no-scratch`` on ``chemsmart run`` and ``chemsmart sub``.
-   Omitting the flag is the same as ``--no-scratch``. Program-specific server YAML settings and job-runner defaults do
-   not enable or disable scratch. When ``--scratch`` is used, the scratch directory **path** comes from program
-   ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH`` (see
-   :doc:`configuration-server-settings`).
+   Omitting the flag is the same as ``--no-scratch``. When ``--scratch`` is used, the scratch directory **path** comes
+   from program ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH`` (see
+   :ref:`scratch-behavior`).
 
 .. note::
 

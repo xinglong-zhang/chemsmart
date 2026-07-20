@@ -311,23 +311,6 @@ uses serial execution commands; when ``False``, uses parallel execution commands
    LOCAL_RUN: True   # Use serial execution
    LOCAL_RUN: False  # Use parallel execution
 
-SCRATCH
-^^^^^^^
-
-**Type:** Boolean (legacy; not used)
-
-**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
-``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`). The scratch directory
-**path** for Gaussian is set by ``export SCRATCH=...`` under ``ENVARS`` (and ``SERVER.SCRATCH_DIR`` / ``usersettings``
-``SCRATCH`` as fallbacks).
-
-**Example:**
-
-.. code:: yaml
-
-   SCRATCH: True   # ignored by CHEMSMART; kept for reference in some templates
-   SCRATCH: False  # ignored by CHEMSMART
-
 CONDA_ENV
 ^^^^^^^^^
 
@@ -379,8 +362,8 @@ ENVARS
 
 **Type:** Multiline string
 
-**Description:** Environment variables required by Gaussian. Essential variables include SCRATCH, GAUSS_EXEDIR, and
-g16root.
+**Description:** Environment variables required by Gaussian. Include ``export SCRATCH=...`` when jobs may be run with
+``--scratch`` (see :ref:`scratch-behavior`). Other essential variables include GAUSS_EXEDIR and g16root.
 
 **Example:**
 
@@ -424,22 +407,6 @@ in parallel mode (``False``).
 
    LOCAL_RUN: False  # Use parallel execution
 
-SCRATCH
-^^^^^^^
-
-**Type:** Boolean (legacy; not used)
-
-**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
-``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`). The scratch directory
-**path** for ORCA is set by ``export SCRATCH=...`` under ``ENVARS``.
-
-**Example:**
-
-.. code:: yaml
-
-   SCRATCH: True   # ignored by CHEMSMART
-   SCRATCH: False  # ignored by CHEMSMART
-
 CONDA_ENV
 ^^^^^^^^^
 
@@ -476,7 +443,8 @@ ENVARS
 
 **Type:** Multiline string
 
-**Description:** Environment variables required by ORCA, including scratch directory and MPI paths.
+**Description:** Environment variables required by ORCA, including scratch directory and MPI paths. Set ``export
+SCRATCH=...`` when jobs may be run with ``--scratch``.
 
 **Example:**
 
@@ -518,20 +486,6 @@ LOCAL_RUN
 .. code:: yaml
 
    LOCAL_RUN: False
-
-SCRATCH
-^^^^^^^
-
-**Type:** Boolean (legacy; not used)
-
-**Description:** This key is **not** read by CHEMSMART to enable or disable scratch execution. Use ``--scratch`` or
-``--no-scratch`` on ``chemsmart run`` / ``chemsmart sub`` instead (see :ref:`scratch-behavior`).
-
-**Example:**
-
-.. code:: yaml
-
-   SCRATCH: True   # ignored by CHEMSMART
 
 CONDA_ENV
 ^^^^^^^^^
@@ -603,7 +557,6 @@ Complete example for a SLURM-based HPC cluster:
    GAUSSIAN:
        EXEFOLDER: ~/bin/g16
        LOCAL_RUN: True
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate chemsmart
@@ -620,7 +573,6 @@ Complete example for a SLURM-based HPC cluster:
    ORCA:
        EXEFOLDER: ~/bin/orca_6_1_0
        LOCAL_RUN: False
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -633,7 +585,6 @@ Complete example for a SLURM-based HPC cluster:
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -667,7 +618,6 @@ Complete example for a PBS/Torque-based HPC cluster:
    GAUSSIAN:
        EXEFOLDER: ~/bin/g16
        LOCAL_RUN: True
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate chemsmart
@@ -684,7 +634,6 @@ Complete example for a PBS/Torque-based HPC cluster:
    ORCA:
        EXEFOLDER: ~/bin/orca_6_0_0
        LOCAL_RUN: False
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -697,7 +646,6 @@ Complete example for a PBS/Torque-based HPC cluster:
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -731,7 +679,6 @@ Complete example for a local workstation without a job scheduler:
    GAUSSIAN:
        EXEFOLDER: ~/bin/g16
        LOCAL_RUN: True
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate chemsmart
@@ -746,7 +693,6 @@ Complete example for a local workstation without a job scheduler:
    ORCA:
        EXEFOLDER: ~/bin/orca_6_0_0
        LOCAL_RUN: False
-       SCRATCH: False
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -757,7 +703,6 @@ Complete example for a local workstation without a job scheduler:
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
-       SCRATCH: True
        CONDA_ENV: |
            source ~/miniconda3/etc/profile.d/conda.sh
            conda activate ~/miniconda3/envs/chemsmart
@@ -776,8 +721,7 @@ Whether a job runs in a scratch directory or in ``job.folder`` is controlled **o
 ``--no-scratch`` on ``chemsmart run`` and ``chemsmart sub``. These flags apply to all programs (Gaussian, ORCA, NCIPLOT,
 PyMOL, and others). Omitting the flag is the same as ``--no-scratch``.
 
-Program-block ``SCRATCH: True/False`` keys in server YAML and job-runner class defaults are **not** used. When
-``--scratch`` is passed, CHEMSMART resolves the scratch directory **path** from program ``ENVARS`` (``export
+When ``--scratch`` is passed, CHEMSMART resolves the scratch directory **path** from program ``ENVARS`` (``export
 SCRATCH=...``), then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH``. If no valid directory exists, CHEMSMART
 falls back to the job folder.
 
