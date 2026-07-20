@@ -224,47 +224,6 @@ class TestScratchCLI:
         assert result.exit_code == 0, result.output
         assert observed["scratch"] is False
 
-    def test_sub_omitted_scratch_defaults_to_false(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
-    ):
-        monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR",
-            str(self._write_gaussian_project(tmp_path)),
-        )
-        fake_server = Server(name="dummy")
-        captured = {"job": None, "cli_args": None}
-
-        def _submit(job, test=False, cli_args=None, **kw):
-            captured["job"] = job
-            captured["cli_args"] = cli_args
-
-        fake_server.submit = _submit
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
-
-        result = CliRunner().invoke(
-            sub,
-            [
-                "--test",
-                "--server",
-                "dummy",
-                "gaussian",
-                "-p",
-                "test",
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "opt",
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        assert captured["job"].jobrunner.scratch is False
-
     def test_run_explicit_scratch_is_not_silently_disabled(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
@@ -349,6 +308,7 @@ class TestScratchCLI:
         assert captured["job"].jobrunner.scratch is True
 
     def test_from_job_passes_scratch_through(self, pbs_server, tmp_path):
+        """``pbs_server`` has ``GAUSSIAN.SCRATCH: True``; ``scratch=False`` is kept."""
         job = SimpleNamespace(TYPE="g16opt")
         runner = JobRunner.from_job(
             job=job,
@@ -366,6 +326,99 @@ class TestScratchCLI:
             scratch_dir=str(tmp_path),
         )
         assert runner.scratch is True
+
+    def test_sub_omitted_scratch_reconstructs_no_scratch_flag(
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
+        )
+        fake_server = Server(name="dummy")
+        captured = {"job": None, "cli_args": None}
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured.update(
+                job=job, cli_args=cli_args
+            )
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["job"].jobrunner.scratch is False
+        assert "--no-scratch" in captured["cli_args"]
+        assert "--scratch" not in captured["cli_args"]
+
+    def test_run_scratch_invalid_path_disables_scratch_via_cli(
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
+    ):
+        from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR",
+            str(self._write_gaussian_project(tmp_path)),
+        )
+        missing_scratch = tmp_path / "missing_scratch"
+        fake_exe = SimpleNamespace(
+            scratch_dir=str(missing_scratch),
+            local_run=True,
+        )
+        monkeypatch.setattr(
+            "chemsmart.jobs.gaussian.runner.GaussianExecutable.from_servername",
+            lambda servername=None, **kwargs: fake_exe,
+        )
+
+        captured = {}
+
+        def _run(self, job, **kwargs):
+            self._prerun(job=job)
+            captured["scratch"] = self.scratch
+            captured["running_directory"] = self.running_directory
+            captured["job_folder"] = job.folder
+            return 0
+
+        monkeypatch.setattr(FakeGaussianJobRunner, "run", _run)
+
+        result = CliRunner().invoke(
+            run,
+            [
+                "--fake",
+                "--scratch",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["scratch"] is False
+        assert captured["running_directory"] == captured["job_folder"]
 
 
 class TestScratchPathFallback:
