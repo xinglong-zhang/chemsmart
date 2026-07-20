@@ -13,9 +13,17 @@ from chemsmart.agent.harness.extractors import (
     extract_cartesian_state,
     extract_gaussian_route,
     extract_orca_route,
+    extract_xtb_program_call,
 )
 
 _INPUT_SUFFIXES = (".com", ".gjf", ".inp")
+
+#: xTB has no route-carrying input file. Its runner writes the geometry as
+#: plain ``.xyz`` and records the rendered argv in the ``program call`` line
+#: of the output file, so the output is what the gate must inspect. Globbing
+#: ``.xyz`` instead would pick up the user's own source geometry, which is an
+#: input to the command rather than evidence produced by it.
+_XTB_ARTIFACT_SUFFIXES = (".out",)
 
 
 def absolutize_file_args(argv: list[str], base: Path) -> list[str]:
@@ -121,68 +129,130 @@ def prepare_safe_runtime_environment(
     return env
 
 
-def input_snapshot(workdir: Path) -> dict[Path, int]:
+def _artifact_paths(workdir: Path, software: str | None):
+    """Yield the paths that carry generated evidence for ``software``.
+
+    Gaussian and ORCA write their route-carrying input beside the command's
+    working directory. xTB instead writes into a per-job subdirectory, so its
+    artifacts are collected recursively.
+    """
+
+    if software == "xtb":
+        for suffix in _XTB_ARTIFACT_SUFFIXES:
+            yield from workdir.rglob(f"*{suffix}")
+        return
+    for suffix in _INPUT_SUFFIXES:
+        yield from workdir.glob(f"*{suffix}")
+
+
+def input_snapshot(
+    workdir: Path, software: str | None = None
+) -> dict[Path, int]:
     snapshot: dict[Path, int] = {}
     if not workdir.exists():
         return snapshot
-    for suffix in _INPUT_SUFFIXES:
-        for path in workdir.glob(f"*{suffix}"):
-            try:
-                snapshot[path.resolve()] = path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
+    for path in _artifact_paths(workdir, software):
+        try:
+            snapshot[path.resolve()] = path.stat().st_mtime_ns
+        except FileNotFoundError:
+            continue
     return snapshot
 
 
 def generated_inputs(
     workdir: Path,
     before: dict[Path, int],
+    software: str | None = None,
 ) -> list[dict[str, Any]]:
     generated: list[dict[str, Any]] = []
     if not workdir.exists():
         return generated
-    for suffix in _INPUT_SUFFIXES:
-        for path in sorted(workdir.glob(f"*{suffix}")):
-            try:
-                resolved = path.resolve()
-                mtime = path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
-            if before.get(resolved) == mtime:
-                continue
-            content = path.read_text(encoding="utf-8", errors="replace")
-            software = "gaussian" if suffix in {".com", ".gjf"} else "orca"
-            route = (
-                extract_gaussian_route(content)
-                if software == "gaussian"
-                else extract_orca_route(content)
-            )
-            state = extract_cartesian_state(content, software=software)
-            state_evidence: dict[str, Any] = {}
-            if state:
-                state_evidence = {
-                    "charge": state["charge"],
-                    "multiplicity": state["multiplicity"],
-                    "element_counts": dict(
-                        sorted(Counter(state["element_symbols"]).items())
-                    ),
-                }
-                for key in (
-                    "charge_multiplicity_pairs",
-                    "atom_layers",
-                    "layer_atoms",
-                ):
-                    if key in state:
-                        state_evidence[key] = state[key]
-            generated.append(
-                {
-                    "path": str(path),
-                    "route": route,
-                    "content_tail": input_excerpt(content),
-                    **state_evidence,
-                }
-            )
+    for path in sorted(_artifact_paths(workdir, software)):
+        try:
+            resolved = path.resolve()
+            mtime = path.stat().st_mtime_ns
+        except FileNotFoundError:
+            continue
+        if before.get(resolved) == mtime:
+            continue
+        content = path.read_text(encoding="utf-8", errors="replace")
+        if software == "xtb":
+            entry = _xtb_generated_entry(path, content)
+            if entry is not None:
+                generated.append(entry)
+            continue
+        suffix = path.suffix
+        file_software = "gaussian" if suffix in {".com", ".gjf"} else "orca"
+        route = (
+            extract_gaussian_route(content)
+            if file_software == "gaussian"
+            else extract_orca_route(content)
+        )
+        state = extract_cartesian_state(content, software=file_software)
+        state_evidence: dict[str, Any] = {}
+        if state:
+            state_evidence = {
+                "charge": state["charge"],
+                "multiplicity": state["multiplicity"],
+                "element_counts": dict(
+                    sorted(Counter(state["element_symbols"]).items())
+                ),
+            }
+            for key in (
+                "charge_multiplicity_pairs",
+                "atom_layers",
+                "layer_atoms",
+            ):
+                if key in state:
+                    state_evidence[key] = state[key]
+        generated.append(
+            {
+                "path": str(path),
+                "route": route,
+                "content_tail": input_excerpt(content),
+                **state_evidence,
+            }
+        )
     return generated
+
+
+def _xtb_generated_entry(path: Path, content: str) -> dict[str, Any] | None:
+    """Describe one xTB output as generated evidence.
+
+    The ``program call`` line is xTB's equivalent of a route line: it is the
+    exact argv the runner rendered, so the invariant checks read solvation,
+    GFN version, charge, and spin from it. Outputs without that line are not
+    xTB evidence and are ignored.
+    """
+
+    program_call = extract_xtb_program_call(content)
+    if program_call is None:
+        return None
+    entry: dict[str, Any] = {
+        "path": str(path),
+        "route": program_call,
+        "content_tail": input_excerpt(content),
+    }
+    charge = _xtb_int_option(program_call, "--chrg")
+    unpaired = _xtb_int_option(program_call, "--uhf")
+    if charge is not None:
+        entry["charge"] = charge
+    if unpaired is not None:
+        entry["multiplicity"] = unpaired + 1
+    return entry
+
+
+def _xtb_int_option(program_call: str, flag: str) -> int | None:
+    tokens = program_call.split()
+    if flag not in tokens:
+        return None
+    index = tokens.index(flag)
+    if index + 1 >= len(tokens):
+        return None
+    try:
+        return int(tokens[index + 1])
+    except ValueError:
+        return None
 
 
 def _top_level_index(argv: list[str], top_level: str) -> int:

@@ -23,6 +23,7 @@ from chemsmart.agent.harness.command_rules.models import (
 )
 from chemsmart.agent.harness.command_rules.qmmm import qmmm_contract_issues
 from chemsmart.agent.harness.command_rules.tokens import token_index
+from chemsmart.agent.harness.command_rules.xtb import solvent_contract_issues
 
 
 def check_command_contracts(
@@ -91,6 +92,9 @@ def check_command_contracts(
         issue = td_project_issue(program_tokens, cwd=cwd)
         if issue is not None:
             issues.append(issue)
+
+    if normalized_program == "xtb":
+        issues.extend(solvent_contract_issues(program_tokens))
 
     return tuple(issues)
 
