@@ -188,10 +188,13 @@ class IterateJobRunner(JobRunner):
     SCRATCH = False
 
     def __init__(
-        self, server=None, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self,
+        server=None,
+        scratch=False,
+        fake=False,
+        scratch_dir=None,
+        **kwargs,
     ):
-        if scratch is None:
-            scratch = self.SCRATCH
         super().__init__(
             server=server,
             scratch=scratch,

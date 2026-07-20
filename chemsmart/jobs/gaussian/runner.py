@@ -101,7 +101,7 @@ class GaussianJobRunner(JobRunner):
     # instance level - set during initialization (__init__).
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize Gaussian job runner with server and execution settings.
@@ -113,14 +113,10 @@ class GaussianJobRunner(JobRunner):
         Args:
             server: Server configuration object for job execution.
             scratch (bool, optional): Whether to use scratch directories.
-                Defaults to class SCRATCH setting.
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Use default SCRATCH if scratch is not explicitly set
-        if scratch is None:
-            scratch = self.SCRATCH
         super().__init__(
             server=server,
             scratch=scratch,
@@ -391,7 +387,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     FAKE = True
 
     def __init__(
-        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=True, scratch_dir=None, **kwargs
     ):
         """
         Initialize the fake Gaussian job runner.

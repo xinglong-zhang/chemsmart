@@ -8,6 +8,7 @@ various queuing systems and cluster schedulers.
 import logging
 
 import click
+from click.core import ParameterSource
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
@@ -88,9 +89,15 @@ def sub(
         if queue is not None:
             server.queue_name = queue
 
+    # True if user passed --scratch/--no-scratch (vs omit).
+    scratch_from_cli = (
+        ctx.get_parameter_source("scratch") == ParameterSource.COMMANDLINE
+    )
+
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        scratch_from_cli=scratch_from_cli,
         delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
@@ -98,8 +105,10 @@ def sub(
         mem_gb=mem_gb,
     )
 
-    # Log the scratch value for debugging purposes
-    logger.debug(f"Scratch value passed from CLI: {scratch}")
+    logger.debug(
+        f"Scratch value passed from CLI: {scratch} "
+        f"(scratch_from_cli={scratch_from_cli})"
+    )
 
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict

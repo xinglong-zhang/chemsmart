@@ -157,6 +157,9 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
+        scratch_from_cli (bool): True if ``--scratch``/``--no-scratch`` was
+            passed; when False, ``from_job`` uses the program ``SCRATCH``
+            default.
         **kwargs: Additional keyword arguments.
     """
 
@@ -167,13 +170,14 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,
+        scratch=False,
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
+        scratch_from_cli=False,
         **kwargs,
     ):
         if server is None:
@@ -188,14 +192,13 @@ class JobRunner(RegistryMixin):
             )
 
         self.server = server
-        self.scratch = scratch
+        self.scratch = bool(scratch)
+        self.scratch_from_cli = bool(scratch_from_cli)
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        # CLI creates a placeholder JobRunner before the typed runner exists.
-        # Resolving scratch here would fail (no executable) and silently set
-        # scratch=False, defeating --scratch. Typed runners resolve in __init__.
-        if self.scratch:
+        # Skip scratch setup on the CLI placeholder (no executable yet).
+        if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
         self.fake = fake
@@ -385,7 +388,15 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+    def from_job(
+        cls,
+        job,
+        server,
+        scratch=False,
+        fake=False,
+        scratch_from_cli=False,
+        **kwargs,
+    ):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -414,17 +425,21 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # If scratch is None, use the runner's default scratch value
-            if scratch is not None:
-                scratch = scratch
-            else:
+            # Omit → program SCRATCH; CLI flag → honor scratch bool.
+            if not scratch_from_cli:
                 scratch = selected_runner.SCRATCH
             logger.info(
-                f"Using scratch={scratch} for job runner: {selected_runner}"
+                f"Using scratch={scratch} "
+                f"(scratch_from_cli={scratch_from_cli}) for job runner: "
+                f"{selected_runner}"
             )
 
             return selected_runner(
-                server=server, scratch=scratch, fake=fake, **kwargs
+                server=server,
+                scratch=scratch,
+                scratch_from_cli=scratch_from_cli,
+                fake=fake,
+                **kwargs,
             )
 
         raise ValueError(

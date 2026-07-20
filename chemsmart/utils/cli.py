@@ -28,6 +28,7 @@ import typing as t
 
 import click
 from click import Context
+from click.core import ParameterSource
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ def _add_subcommand_info_to_ctx(ctx):
         subcommand["kwargs"][param]["type"] = types[param]
         subcommand["kwargs"][param]["is_flag"] = is_flag[param]
         subcommand["kwargs"][param]["secondary_opts"] = secondary_opts[param]
+        subcommand["kwargs"][param]["source"] = ctx.get_parameter_source(param)
 
     parent = ctx.parent.info_name if ctx.parent is not None else None
 
@@ -282,6 +284,12 @@ class CtxObjArguments:
             arg_nargs = subdict["nargs"]
             arg_is_flag = subdict["is_flag"]
             arg_secondary_opts = subdict["secondary_opts"]
+
+            # Skip options not given on the CLI (e.g. omit must not become
+            # --no-scratch when the Click default is False).
+            source = subdict.get("source")
+            if source is not None and source != ParameterSource.COMMANDLINE:
+                continue
 
             if v is None or (isinstance(v, tuple) and len(v) == 0):
                 continue

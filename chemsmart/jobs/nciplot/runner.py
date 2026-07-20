@@ -51,7 +51,7 @@ class NCIPLOTJobRunner(JobRunner):
     SCRATCH = True  # default to using scratch for NCIPLOT Jobs
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize the NCIPLOTJobRunner.
@@ -64,9 +64,6 @@ class NCIPLOTJobRunner(JobRunner):
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
         """
-        # Use default SCRATCH if scratch is not explicitly set
-        if scratch is None:
-            scratch = self.SCRATCH
         super().__init__(
             server=server,
             scratch=scratch,
@@ -416,7 +413,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
     FAKE = True
 
     def __init__(
-        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=True, scratch_dir=None, **kwargs
     ):
         """
         Initialize FakeNCIPLOTJobRunner.

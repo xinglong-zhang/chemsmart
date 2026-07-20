@@ -46,7 +46,7 @@ class ThermochemistryJobRunner(JobRunner):
     SCRATCH = False
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize the thermochemistry job runner.
@@ -58,8 +58,6 @@ class ThermochemistryJobRunner(JobRunner):
             scratch_dir (str, optional): Path to scratch directory
             **kwargs: Additional keyword arguments for parent class
         """
-        if scratch is None:
-            scratch = self.SCRATCH
         super().__init__(
             server=server,
             scratch=scratch,

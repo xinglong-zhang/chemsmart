@@ -42,9 +42,11 @@ def click_jobrunner_options(f):
     )
     @click.option(
         "--scratch/--no-scratch",
-        default=None,
+        default=False,
         type=bool,
-        help="Run in scratch mode or without a scratch folder.",
+        help="Force scratch (--scratch) or job-folder (--no-scratch) mode. "
+        "If omitted, use the program default; when that default is on, "
+        "scratch is used only if a scratch directory is configured and exists.",
     )
     @click.option(
         "--delete-scratch/--no-delete-scratch",

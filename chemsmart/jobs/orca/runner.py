@@ -76,7 +76,7 @@ class ORCAJobRunner(JobRunner):
     SCRATCH = True
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize the ORCA job runner.
@@ -88,9 +88,6 @@ class ORCAJobRunner(JobRunner):
             scratch_dir: Path to scratch directory
             **kwargs: Additional keyword arguments
         """
-        # Use default SCRATCH if scratch is not explicitly set
-        if scratch is None:
-            scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(
             server=server,
             scratch=scratch,
@@ -481,7 +478,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=None, fake=True, **kwargs):
+    def __init__(self, server, scratch=False, fake=True, **kwargs):
         """
         Initialize the fake ORCA job runner.
 
