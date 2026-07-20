@@ -239,7 +239,9 @@ jobs:
         with:
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
-          environment-file: environment.yml
+          # environment.yml minus ffmpeg: its gdk-pixbuf dependency has a
+          # broken win-64 post-link script upstream. See the file header.
+          environment-file: environment-windows.yml
           activate-environment: chemsmart
           channels: conda-forge,defaults
 

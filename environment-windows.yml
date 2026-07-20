@@ -1,0 +1,38 @@
+# Windows CI environment: environment.yml minus ffmpeg.
+#
+# Why this file exists
+# --------------------
+# ffmpeg pulls librsvg, which pulls gdk-pixbuf. Every conda-forge win-64
+# gdk-pixbuf build runs a post-link script that executes
+# gdk-pixbuf-query-loaders.exe to rebuild the image-loader cache. On
+# windows-latest that executable now exits with 3221225781
+# (0xC0000135, STATUS_DLL_NOT_FOUND) because its dependent DLLs are not
+# resolvable at link time, so conda rolls the whole transaction back and
+# `Set up Conda` fails before a single test runs. This is an upstream
+# packaging defect, not a ChemSmart one, and it reproduces on both the
+# 2.44.x and the older 2.42.12 builds.
+#
+# ffmpeg only provides movie export for PyMOL rendering, which the test
+# suite never exercises, so the Windows CI environment drops it. Every
+# other dependency is identical to environment.yml, and
+# tests/test_environment_files.py fails if the two files diverge in any
+# other way.
+#
+# Remove this file and point the Windows job back at environment.yml once
+# conda-forge ships a win-64 gdk-pixbuf whose post-link step succeeds.
+name: chemsmart
+channels:
+  - conda-forge  # handles conda installations
+  - defaults
+dependencies:
+  - python=3.10
+  - cclib=1.8.1
+  - pymol-open-source=3.1.0
+  - openbabel          # includes Python bindings on conda-forge
+  - anthropic>=0.40
+  - openai>=1
+  - pydantic>=2
+  - python-dotenv>=1
+  - pip
+  - pip:
+      - -e .[dev,test,docs,agent-tui]   # pulls all Python deps from pyproject.toml
