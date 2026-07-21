@@ -33,14 +33,6 @@ class XTBMainOut(XTBFileMixin):
         self.filename = filename
 
     @property
-    def xtb_version(self):
-        """xtb version used for the calculation."""
-        for line in self.contents:
-            if "xtb version" in line:
-                return line.split()[3]
-        return None
-
-    @property
     def normal_termination(self):
         """Check if the xtb output file is terminated by checking each output file line from the last line onwards."""
         for line in reversed(self.contents):

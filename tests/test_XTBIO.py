@@ -106,7 +106,7 @@ class TestXTBMainOut:
         xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
         assert os.path.exists(xtb_main_out_file)
         co2_main_out = XTBMainOut(xtb_main_out_file)
-        assert co2_main_out.xtb_version == "6.7.1"
+        assert co2_main_out.version == "6.7.1"
         assert co2_main_out.normal_termination
         assert (
             co2_main_out.route_string
@@ -286,7 +286,7 @@ class TestXTBMainOut:
         )
         assert os.path.exists(xtb_main_out_file)
         p_benzyne_opt_main_out = XTBMainOut(xtb_main_out_file)
-        assert p_benzyne_opt_main_out.xtb_version == "6.7.1"
+        assert p_benzyne_opt_main_out.version == "6.7.1"
         assert p_benzyne_opt_main_out.normal_termination
         assert (
             p_benzyne_opt_main_out.route_string
