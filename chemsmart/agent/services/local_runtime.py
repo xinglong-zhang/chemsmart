@@ -9,6 +9,7 @@ import shutil
 import traceback
 from typing import Any
 
+from chemsmart.agent.runtime.result_parsing import inspect_output
 from chemsmart.agent.services.server_selection import coerce_server
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
@@ -371,6 +372,8 @@ def _has_unresolved_envvars(path: str) -> bool:
 
 
 def _summarize_local_output(job: Job) -> dict[str, Any]:
+    if isinstance(job, XTBJob):
+        return _summarize_xtb_output(job)
     if isinstance(job, GaussianJob):
         parser_cls = Gaussian16Output
         output_path = job.outputfile
@@ -407,6 +410,37 @@ def _summarize_local_output(job: Job) -> dict[str, Any]:
         }
     except Exception:
         return {}
+
+
+def _summarize_xtb_output(job: Job) -> dict[str, Any]:
+    # xTB has no Gaussian/ORCA output parser class; reuse the deterministic
+    # xtb-aware parser that reads `TOTAL ENERGY ... Eh`, `* finished run`,
+    # and the eigval frequency rows. Without this the model gets an empty
+    # summary from a genuine run and cannot report the energy that the
+    # pre-optimization chain depends on.
+    output_path = getattr(job, "outputfile", None)
+    if output_path is None or not os.path.exists(output_path):
+        return {}
+    inspected = inspect_output(output_path, program="xtb")
+    energy = inspected.get("energy")
+    converged = bool(inspected.get("normal_termination"))
+    imag_freqs = list(inspected.get("imag_freqs") or [])
+    if (
+        energy is None
+        and not converged
+        and not imag_freqs
+        and not inspected.get("frequency_count")
+    ):
+        return {}
+    return {
+        "energy": energy,
+        "converged": converged,
+        "imag_freqs": imag_freqs,
+        "frequency_count": inspected.get("frequency_count"),
+        "optimized_geometry_count": (
+            1 if inspected.get("optimization_converged") else 0
+        ),
+    }
 
 
 __all__ = ["extract_optimized_geometry", "run_local", "validate_runtime"]
