@@ -9,10 +9,7 @@ import logging
 
 import click
 
-from chemsmart.cli.jobrunner import (
-    click_jobrunner_options,
-    scratch_for_jobrunner,
-)
+from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
@@ -91,11 +88,9 @@ def sub(
         if queue is not None:
             server.queue_name = queue
 
-    resolved_scratch = scratch_for_jobrunner(ctx, scratch)
-
     jobrunner = JobRunner(
         server=server,
-        scratch=resolved_scratch,
+        scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
@@ -103,7 +98,8 @@ def sub(
         mem_gb=mem_gb,
     )
 
-    logger.debug(f"Scratch value passed from CLI: {resolved_scratch}")
+    # Log the scratch value for debugging purposes
+    logger.debug(f"Scratch value passed from CLI: {scratch}")
 
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
