@@ -106,7 +106,7 @@ class PyMOLJobRunner(JobRunner):
     def __init__(
         self,
         server,
-        scratch=False,
+        scratch=None,
         fake=False,
         **kwargs,
     ):
@@ -119,10 +119,13 @@ class PyMOLJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            scratch: Whether to use scratch directories (default: False).
+            scratch: Whether to use scratch directories (default: None).
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
+        # Use default SCRATCH if scratch is not explicitly set
+        if scratch is None:
+            scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
