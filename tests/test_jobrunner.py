@@ -168,10 +168,10 @@ def _write_gaussian_project(tmp_path):
     return config_root
 
 
-class TestScratchCLIDefaults:
-    """Omitted --scratch should leave program defaults via from_job."""
+class TestScratchCLI:
+    """Scratch CLI wiring: omit vs explicit flags."""
 
-    def test_run_omitted_scratch_leaves_none_for_program_default(
+    def test_run_omitted_scratch_leaves_none_for_from_job(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
@@ -208,7 +208,45 @@ class TestScratchCLIDefaults:
         assert result.exit_code == 0, result.output
         assert observed["scratch_arg"] is None
 
-    def test_sub_omitted_scratch_does_not_force_no_scratch(
+    def test_run_explicit_scratch_reaches_from_job(
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+        )
+        observed = {"scratch_arg": "unset"}
+
+        def _from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+            observed["scratch_arg"] = scratch
+            return type("R", (), {"scratch": scratch})()
+
+        monkeypatch.setattr(
+            "chemsmart.jobs.runner.JobRunner.from_job",
+            classmethod(_from_job),
+        )
+        monkeypatch.setattr("chemsmart.jobs.job.Job.run", lambda self: None)
+
+        result = CliRunner().invoke(
+            run,
+            [
+                "--fake",
+                "--scratch",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert observed["scratch_arg"] is True
+
+    def test_sub_omitted_scratch_does_not_reconstruct_no_scratch(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         monkeypatch.setenv(
@@ -246,84 +284,4 @@ class TestScratchCLIDefaults:
         )
         assert result.exit_code == 0, result.output
         assert "--no-scratch" not in captured["cli_args"]
-
-    def test_run_explicit_scratch_is_not_silently_disabled(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
-    ):
-        """Placeholder JobRunner must not clear --scratch before from_job."""
-        monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
-        )
-        observed = {"scratch_arg": "unset"}
-
-        def _from_job(cls, job, server, scratch=None, fake=False, **kwargs):
-            observed["scratch_arg"] = scratch
-            return type("R", (), {"scratch": scratch})()
-
-        monkeypatch.setattr(
-            "chemsmart.jobs.runner.JobRunner.from_job",
-            classmethod(_from_job),
-        )
-        monkeypatch.setattr("chemsmart.jobs.job.Job.run", lambda self: None)
-
-        result = CliRunner().invoke(
-            run,
-            [
-                "--fake",
-                "--scratch",
-                "gaussian",
-                "-p",
-                "test",
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "opt",
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        assert observed["scratch_arg"] is True
-
-    def test_sub_explicit_scratch_keeps_jobrunner_scratch_true(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
-    ):
-        monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
-        )
-        fake_server = Server(name="dummy")
-        captured = {"job": None, "cli_args": None}
-
-        def _submit(job, test=False, cli_args=None, **kw):
-            captured["job"] = job
-            captured["cli_args"] = cli_args
-
-        fake_server.submit = _submit
-        monkeypatch.setattr(
-            "chemsmart.settings.server.Server.from_servername",
-            lambda _name: fake_server,
-        )
-
-        result = CliRunner().invoke(
-            sub,
-            [
-                "--test",
-                "--scratch",
-                "--server",
-                "dummy",
-                "gaussian",
-                "-p",
-                "test",
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "opt",
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        assert "--scratch" in captured["cli_args"]
-        assert captured["job"].jobrunner.scratch is True
+        assert "--scratch" not in captured["cli_args"]
