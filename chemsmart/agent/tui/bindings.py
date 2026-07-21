@@ -1,4 +1,4 @@
-"""Key bindings for the Phase 1 agent TUI."""
+"""Safety bindings that remain fixed regardless of TUI preferences."""
 
 from textual.binding import Binding
 

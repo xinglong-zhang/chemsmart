@@ -9,9 +9,27 @@ from chemsmart.agent.loop import ToolLoop, ToolLoopBudgets
 from ._agent_session_helpers import FakeProvider
 from ._loop_helpers import (
     ScriptedRegistry,
+    openai_final_response,
     openai_tool_call_response,
     tool_call,
 )
+
+
+class FlakyProvider(FakeProvider):
+    def __init__(self, failures, responses):
+        super().__init__(responses)
+        self.failures = failures
+
+    def chat(self, messages, tools=None, timeout_s=30):
+        if self.failures:
+            self.failures -= 1
+            raise TimeoutError("provider timeout")
+        return super().chat(messages, tools=tools, timeout_s=timeout_s)
+
+
+class OpenAICompatibleProvider(FakeProvider):
+    name = "deepseek"
+    wire_protocol = "openai"
 
 
 @pytest.mark.parametrize(
@@ -168,3 +186,78 @@ def test_tool_loop_stops_cleanly_on_budget_limits(
     entries = loop.decision_log.read_all()
     assert entries[-1]["kind"] == "loop_limit_exceeded"
     assert entries[-1]["payload"]["limit_reason"] == expected_reason
+
+
+def test_tool_loop_retries_one_provider_timeout_then_recovers(tmp_path):
+    provider = FlakyProvider(
+        1,
+        [{"__raw_response__": openai_final_response("Recovered.")}],
+    )
+    registry = ScriptedRegistry({"recommend_method": {"method": "b3lyp"}})
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+    )
+
+    result = loop.run_turn(
+        messages=[{"role": "user", "content": "Try once more."}],
+        tool_defs=registry.openai_tool_defs(),
+    )
+
+    assert result["assistant_text"] == "Recovered."
+    assert result["provider_errors"] == 1
+    assert result["limit_reason"] is None
+    assert any(
+        entry["kind"] == "provider_turn_error"
+        for entry in loop.decision_log.read_all()
+    )
+
+
+def test_tool_loop_stops_after_provider_error_budget(tmp_path):
+    provider = FlakyProvider(3, [])
+    registry = ScriptedRegistry({"recommend_method": {"method": "b3lyp"}})
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+        budgets=ToolLoopBudgets(max_provider_errors_per_turn=2),
+    )
+
+    result = loop.run_turn(
+        messages=[{"role": "user", "content": "Try twice."}],
+        tool_defs=registry.openai_tool_defs(),
+    )
+
+    assert result["provider_errors"] == 2
+    assert result["limit_reason"] == "provider_errors"
+
+
+def test_tool_loop_separates_provider_identity_from_wire_protocol(tmp_path):
+    provider = OpenAICompatibleProvider(
+        [
+            {
+                "__raw_response__": openai_tool_call_response(
+                    tool_call("call_1", "recommend_method", {"task": "opt"})
+                )
+            },
+            {"__raw_response__": openai_final_response("Completed.")},
+        ]
+    )
+    registry = ScriptedRegistry({"recommend_method": {"method": "b3lyp"}})
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+    )
+
+    result = loop.run_turn(
+        messages=[{"role": "user", "content": "Recommend a method."}],
+    )
+
+    assert result["assistant_text"] == "Completed."
+    assert result["tool_outcomes"][0].status == "ok"
+    assert result["tool_requests"][0].provider == "openai"

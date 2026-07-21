@@ -53,6 +53,9 @@ def test_registry_round_trips_build_gaussian_settings_call():
             "orca.sp",
             "orca.irc",
             "orca.scan",
+            "xtb.opt",
+            "xtb.sp",
+            "xtb.hess",
         ],
     }
     gaussian_settings_props = gaussian_settings_def["function"]["parameters"][
@@ -63,6 +66,47 @@ def test_registry_round_trips_build_gaussian_settings_call():
     assert "numfreq" in gaussian_settings_props
     assert "additional_opt_options_in_route" in gaussian_settings_props
     assert "additional_route_parameters" in gaussian_settings_props
+
+
+def test_registry_exposes_typed_handles_and_hides_runtime_owned_fields():
+    registry = ToolRegistry.default()
+    definitions = {
+        item["function"]["name"]: item["function"]["parameters"]
+        for item in registry.openai_tool_defs()
+    }
+
+    build_job = definitions["build_job"]
+    assert build_job["properties"]["molecule"]["pattern"].startswith("^mol_")
+    assert build_job["properties"]["settings"]["pattern"].startswith(
+        "^(?:gset|oset|xset)"
+    )
+    assert "jobrunner" not in build_job["properties"]
+
+    for tool_name in {
+        "dry_run_input",
+        "validate_runtime",
+        "run_local",
+        "extract_optimized_geometry",
+        "submit_hpc",
+    }:
+        job_schema = definitions[tool_name]["properties"]["job"]
+        assert job_schema["type"] == "string"
+        assert job_schema["pattern"].startswith("^job_")
+
+    assert "transport" not in definitions["submit_hpc"]["properties"]
+
+
+def test_registry_model_facing_properties_never_use_empty_any_schema():
+    registry = ToolRegistry.default()
+
+    empty_properties = []
+    for definition in registry.openai_tool_defs():
+        function = definition["function"]
+        for name, schema in function["parameters"]["properties"].items():
+            if not schema:
+                empty_properties.append(f"{function['name']}.{name}")
+
+    assert empty_properties == []
 
 
 def test_registry_unknown_tool_name_raises_clearly():
@@ -112,11 +156,29 @@ def test_registry_default_registration_sets_read_tool_metadata():
     ssh_probe_tool = registry.get_tool("ssh_probe")
     scheduler_query_tool = registry.get_tool("scheduler_query")
     log_tail_tool = registry.get_tool("log_tail")
+    project_tools = {
+        name: registry.get_tool(name)
+        for name in {
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
+            "search_basis_sets",
+            "synthesize_command",
+            "repair_command",
+            "execute_chemsmart_command",
+            "inspect_calculation",
+        }
+    }
 
     assert read_tool is not None
     assert ssh_probe_tool is not None
     assert scheduler_query_tool is not None
     assert log_tail_tool is not None
+    assert all(tool is not None for tool in project_tools.values())
     assert read_tool.metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Read {path} L{start_line}-{end_line}",
@@ -134,11 +196,50 @@ def test_registry_default_registration_sets_read_tool_metadata():
         read_only=True,
         ui_summary_template="Tail {path} on {server} ({lines}L)",
     )
+    assert project_tools["extract_project_protocol"].metadata.read_only is True
+    assert project_tools["render_project_yaml"].metadata.read_only is True
+    assert project_tools["validate_project_yaml"].metadata.read_only is True
+    assert project_tools["critic_project_yaml"].metadata.read_only is True
+    assert project_tools["write_project_yaml"].metadata.read_only is False
+    assert project_tools["read_project_yaml"].metadata.read_only is True
+    assert project_tools["update_project_yaml"].metadata.read_only is False
+    assert project_tools["synthesize_command"].metadata.read_only is True
+    assert project_tools["repair_command"].metadata.read_only is True
+    assert (
+        project_tools["execute_chemsmart_command"].metadata.read_only is False
+    )
+    assert project_tools["search_basis_sets"].metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="Search basis sets {query}",
+    )
+    assert project_tools[
+        "inspect_calculation"
+    ].metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="Inspect calculation {run_id}",
+    )
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
         if tool.name
-        not in {"read", "ssh_probe", "scheduler_query", "log_tail"}
+        not in {
+            "read",
+            "ssh_probe",
+            "scheduler_query",
+            "log_tail",
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
+            "search_basis_sets",
+            "synthesize_command",
+            "repair_command",
+            "execute_chemsmart_command",
+            "inspect_calculation",
+        }
     )
 
 
@@ -237,3 +338,51 @@ def _make_tool_spec(
         input_schema=schema,
         metadata=metadata or RuntimeToolMetadata(),
     )
+
+
+def test_tool_groups_cover_every_registered_tool_exactly_once():
+    from chemsmart.agent.registry import TOOL_GROUPS
+
+    registry = ToolRegistry.default()
+    all_names = {tool.name for tool in registry.list_tools()}
+    grouped: list[str] = [
+        name for names in TOOL_GROUPS.values() for name in names
+    ]
+
+    assert set(grouped) == all_names  # no ungrouped, no phantom entries
+    assert len(grouped) == len(set(grouped))  # each tool in exactly one group
+
+
+def test_default_registry_restricts_to_selected_groups():
+    registry = ToolRegistry.default(groups=["synthesis", "project_yaml"])
+    names = {tool.name for tool in registry.list_tools()}
+
+    assert "synthesize_command" in names
+    assert "read_project_yaml" in names
+    assert "run_local" not in names
+    assert "execute_chemsmart_command" not in names
+
+
+def test_default_registry_honors_tool_groups_env(monkeypatch):
+    monkeypatch.setenv("CHEMSMART_AGENT_TOOL_GROUPS", "synthesis")
+
+    registry = ToolRegistry.default()
+
+    assert {tool.name for tool in registry.list_tools()} == {
+        "synthesize_command",
+        "repair_command",
+    }
+
+
+def test_default_registry_rejects_unknown_group():
+    with pytest.raises(ValueError, match="Unknown tool group"):
+        ToolRegistry.default(groups=["bogus"])
+
+
+def test_tool_group_lookup():
+    from chemsmart.agent.registry import tool_group
+
+    assert tool_group("synthesize_command") == "synthesis"
+    assert tool_group("execute_chemsmart_command") == "execution"
+    assert tool_group("write_project_yaml") == "project_yaml"
+    assert tool_group("nonexistent_tool") is None

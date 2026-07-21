@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args, get_origin, get_type_hints
 
@@ -26,6 +28,329 @@ from chemsmart.agent.tool_protocol import (
 
 logger = logging.getLogger(__name__)
 
+# Module-type tool groups. Each registered tool belongs to exactly one group so
+# the tool surface can be enabled incrementally — e.g. training/serving a local
+# model on "synthesis" only, then adding "project_yaml", then "execution".
+# Select groups via ToolRegistry.default(groups=[...]) or the
+# CHEMSMART_AGENT_TOOL_GROUPS env var (comma-separated group names).
+TOOL_GROUPS: dict[str, frozenset[str]] = {
+    "synthesis": frozenset(
+        {
+            "synthesize_command",
+            "repair_command",
+        }
+    ),
+    "project_yaml": frozenset(
+        {
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
+            "search_basis_sets",
+        }
+    ),
+    "harness_jobs": frozenset(
+        {
+            "build_molecule",
+            "recommend_method",
+            "build_gaussian_settings",
+            "build_orca_settings",
+            "build_xtb_settings",
+            "build_job",
+            "dry_run_input",
+            "validate_runtime",
+            "extract_optimized_geometry",
+        }
+    ),
+    "execution": frozenset(
+        {
+            "execute_chemsmart_command",
+            "run_local",
+            "submit_hpc",
+        }
+    ),
+    "wizard": frozenset(
+        {
+            "wizard_probe",
+            "wizard_refresh",
+            "wizard_verify",
+            "wizard_write",
+        }
+    ),
+    "diagnostics": frozenset(
+        {
+            "inspect_calculation",
+            "read",
+            "ssh_probe",
+            "scheduler_query",
+            "log_tail",
+        }
+    ),
+}
+
+_TOOL_GROUP_BY_NAME: dict[str, str] = {
+    tool_name: group_name
+    for group_name, tool_names in TOOL_GROUPS.items()
+    for tool_name in tool_names
+}
+
+_TOOL_GROUPS_ENV_VAR = "CHEMSMART_AGENT_TOOL_GROUPS"
+
+_MODEL_FIELD_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    ("build_job", "molecule"): {
+        "type": "string",
+        "pattern": r"^mol_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_molecule.",
+    },
+    ("build_job", "settings"): {
+        "type": "string",
+        "pattern": r"^(?:gset|oset|xset)_[0-9a-f]{4,}$",
+        "description": "Handle returned by a program settings builder.",
+    },
+    ("dry_run_input", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("validate_runtime", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("run_local", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("extract_optimized_geometry", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("submit_hpc", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("validate_runtime", "server"): {
+        "oneOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}],
+        "description": "Workspace server name or validated server mapping.",
+    },
+    ("submit_hpc", "server"): {
+        "oneOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}],
+        "description": "Workspace server name or validated server mapping.",
+    },
+}
+_MODEL_EXCLUDED_FIELDS = frozenset(
+    {
+        ("build_job", "jobrunner"),
+        ("submit_hpc", "transport"),
+    }
+)
+
+_DEFAULT_TOOL_SOURCES = (
+    ("build_molecule", "chemsmart.agent.tools", None, None),
+    ("recommend_method", "chemsmart.agent.tools", None, None),
+    (
+        "extract_project_protocol",
+        "chemsmart.agent.project_yaml",
+        "Extract chemsmart project-YAML method facts from a literature protocol or natural-language method description.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Extract project protocol facts",
+        ),
+    ),
+    (
+        "render_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Render a chemsmart Gaussian/ORCA project YAML candidate from extracted method facts.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Render project YAML {project_name}",
+        ),
+    ),
+    (
+        "validate_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Validate project YAML by loading it through chemsmart project settings.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Validate project YAML {project_name}",
+        ),
+    ),
+    (
+        "critic_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Critique whether project YAML matches a literature protocol and chemsmart runtime semantics.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Critique project YAML {project_name}",
+        ),
+    ),
+    (
+        "write_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Write a validated project YAML into the current workspace .chemsmart/<program> after explicit approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Write project YAML {project_name}",
+            side_effect="writes a user project YAML file",
+        ),
+    ),
+    (
+        "read_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Read the active workspace project YAML and summarize the chemsmart runtime settings it loads.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read project YAML {project_name}",
+        ),
+    ),
+    (
+        "update_project_yaml",
+        "chemsmart.agent.project_yaml",
+        "Patch an existing workspace project YAML by dotted path, validate it, and write only after approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Update project YAML {project_name}",
+            side_effect="writes a workspace project YAML file",
+        ),
+    ),
+    (
+        "search_basis_sets",
+        "chemsmart.agent.harness.basis_sets.catalog",
+        "Search BSE-backed basis-set names for a short user phrase; returns top candidates only, never the full catalog.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Search basis sets {query}",
+        ),
+    ),
+    (
+        "synthesize_command",
+        "chemsmart.agent.tools_command",
+        "Synthesize one grounded chemsmart CLI command using the CLI schema, project YAML check, adapter, and runtime semantic gate.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Synthesize chemsmart command",
+        ),
+    ),
+    (
+        "repair_command",
+        "chemsmart.agent.tools_command",
+        "Repair a failed chemsmart CLI command and re-run runtime semantic validation.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Repair chemsmart command",
+        ),
+    ),
+    (
+        "execute_chemsmart_command",
+        "chemsmart.agent.tools_command",
+        "Execute an already semantic-gated chemsmart CLI command after explicit approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Execute chemsmart command",
+            side_effect="runs a local chemsmart command",
+        ),
+    ),
+    (
+        "inspect_calculation",
+        "chemsmart.agent.runtime.calculations",
+        "Inspect the latest or named Gaussian/ORCA calculation receipt and output using deterministic chemistry parsers.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Inspect calculation {run_id}",
+        ),
+    ),
+    ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
+    ("build_orca_settings", "chemsmart.agent.tools", None, None),
+    ("build_xtb_settings", "chemsmart.agent.tools", None, None),
+    ("build_job", "chemsmart.agent.tools", None, None),
+    ("dry_run_input", "chemsmart.agent.tools", None, None),
+    ("validate_runtime", "chemsmart.agent.tools", None, None),
+    ("run_local", "chemsmart.agent.tools", None, None),
+    (
+        "read",
+        "chemsmart.agent.tools_fs",
+        "Read a local text file with 1-based line numbers. Use start_line/limit to page large files.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read {path} L{start_line}-{end_line}",
+            side_effect=None,
+        ),
+    ),
+    (
+        "ssh_probe",
+        "chemsmart.agent.tools_hpc",
+        "Run a predefined read-only probe on a remote HPC server. probe_name must be one of the catalog entries; free-form commands are not allowed.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="SSH probe {probe_name} on {server}",
+        ),
+    ),
+    (
+        "scheduler_query",
+        "chemsmart.agent.tools_hpc",
+        "Inspect HPC scheduler state — queue/partition aggregates (job_id omitted) or per-job status (with job_id). slurm/pbs/sge/lsf. Read-only.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Scheduler query {scheduler} on {server}",
+        ),
+    ),
+    (
+        "log_tail",
+        "chemsmart.agent.tools_hpc",
+        "Tail a remote log file with optional grep filter. Returns last N lines + summary of detected error signatures (OOM, walltime, missing module, node failure, scheduler reject, segfault). Read-only.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Tail {path} on {server} ({lines}L)",
+        ),
+    ),
+    ("extract_optimized_geometry", "chemsmart.agent.tools", None, None),
+    ("submit_hpc", "chemsmart.agent.tools", None, None),
+    ("wizard_probe", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_refresh", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_verify", "chemsmart.agent.wizard.tools", None, None),
+    ("wizard_write", "chemsmart.agent.wizard.tools", None, None),
+)
+
+
+def tool_group(tool_name: str) -> str | None:
+    """Return the module group a registered tool belongs to."""
+
+    return _TOOL_GROUP_BY_NAME.get(tool_name)
+
+
+def resolve_tool_groups(
+    groups: Iterable[str] | None = None,
+) -> frozenset[str] | None:
+    """Resolve the enabled tool-name set from groups or the env override.
+
+    Returns None when no restriction applies (all tools enabled).
+    """
+
+    if groups is None:
+        raw = os.environ.get(_TOOL_GROUPS_ENV_VAR, "").strip()
+        if not raw:
+            return None
+        groups = [part.strip() for part in raw.split(",") if part.strip()]
+    selected = list(groups)
+    if not selected:
+        return None
+    unknown = sorted(set(selected) - set(TOOL_GROUPS))
+    if unknown:
+        known = ", ".join(sorted(TOOL_GROUPS))
+        raise ValueError(
+            f"Unknown tool group(s) {unknown!r}. Known groups: {known}"
+        )
+    enabled: set[str] = set()
+    for group_name in selected:
+        enabled |= TOOL_GROUPS[group_name]
+    return frozenset(enabled)
+
 
 class ToolInputModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
@@ -39,6 +364,7 @@ class ToolSpec:
     description: str | None = None
     accepts_kwargs: bool = False
     schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    model_excluded_fields: frozenset[str] = frozenset()
     metadata: RuntimeToolMetadata = field(default_factory=RuntimeToolMetadata)
 
     def openai_tool_def(self) -> dict[str, Any]:
@@ -68,6 +394,15 @@ class ToolSpec:
         schema.pop("title", None)
         schema.pop("$defs", None)
         properties = schema.get("properties", {})
+        for field_name in self.model_excluded_fields:
+            properties.pop(field_name, None)
+        required = schema.get("required")
+        if isinstance(required, list):
+            schema["required"] = [
+                field_name
+                for field_name in required
+                if field_name not in self.model_excluded_fields
+            ]
         for field_name, override in self.schema_overrides.items():
             if field_name not in properties:
                 continue
@@ -85,67 +420,11 @@ class ToolRegistry:
         self._tools = {tool.name: tool for tool in tools}
 
     @classmethod
-    def default(cls) -> "ToolRegistry":
-        tool_sources = [
-            ("build_molecule", "chemsmart.agent.tools", None, None),
-            ("recommend_method", "chemsmart.agent.tools", None, None),
-            ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
-            ("build_orca_settings", "chemsmart.agent.tools", None, None),
-            ("build_job", "chemsmart.agent.tools", None, None),
-            ("dry_run_input", "chemsmart.agent.tools", None, None),
-            ("validate_runtime", "chemsmart.agent.tools", None, None),
-            ("run_local", "chemsmart.agent.tools", None, None),
-            (
-                "read",
-                "chemsmart.agent.tools_fs",
-                "Read a local text file with 1-based line numbers. Use start_line/limit to page large files.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template="Read {path} L{start_line}-{end_line}",
-                    side_effect=None,
-                ),
-            ),
-            (
-                "ssh_probe",
-                "chemsmart.agent.tools_hpc",
-                "Run a predefined read-only probe on a remote HPC server. probe_name must be one of the catalog entries; free-form commands are not allowed.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=("SSH probe {probe_name} on {server}"),
-                ),
-            ),
-            (
-                "scheduler_query",
-                "chemsmart.agent.tools_hpc",
-                "Inspect HPC scheduler state — queue/partition aggregates (job_id omitted) or per-job status (with job_id). slurm/pbs/sge/lsf. Read-only.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=(
-                        "Scheduler query {scheduler} on {server}"
-                    ),
-                ),
-            ),
-            (
-                "log_tail",
-                "chemsmart.agent.tools_hpc",
-                "Tail a remote log file with optional grep filter. Returns last N lines + summary of detected error signatures (OOM, walltime, missing module, node failure, scheduler reject, segfault). Read-only.",
-                RuntimeToolMetadata(
-                    read_only=True,
-                    ui_summary_template=("Tail {path} on {server} ({lines}L)"),
-                ),
-            ),
-            (
-                "extract_optimized_geometry",
-                "chemsmart.agent.tools",
-                None,
-                None,
-            ),
-            ("submit_hpc", "chemsmart.agent.tools", None, None),
-            ("wizard_probe", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_refresh", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_verify", "chemsmart.agent.wizard.tools", None, None),
-            ("wizard_write", "chemsmart.agent.wizard.tools", None, None),
-        ]
+    def default(
+        cls,
+        groups: Iterable[str] | None = None,
+    ) -> "ToolRegistry":
+        enabled_tools = resolve_tool_groups(groups)
         return cls(
             [
                 _build_tool_spec(
@@ -154,7 +433,8 @@ class ToolRegistry:
                     description=description,
                     metadata=metadata,
                 )
-                for name, module_name, description, metadata in tool_sources
+                for name, module_name, description, metadata in _DEFAULT_TOOL_SOURCES
+                if enabled_tools is None or name in enabled_tools
             ]
         )
 
@@ -272,6 +552,7 @@ def _build_tool_spec(
 ) -> ToolSpec:
     fields: dict[str, Any] = {}
     schema_overrides: dict[str, dict[str, Any]] = {}
+    model_excluded_fields: set[str] = set()
     accepts_kwargs = False
     signature = inspect.signature(func)
     resolved_hints = get_type_hints(func)
@@ -284,13 +565,22 @@ def _build_tool_spec(
         annotation = resolved_hints.get(param.name, param.annotation)
         if annotation is inspect.Signature.empty:
             annotation = Any
-        schema_override = _annotation_to_schema(annotation)
+        field_key = (registered_name or func.__name__, param.name)
+        schema_override = _MODEL_FIELD_SCHEMAS.get(field_key)
+        if schema_override is None:
+            schema_override = _annotation_to_schema(annotation)
         if schema_override is not None:
             schema_overrides[param.name] = schema_override
+        if field_key in _MODEL_EXCLUDED_FIELDS:
+            model_excluded_fields.add(param.name)
         annotation = _schema_friendly_annotation(
             annotation,
             tool_name=registered_name or func.__name__,
             field_name=param.name,
+            has_model_contract=(
+                schema_override is not None
+                or field_key in _MODEL_EXCLUDED_FIELDS
+            ),
         )
         default = param.default
         if default is inspect.Signature.empty:
@@ -314,6 +604,7 @@ def _build_tool_spec(
         description=description,
         accepts_kwargs=accepts_kwargs,
         schema_overrides=schema_overrides,
+        model_excluded_fields=frozenset(model_excluded_fields),
         metadata=metadata or RuntimeToolMetadata(),
     )
 
@@ -343,6 +634,7 @@ def _schema_friendly_annotation(
     *,
     tool_name: str,
     field_name: str,
+    has_model_contract: bool = False,
 ) -> Any:
     try:
         TypeAdapter(annotation).json_schema()
@@ -351,12 +643,13 @@ def _schema_friendly_annotation(
         PydanticSchemaGenerationError,
         TypeError,
     ):
-        logger.warning(
-            "Falling back to Any for tool schema field %s.%s with annotation %r",
-            tool_name,
-            field_name,
-            annotation,
-        )
+        if not has_model_contract:
+            logger.warning(
+                "Falling back to Any for tool schema field %s.%s with annotation %r",
+                tool_name,
+                field_name,
+                annotation,
+            )
         return Any
     return annotation
 

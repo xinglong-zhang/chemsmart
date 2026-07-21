@@ -194,6 +194,32 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
+The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. The `xtb` executable performs the calculation; it is installed from conda-forge (added to `environment.yml`) and resolved from the active environment's `PATH`.
+
+For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
+
+```text
+sp:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+  grad: false
+opt:
+  gfn_version: gfn2
+  optimization_level: vtight
+  charge: 0
+  multiplicity: 1
+  grad: false
+hess:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+  grad: false
+```
+
+A workspace-local `.chemsmart/xtb/<project>.yaml` takes precedence over the same-named project in `~/.chemsmart/xtb/`, matching the Gaussian/ORCA resolution order. Solvent can be added to any xTB job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: alpb` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
+
+---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
 
 One also needs to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in a scratch folder). One may do `ln -s /path/to/scratch/ ~/scratch`.
@@ -235,94 +261,138 @@ make clean
 
 ## AI Agent (`chemsmart agent`)
 
-A natural-language agent that plans and executes Gaussian/ORCA workflows and HPC operations. It chains
-chemistry tools (input generation, dry-runs, submissions) with HPC inspection tools (scheduler state,
-job status, log tailing) under a permission model that keeps risky actions auditable.
+`chemsmart agent` is a natural-language layer for preparing, checking, and
+explaining CHEMSMART Gaussian/ORCA workflows. It is intentionally
+CLI-grounded: when the request is to create or run a job, the primary artifact
+is a real `chemsmart run ...` or `chemsmart sub ...` command, followed by
+parser facts, safe dry-run evidence, and user-visible warnings or rejects.
+
+Current local-agent status and performance are tracked in
+[`docs/agent-current-status.md`](docs/agent-current-status.md). The v13.1 local
+model adapter, dataset evidence, and clean eval summary are tracked in
+[`docs/agent-v13_1-local-adapter.md`](docs/agent-v13_1-local-adapter.md). The
+agent implementation map is in [`chemsmart/agent/README.md`](chemsmart/agent/README.md).
+
+### TUI preview
+
+The TUI renders the generated command, runtime semantic evidence, deterministic
+command interpretation, and collapsible public decision trace.
+
+![chemsmart agent dry-run TUI](tests/agent/tui/snapshots/dry_run_input.svg)
+
+Typing `/` opens the slash-command palette; typing more characters filters the
+available commands.
+
+![chemsmart agent slash command list](tests/agent/tui/snapshots/slash_help.svg)
 
 ### Setup
 
 ```bash
-pip install -e ".[agent-tui]"            # interactive TUI extra (Textual/Rich)
-cp api.env.example api.env               # then set ai_api_key=...
-export AI_PROVIDER=openai                # or: anthropic
+pip install -e ".[agent,agent-tui]"      # providers + interactive TUI
+# Configure ~/.chemsmart/agent/agent.yaml
 chemsmart agent doctor                   # verify provider, SSH, permissions
 ```
+
+Provider configuration is read from `~/.chemsmart/agent/agent.yaml`. A legacy
+`api.env` credential is accepted with a deprecation warning for one release,
+but is not a second configuration source. The active provider may be API-backed
+(`openai`/`anthropic`/OpenAI-compatible) or local (`local` with PyTorch or
+MLX). Project settings used by the interactive agent are workspace-local:
+start CHEMSMART from the research directory and keep project files under
+`.chemsmart/gaussian/` or `.chemsmart/orca/`. A provider `project:` value may
+select a matching workspace candidate, but it does not replace a missing
+workspace YAML.
 
 ### Entry points
 
 | Command | Purpose |
 |---|---|
-| `chemsmart agent` | Launch interactive Textual TUI (`--plain` for inline mode) |
-| `chemsmart agent ask "..."` | One-shot request; print result and exit |
-| `chemsmart agent run --dry-submit "..."` | Plan + generate inputs, skip HPC submit |
-| `chemsmart agent resume <session-id>` | Continue a paused session |
+| `chemsmart agent` | Launch the Textual TUI (`--plain` for conservative terminals) |
+| `chemsmart agent ask "..."` | One-shot synthesis/explanation request |
+| `chemsmart agent run --dry-submit "..."` | Full agent loop with dry-run previews and no remote submit |
+| `chemsmart agent resume <session-id>` | Continue a paused/audited session |
 | `chemsmart agent sessions` | List recent sessions |
-| `chemsmart agent tools` | Show all registered tools |
+| `chemsmart agent tools` | Show registered runtime tools |
 | `chemsmart agent doctor` | Provider/SSH/permission health check |
+
+The TUI has one provider-aware interface: local providers synthesize commands,
+while API providers use the unified tool loop automatically. After semantic,
+intent, generated-input, and workspace-project checks pass, use `/run` for a
+validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
+command. Use `/init` to build a project YAML
+from a reported computational method, then `/write-project` to approve writing
+it into the current workspace. `Shift+Tab` previews the active YAML and cycles
+between multiple workspace projects.
+
+### Current agent behavior
+
+- **CLI-first job synthesis.** Job requests produce real CHEMSMART commands
+  before explanation. Frontier/API providers may explain, critique, or repair a
+  command, but the deterministic parser and runtime semantic gate remain the
+  source of truth.
+- **Deterministic command parser.** The UI explains workspace, execution mode,
+  program, job type, server, dry-run status, input file, charge/multiplicity,
+  project, method/basis, solvent, route parameters, and job-specific options.
+- **Runtime semantic gate.** Generated commands are checked through safe fake or
+  dry-run execution and, when possible, generated `.com`/`.inp` evidence.
+  Gaussian TS routes reject duplicate runtime-owned TS tokens and malformed
+  `opt=(...)` blocks.
+- **Project YAML harness.** The agent can extract a literature protocol, render
+  CHEMSMART `gas:`/`solv:` YAML, validate it through project settings, critique
+  it, and write it only after approval. Existing settings are never silently
+  replaced: the TUI asks whether to overwrite or create a new project name.
+- **Basis-set lookup.** The `search_basis_sets` tool uses a local
+  Basis-Set-Exchange-derived catalog and returns only top-k candidates. It
+  handles common phrases such as "Karlsruhe triple zeta diffuse",
+  "RI fit for def2-TZVP", and "six thirty one star" without injecting the full
+  basis catalog into the prompt.
+- **Public decision trace.** API-routed TUI turns expose a collapsible routing
+  trace with action, confidence, observable evidence, rejected action classes,
+  and caveats. This is user-auditable routing evidence, not hidden
+  chain-of-thought.
+- **Completion-focused transcript.** Tool calls, deterministic parsing,
+  semantic/intent evidence, repair attempts, and intermediate responses remain
+  visible while a turn runs, then collapse behind one toggle. The final command
+  or user-facing answer stays visible and clickable for text selection.
 
 ### Permission modes
 
-The agent is gated by a runtime permission mode. Pick the mode that matches how much autonomy you want:
+The agent is gated by a runtime permission mode. Pick the mode that matches how
+much autonomy you want:
 
 | Mode | Auto-allowed | Requires approval |
 |---|---|---|
-| `read-only` | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | edits, submits, local runs |
-| `accept-edits` | read-only set + `edit`/`write` | `run_local`, `submit_hpc` |
-| `bypass` | everything **except** the `NEVER_AUTO_ALLOW` denylist (`pip install`, `sudo`, `rm -rf /`, `curl | sh`, `chmod 777`, etc.) | dangerous shell commands |
-| `plan` | nothing — planning only, no execution | every tool |
-
-Pass with `--mode read-only` on any CLI command, or toggle inside the TUI.
+| `read-only` | `read`, `ssh_probe`, `scheduler_query`, `log_tail`, project-YAML validation/critique, `search_basis_sets` | edits, local runs, remote submits, project YAML writes |
+| `accept-edits` | read-only set + edit-safe writes | `run_local`, `submit_hpc`, always-approval tools |
+| `bypass` | everything except the `NEVER_AUTO_ALLOW` denylist (`sudo`, `rm -rf /`, `curl \| sh`, etc.) | commands matching never-auto-allow patterns |
+| `plan` | no runtime tools | every tool |
 
 ### Tool catalog
 
+The default registry currently exposes 30 tools:
+
 | Group | Tools | What they do |
 |---|---|---|
-| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA jobs from natural language |
-| Execution | `run_local`, `submit_hpc`, `wizard_probe`/`wizard_write` | Run jobs locally or submit to HPC; profile new servers interactively |
-| HPC inspection | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | Cat local files, run safelist SSH probes, query SLURM/PBS/SGE/LSF normalized output, tail remote logs with auto error classification |
-| Control flow | `ask_user` (virtual) | Pause loop and ask the user when a structured slot is missing (server, job ID, log path, scheduler kind) |
-
-### How the agent decides
-
-The system prompt enforces guardrails that shape behavior beyond raw tool access:
-
-- **Literal tool-result discipline** — never overclaim past what a tool returned (`Queued:0,Running:2` stays "0 queued, 2 running", not "almost full").
-- **Scope refusal** — off-topic asks (food, weather, jokes) get a fixed refusal pointing back to chemistry/HPC.
-- **Install policy** — the agent never prints `pip install`/`apt install`/`brew install` commands in prose; it points to docs.
-- **Read-only initiative** — when the target is concrete (named server + clear queue/job/log intent), it runs the tool instead of asking.
-- **Advisory protection** — questions like "왜 walltime 자꾸 초과뜨지?" / "why does SCF diverge?" get domain analysis directly, not "which server?".
-- **Structured ambiguity** — missing server/job_id/log_path/scheduler/queue is routed through `ask_user`, not prose clarification.
-- **Conversation memory** — the last server, scheduler kind, job ID, log path, and probe error persist across turns. Follow-ups like "그 job 다시" resolve automatically.
-- **Remote-path precedence** — once `last_server` is known, paths route through `log_tail(server=...)` instead of local `read`.
-
-### Example session
-
-```bash
-$ chemsmart agent --mode read-only
-
-> chemnode1 PBS 큐 상태 봐줘
-[scheduler_query(server="chemnode1", scheduler="pbs") → ok]
-0 queued, 2 running on workq.
-                                    PBS · chemnode1 · conf=high
-
-> 내 job 4.chemnode1 로그 마지막 50줄
-[scheduler_query(job_id="4.chemnode1") → Output_Path=/home/x/STDIN.o4]
-[log_tail(server="chemnode1", path="/home/x/STDIN.o4", lines=50) → ok, 0 errors]
-…(last 50 lines)…
-                                    PBS · chemnode1 · job 4.chemnode1 · log STDIN.o4 · conf=high
-
-> 서버 상태 봐줘
-[ask_user(question="Which server?", options=["chemnode1","chemnode2"])]
-```
+| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_xtb_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA/xTB jobs from natural language |
+| Command grounding | `search_basis_sets`, `synthesize_command`, `repair_command` | Resolve basis phrases and produce or repair CLI-grounded commands |
+| Project YAML | `extract_project_protocol`, `render_project_yaml`, `validate_project_yaml`, `critic_project_yaml`, `write_project_yaml`, `read_project_yaml`, `update_project_yaml` | Build, select, audit, and update workspace project settings |
+| Execution | `execute_chemsmart_command`, `run_local`, `submit_hpc`, `wizard_probe`, `wizard_refresh`, `wizard_verify`, `wizard_write` | Execute approved commands, submit to HPC, or profile server YAMLs interactively |
+| HPC inspection | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | Read local files, run safelisted SSH probes, query schedulers, and tail remote logs |
+| Control flow | `ask_user` (virtual) | Ask for missing structured slots such as server, job ID, log path, or scheduler kind |
 
 ### Session artifacts
 
 Every turn writes `~/.chemsmart/agent/sessions/<id>/`:
-- `decision_log.jsonl` — append-only event log: plan, tool requests, tool outcomes, ask/answer pairs, critic verdict
-- `session_metadata.json` — intent, timing, blocked status, model usage
-- Generated `.com` / `.inp` files for submitted jobs
 
-Resume with `chemsmart agent resume <id>` — conversation memory and entity slots reload from the decision log.
+- `decision_log.jsonl` — append-only event log: requests, tool calls, outcomes,
+  approvals, semantic evidence, and critic/trace data
+- `session_metadata.json` — intent, timing, blocked status, model usage, and
+  harness verdict metadata
+- `harness_result.json` when the runtime harness evaluates generated inputs
+- Generated `.com` / `.inp` files for dry-run or submitted jobs
+
+Resume with `chemsmart agent resume <id>` — conversation memory and entity slots
+reload from the decision log.
 
 ## Testing Installations
 
@@ -525,6 +595,24 @@ chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob
 ```
 
 ---
+
+### xTB job submission
+
+xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`, and the input structure is typically an `.xyz` file:
+
+```bash
+chemsmart run xtb -p <project> -f <input.xyz> opt
+chemsmart run xtb -p <project> -f <input.xyz> sp
+chemsmart run xtb -p <project> -f <input.xyz> hess
+```
+
+To submit to a scheduler, use `sub` with a server name:
+
+```bash
+chemsmart sub -s <server_name> xtb -p <project> -f <input.xyz> opt
+```
+
+The GFN Hamiltonian (`-g/--gfn-version`), implicit solvation (`-sm/--solvent-model` together with `-si/--solvent-id`), and the optimization convergence level (`--optimization-level`, `opt` only) can be overridden on the command line; anything not overridden is taken from the project YAML. Example xTB structures are in `examples/xtb/`.
 
 ### General options available to all jobs:
 

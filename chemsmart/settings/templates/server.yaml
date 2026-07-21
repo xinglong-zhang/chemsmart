@@ -2,7 +2,7 @@ SERVER:
     SCHEDULER: PBS
     QUEUE_NAME: normal
     NUM_HOURS: 24
-    MEM_GB: 400
+    MEM_GB: 375
     NUM_CORES: 64
     NUM_GPUS: 0
     NUM_THREADS: 64
@@ -11,6 +11,8 @@ SERVER:
     ##PROJECT: 13002374
     SCRATCH_DIR: null
     USE_HOSTS: true
+    EXTRA_SCHEDULER_DIRECTIVES: |
+      #PBS -m abe
     EXTRA_COMMANDS: |
         export PATH=$HOME/bin/chemsmart:$PATH
         export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
@@ -49,6 +51,18 @@ ORCA:
         export SCRATCH=~/scratch  # required if scratch is true
         export PATH=~/programs/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
+
+XTB:
+    EXEFOLDER: null  # use xtb from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: True
+    CONDA_ENV: |
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: |
+        export SCRATCH=~/scratch
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot

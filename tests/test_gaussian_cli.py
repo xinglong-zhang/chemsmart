@@ -17,6 +17,19 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+
+def test_gaussian_route_drops_duplicate_freq_from_additional_route_parameters():
+    settings = GaussianJobSettings.default()
+    settings.jobtype = "opt"
+    settings.functional = "m062x"
+    settings.basis = "def2svp"
+    settings.freq = True
+    settings.additional_route_parameters = "freq scf=qc"
+
+    assert settings.route_string == "# opt freq m062x def2svp scf=qc"
+
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""

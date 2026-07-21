@@ -28,10 +28,17 @@ def patch_user_config(monkeypatch, config_dir: Path) -> None:
         "USER_CONFIG_DIR",
         str(config_dir),
     )
-    runner_module.user_settings = ChemsmartUserSettings()
-    executable_module.user_settings = ChemsmartUserSettings()
-    server_module.user_settings = ChemsmartUserSettings()
-    submitters_module.user_settings = ChemsmartUserSettings()
+    # Use monkeypatch.setattr so these module-level globals are restored at
+    # teardown. Plain assignment leaked a temp-dir ChemsmartUserSettings into
+    # later tests, which then resolved servers against a deleted config dir
+    # ("No server implemented for local.yaml").
+    for module in (
+        runner_module,
+        executable_module,
+        server_module,
+        submitters_module,
+    ):
+        monkeypatch.setattr(module, "user_settings", ChemsmartUserSettings())
 
 
 def write_server_yaml(
@@ -180,6 +187,7 @@ def invoke_manual_submit_cli(
     jobtype: str,
 ):
     runner = CliRunner()
+    write_gaussian_project_yaml(job_folder / ".chemsmart")
     args = [
         "-s",
         server_name,

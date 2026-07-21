@@ -65,6 +65,7 @@ def test_second_tui_request_includes_prior_turn_memory(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     first_request = f"build water from {single_molecule_xyz_file}"
@@ -113,7 +114,7 @@ def test_second_tui_request_includes_prior_turn_memory(
 
     async def scenario() -> None:
         session_root = tmp_path / "sessions"
-        app = ChemsmartTuiApp(session_root=session_root)
+        app = ChemsmartTuiApp(session_root=session_root, runtime_v2="off")
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)
@@ -172,6 +173,7 @@ def test_clear_resets_transcript_and_session(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     plan = planner_plan(single_molecule_xyz_file, "tui_memory_opt")
@@ -207,7 +209,9 @@ def test_clear_resets_transcript_and_session(
     monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
 
     async def scenario() -> None:
-        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        app = ChemsmartTuiApp(
+            session_root=tmp_path / "sessions", runtime_v2="off"
+        )
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)

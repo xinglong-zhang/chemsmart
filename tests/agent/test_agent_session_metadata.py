@@ -7,6 +7,7 @@ import pytest
 
 from chemsmart.agent.core import AgentSession
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.session_finalizer import SESSION_METADATA_KEYS
 
 from ._agent_session_helpers import FakeProvider, critic_ok, planner_plan
 
@@ -100,6 +101,9 @@ def test_session_metadata_json_is_written_with_required_keys(
         "schema_hash",
         "total_input_tokens",
         "total_output_tokens",
+        "harness_verdict",
+        "harness_issue_count",
+        "harness_failed_rule_ids",
     } <= metadata.keys()
     assert metadata["intent"] == "opt"
     assert metadata["plan_steps"] == 5
@@ -113,6 +117,10 @@ def test_session_metadata_json_is_written_with_required_keys(
     assert len(metadata["schema_hash"]) == 64
     assert metadata["total_input_tokens"] > 0
     assert metadata["total_output_tokens"] > 0
+    assert metadata["harness_verdict"] == "ok"
+    assert metadata["harness_issue_count"] == 0
+    assert metadata["harness_failed_rule_ids"] == []
+    assert (Path(result["session_dir"]) / "harness_result.json").exists()
 
 
 def test_tool_error_is_logged_before_runtime_error(
@@ -476,6 +484,7 @@ def test_session_metadata_has_all_required_fields(
     metadata = json.loads(
         (Path(result["session_dir"]) / "session_metadata.json").read_text()
     )
+    assert tuple(sorted(metadata)) == SESSION_METADATA_KEYS
     required = {
         "session_id": str,
         "request_intent": str,
@@ -490,6 +499,9 @@ def test_session_metadata_has_all_required_fields(
         "critic_confidence": (int, float),
         "block_reason": str,
         "blocked": bool,
+        "harness_verdict": str,
+        "harness_issue_count": int,
+        "harness_failed_rule_ids": list,
         "exit_status": str,
     }
     for key, expected_type in required.items():

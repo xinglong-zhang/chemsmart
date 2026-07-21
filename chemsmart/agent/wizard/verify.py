@@ -36,55 +36,13 @@ def verify_server_yaml(server_name: str) -> VerifyResult:
         path = _resolve_server_yaml_path(server_name)
     except ValueError as exc:
         errors.append(str(exc))
-        return VerifyResult(
-            server_name=server_name,
-            host=None,
-            mode="unknown",
-            would_submit_via="unknown",
-            transport_invocation=None,
-            warnings=warnings,
-            errors=errors,
-        )
+        return _failed_verification(server_name, warnings, errors)
 
-    try:
-        raw_contents = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        errors.append(f"Server YAML not found: {path}")
-        return VerifyResult(
-            server_name=server_name,
-            host=None,
-            mode="unknown",
-            would_submit_via="unknown",
-            transport_invocation=None,
-            warnings=warnings,
-            errors=errors,
-        )
-    except yaml.YAMLError as exc:
-        errors.append(f"Invalid YAML in {path}: {exc}")
-        return VerifyResult(
-            server_name=server_name,
-            host=None,
-            mode="unknown",
-            would_submit_via="unknown",
-            transport_invocation=None,
-            warnings=warnings,
-            errors=errors,
-        )
-
-    server_block = (
-        raw_contents.get("SERVER") if isinstance(raw_contents, dict) else None
-    )
+    server_block = _load_server_block(path, errors)
     if not isinstance(server_block, dict):
-        errors.append(f"Missing SERVER mapping in {path}")
-        return VerifyResult(
-            server_name=server_name,
-            host=None,
-            mode="unknown",
-            would_submit_via="unknown",
-            transport_invocation=None,
-            warnings=warnings,
-            errors=errors,
-        )
+        if not errors:
+            errors.append(f"Missing SERVER mapping in {path}")
+        return _failed_verification(server_name, warnings, errors)
 
     if "HOST" not in server_block:
         warnings.append(
@@ -96,15 +54,7 @@ def verify_server_yaml(server_name: str) -> VerifyResult:
         server = Server.from_yaml(str(path))
     except Exception as exc:  # pragma: no cover - defensive normalization
         errors.append(f"Failed to load Server from YAML: {exc}")
-        return VerifyResult(
-            server_name=server_name,
-            host=None,
-            mode="unknown",
-            would_submit_via="unknown",
-            transport_invocation=None,
-            warnings=warnings,
-            errors=errors,
-        )
+        return _failed_verification(server_name, warnings, errors)
 
     host = _normalize_host(server.kwargs.get("HOST"))
     mode = "local" if host in {None, "", "localhost", "local"} else "ssh"
@@ -136,6 +86,37 @@ def verify_server_yaml(server_name: str) -> VerifyResult:
         warnings=warnings,
         errors=errors,
     )
+
+
+def _failed_verification(
+    server_name: str, warnings: list[str], errors: list[str]
+) -> VerifyResult:
+    return VerifyResult(
+        server_name=server_name,
+        host=None,
+        mode="unknown",
+        would_submit_via="unknown",
+        transport_invocation=None,
+        warnings=warnings,
+        errors=errors,
+    )
+
+
+def _load_server_block(
+    path: Path, errors: list[str]
+) -> dict[str, object] | None:
+    try:
+        raw_contents = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        errors.append(f"Server YAML not found: {path}")
+        return None
+    except yaml.YAMLError as exc:
+        errors.append(f"Invalid YAML in {path}: {exc}")
+        return None
+    server_block = (
+        raw_contents.get("SERVER") if isinstance(raw_contents, dict) else None
+    )
+    return server_block if isinstance(server_block, dict) else None
 
 
 def _resolve_server_yaml_path(server_name: str) -> Path:

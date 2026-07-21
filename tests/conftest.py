@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from _pytest.monkeypatch import MonkeyPatch
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
@@ -30,6 +31,7 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 
 thermochemistry_cli_module = importlib.import_module(
@@ -37,6 +39,43 @@ thermochemistry_cli_module = importlib.import_module(
 )
 
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+
+
+class _HomeAwareMonkeyPatch(MonkeyPatch):
+    """``MonkeyPatch`` that keeps ``~`` consistent with a patched ``HOME``.
+
+    ``Path.home()`` and ``os.path.expanduser`` read ``HOME`` on POSIX but
+    ``USERPROFILE`` on Windows. Dozens of tests redirect the user
+    configuration tree with ``monkeypatch.setenv("HOME", tmp_path)``; on
+    Windows those tests silently escaped the sandbox and wrote into the real
+    profile, which both corrupted the developer/runner home and made the
+    assertions fail. Mirroring the value keeps one call site honest on every
+    platform, including tests written later.
+    """
+
+    _HOME_ALIASES = ("USERPROFILE",)
+
+    def setenv(self, name, value, prepend=None):
+        super().setenv(name, value, prepend=prepend)
+        if name == "HOME" and prepend is None:
+            for alias in self._HOME_ALIASES:
+                super().setenv(alias, value)
+
+    def delenv(self, name, raising=True):
+        super().delenv(name, raising=raising)
+        if name == "HOME":
+            for alias in self._HOME_ALIASES:
+                super().delenv(alias, raising=False)
+
+
+@pytest.fixture
+def monkeypatch():
+    """Replace pytest's builtin fixture with the home-aware variant."""
+    patcher = _HomeAwareMonkeyPatch()
+    try:
+        yield patcher
+    finally:
+        patcher.undo()
 
 
 ############ Thermochemistry Mock Fixtures ##################
@@ -67,6 +106,7 @@ def make_thermochemistry_mock():
         check_imaginary_frequencies=True,
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
+        rotational_mode="gaussian",
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -74,14 +114,16 @@ def make_thermochemistry_mock():
         mock.check_imaginary_frequencies = check_imaginary_frequencies
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
+        mock.target = "dummy.log"
         return mock
 
     return _factory
 
 
 ############ CLI Fixtures ##################
-@pytest.fixture()
+@pytest.fixture
 def make_cli_ctx_obj():
     """Factory for the minimal Click context object."""
 
@@ -329,6 +371,22 @@ def invoke_mol_with_visualize():
             mol_group.commands.pop("_test_noop", None)
 
         return result
+
+    return _invoke
+
+
+@pytest.fixture
+def invoke_mol_cli():
+    """Invoke ``mol`` CLI with provided args."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+        return runner.invoke(
+            mol_group, cli_args, obj=ctx_obj, catch_exceptions=False
+        )
 
     return _invoke
 
@@ -673,6 +731,29 @@ def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
     return gaussian_ts_genecp_output
 
 
+@pytest.fixture()
+def gaussian_pd_insertion_ts_r_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory, "Pd_insertion_ts_r.log"
+    )
+
+
+@pytest.fixture()
+def gaussian_full_gen_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "bromochloromethane_full_gen.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_full_genecp_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "silver_chloride_full_genecp.log",
+    )
+
+
 # Gaussian output file for frozen coordinates
 @pytest.fixture()
 def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
@@ -719,6 +800,15 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
     return gaussian_hirshfeld_outfile
 
 
+# Gaussian output file with custom (generic) SMD solvent
+@pytest.fixture()
+def gaussian_smd_generic_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "benzoic_acid_opt_sp_smd_generic.log",
+    )
+
+
 @pytest.fixture()
 def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
     gaussian_ozone_opt_outfile = os.path.join(
@@ -733,6 +823,22 @@ def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "co2.log"
     )
     return gaussian_co2_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_koh_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH.log"
+    )
+    return gaussian_koh_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_koh_linear_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_linear_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH_linear.log"
+    )
+    return gaussian_koh_linear_opt_outfile
 
 
 @pytest.fixture()
@@ -1296,8 +1402,18 @@ def orca_he_output_freq(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_he_output_freq_new(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq_new.out")
+
+
+@pytest.fixture()
 def orca_co2_output(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "CO2.out")
+
+
+@pytest.fixture()
+def orca_koh_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "KOH.out")
 
 
 @pytest.fixture()
@@ -1531,6 +1647,69 @@ def orca_yaml_settings_custom_solv_cosmors_project_name(
     return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
 
 
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_co2_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_ohess")
+
+
+@pytest.fixture()
+def xtb_water_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
+
+
+@pytest.fixture()
+def xtb_cyclopentadienyl_anion_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "cyclopentadienyl_anion_opt")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_opt_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_opt_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_sp_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_sp_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_acetaldehyde_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "acetaldehyde_hess")
+
+
+@pytest.fixture()
+def xtb_he_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "he_hess")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -1711,6 +1890,18 @@ def orca_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def orca_jobrunner_scratch(tmpdir, pbs_server):
     return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def xtb_jobrunner_no_scratch(pbs_server):
+    return FakeXTBJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def xtb_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeXTBJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 
@@ -2516,3 +2707,100 @@ def empty_pdb_file(tmpdir):
     with open(filepath, "w") as f:
         f.write("REMARK  This PDB has no atoms.\nEND\n")
     return filepath
+
+
+############ Canonical Geometry / Structure ID Fixtures ##################
+@pytest.fixture()
+def canonical_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "canonical")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_file(canonical_test_directory):
+    """Formaldehyde (CH2O) in its reference orientation — planar, C2v symmetry."""
+    return os.path.join(canonical_test_directory, "formaldehyde.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_trans_rot_file(canonical_test_directory):
+    """Formaldehyde translated and rotated from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_perturbed_file(canonical_test_directory):
+    """Formaldehyde with coordinates perturbed at ~1e-7 Å level from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_perturbed.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_file(canonical_test_directory):
+    """Methane (CH4) in its reference orientation — tetrahedral, Td symmetry."""
+    return os.path.join(canonical_test_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_trans_rot_file(canonical_test_directory):
+    """Methane translated and rotated from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_distorted_file(canonical_test_directory):
+    """Methane with one C-H bond elongated by ~2e-3 Å from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_distorted.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_file(canonical_test_directory):
+    """3b (C17H17NOS) in its reference orientation — large, low-symmetry (C1) molecule."""
+    return os.path.join(canonical_test_directory, "3b.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_trans_rot_file(canonical_test_directory):
+    """3b translated and rotated from canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_permuted_file(canonical_test_directory):
+    """3b with input atom order permuted — same coordinates as canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_permuted.xyz")
+
+
+@pytest.fixture()
+def canonical_r_bromochlorofluoromethane_file(canonical_test_directory):
+    """(R)-Bromochlorofluoromethane — one enantiomer of a chiral CHBrClF molecule."""
+    return os.path.join(
+        canonical_test_directory, "R-Bromochlorofluoromethane.xyz"
+    )
+
+
+@pytest.fixture()
+def canonical_s_bromochlorofluoromethane_file(canonical_test_directory):
+    """(S)-Bromochlorofluoromethane — non-superimposable mirror image of the R enantiomer."""
+    return os.path.join(
+        canonical_test_directory, "S-Bromochlorofluoromethane.xyz"
+    )
+
+
+############ Database Fixtures ##################
+@pytest.fixture()
+def database_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "DatabaseTests")
+
+
+@pytest.fixture()
+def database_chemsmart_file(database_test_directory):
+    return os.path.join(database_test_directory, "chemsmart.db")
+
+
+@pytest.fixture()
+def database_ase_file(database_test_directory):
+    return os.path.join(database_test_directory, "ase.db")
+
+
+@pytest.fixture()
+def database_empty_file(database_test_directory):
+    return os.path.join(database_test_directory, "empty.db")

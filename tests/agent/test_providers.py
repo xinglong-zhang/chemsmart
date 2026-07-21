@@ -1,0 +1,194 @@
+"""Tests for provider selection."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from chemsmart.agent import providers
+from chemsmart.agent.provider_config import AgentProviderConfig
+from chemsmart.agent.providers import ProviderError
+
+
+class DummyOpenAIProvider:
+    def __init__(self, api_key: str, **kwargs) -> None:
+        self.api_key = api_key
+        self.kwargs = kwargs
+
+
+class DummyAnthropicProvider:
+    def __init__(self, api_key: str, **kwargs) -> None:
+        self.api_key = api_key
+        self.kwargs = kwargs
+
+
+def test_get_provider_prefers_yaml_config(monkeypatch):
+    config = AgentProviderConfig(
+        name="main",
+        type="openai",
+        api_key="yaml-key",
+        model="gpt-yaml",
+        base_url="https://example.test/v1",
+        extra_headers={"X-Test": "value"},
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+    monkeypatch.setattr(providers, "OpenAIProvider", DummyOpenAIProvider)
+    monkeypatch.setenv("AI_PROVIDER", "anthropic")
+    monkeypatch.setenv("ai_api_key", "legacy-key")
+
+    provider = providers.get_provider()
+
+    assert isinstance(provider, DummyOpenAIProvider)
+    assert provider.api_key == "yaml-key"
+    assert provider.kwargs == {
+        "model": "gpt-yaml",
+        "base_url": "https://example.test/v1",
+        "extra_headers": {"X-Test": "value"},
+        "provider_name": "main",
+    }
+
+
+def test_get_provider_preserves_openai_compatible_provider_name(monkeypatch):
+    config = AgentProviderConfig(
+        name="deepseek",
+        type="openai",
+        api_key="deepseek-key",
+        model="deepseek-v4-pro",
+        base_url="https://api.deepseek.com",
+        extra_headers={},
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+    monkeypatch.setattr(providers, "OpenAIProvider", DummyOpenAIProvider)
+
+    provider = providers.get_provider()
+
+    assert provider.kwargs["provider_name"] == "deepseek"
+
+
+def test_get_provider_builds_mlx_local_provider(monkeypatch):
+    config = AgentProviderConfig(
+        name="local_chemsmart_v13_1_mlx4",
+        type="local",
+        api_key="hf-test",
+        model="chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit",
+        base_url="",
+        extra_headers={},
+        base_model_id=(
+            "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+        ),
+        hf_token="hf-test",
+        runtime="mlx",
+        project="test",
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+
+    provider = providers.get_provider()
+
+    assert isinstance(provider, providers.LocalProvider)
+    assert provider.default_model == (
+        "chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+    )
+    assert provider._runtime == "mlx"
+    assert provider._project == "test"
+
+
+def test_local_provider_applies_kind_disambiguator(monkeypatch):
+    import chemsmart.agent.local.generator as local_generator
+
+    def fake_generate_plan(*_args, **_kwargs):
+        return {
+            "intent": "workflow",
+            "jobs": [
+                {
+                    "id": 1,
+                    "kind": "gaussian.opt",
+                    "file": "examples/h2o.xyz",
+                    "charge": 0,
+                    "mult": 1,
+                    "settings": {"freeze_atoms": [3, 4]},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        providers.LocalProvider,
+        "_ensure_loaded",
+        lambda self: object(),
+    )
+    monkeypatch.setattr(local_generator, "generate_plan", fake_generate_plan)
+
+    provider = providers.LocalProvider(project="test")
+    response = provider.chat(
+        [
+            {
+                "role": "user",
+                "content": (
+                    "Run Gaussian constrained opt freezing the bond between "
+                    "3 and 4 for examples/h2o.xyz, charge 0 mult 1."
+                ),
+            }
+        ]
+    )
+
+    content = response["choices"][0]["message"]["content"]
+    result = json.loads(content)
+    assert result["status"] == "ready"
+    assert result["command"].endswith("modred --coordinates '[[3,4]]'")
+
+
+def test_get_provider_legacy_fallback_emits_deprecation_warning(
+    monkeypatch, tmp_path
+):
+    env_file = tmp_path / "api.env"
+    env_file.write_text("AI_PROVIDER=anthropic\nai_api_key=legacy-key\n")
+    monkeypatch.setattr(providers, "load_active_provider_config", lambda: None)
+    monkeypatch.setattr(providers, "AnthropicProvider", DummyAnthropicProvider)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.delenv("ai_api_key", raising=False)
+
+    with pytest.warns(DeprecationWarning, match="agent.yaml missing"):
+        provider = providers.get_provider(env_path=str(env_file))
+
+    assert isinstance(provider, DummyAnthropicProvider)
+    assert provider.api_key == "legacy-key"
+
+
+def test_get_provider_both_yaml_and_legacy_missing_raises(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(providers, "load_active_provider_config", lambda: None)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.delenv("ai_api_key", raising=False)
+    monkeypatch.delenv("CHEMSMART_API_ENV", raising=False)
+
+    with pytest.warns(DeprecationWarning, match="agent.yaml missing"):
+        with pytest.raises(ProviderError, match="AI_PROVIDER"):
+            providers.get_provider()
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gpt-5.4", True),
+        ("gpt-5o", True),
+        ("o1-preview", True),
+        ("o3-mini", True),
+        ("o4-mini", True),
+        ("gpt-4o", False),
+        ("gpt-4.1-turbo", False),
+        ("gpt-4-turbo", False),
+    ],
+)
+def test_openai_uses_max_completion_tokens_predicate(
+    model: str, expected: bool
+) -> None:
+    assert providers._openai_uses_max_completion_tokens(model) is expected

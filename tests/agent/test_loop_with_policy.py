@@ -63,7 +63,7 @@ def test_driving_mode_denies_run_local_without_yolo(tmp_path):
     assert result["approvals_count"] == 0
 
 
-def test_driving_mode_allows_run_local_with_yolo(tmp_path):
+def test_driving_mode_requires_explicit_run_local_approval_with_yolo(tmp_path):
     provider = FakeProvider(
         [
             {
@@ -75,12 +75,14 @@ def test_driving_mode_allows_run_local_with_yolo(tmp_path):
         ]
     )
     registry = ScriptedRegistry({"run_local": {"ok": True, "status": "done"}})
+    approver = FakeApprover([ApprovalDecision.ALLOW_ONCE])
     loop = ToolLoop(
         provider=provider,
         registry=registry,
         handle_store=HandleStore(tmp_path),
         decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
         policy=PermissionPolicy(mode=PermissionMode.DRIVING, yolo=True),
+        approver=approver,
     )
 
     result = loop.run_turn(
@@ -92,6 +94,7 @@ def test_driving_mode_allows_run_local_with_yolo(tmp_path):
     assert registry.calls == [("run_local", {"job": "job_1"})]
     assert result["denials_count"] == 0
     assert result["approvals_count"] == 1
+    assert approver.calls == ["run_local"]
 
 
 def test_permission_mode_needs_approver_and_allow_session_persists(tmp_path):

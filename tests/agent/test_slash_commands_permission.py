@@ -24,7 +24,6 @@ def test_permission_slash_commands_route_and_backcompat(tmp_path):
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         resolved: list[ApprovalDecision] = []
-        requested: list[str] = []
 
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -32,7 +31,6 @@ def test_permission_slash_commands_route_and_backcompat(tmp_path):
             screen._resolve_pending_approval = (
                 lambda decision: resolved.append(decision) or True
             )
-            screen._request_approval = requested.append
 
             screen._handle_slash_command("/allow")
             screen._handle_slash_command("/allow-session")
@@ -53,11 +51,19 @@ def test_permission_slash_commands_route_and_backcompat(tmp_path):
             screen._handle_slash_command("/yolo off")
             assert screen._yolo_enabled is False
 
+            screen._pending_approval = True
+            screen._pending_tool_request = _pending_request("run_local")
             screen._handle_slash_command("/run")
+            screen._pending_tool_request = _pending_request("submit_hpc")
             screen._handle_slash_command("/submit")
-            assert requested == ["run_local", "submit_hpc"]
+            assert resolved[-2:] == [
+                ApprovalDecision.ALLOW_ONCE,
+                ApprovalDecision.ALLOW_ONCE,
+            ]
 
+            screen._pending_tool_request = _pending_request("run_local")
             screen._handle_slash_command("/run yes")
+            screen._pending_tool_request = _pending_request("submit_hpc")
             screen._handle_slash_command("/submit session")
             assert resolved[-2:] == [
                 ApprovalDecision.ALLOW_ONCE,

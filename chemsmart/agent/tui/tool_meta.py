@@ -11,6 +11,12 @@ from rich.text import Text
 from chemsmart.agent.registry import ToolRegistry
 
 _TOOL_META = {
+    "ask_user": {
+        "risk": "question",
+        "read_only": True,
+        "style": "warning",
+        "summary": "asks you a clarifying question (nothing is changed)",
+    },
     "build_molecule": {
         "risk": "read-only",
         "read_only": True,
@@ -23,6 +29,66 @@ _TOOL_META = {
         "style": "warning",
         "summary": "computes an advisory method recommendation",
     },
+    "extract_project_protocol": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "extracts project YAML method facts",
+    },
+    "render_project_yaml": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "renders a project YAML candidate",
+    },
+    "validate_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "validates project YAML with chemsmart loaders",
+    },
+    "critic_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "critiques project YAML against protocol facts",
+    },
+    "write_project_yaml": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes a user project YAML config",
+    },
+    "read_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "reads the active workspace project YAML",
+    },
+    "update_project_yaml": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "updates a workspace project YAML config",
+    },
+    "synthesize_command": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "synthesizes a semantic-gated chemsmart CLI command",
+    },
+    "repair_command": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "repairs and revalidates a chemsmart CLI command",
+    },
+    "execute_chemsmart_command": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "runs a semantic-gated chemsmart CLI command",
+    },
     "build_gaussian_settings": {
         "risk": "read-only",
         "read_only": True,
@@ -34,6 +100,12 @@ _TOOL_META = {
         "read_only": True,
         "style": "warning",
         "summary": "builds validated ORCA settings",
+    },
+    "build_xtb_settings": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "builds validated xTB settings",
     },
     "build_job": {
         "risk": "local-state",
@@ -236,6 +308,22 @@ def render_tool_result_summary(
         return _render_scheduler_query_summary(payload)
     if tool_name == "log_tail":
         return _render_log_tail_summary(payload)
+    if tool_name in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+        "read_project_yaml",
+        "update_project_yaml",
+    }:
+        return _render_project_yaml_summary(tool_name, payload)
+    if tool_name in {
+        "synthesize_command",
+        "repair_command",
+        "execute_chemsmart_command",
+    }:
+        return _render_command_tool_summary(tool_name, payload)
     return None
 
 
@@ -269,6 +357,22 @@ def render_tool_result_detail(
         return _render_scheduler_query_detail(payload)
     if tool_name == "log_tail":
         return _render_log_tail_detail(payload)
+    if tool_name in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+        "read_project_yaml",
+        "update_project_yaml",
+    }:
+        return _render_project_yaml_detail(payload)
+    if tool_name in {
+        "synthesize_command",
+        "repair_command",
+        "execute_chemsmart_command",
+    }:
+        return _render_command_tool_detail(payload)
     return None
 
 
@@ -319,6 +423,52 @@ def _render_log_tail_summary(payload: dict[str, Any]) -> str | None:
             kinds.append(kind)
     top_kinds = ", ".join(kinds) if kinds else "none"
     return f"{lines_returned}L, {len(errors)} errors: {top_kinds}"
+
+
+def _render_project_yaml_summary(
+    tool_name: str,
+    payload: dict[str, Any],
+) -> str | None:
+    project = _string_or_none(payload.get("project_name")) or "project"
+    program = _string_or_none(payload.get("program")) or "program"
+    verdict = _string_or_none(payload.get("verdict"))
+    if verdict is None and isinstance(payload.get("validation"), dict):
+        verdict = _string_or_none(payload["validation"].get("verdict"))
+    if tool_name == "extract_project_protocol":
+        return f"{program}:{project} facts extracted"
+    if tool_name == "render_project_yaml":
+        return f"{program}:{project} YAML rendered"
+    if tool_name == "write_project_yaml":
+        path = _string_or_none(payload.get("written_path"))
+        return f"{program}:{project} written" + (f" to {path}" if path else "")
+    if tool_name == "read_project_yaml":
+        path = _string_or_none(payload.get("path"))
+        return f"{program}:{project} loaded" + (
+            f" from {path}" if path else ""
+        )
+    if tool_name == "update_project_yaml":
+        return f"{program}:{project} updated"
+    if verdict is not None:
+        return f"{program}:{project} verdict={verdict}"
+    return f"{program}:{project}"
+
+
+def _render_command_tool_summary(
+    tool_name: str,
+    payload: dict[str, Any],
+) -> str | None:
+    status = _string_or_none(payload.get("status")) or "ok"
+    command = _string_or_none(payload.get("command"))
+    semantic = payload.get("semantic")
+    verdict = None
+    if isinstance(semantic, dict):
+        verdict = _string_or_none(semantic.get("verdict"))
+    if tool_name == "execute_chemsmart_command":
+        returncode = payload.get("returncode")
+        return f"execute {status}, rc={returncode}, gate={verdict or 'n/a'}"
+    if command:
+        return f"{status}, gate={verdict or 'n/a'}"
+    return status
 
 
 def _render_read_detail(payload: dict[str, Any]) -> list[Text] | None:
@@ -391,6 +541,62 @@ def _render_log_tail_detail(payload: dict[str, Any]) -> list[Text] | None:
         line_no = _string_or_none(item.get("line_no")) or "?"
         lines.append(Text(f"L{line_no} {kind}: {line}", style="error"))
     return _finalize_detail_lines(lines, truncated=len(errors) > 3)
+
+
+def _render_project_yaml_detail(payload: dict[str, Any]) -> list[Text] | None:
+    lines: list[Text] = []
+    yaml_text = _string_or_none(payload.get("yaml_text"))
+    if yaml_text is not None:
+        lines.extend(
+            Text(line, style="dim") for line in yaml_text.splitlines()[:6]
+        )
+    summary = _string_or_none(payload.get("summary"))
+    if summary is not None:
+        lines.append(Text(summary, style="dim"))
+    issues = payload.get("issues")
+    if not isinstance(issues, list) and isinstance(
+        payload.get("validation"), dict
+    ):
+        issues = payload["validation"].get("issues")
+    if isinstance(issues, list):
+        for issue in issues[:4]:
+            if not isinstance(issue, dict):
+                continue
+            rule = _string_or_none(issue.get("rule_id")) or "issue"
+            severity = _string_or_none(issue.get("severity")) or "warn"
+            message = _string_or_none(issue.get("message")) or ""
+            style = "error" if severity == "reject" else "warning"
+            lines.append(Text(f"{rule}: {message}", style=style))
+    return _finalize_detail_lines(lines, truncated=len(lines) > 6)
+
+
+def _render_command_tool_detail(payload: dict[str, Any]) -> list[Text] | None:
+    lines: list[Text] = []
+    command = _string_or_none(payload.get("command"))
+    if command is not None:
+        lines.append(Text(command, style="bold"))
+    explanation = _string_or_none(payload.get("explanation"))
+    if explanation is not None:
+        lines.append(Text(explanation, style="dim"))
+    semantic = payload.get("semantic")
+    if isinstance(semantic, dict):
+        verdict = _string_or_none(semantic.get("verdict")) or "unknown"
+        failed = semantic.get("failed_rule_ids") or []
+        lines.append(Text(f"semantic gate: {verdict}", style="dim"))
+        if failed:
+            lines.append(
+                Text(
+                    f"failed rules: {', '.join(map(str, failed))}",
+                    style="error",
+                )
+            )
+    stdout = _string_or_none(payload.get("stdout_tail"))
+    stderr = _string_or_none(payload.get("stderr_tail"))
+    if stdout is not None:
+        lines.append(Text(stdout.splitlines()[-1], style="dim"))
+    if stderr is not None:
+        lines.append(Text(stderr.splitlines()[-1], style="error"))
+    return _finalize_detail_lines(lines, truncated=len(lines) > 6)
 
 
 def _finalize_detail_lines(

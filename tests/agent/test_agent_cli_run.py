@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
 from chemsmart.agent.core import Plan
+from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 
 from ._agent_session_helpers import FakeProvider
-from ._loop_helpers import openai_final_response
 from .tui._helpers import write_session_fixture
+
+UTC = timezone.utc
 
 
 def test_agent_cli_run_prints_plan_and_writes_decision_log(
@@ -56,15 +56,22 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()
@@ -87,12 +94,27 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
 
 def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()
-    result = runner.invoke(agent, ["tools"], catch_exceptions=False)
+    # The tool table is rendered by Rich, which wraps to the terminal
+    # width. CI runners report different widths per platform, so pin one
+    # wide enough for the description column to stay on a single line.
+    result = runner.invoke(
+        agent,
+        ["tools"],
+        catch_exceptions=False,
+        env={"COLUMNS": "200"},
+    )
 
     assert result.exit_code == 0, result.output
     assert "Registered tools" in result.output
@@ -104,7 +126,7 @@ def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
 
 def test_resume_missing_emits_friendly_error(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -123,7 +145,7 @@ def test_agent_run_resume_missing_emits_friendly_error(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -141,7 +163,7 @@ def test_agent_run_resume_missing_emits_friendly_error(
 def test_agent_sessions_lists_recent(monkeypatch, tmp_path: Path):
     session_root = tmp_path / "sessions"
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(session_root),
     )
 
@@ -202,7 +224,7 @@ def test_agent_cli_run_wraps_runtime_errors_as_click_exceptions(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
 
     runner = CliRunner()
@@ -260,14 +282,14 @@ def test_agent_cli_run_surfaces_advisory_only_answers(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
 
@@ -295,10 +317,12 @@ def test_ask_renders_advisory_plan(
     provider = FakeProvider(
         [
             {
-                "__raw_response__": openai_final_response(
-                    "Advisory text: start with wB97X-D/def2-SVP, confirm "
-                    "one imaginary frequency, then refine with def2-TZVP."
-                )
+                "status": "ready",
+                "command": "chemsmart sub gaussian ts -p cope -b def2-svp",
+                "explanation": "Synthesize a safe ChemSmart CLI command for the request.",
+                "confidence": "medium",
+                "missing_info": [],
+                "alternatives": [],
             }
         ]
     )
@@ -315,8 +339,15 @@ def test_ask_renders_advisory_plan(
         lambda: str(tmp_path / "sessions"),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.cli._default_session_root",
+        "chemsmart.agent.cli_commands._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()
@@ -326,10 +357,11 @@ def test_ask_renders_advisory_plan(
             "ask",
             "Recommend method/basis for a Cope rearrangement TS and explain trade-offs.",
         ],
+        input="N\n",
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0, result.output
-    assert "Assistant" in result.output
-    assert "Advisory text" in result.output
-    assert "Plan" not in result.output
+    assert "ChemSmart synthesis" in result.output
+    assert "chemsmart sub gaussian ts -p cope -b def2-svp" in result.output
+    assert "Run? [Y]es/[E]dit/[N]o/[T]est" in result.output

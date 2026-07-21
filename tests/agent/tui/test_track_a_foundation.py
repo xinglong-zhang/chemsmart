@@ -48,7 +48,7 @@ def test_tools_slash_command_returns_immediately_and_off_main_thread(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.CliRunner.invoke",
+        "chemsmart.agent.tui.mixins.slash_commands.CliRunner.invoke",
         slow_invoke,
     )
 
@@ -95,7 +95,7 @@ def test_inline_slash_commands_use_semantic_assertions_and_strip_debug_hint(
         )
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.CliRunner.invoke",
+        "chemsmart.agent.tui.mixins.slash_commands.CliRunner.invoke",
         fake_invoke,
     )
 
@@ -137,7 +137,7 @@ def test_cancel_confirmation_returns_immediately_and_off_main_thread(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.cancel_job",
+        "chemsmart.agent.tui.mixins.job_interaction.cancel_job",
         slow_cancel,
     )
 
@@ -210,10 +210,13 @@ def test_refresh_job_snapshot_returns_immediately_when_cache_is_cold(
     tmp_path: Path,
 ):
     call_threads: list[int] = []
+    # Gate the collector so the mount-time poll cannot warm the cache
+    # before the cold-path assertion, however slow the CI host is.
+    release = threading.Event()
 
-    def slow_collect(_session_root):
+    def gated_collect(_session_root):
         call_threads.append(threading.get_ident())
-        time.sleep(0.2)
+        release.wait(timeout=5)
         return {
             "job-2": {
                 "job_id": "job-2",
@@ -221,7 +224,7 @@ def test_refresh_job_snapshot_returns_immediately_when_cache_is_cold(
             }
         }
 
-    monkeypatch.setattr(job_poller, "collect_job_snapshot", slow_collect)
+    monkeypatch.setattr(job_poller, "collect_job_snapshot", gated_collect)
 
     async def scenario() -> None:
         app = ChemsmartTuiApp(
@@ -235,8 +238,13 @@ def test_refresh_job_snapshot_returns_immediately_when_cache_is_cold(
             elapsed = time.perf_counter() - started
             assert elapsed < 0.05
             assert app.chat_screen._job_snapshot == {}
-            await pilot.pause(0.35)
-            app.chat_screen._refresh_job_snapshot()
+            release.set()
+            deadline = time.perf_counter() + 5.0
+            while time.perf_counter() < deadline:
+                await pilot.pause(0.1)
+                app.chat_screen._refresh_job_snapshot()
+                if "job-2" in app.chat_screen._job_snapshot:
+                    break
             assert app.chat_screen._job_snapshot["job-2"]["status"] == (
                 "running"
             )

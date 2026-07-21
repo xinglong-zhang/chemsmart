@@ -1,0 +1,6011 @@
+{
+  "audit": {
+    "boundary": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+    "candidate_documents": 176,
+    "external_documents": {
+      "claude-code": 167,
+      "oh-my-openagent": 5187,
+      "openai-codex": 4088,
+      "openai-codex-research": 3141,
+      "textual": 1488
+    },
+    "head": "3b08f4766259dd577ad8f5414186701c61a46a26",
+    "production_python_files": 151,
+    "thresholds": {
+      "exact_nonblank_lines": 6,
+      "exact_tokens": 50,
+      "near_similarity": 0.85,
+      "near_tokens": 100
+    }
+  },
+  "lineage": [
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 44
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4cc5997521280439ec6a44c68527888dab92a969",
+          "lines": 7
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "dba8a230c6dabd58966c54cfdec62c2fe7ffe294",
+          "lines": 5
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4aa53715fc9eefdc19919f7c0e15c9bc0f062a68",
+          "lines": 4
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "078be537bb7cd54f9e621315df948e3c2bfb3b0c",
+          "lines": 2
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+          "lines": 1
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+          "lines": 1
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+        "date": "2026-05-07T19:00:24+09:00",
+        "subject": "feat(agent): scaffold chemsmart/agent + Anthropic provider + doctor command (#1)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ee081f150051975e1058011a4a37bc022872670a",
+        "date": "2026-05-09T19:56:29+09:00",
+        "subject": "perf(agent): cut startup tax and remove UI-thread blocking"
+      },
+      "lines": 64,
+      "path": "chemsmart/agent/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "efce6c80009e37e9e4abf4b27144d2133f11ce65",
+          "lines": 346
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 100
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 88
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 71
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+          "lines": 61
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 58
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "e5cbc1c48de76341cb756d806aeae3fd4639b65b",
+          "lines": 48
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 35
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1bb93c493ecc9a809ab1888e1c099d695ede9b16",
+          "lines": 27
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "fd08aac401f98d982ba4f1f99c068354384c0366",
+          "lines": 24
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+          "lines": 23
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 19
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "82294c6a5db18a1284981451cedcf6122a38cb10",
+          "lines": 18
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "7d86fa59e183994a0bf1e352edda302103f9c1fc",
+          "lines": 13
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "aa1363c22a0d870358f1c991efe4bcac0ddd27f0",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3d9c97cf2c4c277e246764accb93545c9caf3201",
+          "lines": 4
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3ce410d9f37a8e4346475a0b31c1cce7419d4339",
+          "lines": 1
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8481cf9bdbf9b11f69f3c0eb359258805a0952c",
+          "lines": 1
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 1
+        }
+      ],
+      "commit_count": 22,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+        "date": "2026-05-07T19:00:24+09:00",
+        "subject": "feat(agent): scaffold chemsmart/agent + Anthropic provider + doctor command (#1)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "3ce410d9f37a8e4346475a0b31c1cce7419d4339",
+        "date": "2026-07-13T14:56:28+09:00",
+        "subject": "chore(agent): remove full-tree Ruff debt"
+      },
+      "lines": 962,
+      "path": "chemsmart/agent/cli.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "fd08aac401f98d982ba4f1f99c068354384c0366",
+          "lines": 225
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 7
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "fd08aac401f98d982ba4f1f99c068354384c0366",
+        "date": "2026-05-31T13:29:26+09:00",
+        "subject": "feat: add agent CLI schema introspector (#10) (#116)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 232,
+      "path": "chemsmart/agent/cli_schema.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 346
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 3
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 349,
+      "path": "chemsmart/agent/command_answerer.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 120
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 120,
+      "path": "chemsmart/agent/compact_cli_schema.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+          "lines": 622
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "114abb257803418f09c23e11c58cfaf03388e0e5",
+          "lines": 225
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "64c2629f7b4791c37e1eda12a567e8e9c173eec1",
+          "lines": 217
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "c77d29bfc60dd1a9485bf4c481e2883c5c5b0d0b",
+          "lines": 170
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+          "lines": 154
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 150
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 129
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3d9c97cf2c4c277e246764accb93545c9caf3201",
+          "lines": 121
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8c2897673a7b88c82d9b26f00b2cd4beafda76f",
+          "lines": 110
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "cd0e37802218d4f5ca621c40196aad75bb660ffb",
+          "lines": 105
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "42d24769a0eea17969c27efab6bd3ee6c27ed169",
+          "lines": 75
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "32bc92d20a8e0804405efda98b32afef5a76f2f2",
+          "lines": 72
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b53ec18ea385f3f5c3594334a6373d20bec11f87",
+          "lines": 69
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5d2106b2333b43bbc0aba2bb900691c0eda9bb74",
+          "lines": 65
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 50
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 42
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8481cf9bdbf9b11f69f3c0eb359258805a0952c",
+          "lines": 38
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "42e6ec806b513d8b1494bad580c5c2784cb5ab19",
+          "lines": 35
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 29
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d1aa07ba6268eb2372e23cc8d07012987b2c47f7",
+          "lines": 27
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4b59639df07a9518e291f00f25aabf7557912f0a",
+          "lines": 19
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "7d86fa59e183994a0bf1e352edda302103f9c1fc",
+          "lines": 17
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "03c12060aae7700423c17dde26aa09a0c873e7c4",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 12
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+          "lines": 7
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1a3b8a612e9abdb600f4460555c9dd46a6623a7e",
+          "lines": 4
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7536829661da539faf886265e9e2cfdb9e211d4b",
+          "lines": 4
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "58c0c5134aa312495522f192b59276aade30864b",
+          "lines": 2
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 35,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+        "date": "2026-05-07T20:57:28+09:00",
+        "subject": "feat(agent): Planner + Critic + AgentSession + decision log (Wave 6 of 7)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 2621,
+      "path": "chemsmart/agent/core.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+          "lines": 109
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+        "date": "2026-05-12T18:27:51+09:00",
+        "subject": "feat: add remote log tail diagnostics"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+        "date": "2026-05-12T18:27:51+09:00",
+        "subject": "feat: add remote log tail diagnostics"
+      },
+      "lines": 109,
+      "path": "chemsmart/agent/error_summary.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "32bc92d20a8e0804405efda98b32afef5a76f2f2",
+          "lines": 121
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 35
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+          "lines": 17
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "32bc92d20a8e0804405efda98b32afef5a76f2f2",
+        "date": "2026-05-10T12:08:45+09:00",
+        "subject": "feat(agent): add ArtifactHandle store + provider tool-call adapters (W1a) (#61)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+        "date": "2026-07-13T15:02:34+09:00",
+        "subject": "refactor(agent): share provider and handle plumbing"
+      },
+      "lines": 173,
+      "path": "chemsmart/agent/handles.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 15
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b958c1fbb96a729c79cf6c7fcbfb3c7d51a70059",
+          "lines": 8
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 55,
+      "path": "chemsmart/agent/harness/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 19
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 19,
+      "path": "chemsmart/agent/harness/basis_sets/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 112
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 112,
+      "path": "chemsmart/agent/harness/basis_sets/build_bse_catalog.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 527
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 527,
+      "path": "chemsmart/agent/harness/basis_sets/catalog.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 811
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 7
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 818,
+      "path": "chemsmart/agent/harness/command_contracts.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b958c1fbb96a729c79cf6c7fcbfb3c7d51a70059",
+          "lines": 464
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 155
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "cce5024a6c72da501a8ce8c5b1fe3f3848095302",
+          "lines": 117
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 108
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 54
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "125642d6ddfe2be2ebdf8949b3df8a55d7a9515c",
+          "lines": 4
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1c0c004f2634f2f6e743a081cac40e3aa2aa4daa",
+          "lines": 2
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "b958c1fbb96a729c79cf6c7fcbfb3c7d51a70059",
+        "date": "2026-06-29T09:56:36+09:00",
+        "subject": "Add runtime semantic gate for synthesized commands"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 904,
+      "path": "chemsmart/agent/harness/command_semantics.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 157
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c8277f9e1977057a15cac5c4b821871a071819bc",
+          "lines": 58
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "c8277f9e1977057a15cac5c4b821871a071819bc",
+        "date": "2026-07-16T12:09:29+09:00",
+        "subject": "fix(agent): make harness reliability scoring deterministic"
+      },
+      "lines": 215,
+      "path": "chemsmart/agent/harness/evaluation.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 116
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 33
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 149,
+      "path": "chemsmart/agent/harness/extractors.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 91
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 91,
+      "path": "chemsmart/agent/harness/failure_taxonomy.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 559
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 303
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 21
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 883,
+      "path": "chemsmart/agent/harness/generated_invariants.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 432
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 198
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 630,
+      "path": "chemsmart/agent/harness/intent.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 1
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "lines": 1,
+      "path": "chemsmart/agent/harness/invariants/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 103
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5bc7be5244a036be2d5be9696d85084d9fd4ced2",
+          "lines": 24
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 8
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 167,
+      "path": "chemsmart/agent/harness/invariants/gaussian_ts.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+          "lines": 99
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+        "date": "2026-07-03T19:52:39+09:00",
+        "subject": "feat(harness): all-kind generated-input invariants + spec-invariant gate; TS-dup and freq-schema fixes"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+        "date": "2026-07-03T19:52:39+09:00",
+        "subject": "feat(harness): all-kind generated-input invariants + spec-invariant gate; TS-dup and freq-schema fixes"
+      },
+      "lines": 99,
+      "path": "chemsmart/agent/harness/invariants/route_checks.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 67
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "lines": 67,
+      "path": "chemsmart/agent/harness/models.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 75
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 58
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+          "lines": 50
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bbb8cf64c06b25bcf895d9cac9f1aa5e2d977d73",
+          "lines": 4
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 187,
+      "path": "chemsmart/agent/harness/runner.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5bc7be5244a036be2d5be9696d85084d9fd4ced2",
+          "lines": 228
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 74
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 31
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "35ef66e8f66748a8bfe4368f16daad102a405912",
+          "lines": 3
+        }
+      ],
+      "commit_count": 6,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "5bc7be5244a036be2d5be9696d85084d9fd4ced2",
+        "date": "2026-06-28T08:53:46+09:00",
+        "subject": "fix(agent): enforce corrected v13 harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 346,
+      "path": "chemsmart/agent/harness/spec_invariants.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 196
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 34
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 230,
+      "path": "chemsmart/agent/harness/sub_intent.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 171
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 171,
+      "path": "chemsmart/agent/harness/terminal_state.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+          "lines": 13
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9d8084ea0354a4dbcf7c960bdf87fa8900cedb2e",
+        "date": "2026-06-27T15:55:50+09:00",
+        "subject": "feat(agent): add runtime harness invariants"
+      },
+      "lines": 13,
+      "path": "chemsmart/agent/harness/trace.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 258
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 62
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 30
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+        "date": "2026-07-16T12:59:25+09:00",
+        "subject": "feat(agent): integrate runtime v2 control plane"
+      },
+      "lines": 350,
+      "path": "chemsmart/agent/harness/workflow_state.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 62
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "29537d45719e229987c8014ba53772dc6b2cae2e",
+          "lines": 26
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "12f6401f7811a4608cb063a6f54ba5e8fcdf9339",
+          "lines": 17
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "12f6401f7811a4608cb063a6f54ba5e8fcdf9339",
+        "date": "2026-06-26T04:56:44+09:00",
+        "subject": "feat(agent): deterministic kind-disambiguation backstop (modred/wbi) \u2014 0.911\u21921.000"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "29537d45719e229987c8014ba53772dc6b2cae2e",
+        "date": "2026-06-30T15:31:48+09:00",
+        "subject": "fix(agent): real-CLI rendering for sp/freq/tddft/modred + ORCA-TS disambiguation"
+      },
+      "lines": 105,
+      "path": "chemsmart/agent/kind_disambiguator.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f8b7f4cb67d8214fc90e6fbf21d1fa7bd866002f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "f8b7f4cb67d8214fc90e6fbf21d1fa7bd866002f",
+        "date": "2026-06-29T09:30:26+09:00",
+        "subject": "Fix local generator postprocessor wiring"
+      },
+      "lines": 17,
+      "path": "chemsmart/agent/local/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 263
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 66
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 12
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+        "date": "2026-06-29T23:35:06+09:00",
+        "subject": "feat(agent): add MLX 4-bit local provider"
+      },
+      "lines": 341,
+      "path": "chemsmart/agent/local/adapter.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 105
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 35
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f8b7f4cb67d8214fc90e6fbf21d1fa7bd866002f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+        "date": "2026-06-29T23:35:06+09:00",
+        "subject": "feat(agent): add MLX 4-bit local provider"
+      },
+      "lines": 147,
+      "path": "chemsmart/agent/local/generator.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 130
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 46
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+        "date": "2026-06-29T07:34:25+09:00",
+        "subject": "feat(agent): adapt local provider to v13.1 compact spec"
+      },
+      "lines": 176,
+      "path": "chemsmart/agent/local/loader.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 68
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 4
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+        "date": "2026-06-29T23:35:06+09:00",
+        "subject": "feat(agent): add MLX 4-bit local provider"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+        "date": "2026-07-03T17:54:49+09:00",
+        "subject": "fix(orca): honor additional_route_parameters in ORCA route; agent adapter/TUI updates"
+      },
+      "lines": 72,
+      "path": "chemsmart/agent/local/mlx_loader.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 205
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 29
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+        "date": "2026-06-29T23:35:06+09:00",
+        "subject": "feat(agent): add MLX 4-bit local provider"
+      },
+      "lines": 234,
+      "path": "chemsmart/agent/local/postprocessor.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 142
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 5
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+        "date": "2026-06-03T10:38:14+09:00",
+        "subject": "feat(agent): add local LoRA provider (V4 LoRA + chemsmart config agent)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+        "date": "2026-06-29T07:34:25+09:00",
+        "subject": "feat(agent): adapt local provider to v13.1 compact spec"
+      },
+      "lines": 147,
+      "path": "chemsmart/agent/local/server.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "c77d29bfc60dd1a9485bf4c481e2883c5c5b0d0b",
+          "lines": 424
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8c2897673a7b88c82d9b26f00b2cd4beafda76f",
+          "lines": 151
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "42e6ec806b513d8b1494bad580c5c2784cb5ab19",
+          "lines": 147
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 126
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 34
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+          "lines": 25
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+          "lines": 21
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 5
+        }
+      ],
+      "commit_count": 10,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "c77d29bfc60dd1a9485bf4c481e2883c5c5b0d0b",
+        "date": "2026-05-10T12:27:07+09:00",
+        "subject": "feat(agent): add provider-native tool loop orchestrator (W1b) (#62)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+        "date": "2026-07-16T13:32:28+09:00",
+        "subject": "fix(agent): harden provider-neutral runtime completion"
+      },
+      "lines": 950,
+      "path": "chemsmart/agent/loop.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 740
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 114
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 55
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 13
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 5
+        }
+      ],
+      "commit_count": 6,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+        "date": "2026-07-03T17:54:49+09:00",
+        "subject": "fix(orca): honor additional_route_parameters in ORCA route; agent adapter/TUI updates"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 927,
+      "path": "chemsmart/agent/model_command_parser.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "096afc603b7e08d2ef4b9a08ad478dcc3b17d02b",
+          "lines": 90
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "42e6ec806b513d8b1494bad580c5c2784cb5ab19",
+          "lines": 53
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f771bcd9aae55f6139d95f4a26cc93e38c445187",
+          "lines": 53
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 28
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 17
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 11
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 5
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "42e6ec806b513d8b1494bad580c5c2784cb5ab19",
+        "date": "2026-05-10T12:43:14+09:00",
+        "subject": "feat(agent): add permission engine + driving mode policy (W2a) (#63)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+        "date": "2026-07-16T12:59:25+09:00",
+        "subject": "feat(agent): integrate runtime v2 control plane"
+      },
+      "lines": 257,
+      "path": "chemsmart/agent/permissions.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 116
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+          "lines": 19
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "35ef66e8f66748a8bfe4368f16daad102a405912",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "29537d45719e229987c8014ba53772dc6b2cae2e",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3d9964a0179d8e381f18d393c3d461d48b1eeb58",
+          "lines": 3
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "7dc52f0ddcaf180f8f4c831a2e9c0154ae75b88a",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8ec6e9c7b491d0713896b9e4ee76f7c31c53e493",
+          "lines": 1
+        }
+      ],
+      "commit_count": 10,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+        "date": "2026-06-24T11:47:41+09:00",
+        "subject": "feat(agent): v8 spec-emission adapter \u2014 postprocess + render valid chemsmart commands"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "139c8caf00d2521153926d76a093726354f9effa",
+        "date": "2026-07-03T21:09:17+09:00",
+        "subject": "fix(agent): align adapter with runtime semantics"
+      },
+      "lines": 165,
+      "path": "chemsmart/agent/postprocess_v8.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 826
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 423
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 7
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+        "date": "2026-07-16T13:32:28+09:00",
+        "subject": "fix(agent): harden provider-neutral runtime completion"
+      },
+      "lines": 1256,
+      "path": "chemsmart/agent/project_yaml.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5d2106b2333b43bbc0aba2bb900691c0eda9bb74",
+          "lines": 10
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+        "date": "2026-05-07T19:00:24+09:00",
+        "subject": "feat(agent): scaffold chemsmart/agent + Anthropic provider + doctor command (#1)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+        "date": "2026-05-07T19:00:24+09:00",
+        "subject": "feat(agent): scaffold chemsmart/agent + Anthropic provider + doctor command (#1)"
+      },
+      "lines": 10,
+      "path": "chemsmart/agent/prompts/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 110
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5d2106b2333b43bbc0aba2bb900691c0eda9bb74",
+          "lines": 63
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 1
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "5d2106b2333b43bbc0aba2bb900691c0eda9bb74",
+        "date": "2026-05-11T16:52:55+09:00",
+        "subject": "fix(agent): anchor identity and context across llm paths"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 174,
+      "path": "chemsmart/agent/prompts/identity.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 89
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "aa1363c22a0d870358f1c991efe4bcac0ddd27f0",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 3
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "aa1363c22a0d870358f1c991efe4bcac0ddd27f0",
+        "date": "2026-05-31T13:59:03+09:00",
+        "subject": "feat(agent): add ask command synthesis loop (#117) (#117)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 101,
+      "path": "chemsmart/agent/prompts/synthesis.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "32bc92d20a8e0804405efda98b32afef5a76f2f2",
+          "lines": 225
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+          "lines": 4
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8c2897673a7b88c82d9b26f00b2cd4beafda76f",
+          "lines": 3
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "c77d29bfc60dd1a9485bf4c481e2883c5c5b0d0b",
+          "lines": 2
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "32bc92d20a8e0804405efda98b32afef5a76f2f2",
+        "date": "2026-05-10T12:08:45+09:00",
+        "subject": "feat(agent): add ArtifactHandle store + provider tool-call adapters (W1a) (#61)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "b6a58dfa7a4979c2426ccf894c9f8818b11f0ee9",
+        "date": "2026-07-13T15:02:34+09:00",
+        "subject": "refactor(agent): share provider and handle plumbing"
+      },
+      "lines": 266,
+      "path": "chemsmart/agent/provider_adapter.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "1bb93c493ecc9a809ab1888e1c099d695ede9b16",
+          "lines": 163
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 30
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "7002c7ec619905995e433904a20b40b900a3fb70",
+          "lines": 17
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 3
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "1bb93c493ecc9a809ab1888e1c099d695ede9b16",
+        "date": "2026-05-31T13:29:00+09:00",
+        "subject": "feat: add agent provider config (#9) (#115)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "7002c7ec619905995e433904a20b40b900a3fb70",
+        "date": "2026-07-16T13:52:47+09:00",
+        "subject": "feat(agent): configure named OpenAI-compatible providers"
+      },
+      "lines": 213,
+      "path": "chemsmart/agent/provider_config.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ef90175f0279cd395cec7905a0ebb2fd6439363c",
+          "lines": 131
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1bb93c493ecc9a809ab1888e1c099d695ede9b16",
+          "lines": 67
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "82294c6a5db18a1284981451cedcf6122a38cb10",
+          "lines": 63
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+          "lines": 60
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 44
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "114abb257803418f09c23e11c58cfaf03388e0e5",
+          "lines": 28
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "114aef697407b37951acb076dd06df567ebd64c6",
+          "lines": 22
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f37038e30871fcce0a70f44fc67f2c8692de21b2",
+          "lines": 21
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "19124ee22088dc2078ae525c4d0714ac272e1348",
+          "lines": 18
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 9
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c6d3e4874a2bd4685d9f3b065096ffa4e7df060c",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "7002c7ec619905995e433904a20b40b900a3fb70",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 3
+        }
+      ],
+      "commit_count": 14,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "7f1cb674bbaeb524a78a1f3939b33d472ea2e94d",
+        "date": "2026-05-07T19:00:24+09:00",
+        "subject": "feat(agent): scaffold chemsmart/agent + Anthropic provider + doctor command (#1)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "7002c7ec619905995e433904a20b40b900a3fb70",
+        "date": "2026-07-16T13:52:47+09:00",
+        "subject": "feat(agent): configure named OpenAI-compatible providers"
+      },
+      "lines": 489,
+      "path": "chemsmart/agent/providers.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 159
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+          "lines": 126
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 82
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 54
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+          "lines": 45
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "23bc1bb475cfb866ecd8e1c36acfcbb1c3ca71ba",
+          "lines": 44
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "65ab30e1cf7348fa00e21be4981a834a23b82646",
+          "lines": 37
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "c77d29bfc60dd1a9485bf4c481e2883c5c5b0d0b",
+          "lines": 22
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7536829661da539faf886265e9e2cfdb9e211d4b",
+          "lines": 20
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "114abb257803418f09c23e11c58cfaf03388e0e5",
+          "lines": 15
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "a0e330b6c4fe91559226441429092d9fccb9c91f",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+          "lines": 9
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 9
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 7
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 4
+        }
+      ],
+      "commit_count": 21,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4d0662f39d8929c4588afba97f8a8511f8000037",
+        "date": "2026-05-07T20:57:28+09:00",
+        "subject": "feat(agent): Planner + Critic + AgentSession + decision log (Wave 6 of 7)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 663,
+      "path": "chemsmart/agent/registry.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 25
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "lines": 25,
+      "path": "chemsmart/agent/runtime/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 1136
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 1136,
+      "path": "chemsmart/agent/runtime/calculations.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 97
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 97,
+      "path": "chemsmart/agent/runtime/cclib_parser.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 136
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 139,
+      "path": "chemsmart/agent/runtime/contracts.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 115
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "lines": 115,
+      "path": "chemsmart/agent/runtime/event_store.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 84
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "lines": 84,
+      "path": "chemsmart/agent/runtime/events.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 223
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 36
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 13
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 286,
+      "path": "chemsmart/agent/runtime/lifecycle.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 353
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 137
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 18
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 540,
+      "path": "chemsmart/agent/runtime/orchestrator.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 81
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "lines": 81,
+      "path": "chemsmart/agent/runtime/receipts.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 133
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+          "lines": 13
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "69f0ec59e9afe64743c7a866f86d60a2dfd0dbdc",
+        "date": "2026-07-16T13:32:28+09:00",
+        "subject": "fix(agent): harden provider-neutral runtime completion"
+      },
+      "lines": 146,
+      "path": "chemsmart/agent/runtime/reducer.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 90
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "lines": 90,
+      "path": "chemsmart/agent/runtime/repair_policy.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+          "lines": 152
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e2e715791d7993a72c90b4ad8e2ee2215c95a2f",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+          "lines": 1
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ffaac2cbac476c9f92fe21f2f11762a517353bd4",
+        "date": "2026-07-16T12:24:06+09:00",
+        "subject": "feat(agent): add replayable runtime kernel"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+        "date": "2026-07-16T19:24:29+09:00",
+        "subject": "fix(agent): persist workspace YAML selection"
+      },
+      "lines": 164,
+      "path": "chemsmart/agent/runtime/tool_catalog.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 285
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 4
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+        "date": "2026-07-16T12:03:39+09:00",
+        "subject": "chore(agent): snapshot intent-preserving harness baseline"
+      },
+      "lines": 289,
+      "path": "chemsmart/agent/schema_prune.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+          "lines": 1
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+        "date": "2026-05-09T23:12:44+09:00",
+        "subject": "feat(agent): add multi-turn conversation memory"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+        "date": "2026-05-09T23:12:44+09:00",
+        "subject": "feat(agent): add multi-turn conversation memory"
+      },
+      "lines": 1,
+      "path": "chemsmart/agent/services/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+          "lines": 377
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1413d654199fe55163cdc930be8d331a0359d52a",
+          "lines": 265
+        },
+        {
+          "author": "hjs0603",
+          "commit": "be073f270b60299b5eff10b53b60a394b98b087f",
+          "lines": 129
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 87
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 47
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d8c2897673a7b88c82d9b26f00b2cd4beafda76f",
+          "lines": 41
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "0b233d16ab7b439ad591c4855e1972476e5e4bfa",
+          "lines": 1
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+        "date": "2026-05-09T23:12:44+09:00",
+        "subject": "feat(agent): add multi-turn conversation memory"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 947,
+      "path": "chemsmart/agent/services/conversation_memory.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 404
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 389
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "aa1363c22a0d870358f1c991efe4bcac0ddd27f0",
+          "lines": 296
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 136
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 96
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b958c1fbb96a729c79cf6c7fcbfb3c7d51a70059",
+          "lines": 82
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 54
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 20
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "0b233d16ab7b439ad591c4855e1972476e5e4bfa",
+          "lines": 17
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "e5cbc1c48de76341cb756d806aeae3fd4639b65b",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c6d3e4874a2bd4685d9f3b065096ffa4e7df060c",
+          "lines": 7
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4f2f552882cdaae98d92ab1acf3c3d7f29d11145",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+          "lines": 2
+        }
+      ],
+      "commit_count": 15,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "aa1363c22a0d870358f1c991efe4bcac0ddd27f0",
+        "date": "2026-05-31T13:59:03+09:00",
+        "subject": "feat(agent): add ask command synthesis loop (#117) (#117)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 1551,
+      "path": "chemsmart/agent/synthesis.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+          "lines": 46
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+        "date": "2026-05-12T13:23:57+09:00",
+        "subject": "feat(agent): add runtime tool metadata filter"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "6a08f0ede3eb43af78b77274986682166f1f1c90",
+        "date": "2026-05-12T13:23:57+09:00",
+        "subject": "feat(agent): add runtime tool metadata filter"
+      },
+      "lines": 46,
+      "path": "chemsmart/agent/tool_protocol.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4cc5997521280439ec6a44c68527888dab92a969",
+          "lines": 239
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "078be537bb7cd54f9e621315df948e3c2bfb3b0c",
+          "lines": 238
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 236
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "4aa53715fc9eefdc19919f7c0e15c9bc0f062a68",
+          "lines": 221
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "dba8a230c6dabd58966c54cfdec62c2fe7ffe294",
+          "lines": 218
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "7536829661da539faf886265e9e2cfdb9e211d4b",
+          "lines": 134
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 123
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fc3d7b7c876ec945af22a183b3056ecb412586ef",
+          "lines": 111
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "65ab30e1cf7348fa00e21be4981a834a23b82646",
+          "lines": 37
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "114abb257803418f09c23e11c58cfaf03388e0e5",
+          "lines": 27
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "c118614558e7b254a1fb976d481401bc5d1119b5",
+          "lines": 20
+        },
+        {
+          "author": "hjs0603",
+          "commit": "4a9c9b334fc9790c02e2f15d4ca847c21dfae3a2",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3b7edb8e94530c3ce216584231198d9ae2f36ea0",
+          "lines": 9
+        },
+        {
+          "author": "hjs0603",
+          "commit": "c0860ce3e0b2515a26f0d2564a63f4716138bc44",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "50b8bdc70092c358b41684bf1cce7aa62aad6a5f",
+          "lines": 4
+        }
+      ],
+      "commit_count": 15,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4cc5997521280439ec6a44c68527888dab92a969",
+        "date": "2026-05-07T19:23:55+09:00",
+        "subject": "feat(agent): add build_molecule and recommend_method tools (#3)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 1633,
+      "path": "chemsmart/agent/tools.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 774
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 54
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "adb8d9e8f715a32c93ef1cb41642bb6fe9377245",
+          "lines": 3
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 831,
+      "path": "chemsmart/agent/tools_command.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "23bc1bb475cfb866ecd8e1c36acfcbb1c3ca71ba",
+          "lines": 67
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "23bc1bb475cfb866ecd8e1c36acfcbb1c3ca71ba",
+        "date": "2026-05-12T17:23:42+09:00",
+        "subject": "feat: add agent read tool"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "23bc1bb475cfb866ecd8e1c36acfcbb1c3ca71ba",
+        "date": "2026-05-12T17:23:42+09:00",
+        "subject": "feat: add agent read tool"
+      },
+      "lines": 67,
+      "path": "chemsmart/agent/tools_fs.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "a0e330b6c4fe91559226441429092d9fccb9c91f",
+          "lines": 498
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+          "lines": 84
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+          "lines": 64
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+        "date": "2026-05-12T17:41:28+09:00",
+        "subject": "feat(agent): add ssh probe exec transport"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+        "date": "2026-05-12T18:27:51+09:00",
+        "subject": "feat: add remote log tail diagnostics"
+      },
+      "lines": 646,
+      "path": "chemsmart/agent/tools_hpc.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 719
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 719,
+      "path": "chemsmart/agent/training_log.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+          "lines": 165
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "dba8a230c6dabd58966c54cfdec62c2fe7ffe294",
+          "lines": 138
+        },
+        {
+          "author": "hjs0603",
+          "commit": "1a2431991594d238335cfcd64133353b5269ff04",
+          "lines": 27
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f37038e30871fcce0a70f44fc67f2c8692de21b2",
+          "lines": 6
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "dba8a230c6dabd58966c54cfdec62c2fe7ffe294",
+        "date": "2026-05-07T20:11:42+09:00",
+        "subject": "feat(agent): add submit_hpc transport port (#7)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+        "date": "2026-05-12T17:41:28+09:00",
+        "subject": "feat(agent): add ssh probe exec transport"
+      },
+      "lines": 336,
+      "path": "chemsmart/agent/transport.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 2
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "lines": 12,
+      "path": "chemsmart/agent/tui/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "e5cbc1c48de76341cb756d806aeae3fd4639b65b",
+          "lines": 83
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8925cf6113796474561e3e18a4cf4b63e8a84f7b",
+          "lines": 37
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "efce6c80009e37e9e4abf4b27144d2133f11ce65",
+          "lines": 32
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 3
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8925cf6113796474561e3e18a4cf4b63e8a84f7b",
+        "date": "2026-05-09T01:25:38+09:00",
+        "subject": "fix(agent): silence stdout logging while tui is running"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "e5cbc1c48de76341cb756d806aeae3fd4639b65b",
+        "date": "2026-05-31T14:43:30+09:00",
+        "subject": "feat(agent): quiet-by-default for `agent ask`, add --debug flag (#118)"
+      },
+      "lines": 155,
+      "path": "chemsmart/agent/tui/_logging.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 39
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 21
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3a475da05872a20235c2fbc39dc5afd28e4c0bbe",
+          "lines": 18
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8925cf6113796474561e3e18a4cf4b63e8a84f7b",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 3
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9c150752bfc6df5487ab6700409d3d9fbe61f4dd",
+          "lines": 1
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 107,
+      "path": "chemsmart/agent/tui/app.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 1
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 10,
+      "path": "chemsmart/agent/tui/bindings.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 91
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 91,
+      "path": "chemsmart/agent/tui/config.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 110
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 106
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 76
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 58
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 19
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 369,
+      "path": "chemsmart/agent/tui/events.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 23
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 16
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 2
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 41,
+      "path": "chemsmart/agent/tui/phase.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 1
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "lines": 1,
+      "path": "chemsmart/agent/tui/screens/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 374
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 374,
+      "path": "chemsmart/agent/tui/screens/calculations.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 1216
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 632
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 314
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 312
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 275
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 269
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 245
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+          "lines": 193
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 179
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 167
+        },
+        {
+          "author": "hjs0603",
+          "commit": "ab983eaff1247dd0a05f5ad8f8caaad44a6cf9bf",
+          "lines": 122
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 118
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 94
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 83
+        },
+        {
+          "author": "hjs0603",
+          "commit": "40a71b8fb7a7d0ac89035e3fe9cc8d8a8b4e5d79",
+          "lines": 65
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ea954aa6dd54d50517bd98060947c0c1471f6805",
+          "lines": 64
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 63
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "0ae621c47600e49dd12cce98af494cab4ffffd83",
+          "lines": 59
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 58
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b53ec18ea385f3f5c3594334a6373d20bec11f87",
+          "lines": 29
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bf710306d8129e25a8052464f9cd2a4d8d0c7840",
+          "lines": 15
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4b59639df07a9518e291f00f25aabf7557912f0a",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 12
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5f3394bbde3501fe75f43a47e404ca0fd87057e0",
+          "lines": 11
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "03c12060aae7700423c17dde26aa09a0c873e7c4",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "247db254ca564659d5f61991f39f0183c1d7d524",
+          "lines": 7
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "9c3569142e079cde3b657a07970c5435881ea4c0",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "096afc603b7e08d2ef4b9a08ad478dcc3b17d02b",
+          "lines": 1
+        }
+      ],
+      "commit_count": 28,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+        "date": "2026-07-16T19:24:29+09:00",
+        "subject": "fix(agent): persist workspace YAML selection"
+      },
+      "lines": 4628,
+      "path": "chemsmart/agent/tui/screens/chat.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 153
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "lines": 153,
+      "path": "chemsmart/agent/tui/screens/jobs_panel.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "891756b666426966902fa3687fb1b58f3c3db51c",
+          "lines": 40
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f2691a5ae757018badb312e2fcd784bebf283d40",
+          "lines": 26
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 3
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 120,
+      "path": "chemsmart/agent/tui/screens/sessions.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 1
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "lines": 1,
+      "path": "chemsmart/agent/tui/services/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 83
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 36
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "ee081f150051975e1058011a4a37bc022872670a",
+        "date": "2026-05-09T19:56:29+09:00",
+        "subject": "perf(agent): cut startup tax and remove UI-thread blocking"
+      },
+      "lines": 119,
+      "path": "chemsmart/agent/tui/services/file_index.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 562
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "ee081f150051975e1058011a4a37bc022872670a",
+          "lines": 108
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 56
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 3
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 1
+        }
+      ],
+      "commit_count": 6,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 731,
+      "path": "chemsmart/agent/tui/services/job_poller.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 67
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9ede9adefc0ea45591ef6892fff8c51b86a65420",
+          "lines": 6
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "9ede9adefc0ea45591ef6892fff8c51b86a65420",
+        "date": "2026-07-04T21:39:29+09:00",
+        "subject": "fix(agent-tui): use polling log tailer on macOS"
+      },
+      "lines": 73,
+      "path": "chemsmart/agent/tui/services/log_tailer.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 29
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 29,
+      "path": "chemsmart/agent/tui/services/session_index.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 23
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 20
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 7
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 101,
+      "path": "chemsmart/agent/tui/services/session_runner.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 90
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 90,
+      "path": "chemsmart/agent/tui/state.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "41f49b4a5293b472bcd12d60ac97fb17a470d3a6",
+          "lines": 236
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 116
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 105
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 88
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "0ae621c47600e49dd12cce98af494cab4ffffd83",
+          "lines": 50
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 12
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 6
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 6
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+        "date": "2026-05-10T13:20:28+09:00",
+        "subject": "feat(agent): wire TUI to permission engine and driving mode (W2b) (#64)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "290c87680d41752bee5912258950c844435bbe39",
+        "date": "2026-07-13T14:55:09+09:00",
+        "subject": "feat(agent-tui): surface unified tool and workspace state"
+      },
+      "lines": 619,
+      "path": "chemsmart/agent/tui/tool_meta.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 1
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "lines": 1,
+      "path": "chemsmart/agent/tui/widgets/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 103
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 103,
+      "path": "chemsmart/agent/tui/widgets/calculation_strip.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 17
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 3
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 2
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 2
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 44,
+      "path": "chemsmart/agent/tui/widgets/cells/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 32
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "lines": 32,
+      "path": "chemsmart/agent/tui/widgets/cells/_common.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 6
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+        "date": "2026-05-09T21:23:30+09:00",
+        "subject": "chore(agent): translate TUI copy to English and toast /clear feedback"
+      },
+      "lines": 16,
+      "path": "chemsmart/agent/tui/widgets/cells/agent_message.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 25
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2540ba7f080fb342181466b96f942f39b05b23b9",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 5
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "2540ba7f080fb342181466b96f942f39b05b23b9",
+        "date": "2026-05-09T23:05:51+09:00",
+        "subject": "fix(agent): actually right-align user message bubbles"
+      },
+      "lines": 49,
+      "path": "chemsmart/agent/tui/widgets/cells/base.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 141
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 141,
+      "path": "chemsmart/agent/tui/widgets/cells/calculation_receipt.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 165
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 40
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 19
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+        "date": "2026-07-03T17:54:49+09:00",
+        "subject": "fix(orca): honor additional_route_parameters in ORCA route; agent adapter/TUI updates"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "290c87680d41752bee5912258950c844435bbe39",
+        "date": "2026-07-13T14:55:09+09:00",
+        "subject": "feat(agent-tui): surface unified tool and workspace state"
+      },
+      "lines": 224,
+      "path": "chemsmart/agent/tui/widgets/cells/command_interpretation.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 28
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "lines": 28,
+      "path": "chemsmart/agent/tui/widgets/cells/critic_verdict.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 158
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 10
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 168,
+      "path": "chemsmart/agent/tui/widgets/cells/decision_trace.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 33
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 17
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 15
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 1
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+        "date": "2026-07-04T21:33:21+09:00",
+        "subject": "feat(agent): ground CLI synthesis and TUI harness docs"
+      },
+      "lines": 117,
+      "path": "chemsmart/agent/tui/widgets/cells/dry_run_input.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 80
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 46
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 17
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 17
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+        "date": "2026-05-09T21:23:30+09:00",
+        "subject": "chore(agent): translate TUI copy to English and toast /clear feedback"
+      },
+      "lines": 160,
+      "path": "chemsmart/agent/tui/widgets/cells/error.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 67
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "lines": 67,
+      "path": "chemsmart/agent/tui/widgets/cells/geometry_handoff.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 55
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 13
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+        "date": "2026-05-09T10:04:46+09:00",
+        "subject": "fix(agent): harden tui empty states and slash UX"
+      },
+      "lines": 68,
+      "path": "chemsmart/agent/tui/widgets/cells/job_status.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 10
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+        "date": "2026-05-09T10:04:46+09:00",
+        "subject": "fix(agent): harden tui empty states and slash UX"
+      },
+      "lines": 61,
+      "path": "chemsmart/agent/tui/widgets/cells/method.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 62
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 26
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+        "date": "2026-05-09T10:04:46+09:00",
+        "subject": "fix(agent): harden tui empty states and slash UX"
+      },
+      "lines": 88,
+      "path": "chemsmart/agent/tui/widgets/cells/molecule.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 194
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 60
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 22
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4b59639df07a9518e291f00f25aabf7557912f0a",
+          "lines": 4
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 1
+        }
+      ],
+      "commit_count": 6,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 289,
+      "path": "chemsmart/agent/tui/widgets/cells/plan.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 56
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 6
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+        "date": "2026-05-09T10:04:46+09:00",
+        "subject": "fix(agent): harden tui empty states and slash UX"
+      },
+      "lines": 62,
+      "path": "chemsmart/agent/tui/widgets/cells/run_result.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 60
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 25
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 4
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+        "date": "2026-05-09T21:23:30+09:00",
+        "subject": "chore(agent): translate TUI copy to English and toast /clear feedback"
+      },
+      "lines": 99,
+      "path": "chemsmart/agent/tui/widgets/cells/runtime_validation.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 46
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 7
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 1
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 1
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+        "date": "2026-05-09T21:23:30+09:00",
+        "subject": "chore(agent): translate TUI copy to English and toast /clear feedback"
+      },
+      "lines": 55,
+      "path": "chemsmart/agent/tui/widgets/cells/submission_preview.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 220
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "290c87680d41752bee5912258950c844435bbe39",
+        "date": "2026-07-13T14:55:09+09:00",
+        "subject": "feat(agent-tui): surface unified tool and workspace state"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "290c87680d41752bee5912258950c844435bbe39",
+        "date": "2026-07-13T14:55:09+09:00",
+        "subject": "feat(agent-tui): surface unified tool and workspace state"
+      },
+      "lines": 220,
+      "path": "chemsmart/agent/tui/widgets/cells/synthesis_trace.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 142
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 59
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "41f49b4a5293b472bcd12d60ac97fb17a470d3a6",
+          "lines": 11
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+        "date": "2026-05-10T13:20:28+09:00",
+        "subject": "feat(agent): wire TUI to permission engine and driving mode (W2b) (#64)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 212,
+      "path": "chemsmart/agent/tui/widgets/cells/tool_call_cell.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2540ba7f080fb342181466b96f942f39b05b23b9",
+          "lines": 55
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 10
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "2540ba7f080fb342181466b96f942f39b05b23b9",
+        "date": "2026-05-09T23:05:51+09:00",
+        "subject": "fix(agent): actually right-align user message bubbles"
+      },
+      "lines": 65,
+      "path": "chemsmart/agent/tui/widgets/cells/user_message.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 68
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 8
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 76,
+      "path": "chemsmart/agent/tui/widgets/cells/workflow.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 76
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 56
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 48
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 43
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9c150752bfc6df5487ab6700409d3d9fbe61f4dd",
+          "lines": 6
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 229,
+      "path": "chemsmart/agent/tui/widgets/composer.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 173
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4df0a1c95cef76692459ca04de54192dc3c2e34c",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 36
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "e055c918404b4f0743b92b8cf462807dab07c01c",
+          "lines": 16
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 7
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "0ae621c47600e49dd12cce98af494cab4ffffd83",
+          "lines": 4
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d05aac46bab5cd5cdb5cc0b401b4a9a9147e74ad",
+          "lines": 2
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 1
+        }
+      ],
+      "commit_count": 10,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 298,
+      "path": "chemsmart/agent/tui/widgets/footer.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "0bf148f94c9df5c9c014e6984f95034ca7074870",
+          "lines": 43
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "9c3569142e079cde3b657a07970c5435881ea4c0",
+          "lines": 40
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "9c3569142e079cde3b657a07970c5435881ea4c0",
+        "date": "2026-05-10T00:50:32+09:00",
+        "subject": "feat(agent): add chemsmart wordmark header (#57)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "0bf148f94c9df5c9c014e6984f95034ca7074870",
+        "date": "2026-05-10T01:09:06+09:00",
+        "subject": "feat(agent): refined chemsmart wordmark header (#58)"
+      },
+      "lines": 83,
+      "path": "chemsmart/agent/tui/widgets/header.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 11
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 3
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 2
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 32,
+      "path": "chemsmart/agent/tui/widgets/popups/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 85
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 85,
+      "path": "chemsmart/agent/tui/widgets/popups/activity.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 172
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "9c150752bfc6df5487ab6700409d3d9fbe61f4dd",
+          "lines": 16
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "096afc603b7e08d2ef4b9a08ad478dcc3b17d02b",
+          "lines": 7
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3201461e9a8ebbfa7a223b2d6211ef6101fc1705",
+          "lines": 6
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 260,
+      "path": "chemsmart/agent/tui/widgets/popups/approval.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+          "lines": 62
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+          "lines": 6
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "1871268654a9c4b3562b3c9606015763d37581a3",
+        "date": "2026-05-09T00:34:57+09:00",
+        "subject": "feat: add phase 3 agent tui jobs and hpc integration"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "fff8f045ab437af06da5d887fbc7e6f2050134f7",
+        "date": "2026-05-09T21:23:30+09:00",
+        "subject": "chore(agent): translate TUI copy to English and toast /clear feedback"
+      },
+      "lines": 68,
+      "path": "chemsmart/agent/tui/widgets/popups/cwd_mismatch.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 66
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 62
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 128,
+      "path": "chemsmart/agent/tui/widgets/popups/file_picker.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 103
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 103,
+      "path": "chemsmart/agent/tui/widgets/popups/history.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+          "lines": 109
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 54
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "290c87680d41752bee5912258950c844435bbe39",
+        "date": "2026-07-13T14:55:09+09:00",
+        "subject": "feat(agent-tui): surface unified tool and workspace state"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "f5c7a3280dd86bf19d915430a87ee24c0b4783e4",
+        "date": "2026-07-16T19:24:29+09:00",
+        "subject": "fix(agent): persist workspace YAML selection"
+      },
+      "lines": 163,
+      "path": "chemsmart/agent/tui/widgets/popups/project_yaml.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 58
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 58,
+      "path": "chemsmart/agent/tui/widgets/popups/shortcuts.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+          "lines": 59
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8115851e8a758855d7d6297ce368286de5e99b72",
+        "date": "2026-05-09T00:01:19+09:00",
+        "subject": "feat(agent): implement phase 2 tui approval flow"
+      },
+      "lines": 59,
+      "path": "chemsmart/agent/tui/widgets/popups/text_prompt.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 77
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 35
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+        "date": "2026-07-03T17:54:49+09:00",
+        "subject": "fix(orca): honor additional_route_parameters in ORCA route; agent adapter/TUI updates"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 112,
+      "path": "chemsmart/agent/tui/widgets/slash_palette.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+          "lines": 31
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "247db254ca564659d5f61991f39f0183c1d7d524",
+          "lines": 30
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+          "lines": 26
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "290c87680d41752bee5912258950c844435bbe39",
+          "lines": 3
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "891756b666426966902fa3687fb1b58f3c3db51c",
+          "lines": 2
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "20cbcdb9f05096564a5a12b55da21f7405653a15",
+          "lines": 1
+        }
+      ],
+      "commit_count": 6,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "8328b73a8ca61b70c86817fcf92ab46e64242e25",
+        "date": "2026-05-08T23:38:31+09:00",
+        "subject": "feat(agent): add phase 1 tui shell"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "daa15dd61b31a7c12c1b2334f7568ff2a92c5f30",
+        "date": "2026-07-16T19:02:37+09:00",
+        "subject": "feat(agent-tui): add observable calculation workflows"
+      },
+      "lines": 93,
+      "path": "chemsmart/agent/tui/widgets/transcript.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 182
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 117
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+          "lines": 49
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 49
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "b958c1fbb96a729c79cf6c7fcbfb3c7d51a70059",
+          "lines": 19
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "179df95e1f9a47dd361c40212ae14754decb97f9",
+          "lines": 18
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3aa25dafd5aed302d8730d743337d4e8906ecf0b",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "29537d45719e229987c8014ba53772dc6b2cae2e",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "125642d6ddfe2be2ebdf8949b3df8a55d7a9515c",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "be3d954ed7e8aab839a2b0e9e437a1fc23826709",
+          "lines": 3
+        }
+      ],
+      "commit_count": 13,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+        "date": "2026-06-24T11:47:41+09:00",
+        "subject": "feat(agent): v8 spec-emission adapter \u2014 postprocess + render valid chemsmart commands"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 462,
+      "path": "chemsmart/agent/v8_adapter.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "5b7f5ef3bcf0db8114b457186338f53b52fd6713",
+          "lines": 126
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+          "lines": 51
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+          "lines": 29
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "139c8caf00d2521153926d76a093726354f9effa",
+          "lines": 5
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "618268bbe65ec5415bbc0fe99a44b07803e14f92",
+          "lines": 3
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "d38e00905646c9b10dc8b6947c989f4590406f69",
+        "date": "2026-06-24T11:47:41+09:00",
+        "subject": "feat(agent): v8 spec-emission adapter \u2014 postprocess + render valid chemsmart commands"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "11a3eb4d724cf9b6c6b6d7a04124ea0ac7f130dc",
+        "date": "2026-07-13T14:54:41+09:00",
+        "subject": "feat(agent): enforce stateful semantic intent contracts"
+      },
+      "lines": 214,
+      "path": "chemsmart/agent/v8_kind_index.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+          "lines": 28
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 20
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+          "lines": 20
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+          "lines": 13
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "dd2e5355e4414e74d940f108e389132e20618e90",
+          "lines": 12
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 8
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 6
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 6
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 3
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 10,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "dd2e5355e4414e74d940f108e389132e20618e90",
+        "date": "2026-05-10T18:12:20+09:00",
+        "subject": "feat: add wizard probe primitives (#68)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+        "date": "2026-05-11T19:20:37+09:00",
+        "subject": "fix(agent/wizard): harden sge queue and conda rendering"
+      },
+      "lines": 117,
+      "path": "chemsmart/agent/wizard/__init__.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 154
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 6
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "3ce410d9f37a8e4346475a0b31c1cce7419d4339",
+          "lines": 1
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+        "date": "2026-05-10T20:29:41+09:00",
+        "subject": "feat(agent): add wizard node-refresh sidecar cache (#74)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "3ce410d9f37a8e4346475a0b31c1cce7419d4339",
+        "date": "2026-07-13T14:56:28+09:00",
+        "subject": "chore(agent): remove full-tree Ruff debt"
+      },
+      "lines": 162,
+      "path": "chemsmart/agent/wizard/cache.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+          "lines": 51
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "530138541566bc56a220fc7beab9cb66ca0c49fd",
+          "lines": 10
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 1
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+        "date": "2026-05-10T18:29:30+09:00",
+        "subject": "feat(agent): add wizard scheduler survey (#69)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+        "date": "2026-05-11T19:20:37+09:00",
+        "subject": "fix(agent/wizard): harden sge queue and conda rendering"
+      },
+      "lines": 62,
+      "path": "chemsmart/agent/wizard/normalize.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 75
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 12
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+        "date": "2026-05-10T19:42:12+09:00",
+        "subject": "feat(agent): add wizard slash and cli flow (#72)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+        "date": "2026-05-10T20:29:41+09:00",
+        "subject": "feat(agent): add wizard node-refresh sidecar cache (#74)"
+      },
+      "lines": 87,
+      "path": "chemsmart/agent/wizard/orchestrator.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+          "lines": 426
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "a0e330b6c4fe91559226441429092d9fccb9c91f",
+          "lines": 78
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f07920d5e6b0bdce962801c097a8a836c2c67b24",
+          "lines": 67
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 45
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 31
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e93c35b83c2516d7ff128c072473bec309aebf6",
+          "lines": 27
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+          "lines": 14
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "825ca000bcd1343812333e3d591b6e579001dc50",
+          "lines": 14
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+        "date": "2026-05-10T18:29:30+09:00",
+        "subject": "feat(agent): add wizard scheduler survey (#69)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "a0e330b6c4fe91559226441429092d9fccb9c91f",
+        "date": "2026-05-12T18:04:52+09:00",
+        "subject": "feat(agent): add scheduler_query HPC inspection tool"
+      },
+      "lines": 702,
+      "path": "chemsmart/agent/wizard/parsers.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 83
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 83,
+      "path": "chemsmart/agent/wizard/paths.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 288
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "dd2e5355e4414e74d940f108e389132e20618e90",
+          "lines": 131
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "a0e330b6c4fe91559226441429092d9fccb9c91f",
+          "lines": 44
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+          "lines": 26
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+          "lines": 23
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "bb2500a0d899f7c69d3d293f2a0301c466f58e93",
+          "lines": 16
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "629092cd2c2262ed41529170bbea54decd3bdbd0",
+          "lines": 16
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f07920d5e6b0bdce962801c097a8a836c2c67b24",
+          "lines": 13
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 11
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 5
+        }
+      ],
+      "commit_count": 10,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "dd2e5355e4414e74d940f108e389132e20618e90",
+        "date": "2026-05-10T18:12:20+09:00",
+        "subject": "feat: add wizard probe primitives (#68)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "24c5b53fd8adb423da02b71977fa86ddeb257521",
+        "date": "2026-05-12T18:27:51+09:00",
+        "subject": "feat: add remote log tail diagnostics"
+      },
+      "lines": 573,
+      "path": "chemsmart/agent/wizard/probe.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+          "lines": 121
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 56
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+        "date": "2026-05-10T18:51:53+09:00",
+        "subject": "feat(agent): add wizard software discovery probes (#70)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 177,
+      "path": "chemsmart/agent/wizard/project.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 257
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 9
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 5
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 1
+        }
+      ],
+      "commit_count": 4,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+        "date": "2026-05-10T20:29:41+09:00",
+        "subject": "feat(agent): add wizard node-refresh sidecar cache (#74)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+        "date": "2026-05-11T19:20:37+09:00",
+        "subject": "fix(agent/wizard): harden sge queue and conda rendering"
+      },
+      "lines": 272,
+      "path": "chemsmart/agent/wizard/refresh.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+          "lines": 267
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 18
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+          "lines": 11
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "530138541566bc56a220fc7beab9cb66ca0c49fd",
+          "lines": 7
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 6
+        }
+      ],
+      "commit_count": 5,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+        "date": "2026-05-10T19:20:51+09:00",
+        "subject": "feat(agent): add wizard YAML render and validation (#71)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+        "date": "2026-05-11T21:21:17+09:00",
+        "subject": "fix(agent/wizard): infer Slurm memory and conda fallback"
+      },
+      "lines": 309,
+      "path": "chemsmart/agent/wizard/render.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 252
+        },
+        {
+          "author": "hjs0603",
+          "commit": "4a9c9b334fc9790c02e2f15d4ca847c21dfae3a2",
+          "lines": 99
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "113cec5c5245f0e131446b7db004d63613aff609",
+          "lines": 11
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+        "date": "2026-05-11T14:02:41+09:00",
+        "subject": "fix(agent): Python 3.10 compat + SGE wizard auto-discovery + provider UX (#81)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "113cec5c5245f0e131446b7db004d63613aff609",
+        "date": "2026-05-11T15:22:14+09:00",
+        "subject": "feat(agent): expand wizard scheduler path candidates for Bright/OHPC/vendor defaults (#83)"
+      },
+      "lines": 362,
+      "path": "chemsmart/agent/wizard/scheduler_env.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+          "lines": 87
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 80
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+        "date": "2026-05-10T18:51:53+09:00",
+        "subject": "feat(agent): add wizard software discovery probes (#70)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 167,
+      "path": "chemsmart/agent/wizard/scratch.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+          "lines": 233
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+          "lines": 146
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "629092cd2c2262ed41529170bbea54decd3bdbd0",
+          "lines": 116
+        },
+        {
+          "author": "hjs0603",
+          "commit": "4a9c9b334fc9790c02e2f15d4ca847c21dfae3a2",
+          "lines": 43
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 36
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 33
+        }
+      ],
+      "commit_count": 7,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "4a420c3722a835d0429ad8d180a1e6af7aa942ec",
+        "date": "2026-05-10T18:51:53+09:00",
+        "subject": "feat(agent): add wizard software discovery probes (#70)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "629092cd2c2262ed41529170bbea54decd3bdbd0",
+        "date": "2026-05-12T12:15:38+09:00",
+        "subject": "fix(agent/wizard): preserve module versions and extract module roots"
+      },
+      "lines": 607,
+      "path": "chemsmart/agent/wizard/software.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+          "lines": 157
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "f07920d5e6b0bdce962801c097a8a836c2c67b24",
+          "lines": 154
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "277d8695d8ca8d8829ecd24a2feab73f48fcef8b",
+          "lines": 87
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "825ca000bcd1343812333e3d591b6e579001dc50",
+          "lines": 43
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 42
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "f58eb046b120a40035c1ae2e62b9c334d558e62f",
+          "lines": 31
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "2985523eb1120b2a545d53bd8743eff9e962db24",
+          "lines": 30
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "4e93c35b83c2516d7ff128c072473bec309aebf6",
+          "lines": 8
+        },
+        {
+          "author": "\ud64d\uc9c0\uc2b9",
+          "commit": "121e4939c8a4e8f0bcacadb97f7db631b9c644ac",
+          "lines": 4
+        }
+      ],
+      "commit_count": 8,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+        "date": "2026-05-10T18:29:30+09:00",
+        "subject": "feat(agent): add wizard scheduler survey (#69)"
+      },
+      "latest_change": {
+        "author": "\ud64d\uc9c0\uc2b9",
+        "commit": "4e93c35b83c2516d7ff128c072473bec309aebf6",
+        "date": "2026-05-12T10:44:41+09:00",
+        "subject": "fix(agent/wizard): prefer pbs node facts over queue defaults"
+      },
+      "lines": 556,
+      "path": "chemsmart/agent/wizard/survey.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 67
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+          "lines": 16
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 7
+        }
+      ],
+      "commit_count": 3,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+        "date": "2026-05-10T19:42:12+09:00",
+        "subject": "feat(agent): add wizard slash and cli flow (#72)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "43b3401267ae1921471d464170c1572f7c3e2b7a",
+        "date": "2026-05-10T20:29:41+09:00",
+        "subject": "feat(agent): add wizard node-refresh sidecar cache (#74)"
+      },
+      "lines": 90,
+      "path": "chemsmart/agent/wizard/tools.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+          "lines": 46
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 13
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "d3acee6df2ef2c7abb4be09d8131d574f9900f5c",
+        "date": "2026-05-10T18:29:30+09:00",
+        "subject": "feat(agent): add wizard scheduler survey (#69)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 59,
+      "path": "chemsmart/agent/wizard/topology.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+          "lines": 73
+        }
+      ],
+      "commit_count": 1,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+        "date": "2026-05-10T19:20:51+09:00",
+        "subject": "feat(agent): add wizard YAML render and validation (#71)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "11b3ec388ac069163c27ae34f284586bf1352e22",
+        "date": "2026-05-10T19:20:51+09:00",
+        "subject": "feat(agent): add wizard YAML render and validation (#71)"
+      },
+      "lines": 73,
+      "path": "chemsmart/agent/wizard/validate.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+          "lines": 142
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 16
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "2eebcfe35d4271dc553b4bd2ae5f4c21c99b05d0",
+        "date": "2026-05-10T19:57:37+09:00",
+        "subject": "feat(agent): wizard host/topology finalization + verify (#73)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 158,
+      "path": "chemsmart/agent/wizard/verify.py"
+    },
+    {
+      "blame": [
+        {
+          "author": "Hong jiseung",
+          "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+          "lines": 13
+        },
+        {
+          "author": "Hong jiseung",
+          "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+          "lines": 3
+        }
+      ],
+      "commit_count": 2,
+      "introduced_after_boundary": true,
+      "introduction": {
+        "author": "Hong jiseung",
+        "commit": "1991f52769f11b2d205bc3cdb8659095cb7ddd64",
+        "date": "2026-05-10T19:42:12+09:00",
+        "subject": "feat(agent): add wizard slash and cli flow (#72)"
+      },
+      "latest_change": {
+        "author": "Hong jiseung",
+        "commit": "52e7d6d06a9361351bcc784e19da890f4ac675d2",
+        "date": "2026-05-10T21:34:03+09:00",
+        "subject": "fix(agent): harden wizard probes and server files (#78)"
+      },
+      "lines": 16,
+      "path": "chemsmart/agent/wizard/write.py"
+    }
+  ],
+  "matches": {
+    "exact_lines": [],
+    "exact_tokens": [],
+    "near_tokens": []
+  },
+  "schema_version": 1,
+  "sources": [
+    {
+      "commit": "800715d201651a2a07c2706dca10400109dae3d3",
+      "directory": "openai-codex",
+      "license_path": "LICENSE",
+      "license_sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "name": "openai-codex",
+      "review_posture": "Apache-2.0 evidence; preserve applicable notices for confirmed reuse",
+      "url": "https://github.com/openai/codex.git"
+    },
+    {
+      "commit": "cce059467af64f05d0a1521344847d2b558b6a80",
+      "directory": "openai-codex-research",
+      "license_path": "LICENSE",
+      "license_sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "name": "openai-codex-research",
+      "review_posture": "Historical Apache-2.0 snapshot cited by the TUI research note",
+      "url": "https://github.com/openai/codex.git"
+    },
+    {
+      "commit": "06dbeef4bb70fb718236aa418ed658ef4667a126",
+      "directory": "textual",
+      "license_path": "LICENSE",
+      "license_sha256": "94f290a762376dfdb7768e42070618b0abfd2a2799eab1b1c097816c3a39eb57",
+      "name": "textual",
+      "review_posture": "MIT evidence; preserve copyright and permission notice for substantial reuse",
+      "url": "https://github.com/Textualize/textual.git"
+    },
+    {
+      "commit": "c39cb0f14bfe8bb519bae5bfc55add6867c5e2ab",
+      "directory": "claude-code",
+      "license_path": "LICENSE.md",
+      "license_sha256": "728158fd1037143fad6907e8fa34804177e598b7326519503fe83cafdef849e6",
+      "name": "claude-code",
+      "review_posture": "All-rights-reserved evidence; matching code requires clean-room review",
+      "url": "https://github.com/anthropics/claude-code.git"
+    },
+    {
+      "commit": "5ef852a32c2c433386eb009bd92ca7c07359d0e6",
+      "directory": "oh-my-openagent",
+      "license_path": "LICENSE.md",
+      "license_sha256": "b61ac928f152d13517328263e6bee9175b928f9ab696a2d2ca2b6cfd961ddc32",
+      "name": "oh-my-openagent",
+      "review_posture": "Sustainable Use License evidence; matching code requires restrictive-license review",
+      "url": "https://github.com/code-yeongyu/oh-my-openagent.git"
+    }
+  ]
+}

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-UTC = timezone.utc
-
 from chemsmart.agent.wizard.cache import (
     CacheEntry,
     cache_path,
@@ -12,6 +10,8 @@ from chemsmart.agent.wizard.cache import (
     mark_status,
     write_cache,
 )
+
+UTC = timezone.utc
 
 
 def _entry(

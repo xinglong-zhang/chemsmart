@@ -1,0 +1,486 @@
+"""Regression tests for the live-harness hardening (H1-H4).
+
+Each test pins one verified live-harness defect that let a *silent-wrong*
+command (syntactically valid, but quietly changing the intended job) reach the
+user:
+
+* H1 - the synthesis prompt falsely denied the real ``gaussian scan``
+  subcommand and reused ``-n`` for cores/steps/states.
+* H2 - the schema pruner hid the correct sibling subcommand, forcing a
+  collapse to the ``{opt, sp}`` floor.
+* H3 - the direct ``SynthesisSession.synthesize`` path never applied the intent
+  gate, so a coordinate scan collapsed to a plain ``opt`` surfaced as ready.
+* H4 - the intent oracle returned ``None`` for common scan/freeze phrasings, so
+  the kind assertion never fired.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from chemsmart.agent.cli_schema import build_chemsmart_cli_schema
+from chemsmart.agent.harness.intent import (
+    IntentSpec,
+    ObservedIntent,
+    _kind_from_request,
+    evaluate_intent,
+)
+from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
+from chemsmart.agent.schema_prune import prune_schema_for_request
+from chemsmart.agent.synthesis import SynthesisSession
+
+
+# --------------------------------------------------------------------------- #
+# H1 - prompt is grounded in the true CLI
+# --------------------------------------------------------------------------- #
+def test_prompt_teaches_gaussian_scan_and_drops_false_claim() -> None:
+    schema = build_chemsmart_cli_schema()
+    prompt = build_synthesis_system_prompt(
+        prune_schema_for_request(
+            schema,
+            "Gaussian relaxed scan bond 1-2 and freeze bond 1-3",
+        )
+    )
+    assert "gaussian scan" in prompt
+    # the old, factually-wrong claim must be gone
+    assert "There is NO" not in prompt
+    # the -n triple-overload example must use the long form for state count
+    td_prompt = build_synthesis_system_prompt(
+        prune_schema_for_request(schema, "Gaussian TDDFT with 5 states")
+    )
+    assert "td --states singlets --nstates 5" in td_prompt
+    assert "td -n 5" not in td_prompt
+
+
+# --------------------------------------------------------------------------- #
+# H2 - the pruner keeps the confusable sibling so the model can pick it
+# --------------------------------------------------------------------------- #
+def _gaussian_kinds(request: str) -> set[str]:
+    pruned = prune_schema_for_request(build_chemsmart_cli_schema(), request)
+    run = (pruned.get("subcommands") or {}).get("run") or {}
+    gaussian = (run.get("subcommands") or {}).get("gaussian") or {}
+    return set((gaussian.get("subcommands") or {}).keys())
+
+
+def test_pruner_keeps_scan_and_modred_together() -> None:
+    # A coordinate-scan request must expose BOTH scan and modred; either is a
+    # legal target and the disambiguator/model may switch between them.
+    kinds = _gaussian_kinds(
+        "scan the bond between atoms 1 and 2 of oxetane.xyz with gaussian"
+    )
+    assert {"scan", "modred"} <= kinds
+    # A freeze request likewise keeps both.
+    kinds = _gaussian_kinds(
+        "freeze bond 1 2 and optimize oxetane.xyz with gaussian"
+    )
+    assert {"scan", "modred"} <= kinds
+
+
+def test_pruner_keeps_dias_and_wbi_together() -> None:
+    kinds = _gaussian_kinds("distortion interaction analysis on gaussian")
+    assert {"dias", "wbi"} <= kinds
+
+
+# --------------------------------------------------------------------------- #
+# H4 - the intent oracle catches the collapse without false-rejecting
+# --------------------------------------------------------------------------- #
+def _verdict(request: str, command: str) -> str:
+    return evaluate_intent(command, IntentSpec.from_request(request)).verdict
+
+
+def test_intent_rejects_scan_collapsed_to_opt() -> None:
+    assert (
+        _verdict(
+            "scan the bond between atoms 1 and 2 of oxetane.xyz with gaussian",
+            "chemsmart run gaussian -f oxetane.xyz opt",
+        )
+        == "reject"
+    )
+    assert (
+        _verdict(
+            "relaxed PES scan of the C-C bond in ethane with gaussian",
+            "chemsmart run gaussian -p ethane opt",
+        )
+        == "reject"
+    )
+
+
+def test_intent_rejects_freeze_collapsed_to_opt() -> None:
+    assert (
+        _verdict(
+            "hold the 1-2 bond fixed and optimize oxetane.xyz gaussian",
+            "chemsmart run gaussian -f oxetane.xyz opt",
+        )
+        == "reject"
+    )
+
+
+def test_intent_accepts_correct_scan_and_rejects_modred_substitution() -> None:
+    # correct scan
+    assert (
+        _verdict(
+            "relaxed PES scan of the C-C bond in ethane with gaussian",
+            'chemsmart run gaussian -p ethane scan -c "1 2" '
+            "--step-size 0.1 --num-steps 10",
+        )
+        == "ok"
+    )
+    # Candidate pruning exposes both siblings, but the final intent gate must
+    # preserve the user's choice to vary rather than freeze a coordinate.
+    assert (
+        _verdict(
+            "scan the bond 1 2 gaussian",
+            'chemsmart run gaussian -f a.xyz modred -c "1 2"',
+        )
+        == "reject"
+    )
+
+
+def test_intent_accepts_single_coordinate_wrapper_variants_only() -> None:
+    expected = IntentSpec.from_dict(
+        {
+            "program": "orca",
+            "kind": "orca.scan",
+            "chemistry": {"coordinates": [2, 7]},
+        }
+    )
+
+    singleton = evaluate_intent(
+        "chemsmart run orca scan --coordinates '[[2,7]]' "
+        "--dist-start 1.8 --dist-end 3.0 --num-steps 13",
+        expected,
+    )
+    grouped = evaluate_intent(
+        "chemsmart run orca scan --coordinates '[[2,7],[3,8]]' "
+        "--dist-start 1.8 --dist-end 3.0 --num-steps 13",
+        expected,
+    )
+
+    assert singleton.verdict == "ok"
+    assert grouped.verdict == "reject"
+    assert grouped.failed_rule_ids == ["intent.chemistry.coordinates"]
+
+
+def test_intent_does_not_false_reject_tddft_alias() -> None:
+    # expected kind is gaussian.tddft; the CLI subcommand is `td`. The oracle
+    # must canonicalize so a correct command is not flagged.
+    assert (
+        _verdict(
+            "TDDFT 5 excited states of pyridine with gaussian",
+            "chemsmart run gaussian -p pyridine td --nstates 5",
+        )
+        == "ok"
+    )
+
+
+def test_intent_asserts_nstates_from_ordinary_tddft_wording() -> None:
+    request = "Gaussian TD-DFT with 10 lowest triplet excited states"
+    expected = IntentSpec.from_request(request)
+    assert expected.chemistry["nstates"] == 10
+    assert (
+        _verdict(
+            request, "chemsmart run gaussian td --nstates 10 --states triplets"
+        )
+        == "ok"
+    )
+    assert (
+        _verdict(
+            request, "chemsmart run gaussian td --nstates 8 --states triplets"
+        )
+        == "reject"
+    )
+
+
+def test_intent_asserts_orca_scan_point_count_and_project() -> None:
+    request = (
+        "Using ORCA project orca_demo, scan bond 2-7 in complex.xyz from "
+        "1.8 to 3.0 angstrom with 13 points."
+    )
+    expected = IntentSpec.from_request(request)
+
+    assert expected.project == "orca_demo"
+    assert expected.chemistry["num_steps"] == 13
+    assert (
+        _verdict(
+            request,
+            "chemsmart run orca -p orca_demo -f complex.xyz scan "
+            "--coordinates '[2,7]' --dist-start 1.8 --dist-end 3.0 "
+            "--num-steps 12",
+        )
+        == "reject"
+    )
+
+
+def test_intent_reads_step_count_before_step_size() -> None:
+    request = (
+        "Use Gaussian to scan bond 1-2 for 10 steps of 0.05 angstrom in "
+        "ethanol.xyz."
+    )
+
+    expected = IntentSpec.from_request(request)
+
+    assert expected.chemistry["num_steps"] == 10
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f ethanol.xyz scan "
+            "--coordinates '[[1,2]]' --num-steps '[10]' "
+            "--step-size '[0.05]'",
+        )
+        == "ok"
+    )
+
+
+def test_intent_reads_gaussian_td_root_and_eqsolv_in_job_context() -> None:
+    request = (
+        "Gaussian TD-DFT for dye.xyz with 8 singlet states, root 3, "
+        "equilibrium solvation, charge 0, multiplicity 1."
+    )
+    command = (
+        "chemsmart run gaussian -f dye.xyz -c 0 -m 1 "
+        "td -s singlets -n 8 -r 3 -e eqsolv"
+    )
+
+    assert _verdict(request, command) == "ok"
+    observed = ObservedIntent.from_command(command)
+    assert observed.chemistry["eqsolv"] == "eqsolv"
+    assert "ending_xyzfile" not in observed.chemistry
+
+
+def test_intent_uses_final_tddft_state_after_a_correction() -> None:
+    request = (
+        "I first wrote triplets by mistake. Correct that to singlets. "
+        "Prepare Gaussian TD-DFT for dye.xyz with 8 states, root 3, "
+        "equilibrium solvation, charge -1, multiplicity 1."
+    )
+    command = (
+        "chemsmart run gaussian -f dye.xyz -c -1 -m 1 "
+        "td --states singlets --nstates 8 --root 3 --eqsolv eqsolv"
+    )
+
+    expected = IntentSpec.from_request(request)
+    assert expected.chemistry["states"] == "singlets"
+    assert _verdict(request, command) == "ok"
+
+
+def test_intent_distinguishes_nonequilibrium_tddft_solvation() -> None:
+    request = (
+        "Prepare Gaussian TD-DFT for switch.xyz with 50-50 states, nstates=6, root 2, "
+        "nonequilibrium solvation, charge 0, multiplicity 1."
+    )
+    expected = IntentSpec.from_request(request)
+
+    assert expected.chemistry["nstates"] == 6
+    assert expected.chemistry["eqsolv"] is False
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f switch.xyz -c 0 -m 1 td "
+            "--states 50-50 --nstates 6 --root 2 --eqsolv noneqsolv",
+        )
+        == "ok"
+    )
+
+
+def test_intent_asserts_explicit_userjob_kind_and_route() -> None:
+    request = (
+        "Set up a Gaussian user job with the NMR=GIAO route for anisole_nmr.xyz, "
+        "charge 0 multiplicity 1."
+    )
+    expected = IntentSpec.from_request(request)
+    assert expected.kind == "gaussian.userjob"
+    assert expected.chemistry["route_contains"] == "nmr=giao"
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f anisole_nmr.xyz -c 0 -m 1 userjob -r nmr=giao",
+        )
+        == "ok"
+    )
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f anisole_nmr.xyz -c 0 -m 1 userjob -r pop=nbo",
+        )
+        == "reject"
+    )
+
+
+def test_intent_asserts_trajectory_frame_count_and_explicit_jobtype() -> None:
+    request = (
+        "Select 6 representative trajectory frames from host_guest_md.xyz and "
+        "perform Gaussian geometry optimization on each structure."
+    )
+    expected = IntentSpec.from_request(request)
+    assert expected.kind == "gaussian.traj"
+    assert expected.chemistry == {
+        "num_structures_to_run": 6,
+        "jobtype": "opt",
+    }
+    command = (
+        "chemsmart run gaussian -f host_guest_md.xyz -c 0 -m 1 "
+        "traj -j opt -ns 6"
+    )
+    assert _verdict(request, command) == "ok"
+    assert _verdict(request, command.replace("-ns 6", "-ns 5")) == "reject"
+    assert _verdict(request, command.replace("-j opt", "-j sp")) == "reject"
+
+
+def test_intent_trajectory_selection_beats_generic_optimization_and_no_neb_endpoint() -> (
+    None
+):
+    request = (
+        "Using the loaded project, select 4 representative MD snapshots from "
+        "ligand_md.xyz and perform Gaussian geometry optimization on each."
+    )
+    expected = IntentSpec.from_request(request)
+    assert expected.kind == "gaussian.traj"
+    assert expected.project is None
+    assert expected.chemistry == {
+        "num_structures_to_run": 4,
+        "jobtype": "opt",
+    }
+
+
+def test_intent_asserts_snapshot_count_when_number_follows_snapshot_word() -> (
+    None
+):
+    request = (
+        "MD trajectory에서 대표 구조 4개를 선택해 Gaussian single-point "
+        "calculations for ligand_md.xyz를 준비해줘."
+    )
+    expected = IntentSpec.from_request(request)
+    assert expected.kind == "gaussian.traj"
+    assert expected.chemistry == {
+        "num_structures_to_run": 4,
+        "jobtype": "sp",
+    }
+
+
+def test_intent_asserts_explicit_trajectory_jobtype_spelling() -> None:
+    expected = IntentSpec.from_request(
+        "Use Gaussian trajectory selection for frames.xyz, exactly 5 structures, jobtype opt."
+    )
+    assert expected.chemistry == {
+        "num_structures_to_run": 5,
+        "jobtype": "opt",
+    }
+
+
+def test_intent_asserts_bare_userjob_route_keyword() -> None:
+    request = (
+        "This route request is for a completed geometry. Prepare a Gaussian userjob "
+        "for intermediate.xyz, charge 0 multiplicity 1, "
+        "using explicit route freq."
+    )
+    expected = IntentSpec.from_request(request)
+    assert expected.chemistry["route_contains"] == "freq"
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f intermediate.xyz -c 0 -m 1 userjob -r freq",
+        )
+        == "ok"
+    )
+
+
+def test_intent_discards_terminal_prose_punctuation_from_userjob_route() -> (
+    None
+):
+    request = (
+        "Make a Gaussian userjob command for donor.xyz, charge 0, multiplicity 1, "
+        "with custom route pop=(nbo), using the loaded project."
+    )
+
+    expected = IntentSpec.from_request(request)
+
+    assert expected.chemistry["route_contains"] == "pop=(nbo)"
+    assert (
+        _verdict(
+            request,
+            "chemsmart run gaussian -f donor.xyz -c 0 -m 1 "
+            "userjob -r 'pop=(nbo)'",
+        )
+        == "ok"
+    )
+
+
+def test_intent_freeze_does_not_steal_transition_state() -> None:
+    # "...with the bond frozen" inside a TS request must stay a TS, not modred.
+    assert (
+        _verdict(
+            "transition state search with the forming bond frozen, gaussian",
+            "chemsmart run gaussian -f a.xyz ts",
+        )
+        == "ok"
+    )
+
+
+def test_kind_from_request_recovers_scan_and_freeze_phrasings() -> None:
+    assert (
+        _kind_from_request(
+            "scan the bond between atoms 1 and 2 with gaussian", "gaussian"
+        )
+        == "gaussian.scan"
+    )
+    assert (
+        _kind_from_request(
+            "relaxed pes scan of the c-c bond in ethane", "gaussian"
+        )
+        == "gaussian.scan"
+    )
+    assert (
+        _kind_from_request("hold the 1-2 bond fixed and optimize", "gaussian")
+        == "gaussian.modred"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# H3 - the direct synthesize path enforces intent end-to-end
+# --------------------------------------------------------------------------- #
+class _MockProvider:
+    name = "openai"
+
+    def __init__(self, command: str) -> None:
+        self._command = command
+
+    def chat(self, messages: list[dict[str, Any]], **_kwargs: Any) -> dict:
+        return {
+            "content": json.dumps(
+                {
+                    "status": "ready",
+                    "command": self._command,
+                    "explanation": "draft",
+                    "confidence": "high",
+                    "missing_info": [],
+                    "alternatives": [],
+                }
+            )
+        }
+
+
+def _synthesize(request: str, command: str) -> dict:
+    session = SynthesisSession(
+        provider=_MockProvider(command), default_project="demo"
+    )
+    return session.synthesize(request)
+
+
+def test_synthesize_downgrades_silent_wrong_command() -> None:
+    result = _synthesize(
+        "scan the bond 1 2 of oxetane.xyz with gaussian",
+        "chemsmart run gaussian -f oxetane.xyz opt",
+    )
+    assert result["status"] == "needs_clarification"
+    assert result.get("intent_reject") == ["intent.kind"]
+
+
+def test_synthesize_keeps_correct_command_ready() -> None:
+    result = _synthesize(
+        "scan the bond 1 2 of oxetane.xyz with gaussian",
+        'chemsmart run gaussian -f oxetane.xyz scan -c "1 2" '
+        "--step-size 0.1 --num-steps 10",
+    )
+    assert result["status"] == "ready"
+    assert "intent_reject" not in result

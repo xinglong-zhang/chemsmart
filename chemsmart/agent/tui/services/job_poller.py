@@ -10,8 +10,6 @@ import traceback
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
@@ -25,6 +23,10 @@ from chemsmart.agent.core import (
     _resolve_refs,
     _restore_json_result,
 )
+from chemsmart.agent.services.session_store import (
+    LegacySessionFormatError,
+    load_current_session_state,
+)
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.job import Job
@@ -33,6 +35,9 @@ from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.cluster import ClusterHelper
 from chemsmart.utils.io import get_program_type_from_file
 
+from .session_index import agent_session_dirs
+
+UTC = timezone.utc
 _JOB_SNAPSHOT_CACHE_LOCK = Lock()
 
 
@@ -116,20 +121,17 @@ class JobPollerMixin:
 
 
 class JobStateReader:
-    """Compatibility loader for agent session state files."""
+    """Read canonical agent session state for job monitoring."""
 
     @staticmethod
     def load(session_dir: Path) -> SessionState | None:
-        for name in ("state.json", "session.json"):
-            path = session_dir / name
-            if path.exists():
-                try:
-                    return SessionState.load(path)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Malformed session state: {path}"
-                    ) from exc
-        return None
+        path = session_dir / "session.json"
+        try:
+            return load_current_session_state(session_dir)
+        except LegacySessionFormatError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Malformed session state: {path}") from exc
 
 
 def available_server_names() -> list[str]:
@@ -235,9 +237,7 @@ def collect_job_snapshot(session_root: Path) -> dict[str, dict[str, Any]]:
     if not session_root.exists():
         return snapshot
 
-    for session_dir in sorted(session_root.iterdir(), reverse=True):
-        if not session_dir.is_dir():
-            continue
+    for session_dir in agent_session_dirs(session_root):
         session_jobs = _session_jobs(
             session_dir,
             cluster_running_ids=cluster_running_ids,

@@ -38,6 +38,10 @@ def test_tool_call_cell_renders_read_result_summary_and_detail():
     )
 
     renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "L10-16 of 200, truncated" in renderables[0].plain
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
     assert any(
         item.plain == "Result · L10-16 of 200, truncated"
         for item in renderables
@@ -66,6 +70,10 @@ def test_tool_call_cell_renders_ssh_probe_result_summary_and_detail():
         result=result,
     )
 
+    renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "rc=0 in 0.13s" in renderables[0].plain
+    cell.set_expanded(True)
     renderables = _renderables(cell)
     assert any(item.plain == "Result · rc=0 in 0.13s" for item in renderables)
     detail = render_tool_result_detail("ssh_probe", result)
@@ -99,6 +107,10 @@ def test_tool_call_cell_renders_scheduler_query_result_summary_and_detail():
         result=queue_result,
     )
 
+    renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "slurm: debug 4n/128cpu" in renderables[0].plain
+    cell.set_expanded(True)
     renderables = _renderables(cell)
     assert any(
         item.plain == "Result · slurm: debug 4n/128cpu" for item in renderables
@@ -157,6 +169,13 @@ def test_tool_call_cell_renders_log_tail_result_summary_and_detail():
     )
 
     renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert (
+        "12L, 4 errors: oom_killed, walltime_exceeded, missing_module"
+        in renderables[0].plain
+    )
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
     assert any(
         item.plain
         == "Result · 12L, 4 errors: oom_killed, walltime_exceeded, missing_module"
@@ -178,8 +197,15 @@ def test_tool_call_cell_result_none_stays_backward_compatible():
     )
 
     renderables = _renderables(cell)
-    assert [item.plain for item in renderables] == [
-        "● PENDING build_job [local-state]",
+    assert len(renderables) == 1
+    assert renderables[0].plain.startswith(
+        "● PENDING · build_job · local-state · 0.0s · Build"
+    )
+    assert renderables[0].plain.endswith("[enter expand]")
+
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
+    assert [item.plain for item in renderables[1:]] == [
         "Build",
         "effect: creates a job object handle",
         "",
@@ -212,6 +238,12 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
             "read_only": True,
             "style": "warning",
             "summary": "builds validated ORCA settings",
+        },
+        "build_xtb_settings": {
+            "risk": "read-only",
+            "read_only": True,
+            "style": "warning",
+            "summary": "builds validated xTB settings",
         },
         "build_job": {
             "risk": "local-state",
@@ -275,7 +307,7 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
         },
     }
 
-    assert len(expected_existing) == 14
+    assert len(expected_existing) == 15
     assert {
         key: _TOOL_META[key] for key in expected_existing
     } == expected_existing
@@ -303,6 +335,24 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
         "style": "warning",
         "summary": "tails remote logs for diagnostics",
     }
+
+
+def test_ask_user_is_a_clean_read_only_clarification_not_unknown_risk():
+    # ask_user is the model's clarification mechanism; it must NOT render as an
+    # "[unknown]" risky, state-mutating pending tool (the confusing permission
+    # framing users saw). It has no side effect.
+    from chemsmart.agent.tui.tool_meta import (
+        tool_read_only,
+        tool_risk_badge,
+        tool_side_effect_summary,
+    )
+
+    risk, _style = tool_risk_badge("ask_user")
+    assert risk == "question"
+    assert tool_read_only("ask_user") is True
+    summary = tool_side_effect_summary("ask_user")
+    assert "mutate" not in summary
+    assert summary != "may inspect or mutate local state"
 
 
 def test_render_tool_result_error_uses_compact_error_summary_only():

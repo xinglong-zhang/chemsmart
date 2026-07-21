@@ -268,6 +268,16 @@ class Server(RegistryMixin):
         """
         return self.kwargs.get("EXTRA_COMMANDS", None)
 
+    @cached_property
+    def extra_scheduler_directives(self):
+        """
+        Get additional scheduler directives for submission scripts.
+
+        Returns:
+            str or list or None: Additional scheduler directives or None.
+        """
+        return self.kwargs.get("EXTRA_SCHEDULER_DIRECTIVES", None)
+
     def _get_submit_command(self):
         """
         Obtain job submission command based on scheduler type.
@@ -545,9 +555,18 @@ class Server(RegistryMixin):
         self._check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
-        # Submit the job
-        if not test:
-            self._submit_job(job)
+        # Submit the job and propagate the scheduler return code.  Previously
+        # a failed qsub/sbatch process was discarded, making `chemsmart sub`
+        # look successful to an agent even though no job entered the queue.
+        if test:
+            return 0
+        returncode = self._submit_job(job)
+        if returncode != 0:
+            raise RuntimeError(
+                f"Job submission failed on {self.name} "
+                f"with return code {returncode}."
+            )
+        return returncode
 
     @staticmethod
     def _check_running_jobs(job):

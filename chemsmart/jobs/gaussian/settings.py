@@ -31,6 +31,24 @@ pt = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
+def _drop_duplicate_route_freq(
+    additional_route_parameters: str,
+    route_string: str,
+    *,
+    has_frequency: bool = False,
+) -> str:
+    """Remove a pure duplicate freq token from extra route parameters."""
+    if not has_frequency and not re.search(
+        gaussian_freq_keywords_pattern,
+        route_string,
+        re.I,
+    ):
+        return additional_route_parameters
+    tokens = additional_route_parameters.split()
+    filtered = [token for token in tokens if token.lower() != "freq"]
+    return " ".join(filtered)
+
+
 class GaussianJobSettings(MolecularJobSettings):
     """
     Configuration settings for Gaussian computational chemistry jobs.
@@ -758,10 +776,15 @@ class GaussianJobSettings(MolecularJobSettings):
 
         # Write additional parameters for route
         if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
+            additional_params = _drop_duplicate_route_freq(
+                str(self.additional_route_parameters),
+                route_string,
+                has_frequency=self.freq or self.numfreq,
+            )
+            if additional_params:
+                route_string += f" {additional_params}"
             logger.debug(
-                f"Added additional route parameters: "
-                f"{self.additional_route_parameters}"
+                f"Added additional route parameters: {additional_params}"
             )
 
         # Write job type specific route keywords
@@ -924,6 +947,18 @@ class GaussianJobSettings(MolecularJobSettings):
                     f"Element {element} requires ECP (Z > 36), using 'genecp'"
                 )
                 return "genecp"
+
+        # An explicitly requested built-in ECP basis (e.g. SDD on Br) must
+        # keep the genecp keyword even when Z <= 36, or Gaussian never reads
+        # the pseudopotential section.
+        from chemsmart.io.gaussian.gengenecp import is_builtin_ecp_basis
+
+        if is_builtin_ecp_basis(self.heavy_elements_basis):
+            logger.debug(
+                f"Heavy elements basis {self.heavy_elements_basis!r} is a "
+                f"built-in ECP keyword, using 'genecp'"
+            )
+            return "genecp"
 
         # All heavy elements have atomic number <= 36, use 'gen'
         logger.debug(
@@ -1113,7 +1148,11 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             # Check if the additional parameters
             # are already in the route string
             # to avoid duplication (e.g., scf=qc appearing twice)
-            additional_params = self.additional_route_parameters.strip()
+            additional_params = _drop_duplicate_route_freq(
+                self.additional_route_parameters.strip(),
+                route_string,
+                has_frequency=self.freq or self.numfreq,
+            )
             if additional_params not in route_string:
                 route_string += f" {additional_params}"
             else:
@@ -1754,7 +1793,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         # Append additional route parameters (e.g., from -r CLI flag)
         if self.additional_route_parameters is not None:
-            additional_params = self.additional_route_parameters.strip()
+            additional_params = _drop_duplicate_route_freq(
+                self.additional_route_parameters.strip(),
+                route_string,
+                has_frequency=self.freq or self.numfreq,
+            )
             if additional_params not in route_string:
                 route_string += f" {additional_params}"
                 logger.debug(

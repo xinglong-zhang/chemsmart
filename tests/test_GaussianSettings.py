@@ -635,7 +635,7 @@ class TestGaussianRoute:
         assert isinstance(route_object2, object)
         assert route_object2.jobtype == "opt"
         assert route_object2.freq is False
-        assert route_object2.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert route_object2.functional == "b3lyp-d3bj"
         assert route_object2.basis == "6-31G(d)".lower()
         assert route_object2.solvent_model is None
         assert route_object2.solvent_id is None
@@ -862,6 +862,44 @@ class TestGaussianJobFromLogFile:
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
+    def test_reads_oldform_redundant_coordinates_with_atomic_numbers(
+        self, tmp_path
+    ):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        settings = GaussianJobSettings.from_logfile(str(outputfile))
+        assert settings.jobtype == "opt"
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "gen"
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+
+    def test_reads_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        settings = GaussianJobSettings.from_logfile(
+            gaussian_pd_insertion_ts_r_outfile
+        )
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp-d3"
+
 
 class TestGaussianPBCJob:
     def test_writes_gaussian_input_from_pbc_comfile(
@@ -907,3 +945,51 @@ class TestGaussianLinkJobSettingsGuess:
         route = self._route(" (mix,always) ")
         assert "guess=(mix,always)" in route
         assert "guess=((mix,always))" not in route
+
+
+class TestBuiltinECPBasisKeyword:
+    """Explicit built-in ECP bases (SDD on Br, Z<=36) must keep genecp."""
+
+    def test_sdd_on_br_keeps_genecp_and_writes_ecp_block(self):
+        from chemsmart.io.gaussian.gengenecp import (
+            GenGenECPSection,
+            is_builtin_ecp_basis,
+        )
+
+        assert is_builtin_ecp_basis("SDD")
+        assert is_builtin_ecp_basis("lanl2dz")
+        assert not is_builtin_ecp_basis("def2-SVPD")
+
+        section = GenGenECPSection._fallback_genecp_heavy_basis_section(
+            heavy_elements=["Br"], heavy_elements_basis="SDD"
+        )
+        # Basis block AND the pseudopotential block must both be present.
+        assert section.count("Br 0") == 2
+        assert section.count("SDD") == 2
+
+    def test_determine_basis_keyword_respects_explicit_ecp(self):
+        import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        settings = GaussianJobSettings.default()
+        settings.basis = "genecp"
+        settings.heavy_elements = ["Br"]
+        settings.heavy_elements_basis = "SDD"
+        settings.light_elements_basis = "6-31G**"
+        molecule = Molecule(
+            symbols=["C", "Br", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.94],
+                    [1.03, 0.0, -0.36],
+                    [-0.515, 0.892, -0.36],
+                    [-0.515, -0.892, -0.36],
+                ]
+            ),
+        )
+
+        # Br is Z=35 (<=36): the old heuristic downgraded to 'gen' and the
+        # SDD pseudopotential was silently dropped.
+        assert settings.determine_basis_keyword(molecule) == "genecp"

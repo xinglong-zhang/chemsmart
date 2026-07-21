@@ -7,6 +7,7 @@ from chemsmart.settings.executable import (
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    XTBExecutable,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -236,8 +237,8 @@ class Submitter(RegistryMixin):
 
         Returns:
             Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            (GaussianExecutable, ORCAExecutable, XTBExecutable, or
+            NCIPLOTExecutable) based on `job.PROGRAM`.
 
         Raises:
             ValueError: If the job's program is not supported.
@@ -246,6 +247,8 @@ class Submitter(RegistryMixin):
             executable = GaussianExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "orca":
             executable = ORCAExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "xtb":
+            executable = XTBExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
 
@@ -395,6 +398,26 @@ class Submitter(RegistryMixin):
             for line in self.executable.scripts:
                 f.write(line)
             f.write("\n")
+
+    def _write_extra_scheduler_directives(self, f):
+        """
+        Write additional scheduler directives from server settings.
+
+        Args:
+            f: File handle for writing scheduler directives.
+        """
+        directives = self.server.extra_scheduler_directives
+        if directives is None:
+            return
+        if isinstance(directives, str):
+            f.write(directives)
+            if directives and not directives.endswith("\n"):
+                f.write("\n")
+            return
+        for line in directives:
+            f.write(line)
+            if line and not line.endswith("\n"):
+                f.write("\n")
 
     def _write_extra_commands(self, f):
         """
@@ -552,6 +575,7 @@ class PBSSubmitter(Submitter):
             if user_settings.data.get("EMAIL"):
                 f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
                 f.write("#PBS -m abe\n")
+        self._write_extra_scheduler_directives(f)
         f.write("\n")
         f.write("\n")
 
@@ -628,6 +652,7 @@ class SLURMSubmitter(Submitter):
             if user_settings.data.get("EMAIL"):
                 f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
                 f.write("#SBATCH --mail-type=END,FAIL\n")
+        self._write_extra_scheduler_directives(f)
         f.write("\n")
         f.write("\n")
 

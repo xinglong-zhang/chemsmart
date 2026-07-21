@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from chemsmart.agent.transport import build_submit_invocation
@@ -66,6 +68,14 @@ def _result(
     )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    # Mode A declares the local machine to be the compute host, so its
+    # probes expand ~ and run POSIX shell commands there. A Windows home
+    # cannot produce a POSIX probe path; mode B (remote host) is the
+    # supported Windows topology and stays covered below.
+    reason="mode A treats the local machine as a POSIX compute host",
+)
 def test_mode_a_round_trip(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     runner = StubRunner(

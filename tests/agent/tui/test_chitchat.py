@@ -26,6 +26,7 @@ def test_chitchat_input_renders_single_reply_cell_only(
     monkeypatch,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     provider = FakeProvider(
         [
             {
@@ -45,7 +46,9 @@ def test_chitchat_input_renders_single_reply_cell_only(
     monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
 
     async def scenario() -> None:
-        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        app = ChemsmartTuiApp(
+            session_root=tmp_path / "sessions", runtime_v2="off"
+        )
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)
@@ -79,6 +82,7 @@ def test_chemistry_request_keeps_full_workflow_rendering(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     plan = planner_plan(single_molecule_xyz_file, "workflow_case")
@@ -113,7 +117,9 @@ def test_chemistry_request_keeps_full_workflow_rendering(
     monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
 
     async def scenario() -> None:
-        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        app = ChemsmartTuiApp(
+            session_root=tmp_path / "sessions", runtime_v2="off"
+        )
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)

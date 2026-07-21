@@ -39,11 +39,43 @@ class ToolOutcome:
     handle_id: str | None = None
 
 
+def extract_response_text(response: Any) -> str:
+    """Extract public text from Anthropic- or OpenAI-shaped responses."""
+
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        content = response.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = [
+                str(item.get("text", ""))
+                for item in content
+                if isinstance(item, dict) and item.get("type") == "text"
+            ]
+            if parts:
+                return "\n".join(parts)
+        choices = response.get("choices") or []
+        if choices:
+            message = choices[0].get("message", {})
+            content = message.get("content", "")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "\n".join(
+                    str(item.get("text", ""))
+                    for item in content
+                    if isinstance(item, dict)
+                )
+    raise ValueError("could not extract text from provider response")
+
+
 def normalize_response(
     provider: str,
     response: Any,
 ) -> tuple[str, list[ToolRequest], str | None]:
-    payload = _response_payload(response)
+    payload = response_payload(response)
     if provider == "anthropic":
         return _normalize_anthropic_response(payload)
     if provider == "openai":
@@ -175,7 +207,9 @@ def _openai_message_text(message: dict[str, Any]) -> str:
     return "\n".join(text_parts)
 
 
-def _response_payload(response: Any) -> dict[str, Any]:
+def response_payload(response: Any) -> dict[str, Any]:
+    """Normalize a provider SDK response into a dictionary."""
+
     if isinstance(response, dict):
         return response
     if hasattr(response, "model_dump"):

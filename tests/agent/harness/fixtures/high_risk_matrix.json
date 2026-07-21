@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "families": [
+    {
+      "id": "project_yaml_state",
+      "intent": {"program": "gaussian", "project": "co2cat"},
+      "fixture": {"workspace_projects": ["demo", "co2cat"]},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Read the Gaussian co2cat project YAML, then use that project for the next calculation."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "turns": ["Use one of the project YAML files in this workspace for a Gaussian calculation."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Read co2cat.", "Change gas.freq to true and keep co2cat selected."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Use demo.", "No, use the Gaussian co2cat project instead."]}
+      ]
+    },
+    {
+      "id": "gaussian_opt_freq",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.opt", "project": "demo", "input_path": "water.xyz", "charge": 0, "multiplicity": 1, "execution_mode": "local", "chemistry": {"route_contains": "freq"}},
+      "fixture": {"input": "water.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run a Gaussian optimization and harmonic frequency confirmation for water.xyz, neutral singlet, using project demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"charge": null, "multiplicity": null}, "turns": ["Optimize water.xyz with Gaussian and confirm it by frequencies using demo."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare a Gaussian optimization for water.xyz with demo, charge 0 multiplicity 1.", "Also include harmonic frequencies."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Run Gaussian opt_freq for water.xyz using demo, charge 0 multiplicity 1.", "Repair that to the real ChemSmart opt plus frequency route."]}
+      ]
+    },
+    {
+      "id": "gaussian_ts",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.ts", "project": "demo", "input_path": "ts_guess.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"maxstep": 8}},
+      "fixture": {"input": "ts_guess.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run a Gaussian TS optimization on ts_guess.xyz, neutral singlet, maxstep 8, project demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"input_path": null}, "turns": ["Prepare a neutral-singlet Gaussian TS search with maxstep 8 using demo."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare a Gaussian TS job for ts_guess.xyz using demo, charge 0 multiplicity 1.", "Limit the optimization maxstep to 8."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Add ts, calcfc, and noeigentest manually to a Gaussian TS job.", "Repair it so runtime-owned TS keywords are not duplicated; keep maxstep 8."]}
+      ]
+    },
+    {
+      "id": "gaussian_scan_modred",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.scan", "project": "demo", "input_path": "ethanol.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"coordinates": [1, 2], "num_steps": 10, "step_size": 0.05, "constrained_coordinates": [[1, 3]]}},
+      "fixture": {"input": "ethanol.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run a Gaussian relaxed scan for ethanol.xyz: bond 1-2, 10 steps of 0.05, freeze bond 1-3, neutral singlet, project demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"coordinates": null}}, "turns": ["Set up a 10-step Gaussian relaxed scan for ethanol.xyz with demo, charge 0 multiplicity 1."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Scan bond 1-2 in ethanol.xyz for 10 steps of 0.05 using Gaussian demo, neutral singlet.", "Keep bond 1-3 frozen during the scan."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Freeze atoms 1 and 3 while scanning bond 1-2.", "Repair that: this is an internal-coordinate F constraint, not Cartesian frozen atoms."]}
+      ]
+    },
+    {
+      "id": "gaussian_tddft",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.tddft", "project": "photo", "input_path": "dye.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"states": "singlets", "nstates": 8, "root": 2, "eqsolv": true}},
+      "fixture": {"input": "dye.xyz", "project_requires": ["td"]},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run Gaussian TD-DFT for dye.xyz with project photo: 8 singlet states, root 2, eqsolv, neutral singlet."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"project": null}, "turns": ["Calculate 8 singlet TD-DFT states for dye.xyz, root 2 with eqsolv, charge 0 multiplicity 1."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare a TD-DFT absorption calculation for dye.xyz using photo, 8 singlets, neutral singlet.", "Target root 2 and use equilibrium solvation."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Set states to 2 for dye.xyz TD-DFT.", "Repair it: states are singlets and the target root is 2; request 8 states."]}
+      ]
+    },
+    {
+      "id": "gaussian_irc_qrc",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.irc", "project": "demo", "input_path": "ts.log", "charge": 0, "multiplicity": 1, "chemistry": {"direction": "both"}},
+      "fixture": {"input": "ts.log"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Follow the Gaussian IRC from ts.log in both directions, neutral singlet, project demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"input_path": null}, "turns": ["Continue with a Gaussian IRC in both directions using demo, charge 0 multiplicity 1."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare a forward Gaussian IRC from ts.log using demo, neutral singlet.", "Actually run both directions."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Displace the imaginary mode both ways as a QRC job from ts.log.", "No, I need a true IRC path, not a QRC displacement."]}
+      ]
+    },
+    {
+      "id": "gaussian_dias_wbi",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.dias", "project": "demo", "input_path": "reaction.log", "charge": 0, "multiplicity": 1, "chemistry": {"fragment_indices": "1-6", "every_n_points": 3, "mode": "irc"}},
+      "fixture": {"input": "reaction.log"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Perform Gaussian DIAS on reaction.log every 3 IRC points; fragment 1 is atoms 1-6, neutral singlet, project demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"fragment_indices": null}}, "turns": ["Run DIAS on reaction.log every 3 IRC points using demo, neutral singlet."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Calculate Wiberg bond indices for reaction.log using Gaussian demo.", "Change this to DIAS; fragment 1 is atoms 1-6 and sample every 3 points."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Use fragments [[1,2,3,4,5,6],[7,8]] for DIAS.", "Repair it to the real fragment-1-only range 1-6."]}
+      ]
+    },
+    {
+      "id": "gaussian_qmmm",
+      "intent": {"action": "run", "program": "gaussian", "kind": "gaussian.qmmm", "project": "oniom", "input_path": "enzyme.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"high_level_atoms": "1-8", "low_level_atoms": "9-30"}},
+      "fixture": {"input": "enzyme.xyz", "atom_count": 30},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run a Gaussian ONIOM optimization for enzyme.xyz using oniom, total charge 0 multiplicity 1, QM atoms 1-8 and low layer 9-30."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"high_level_atoms": null, "low_level_atoms": null}}, "turns": ["Prepare a Gaussian QM/MM optimization for enzyme.xyz using oniom, neutral singlet."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Set up Gaussian QM/MM for enzyme.xyz using oniom with QM atoms 1-6, neutral singlet.", "Expand the QM region to atoms 1-8 and define the low region as 9-30."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Use QM atoms 1 2 3 4 5 6 7 8 in the Gaussian QMMM command.", "Repair the atom list to the valid range form 1-8 and keep low atoms 9-30."]}
+      ]
+    },
+    {
+      "id": "orca_ts",
+      "intent": {"action": "run", "program": "orca", "kind": "orca.ts", "project": "orca_ts", "input_path": "ts_guess.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"recalc_hess": 4, "trust_radius": 0.12, "tssearch_type": "optts"}},
+      "fixture": {"input": "ts_guess.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run an ORCA OptTS for ts_guess.xyz with orca_ts, neutral singlet, recalc Hessian every 4 steps and trust radius 0.12."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"input_path": null}, "turns": ["Prepare an ORCA OptTS, neutral singlet, recalc Hessian every 4 steps, project orca_ts."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare ORCA OptTS for ts_guess.xyz using orca_ts, neutral singlet.", "Use recalc_hess 4 and trust radius 0.12."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Run this as a plain ORCA optimization.", "Repair it to OptTS; this geometry is a first-order saddle guess."]}
+      ]
+    },
+    {
+      "id": "orca_scan_modred",
+      "intent": {"action": "run", "program": "orca", "kind": "orca.scan", "project": "orca_demo", "input_path": "complex.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"coordinates": [2, 7], "dist_start": 1.8, "dist_end": 3.0, "num_steps": 13}},
+      "fixture": {"input": "complex.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run an ORCA relaxed scan of bond 2-7 from 1.8 to 3.0 angstrom in 13 points for complex.xyz, neutral singlet, orca_demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"dist_start": null, "dist_end": null}}, "turns": ["Scan bond 2-7 in complex.xyz with ORCA for 13 points using orca_demo, neutral singlet."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Constrain bond 2-7 in an ORCA optimization for complex.xyz using orca_demo.", "Change it to a relaxed scan from 1.8 to 3.0 in 13 points."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Use coordinates '2 7' for the ORCA scan.", "Repair that to a valid coordinate literal while preserving 1.8, 3.0, and 13 points."]}
+      ]
+    },
+    {
+      "id": "orca_neb_irc",
+      "intent": {"action": "run", "program": "orca", "kind": "orca.neb", "project": "orca_demo", "input_path": "reactant.xyz", "charge": 0, "multiplicity": 1, "chemistry": {"ending_xyzfile": "product.xyz", "nimages": 9, "joboption": "NEB-TS"}},
+      "fixture": {"input": "reactant.xyz", "endpoint": "product.xyz"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Run ORCA NEB-TS from reactant.xyz to product.xyz with 9 images, neutral singlet, project orca_demo."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"ending_xyzfile": null}}, "turns": ["Run ORCA NEB-TS from reactant.xyz with 9 images using orca_demo, neutral singlet."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare ORCA NEB from reactant.xyz to product.xyz with 7 images using orca_demo.", "Use NEB-TS and increase to 9 images."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Use product.xyz as the reactant and reactant.xyz as the endpoint.", "Repair the endpoint ownership: reactant.xyz starts the path and product.xyz ends it."]}
+      ]
+    },
+    {
+      "id": "orca_qmmm_submission",
+      "intent": {"action": "sub", "program": "orca", "kind": "orca.qmmm", "project": "enzyme", "server": "hpc1", "input_path": "enzyme.xyz", "charge": 0, "multiplicity": 1, "execution_mode": "submit", "chemistry": {"high_level_atoms": "1-12", "low_level_method": "AMBER=HardFirst"}},
+      "fixture": {"input": "enzyme.xyz", "server": "hpc1", "scheduler": "SLURM"},
+      "variants": [
+        {"id": "complete", "expected_outcome": "direct_pass", "turns": ["Submit an ORCA QM/MM optimization for enzyme.xyz to server hpc1 using project enzyme, total charge 0 multiplicity 1, QM atoms 1-12, AMBER=HardFirst for the MM layer."]},
+        {"id": "missing", "expected_outcome": "valid_ask", "intent": {"chemistry": {"low_level_method": null}}, "turns": ["Submit ORCA QM/MM optimization for enzyme.xyz to hpc1 using enzyme, neutral singlet, QM atoms 1-12."]},
+        {"id": "modify", "expected_outcome": "direct_pass", "turns": ["Prepare a local ORCA QMMM optimization for enzyme.xyz using enzyme, QM atoms 1-12, neutral singlet.", "Submit it to hpc1 and use AMBER=HardFirst for the MM layer."]},
+        {"id": "repair", "expected_outcome": "repair_pass", "turns": ["Submit a top-level ORCA qmmm command to hpc1.", "Repair it to an opt parent with nested qmmm, QM atoms 1-12 and AMBER=HardFirst."]}
+      ]
+    }
+  ]
+}

@@ -58,14 +58,14 @@ def make_request_with_args(name: str, args: dict[str, object]) -> ToolRequest:
         (
             PermissionPolicy(mode=PermissionMode.DRIVING),
             "run_local",
-            ResolvedDecision.AUTO_DENY,
-            "missing_yolo",
+            ResolvedDecision.NEEDS_USER,
+            "always_require_approval",
         ),
         (
             PermissionPolicy(mode=PermissionMode.DRIVING, yolo=True),
             "run_local",
-            ResolvedDecision.AUTO_ALLOW,
-            "yolo",
+            ResolvedDecision.NEEDS_USER,
+            "always_require_approval",
         ),
         (
             PermissionPolicy(mode=PermissionMode.PERMISSION),
@@ -89,7 +89,7 @@ def make_request_with_args(name: str, args: dict[str, object]) -> ToolRequest:
             ),
             "run_local",
             ResolvedDecision.NEEDS_USER,
-            "needs_user",
+            "always_require_approval",
         ),
         (
             PermissionPolicy(
@@ -190,7 +190,7 @@ def test_wizard_write_always_requires_explicit_approval():
             "run_local",
             ResolvedPermission(
                 decision=ResolvedDecision.NEEDS_USER,
-                reason="needs_user",
+                reason="always_require_approval",
             ),
         ),
         (
@@ -214,7 +214,7 @@ def test_wizard_write_always_requires_explicit_approval():
             "run_local",
             ResolvedPermission(
                 decision=ResolvedDecision.NEEDS_USER,
-                reason="needs_user",
+                reason="always_require_approval",
             ),
         ),
         (
@@ -237,8 +237,8 @@ def test_wizard_write_always_requires_explicit_approval():
             RuntimePermissionMode.BYPASS,
             "run_local",
             ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="bypass_mode",
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="always_require_approval",
             ),
         ),
         (
@@ -327,8 +327,8 @@ def test_runtime_permission_mode_matrix(mode, tool, expected):
                 "run_local",
                 {"command": "rm -rf /tmp/foo"},
             ),
-            ResolvedDecision.AUTO_ALLOW,
-            "bypass_mode",
+            ResolvedDecision.NEEDS_USER,
+            "always_require_approval",
             id="bypass_run_local_rm_tmp",
         ),
         pytest.param(
@@ -354,8 +354,8 @@ def test_runtime_permission_mode_matrix(mode, tool, expected):
         pytest.param(
             PermissionPolicy(mode=RuntimePermissionMode.BYPASS),
             make_request_with_args("run_local", {"command": "ls -la"}),
-            ResolvedDecision.AUTO_ALLOW,
-            "bypass_mode",
+            ResolvedDecision.NEEDS_USER,
+            "always_require_approval",
             id="bypass_run_local_ls",
         ),
         pytest.param(
@@ -475,16 +475,16 @@ def test_legacy_permission_regression_snapshot(tool, expected):
             "run_local",
             False,
             ResolvedPermission(
-                decision=ResolvedDecision.AUTO_DENY,
-                reason="missing_yolo",
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="always_require_approval",
             ),
         ),
         (
             "run_local",
             True,
             ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="yolo",
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="always_require_approval",
             ),
         ),
         (
@@ -507,11 +507,85 @@ def test_legacy_driving_regression_snapshot(tool, yolo, expected):
     assert resolved == expected
 
 
+@pytest.mark.parametrize("tool", ["run_local", "submit_hpc"])
+def test_prompt_risky_converts_driving_deny_to_user_approval(tool):
+    request = (
+        make_request_with_args("submit_hpc", {"execute": True})
+        if tool == "submit_hpc"
+        else make_request(tool)
+    )
+    resolved = PermissionPolicy(
+        mode=PermissionMode.DRIVING,
+        prompt_risky=True,
+    ).resolve(request)
+
+    assert resolved == ResolvedPermission(
+        decision=ResolvedDecision.NEEDS_USER,
+        reason="always_require_approval",
+    )
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "update_project_yaml",
+        "execute_chemsmart_command",
+        "run_local",
+        "submit_hpc",
+    ],
+)
+def test_unified_risky_tools_always_require_approval(tool):
+    request = (
+        make_request_with_args("submit_hpc", {"execute": True})
+        if tool == "submit_hpc"
+        else make_request(tool)
+    )
+    resolved = PermissionPolicy(
+        mode=PermissionMode.DRIVING,
+        yolo=True,
+        prompt_risky=True,
+    ).resolve(request)
+
+    assert resolved == ResolvedPermission(
+        decision=ResolvedDecision.NEEDS_USER,
+        reason="always_require_approval",
+    )
+
+
+@pytest.mark.parametrize(
+    "case_request",
+    [
+        make_request_with_args(
+            "execute_chemsmart_command",
+            {"command": "chemsmart run ...", "test": True},
+        ),
+        make_request_with_args("submit_hpc", {"execute": False}),
+    ],
+)
+def test_safe_fake_and_submission_preview_are_automatic(case_request):
+    resolved = PermissionPolicy(
+        mode=RuntimePermissionMode.READ_ONLY,
+    ).resolve(case_request)
+
+    assert resolved == ResolvedPermission(
+        decision=ResolvedDecision.AUTO_ALLOW,
+        reason="safe_fake_or_preview",
+    )
+
+
 def test_runtime_permission_mode_placeholders_are_stable():
     assert READ_ONLY_TOOLS == {
         "read",
         "ssh_probe",
         "scheduler_query",
         "log_tail",
+        "synthesize_command",
+        "repair_command",
+        "read_project_yaml",
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "search_basis_sets",
     }
     assert EDIT_SAFE_TOOLS == {"edit", "write"}

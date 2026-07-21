@@ -9,10 +9,11 @@ from chemsmart.jobs.orca.settings import (
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.workspace_project import (
+    workspace_project_names,
+    workspace_project_path,
+)
 from chemsmart.utils.mixins import RegistryMixin
-
-user_settings = ChemsmartUserSettings()
-
 
 logger = logging.getLogger(__name__)
 project_settings_registry: list[str] = []
@@ -240,22 +241,30 @@ class ORCAProjectSettings(RegistryMixin):
             FileNotFoundError: If no project settings are found for the
                 specified project name, with guidance on creating new settings.
         """
+        workspace_project_settings = cls._from_workspace_project_name(project)
+        if workspace_project_settings is not None:
+            return workspace_project_settings
+
+        # Keep explicit legacy CLI projects working while agent auto-selection
+        # remains restricted to the current workspace.
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
-        else:
-            chemsmart_test_project_settings = (
-                cls._from_chemsmart_test_projects(project)
-            )
-            if chemsmart_test_project_settings is not None:
-                return chemsmart_test_project_settings
+
+        chemsmart_test_project_settings = cls._from_chemsmart_test_projects(
+            project
+        )
+        if chemsmart_test_project_settings is not None:
+            return chemsmart_test_project_settings
 
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new ORCA project settings .yaml file in {user_settings.user_orca_settings_dir}.\n\n"
+            "Place new ORCA project settings .yaml file in "
+            f"{workspace_project_path(project, 'orca').parent}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            f"Currently available projects: {user_settings.all_available_orca_projects}"
+            "Currently available projects: "
+            f"{_available_orca_projects()}"
         )
 
     @classmethod
@@ -307,6 +316,17 @@ class ORCAProjectSettings(RegistryMixin):
             return settings
 
     @classmethod
+    def _from_workspace_project_name(cls, project_name):
+        project_name_yaml_path = workspace_project_path(project_name, "orca")
+        project_settings_manager = ORCAProjectSettingsManager(
+            filename=str(project_name_yaml_path)
+        )
+        settings = cls._from_projects_manager(project_settings_manager)
+
+        if settings is not None:
+            return settings
+
+    @classmethod
     def _from_chemsmart_test_projects(cls, project_name):
         """
         Load YAML project settings from test projects directory.
@@ -336,6 +356,11 @@ class ORCAProjectSettings(RegistryMixin):
 
         if settings is not None:
             return settings
+
+
+def _available_orca_projects() -> list[str]:
+    legacy = ChemsmartUserSettings().all_available_orca_projects
+    return sorted(set(workspace_project_names("orca")) | set(legacy))
 
 
 class YamlORCAProjectSettings(ORCAProjectSettings):

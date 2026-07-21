@@ -7,12 +7,12 @@ from click.testing import CliRunner
 from textual import events
 
 from chemsmart.agent.cli import agent
+from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.tui.app import ChemsmartTuiApp, launch_tui
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.popups import ApprovalOverlay, ApprovalResult
 
 from .._agent_session_helpers import FakeProvider
-from .._loop_helpers import openai_final_response
 
 
 def test_approval_overlay_blocks_run_until_yes(
@@ -72,6 +72,25 @@ def test_composer_large_paste_placeholder_and_external_editor(
             monkeypatch.setenv("EDITOR", "vi")
             composer.action_external_editor()
             assert composer.text == "edited externally"
+
+    asyncio.run(scenario())
+
+
+def test_composer_paste_ignores_immediate_duplicate_key_stream(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            composer = app.query_one(Composer)
+            await composer._on_paste(events.Paste("abc"))
+            for character in "abc":
+                await composer._on_key(events.Key(character, character))
+            assert composer.text == "abc"
+
+            await composer._on_key(events.Key("d", "d"))
+            assert composer.text == "abcd"
 
     asyncio.run(scenario())
 
@@ -162,7 +181,19 @@ def test_agent_cli_ask_streams_without_tui_import(
     import builtins
 
     provider = FakeProvider(
-        [{"__raw_response__": openai_final_response("Loop answer.")}]
+        [
+            {
+                "status": "ready",
+                "command": (
+                    "chemsmart sub gaussian -p water -b 6-31g* "
+                    f"-f {single_molecule_xyz_file} opt"
+                ),
+                "explanation": "Loop answer.",
+                "confidence": "medium",
+                "missing_info": [],
+                "alternatives": [],
+            }
+        ]
     )
     real_import = builtins.__import__
 
@@ -191,14 +222,26 @@ def test_agent_cli_ask_streams_without_tui_import(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
+    monkeypatch.setattr(
+        "chemsmart.agent.cli_commands._agent_log_root",
+        lambda: tmp_path,
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
+    )
 
     runner = CliRunner()
     result = runner.invoke(
         agent,
         ["ask", f"optimize {single_molecule_xyz_file}"],
+        input="N\n",
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0, result.output
-    assert "Assistant" in result.output
+    assert "ChemSmart synthesis" in result.output
     assert "Loop answer." in result.output

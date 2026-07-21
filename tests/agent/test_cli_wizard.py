@@ -33,7 +33,7 @@ def _wizard_outcome() -> WizardOutcome:
 
 def test_agent_wizard_prints_yaml_stdout(monkeypatch):
     monkeypatch.setattr(
-        "chemsmart.agent.cli.run_wizard",
+        "chemsmart.agent.cli_commands.run_wizard",
         lambda *args, **kwargs: _wizard_outcome(),
     )
 
@@ -49,7 +49,7 @@ def test_agent_wizard_prints_yaml_stdout(monkeypatch):
 
 def test_agent_wizard_write_yes_writes_to_home(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "chemsmart.agent.cli.run_wizard",
+        "chemsmart.agent.cli_commands.run_wizard",
         lambda *args, **kwargs: _wizard_outcome(),
     )
     monkeypatch.setenv("HOME", str(tmp_path))

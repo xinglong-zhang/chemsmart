@@ -167,12 +167,18 @@ def test_dry_run_input_cell_shows_path_before_body():
     cell = DryRunInputCell(
         "%chk=water.chk\n# B3LYP/6-31G(d)\n",
         inputfile="/tmp/water.com",
+        command="chemsmart run gaussian -f water.xyz -c 0 -m 1 sp",
+        cli_grounded=True,
     )
 
     text = _render_plain(cell.renderable)
     assert "✓ water.com ready" in text
     assert "path: /tmp/water.com" in text
-    assert text.index("path: /tmp/water.com") < text.index("%chk=water.chk")
+    assert "Generated chemsmart CLI command" in text
+    assert "chemsmart run gaussian -f water.xyz -c 0 -m 1 sp" in text
+    assert text.index("Generated chemsmart CLI command") < text.index(
+        "%chk=water.chk"
+    )
 
 
 def test_plan_cell_renders_rationale_when_no_steps():
@@ -201,7 +207,9 @@ def test_approval_popup_includes_mode_and_rollback_labels(tmp_path: Path):
     asyncio.run(scenario())
 
 
-def test_greeter_copy_mentions_doctor_ask_and_run(tmp_path: Path):
+def test_greeter_copy_mentions_unified_validation_and_execution(
+    tmp_path: Path,
+):
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
@@ -210,8 +218,9 @@ def test_greeter_copy_mentions_doctor_ask_and_run(tmp_path: Path):
             first = transcript.children[0]
             text = _render_plain(first.renderable)
             assert "/doctor" in text
-            assert "ask mode" in text
-            assert "run mode" in text
+            assert "same interface" in text
+            assert "/run" in text
+            assert "/submit" in text
 
     asyncio.run(scenario())
 

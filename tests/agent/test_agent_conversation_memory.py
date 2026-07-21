@@ -321,6 +321,40 @@ def test_prompt_context_includes_entities_only_when_populated():
     }
 
 
+def test_direct_dry_run_command_is_retained_as_conversation_state():
+    command = (
+        "chemsmart run gaussian -p water_demo -f h2o.xyz -c 0 -m 1 "
+        "scan --coordinates '[[1,2]]' --num-steps 10 --step-size 0.05"
+    )
+    memory = ConversationMemory.from_entries(
+        [
+            {"kind": "request", "payload": {"request": "Prepare scan."}},
+            {
+                "kind": "tool_use_request",
+                "payload": {"step": 1, "tool": "dry_run_input", "args": {}},
+            },
+            {
+                "kind": "tool_use_result",
+                "payload": {
+                    "step": 1,
+                    "tool": "dry_run_input",
+                    "status": "ok",
+                    "payload": {
+                        "summary": {
+                            "command": command,
+                            "cli_grounded": True,
+                            "inputfile": "h2o_scan.com",
+                            "content": "# opt=modredundant\n",
+                        }
+                    },
+                },
+            },
+        ]
+    )
+
+    assert memory.entities.last_command == command
+
+
 def test_conversation_memory_reusable_results_include_new_mva_summaries():
     memory = ConversationMemory.from_entries(
         [
@@ -398,3 +432,26 @@ def test_conversation_memory_updates_entities_for_tool_result_branch():
     assert memory.entities.last_server == "cluster-b"
     assert memory.entities.last_scheduler == "pbs"
     assert memory.entities.last_job_id == "7788"
+
+
+def test_conversation_memory_tracks_latest_calculation_receipt():
+    memory = ConversationMemory.from_entries(
+        [
+            _request_entry("run the ORCA single point"),
+            {
+                "kind": "calculation_event",
+                "payload": {
+                    "kind": "completed",
+                    "run": {
+                        "run_id": "calc-water",
+                        "status": "completed",
+                        "output_path": "/workspace/water.out",
+                    },
+                },
+            },
+        ]
+    )
+
+    assert memory.entities.last_run_id == "calc-water"
+    assert memory.entities.last_output_path == "/workspace/water.out"
+    assert memory.entities.last_calculation_status == "completed"

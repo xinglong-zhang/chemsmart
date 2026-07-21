@@ -10,6 +10,8 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
+from chemsmart.agent.tui.services.session_index import agent_session_dirs
+
 
 class SessionsScreen(ModalScreen[str | None]):
     BINDINGS = [
@@ -86,15 +88,7 @@ class SessionsScreen(ModalScreen[str | None]):
         if not self.session_root.exists():
             return []
         return [
-            path.name
-            for path in sorted(
-                [
-                    path
-                    for path in self.session_root.iterdir()
-                    if path.is_dir()
-                ],
-                reverse=True,
-            )[:10]
+            path.name for path in agent_session_dirs(self.session_root)[:10]
         ]
 
     def _render_text(self) -> str:
@@ -117,10 +111,10 @@ class SessionsScreen(ModalScreen[str | None]):
         metadata_path = session_dir / "session_metadata.json"
         session_path = session_dir / "session.json"
         if metadata_path.exists():
-            data = json.loads(metadata_path.read_text())
+            data = json.loads(metadata_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         elif session_path.exists():
-            data = json.loads(session_path.read_text())
+            data = json.loads(session_path.read_text(encoding="utf-8"))
             request = str(data.get("request") or "")
         request = request.strip().replace("\n", " ")
         if len(request) > 48:

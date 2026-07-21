@@ -1,7 +1,11 @@
 import os
+from io import StringIO
+
+import pytest
 
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
+from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
 
 
 class TestServer:
@@ -12,7 +16,7 @@ class TestServer:
         assert server.scheduler.lower() == "pbs"
         assert server.queue_name == "normal"
         assert server.num_hours == 24
-        assert server.mem_gb == 400
+        assert server.mem_gb == 375
         assert server.num_cores == 64
         assert server.num_gpus == 0
         assert server.num_threads == 64
@@ -26,6 +30,7 @@ export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
 export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
 """
         )
+        assert server.extra_scheduler_directives == "#PBS -m abe\n"
 
     def test_gaussian_executable(self, server_yaml_file):
         gaussian_executable = GaussianExecutable.from_servername(
@@ -76,3 +81,62 @@ export g16root=~/programs/g16
 export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 """
         assert orca_executable.envars == orca_envars
+
+    def test_slurm_submitter_writes_extra_scheduler_directives(self):
+        server = Server(
+            "custom-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=24,
+            NUM_GPUS=0,
+            EXTRA_SCHEDULER_DIRECTIVES="#SBATCH --reservation=xlzhang_1\n",
+        )
+        job = type("DummyJob", (), {"label": "job1"})()
+        submitter = SLURMSubmitter(job=job, server=server)
+
+        buffer = StringIO()
+        submitter._write_scheduler_options(buffer)
+        assert "#SBATCH --reservation=xlzhang_1\n" in buffer.getvalue()
+
+    def test_pbs_submitter_writes_extra_scheduler_directives(self):
+        server = Server(
+            "custom-pbs",
+            SCHEDULER="PBS",
+            NUM_CORES=8,
+            MEM_GB=24,
+            NUM_GPUS=0,
+            EXTRA_SCHEDULER_DIRECTIVES="#PBS -m abe\n",
+        )
+        job = type("DummyJob", (), {"label": "job1"})()
+        submitter = PBSSubmitter(job=job, server=server)
+
+        buffer = StringIO()
+        submitter._write_scheduler_options(buffer)
+        assert "#PBS -m abe\n" in buffer.getvalue()
+
+    def test_submit_propagates_scheduler_failure(self, monkeypatch):
+        server = Server("mock-pbs", SCHEDULER="PBS", SUBMIT_COMMAND="qsub")
+        monkeypatch.setattr(server, "_check_running_jobs", lambda job: None)
+        monkeypatch.setattr(
+            server, "_write_submission_script", lambda **kwargs: None
+        )
+        monkeypatch.setattr(server, "_submit_job", lambda job: 1)
+
+        with pytest.raises(RuntimeError, match="return code 1"):
+            server.submit(job=object())
+
+    def test_submit_test_mode_returns_without_scheduler_submission(
+        self, monkeypatch
+    ):
+        server = Server("mock-pbs", SCHEDULER="PBS", SUBMIT_COMMAND="qsub")
+        monkeypatch.setattr(server, "_check_running_jobs", lambda job: None)
+        monkeypatch.setattr(
+            server, "_write_submission_script", lambda **kwargs: None
+        )
+        called = []
+        monkeypatch.setattr(
+            server, "_submit_job", lambda job: called.append(job)
+        )
+
+        assert server.submit(job=object(), test=True) == 0
+        assert called == []

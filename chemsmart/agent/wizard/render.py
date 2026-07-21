@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import shlex
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import PurePosixPath
 
 import yaml
 
@@ -165,6 +165,9 @@ def _render_program_blocks(
     notes: list[str],
 ) -> dict[str, dict]:
     program_blocks: dict[str, dict] = {}
+    # xTB is intentionally absent: the wizard renders a block only for
+    # programs its software survey probes for, and xTB resolves from PATH
+    # (a conda environment) rather than an EXEFOLDER the wizard must find.
     for program_key in ["gaussian", "orca", "nciplot"]:
         block_name = _PROGRAM_NAME_MAP[program_key]
         finding = software_survey.programs.get(program_key)
@@ -231,7 +234,11 @@ def _render_conda_env(conda: CondaEnvSurvey) -> str | None:
     if conda.base is None:
         return None
 
-    conda_sh = Path(conda.base) / "etc" / "profile.d" / "conda.sh"
+    # This line is emitted into a submission script that a POSIX scheduler
+    # sources on the compute host. Joining with the local flavour turned
+    # '/opt/miniforge3/etc/profile.d/conda.sh' into a backslash path when
+    # the wizard ran on Windows, producing a script the cluster cannot run.
+    conda_sh = PurePosixPath(conda.base) / "etc" / "profile.d" / "conda.sh"
     lines = [f"source {shlex.quote(str(conda_sh))}"]
     if conda.env_name is not None:
         lines.append(f"conda activate {shlex.quote(conda.env_name)}")

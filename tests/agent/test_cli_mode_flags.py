@@ -47,7 +47,7 @@ def test_agent_run_mode_flags_pass_permission_policy(monkeypatch):
         return _loop_result()
 
     monkeypatch.setattr(
-        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+        "chemsmart.agent.cli_commands.AgentSession.run_loop", fake_run_loop
     )
 
     runner = CliRunner()

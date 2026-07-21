@@ -20,10 +20,16 @@ class DryRunInputCell(BaseCell):
         content: str,
         inputfile: str | None = None,
         previous_content: str | None = None,
+        command: str | None = None,
+        cli_grounded: bool = False,
+        cli_grounding_issue: str | None = None,
     ) -> None:
         self.content = content or "# no data"
         self.inputfile = inputfile
         self.previous_content = previous_content
+        self.command = command
+        self.cli_grounded = cli_grounded
+        self.cli_grounding_issue = cli_grounding_issue
         self.show_diff = False
         super().__init__(
             self._build_renderable(),
@@ -80,5 +86,32 @@ class DryRunInputCell(BaseCell):
         lines = [header]
         if self.inputfile:
             lines.append(path_line)
+        lines.append(Text(""))
+        lines.append(Text("Generated chemsmart CLI command", style="bold"))
+        if self.command:
+            lines.append(
+                Syntax(
+                    self.command,
+                    "bash",
+                    theme="ansi_dark",
+                    word_wrap=True,
+                )
+            )
+        else:
+            warning = Text()
+            warning.append("CLI-grounding missing", style="bold red")
+            issue = self.cli_grounding_issue or (
+                "dry-run input did not include a generated chemsmart command"
+            )
+            warning.append(f": {issue}", style="yellow")
+            lines.append(warning)
+        if self.command and not self.cli_grounded:
+            warning = Text()
+            warning.append("CLI-grounding warning", style="bold yellow")
+            issue = self.cli_grounding_issue or (
+                "command evidence was present but not marked grounded"
+            )
+            warning.append(f": {issue}", style="yellow")
+            lines.append(warning)
         lines.extend([Text(""), body])
         return Group(*lines)

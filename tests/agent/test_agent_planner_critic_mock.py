@@ -160,6 +160,8 @@ def test_critic_blocks_malformed_input(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "malformed.com"),
+            "command": "chemsmart run gaussian -f malformed.xyz -c 0 -m 1 opt",
+            "cli_grounded": True,
             "content": "%chk=bad.chk\nmissing route line\n",
         }
 
@@ -266,6 +268,64 @@ def test_critic_receives_all_dry_run_inputs(
     )
 
 
+def test_project_yaml_workflow_skips_generic_dry_run_critic(tmp_path: Path):
+    plan = {
+        "steps": [
+            {
+                "tool": "extract_project_protocol",
+                "args": {
+                    "text": (
+                        "Use Gaussian B3LYP-D3BJ with def2-SVP in the gas "
+                        "phase for CO2."
+                    ),
+                    "project_name": "co2",
+                    "program": "gaussian",
+                },
+                "rationale": "Extract project method facts.",
+            },
+            {
+                "tool": "render_project_yaml",
+                "args": {"protocol": "$step1"},
+                "rationale": "Render a project YAML candidate.",
+            },
+            {
+                "tool": "validate_project_yaml",
+                "args": {
+                    "yaml_text": "$step2",
+                    "program": "gaussian",
+                    "project_name": "co2",
+                },
+                "rationale": "Validate the project YAML candidate.",
+            },
+            {
+                "tool": "critic_project_yaml",
+                "args": {
+                    "yaml_text": "$step2",
+                    "protocol": "$step1",
+                    "program": "gaussian",
+                    "project_name": "co2",
+                },
+                "rationale": "Critique the YAML against the protocol.",
+            },
+        ],
+        "rationale": "Prepare a chemsmart project YAML.",
+        "estimated_cost": "low",
+    }
+    provider = FakeProvider([plan])
+    session = AgentSession(
+        provider=provider,
+        registry=ToolRegistry.default(),
+        session_root=tmp_path,
+    )
+
+    result = session.run("create co2 project yaml", dry_submit=True)
+
+    assert result["blocked"] is False
+    assert result["critic_verdict"] is None
+    assert result["completed_steps"] == 4
+    assert len(provider.calls) == 1
+
+
 def test_critic_hard_rejects_irc_without_irc_keyword(
     monkeypatch,
     single_molecule_xyz_file,
@@ -288,6 +348,8 @@ def test_critic_hard_rejects_irc_without_irc_keyword(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "irc_case.com"),
+            "command": "chemsmart run gaussian -f irc_case.xyz -c 0 -m 1 irc",
+            "cli_grounded": True,
             "content": "#p b3lyp/6-31g* opt\n\nirc test\n\n0 1\nO 0.0 0.0 0.0\n",
         }
 
