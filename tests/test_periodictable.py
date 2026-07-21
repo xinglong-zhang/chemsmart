@@ -3,6 +3,9 @@ from chemsmart.utils.periodictable import (
     NON_METALS_AND_METALLOIDS,
     NONMETALS,
     PeriodicTable,
+    is_metal,
+    is_metal_atomic_number,
+    metal_element_symbols,
 )
 
 p = PeriodicTable()
@@ -195,3 +198,31 @@ class TestElementClassifications:
                 assert (
                     atomic_num not in NON_METALS_AND_METALLOIDS
                 ), f"Element {atomic_num} should be a metal"
+
+
+class TestMetalHelpers:
+    def test_is_metal_atomic_number(self):
+        assert is_metal_atomic_number(26)
+        assert not is_metal_atomic_number(6)
+        assert not is_metal_atomic_number(14)
+
+    def test_is_metal_symbol(self):
+        assert is_metal("Fe")
+        assert is_metal("fe")
+        assert is_metal("Mn")
+        assert not is_metal("C")
+        assert not is_metal("Si")
+        assert not is_metal("Xx")
+        assert not is_metal("invalid")
+        assert not is_metal("Zz")
+
+    def test_periodic_table_is_metal(self):
+        assert p.is_metal("Cu")
+        assert not p.is_metal("N")
+
+    def test_metal_element_symbols_includes_lanthanides(self):
+        symbols = metal_element_symbols()
+        assert "La" in symbols
+        assert "Mn" in symbols
+        assert "C" not in symbols
+        assert "Si" not in symbols

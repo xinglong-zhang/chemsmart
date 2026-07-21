@@ -268,6 +268,76 @@ def cylview_style(arg1):
 cmd.extend("cylview_style", cylview_style)
 
 
+def flat_render():
+    """
+    Set matte orthographic rendering for schematic CylView-style figures.
+
+    Configures PyMOL with flat lighting, no depth fog, and orthoscopic
+    projection for publication diagram-style molecular visualizations.
+    """
+    cmd.bg_color("white")
+    cmd.set("ray_opaque_background", "off")
+    cmd.set("depth_cue", 0)
+    cmd.set("orthoscopic", 1)
+    cmd.set("field_of_view", 35)
+    cmd.set("ambient", 0.55)
+    cmd.set("specular", 0.15)
+    cmd.set("spec_power", 180)
+    cmd.set("shininess", 20)
+    cmd.util.ray_shadows("light")
+    cmd.set("antialias", 2)
+    cmd.set("ray_trace_mode", 0)
+
+
+cmd.extend("flat_render", flat_render)
+
+
+def ballnstick_cylinder(arg1):
+    """
+    Apply cylindrical ball-and-stick molecular representation style.
+
+    Creates a schematic ball-and-stick representation with cylindrical
+    bonds colored by element and slightly larger atom spheres for clearer
+    node visibility in flat CylView-style figures.
+
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
+    cmd.show("sticks", arg1)
+    cmd.show("spheres", arg1)
+    cmd.color("gray85", "elem C and " + arg1)
+    cmd.color("gray98", "elem H and " + arg1)
+    cmd.color("gray", "elem Ag and " + arg1)
+    cmd.set("render_as_cylinders", 1, arg1)
+    cmd.set("stick_quality", 20, arg1)
+    cmd.set("stick_radius", 0.09, arg1)
+    cmd.set("sphere_scale", 0.18, arg1)
+    cmd.alter(arg1 + " and elem H", "vdw=0.75")
+    cmd.set("stick_color", -1, arg1)
+    cmd.set("dash_gap", 0.2)
+    cmd.set("dash_radius", 0.05)
+    cmd.set("label_distance_digits", 2)
+    cmd.hide("nonbonded", arg1)
+    cmd.hide("lines", arg1)
+
+
+def cylview_flat_style(arg1):
+    """
+    Apply flat schematic CylView visualization style.
+
+    Combines matte orthographic rendering with cylindrical ball-and-stick
+    representation for diagram-style molecular visualization.
+
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
+    flat_render()
+    ballnstick_cylinder(arg1)
+
+
+cmd.extend("cylview_flat_style", cylview_flat_style)
+
+
 def movie_style(arg1):
     """
     Apply movie-optimized visualization style.

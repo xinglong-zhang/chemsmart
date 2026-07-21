@@ -32,7 +32,7 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: pymol or cylview
+      -  Render style (see :ref:`visualization-styles`)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -200,6 +200,209 @@ Example
 .. image:: _static/B_in_R.png
    :width: 60%
    :align: center
+
+.. _visualization-styles:
+
+**********************
+ Visualization Styles
+**********************
+
+Use ``-s/--style`` on the ``visualize`` subcommand to select a render style. Base styles use
+``zhang_group_pymol_style.py``; scientific styles use ``zhang_group_scientific_styles.py`` and are routed through
+:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 22 50
+
+   -  -  ``-s`` value
+      -  Template
+      -  Description
+
+   -  -  ``pymol``
+      -  ``zhang_group_pymol_style.py``
+      -  Default PyMOL ball-and-stick visualization
+
+   -  -  ``cylview``
+      -  ``zhang_group_pymol_style.py``
+      -  Cylindrical stick representation
+
+   -  -  ``glossy``
+      -  ``zhang_group_scientific_styles.py``
+      -  Glossy semi-metallic rendering with transparent PNG export
+
+   -  -  ``comic``
+      -  ``zhang_group_scientific_styles.py``
+      -  Comic ball-and-stick rendering with black outlines and element labels
+
+   -  -  ``soft-cartoon``
+      -  ``zhang_group_scientific_styles.py``
+      -  Soft pastel ball-and-stick with radius-ratio coordination spheres and illustrated outlines
+
+   -  -  ``editorial-minimal``
+      -  ``zhang_group_scientific_styles.py``
+      -  Matte minimal ball-and-stick style for main-text mechanistic figures
+
+   -  -  ``soft-ceramic``
+      -  ``zhang_group_scientific_styles.py``
+      -  Soft ceramic / studio ball-and-stick style for coordination complexes
+
+   -  -  ``neon-coordination-core``
+      -  ``zhang_group_scientific_styles.py``
+      -  Neon coordination-core emphasis using radius-ratio shells and a transparent background
+
+   -  -  ``matte-clay``
+      -  ``zhang_group_scientific_styles.py``
+      -  Matte clay ball-and-stick using radius-ratio coordination spheres and core hydrogens
+
+   -  -  ``xray-wire``
+      -  ``zhang_group_scientific_styles.py``
+      -  Monochrome wireframe style for SI structure verification
+
+   -  -  ``steric-surface``
+      -  ``zhang_group_scientific_styles.py``
+      -  Transparent molecular surface for steric / space-filling views
+
+   -  -  ``quasi-chemdraw-bold``
+      -  ``zhang_group_scientific_styles.py``
+      -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
+
+Basic Usage
+===========
+
+Standard PyMOL style:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.xyz visualize
+   chemsmart run mol -f molecule.xyz visualize -s pymol
+   chemsmart run mol -f molecule.xyz visualize -s cylview
+
+Scientific styles:
+
+.. code:: bash
+
+   chemsmart run mol -f complex.xyz visualize -s glossy
+   chemsmart run mol -f complex.xyz visualize -s comic
+   chemsmart run mol -f complex.xyz visualize -s soft-cartoon
+   chemsmart run mol -f complex.xyz visualize -s editorial-minimal
+
+Highlight metal–ligand bonds with ``-c``. In comic style, each pair is drawn as a ball-and-stick bond; numeric distance
+labels are hidden so element labels remain visible. Other scientific styles keep the usual dashed distance measurements.
+
+.. code:: bash
+
+   chemsmart run mol -f complex.xyz visualize -s comic \\
+       -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'
+
+.. note::
+
+   ``-H/--hybrid`` and derived ``-s`` styles are mutually exclusive. Scientific styles resolve the metal center and
+   coordinating atoms via the radius-ratio ``select_coordination`` algorithm. Ray-traced PNG export uses a transparent
+   background for compositing.
+
+Examples
+========
+
+Glossy
+------
+
+.. figure:: _static/pymol_styles/style_glossy.png
+   :alt: Glossy semi-metallic visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s glossy``
+
+Comic
+-----
+
+.. figure:: _static/pymol_styles/style_comic.png
+   :alt: Comic visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``
+
+Soft cartoon
+------------
+
+.. figure:: _static/pymol_styles/style_soft_cartoon.png
+   :alt: Soft cartoon visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s soft-cartoon``
+
+Editorial minimal
+-----------------
+
+.. figure:: _static/pymol_styles/style_editorial_minimal.png
+   :alt: Editorial minimal visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s editorial-minimal``
+
+Soft ceramic
+------------
+
+.. figure:: _static/pymol_styles/style_soft_ceramic.png
+   :alt: Soft ceramic visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s soft-ceramic``
+
+Neon coordination core
+----------------------
+
+.. figure:: _static/pymol_styles/style_neon_coordination_core.png
+   :alt: Neon coordination core visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s neon-coordination-core``
+
+Matte clay
+----------
+
+.. figure:: _static/pymol_styles/style_matte_clay.png
+   :alt: Matte clay visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s matte-clay``
+
+X-ray wire
+----------
+
+.. figure:: _static/pymol_styles/style_xray_wire.png
+   :alt: X-ray wire visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s xray-wire``
+
+Steric surface
+--------------
+
+.. figure:: _static/pymol_styles/style_steric_surface.png
+   :alt: Steric surface visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s steric-surface``
+
+Quasi-ChemDraw bold
+-------------------
+
+.. figure:: _static/pymol_styles/style_quasi_chemdraw_bold.png
+   :alt: Quasi-ChemDraw bold visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s quasi-chemdraw-bold``
 
 ************
  Align Jobs

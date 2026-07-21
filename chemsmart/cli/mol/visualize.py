@@ -9,6 +9,10 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
+from chemsmart.jobs.mol.runner import (
+    is_pymol_derived_style,
+    normalize_pymol_style,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -20,7 +24,7 @@ logger = logging.getLogger(__name__)
     context_settings=dict(allow_extra_args=True),
 )
 @click_job_options
-@click_pymol_visualization_options
+@click_pymol_visualization_options(include_visualize_styles=True)
 @click_pymol_hybrid_visualization_options
 @click.pass_context
 def visualize(
@@ -54,13 +58,16 @@ def visualize(
     Example usage:
     chemsmart run mol -f 'structure_file' visualize
     -G '233,468-512' -G '308,397-414,416-423'
+
+    Derived styles from zhang_group_scientific_styles.py are selected with -s. Examples:
+        chemsmart run mol -f complex.xyz visualize -s glossy
+        chemsmart run mol -f complex.xyz visualize -s comic
+        chemsmart run mol -f complex.xyz visualize -s editorial-minimal
     """
 
-    # get molecule
     molecules = ctx.obj["molecules"]
     logger.info(f"Visualizing molecule(s): {molecules}.")
 
-    # get label for the job
     label = ctx.obj["label"]
     if coordinates is not None:
         logger.debug(f"Coordinates for visualization: {coordinates}")
@@ -74,14 +81,31 @@ def visualize(
                 "Invalid coordinates input. Please provide a valid Python "
                 "literal."
             )
+
+    normalized_style = None
+    if style is not None:
+        normalized_style = normalize_pymol_style(style)
+
+    is_derived_style = is_pymol_derived_style(normalized_style)
+
+    if hybrid and is_derived_style:
+        raise click.UsageError(
+            "Hybrid visualization (-H/--hybrid) cannot be combined with "
+            f"-s {style}."
+        )
+
     from chemsmart.jobs.mol.visualize import (
         PyMOLHybridVisualizationJob,
+        PyMOLScientificStyleVisualizationJob,
         PyMOLVisualizationJob,
     )
 
-    visualization_job = (
-        PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
-    )
+    if hybrid:
+        visualization_job = PyMOLHybridVisualizationJob
+    elif is_derived_style:
+        visualization_job = PyMOLScientificStyleVisualizationJob
+    else:
+        visualization_job = PyMOLVisualizationJob
 
     hybrid_opts = {}
 
@@ -90,8 +114,6 @@ def visualize(
     colors = kwargs.pop("colors", ())
     hybrid_opts["colors"] = colors
 
-    # raise error if -G/-C/-sc/-st or new_color_*
-    # is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "colors",
@@ -111,7 +133,6 @@ def visualize(
             "with '-H/--hybrid'."
         )
 
-    # Include new_color_* options if specified
     for hybrid_opt in [
         "surface_color",
         "surface_transparency",
@@ -125,11 +146,11 @@ def visualize(
             hybrid_opts[hybrid_opt] = kwargs.pop(hybrid_opt)
 
     logger.info(f"Hybrid visualization job options: {hybrid_opts}")
-    job = visualization_job(
+
+    job_kwargs = dict(
         molecule=molecules,
         label=label,
         pymol_script=file,
-        style=style,
         trace=trace,
         vdw=vdw,
         quiet_mode=quiet,
@@ -139,5 +160,12 @@ def visualize(
         **hybrid_opts,
         **kwargs,
     )
+
+    if is_derived_style:
+        job_kwargs["style"] = normalized_style
+    elif style is not None:
+        job_kwargs["style"] = style
+
+    job = visualization_job(**job_kwargs)
 
     return job
