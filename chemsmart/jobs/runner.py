@@ -45,9 +45,9 @@ def _scratch_from_server_yaml(runner_cls, server):
 
 
 def _resolve_scratch_bool(scratch, runner_cls, server):
-    """Resolve scratch: CLI True forces on; else program YAML SCRATCH; else False."""
-    if scratch:
-        return True
+    """Resolve scratch: user bool, else program YAML SCRATCH, else False."""
+    if scratch is not None:
+        return bool(scratch)
     yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
     if yaml_scratch is not None:
         return bool(yaml_scratch)
@@ -186,7 +186,8 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool): Whether to use scratch directory.
+        scratch (bool or None): Whether to use scratch directory. ``None`` means
+            use program YAML in ``from_job``; typed runners receive a bool.
         scratch_dir (str): Path to scratch directory.
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
@@ -201,7 +202,7 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=False,
+        scratch=None,
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
@@ -222,13 +223,15 @@ class JobRunner(RegistryMixin):
             )
 
         self.server = server
-        self.scratch = bool(scratch)
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        # Skip path setup on the CLI placeholder (no executable yet).
-        if self.scratch and type(self) is not JobRunner:
-            self._set_scratch()
+        if type(self) is JobRunner:
+            self.scratch = scratch
+        else:
+            self.scratch = bool(scratch)
+            if self.scratch:
+                self._set_scratch()
 
         self.fake = fake
 
@@ -419,7 +422,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
+    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -447,9 +450,7 @@ class JobRunner(RegistryMixin):
                 selected_runner = candidate_runners[0]
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
-            scratch = _resolve_scratch_bool(
-                bool(scratch), selected_runner, server
-            )
+            scratch = _resolve_scratch_bool(scratch, selected_runner, server)
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )

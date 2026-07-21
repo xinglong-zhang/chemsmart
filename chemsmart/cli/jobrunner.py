@@ -2,8 +2,16 @@ import functools
 import logging
 
 import click
+from click.core import ParameterSource
 
 logger = logging.getLogger(__name__)
+
+
+def scratch_for_jobrunner(ctx, scratch):
+    """Return user scratch bool when passed on CLI, else None for YAML fallback."""
+    if ctx.get_parameter_source("scratch") == ParameterSource.COMMANDLINE:
+        return scratch
+    return None
 
 
 def click_jobrunner_options(f):
@@ -44,8 +52,8 @@ def click_jobrunner_options(f):
         "--scratch/--no-scratch",
         default=False,
         type=bool,
-        help="Force scratch with --scratch. Without --scratch, use program "
-        "YAML SCRATCH when set, otherwise False.",
+        help="Force scratch with --scratch or job-folder with --no-scratch. "
+        "If omitted, use program YAML SCRATCH, otherwise False.",
     )
     @click.option(
         "--delete-scratch/--no-delete-scratch",
