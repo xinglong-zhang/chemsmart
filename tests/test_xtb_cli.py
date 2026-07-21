@@ -87,7 +87,7 @@ class TestXTBCLISettings:
                 "-f",
                 single_molecule_xyz_file,
                 "opt",
-                "--optimization-level",
+                "-l",
                 "loose",
             ],
         )

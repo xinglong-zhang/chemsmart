@@ -4,10 +4,10 @@ import os
 import yaml
 
 from chemsmart.jobs.xtb.settings import XTBJobSettings
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +72,7 @@ class XTBProjectSettings(RegistryMixin):
         if project_name is None:
             return None
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_xtb_settings_dir,
+            CHEMSMARTUserSettings().user_xtb_settings_dir,
             f"{project_name}.yaml",
         )
         manager = XTBProjectSettingsManager(filename=project_name_yaml_path)
