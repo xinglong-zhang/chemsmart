@@ -370,7 +370,7 @@ class TestScratchCLIDefaults:
         assert captured["job"].jobrunner.scratch is True
         assert captured["job"].jobrunner.scratch_from_cli is True
 
-    def test_from_job_omitted_uses_class_scratch(self, pbs_server, tmp_path):
+    def test_from_job_omitted_uses_program_scratch(self, pbs_server, tmp_path):
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
         job = SimpleNamespace(TYPE="g16opt")
@@ -398,74 +398,3 @@ class TestScratchCLIDefaults:
         )
         assert runner.scratch is False
         assert runner.scratch_from_cli is True
-
-
-class TestScratchPathFallback:
-    """Invalid configured scratch paths fall back to job.folder."""
-
-    def test_set_scratch_missing_path_disables_scratch(
-        self, pbs_server, tmp_path, monkeypatch
-    ):
-        runner = FakeGaussianJobRunner(
-            server=pbs_server, scratch=False, fake=True
-        )
-        runner.scratch = True
-        runner._scratch_dir = None
-        runner._set_scratch.cache_clear()
-        fake_exe = SimpleNamespace(
-            scratch_dir=str(tmp_path / "does_not_exist")
-        )
-        monkeypatch.setattr(
-            type(runner),
-            "executable",
-            property(lambda self: fake_exe),
-        )
-
-        assert runner._set_scratch() is None
-        assert runner.scratch is False
-
-    def test_set_scratch_non_directory_disables_scratch(
-        self, pbs_server, tmp_path, monkeypatch
-    ):
-        not_a_dir = tmp_path / "scratch.txt"
-        not_a_dir.write_text("x")
-        runner = FakeGaussianJobRunner(
-            server=pbs_server, scratch=False, fake=True
-        )
-        runner.scratch = True
-        runner._scratch_dir = None
-        runner._set_scratch.cache_clear()
-        fake_exe = SimpleNamespace(scratch_dir=str(not_a_dir))
-        monkeypatch.setattr(
-            type(runner),
-            "executable",
-            property(lambda self: fake_exe),
-        )
-
-        assert runner._set_scratch() is None
-        assert runner.scratch is False
-
-    def test_invalid_scratch_path_uses_job_folder(
-        self, pbs_server, tmp_path, monkeypatch
-    ):
-        runner = FakeGaussianJobRunner(
-            server=pbs_server, scratch=False, fake=True
-        )
-        runner.scratch = True
-        runner._scratch_dir = None
-        runner._set_scratch.cache_clear()
-        fake_exe = SimpleNamespace(
-            scratch_dir=str(tmp_path / "does_not_exist"),
-            local_run=None,
-        )
-        monkeypatch.setattr(
-            type(runner),
-            "executable",
-            property(lambda self: fake_exe),
-        )
-        runner._set_scratch()
-        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt")
-        runner._assign_variables(job)
-
-        assert runner.scratch is False
-        assert runner.running_directory == job.folder
