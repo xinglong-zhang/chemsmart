@@ -436,7 +436,7 @@ class IterateReport:
                 "",
                 f"   Label:                 {r.label}",
                 f"   Output mode:           {self.output_mode}",
-                f"   Target path:           {r.output_path}",
+                f"   Target path:           {r.output_path or 'N/A'}",
                 f"   Error type:            {r.error_type}",
                 f"   Reason:                {r.error_message}",
                 "",

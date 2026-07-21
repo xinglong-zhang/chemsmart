@@ -25,9 +25,11 @@ from chemsmart.jobs.iterate.report import (
     ERROR_CODE_INTERRUPTED,
     STAGE_ALGORITHM,
     STAGE_PREPROCESSING,
+    STAGE_WRITE,
     STATUS_FAILED,
     STATUS_SUCCESS,
     STATUS_TIMED_OUT,
+    STATUS_WRITE_FAILED,
     CombinationResult,
     IterateReport,
     summarize_results,
@@ -601,7 +603,9 @@ class IterateJobRunner(JobRunner):
             ``callback(result)`` invoked once when each combination is
             finalized and before its progress update. The job runner uses it
             to serialize successful molecules without retaining them all in
-            memory; direct callers may omit it.
+            memory; direct callers may omit it. An unexpected callback error
+            converts a successful result to ``WRITE FAILED`` without stopping
+            unrelated combinations.
 
         Returns
         -------
@@ -620,19 +624,46 @@ class IterateJobRunner(JobRunner):
 
         results: list[Optional[CombinationResult]] = [None] * total
         finalized: set[int] = set()
+        active_progress_callback = progress_callback
+
+        def _notify_progress(completed: int) -> None:
+            nonlocal active_progress_callback
+            if active_progress_callback is None:
+                return
+            try:
+                active_progress_callback(completed, total)
+            except Exception:
+                # Progress is presentation-only. A broken terminal callback
+                # must not terminate molecular generation.
+                logger.debug(
+                    "Disabling Iterate progress callback after an error.",
+                    exc_info=True,
+                )
+                active_progress_callback = None
 
         def _finalize(task_id: int, result: CombinationResult) -> None:
             if task_id in finalized:
                 return
             if result_callback is not None:
-                result_callback(result)
+                try:
+                    result_callback(result)
+                except Exception as error:
+                    logger.debug(
+                        "Iterate result callback failed for combination %s.",
+                        result.label,
+                        exc_info=True,
+                    )
+                    if result.execution_status == STATUS_SUCCESS:
+                        result.execution_status = STATUS_WRITE_FAILED
+                        result.failure_stage = STAGE_WRITE
+                        result.error_type = type(error).__name__
+                        result.error_message = str(error)
+                    result.molecule = None
             results[task_id] = result
             finalized.add(task_id)
-            if progress_callback is not None:
-                progress_callback(len(finalized), total)
+            _notify_progress(len(finalized))
 
-        if progress_callback is not None:
-            progress_callback(0, total)
+        _notify_progress(0)
 
         max_workers = min(max(1, int(nprocs)), total)
         pending = deque(enumerate(combinations))
@@ -653,6 +684,59 @@ class IterateJobRunner(JobRunner):
             _close_worker_slot(old_slot, graceful=graceful)
             if pending:
                 _spawn(slot_id, next_generation)
+
+        def _drain_ready_results(
+            retire_ids: set[int], disconnected_ids: set[int]
+        ) -> bool:
+            """Consume one ready result per slot.
+
+            Returns whether a result-shaped message was consumed, including a
+            stale one, so the caller keeps scanning until every pipe is
+            drained. A slot whose pipe reports EOF or a connection-level
+            ``OSError`` is recorded in ``disconnected_ids`` so the crash check
+            can retire it without waiting for the process to be reported dead.
+            """
+            consumed_result_message = False
+            for slot_id in list(slots):
+                if slot_id in retire_ids:
+                    continue
+                slot = slots[slot_id]
+                if not slot.connection.poll():
+                    continue
+                try:
+                    message = slot.connection.recv()
+                except (EOFError, OSError):
+                    # The worker closed its end of the pipe. Record the slot
+                    # so the crash check retires it even if the process is
+                    # briefly still reported alive, avoiding repeated
+                    # EOF-ready defer in the timeout check below.
+                    disconnected_ids.add(slot_id)
+                    continue
+                if not message or message[0] != "result":
+                    continue
+                consumed_result_message = True
+                _, generation, task_id, result = message
+                if (
+                    generation != slot.generation
+                    or task_id != slot.current_task_id
+                ):
+                    logger.debug(
+                        "Ignoring stale worker result from slot %s "
+                        "generation %s for task %s.",
+                        slot_id,
+                        generation,
+                        task_id,
+                    )
+                    continue
+
+                slot.current_task_id = None
+                slot.current_combination = None
+                slot.started_at = None
+                slot.completed_tasks += 1
+                _finalize(task_id, result)
+                if slot.completed_tasks >= self.max_tasks_per_worker:
+                    retire_ids.add(slot_id)
+            return consumed_result_message
 
         try:
             for slot_id in range(max_workers):
@@ -719,49 +803,27 @@ class IterateJobRunner(JobRunner):
                 )
                 wait(waitables, timeout=wait_timeout)
 
-                # Drain every connection that became ready. This is done
-                # before timeout checks so a completed result already waiting
-                # in its pipe is not misclassified as timed out.
+                # Drain until no connection is ready. A callback may take long
+                # enough for another worker to finish after its slot was first
+                # polled; repeating the scan prevents that completed result
+                # from being misclassified as a crash or timeout.
                 retire_ids: set[int] = set()
-                for slot_id in list(slots):
-                    slot = slots[slot_id]
-                    if not slot.connection.poll():
-                        continue
-                    try:
-                        message = slot.connection.recv()
-                    except (EOFError, OSError):
-                        continue
-                    if not message or message[0] != "result":
-                        continue
-                    _, generation, task_id, result = message
-                    if (
-                        generation != slot.generation
-                        or task_id != slot.current_task_id
-                    ):
-                        logger.debug(
-                            "Ignoring stale worker result from slot %s "
-                            "generation %s for task %s.",
-                            slot_id,
-                            generation,
-                            task_id,
-                        )
-                        continue
+                disconnected_ids: set[int] = set()
+                while _drain_ready_results(retire_ids, disconnected_ids):
+                    pass
 
-                    slot.current_task_id = None
-                    slot.current_combination = None
-                    slot.started_at = None
-                    slot.completed_tasks += 1
-                    _finalize(task_id, result)
-                    if slot.completed_tasks >= self.max_tasks_per_worker:
-                        retire_ids.add(slot_id)
-
-                # A dead worker with an active task is a combination failure;
-                # an idle dead worker is simply replaced when work remains.
+                # A worker that has died or closed its pipe can no longer
+                # deliver a result. An active task on such a slot is a
+                # combination failure; an idle one is simply replaced when
+                # work remains. Treating a disconnected pipe as terminal here
+                # avoids waiting on the process-exit report and prevents the
+                # timeout check below from repeatedly deferring on EOF-ready.
                 for slot_id in list(slots):
                     if slot_id in retire_ids:
                         continue
                     slot = slots[slot_id]
-                    if slot.process.is_alive():
+                    disconnected = slot_id in disconnected_ids
+                    if slot.process.is_alive() and not disconnected:
                         continue
                     if slot.current_task_id is not None:
                         task_id = slot.current_task_id
@@ -771,6 +833,16 @@ class IterateJobRunner(JobRunner):
                             if slot.started_at is not None
                             else None
                         )
+                        if disconnected:
+                            error_message = (
+                                "Worker connection closed "
+                                "without returning a result."
+                            )
+                        else:
+                            error_message = (
+                                "Worker process exited "
+                                "without returning a result."
+                            )
                         _finalize(
                             task_id,
                             CombinationResult(
@@ -780,10 +852,7 @@ class IterateJobRunner(JobRunner):
                                 duration_seconds=duration,
                                 failure_stage=STAGE_ALGORITHM,
                                 error_type="WorkerCrash",
-                                error_message=(
-                                    "Worker process exited without returning "
-                                    "a result."
-                                ),
+                                error_message=error_message,
                             ),
                         )
                     _replace(slot_id)
@@ -799,6 +868,11 @@ class IterateJobRunner(JobRunner):
                         or slot.started_at is None
                         or now - slot.started_at <= timeout
                     ):
+                        continue
+                    # The result may have arrived in the narrow interval after
+                    # the last drain pass. Defer termination so the next loop
+                    # can receive it normally.
+                    if slot.connection.poll():
                         continue
                     task_id = slot.current_task_id
                     combination = slot.current_combination
