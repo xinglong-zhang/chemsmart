@@ -195,7 +195,7 @@ class JobRunner(RegistryMixin):
         # CLI creates a placeholder JobRunner before the typed runner exists.
         # Resolving scratch here would fail (no executable) and silently set
         # scratch=False, defeating --scratch. Typed runners resolve in __init__.
-        if self.scratch:
+        if self.scratch is not None:
             self._set_scratch()
 
         self.fake = fake
