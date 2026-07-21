@@ -46,7 +46,7 @@ These entities represent *what was computed*, *what chemical species was studied
    -  -  ``record``
       -  One calculation
       -  Identified by ``record_id``. Stores the calculation context, parsed results, runtime information, and
-         provenance for one output file.
+         provenance for one calculation.
 
    -  -  ``molecule``
       -  One chemical species

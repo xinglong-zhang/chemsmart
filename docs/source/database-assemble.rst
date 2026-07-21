@@ -5,10 +5,10 @@
 The ``assemble`` subcommand scans a project directory for supported quantum chemistry output files and calculation
 folders, parses the available calculation data, and stores the results as records in a CHEMSMART database.
 
-Each record is uniquely identified by its ``record_id``. If a newly parsed output file generates a ``record_id`` that
+Each record is uniquely identified by its ``record_id``. If a newly parsed calculation generates a ``record_id`` that
 already exists in the database, the existing record is updated with the newly parsed data rather than duplicated. This
 allows ``assemble`` to be safely re-run on the same project directory after additional calculations have finished or
-existing output files have been updated.
+existing outputs have been updated.
 
 *******
  Usage
@@ -60,7 +60,7 @@ existing output files have been updated.
  Examples
 **********
 
-**Assemble all output files under the current directory:**
+**Assemble all supported calculations under the current directory:**
 
 .. code:: bash
 
@@ -74,8 +74,8 @@ existing output files have been updated.
 
 **Assemble only xTB calculation outputs from a project directory:**
 
-For xTB calculations, ``assemble`` can scan a parent directory containing multiple xTB calculation folders. Each
-recognized xTB calculation folder is treated as one record.
+For xTB calculations, ``assemble`` recursively scans the root directory to arbitrary depth. Each recognized xTB
+calculation directory is treated as one record.
 
 Example directory layout:
 
@@ -83,15 +83,22 @@ Example directory layout:
 
    xtb_results/
    ├── molecule1_ohess/
-   ├── molecule2_hess/
-   ├── molecule3_opt/
-   └── molecule4_sp/
+   ├── project_a/
+   │   ├── molecule2_hess/
+   │   └── nested/
+   │       └── molecule3_opt/
+   └── project_b/
+       └── molecule4_sp/
 
 .. code:: bash
 
    chemsmart run database assemble -d xtb_results/ -p xtb -o xtb_results.db
 
-**Assemble only the final structure from each file:**
+Every xTB calculation directory must contain exactly one xTB main output together with the required auxiliary files.
+Directories containing multiple xTB main outputs are ambiguous: CHEMSMART logs an error, skips that directory, and
+continues assembling other valid calculations.
+
+**Assemble only the final structure from each calculation source:**
 
 .. code:: bash
 

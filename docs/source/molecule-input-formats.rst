@@ -144,7 +144,8 @@ xTB Main Output Files (.out)
 
 An xTB calculation writes its results to a **directory** (containing ``charges``, ``xtbopt.log``, ``g98.out``, and so
 on). For geometry input you can point ``-f`` at the xTB main output file; when given a file path, CHEMSMART
-automatically resolves it to the parent calculation directory before reading.
+automatically resolves it to the parent calculation directory and reads the associated auxiliary files. Each xTB
+calculation directory must contain exactly one xTB main output.
 
 .. code:: bash
 
