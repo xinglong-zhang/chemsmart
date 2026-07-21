@@ -76,9 +76,10 @@ def run_phase_jobs(
 
 def get_serial_mode(jobrunner) -> SerialMode:
     """Return serial-mode flags from a jobrunner."""
-    no_run_in_parallel = bool(
-        jobrunner and getattr(jobrunner, "no_run_in_parallel", False)
-    )
+    if jobrunner is None:
+        no_run_in_parallel = False
+    else:
+        no_run_in_parallel = bool(jobrunner.no_run_in_parallel)
     return SerialMode(
         no_run_in_parallel=no_run_in_parallel,
         run_in_parallel=not no_run_in_parallel,
@@ -95,8 +96,56 @@ def _positive_int_or_none(value) -> Optional[int]:
     return parsed
 
 
+def get_configured_array_concurrency_limit(
+    jobrunner=None,
+) -> Optional[int]:
+    """Return optional SLURM array throttle from env or server policy.
+
+    Used for ``chemsmart sub --run-in-parallel`` when ``-N`` is not passed.
+    Does not fall back to ``num_cores`` (cores per task and array concurrency
+    are unrelated).
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+
+    Returns ``None`` when unset (caller may run all array tasks at once).
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    if jobrunner is None:
+        return None
+
+    try:
+        runner_value = _positive_int_or_none(jobrunner.max_submitters)
+    except AttributeError:
+        runner_value = None
+    if runner_value is not None:
+        return runner_value
+
+    if isinstance(jobrunner, JobRunner):
+        try:
+            server_value = _positive_int_or_none(
+                jobrunner.server.max_submitters
+            )
+        except AttributeError:
+            server_value = None
+        if server_value is not None:
+            return server_value
+
+    return None
+
+
 def get_configured_max_submitters(jobrunner=None) -> int:
     """Return configured submitter concurrency limit.
+
+    Used for in-process multi-node batch worker threads, not SLURM array
+    ``%M`` throttling (see ``get_configured_array_concurrency_limit``).
 
     Resolution order:
     1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
@@ -106,29 +155,15 @@ def get_configured_max_submitters(jobrunner=None) -> int:
     5. ``jobrunner.server.num_cores``
     6. ``os.cpu_count()``
     """
-    env_value = _positive_int_or_none(
-        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
-    )
-    if env_value is not None:
-        return env_value
-
-    runner_value = _positive_int_or_none(
-        getattr(jobrunner, "max_submitters", None)
-    )
-    if runner_value is not None:
-        return runner_value
-
-    server = getattr(jobrunner, "server", None)
-    server_value = _positive_int_or_none(
-        getattr(server, "max_submitters", None)
-    )
-    if server_value is not None:
-        return server_value
+    array_limit = get_configured_array_concurrency_limit(jobrunner)
+    if array_limit is not None:
+        return array_limit
 
     cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
     if cores_value is not None:
         return cores_value
 
+    server = jobrunner.server if jobrunner is not None else None
     server_cores_value = _positive_int_or_none(
         getattr(server, "num_cores", None)
     )
@@ -239,10 +274,11 @@ class JobRunner(RegistryMixin):
         else:
             self.num_cores = self.server.num_cores
 
+        self.cli_num_nodes = num_nodes
         if num_nodes is not None:
             self.num_nodes = num_nodes
         else:
-            self.num_nodes = getattr(self.server, "num_nodes", 1)
+            self.num_nodes = self.server.num_nodes
 
         if num_gpus is not None:
             self.num_gpus = num_gpus

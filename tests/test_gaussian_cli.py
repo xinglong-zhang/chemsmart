@@ -1043,6 +1043,67 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_submit_array.call_args.kwargs["num_nodes"] == 2
         assert len(mock_submit_array.call_args.kwargs["jobs"]) == 3
 
+    def test_sub_run_in_parallel_without_n_ignores_num_cores(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Parallel batch without -N must not use num_cores as array throttle."""
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+
+        runner = CliRunner()
+        mock_batch_job = GaussianBatchJob(
+            jobs=[
+                MagicMock(label="j1"),
+                MagicMock(label="j2"),
+                MagicMock(label="j3"),
+            ],
+            label="mols_batch",
+        )
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob"),
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=mock_batch_job,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-n",
+                    "64",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2,3",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_submit_array.call_args.kwargs["num_nodes"] == 3
+
     def test_sub_run_in_parallel_expands_qrc_to_array(
         self,
         single_molecule_xyz_file,

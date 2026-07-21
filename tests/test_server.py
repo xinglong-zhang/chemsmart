@@ -292,6 +292,30 @@ class TestSchedulerArrayPolicy:
         )
         assert policy.array_throttle(10) == 2
 
+    def test_parallel_without_explicit_n_runs_all_tasks(self):
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        policy = SchedulerArrayPolicy(
+            no_run_in_parallel=False, num_nodes=None, max_concurrent=None
+        )
+        assert policy.array_throttle(10) == 10
+
+    def test_from_jobrunner_uses_cli_num_nodes_not_server_default(
+        self, pbs_server
+    ):
+        from chemsmart.jobs.runner import JobRunner
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=64,
+        )
+        policy = SchedulerArrayPolicy.from_jobrunner(runner)
+        assert policy.num_nodes is None
+        assert policy.array_throttle(5) == 5
+
     def test_from_jobrunner(self, pbs_server):
         from chemsmart.jobs.runner import JobRunner
         from chemsmart.settings.server import SchedulerArrayPolicy

@@ -34,7 +34,6 @@ class TestJobRunner:
     def test_jobrunner_default_no_run_in_parallel(self, pbs_server):
         """Test that no_run_in_parallel defaults to False."""
         runner = JobRunner(server=pbs_server, fake=True)
-        assert hasattr(runner, "no_run_in_parallel")
         assert runner.no_run_in_parallel is False
 
     def test_jobrunner_no_run_in_parallel_true(self, pbs_server):

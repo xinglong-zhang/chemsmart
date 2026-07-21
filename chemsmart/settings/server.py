@@ -25,8 +25,9 @@ class SchedulerArrayPolicy:
     Controls the SLURM ``--array=1-N%M`` throttle ``M``:
 
     - ``no_run_in_parallel`` → ``M=1``
-    - else ``num_nodes`` when set and positive
-    - else ``min(num_jobs, max_concurrent)``
+    - else explicit CLI ``-N`` (``cli_num_nodes``) when set and positive
+    - else ``min(num_jobs, max_concurrent)`` from env/server max submitters
+    - else all tasks at once (``M=num_jobs``)
     """
 
     no_run_in_parallel: bool = False
@@ -36,12 +37,14 @@ class SchedulerArrayPolicy:
     @classmethod
     def from_jobrunner(cls, jobrunner: Any) -> "SchedulerArrayPolicy":
         """Build a policy from a ``JobRunner`` (CLI ``sub`` resources/flags)."""
-        from chemsmart.jobs.runner import get_configured_max_submitters
+        from chemsmart.jobs.runner import (
+            get_configured_array_concurrency_limit,
+        )
 
         return cls(
             no_run_in_parallel=bool(jobrunner.no_run_in_parallel),
-            num_nodes=jobrunner.num_nodes,
-            max_concurrent=get_configured_max_submitters(jobrunner),
+            num_nodes=jobrunner.cli_num_nodes,
+            max_concurrent=get_configured_array_concurrency_limit(jobrunner),
         )
 
     def array_throttle(self, num_jobs: int) -> int:
@@ -51,7 +54,7 @@ class SchedulerArrayPolicy:
         if self.no_run_in_parallel:
             return 1
         if self.num_nodes is not None and self.num_nodes > 0:
-            return int(self.num_nodes)
+            return min(num_jobs, int(self.num_nodes))
         if self.max_concurrent is not None and self.max_concurrent > 0:
             return min(num_jobs, int(self.max_concurrent))
         return num_jobs

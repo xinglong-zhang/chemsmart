@@ -338,8 +338,9 @@ row or ChemDraw fragment**, so different acids can run at the same time on the c
 How many tasks run at once
 ==========================
 
-By default, one array task runs at a time. Pass ``--run-in-parallel`` (and optionally ``-N`` / ``--num-nodes``) for
-concurrent array tasks:
+By default, one array task runs at a time. Pass ``--run-in-parallel`` and set ``-N`` / ``--num-nodes`` to cap how many
+array tasks run concurrently (``%M`` in ``--array=1-N%M``). Without ``-N``, all batch tasks may run at once unless
+``CHEMSMART_MAX_SUBMITTERS`` limits concurrency.
 
 .. code:: bash
 

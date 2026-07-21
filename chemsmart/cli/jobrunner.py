@@ -10,7 +10,19 @@ PARALLEL_HELP_SUB = (
     "nestable jobs (crest/QRC/dias/traj) into one array task per child. "
     "Default is serial: top-level batches use one array task at a time (%1), "
     "and nestable jobs submit as a single parent with nested serial children. "
-    "Pass --run-in-parallel to enable concurrent array tasks / nestable expansion."
+    "Pass --run-in-parallel to enable concurrent array tasks / nestable "
+    "expansion; cap concurrency with -N (see -N help)."
+)
+
+NUM_NODES_HELP_SUB = (
+    "With chemsmart sub --run-in-parallel: max concurrent SLURM array tasks "
+    "(%M in --array=1-N%M). Ignored under the serial default. Each array "
+    "task still uses one node (--nodes=1); -n sets cores per task."
+)
+
+NUM_NODES_HELP_RUN = (
+    "Reserved for multi-node batch execution; not used for SLURM array "
+    "throttling on chemsmart run."
 )
 
 PARALLEL_HELP_RUN = (
@@ -28,10 +40,13 @@ def click_jobrunner_options(f=None, *, entry_point=None):
     """
     if entry_point == "sub":
         parallel_help = PARALLEL_HELP_SUB
+        num_nodes_help = NUM_NODES_HELP_SUB
     elif entry_point == "run":
         parallel_help = PARALLEL_HELP_RUN
+        num_nodes_help = NUM_NODES_HELP_RUN
     else:
         parallel_help = f"{PARALLEL_HELP_SUB} {PARALLEL_HELP_RUN}"
+        num_nodes_help = f"{NUM_NODES_HELP_SUB} {NUM_NODES_HELP_RUN}"
 
     def decorator(func):
         @click.option(
@@ -65,7 +80,7 @@ def click_jobrunner_options(f=None, *, entry_point=None):
             "--number-of-nodes",
             type=int,
             default=None,
-            help="Number of nodes to request for each job.",
+            help=num_nodes_help,
         )
         @click.option(
             "--fake/--no-fake",
