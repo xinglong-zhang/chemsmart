@@ -5,6 +5,7 @@ import yaml
 
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.workspace_project import workspace_project_path
 from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
@@ -39,8 +40,13 @@ class XTBProjectSettings(RegistryMixin):
 
     @classmethod
     def from_project(cls, project):
-        # Match Gaussian/ORCA precedence: user projects override packaged
-        # templates, and missing names fail with a discoverable config path.
+        # Match Gaussian/ORCA precedence: a workspace project shadows a global
+        # ~/.chemsmart project of the same name, which in turn shadows the
+        # packaged template. Missing names fail with a discoverable path.
+        workspace_project_settings = cls._from_workspace_project_name(project)
+        if workspace_project_settings is not None:
+            return workspace_project_settings
+
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
@@ -66,6 +72,16 @@ class XTBProjectSettings(RegistryMixin):
             return manager.create()
         except FileNotFoundError:
             return None
+
+    @classmethod
+    def _from_workspace_project_name(cls, project_name):
+        if project_name is None:
+            return None
+        project_name_yaml_path = workspace_project_path(project_name, "xtb")
+        manager = XTBProjectSettingsManager(
+            filename=str(project_name_yaml_path)
+        )
+        return cls._from_projects_manager(manager)
 
     @classmethod
     def _from_user_project_name(cls, project_name):

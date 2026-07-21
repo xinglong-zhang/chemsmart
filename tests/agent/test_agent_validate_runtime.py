@@ -44,9 +44,19 @@ def _patch_user_config(monkeypatch, config_dir: Path) -> None:
         "USER_CONFIG_DIR",
         str(config_dir),
     )
-    runner_module.user_settings = ChemsmartUserSettings()
-    executable_module.user_settings = ChemsmartUserSettings()
-    server_module.user_settings = ChemsmartUserSettings()
+    # Use monkeypatch.setattr so these module-level globals are restored at
+    # teardown. Plain assignment leaked a temp-dir ChemsmartUserSettings into
+    # later tests, which then resolved servers against a deleted config dir
+    # ("No server implemented for local.yaml").
+    monkeypatch.setattr(
+        runner_module, "user_settings", ChemsmartUserSettings()
+    )
+    monkeypatch.setattr(
+        executable_module, "user_settings", ChemsmartUserSettings()
+    )
+    monkeypatch.setattr(
+        server_module, "user_settings", ChemsmartUserSettings()
+    )
 
 
 def test_validate_runtime_fails_when_executable_path_missing(
