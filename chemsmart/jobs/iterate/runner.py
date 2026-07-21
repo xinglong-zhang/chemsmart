@@ -2,7 +2,6 @@ import hashlib
 import logging
 import multiprocessing
 import os
-import queue
 import sys
 import time
 import uuid
@@ -11,6 +10,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import product
+from multiprocessing.connection import Connection, wait
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -19,16 +19,15 @@ from chemsmart.jobs.iterate.iterate import (
     SkeletonPreprocessor,
     SubstituentPreprocessor,
 )
+from chemsmart.jobs.iterate.output import IterateOutputWriter
 from chemsmart.jobs.iterate.report import (
     ERROR_CODE_INTERNAL,
     ERROR_CODE_INTERRUPTED,
     STAGE_ALGORITHM,
     STAGE_PREPROCESSING,
-    STAGE_WRITE,
     STATUS_FAILED,
     STATUS_SUCCESS,
     STATUS_TIMED_OUT,
-    STATUS_WRITE_FAILED,
     CombinationResult,
     IterateReport,
     summarize_results,
@@ -48,6 +47,10 @@ logger = logging.getLogger(__name__)
 
 # Default timeout for each combination worker (in seconds)
 DEFAULT_WORKER_TIMEOUT = 120  # 2 minutes
+
+# Periodic recycling limits the lifetime of native RDKit/SciPy state without
+# paying process-startup cost for every combination.
+DEFAULT_TASKS_PER_WORKER = 100
 
 
 def _silence_rdkit_warnings() -> None:
@@ -389,27 +392,27 @@ def _run_combination_task(
         )
 
 
-def _run_combination_worker(
-    combination: IterateCombination,
+def _run_combination_worker_loop(
     pool: IterateMoleculePool,
-    result_queue: "multiprocessing.Queue",
-    number: int,
+    connection: Connection,
+    generation: int,
     show_worker_logs: bool = False,
+    max_tasks: int = DEFAULT_TASKS_PER_WORKER,
 ) -> None:
-    """Worker function for multiprocessing.Process.
+    """Receive and execute several combinations on one worker connection.
 
     Parameters
     ----------
-    combination : IterateCombination
-        The combination to process.
     pool : IterateMoleculePool
-        Shared molecule pool.
-    result_queue : multiprocessing.Queue
-        Queue to put the :class:`CombinationResult`.
-    number : int
-        Stable 1-based combination number for the report.
+        Molecule pool copied into this worker once at process startup.
+    connection : multiprocessing.connection.Connection
+        This worker's private duplex connection to the parent.
+    generation : int
+        Monotonically increasing worker-slot generation.
     show_worker_logs : bool
         Keep worker and RDKit diagnostic output visible in debug mode.
+    max_tasks : int
+        Number of completed tasks after which the worker exits normally.
     """
     if show_worker_logs:
         logging_context = nullcontext()
@@ -419,20 +422,98 @@ def _run_combination_worker(
 
     with logging_context:
         try:
-            result = _run_combination_task(combination, pool, number)
-            result_queue.put(result)
-        except Exception as e:
-            logger.debug(f"Worker process panic for {combination.label}: {e}")
-            result_queue.put(
-                CombinationResult(
-                    combination_number=number,
-                    label=combination.label,
-                    execution_status=STATUS_FAILED,
-                    failure_stage=STAGE_ALGORITHM,
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                )
-            )
+            completed = 0
+            while completed < max_tasks:
+                message = connection.recv()
+                command = message[0]
+                if command == "stop":
+                    break
+                if command != "task":
+                    raise ValueError(f"Unknown worker command: {command!r}")
+
+                _, message_generation, task_id, number, combination = message
+                if message_generation != generation:
+                    continue
+
+                result = _run_combination_task(combination, pool, number)
+                connection.send(("result", generation, task_id, result))
+                completed += 1
+        except (EOFError, BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            logger.debug("Iterate worker loop crashed", exc_info=True)
+        finally:
+            connection.close()
+
+
+@dataclass
+class _WorkerSlot:
+    """Parent-side state for one persistent worker slot."""
+
+    slot_id: int
+    generation: int
+    process: multiprocessing.Process
+    connection: Connection
+    completed_tasks: int = 0
+    current_task_id: Optional[int] = None
+    current_combination: Optional[IterateCombination] = None
+    started_at: Optional[float] = None
+
+
+def _start_worker_slot(
+    slot_id: int,
+    generation: int,
+    pool: IterateMoleculePool,
+    show_worker_logs: bool,
+    max_tasks: int,
+) -> _WorkerSlot:
+    """Start one persistent worker with an independent duplex pipe."""
+    parent_connection, worker_connection = multiprocessing.Pipe(duplex=True)
+    process = multiprocessing.Process(
+        target=_run_combination_worker_loop,
+        args=(
+            pool,
+            worker_connection,
+            generation,
+            show_worker_logs,
+            max_tasks,
+        ),
+        daemon=True,
+    )
+    try:
+        process.start()
+    except Exception:
+        parent_connection.close()
+        worker_connection.close()
+        raise
+    worker_connection.close()
+    return _WorkerSlot(
+        slot_id=slot_id,
+        generation=generation,
+        process=process,
+        connection=parent_connection,
+    )
+
+
+def _close_worker_slot(slot: _WorkerSlot, graceful: bool = False) -> None:
+    """Close a worker, escalating from graceful stop to terminate/kill."""
+    process = slot.process
+    if graceful and process.is_alive():
+        try:
+            slot.connection.send(("stop", slot.generation))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+        process.join(timeout=0.5)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=0.5)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=1.0)
+    else:
+        process.join(timeout=0)
+    slot.connection.close()
 
 
 class IterateJobRunner(JobRunner):
@@ -458,9 +539,11 @@ class IterateJobRunner(JobRunner):
         fake=False,
         scratch_dir=None,
         show_worker_logs: bool = False,
+        max_tasks_per_worker: int = DEFAULT_TASKS_PER_WORKER,
         **kwargs,
     ):
         self.show_worker_logs = show_worker_logs
+        self.max_tasks_per_worker = max(1, int(max_tasks_per_worker))
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -491,11 +574,14 @@ class IterateJobRunner(JobRunner):
         nprocs: int = 1,
         timeout: float = DEFAULT_WORKER_TIMEOUT,
         progress_callback=None,
+        result_callback=None,
     ) -> list[CombinationResult]:
-        """Run multiple combinations using multiprocessing.Process with watchdog.
+        """Run combinations on fixed worker slots with per-task watchdogs.
 
-        Manually manages processes to ensure they can be forcefully killed
-        (terminate/kill) if they exceed the timeout.
+        Each worker owns an independent pipe, processes several combinations,
+        and is recycled periodically. A timeout or crash terminates only the
+        affected slot; other workers and their communication channels remain
+        intact.
 
         Parameters
         ----------
@@ -510,10 +596,12 @@ class IterateJobRunner(JobRunner):
         progress_callback : callable, optional
             ``callback(completed, total)`` invoked once when execution starts
             (``completed == 0``) and once each time a combination is finalized
-            (SUCCESS / FAILED / TIMED OUT / crash). Each combination is
-            counted exactly once; a late worker result for an already-finalized
-            (e.g. timed-out) combination is ignored. Display-only: the runner
-            never depends on the callback.
+            (SUCCESS / FAILED / TIMED OUT / crash).
+        result_callback : callable, optional
+            ``callback(result)`` invoked once when each combination is
+            finalized and before its progress update. The job runner uses it
+            to serialize successful molecules without retaining them all in
+            memory; direct callers may omit it.
 
         Returns
         -------
@@ -530,163 +618,248 @@ class IterateJobRunner(JobRunner):
             f"process(es), timeout={timeout}s"
         )
 
-        number_by_label = {
-            comb.label: i for i, comb in enumerate(combinations, start=1)
-        }
-        results_by_label: dict[str, CombinationResult] = {}
-        # Labels whose result has been finalized (and counted for progress).
-        # A finalized combination is never re-counted or overwritten, even if
-        # a late worker result arrives after a timeout was already recorded.
-        finalized: set[str] = set()
+        results: list[Optional[CombinationResult]] = [None] * total
+        finalized: set[int] = set()
 
-        def _finalize(result: CombinationResult) -> None:
-            if result.label in finalized:
+        def _finalize(task_id: int, result: CombinationResult) -> None:
+            if task_id in finalized:
                 return
-            results_by_label[result.label] = result
-            finalized.add(result.label)
+            if result_callback is not None:
+                result_callback(result)
+            results[task_id] = result
+            finalized.add(task_id)
             if progress_callback is not None:
                 progress_callback(len(finalized), total)
 
         if progress_callback is not None:
             progress_callback(0, total)
 
-        max_workers = 1 if nprocs == 1 else nprocs
+        max_workers = min(max(1, int(nprocs)), total)
+        pending = deque(enumerate(combinations))
+        slots: dict[int, _WorkerSlot] = {}
 
-        manager = multiprocessing.Manager()
-        result_queue = manager.Queue()
+        def _spawn(slot_id: int, generation: int) -> None:
+            slots[slot_id] = _start_worker_slot(
+                slot_id,
+                generation,
+                pool,
+                self.show_worker_logs,
+                self.max_tasks_per_worker,
+            )
+
+        def _replace(slot_id: int, graceful: bool = False) -> None:
+            old_slot = slots.pop(slot_id)
+            next_generation = old_slot.generation + 1
+            _close_worker_slot(old_slot, graceful=graceful)
+            if pending:
+                _spawn(slot_id, next_generation)
 
         try:
-            pending_combinations = deque(combinations)
-            active_processes: dict[
-                int,
-                tuple[multiprocessing.Process, IterateCombination, float],
-            ] = {}
+            for slot_id in range(max_workers):
+                _spawn(slot_id, 0)
 
-            while pending_combinations or active_processes:
-                # 1. Fill up empty slots
-                while (
-                    pending_combinations
-                    and len(active_processes) < max_workers
-                ):
-                    comb = pending_combinations.popleft()
-                    p = multiprocessing.Process(
-                        target=_run_combination_worker,
-                        args=(
-                            comb,
-                            pool,
-                            result_queue,
-                            number_by_label[comb.label],
-                            self.show_worker_logs,
-                        ),
-                        daemon=True,
-                    )
-                    p.start()
-                    active_processes[id(p)] = (p, comb, time.time())
-
-                # 2. Drain the queue (late results for finalized labels are
-                #    ignored by _finalize).
-                while True:
+            while pending or any(
+                slot.current_task_id is not None for slot in slots.values()
+            ):
+                # Assign at most one combination to each idle worker.
+                for slot_id in list(slots):
+                    if not pending:
+                        break
+                    slot = slots[slot_id]
+                    if slot.current_task_id is not None:
+                        continue
+                    task_id, combination = pending.popleft()
                     try:
-                        res = result_queue.get_nowait()
-                        _finalize(res)
-                    except queue.Empty:
-                        break
-                    except Exception:
-                        break
-
-                # 3. Monitor running processes
-                current_time = time.time()
-                pids_to_remove = []
-
-                for proc_id, (
-                    p,
-                    comb,
-                    start_time,
-                ) in active_processes.items():
-                    if not p.is_alive():
-                        p.join()
-                        pids_to_remove.append(proc_id)
-                    else:
-                        if (current_time - start_time) > timeout:
-                            logger.debug(
-                                f"Timeout ({timeout}s) for {comb.label} "
-                                f"(pid {p.pid}). Terminating..."
+                        slot.connection.send(
+                            (
+                                "task",
+                                slot.generation,
+                                task_id,
+                                task_id + 1,
+                                combination,
                             )
-                            p.terminate()
-                            p.join(timeout=0.5)
-                            if p.is_alive():
-                                logger.debug(
-                                    f"Process {p.pid} stuck, killing..."
-                                )
-                                p.kill()  # SIGKILL
-                                p.join(timeout=1.0)
+                        )
+                    except (BrokenPipeError, EOFError, OSError) as error:
+                        _finalize(
+                            task_id,
+                            CombinationResult(
+                                combination_number=task_id + 1,
+                                label=combination.label,
+                                execution_status=STATUS_FAILED,
+                                failure_stage=STAGE_ALGORITHM,
+                                error_type="WorkerCrash",
+                                error_message=(
+                                    "Could not dispatch combination to "
+                                    f"worker: {error}"
+                                ),
+                            ),
+                        )
+                        _replace(slot_id)
+                        continue
+                    slot.current_task_id = task_id
+                    slot.current_combination = combination
+                    slot.started_at = time.monotonic()
 
-                            _finalize(
-                                CombinationResult(
-                                    combination_number=number_by_label[
-                                        comb.label
-                                    ],
-                                    label=comb.label,
-                                    execution_status=STATUS_TIMED_OUT,
-                                    duration_seconds=current_time - start_time,
-                                    error_type="Timeout",
-                                    error_message=(
-                                        f"Exceeded worker timeout of "
-                                        f"{timeout} seconds."
-                                    ),
-                                )
-                            )
-                            pids_to_remove.append(proc_id)
+                active_slots = [
+                    slot
+                    for slot in slots.values()
+                    if slot.current_task_id is not None
+                ]
+                if not active_slots:
+                    continue
 
-                # 4. Cleanup removed processes
-                for proc_id in pids_to_remove:
-                    del active_processes[proc_id]
-
-                # 5. Sleep briefly to yield CPU
-                if active_processes:
-                    time.sleep(0.1)
-
-            # Final queue drain
-            while True:
-                try:
-                    res = result_queue.get_nowait()
-                    _finalize(res)
-                except queue.Empty:
-                    break
-                except Exception:
-                    break
-
-        finally:
-            manager.shutdown()
-
-        # Fill in missing results (worker crashed without writing to queue).
-        for comb in combinations:
-            if comb.label not in finalized:
-                logger.debug(
-                    f"No result found for {comb.label} - assuming worker "
-                    f"crash."
+                now = time.monotonic()
+                nearest_deadline = min(
+                    slot.started_at + timeout for slot in active_slots
                 )
+                wait_timeout = max(0.0, nearest_deadline - now)
+                waitables = [slot.connection for slot in slots.values()]
+                waitables.extend(
+                    slot.process.sentinel for slot in slots.values()
+                )
+                wait(waitables, timeout=wait_timeout)
+
+                # Drain every connection that became ready. This is done
+                # before timeout checks so a completed result already waiting
+                # in its pipe is not misclassified as timed out.
+                retire_ids: set[int] = set()
+                for slot_id in list(slots):
+                    slot = slots[slot_id]
+                    if not slot.connection.poll():
+                        continue
+                    try:
+                        message = slot.connection.recv()
+                    except (EOFError, OSError):
+                        continue
+                    if not message or message[0] != "result":
+                        continue
+                    _, generation, task_id, result = message
+                    if (
+                        generation != slot.generation
+                        or task_id != slot.current_task_id
+                    ):
+                        logger.debug(
+                            "Ignoring stale worker result from slot %s "
+                            "generation %s for task %s.",
+                            slot_id,
+                            generation,
+                            task_id,
+                        )
+                        continue
+
+                    slot.current_task_id = None
+                    slot.current_combination = None
+                    slot.started_at = None
+                    slot.completed_tasks += 1
+                    _finalize(task_id, result)
+                    if slot.completed_tasks >= self.max_tasks_per_worker:
+                        retire_ids.add(slot_id)
+
+                # A dead worker with an active task is a combination failure;
+                # an idle dead worker is simply replaced when work remains.
+                for slot_id in list(slots):
+                    if slot_id in retire_ids:
+                        continue
+                    slot = slots[slot_id]
+                    if slot.process.is_alive():
+                        continue
+                    if slot.current_task_id is not None:
+                        task_id = slot.current_task_id
+                        combination = slot.current_combination
+                        duration = (
+                            time.monotonic() - slot.started_at
+                            if slot.started_at is not None
+                            else None
+                        )
+                        _finalize(
+                            task_id,
+                            CombinationResult(
+                                combination_number=task_id + 1,
+                                label=combination.label,
+                                execution_status=STATUS_FAILED,
+                                duration_seconds=duration,
+                                failure_stage=STAGE_ALGORITHM,
+                                error_type="WorkerCrash",
+                                error_message=(
+                                    "Worker process exited without returning "
+                                    "a result."
+                                ),
+                            ),
+                        )
+                    _replace(slot_id)
+
+                # Enforce timeout independently for each active slot.
+                now = time.monotonic()
+                for slot_id in list(slots):
+                    if slot_id in retire_ids:
+                        continue
+                    slot = slots[slot_id]
+                    if (
+                        slot.current_task_id is None
+                        or slot.started_at is None
+                        or now - slot.started_at <= timeout
+                    ):
+                        continue
+                    task_id = slot.current_task_id
+                    combination = slot.current_combination
+                    duration = now - slot.started_at
+                    logger.debug(
+                        "Timeout (%ss) for %s in worker slot %s "
+                        "generation %s (pid %s).",
+                        timeout,
+                        combination.label,
+                        slot_id,
+                        slot.generation,
+                        slot.process.pid,
+                    )
+                    _finalize(
+                        task_id,
+                        CombinationResult(
+                            combination_number=task_id + 1,
+                            label=combination.label,
+                            execution_status=STATUS_TIMED_OUT,
+                            duration_seconds=duration,
+                            error_type="Timeout",
+                            error_message=(
+                                f"Exceeded worker timeout of {timeout} "
+                                "seconds."
+                            ),
+                        ),
+                    )
+                    _replace(slot_id)
+
+                for slot_id in sorted(retire_ids):
+                    if slot_id in slots:
+                        _replace(slot_id, graceful=True)
+        finally:
+            for slot in list(slots.values()):
+                _close_worker_slot(slot, graceful=True)
+            slots.clear()
+
+        # Defensive fallback: every task should already have been finalized.
+        for task_id, combination in enumerate(combinations):
+            if task_id not in finalized:
                 _finalize(
+                    task_id,
                     CombinationResult(
-                        combination_number=number_by_label[comb.label],
-                        label=comb.label,
+                        combination_number=task_id + 1,
+                        label=combination.label,
                         execution_status=STATUS_FAILED,
                         failure_stage=STAGE_ALGORITHM,
                         error_type="WorkerCrash",
                         error_message="Worker process produced no result.",
-                    )
+                    ),
                 )
 
-        # Build the results list in the original combination order.
-        results = [results_by_label[comb.label] for comb in combinations]
+        ordered_results = [result for result in results if result is not None]
 
-        stats = summarize_results(results)
+        stats = summarize_results(ordered_results)
         logger.debug(
             f"Completed: {stats['generated']}/{stats['total']} "
             f"combinations generated a structure "
             f"({stats['failed']} failed, {stats['timed_out']} timed out)."
         )
-        return results
+        return ordered_results
 
     def _load_molecule(
         self, mol_config: dict, mol_type: str, idx: int, errors: list = None
@@ -1115,114 +1288,6 @@ class IterateJobRunner(JobRunner):
             combinations.append(combination)
             logger.debug(f"Created combination: {combination.label}")
 
-    @staticmethod
-    def _write_xyz_file(
-        filename: str, items: list[tuple[str, Molecule]]
-    ) -> None:
-        """Write one or more labelled molecules to an XYZ file."""
-        with open(filename, "w") as f:
-            for label, mol in items:
-                f.write(f"{mol.num_atoms}\n")
-                f.write(f"       {label}\n")
-                for symbol, pos in zip(mol.chemical_symbols, mol.positions):
-                    f.write(
-                        f"{symbol:2s}  {pos[0]:15.10f}  "
-                        f"{pos[1]:15.10f}  {pos[2]:15.10f}\n"
-                    )
-
-    def _write_outputs(
-        self, results: list[CombinationResult], job: "IterateJob"
-    ) -> list[str]:
-        """Write successful structures and annotate each result.
-
-        Mutates each successful :class:`CombinationResult` with its
-        ``output_path`` and ``structure_index``; a structure that fails to
-        write is flipped to ``WRITE FAILED`` with the failure recorded, so the
-        report can distinguish generation success from delivery success.
-
-        Returns
-        -------
-        list[str]
-            Paths of the files actually written (empty when nothing was
-            delivered; no empty placeholder file is ever created).
-        """
-        written_paths: list[str] = []
-        successful = [
-            r
-            for r in results
-            if r.execution_status == STATUS_SUCCESS and r.molecule is not None
-        ]
-
-        if job.separate_outputs:
-            output_dir = job.output_directory or "."
-            os.makedirs(output_dir, exist_ok=True)
-            logger.debug(
-                f"Writing separate output files to directory: {output_dir}"
-            )
-            used_filenames: set[str] = set()
-            for r in successful:
-                filename = os.path.join(output_dir, f"{r.label}.xyz")
-                if filename in used_filenames:
-                    raise ValueError(
-                        f"Duplicate output filename '{filename}' for label "
-                        f"'{r.label}'; refusing to overwrite a previously "
-                        f"written structure."
-                    )
-                used_filenames.add(filename)
-                try:
-                    self._write_xyz_file(filename, [(r.label, r.molecule)])
-                    r.output_path = filename
-                    r.structure_index = len(written_paths) + 1
-                    written_paths.append(filename)
-                    logger.debug(f"Wrote {filename}")
-                except Exception as e:
-                    logger.debug(f"Failed to write {filename}: {e}")
-                    r.execution_status = STATUS_WRITE_FAILED
-                    r.failure_stage = STAGE_WRITE
-                    r.error_type = type(e).__name__
-                    r.error_message = str(e)
-                    r.output_path = filename
-            logger.debug(
-                f"Wrote {len(written_paths)} separate molecule file(s) to "
-                f"{output_dir}"
-            )
-            return written_paths
-
-        # Merged mode: only write when at least one structure succeeded, so a
-        # fully-failed run does not leave an empty file that looks like success.
-        if not successful:
-            logger.debug(
-                "No structures were generated; not creating an empty merged "
-                "output file."
-            )
-            return written_paths
-
-        outputfile = job.outputfile
-        output_dir = os.path.dirname(outputfile)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-
-        try:
-            self._write_xyz_file(
-                outputfile, [(r.label, r.molecule) for r in successful]
-            )
-        except Exception as e:
-            logger.debug(f"Failed to write merged output {outputfile}: {e}")
-            for r in successful:
-                r.execution_status = STATUS_WRITE_FAILED
-                r.failure_stage = STAGE_WRITE
-                r.error_type = type(e).__name__
-                r.error_message = str(e)
-                r.output_path = outputfile
-            return written_paths
-
-        for index, r in enumerate(successful, start=1):
-            r.output_path = outputfile
-            r.structure_index = index
-        written_paths.append(outputfile)
-        logger.debug(f"Wrote {len(successful)} molecule(s) to {outputfile}")
-        return written_paths
-
     def run(
         self,
         job: "IterateJob",
@@ -1257,12 +1322,14 @@ class IterateJobRunner(JobRunner):
         run_id = uuid.uuid4().hex[:12]
         started_at = datetime.now()
         start_perf = time.perf_counter()
+        output_writer: Optional[IterateOutputWriter] = None
 
         try:
             pool, combinations, input_errors, attachment_site_count = (
                 self._generate_combinations(job)
             )
             logger.debug(f"Generated {len(combinations)} combination(s)")
+            output_writer = IterateOutputWriter(job)
 
             if combinations:
                 results = self.run_combinations(
@@ -1271,8 +1338,9 @@ class IterateJobRunner(JobRunner):
                     nprocs=job.nprocs,
                     timeout=job.timeout,
                     progress_callback=progress_callback,
+                    result_callback=output_writer.consume,
                 )
-                output_paths = self._write_outputs(results, job)
+                output_paths = output_writer.finalize(results)
             else:
                 logger.debug("No valid combinations to process.")
                 results = []
@@ -1324,6 +1392,8 @@ class IterateJobRunner(JobRunner):
         except KeyboardInterrupt:
             # Best-effort interrupt (SIGINT) summary; keep any structures
             # already written and re-raise so the CLI exits with 130.
+            if output_writer is not None:
+                output_writer.abort()
             logger.debug("Iterate interrupted by user (SIGINT).")
             finished_at = datetime.now()
             duration = time.perf_counter() - start_perf
@@ -1346,6 +1416,8 @@ class IterateJobRunner(JobRunner):
             raise
         except Exception as error:
             # Unexpected runtime failure: best-effort INTERNAL ERROR report.
+            if output_writer is not None:
+                output_writer.abort()
             logger.debug(f"Unexpected error during iterate run: {error}")
             logger.debug("Iterate run traceback", exc_info=True)
             finished_at = datetime.now()
