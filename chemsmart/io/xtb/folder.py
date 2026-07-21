@@ -31,10 +31,9 @@ class XTBFolder(BaseFolder):
         └─ ...              → other auxiliary files
     """
 
-    PARSEABLE_GEOMETRY_EXTENSIONS = (".xyz", ".sdf")
+    PARSEABLE_GEOMETRY_EXTENSIONS = (".xyz", ".sdf", ".pdb")
     UNSUPPORTED_GEOMETRY_EXTENSIONS = (
         ".coord",
-        ".pdb",
         ".poscar",
         ".gen",
         ".EIn",
@@ -185,10 +184,10 @@ class XTBFolder(BaseFolder):
         Search priority (parseable formats only):
             1. xtbopt.xyz     → XYZ format (supported)
             2. xtbopt.sdf     → SDF format (supported)
+            3. xtbopt.pdb     → PDB format (supported)
 
         Unsupported formats (will show warning):
             - xtbopt.coord   → Turbomole coord format
-            - xtbopt.pdb     → PDB format
             - xtbopt.poscar  → VASP POSCAR format
             - xtbopt.gen     → DFTB+ gen format
             - xtbopt.EIn     → Gaussian External format

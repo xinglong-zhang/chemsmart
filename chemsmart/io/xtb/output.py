@@ -2,6 +2,7 @@ import logging
 from functools import cached_property
 
 from chemsmart.io.file import SDFFile
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xtb.file import (
     XTBChargesFile,
     XTBEnergyFile,
@@ -141,7 +142,7 @@ class XTBOutput:
 
     @cached_property
     def xtbopt_geometry_file(self):
-        """Optimized geometry file parser (XYZFile or SDFFile)."""
+        """Optimized geometry file parser (XYZFile, SDFFile, or PDBFile)."""
         path = self.folder._xtbopt_geometry()
         if not path:
             return None
@@ -149,12 +150,14 @@ class XTBOutput:
             return XYZFile(path)
         elif path.endswith(".sdf"):
             return SDFFile(path)
+        elif path.endswith(".pdb"):
+            return PDBFile(path)
         else:
             return None
 
     @cached_property
     def input_geometry_file(self):
-        """Input geometry file parser (XYZFile or SDFFile)."""
+        """Input geometry file parser (XYZFile, SDFFile, or PDBFile)."""
         path = self.folder._input_geometry()
         if not path:
             return None
@@ -162,6 +165,8 @@ class XTBOutput:
             return XYZFile(path)
         elif path.endswith(".sdf"):
             return SDFFile(path)
+        elif path.endswith(".pdb"):
+            return PDBFile(path)
         else:
             return None
 
@@ -307,7 +312,7 @@ class XTBOutput:
         return molecule
 
     def _read_geometry_file(self, path):
-        """Read geometry file (.xyz / .sdf) and return Molecule or None."""
+        """Read geometry file (.xyz, .sdf, or .pdb) and return Molecule or None."""
         if not path:
             return None
         try:
@@ -317,6 +322,10 @@ class XTBOutput:
                 )
             elif path.endswith(".sdf"):
                 return SDFFile(path).get_molecule()
+            elif path.endswith(".pdb"):
+                return PDBFile(path).get_molecules(
+                    index="-1", return_list=False
+                )
             else:
                 return None
         except Exception as e:
