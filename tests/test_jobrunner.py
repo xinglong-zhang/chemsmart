@@ -156,26 +156,17 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
 
-def _write_gaussian_project(tmp_path):
-    config_root = tmp_path / "chemsmart_cfg"
-    gaussian_cfg = config_root / "gaussian"
-    gaussian_cfg.mkdir(parents=True)
-    (gaussian_cfg / "test.yaml").write_text(
-        "gas:\n  functional: B3LYP\n  basis: def2-SVP\n"
-        "solv:\n  functional: B3LYP\n  basis: def2-SVP\n"
-        "  solvent_model: smd\n  solvent_id: water\n"
-    )
-    return config_root
-
-
 class TestScratchCLI:
     """Scratch CLI wiring: omit vs explicit flags."""
 
     def test_run_omitted_scratch_leaves_none_for_from_job(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
         )
         observed = {"scratch_arg": "unset"}
 
@@ -209,10 +200,13 @@ class TestScratchCLI:
         assert observed["scratch_arg"] is None
 
     def test_run_explicit_scratch_reaches_from_job(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
         )
         observed = {"scratch_arg": "unset"}
 
@@ -247,10 +241,13 @@ class TestScratchCLI:
         assert observed["scratch_arg"] is True
 
     def test_sub_omitted_scratch_does_not_reconstruct_no_scratch(
-        self, tmp_path, monkeypatch, single_molecule_xyz_file
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
     ):
         monkeypatch.setenv(
-            "CHEMSMART_CONFIG_DIR", str(_write_gaussian_project(tmp_path))
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
         )
         fake_server = Server(name="dummy")
         captured = {"cli_args": None}
