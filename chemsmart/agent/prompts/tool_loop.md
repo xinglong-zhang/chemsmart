@@ -8,3 +8,4 @@ Rules:
 - If a follow-up depends on prior turns, use the session memory already provided in the system prompt.
 - When tool calls are needed, choose only valid registered tool names and valid parameter names.
 - Keep execution conservative: preview or validate before risky actions whenever the workflow requires it.
+- xTB jobs need no project YAML: GFN2 defaults apply when none is given, and the GFN Hamiltonian is the whole method (no functional/basis).

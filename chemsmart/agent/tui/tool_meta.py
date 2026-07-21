@@ -173,6 +173,30 @@ _TOOL_META = {
         "style": "warning",
         "summary": "reads local file lines",
     },
+    "list_workspace": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "lists workspace geometries, projects, and outputs",
+    },
+    "read_behavior_rules": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "reads the CHEMSMART.md agent rules files",
+    },
+    "write_behavior_rules": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes the CHEMSMART.md agent rules file",
+    },
+    "save_geometry": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes a geometry .xyz file into the workspace",
+    },
     "ssh_probe": {
         "risk": "inspection",
         "read_only": True,

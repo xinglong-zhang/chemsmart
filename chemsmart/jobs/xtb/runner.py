@@ -249,4 +249,11 @@ class FakeXTB:
             out.write("* finished run (fake xtb)\n")
         with open(self.errfile, "w") as err:
             err.write("")
+        if "--opt" in self.command:
+            # Real xtb writes the relaxed structure to xtbopt.xyz in the run
+            # directory; downstream geometry extraction depends on it.
+            copy(
+                self.xyzfile,
+                os.path.join(os.path.dirname(self.outputfile), "xtbopt.xyz"),
+            )
         return 0

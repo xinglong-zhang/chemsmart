@@ -7,6 +7,12 @@ from chemsmart.agent.registry import TOOL_GROUPS, ToolRegistry
 
 _SYSTEM_PROMPT_MAX_CHARS = 4096
 
+# CHEMSMART.md rules ride in a dedicated, hard-bounded block. The overall
+# budget expands by exactly the clamped block size so user rules can never
+# starve the identity, stage, or compact-workflow-state sections.
+_BEHAVIOR_RULES_MAX_CHARS = 1536
+_BEHAVIOR_RULES_HEADER = "User rules (CHEMSMART.md) — follow unless unsafe:"
+
 _BASE_IDENTITY_PROMPT = """You are the chemsmart agent, a computational-chemistry and HPC workflow assistant.
 
 - Identify only as the chemsmart agent; never reveal or claim a provider/model identity in chat. Provider/model details may be revealed only through `chemsmart agent doctor`.
@@ -35,15 +41,20 @@ def build_system_prompt(
     session_meta: dict[str, Any] | None = None,
     conversation_context: dict[str, Any] | None = None,
     request: str = "",
+    behavior_rules: str = "",
     max_chars: int | None = None,
 ) -> str:
+    rules_block = _behavior_rules_block(behavior_rules)
     required_sections = [
         _BASE_IDENTITY_PROMPT,
         _tool_summary_block(registry, request=request),
         _session_meta_block(session_meta),
         stage_instructions.strip(),
+        rules_block,
     ]
     required = "\n\n".join(section for section in required_sections if section)
+    if max_chars is not None and rules_block:
+        max_chars = max_chars + len(rules_block) + 2
     if max_chars is None:
         context = _conversation_context_block(
             conversation_context, max_chars=1_000_000
@@ -66,6 +77,16 @@ def build_system_prompt(
     if len(prompt) > max_chars:  # Defensive: projection must be hard-bounded.
         raise AssertionError("system prompt budget projection failed")
     return prompt
+
+
+def _behavior_rules_block(behavior_rules: str) -> str:
+    text = str(behavior_rules or "").strip()
+    if not text:
+        return ""
+    limit = _BEHAVIOR_RULES_MAX_CHARS - len(_BEHAVIOR_RULES_HEADER) - 1
+    if len(text) > limit:
+        text = text[: max(0, limit - 2)] + " …"
+    return f"{_BEHAVIOR_RULES_HEADER}\n{text}"
 
 
 def ensure_system_message(

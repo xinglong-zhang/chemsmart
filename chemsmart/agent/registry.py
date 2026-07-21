@@ -50,6 +50,8 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
             "read_project_yaml",
             "update_project_yaml",
             "search_basis_sets",
+            "read_behavior_rules",
+            "write_behavior_rules",
         }
     ),
     "harness_jobs": frozenset(
@@ -63,6 +65,7 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
             "dry_run_input",
             "validate_runtime",
             "extract_optimized_geometry",
+            "save_geometry",
         }
     ),
     "execution": frozenset(
@@ -84,6 +87,7 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
         {
             "inspect_calculation",
             "read",
+            "list_workspace",
             "ssh_probe",
             "scheduler_query",
             "log_tail",
@@ -102,8 +106,19 @@ _TOOL_GROUPS_ENV_VAR = "CHEMSMART_AGENT_TOOL_GROUPS"
 _MODEL_FIELD_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("build_job", "molecule"): {
         "type": "string",
-        "pattern": r"^mol_[0-9a-f]{4,}$",
-        "description": "Handle returned by build_molecule.",
+        "pattern": r"^(?:mol|geom)_[0-9a-f]{4,}$",
+        "description": (
+            "Handle returned by build_molecule or "
+            "extract_optimized_geometry."
+        ),
+    },
+    ("save_geometry", "molecule"): {
+        "type": "string",
+        "pattern": r"^(?:mol|geom)_[0-9a-f]{4,}$",
+        "description": (
+            "Handle returned by build_molecule or "
+            "extract_optimized_geometry."
+        ),
     },
     ("build_job", "settings"): {
         "type": "string",
@@ -220,6 +235,25 @@ _DEFAULT_TOOL_SOURCES = (
         ),
     ),
     (
+        "read_behavior_rules",
+        "chemsmart.agent.behavior_rules",
+        "Read the CHEMSMART.md agent rules files (workspace and user scope) with their parsed policy values.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read CHEMSMART.md rules",
+        ),
+    ),
+    (
+        "write_behavior_rules",
+        "chemsmart.agent.behavior_rules",
+        "Write a CHEMSMART.md agent rules file (workspace or user scope) after explicit approval; refuses overwrite without an explicit flag.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Write CHEMSMART.md ({scope})",
+            side_effect="writes the CHEMSMART.md agent rules file",
+        ),
+    ),
+    (
         "search_basis_sets",
         "chemsmart.agent.harness.basis_sets.catalog",
         "Search BSE-backed basis-set names for a short user phrase; returns top candidates only, never the full catalog.",
@@ -280,6 +314,25 @@ _DEFAULT_TOOL_SOURCES = (
             read_only=True,
             ui_summary_template="Read {path} L{start_line}-{end_line}",
             side_effect=None,
+        ),
+    ),
+    (
+        "list_workspace",
+        "chemsmart.agent.tools_fs",
+        "Summarize the current workspace: geometry files, project YAMLs, recent job outputs, and rules files. Read-only; call it before asking the user which file to use.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="List workspace {subdir}",
+        ),
+    ),
+    (
+        "save_geometry",
+        "chemsmart.agent.tools_fs",
+        "Write a molecule's coordinates (for example an xTB pre-optimized geometry) to a workspace .xyz file so a follow-up job can use it as -f input. Requires approval.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Save geometry {filename}",
+            side_effect="writes a geometry file in the workspace",
         ),
     ),
     (

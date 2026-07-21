@@ -9,14 +9,17 @@ import shutil
 import traceback
 from typing import Any
 
+from chemsmart.agent.runtime.result_parsing import inspect_output
 from chemsmart.agent.services.server_selection import coerce_server
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.settings.server import Server
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -219,6 +222,8 @@ def _execute_job(job: Job, stdout_path: str, stderr_path: str) -> int:
 def extract_optimized_geometry(job: Job) -> Molecule:
     """Extract the final optimized geometry from a completed job log."""
 
+    if isinstance(job, XTBJob):
+        return _extract_xtb_geometry(job)
     logfile = _resolve_geometry_logfile(job)
     if not os.path.exists(logfile):
         raise FileNotFoundError(f"Output log not found: {logfile}")
@@ -230,8 +235,8 @@ def extract_optimized_geometry(job: Job) -> Molecule:
         symbols, positions = _parse_orca_geometry(lines)
     else:
         raise ValueError(
-            "extract_optimized_geometry only supports GaussianJob and "
-            "ORCAJob instances"
+            "extract_optimized_geometry only supports GaussianJob, ORCAJob, "
+            "and XTBJob instances"
         )
     return Molecule(
         symbols=symbols,
@@ -239,6 +244,31 @@ def extract_optimized_geometry(job: Job) -> Molecule:
         charge=getattr(job.settings, "charge", None),
         multiplicity=getattr(job.settings, "multiplicity", None),
     )
+
+
+def _extract_xtb_geometry(job: Job) -> Molecule:
+    # xTB does not print a final-geometry table in its .out file; the
+    # optimizer writes the relaxed structure to xtbopt.* in the job folder
+    # (same format as the input, .xyz for chemsmart-driven jobs).
+    folder = XTBFolder(folder=str(job.folder))
+    geometry_path = folder._xtbopt_geometry()
+    if geometry_path is None:
+        raise FileNotFoundError(
+            "No optimized geometry (xtbopt.*) found in "
+            f"{job.folder}; only completed xtb opt jobs write one"
+        )
+    molecule = Molecule.from_filepath(
+        filepath=geometry_path,
+        index="-1",
+        return_list=False,
+    )
+    molecule.charge = getattr(job.settings, "charge", None)
+    molecule.multiplicity = getattr(job.settings, "multiplicity", None)
+    # xtbopt.* is a real on-disk file, so it can ground a follow-up
+    # `chemsmart run/sub ... -f` command directly.
+    setattr(molecule, "_agent_source_filepath", str(geometry_path))
+    setattr(molecule, "_agent_source_index", "-1")
+    return molecule
 
 
 def _validate_job_fields(job: Job) -> list[str]:
@@ -342,6 +372,8 @@ def _has_unresolved_envvars(path: str) -> bool:
 
 
 def _summarize_local_output(job: Job) -> dict[str, Any]:
+    if isinstance(job, XTBJob):
+        return _summarize_xtb_output(job)
     if isinstance(job, GaussianJob):
         parser_cls = Gaussian16Output
         output_path = job.outputfile
@@ -378,6 +410,37 @@ def _summarize_local_output(job: Job) -> dict[str, Any]:
         }
     except Exception:
         return {}
+
+
+def _summarize_xtb_output(job: Job) -> dict[str, Any]:
+    # xTB has no Gaussian/ORCA output parser class; reuse the deterministic
+    # xtb-aware parser that reads `TOTAL ENERGY ... Eh`, `* finished run`,
+    # and the eigval frequency rows. Without this the model gets an empty
+    # summary from a genuine run and cannot report the energy that the
+    # pre-optimization chain depends on.
+    output_path = getattr(job, "outputfile", None)
+    if output_path is None or not os.path.exists(output_path):
+        return {}
+    inspected = inspect_output(output_path, program="xtb")
+    energy = inspected.get("energy")
+    converged = bool(inspected.get("normal_termination"))
+    imag_freqs = list(inspected.get("imag_freqs") or [])
+    if (
+        energy is None
+        and not converged
+        and not imag_freqs
+        and not inspected.get("frequency_count")
+    ):
+        return {}
+    return {
+        "energy": energy,
+        "converged": converged,
+        "imag_freqs": imag_freqs,
+        "frequency_count": inspected.get("frequency_count"),
+        "optimized_geometry_count": (
+            1 if inspected.get("optimization_converged") else 0
+        ),
+    }
 
 
 __all__ = ["extract_optimized_geometry", "run_local", "validate_runtime"]

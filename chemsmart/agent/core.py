@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from chemsmart.agent.behavior_rules import load_behavior_rules
 from chemsmart.agent.handles import HandleStore
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.session_gates import (
@@ -493,6 +494,7 @@ class AgentSession:
                 current_turn_index=current_turn_index
             ),
             request=request,
+            behavior_rules=load_behavior_rules().text,
             max_chars=4096,
         )
 

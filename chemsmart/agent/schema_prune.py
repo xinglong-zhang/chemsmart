@@ -38,11 +38,14 @@ _LOCAL_PATTERN = re.compile(
 _PROGRAM_PATTERNS = {
     "gaussian": re.compile(r"\bgaussian\b|\bg16\b|\bg09\b", re.IGNORECASE),
     "orca": re.compile(r"\borca\b", re.IGNORECASE),
-    # Requests name xTB by the program or by the Hamiltonian they want
-    # (GFN2-xTB, GFN-FF). Missing a cue here would prune the xtb subcommand
-    # out of the schema, leaving the model unable to emit it at all.
+    # Requests name xTB by the program, by the Hamiltonian they want
+    # (GFN2-xTB, GFN-FF), by the method family, or by the pre-optimization
+    # role it plays before an expensive DFT job. Missing a cue here would
+    # prune the xtb subcommand out of the schema, leaving the model unable
+    # to emit it at all.
     "xtb": re.compile(
-        r"\bxtb\b|\bgfn-?ff\b|\bgfn-?[012]\b|semi-?empirical tight",
+        r"\bxtb\b|\bgfn-?ff\b|\bgfn-?[012]\b|semi-?empirical"
+        r"|tight[- ]binding|pre-?opt\w*|사전\s?최적화|반경험",
         re.IGNORECASE,
     ),
 }

@@ -59,7 +59,7 @@ class ProjectWriteMixin:
         if candidate is None:
             self.post_error(
                 "Project write unavailable",
-                "Run /init and build a validated project YAML first.",
+                "Run /project and build a validated project YAML first.",
             )
             return
         if project_name:

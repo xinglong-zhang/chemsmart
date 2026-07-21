@@ -40,9 +40,17 @@ class XTBProjectSettings(RegistryMixin):
 
     @classmethod
     def from_project(cls, project):
-        # Match Gaussian/ORCA precedence: a workspace project shadows a global
-        # ~/.chemsmart project of the same name, which in turn shadows the
-        # packaged template. Missing names fail with a discoverable path.
+        # xTB needs no project YAML. Its method space is just the GFN
+        # Hamiltonian (gfn0/gfn1/gfn2/gfnff) with a strong GFN2 default, unlike
+        # the functional/basis/solvent choice a Gaussian or ORCA project must
+        # encode. A bare ``chemsmart run xtb -f mol.xyz opt`` (no ``-p``)
+        # therefore runs from XTBJobSettings.default() plus any CLI overrides;
+        # this base class already exposes those defaults for every leaf.
+        if project is None:
+            return cls()
+
+        # A named project still layers workspace -> user -> packaged, so a
+        # project can pin non-default settings when a workflow wants them.
         workspace_project_settings = cls._from_workspace_project_name(project)
         if workspace_project_settings is not None:
             return workspace_project_settings
@@ -55,10 +63,13 @@ class XTBProjectSettings(RegistryMixin):
         if packaged_project_settings is not None:
             return packaged_project_settings
 
+        # A project was explicitly named but not found: that is a user error,
+        # not a request for defaults, so fail with a discoverable path.
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No xTB project settings implemented for {project}.\n\n"
-            f"Place new xTB project settings .yaml file in "
+            f"xTB does not require a project; omit -p to use GFN2 defaults, "
+            f"or place a project .yaml file in "
             f"{user_settings.user_xtb_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at "
             f"{templates_path}\n\n "
