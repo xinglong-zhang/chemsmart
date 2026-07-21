@@ -97,15 +97,24 @@ def assemble(
         files = sorted(set(files))
 
     folders = []
-    if "xtb" in programs:
-        if XTBFolder(folder=directory).is_xtb_calculation_directory:
-            folders.append(directory)
-        else:
-            for entry in os.listdir(directory):
-                subdir = os.path.join(directory, entry)
-                if XTBFolder(folder=subdir).is_xtb_calculation_directory:
-                    folders.append(subdir)
-        folders = sorted(folders)
+    folder_programs = programs & {"xtb"}
+    if folder_programs:
+        base_folder = BaseFolder(folder=directory)
+        for prog in sorted(folder_programs):
+            output_files = base_folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
+                program=prog
+            )
+            candidate_folders = {
+                os.path.dirname(os.path.abspath(output_file))
+                for output_file in output_files
+            }
+            if prog == "xtb":
+                folders.extend(
+                    folder
+                    for folder in candidate_folders
+                    if XTBFolder(folder=folder).is_xtb_calculation_directory
+                )
+        folders = sorted(set(folders))
 
     if not files and not folders:
         program_label = program or "gaussian, orca, or xtb"
