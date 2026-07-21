@@ -190,3 +190,87 @@ GaussianComJob.from_filename(filename="some_input.com")
 via `Molecule.from_filepath(filename)`) and pass it through, or relax the
 parent's molecule-type check for job types that are known to not need one
 (mirrors how `ThermochemistryJob` allows `molecule=None`).
+
+---
+
+## 5. `SLFSubmitter._write_scheduler_options` always crashes (missing `Server.num_nodes`)
+
+**File:** `chemsmart/settings/submitters.py:894-907`
+**Test:** `tests/test_submitters_unit.py::TestSLFSubmitterBug::test_scheduler_options_crashes_on_missing_num_nodes`
+
+```python
+def _write_scheduler_options(self, f):
+    ...
+    f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
+```
+
+`Server` (`chemsmart/settings/server.py`) has no `num_nodes` attribute or
+property anywhere — only `num_cores`, `num_gpus`, `num_hours`, etc. Any
+attempt to write an LSF/SLF submission script (i.e. any job submitted with
+`SCHEDULER="SLF"`) crashes with
+`AttributeError: 'Server' object has no attribute 'num_nodes'`.
+
+**Reproduce:**
+```python
+from io import StringIO
+from chemsmart.settings.server import Server
+from chemsmart.settings.submitters import SLFSubmitter
+server = Server("s", SCHEDULER="SLF", NUM_CORES=8, MEM_GB=24, NUM_GPUS=0, NUM_HOURS=24)
+job = type("J", (), {"label": "j1"})()
+SLFSubmitter(job=job, server=server)._write_scheduler_options(StringIO())
+# AttributeError: 'Server' object has no attribute 'num_nodes'
+```
+
+**Suggested direction:** add a `num_nodes` property to `Server` (likely
+reading a `NUM_NODES` kwarg with a sensible default of `1`, matching how
+`num_cores`/`num_gpus` are exposed), or have `SLFSubmitter` fall back to a
+hardcoded `1` node like the other submitters implicitly do.
+
+**Related fragility (not confirmed reachable):** a few lines above,
+`project_number` is only assigned inside `if user_settings is not None:`,
+then read unconditionally on the next line. `user_settings` is a
+module-level singleton that's always truthy in practice, so this isn't
+currently reachable, but it would raise `UnboundLocalError` if that ever
+changed.
+
+---
+
+## 6. `FUGAKUSubmitter._write_scheduler_options` always crashes (undefined `self.project`)
+
+**File:** `chemsmart/settings/submitters.py:955-977`
+**Test:** `tests/test_submitters_unit.py::TestFUGAKUSubmitterBug::test_scheduler_options_crashes_on_missing_project_attr`
+
+```python
+def _write_scheduler_options(self, f):
+    if user_settings is not None:
+        f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
+    f.write("#PJM -L node=1\n")
+    f.write(f"#PJM -L elapse={self.server.num_hours}\n")
+    f.write(f"#PJM --mpi proc={self.server.num_cores}\n")
+    f.write(f"#PJM -g {self.project}\n")
+    ...
+```
+
+`self.project` is never assigned anywhere in `FUGAKUSubmitter` or the base
+`Submitter` class. Any attempt to write a FUGAKU submission script crashes
+with `AttributeError: 'FUGAKUSubmitter' object has no attribute 'project'`
+(after first requiring `user_settings.data["RSCGRP"]` to be set, which
+raises its own `KeyError` if missing).
+
+**Reproduce:**
+```python
+from io import StringIO
+from unittest.mock import patch
+from chemsmart.settings.server import Server
+from chemsmart.settings.submitters import FUGAKUSubmitter, user_settings
+server = Server("s", SCHEDULER="FUGAKU", NUM_CORES=8, MEM_GB=24, NUM_HOURS=24)
+job = type("J", (), {"label": "j1"})()
+with patch.object(user_settings, "data", {"RSCGRP": "small"}):
+    FUGAKUSubmitter(job=job, server=server)._write_scheduler_options(StringIO())
+# AttributeError: 'FUGAKUSubmitter' object has no attribute 'project'
+```
+
+**Suggested direction:** likely meant to read a project/group ID from user
+settings (mirrors `PROJECT` used by `PBSSubmitter`/`SLURMSubmitter`) —
+probably should be `user_settings.data["PROJECT"]` or a dedicated
+`RSCGRP`-adjacent key, not `self.project`.
