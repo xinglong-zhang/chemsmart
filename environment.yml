@@ -10,6 +10,7 @@ dependencies:
   # currently broken upstream; environment-windows.yml omits it for CI.
   - ffmpeg=7.1.1  # movie support for pymol
   - openbabel          # includes Python bindings on conda-forge
+  - xtb                # xTB semiempirical engine (provides the `xtb` binary)
   - anthropic>=0.40
   - openai>=1
   - pydantic>=2

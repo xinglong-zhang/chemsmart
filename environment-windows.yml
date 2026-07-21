@@ -30,6 +30,7 @@ dependencies:
   - cclib=1.8.1
   - pymol-open-source=3.1.0
   - openbabel          # includes Python bindings on conda-forge
+  - xtb                # xTB semiempirical engine (provides the `xtb` binary)
   - anthropic>=0.40
   - openai>=1
   - pydantic>=2

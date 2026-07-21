@@ -194,6 +194,32 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
+The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. The `xtb` executable performs the calculation; it is installed from conda-forge (added to `environment.yml`) and resolved from the active environment's `PATH`.
+
+For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
+
+```text
+sp:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+  grad: false
+opt:
+  gfn_version: gfn2
+  optimization_level: vtight
+  charge: 0
+  multiplicity: 1
+  grad: false
+hess:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+  grad: false
+```
+
+A workspace-local `.chemsmart/xtb/<project>.yaml` takes precedence over the same-named project in `~/.chemsmart/xtb/`, matching the Gaussian/ORCA resolution order. Solvent can be added to any xTB job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: alpb` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
+
+---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
 
 One also needs to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in a scratch folder). One may do `ln -s /path/to/scratch/ ~/scratch`.
@@ -343,11 +369,11 @@ much autonomy you want:
 
 ### Tool catalog
 
-The default registry currently exposes 29 tools:
+The default registry currently exposes 30 tools:
 
 | Group | Tools | What they do |
 |---|---|---|
-| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA jobs from natural language |
+| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_xtb_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA/xTB jobs from natural language |
 | Command grounding | `search_basis_sets`, `synthesize_command`, `repair_command` | Resolve basis phrases and produce or repair CLI-grounded commands |
 | Project YAML | `extract_project_protocol`, `render_project_yaml`, `validate_project_yaml`, `critic_project_yaml`, `write_project_yaml`, `read_project_yaml`, `update_project_yaml` | Build, select, audit, and update workspace project settings |
 | Execution | `execute_chemsmart_command`, `run_local`, `submit_hpc`, `wizard_probe`, `wizard_refresh`, `wizard_verify`, `wizard_write` | Execute approved commands, submit to HPC, or profile server YAMLs interactively |
@@ -569,6 +595,24 @@ chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob
 ```
 
 ---
+
+### xTB job submission
+
+xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`, and the input structure is typically an `.xyz` file:
+
+```bash
+chemsmart run xtb -p <project> -f <input.xyz> opt
+chemsmart run xtb -p <project> -f <input.xyz> sp
+chemsmart run xtb -p <project> -f <input.xyz> hess
+```
+
+To submit to a scheduler, use `sub` with a server name:
+
+```bash
+chemsmart sub -s <server_name> xtb -p <project> -f <input.xyz> opt
+```
+
+The GFN Hamiltonian (`-g/--gfn-version`), implicit solvation (`-sm/--solvent-model` together with `-si/--solvent-id`), and the optimization convergence level (`--optimization-level`, `opt` only) can be overridden on the command line; anything not overridden is taken from the project YAML. Example xTB structures are in `examples/xtb/`.
 
 ### General options available to all jobs:
 
