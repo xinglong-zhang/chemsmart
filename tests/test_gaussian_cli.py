@@ -17,7 +17,20 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
+from click.testing import CliRunner
+
+import chemsmart.cli.gaussian.traj  # noqa: F401 - ensures module is cached
+from chemsmart.cli.gaussian.gaussian import gaussian
+
+# ``chemsmart.cli.gaussian.__init__`` does ``from .traj import traj``,
+# which shadows the ``traj`` submodule attribute on the package with the
+# click Command object. Fetch the real submodule from ``sys.modules``
+# directly so we can patch ``GaussianTrajJob`` on it.
+traj_module = sys.modules["chemsmart.cli.gaussian.traj"]
 
 
 class TestGaussianCLIPubChemOptCommand:
@@ -1014,3 +1027,614 @@ class TestGaussianCLIQrcCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianCLIComCommand:
+    """CLI tests for the ``com`` (run input file as-is) subcommand."""
+
+    def test_com_job_creation_from_com_file(
+        self,
+        gaussian_opt_inputfile,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``com`` subcommand creates a ``GaussianComJob`` from a ``.com`` file."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.job.GaussianComJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                gaussian_opt_inputfile,
+                "com",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianComJob was never instantiated"
+        assert settings.input_string is not None
+
+
+class TestGaussianCLIRespCommand:
+    """CLI tests for the ``resp`` subcommand."""
+
+    def test_resp_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``resp`` subcommand creates a ``GaussianRESPJob`` with fixed route."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.resp.GaussianRESPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "resp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianRESPJob was never instantiated"
+        assert "Pop=MK" in settings.route_to_be_written
+
+
+class TestGaussianCLIUserjobCommand:
+    """CLI tests for the ``userjob`` (custom route) subcommand."""
+
+    def test_userjob_requires_route_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``userjob`` fails without the required ``-r`` route option."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.custom.GaussianCustomJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "userjob",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code != 0
+
+    def test_userjob_job_creation_with_route(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``userjob -r <route>`` creates a ``GaussianCustomJob`` with that route."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.custom.GaussianCustomJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "userjob",
+                "-r",
+                "opt freq",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.route_to_be_written == "opt freq"
+
+    def test_userjob_append_info_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-a`` appends decoded additional info to the job settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.custom.GaussianCustomJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "userjob",
+                "-r",
+                "opt",
+                "-a",
+                "extra info",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.append_additional_info == "extra info"
+
+
+class TestGaussianCLINciCommand:
+    """CLI tests for the ``nci`` (non-covalent interaction) subcommand."""
+
+    def test_nci_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``nci`` subcommand creates a ``GaussianNCIJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.nci.GaussianNCIJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "nci",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianNCIJob was never instantiated"
+
+    def test_nci_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``nci`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.nci.GaussianNCIJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "nci",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+
+class TestGaussianCLIWbiCommand:
+    """CLI tests for the ``wbi`` (Wiberg bond index) subcommand."""
+
+    def test_wbi_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``wbi`` subcommand creates a ``GaussianWBIJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.wbi.GaussianWBIJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "wbi",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianWBIJob was never instantiated"
+
+
+class TestGaussianCLILinkCommand:
+    """CLI tests for the ``link`` subcommand."""
+
+    def test_link_requires_jobtype(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``link`` without ``-j`` raises since jobtype is required."""
+        with pytest.raises(ValueError, match="Jobtype must be provided"):
+            run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "link",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+    def test_link_opt_jobtype_creates_job(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``link -j opt`` creates a ``GaussianLinkJob`` with unrestricted functional."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.functional.lower().startswith("u")
+        assert settings.stable == "opt"
+        assert settings.guess == "mix"
+
+    def test_link_irc_jobtype_sets_irc_params_and_label(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``link -j irc -d forward`` sets IRC parameters on the link settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "irc",
+                "-d",
+                "forward",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.direction == "forward"
+        assert settings.maxpoints == 512
+
+    def test_link_custom_route_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--route`` sets a custom route for the link section."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "opt",
+                "--route",
+                "opt=(calcfc)",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.link_route == "opt=(calcfc)"
+
+
+class TestGaussianCLIModredCommand:
+    """CLI tests for the ``modred`` subcommand group."""
+
+    def test_modred_requires_coordinates(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``modred`` without coordinates raises an assertion error."""
+        with pytest.raises(
+            AssertionError, match="Coordinates must be provided"
+        ):
+            run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.modred.GaussianModredJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "modred",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+    def test_modred_basic_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``modred -c "[[1,2]]"`` creates a ``GaussianModredJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.modred.GaussianModredJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "modred",
+                "-c",
+                "[[1,2]]",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianModredJob was never instantiated"
+
+    def test_modred_qmmm_subcommand_creates_qmmm_job(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``modred -c "[[1,2]]" qmmm`` creates a ``GaussianQMMMJob`` inheriting modred info."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "modred",
+                "-c",
+                "[[1,2]]",
+                "qmmm",
+                "-hx",
+                "b3lyp",
+                "-hb",
+                "6-31g(d)",
+                "-ha",
+                "1-3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianQMMMJob was never instantiated"
+        assert settings.high_level_functional == "b3lyp"
+        assert settings.high_level_basis == "6-31g(d)"
+        assert settings.jobtype == "modred"
+
+
+class TestGaussianCLITrajCommand:
+    """CLI tests for the ``traj`` subcommand."""
+
+    def test_traj_basic_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """``traj -j opt`` creates a ``GaussianTrajJob`` for structures from a trajectory."""
+        runner = CliRunner()
+        with patch.object(traj_module, "GaussianTrajJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "traj",
+                    "-j",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_job_cls.assert_called_once()
+
+    def test_traj_mutually_exclusive_options_raise(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """``-g`` and ``-ns`` together raise a usage error."""
+        runner = CliRunner()
+        with patch.object(traj_module, "GaussianTrajJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "traj",
+                    "-j",
+                    "opt",
+                    "-g",
+                    "rmsd",
+                    "-ns",
+                    "5",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+        assert result.exit_code != 0
+
+
+class TestGaussianCLIDiasCommand:
+    """CLI tests for the ``dias`` (distortion/interaction) subcommand."""
+
+    def test_dias_basic_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``dias -i 1-3`` creates a ``GaussianDIASJob`` with solvent removed by default."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.dias.GaussianDIASJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "dias",
+                "-i",
+                "1-3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "GaussianDIASJob was never instantiated"
+
+    def test_dias_solv_flag_keeps_solvent(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--solv`` keeps solvent on the DI-AS job settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.dias.GaussianDIASJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "dias",
+                "-i",
+                "1-3",
+                "--solv",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+
+    def test_dias_ts_mode_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-m ts`` selects the TS mode for DI-AS analysis."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.dias.GaussianDIASJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "dias",
+                "-i",
+                "1-3",
+                "-m",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
