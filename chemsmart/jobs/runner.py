@@ -10,6 +10,7 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -18,6 +19,29 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML when explicitly set."""
+    program = runner_cls.PROGRAM
+    if program is NotImplemented or not program or server is None:
+        return None
+    exe_cls = _executable_class_for_program(program)
+    if exe_cls is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
 
 
 @dataclass(frozen=True)
@@ -157,6 +181,9 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
+        scratch_from_cli (bool): True if ``--scratch``/``--no-scratch`` was
+            passed; when False, ``from_job`` uses the runner class ``SCRATCH``,
+            overridden by program ``SCRATCH`` in server YAML when that key is set.
         **kwargs: Additional keyword arguments.
     """
 
@@ -174,6 +201,7 @@ class JobRunner(RegistryMixin):
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
+        scratch_from_cli=False,
         **kwargs,
     ):
         if server is None:
@@ -189,6 +217,7 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = bool(scratch)
+        self.scratch_from_cli = bool(scratch_from_cli)
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
@@ -387,8 +416,15 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
-        scratch = bool(scratch)
+    def from_job(
+        cls,
+        job,
+        server,
+        scratch=False,
+        fake=False,
+        scratch_from_cli=False,
+        **kwargs,
+    ):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -416,12 +452,27 @@ class JobRunner(RegistryMixin):
                 selected_runner = candidate_runners[0]
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
+
+            # Omit → class SCRATCH, with optional YAML override; CLI → bool.
+            if not scratch_from_cli:
+                scratch = selected_runner.SCRATCH
+                yaml_scratch = _scratch_from_server_yaml(
+                    selected_runner, server
+                )
+                if yaml_scratch is not None:
+                    scratch = yaml_scratch
             logger.info(
-                f"Using scratch={scratch} for job runner: {selected_runner}"
+                f"Using scratch={scratch} "
+                f"(scratch_from_cli={scratch_from_cli}) for job runner: "
+                f"{selected_runner}"
             )
 
             return selected_runner(
-                server=server, scratch=scratch, fake=fake, **kwargs
+                server=server,
+                scratch=scratch,
+                scratch_from_cli=scratch_from_cli,
+                fake=fake,
+                **kwargs,
             )
 
         raise ValueError(
