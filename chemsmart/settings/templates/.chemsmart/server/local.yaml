@@ -16,7 +16,6 @@ SERVER:
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True  # local run True to use serial_command
-    SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate chemsmart
@@ -27,14 +26,13 @@ GAUSSIAN:
     SCRIPTS: |
         tcsh -c "source ~/bin/g16/bsd/g16.login"
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
+        export SCRATCH=~/scratch  # scratch path when using --scratch
         export GAUSS_EXEDIR=~/bin/g16
         export g16root=~/bin/g16
            
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
-    SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate ~/miniconda3/envs/chemsmart
@@ -43,17 +41,16 @@ ORCA:
         module load libfabric
         module load openmpi
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
+        export SCRATCH=~/scratch  # scratch path when using --scratch
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot
     LOCAL_RUN: False  # local run True to use serial_command
-    SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate ~/miniconda3/envs/chemsmart
     MODULES: |
         module purge
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
+        export SCRATCH=~/scratch  # scratch path when using --scratch
         export NCIPLOT_HOME=~/bin/nciplot

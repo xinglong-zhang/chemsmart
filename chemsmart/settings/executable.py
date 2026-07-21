@@ -118,37 +118,6 @@ class Executable(RegistryMixin):
             envars=envars,
         )
 
-    @classmethod
-    def program_scratch_from_servername(cls, servername):
-        """Return program-block ``SCRATCH`` from server YAML, or None if unset."""
-        if cls.PROGRAM is None or not servername:
-            return None
-
-        servername = str(servername)
-        if os.path.isfile(servername):
-            server_yaml_file = servername
-        else:
-            server_yaml = (
-                servername
-                if servername.endswith(".yaml")
-                else f"{servername}.yaml"
-            )
-            server_yaml_file = os.path.join(
-                user_settings.user_server_dir, server_yaml
-            )
-        try:
-            contents = YAMLFile(filename=server_yaml_file).yaml_contents_dict
-            program_cfg = contents.get(cls.PROGRAM)
-            if not program_cfg or "SCRATCH" not in program_cfg:
-                return None
-            return bool(program_cfg["SCRATCH"])
-        except (FileNotFoundError, OSError, TypeError, ValueError) as e:
-            logger.debug(
-                f"Could not read {cls.PROGRAM} SCRATCH from "
-                f"{server_yaml_file}: {e}"
-            )
-            return None
-
     @property
     def available_servers(self):
         """
