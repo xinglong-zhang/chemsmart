@@ -784,6 +784,10 @@ def run_selected_array_child(
     running a selected child, so nestable selection does not fire for
     parents that are themselves top-level array children.
 
+    The selected child receives a copied parent jobrunner (via
+    ``Job._propagate_runner``). After ``child.run()``, raises
+    ``BatchExecutionError`` if the child is incomplete.
+
     Returns:
         True if an array task was handled; False if no array env is set
         (caller should run the full nested batch).
@@ -804,11 +808,10 @@ def run_selected_array_child(
             f"nested child job(s) of {parent.label!r}; expected 1..{total}."
         )
     child = children[child_index]
-    runner = parent.jobrunner
-    if runner is not None:
-        child.jobrunner = runner
-        cores = runner.num_cores
-        mem_gb = runner.mem_gb
+    child_runner = Job._propagate_runner(parent.jobrunner, child)
+    if child_runner is not None:
+        cores = child_runner.num_cores
+        mem_gb = child_runner.mem_gb
     else:
         cores = None
         mem_gb = None
@@ -824,6 +827,11 @@ def run_selected_array_child(
         child.label,
     )
     child.run()
+    if not child.is_complete():
+        raise BatchExecutionError(
+            f"Nestable array child {child.label!r} of {parent.label!r} "
+            f"(task {task_id}/{total}) is incomplete after execution."
+        )
     return True
 
 

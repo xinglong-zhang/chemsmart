@@ -721,8 +721,10 @@ class TestGaussianBatchDelegation:
         )
         child_f = Mock(label="qrc_f")
         child_f.run.return_value = None
+        child_f.is_complete.return_value = True
         child_r = Mock(label="qrc_r")
         child_r.run.return_value = None
+        child_r.is_complete.return_value = True
         mocker.patch.object(
             type(job),
             "both_qrc_jobs",
@@ -737,8 +739,47 @@ class TestGaussianBatchDelegation:
 
         child_f.run.assert_not_called()
         child_r.run.assert_called_once()
-        assert child_r.jobrunner is gaussian_jobrunner_no_scratch
+        assert child_r.jobrunner is not gaussian_jobrunner_no_scratch
+        assert child_r.jobrunner.num_cores == 16
+        assert child_r.jobrunner.mem_gb == 32
         mock_batch_cls.return_value.run.assert_not_called()
+
+    def test_qrc_array_task_raises_when_selected_child_incomplete(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Nestable array path fails if the selected child did not complete."""
+        from chemsmart.jobs.batch import BatchExecutionError
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_incomplete",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = False
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            type(job),
+            "both_qrc_jobs",
+            new_callable=mocker.PropertyMock,
+            return_value=[child_f, child_r],
+        )
+
+        with pytest.raises(
+            BatchExecutionError, match="incomplete after execution"
+        ):
+            job._run_both_jobs()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
 
     def test_multi_molecule_orca_qrc_outer_array_runs_both_directions(
         self, pbs_server, orca_jobrunner_no_scratch, mocker, monkeypatch
