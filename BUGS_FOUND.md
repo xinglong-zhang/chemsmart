@@ -334,3 +334,52 @@ by the immediate root class, or give `Server` a dedicated
 `_INSTANCE_REGISTRY` list separate from the metaclass's class-level
 `_REGISTRY`, since the two are conceptually different (registered *classes*
 for dispatch vs. registered *instances* for caching/dedup).
+
+---
+
+## 8. `SLURMServer()` always crashes (wrong kwarg name to parent `__init__`)
+
+**File:** `chemsmart/settings/server.py:865-872`
+**Test:** `tests/test_yaml_server_settings_unit.py::TestSLURMServerBug::test_construction_raises_type_error`
+
+```python
+class SLURMServer(YamlServerSettings):
+    NAME = "SLURM"
+    SCHEDULER_TYPE = "SLURM"
+
+    def __init__(self, **kwargs):
+        super().__init__(filename=f"{self.NAME}.yaml", **kwargs)
+```
+
+`YamlServerSettings.__init__(self, name, **kwargs)` (and `Server.__init__`
+above it) take a positional/`name` argument — there is no `filename`
+parameter anywhere in the chain. Compare with the sibling classes, which
+pass it correctly:
+
+```python
+class PBSServer(YamlServerSettings):
+    def __init__(self, **kwargs):
+        super().__init__(self.NAME, **kwargs)   # positional — correct
+```
+
+So `SLURMServer(...)` always raises
+`TypeError: YamlServerSettings.__init__() missing 1 required positional argument: 'name'`,
+while `PBSServer`/`LSFServer`/`SGE_Server` construct fine.
+
+**Reproduce:**
+```python
+from chemsmart.settings.server import SLURMServer
+SLURMServer(NUM_CORES=8)
+# TypeError: YamlServerSettings.__init__() missing 1 required positional argument: 'name'
+```
+
+**Impact:** Currently limited — `Server.from_scheduler_type()` never calls
+`SLURMServer()` directly; it dispatches through
+`server_cls.from_servername(scheduler_type)`, which loads
+`YamlServerSettings` via `ServerSettingsManager` instead. So SLURM
+autodetection itself doesn't hit this path today. But `SLURMServer` is
+public API and any direct instantiation (e.g. from a future caller, or a
+test) crashes.
+
+**Suggested direction:** change to `super().__init__(self.NAME, **kwargs)`,
+matching `PBSServer`/`LSFServer`/`SGE_Server`.
