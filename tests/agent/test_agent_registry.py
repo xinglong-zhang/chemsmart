@@ -239,6 +239,12 @@ def test_registry_default_registration_sets_read_tool_metadata():
         ui_summary_template="Save geometry {filename}",
         side_effect="writes a geometry file in the workspace",
     )
+    read_rules_tool = registry.get_tool("read_behavior_rules")
+    assert read_rules_tool is not None
+    assert read_rules_tool.metadata.read_only is True
+    write_rules_tool = registry.get_tool("write_behavior_rules")
+    assert write_rules_tool is not None
+    assert write_rules_tool.metadata.read_only is False
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
@@ -247,6 +253,8 @@ def test_registry_default_registration_sets_read_tool_metadata():
             "read",
             "list_workspace",
             "save_geometry",
+            "read_behavior_rules",
+            "write_behavior_rules",
             "ssh_probe",
             "scheduler_query",
             "log_tail",

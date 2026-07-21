@@ -71,7 +71,7 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
     asyncio.run(scenario())
 
 
-def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
+def test_project_and_init_slash_commands_route_requests(monkeypatch, tmp_path):
     session_root = tmp_path / "sessions"
     write_session_fixture(session_root)
 
@@ -101,11 +101,12 @@ def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
                 lambda text: captured.append(text) or _FakeWorker(),
             )
 
-            # Bare /init is now a helper/alias, not a persistent mode.
-            _set_composer_text(app, "/init")
+            # Bare /project is a helper, not a persistent mode.
+            _set_composer_text(app, "/project")
             await pilot.press("enter")
             await pilot.pause()
             assert screen._build_mode is False
+            assert captured == []
 
             # A subsequent natural message routes through the unified session.
             _set_composer_text(
@@ -118,9 +119,9 @@ def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
             ]
             assert screen._build_mode is False
 
-            # /init with an argument injects project-YAML intent.
+            # /project with an argument injects project-YAML intent.
             _set_composer_text(
-                app, "/init Use Gaussian B3LYP/def2-SVP, call it co2."
+                app, "/project Use Gaussian B3LYP/def2-SVP, call it co2."
             )
             await pilot.press("enter")
             await pilot.pause()
@@ -128,6 +129,22 @@ def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
                 "Build a workspace project YAML from this reported method."
             )
             assert "call it co2" in captured[-1]
+
+            # /init now seeds the CHEMSMART.md rules interview (workspace).
+            _set_composer_text(app, "/init")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert captured[-1].startswith(
+                "Create or update the CHEMSMART.md agent rules file"
+            )
+            assert "scope='workspace'" in captured[-1]
+            assert "write_behavior_rules" in captured[-1]
+
+            # /init global targets the user-scope rules file.
+            _set_composer_text(app, "/init global")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert "scope='user'" in captured[-1]
 
     asyncio.run(scenario())
 

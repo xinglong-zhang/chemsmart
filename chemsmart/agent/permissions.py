@@ -42,10 +42,12 @@ ALWAYS_REQUIRE_APPROVAL = {
     "run_local",
     "submit_hpc",
     "save_geometry",
+    "write_behavior_rules",
 }
 READ_ONLY_TOOLS = {
     "read",
     "list_workspace",
+    "read_behavior_rules",
     "ssh_probe",
     "scheduler_query",
     "log_tail",

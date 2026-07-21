@@ -57,7 +57,8 @@ class SlashCommandsMixin:
             "/doctor": lambda _arg: self._run_inline_cli(
                 ["doctor"], title="Doctor"
             ),
-            "/init": self._handle_init_command,
+            "/init": self._handle_rules_init_command,
+            "/project": self._handle_project_command,
             "/write-project": self._handle_project_write_command,
             "/wizard": self._handle_wizard_probe_command,
             "/wizard-verify": self._handle_wizard_verify_command,
@@ -251,6 +252,16 @@ class SlashCommandsMixin:
             ("[A]", "/wizard-verify <name>", "verify server transport wiring"),
             ("[A]", "/doctor", "run inline diagnostics"),
             (
+                "[A]",
+                "/init [global]",
+                "create or update the CHEMSMART.md agent rules file",
+            ),
+            (
+                "[A]",
+                "/project [method text]",
+                "start a project YAML request",
+            ),
+            (
                 "[F]",
                 "/write-project [name]",
                 "write or replace the latest validated project YAML",
@@ -263,23 +274,28 @@ class SlashCommandsMixin:
             AgentMessageCell(table, title="Help")
         )
 
-    def _handle_init_command(self, argument: str) -> None:
+    def _guard_agent_request_command(self, label: str) -> bool:
         if (
             self._active_provider_config is not None
             and self._active_provider_config.type == "local"
         ):
             self.post_error(
-                "Init unavailable for local provider",
-                "Project YAML build mode uses the tool-loop harness, which "
-                "needs a tool-calling provider (anthropic/openai).",
+                f"{label} unavailable for local provider",
+                "This mode uses the tool-loop harness, which needs a "
+                "tool-calling provider (anthropic/openai).",
             )
-            return
+            return False
         if self._current_worker and not self._current_worker.is_finished:
             self.post_error(
                 "Session already running",
                 "Wait for the current request to finish before starting "
-                "project YAML build mode.",
+                f"{label}.",
             )
+            return False
+        return True
+
+    def _handle_project_command(self, argument: str) -> None:
+        if not self._guard_agent_request_command("Project YAML build mode"):
             return
         argument = argument.strip()
         self._build_mode = False
@@ -304,10 +320,44 @@ class SlashCommandsMixin:
                 'Tip: name the project (e.g. "call it co2") and say the '
                 "program (Gaussian or ORCA)."
             ),
-            title="Init: Project YAML",
+            title="Project YAML",
         )
         self.query_one(FooterWidget).set_hint("Paste a project-YAML request")
         self.focus_composer()
+
+    def _handle_rules_init_command(self, argument: str) -> None:
+        if not self._guard_agent_request_command("CHEMSMART.md setup"):
+            return
+        scope = (
+            "user"
+            if argument.strip().lower() in {"global", "user"}
+            else "workspace"
+        )
+        self._build_mode = False
+        self._sync_footer_provider()
+        target = (
+            "the user-global ~/.chemsmart/CHEMSMART.md"
+            if scope == "user"
+            else "this workspace's ./CHEMSMART.md"
+        )
+        self.start_request(
+            "Create or update the CHEMSMART.md agent rules file for "
+            f"{target}.\n"
+            "1. Call read_behavior_rules to see any existing rules, and "
+            "list_workspace to see what this workspace contains.\n"
+            "2. Ask me (ask_user) for: answer language, verbosity "
+            "(concise|balanced|detailed), creativity "
+            "(conservative|balanced|exploratory), and the xtb_real_runs "
+            "policy (auto|ask|never).\n"
+            "3. Draft the file: one identity line anchoring the ChemSmart "
+            "mission (reproducible computational-chemistry workflows), a "
+            "'## Style' section in prose, a '## Policy' section with exactly "
+            "the `key: value` lines I chose, and a short '## Workspace "
+            "notes' section from what list_workspace found.\n"
+            "4. Show me the full draft, then call write_behavior_rules with "
+            f"scope='{scope}' (set overwrite=true only if I confirmed "
+            "replacing an existing file). Do not write without approval."
+        )
 
     def _show_sessions_snapshot(self) -> None:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]

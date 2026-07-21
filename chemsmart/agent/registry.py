@@ -50,6 +50,8 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
             "read_project_yaml",
             "update_project_yaml",
             "search_basis_sets",
+            "read_behavior_rules",
+            "write_behavior_rules",
         }
     ),
     "harness_jobs": frozenset(
@@ -230,6 +232,25 @@ _DEFAULT_TOOL_SOURCES = (
             read_only=False,
             ui_summary_template="Update project YAML {project_name}",
             side_effect="writes a workspace project YAML file",
+        ),
+    ),
+    (
+        "read_behavior_rules",
+        "chemsmart.agent.behavior_rules",
+        "Read the CHEMSMART.md agent rules files (workspace and user scope) with their parsed policy values.",
+        RuntimeToolMetadata(
+            read_only=True,
+            ui_summary_template="Read CHEMSMART.md rules",
+        ),
+    ),
+    (
+        "write_behavior_rules",
+        "chemsmart.agent.behavior_rules",
+        "Write a CHEMSMART.md agent rules file (workspace or user scope) after explicit approval; refuses overwrite without an explicit flag.",
+        RuntimeToolMetadata(
+            read_only=False,
+            ui_summary_template="Write CHEMSMART.md ({scope})",
+            side_effect="writes the CHEMSMART.md agent rules file",
         ),
     ),
     (

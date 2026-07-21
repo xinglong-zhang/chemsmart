@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Event
 
+from chemsmart.agent.behavior_rules import load_behavior_rules
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
     PermissionPolicy,
+    normalize_xtb_real_runs,
 )
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.tui.phase import Phase
@@ -231,12 +233,18 @@ class ApprovalFlowMixin:
     def _permission_policy(
         self, *, prompt_risky: bool = False
     ) -> PermissionPolicy:
-        return PermissionPolicy(
+        # CHEMSMART.md's deterministic Policy block wins over the env-var
+        # default so a workspace can pin its own xtb_real_runs mode.
+        configured = load_behavior_rules().policy.get("xtb_real_runs")
+        policy = PermissionPolicy(
             mode=self._permission_mode,
             yolo=self._yolo_enabled,
             prompt_risky=prompt_risky,
             session_allow=set(self._session_allow_tools),
         )
+        if configured is not None:
+            policy.xtb_real_runs = normalize_xtb_real_runs(configured)
+        return policy
 
     def _handle_permission_mode_result(
         self,

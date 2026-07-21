@@ -577,6 +577,7 @@ def test_runtime_permission_mode_placeholders_are_stable():
     assert READ_ONLY_TOOLS == {
         "read",
         "list_workspace",
+        "read_behavior_rules",
         "ssh_probe",
         "scheduler_query",
         "log_tail",
