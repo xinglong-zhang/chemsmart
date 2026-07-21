@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -59,6 +60,58 @@ READ_ONLY_TOOLS = {
 }
 EDIT_SAFE_TOOLS = {"edit", "write"}
 PLAN_MODE_REASON = "plan mode active"
+
+# Rule-based policy for REAL local xTB execution. Semiempirical xTB runs are
+# seconds-cheap, so a user may opt in to unattended pre-optimizations; the
+# guards below keep that opt-in narrow. Gaussian/ORCA run_local, submit_hpc,
+# and execute_chemsmart_command always require approval regardless of this
+# policy.
+XTB_REAL_RUN_MODES = ("auto", "ask", "never")
+XTB_REAL_RUNS_DEFAULT = "ask"
+XTB_REAL_RUNS_ENV_VAR = "CHEMSMART_XTB_REAL_RUNS"
+XTB_AUTO_MAX_ATOMS = 200
+
+
+def normalize_xtb_real_runs(value: Any) -> str:
+    """Coerce a configured xtb_real_runs value to a known mode."""
+
+    text = str(value or "").strip().lower()
+    return text if text in XTB_REAL_RUN_MODES else XTB_REAL_RUNS_DEFAULT
+
+
+def default_xtb_real_runs() -> str:
+    return normalize_xtb_real_runs(os.environ.get(XTB_REAL_RUNS_ENV_VAR))
+
+
+def resolve_xtb_run_local(
+    policy_value: Any,
+    *,
+    job_program: str | None,
+    atom_count: int | None,
+) -> ResolvedPermission | None:
+    """Apply the xtb_real_runs policy to one run_local request.
+
+    Returns None whenever the generic approval flow should decide instead:
+    ask mode, a non-xTB job, or an auto request that fails a guard (unknown
+    or oversized system).
+    """
+
+    mode = normalize_xtb_real_runs(policy_value)
+    if mode == "ask" or (job_program or "").lower() != "xtb":
+        return None
+    if mode == "never":
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_DENY,
+            reason="xtb_real_runs_never",
+        )
+    if atom_count is not None and 0 < atom_count <= XTB_AUTO_MAX_ATOMS:
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_ALLOW,
+            reason="xtb_real_runs_auto",
+        )
+    return None
+
+
 NEVER_AUTO_ALLOW_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pip_install", re.compile(r"\bpip3?\s+(install|uninstall)\b")),
     ("apt_install", re.compile(r"\bapt(-get)?\s+install\b")),
@@ -94,6 +147,10 @@ class PermissionPolicy:
     driving_denylist: set[str] = field(
         default_factory=lambda: set(DRIVING_DEFAULT_DENY)
     )
+    # auto|ask|never for REAL local xTB runs; sourced from CHEMSMART.md or
+    # the CHEMSMART_XTB_REAL_RUNS env var. Consulted by the tool loop, which
+    # can see the target job; resolve() itself never auto-allows run_local.
+    xtb_real_runs: str = field(default_factory=default_xtb_real_runs)
 
     def resolve(self, req: ToolRequest) -> ResolvedPermission:
         return resolve(

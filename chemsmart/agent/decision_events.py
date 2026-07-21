@@ -244,6 +244,11 @@ def _parse_tool_lifecycle_event(
             args={},
             description=str(payload.get("description") or ""),
             provider_call_id=str(payload.get("provider_call_id") or ""),
+            reason=(
+                str(payload.get("source"))
+                if payload.get("source") is not None
+                else None
+            ),
             scope=(
                 str(payload.get("scope"))
                 if payload.get("scope") is not None
