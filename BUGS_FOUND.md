@@ -274,3 +274,63 @@ with patch.object(user_settings, "data", {"RSCGRP": "small"}):
 settings (mirrors `PROJECT` used by `PBSSubmitter`/`SLURMSubmitter`) —
 probably should be `user_settings.data["PROJECT"]` or a dedicated
 `RSCGRP`-adjacent key, not `self.project`.
+
+---
+
+## 7. `Server.register()` always crashes for a fresh instance
+
+**File:** `chemsmart/settings/server.py:296-310`,
+`chemsmart/utils/mixins.py:1483-1501`
+**Test:** `tests/test_server_class_unit.py::TestServerRegisterBug::test_register_crashes_on_unrelated_registry_entries`
+
+```python
+def register(self):
+    # if server already in registry, pass
+    if self in Server._REGISTRY:
+        return self
+    Server._REGISTRY.append(self)
+    return self
+```
+
+`RegistryMixin`'s metaclass (`RegistryMeta`, in `chemsmart/utils/mixins.py`)
+initializes `_REGISTRY` as a class attribute the *first* time any
+`RegistryMixin`-based class is defined, then every subsequent
+`RegistryMixin` subclass — `Server`, `Executable`, `Submitter`, and all of
+*their* subclasses — inherits that same single list via normal Python
+attribute lookup (`hasattr(cls, "_REGISTRY")` is `True` for all of them, so
+a fresh list is never created per-hierarchy). The metaclass populates it
+with **classes** (not instances) across every hierarchy:
+
+```pycon
+>>> from chemsmart.settings.server import Server
+>>> [x.__name__ for x in Server._REGISTRY]
+['Executable', 'GaussianExecutable', 'ORCAExecutable', 'NCIPLOTExecutable',
+ 'Submitter', 'PBSSubmitter', 'SLURMSubmitter', 'SLFSubmitter',
+ 'FUGAKUSubmitter', 'Server', 'YamlServerSettings', 'SLURMServer',
+ 'PBSServer', 'LSFServer', 'SGE_Server']
+```
+
+`Server.register()` then does `if self in Server._REGISTRY`, appending a
+**Server instance** to a list of classes belonging to unrelated
+hierarchies. Python's `in` short-circuits to `True` only on `is`
+(identity); for every other element it falls back to `Server.__eq__`
+(`self.name == other.name`). The first non-identical element it compares
+against — e.g. the `Executable` class — has no `.name` attribute at all,
+so this raises `AttributeError: type object 'Executable' has no attribute
+'name'` for any freshly constructed `Server`, before `register()` can ever
+succeed.
+
+**Reproduce:**
+```python
+from chemsmart.settings.server import Server
+Server("myserver").register()
+# AttributeError: type object 'Executable' has no attribute 'name'
+```
+
+**Suggested direction:** give `Server` (or `RegistryMixin` subclasses in
+general) their own per-hierarchy registry rather than sharing one global
+list across unrelated class families — e.g. initialize `_REGISTRY` keyed
+by the immediate root class, or give `Server` a dedicated
+`_INSTANCE_REGISTRY` list separate from the metaclass's class-level
+`_REGISTRY`, since the two are conceptually different (registered *classes*
+for dispatch vs. registered *instances* for caching/dedup).
