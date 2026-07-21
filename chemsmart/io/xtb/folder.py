@@ -168,7 +168,7 @@ class XTBFolder(BaseFolder):
                 if not basename.startswith("xtbopt"):
                     logger.warning(
                         f"Found input geometry file {filepath}, but format {ext} "
-                        "is not yet supported by chemsmart."
+                        "is not yet supported by CHEMSMART."
                     )
                     return filepath
         # No input geometry file found
@@ -209,7 +209,7 @@ class XTBFolder(BaseFolder):
             if os.path.exists(filepath):
                 logger.warning(
                     f"Found optimized geometry file {filepath}, but format {ext} "
-                    "is not yet supported by chemsmart."
+                    "is not yet supported by CHEMSMART."
                 )
                 return filepath
         # No xtbopt.* file found
