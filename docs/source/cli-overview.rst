@@ -89,6 +89,7 @@ Execution Control Options
 
    -  ``chemsmart run --fake gaussian ...`` / ``chemsmart sub --fake gaussian ...`` uses the Gaussian fake runner.
    -  ``chemsmart run --fake orca ...`` / ``chemsmart sub --fake orca ...`` uses the ORCA fake runner.
+   -  ``chemsmart run --fake xtb ...`` / ``chemsmart sub --fake xtb ...`` uses the xTB fake runner.
 
    In these fake modes, executable-path checks for the corresponding real program are not required and the corresponding
    fake runner will be used without needing to specify its path.
@@ -152,6 +153,7 @@ These options are only available with ``chemsmart sub``:
 
 -  ``gaussian``: Run or submit Gaussian jobs
 -  ``orca``: Run or submit ORCA jobs
+-  ``xtb``: Run or submit xTB jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
@@ -164,6 +166,7 @@ For specific job types, see the detailed tutorials:
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`

@@ -274,8 +274,8 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
 Program-Specific Sections
 =========================
 
-Each computational chemistry program (GAUSSIAN, ORCA, NCIPLOT) has its own configuration section. These sections define
-program-specific paths, execution settings, and environment variables.
+Each computational chemistry program (GAUSSIAN, ORCA, XTB, NCIPLOT) has its own configuration section. These sections
+define program-specific paths, execution settings, and environment variables.
 
 GAUSSIAN Section
 ----------------
@@ -482,6 +482,98 @@ ENVARS
        export SCRATCH=~/scratch
        export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
        export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
+
+XTB Section
+-----------
+
+Configuration for the standalone xTB executable used by CHEMSMART xTB jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to an xTB installation directory, or ``null`` to use the ``xtb`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null  # use xtb from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat xTB as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run xTB in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``xtb`` (and CHEMSMART).
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Environment variables for xTB runs. Set ``SCRATCH`` if scratch mode is enabled.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: |
+           export SCRATCH=~/scratch
 
 NCIPLOT Section
 ---------------
