@@ -16,7 +16,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Iterator
 
-from chemsmart.settings.workspace_project import workspace_project_path
+from chemsmart.settings.workspace_project import (
+    PROJECT_PROGRAMS,
+    workspace_project_path,
+)
 
 
 @dataclass(frozen=True)
@@ -200,7 +203,7 @@ def select_project_from_request(
         return None
     base = Path(cwd or Path.cwd()).resolve()
     program_hint = _program_from_request(request)
-    programs = (program_hint,) if program_hint else ("gaussian", "orca")
+    programs = (program_hint,) if program_hint else PROJECT_PROGRAMS
     for program in programs:
         result = select_workspace_project(name, program, cwd=base)
         if result.get("selected"):

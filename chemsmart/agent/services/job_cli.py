@@ -13,8 +13,15 @@ from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.writer import ORCAInputWriter
+from chemsmart.jobs.xtb.job import XTBJob
 
 SUPPORTED_SUBMIT_JOBTYPES = {"opt", "ts", "sp", "irc", "scan"}
+#: xTB exposes a different leaf set from the route-based programs: it has a
+#: Hessian leaf and no TS/IRC/scan. Keeping the sets per program stops an
+#: xTB-only jobtype from being accepted for Gaussian or ORCA.
+SUBMIT_JOBTYPES_BY_PROGRAM = {
+    "xtb": {"opt", "sp", "hess"},
+}
 _PROJECT_RUNTIME_SETTING_FIELDS = {
     "functional",
     "basis",
@@ -45,14 +52,20 @@ def dry_run_input(job: Job) -> dict[str, Any]:
     if job.jobrunner is None:
         job.jobrunner = SimpleNamespace(num_cores=12, mem_gb=16)
     if isinstance(job, GaussianJob):
-        input_writer = GaussianInputWriter(job=job)
+        GaussianInputWriter(job=job).write(target_directory=target_directory)
     elif isinstance(job, ORCAJob):
-        input_writer = ORCAInputWriter(job=job)
+        ORCAInputWriter(job=job).write(target_directory=target_directory)
+    elif isinstance(job, XTBJob):
+        # xTB takes a bare geometry and its whole method on the command line,
+        # so the geometry is the only file to render; the grounded command
+        # below carries the rest of the calculation.
+        os.makedirs(target_directory, exist_ok=True)
+        job.molecule.write_xyz(os.path.abspath(job.xyzfile), mode="w")
     else:
         raise ValueError(
-            "dry_run_input only supports GaussianJob and ORCAJob instances"
+            "dry_run_input only supports GaussianJob, ORCAJob, and XTBJob "
+            "instances"
         )
-    input_writer.write(target_directory=target_directory)
     inputfile = os.path.abspath(job.inputfile)
     with open(inputfile) as file:
         content = file.read()
@@ -91,7 +104,7 @@ def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
     if not isinstance(program_name, str):
         return None
     program = program_name.lower()
-    if program not in {"gaussian", "orca"}:
+    if program not in {"gaussian", "orca", "xtb"}:
         return None
     cli_jobtype = _run_cli_jobtype_name(job)
     argv = ["chemsmart", "run", program]
@@ -99,13 +112,16 @@ def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
     project_backed = isinstance(project, str) and bool(project.strip())
     if project_backed:
         argv.extend(["-p", project.strip()])
-    argv.extend(
-        _program_cli_args(
-            settings,
-            force_route_freq=_jobtype_name_for_settings(job) == "freq",
-            project_backed=project_backed,
+    if program == "xtb":
+        argv.extend(_xtb_program_cli_args(settings))
+    else:
+        argv.extend(
+            _program_cli_args(
+                settings,
+                force_route_freq=_jobtype_name_for_settings(job) == "freq",
+                project_backed=project_backed,
+            )
         )
-    )
     argv.extend(["-f", source_filepath])
     index = _agent_source_index_for_cli(job)
     if index is not None:
@@ -115,6 +131,34 @@ def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
         argv.extend(["-l", label])
     argv.append(cli_jobtype)
     argv.extend(_jobtype_cli_args(job))
+    return argv
+
+
+def _xtb_program_cli_args(settings: Any) -> list[str]:
+    """Render the xTB program-level flags.
+
+    Unlike Gaussian and ORCA these are always emitted, project-backed or
+    not: xTB's method lives only on the command line, so dropping it would
+    make the grounded command a different calculation.
+    Source: ``chemsmart/cli/xtb/xtb.py``.
+    """
+
+    if settings is None:
+        return []
+    argv: list[str] = []
+    for name, flag in (
+        ("charge", "-c"),
+        ("multiplicity", "-m"),
+        ("gfn_version", "-g"),
+        ("solvent_model", "-sm"),
+        ("solvent_id", "-si"),
+    ):
+        value = getattr(settings, name, None)
+        if value is None:
+            continue
+        argv.extend([flag, str(value)])
+    if getattr(settings, "grad", False):
+        argv.append("--grad")
     return argv
 
 
@@ -184,6 +228,11 @@ def _jobtype_cli_args(job: Job) -> list[str]:
     settings = getattr(job, "settings", None)
     if settings is None:
         return []
+    if isinstance(job, XTBJob):
+        level = getattr(settings, "optimization_level", None)
+        if jobtype == "opt" and level is not None:
+            return ["--optimization-level", str(level)]
+        return []
     if jobtype == "scan":
         return _dict_to_cli_args(_scan_cli_overrides(settings))
     if jobtype == "modred":
@@ -195,16 +244,22 @@ def _jobtype_cli_args(job: Job) -> list[str]:
 
 def _run_cli_jobtype_name(job: Job) -> str:
     jobtype = _jobtype_name_for_settings(job)
+    program = str(getattr(job, "PROGRAM", "") or "").lower()
+    if program in SUBMIT_JOBTYPES_BY_PROGRAM:
+        supported = SUBMIT_JOBTYPES_BY_PROGRAM[program]
+        accepted = supported
+    else:
+        supported = SUPPORTED_SUBMIT_JOBTYPES
+        # Gaussian and ORCA reach a frequency job through their opt leaf.
+        accepted = {*supported, "freq"}
     if jobtype == "singlepoint":
         return "sp"
-    if jobtype == "freq":
-        return "opt"
-    if jobtype not in SUPPORTED_SUBMIT_JOBTYPES:
-        supported = ", ".join(sorted({*SUPPORTED_SUBMIT_JOBTYPES, "freq"}))
+    if jobtype not in accepted:
+        names = ", ".join(sorted(accepted))
         raise ValueError(
-            f"Unsupported run jobtype {jobtype!r}. Supported: {supported}"
+            f"Unsupported run jobtype {jobtype!r}. Supported: {names}"
         )
-    return jobtype
+    return "opt" if jobtype == "freq" else jobtype
 
 
 def _jobtype_name_for_settings(job: Job) -> str:
@@ -268,6 +323,7 @@ def _scalar_or_json_cli_value(value: Any) -> str:
 
 
 __all__ = [
+    "SUBMIT_JOBTYPES_BY_PROGRAM",
     "SUPPORTED_SUBMIT_JOBTYPES",
     "dry_run_input",
     "reconstruct_run_cli_command",

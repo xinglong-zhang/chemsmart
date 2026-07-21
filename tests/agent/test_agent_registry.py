@@ -53,6 +53,9 @@ def test_registry_round_trips_build_gaussian_settings_call():
             "orca.sp",
             "orca.irc",
             "orca.scan",
+            "xtb.opt",
+            "xtb.sp",
+            "xtb.hess",
         ],
     }
     gaussian_settings_props = gaussian_settings_def["function"]["parameters"][
@@ -75,7 +78,7 @@ def test_registry_exposes_typed_handles_and_hides_runtime_owned_fields():
     build_job = definitions["build_job"]
     assert build_job["properties"]["molecule"]["pattern"].startswith("^mol_")
     assert build_job["properties"]["settings"]["pattern"].startswith(
-        "^(?:gset|oset)"
+        "^(?:gset|oset|xset)"
     )
     assert "jobrunner" not in build_job["properties"]
 

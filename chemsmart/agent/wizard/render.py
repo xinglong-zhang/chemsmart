@@ -165,6 +165,9 @@ def _render_program_blocks(
     notes: list[str],
 ) -> dict[str, dict]:
     program_blocks: dict[str, dict] = {}
+    # xTB is intentionally absent: the wizard renders a block only for
+    # programs its software survey probes for, and xTB resolves from PATH
+    # (a conda environment) rather than an EXEFOLDER the wizard must find.
     for program_key in ["gaussian", "orca", "nciplot"]:
         block_name = _PROGRAM_NAME_MAP[program_key]
         finding = software_survey.programs.get(program_key)

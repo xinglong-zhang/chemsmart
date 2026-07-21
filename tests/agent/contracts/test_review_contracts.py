@@ -16,13 +16,15 @@ def _load(name: str) -> dict[str, object]:
     return json.loads((CONTRACT_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_full26_fixture_has_every_canonical_kind_once() -> None:
+def test_compact_spec_fixture_has_every_canonical_kind_once() -> None:
     fixture = _load("full26_compact_specs.json")
     cases = fixture["cases"]
     assert isinstance(cases, list)
     kinds = [case["kind"] for case in cases]
-    assert len(kinds) == 26
-    assert len(set(kinds)) == 26
+    # The count follows the canonical kind table rather than a frozen number,
+    # so adding a program keeps this a coverage check instead of a tripwire.
+    assert len(kinds) == len(KIND_SETTINGS)
+    assert len(set(kinds)) == len(KIND_SETTINGS)
     assert sorted(kinds) == sorted(KIND_SETTINGS)
 
 

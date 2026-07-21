@@ -47,6 +47,7 @@ from chemsmart.agent.synthesis import (
     resolve_default_project,
 )
 from chemsmart.settings.workspace_project import (
+    PROJECT_PROGRAMS,
     iter_workspace_project_yaml,
     resolve_workspace_project,
 )
@@ -319,7 +320,7 @@ def register_command_intent(
     )
     result = evaluate_intent(command, spec, cwd=str(Path.cwd()))
     _record_intent_result(command, result)
-    if spec.project and spec.program in {"gaussian", "orca"}:
+    if spec.project and spec.program in PROJECT_PROGRAMS:
         select_workspace_project(spec.project, spec.program)
     return result
 

@@ -58,6 +58,7 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
             "recommend_method",
             "build_gaussian_settings",
             "build_orca_settings",
+            "build_xtb_settings",
             "build_job",
             "dry_run_input",
             "validate_runtime",
@@ -106,7 +107,7 @@ _MODEL_FIELD_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("build_job", "settings"): {
         "type": "string",
-        "pattern": r"^(?:gset|oset)_[0-9a-f]{4,}$",
+        "pattern": r"^(?:gset|oset|xset)_[0-9a-f]{4,}$",
         "description": "Handle returned by a program settings builder.",
     },
     ("dry_run_input", "job"): {
@@ -266,6 +267,7 @@ _DEFAULT_TOOL_SOURCES = (
     ),
     ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
     ("build_orca_settings", "chemsmart.agent.tools", None, None),
+    ("build_xtb_settings", "chemsmart.agent.tools", None, None),
     ("build_job", "chemsmart.agent.tools", None, None),
     ("dry_run_input", "chemsmart.agent.tools", None, None),
     ("validate_runtime", "chemsmart.agent.tools", None, None),

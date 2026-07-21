@@ -20,6 +20,7 @@ from chemsmart.agent.services.compact_spec import (
     project_compact_spec,
 )
 from chemsmart.settings.workspace_project import (
+    PROJECT_PROGRAMS,
     resolve_workspace_project,
     workspace_project_path,
 )
@@ -224,7 +225,7 @@ def resolve_default_project() -> str:
 def _workspace_project_exists(project: str) -> bool:
     return any(
         workspace_project_path(project, program).exists()
-        for program in ("gaussian", "orca")
+        for program in PROJECT_PROGRAMS
     )
 
 
@@ -483,7 +484,7 @@ def _find_program_index(tokens: list[str]) -> int | None:
     index = top_index + 1
     while index < len(tokens):
         token = tokens[index]
-        if token in {"gaussian", "orca"}:
+        if token in PROJECT_PROGRAMS:
             return index
         if token.startswith("-"):
             index += 1 if token in _TOP_LEVEL_FLAGS else 2

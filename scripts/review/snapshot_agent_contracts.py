@@ -571,6 +571,10 @@ def _prepare_full26_workspace(repo_root: Path, workspace: Path) -> None:
             templates / program / "test_qmmm.yaml",
             target / "contract_qmmm.yaml",
         )
+    # xTB has no QMMM leaf, so it only needs the base project.
+    xtb_target = workspace / ".chemsmart" / "xtb"
+    xtb_target.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(templates / "xtb" / "test.yaml", xtb_target / "contract.yaml")
     server_dir = Path.home() / ".chemsmart/server"
     server_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(templates / "server/local.yaml", server_dir / "local.yaml")

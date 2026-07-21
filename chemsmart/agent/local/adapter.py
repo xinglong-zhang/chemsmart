@@ -15,6 +15,7 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from chemsmart.agent.handles import SETTINGS_BUILDER_TOOLS
 from chemsmart.agent.services.compact_spec import (
     non_workflow_result,
     project_compact_spec,
@@ -34,6 +35,9 @@ _KIND_TO_CLI: dict[str, tuple[str, str]] = {
     "orca.ts": ("orca", "ts"),
     "orca.irc": ("orca", "irc"),
     "orca.scan": ("orca", "scan"),
+    "xtb.sp": ("xtb", "sp"),
+    "xtb.opt": ("xtb", "opt"),
+    "xtb.hess": ("xtb", "hess"),
 }
 
 # Kinds the V4 LoRA can emit but the CLI does not (yet) accept as drop-in
@@ -253,7 +257,7 @@ def _extract_settings(steps: list[Any]) -> dict[str, Any]:
         if not isinstance(step, dict):
             continue
         tool = step.get("tool", "")
-        if tool in {"build_gaussian_settings", "build_orca_settings"}:
+        if tool in SETTINGS_BUILDER_TOOLS:
             args = step.get("args") or {}
             if isinstance(args, dict):
                 return args
