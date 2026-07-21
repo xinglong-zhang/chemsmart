@@ -289,7 +289,7 @@ Important Notes
 
 **Scratch Directory Execution**
 
--  When ``--scratch`` is passed on ``chemsmart run`` or ``chemsmart sub``, geometry files are automatically copied to
+-  When scratch is enabled (via ``--scratch`` or program YAML ``SCRATCH``), geometry files are automatically copied to
    the scratch directory
 -  This ensures ORCA can find all required files during execution
 -  After job completion, all output files are copied back to the job folder

@@ -44,7 +44,8 @@ def click_jobrunner_options(f):
         "--scratch/--no-scratch",
         default=False,
         type=bool,
-        help="Force scratch (--scratch) or job-folder (--no-scratch) mode. ",
+        help="Force scratch with --scratch. Without --scratch, use program "
+        "YAML SCRATCH when set, otherwise False.",
     )
     @click.option(
         "--delete-scratch/--no-delete-scratch",

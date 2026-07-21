@@ -77,14 +77,8 @@ Execution Control Options
 
    -  -  ``--scratch/--no-scratch``
       -  bool
-      -  Run in a scratch directory (``--scratch``) or the job folder (``--no-scratch``). Default: ``--no-scratch``.
-
-.. note::
-
-   Scratch mode is controlled **only** by ``--scratch`` and ``--no-scratch`` on ``chemsmart run`` and ``chemsmart sub``.
-   Omitting the flag is the same as ``--no-scratch``. When ``--scratch`` is used, the scratch directory **path** comes
-   from program ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then ``usersettings`` ``SCRATCH`` (see
-   :ref:`scratch-behavior`).
+      -  ``--scratch`` forces scratch on; otherwise use program YAML ``SCRATCH`` when set, else ``False`` (see
+         :ref:`scratch-behavior`).
 
 .. note::
 

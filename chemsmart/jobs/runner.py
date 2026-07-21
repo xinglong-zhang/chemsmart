@@ -10,6 +10,7 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -18,6 +19,39 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML when explicitly set."""
+    program = runner_cls.PROGRAM
+    if program is NotImplemented or not program or server is None:
+        return None
+    exe_cls = _executable_class_for_program(program)
+    if exe_cls is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
+
+
+def _resolve_scratch_bool(scratch, runner_cls, server):
+    """Resolve scratch: CLI True forces on; else program YAML SCRATCH; else False."""
+    if scratch:
+        return True
+    yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
+    if yaml_scratch is not None:
+        return bool(yaml_scratch)
+    return False
 
 
 @dataclass(frozen=True)
@@ -192,9 +226,7 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        # CLI builds a placeholder JobRunner before the typed runner exists.
-        # Resolving scratch here has no executable and would set scratch=False,
-        # defeating --scratch. Typed runners resolve in their __init__.
+        # Skip path setup on the CLI placeholder (no executable yet).
         if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
@@ -388,7 +420,6 @@ class JobRunner(RegistryMixin):
 
     @classmethod
     def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
-        scratch = bool(scratch)
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -416,6 +447,9 @@ class JobRunner(RegistryMixin):
                 selected_runner = candidate_runners[0]
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
+            scratch = _resolve_scratch_bool(
+                bool(scratch), selected_runner, server
+            )
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )
