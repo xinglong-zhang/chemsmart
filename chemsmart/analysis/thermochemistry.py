@@ -80,7 +80,6 @@ class Thermochemistry:
         self.filename = filename
         self.program = get_program_type_from_file(self.filename)
         self.molecule = Molecule.from_filepath(filename)
-
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
         self.rotational_mode = rotational_mode
@@ -166,7 +165,7 @@ class Thermochemistry:
             raise ValueError("Unsupported file format.")
         if not output.normal_termination:
             raise ValueError(
-                f"Calculation '{self.filename}' did not terminate normally. "
+                f"File '{self.filename}' did not terminate normally. "
                 "Skipping thermochemistry calculation for this file."
             )
         return output
