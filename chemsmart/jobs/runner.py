@@ -152,8 +152,13 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool): Whether to use scratch directory.
-        scratch_dir (str): Path to scratch directory.
+        scratch (bool or None): Whether to use a scratch directory.
+            None means unset: typed runners substitute their SCRATCH class
+            default in ``from_job`` or ``__init__``. False or True would
+            force scratch off or on for every program regardless of those
+            defaults.
+        scratch_dir (str or None): Path to scratch directory, or None to
+            resolve from executable ENVARS, server YAML, then user settings.
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
@@ -167,8 +172,8 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,
-        scratch_dir=None,  # Explicit scratch directory
+        scratch=None,  # None: unset; typed subclasses map to SCRATCH default
+        scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
         delete_scratch=False,
         fake=False,
         num_cores=None,
@@ -411,7 +416,10 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # If scratch is None, use the runner's default scratch value
+            # None means the caller did not pass --scratch/--no-scratch (or
+            # equivalent). Use the selected runner's SCRATCH default so
+            # Gaussian/ORCA keep scratch on while lightweight runners stay
+            # off. Only explicit True/False should override that default.
             if scratch is not None:
                 scratch = scratch
             else:
