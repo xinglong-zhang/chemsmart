@@ -26,11 +26,12 @@ def inspect_output(
         "program": detected,
         "kind": kind,
     }
-    energy_matches = (
-        _parse_orca(result, text)
-        if detected == "orca"
-        else _parse_gaussian(result, text)
-    )
+    if detected == "orca":
+        energy_matches = _parse_orca(result, text)
+    elif detected == "xtb":
+        energy_matches = _parse_xtb(result, text)
+    else:
+        energy_matches = _parse_gaussian(result, text)
     if energy_matches:
         energies = [float(value) for value in energy_matches]
         result["energy_min"] = min(energies)
@@ -153,6 +154,44 @@ def _parse_gaussian(result: dict[str, Any], text: str) -> list[str]:
         float(value)
         for line in re.findall(r"Frequencies\s+--\s+([^\n]+)", frequency_text)
         for value in re.findall(r"-?\d+(?:\.\d+)?", line)
+    ]
+    _add_frequency_summary(result, frequencies)
+    return energy_matches
+
+
+def _parse_xtb(result: dict[str, Any], text: str) -> list[str]:
+    # xTB writes no Gaussian/ORCA termination banner; a completed run ends with
+    # a "* finished run" line (the same marker XTBFile uses), and the fake
+    # runner emits it too. Routing xtb through _parse_gaussian would report
+    # normal_termination=False on every successful xtb job.
+    energy_matches = re.findall(
+        r"TOTAL ENERGY\s+(-?\d+\.\d+)\s*Eh",
+        text,
+    )
+    opt_iterations = re.findall(
+        r"GEOMETRY OPTIMIZATION CONVERGED AFTER\s+(\d+)\s+ITERATION",
+        text,
+        re.IGNORECASE,
+    )
+    result.update(
+        energy=float(energy_matches[-1]) if energy_matches else None,
+        scf_cycles=None,
+        optimization_cycles=(
+            int(opt_iterations[-1]) if opt_iterations else None
+        ),
+        optimization_converged=(bool(opt_iterations) or None),
+        scan_points_completed=None,
+        scan_points_total=None,
+        normal_termination="* finished run" in text,
+    )
+    frequencies = [
+        float(value)
+        for value in re.findall(
+            r"^\s*\d+\s+-?\d+\s+(-?\d+\.\d+)\s+",
+            _last_section(text, "projected vibrational frequencies"),
+            re.MULTILINE,
+        )
+        if abs(float(value)) > 1e-6
     ]
     _add_frequency_summary(result, frequencies)
     return energy_matches

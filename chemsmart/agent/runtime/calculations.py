@@ -551,7 +551,7 @@ def _reported_output_path(
         return None
     roots = [Path(value.strip()).expanduser() for value in folders[-3:]]
     roots.append(cwd)
-    suffixes = (".out",) if program == "orca" else (".log", ".out")
+    suffixes = (".log", ".out") if program == "gaussian" else (".out",)
     for label in reversed(labels):
         for root in reversed(roots):
             for suffix in suffixes:
@@ -565,14 +565,30 @@ def _progress_summary(path: Path, program: str, kind: str) -> str:
     if not path.is_file():
         return "Process running"
     text = _read_tail(path, max_chars=120_000)
-    progress = (
-        _orca_progress(text) if program == "orca" else _gaussian_progress(text)
-    )
+    if program == "orca":
+        progress = _orca_progress(text)
+    elif program == "xtb":
+        progress = _xtb_progress(text)
+    else:
+        progress = _gaussian_progress(text)
     if progress:
         return progress
     if "scan" in kind.lower():
         return "Coordinate scan running"
     return "Process running"
+
+
+def _xtb_progress(text: str) -> str:
+    if "* finished run" in text:
+        return "xTB finished"
+    if "GEOMETRY OPTIMIZATION CONVERGED" in text:
+        return "xTB optimization converged"
+    cycles = re.findall(r"##\s*CYCLE\s+(\d+)", text)
+    if cycles:
+        return f"xTB optimization cycle {cycles[-1]}"
+    if "projected vibrational frequencies" in text:
+        return "xTB frequency analysis"
+    return ""
 
 
 def _orca_progress(text: str) -> str:
