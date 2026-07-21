@@ -139,19 +139,24 @@ def invoke_folder_command():
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
-    def _run(extra_args=None, ctx_obj=None):
+    def _run(
+        extra_args=None,
+        ctx_obj=None,
+        filename="dummy.log",
+        detected_program="gaussian",
+    ):
         runner = CliRunner()
         captured_settings = None
         mock_job = MagicMock()
 
-        base_args = ["-f", "dummy.log", "-T", "298.15"]
+        base_args = ["-f", filename, "-T", "298.15"]
         cli_args = base_args + (extra_args or [])
 
         with (
             patch.object(
                 thermochemistry_cli_module,
                 "get_program_type_from_file",
-                return_value="gaussian",
+                return_value=detected_program,
             ),
             patch.object(
                 thermochemistry_cli_module.ThermochemistryJob,
@@ -216,6 +221,9 @@ def run_thermochemistry_with_directory():
             mock_folder = MagicMock()
             # Configure every discovery method to return the caller-supplied list
             mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.return_value = (
                 mock_files
             )
             mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (

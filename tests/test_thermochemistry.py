@@ -4400,6 +4400,17 @@ class TestThermochemistryCLI:
         assert settings is not None
         assert settings.check_imaginary_frequencies is False
 
+    def test_xtb_output_file_is_accepted(
+        self, run_thermochemistry_and_capture_settings
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            filename="water_opt/water_opt.out",
+            detected_program="xtb",
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
 
 class TestThermochemistryCLIFolderOptions:
     """Folder options are wired correctly into the ``thermochemistry`` CLI."""
@@ -4523,3 +4534,26 @@ class TestThermochemistryCLIFolderOptions:
         )
         assert result.exit_code == 0, result.output
         assert mock_from_filename.call_count == 2
+
+    def test_xtb_parent_directory_processes_subdirectory_output_files(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        xtb_output = str(tmp_path / "water_opt" / "water_opt.out")
+
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "xtb",
+                "-T",
+                "298.15",
+                "-o",
+                "thermo.dat",
+            ],
+            mock_files=[xtb_output],
+        )
+
+        assert result.exit_code == 0, result.output
+        mock_from_filename.assert_called_once()
+        assert mock_from_filename.call_args.kwargs["filename"] == xtb_output
