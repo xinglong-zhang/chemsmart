@@ -38,6 +38,13 @@ _LOCAL_PATTERN = re.compile(
 _PROGRAM_PATTERNS = {
     "gaussian": re.compile(r"\bgaussian\b|\bg16\b|\bg09\b", re.IGNORECASE),
     "orca": re.compile(r"\borca\b", re.IGNORECASE),
+    # Requests name xTB by the program or by the Hamiltonian they want
+    # (GFN2-xTB, GFN-FF). Missing a cue here would prune the xtb subcommand
+    # out of the schema, leaving the model unable to emit it at all.
+    "xtb": re.compile(
+        r"\bxtb\b|\bgfn-?ff\b|\bgfn-?[012]\b|semi-?empirical tight",
+        re.IGNORECASE,
+    ),
 }
 
 # Non-engine programs under run/sub, kept only when the request names them.
@@ -65,6 +72,10 @@ _KIND_PATTERNS = {
         r"\bts\b|transition[- ]?state|saddle point|전이상태", re.IGNORECASE
     ),
     "irc": re.compile(r"\birc\b|intrinsic reaction", re.IGNORECASE),
+    # xTB spells its frequency leaf "hess"; users ask for either word.
+    "hess": re.compile(
+        r"\bhess\w*\b|\bfreq\w*\b|vibrational|harmonic", re.IGNORECASE
+    ),
     "scan": re.compile(
         r"\bscan\b|\bpes\b|potential energy surface", re.IGNORECASE
     ),

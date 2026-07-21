@@ -19,7 +19,7 @@ from chemsmart.agent.services.command_explanation import (
 )
 
 _TOP_LEVEL_COMMANDS = {"run", "sub"}
-_PROGRAMS = {"gaussian", "orca", "nciplot", "mol"}
+_PROGRAMS = {"gaussian", "orca", "xtb", "nciplot", "mol"}
 _GAUSSIAN_SUBCOMMANDS = {
     "com",
     "crest",
@@ -52,9 +52,15 @@ _ORCA_SUBCOMMANDS = {
     "sp",
     "ts",
 }
+_XTB_SUBCOMMANDS = {
+    "hess",
+    "opt",
+    "sp",
+}
 _SUBCOMMANDS_BY_PROGRAM = {
     "gaussian": _GAUSSIAN_SUBCOMMANDS,
     "orca": _ORCA_SUBCOMMANDS,
+    "xtb": _XTB_SUBCOMMANDS,
 }
 
 
@@ -277,7 +283,26 @@ _ORCA_QMMM_OPTIONS: dict[str, _OptionSpec] = {
     "--active-atoms": _OptionSpec("active_atoms"),
 }
 
+# Program-scoped options that do not exist for the other programs. xTB carries
+# its method on the command line rather than in a route line, so ``-g`` selects
+# the GFN Hamiltonian here while it stays unknown to Gaussian and ORCA.
+# Source: ``chemsmart/cli/xtb/xtb.py``.
+_PROGRAM_OPTION_OVERRIDES: dict[str, dict[str, _OptionSpec]] = {
+    "xtb": {
+        "-g": _OptionSpec("gfn_version"),
+        "--gfn-version": _OptionSpec("gfn_version"),
+        "--grad": _OptionSpec("grad", takes_value=False, flag_value="true"),
+        "--no-grad": _OptionSpec(
+            "grad", takes_value=False, flag_value="false"
+        ),
+    },
+}
+
 _JOB_OPTION_OVERRIDES: dict[tuple[str, str], dict[str, _OptionSpec]] = {
+    # Source: ``chemsmart/cli/xtb/opt.py``.
+    ("xtb", "opt"): {
+        "--optimization-level": _OptionSpec("optimization_level"),
+    },
     ("gaussian", "td"): {
         "-s": _OptionSpec("states"),
         "-r": _OptionSpec("root"),
@@ -316,9 +341,11 @@ def parse_model_command(
         prefix.tokens[prefix.action_index + 1 : prefix.program_index],
         _RUNNER_OPTIONS,
     )
+    program_specs = dict(_PROGRAM_OPTIONS)
+    program_specs.update(_PROGRAM_OPTION_OVERRIDES.get(prefix.program, {}))
     program_opts, program_warnings = _parse_options(
         prefix.tokens[prefix.program_index + 1 : job_layout.subcommand_index],
-        _PROGRAM_OPTIONS,
+        program_specs,
     )
     subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
     subcommand_specs.update(
@@ -589,12 +616,15 @@ def _find_subcommand_index(
     tokens: list[str], program: str, start: int
 ) -> int | None:
     subcommands = _SUBCOMMANDS_BY_PROGRAM.get(program, set())
+    # Program-scoped options must be skipped with their values here too, or a
+    # value that happens to spell a subcommand would be read as one.
+    specs = {**_PROGRAM_OPTIONS, **_PROGRAM_OPTION_OVERRIDES.get(program, {})}
     index = start
     while index < len(tokens):
         token = tokens[index]
         if token in subcommands:
             return index
-        spec, _value = _option_spec_for_token(token, _PROGRAM_OPTIONS)
+        spec, _value = _option_spec_for_token(token, specs)
         if spec is not None:
             index += 2 if spec.takes_value and "=" not in token else 1
         else:

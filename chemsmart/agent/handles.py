@@ -9,10 +9,22 @@ from typing import Any
 
 from chemsmart.agent.serialization import generic_json_safe
 
+#: Tools that return a program settings object. Each program has its own
+#: builder, so callers that treat "a settings result" uniformly must stay in
+#: sync with this set rather than spelling two of the three names.
+SETTINGS_BUILDER_TOOLS = frozenset(
+    {
+        "build_gaussian_settings",
+        "build_orca_settings",
+        "build_xtb_settings",
+    }
+)
+
 _HANDLE_PREFIXES = {
     "mol": "mol",
     "gset": "gset",
     "oset": "oset",
+    "xset": "xset",
     "job": "job",
     "dryrun": "dryrun",
     "runtime": "runtime",
@@ -120,6 +132,7 @@ def result_handle_kind(tool_name: str, result: Any) -> str | None:
         "build_molecule": "mol",
         "build_gaussian_settings": "gset",
         "build_orca_settings": "oset",
+        "build_xtb_settings": "xset",
         "build_job": "job",
         "extract_optimized_geometry": "geom",
     }

@@ -24,6 +24,7 @@ from chemsmart.agent.model_command_parser import (
     format_parsed_model_command,
 )
 from chemsmart.agent.provider_adapter import extract_response_text
+from chemsmart.settings.workspace_project import PROJECT_PROGRAMS
 
 JsonDict = dict[str, Any]
 
@@ -313,7 +314,7 @@ def _grounding_contradiction(
     # Secondary check: proper nouns survive translation, so a wrong program
     # name appearing in prose (while the correct one is absent) is a red flag.
     program = str(facts.get("program") or "").lower()
-    other_programs = {"gaussian", "orca"} - {program}
+    other_programs = set(PROJECT_PROGRAMS) - {program}
     lowered_answer = answer.lower()
     if program and any(name in lowered_answer for name in other_programs):
         if program not in lowered_answer:

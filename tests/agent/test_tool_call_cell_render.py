@@ -239,6 +239,12 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
             "style": "warning",
             "summary": "builds validated ORCA settings",
         },
+        "build_xtb_settings": {
+            "risk": "read-only",
+            "read_only": True,
+            "style": "warning",
+            "summary": "builds validated xTB settings",
+        },
         "build_job": {
             "risk": "local-state",
             "read_only": False,
@@ -301,7 +307,7 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
         },
     }
 
-    assert len(expected_existing) == 14
+    assert len(expected_existing) == 15
     assert {
         key: _TOOL_META[key] for key in expected_existing
     } == expected_existing

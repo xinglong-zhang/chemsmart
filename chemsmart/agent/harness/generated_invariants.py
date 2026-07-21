@@ -38,6 +38,12 @@ from chemsmart.agent.harness.generated_orca import (
 from chemsmart.agent.harness.generated_orca import (
     qmmm_issues as orca_qmmm_issues,
 )
+from chemsmart.agent.harness.generated_xtb import (
+    gfn_version_issues as xtb_gfn_version_issues,
+)
+from chemsmart.agent.harness.generated_xtb import (
+    solvent_issues as xtb_solvent_issues,
+)
 from chemsmart.agent.harness.intent import ObservedIntent
 from chemsmart.agent.harness.invariants.gaussian_ts import (
     check_gaussian_ts_route,
@@ -145,6 +151,13 @@ def _route_issues(
                 result_index=result_index,
             ).issues
         )
+    # The route-keyword scan below only holds for programs whose route is a
+    # keyword line. xTB's "route" is its argv, which embeds file paths, so a
+    # geometry named ``*_opt.xyz`` would otherwise be read as an opt keyword.
+    if kind.startswith("xtb."):
+        issues.extend(xtb_solvent_issues(route, chemistry, evidence))
+        issues.extend(xtb_gfn_version_issues(route, chemistry, evidence))
+        return issues
     if kind.endswith(".sp") and re.search(
         r"\b(?:opt|freq|optts|scants)\b",
         route,

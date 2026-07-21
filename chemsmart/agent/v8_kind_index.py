@@ -132,11 +132,33 @@ KIND_SETTINGS = {
         "low_level_method": "str",
     },
     "orca.qrc": {},
+    # xTB carries its whole method on the command line and has no route line,
+    # so its settings are the GFN Hamiltonian, solvation pair, and (for opt)
+    # the convergence level.
+    "xtb.opt": {
+        "gfn_version": "str",
+        "solvent_model": "str",
+        "solvent_id": "str",
+        "optimization_level": "str",
+    },
+    "xtb.sp": {
+        "gfn_version": "str",
+        "solvent_model": "str",
+        "solvent_id": "str",
+    },
+    "xtb.hess": {
+        "gfn_version": "str",
+        "solvent_model": "str",
+        "solvent_id": "str",
+    },
 }
 
 # Group-level route parameters are accepted for both Gaussian and ORCA command
-# groups, so keep them for every kind instead of silently dropping them.
+# groups, so keep them for every kind instead of silently dropping them. xTB
+# has no route line, so it is excluded.
 for _kind in KIND_SETTINGS:
+    if _kind.startswith("xtb."):
+        continue
     KIND_SETTINGS[_kind].setdefault("additional_route_parameters", "str")
 
 GEOM_KINDS = {"opt", "ts", "irc", "scan", "modred", "crest", "neb"}

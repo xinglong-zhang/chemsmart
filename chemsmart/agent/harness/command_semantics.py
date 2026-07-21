@@ -34,7 +34,7 @@ CommandSemanticVerdict = Literal["ok", "warn", "reject"]
 CommandSemanticSeverity = Literal["warn", "reject"]
 
 _COMPUTATIONAL_TOP_LEVEL = {"run", "sub"}
-_SOFTWARE_COMMANDS = {"gaussian", "orca"}
+_SOFTWARE_COMMANDS = {"gaussian", "orca", "xtb"}
 
 
 @dataclass(frozen=True)
@@ -284,8 +284,9 @@ def _execute_safe_semantic_runtime(
         workdir=workdir,
         top_level=top_level,
     )
+    software = _software_program(tokens, top_index)
     try:
-        before = input_snapshot(workdir)
+        before = input_snapshot(workdir, software)
         completed = _run_safe_command(
             command,
             safe_argv,
@@ -297,7 +298,7 @@ def _execute_safe_semantic_runtime(
             return completed
         stdout_tail = _tail(completed.stdout)
         stderr_tail = _tail(completed.stderr)
-        generated_inputs = collect_generated_inputs(workdir, before)
+        generated_inputs = collect_generated_inputs(workdir, before, software)
         issues = _runtime_semantic_issues(
             tokens=tokens,
             top_index=top_index,
@@ -406,14 +407,21 @@ def _runtime_semantic_issues(
         ]
     if not _is_software_command(tokens, top_index) or generated_inputs:
         return []
+    # xTB has no route-carrying input file; its evidence is the rendered
+    # program call in the output it writes.
+    artifact = (
+        "xTB output"
+        if _software_program(tokens, top_index) == "xtb"
+        else "Gaussian/ORCA input file"
+    )
     if top_level == "run":
         return [
             CommandSemanticIssue(
                 rule_id="cmd.semantic.generated_input_missing",
                 severity="reject",
                 message=(
-                    "safe runtime validation succeeded but no Gaussian/ORCA "
-                    "input file was generated"
+                    "safe runtime validation succeeded but no "
+                    f"{artifact} was generated"
                 ),
                 evidence={"cwd": str(workdir), "argv": safe_argv},
             )
@@ -423,8 +431,8 @@ def _runtime_semantic_issues(
             rule_id="cmd.semantic.submit_generated_input_not_observed",
             severity="warn",
             message=(
-                "safe submit validation succeeded but no Gaussian/ORCA "
-                "input file was observed in the working directory"
+                "safe submit validation succeeded but no "
+                f"{artifact} was observed in the working directory"
             ),
             evidence={"cwd": str(workdir), "argv": safe_argv},
         )
@@ -658,6 +666,11 @@ def _command_contract_issues(
         )
         for issue in contract_issues
     )
+
+
+def _software_program(tokens: list[str], top_index: int) -> str | None:
+    index = _software_index(tokens, top_index)
+    return None if index is None else tokens[index]
 
 
 def _software_index(tokens: list[str], top_index: int) -> int | None:

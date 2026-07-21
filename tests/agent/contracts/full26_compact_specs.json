@@ -172,6 +172,42 @@
     {
       "kind": "orca.qrc",
       "input": "orca_ts.out"
+    },
+    {
+      "kind": "xtb.opt",
+      "project": "contract",
+      "settings": {
+        "gfn_version": "gfn2",
+        "optimization_level": "tight"
+      },
+      "intent_chemistry": {
+        "gfn_version": "gfn2",
+        "optimization_level": "tight"
+      }
+    },
+    {
+      "kind": "xtb.sp",
+      "project": "contract",
+      "settings": {
+        "gfn_version": "gfn2",
+        "solvent_model": "alpb",
+        "solvent_id": "toluene"
+      },
+      "intent_chemistry": {
+        "gfn_version": "gfn2",
+        "solvent_model": "alpb",
+        "solvent_id": "toluene"
+      }
+    },
+    {
+      "kind": "xtb.hess",
+      "project": "contract",
+      "settings": {
+        "gfn_version": "gfn2"
+      },
+      "intent_chemistry": {
+        "gfn_version": "gfn2"
+      }
     }
   ]
 }

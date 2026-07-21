@@ -36,6 +36,30 @@ def extract_orca_route(content: str | None) -> str | None:
     return " ".join(route_lines)
 
 
+def extract_xtb_program_call(content: str | None) -> str | None:
+    """Return the ``xtb ...`` argv recorded in an xTB output file.
+
+    xTB echoes the exact command it was invoked with on a ``program call``
+    line. That line, not an input file, is the artifact the harness gates
+    against, so it is normalized to start at the ``xtb`` executable token.
+    """
+
+    if not isinstance(content, str):
+        return None
+    for line in content.splitlines():
+        if not line.lstrip().lower().startswith("program call"):
+            continue
+        _, _, call = line.partition(":")
+        tokens = call.split()
+        if not tokens:
+            continue
+        for index, token in enumerate(tokens):
+            if token == "xtb" or token.endswith(("/xtb", "\\xtb")):
+                return " ".join(tokens[index:])
+        return " ".join(tokens)
+    return None
+
+
 def extract_cartesian_state(
     content: str | None,
     *,

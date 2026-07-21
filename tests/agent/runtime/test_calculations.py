@@ -247,6 +247,56 @@ def test_inspect_orca_output_fixture(tmp_path):
     assert summary["chemistry_elapsed_s"] == pytest.approx(0.563)
 
 
+def test_inspect_xtb_output_reports_normal_termination(tmp_path):
+    # xTB ends a completed run with "* finished run"; routing it through the
+    # Gaussian parser would report normal_termination=False on success.
+    output = tmp_path / "water_opt.out"
+    output.write_text(
+        "          | TOTAL ENERGY               -5.070544443465 Eh   |\n"
+        "   *** GEOMETRY OPTIMIZATION CONVERGED AFTER 4 ITERATIONS ***\n"
+        "* finished run on 2024/01/01 at 00:00:00.000\n",
+        encoding="utf-8",
+    )
+
+    summary = inspect_output(output, program="xtb", kind="xtb.opt")
+
+    assert summary["program"] == "xtb"
+    assert summary["normal_termination"] is True
+    assert summary["energy"] == pytest.approx(-5.070544443465)
+    assert summary["optimization_cycles"] == 4
+    assert summary["optimization_converged"] is True
+
+
+def test_inspect_xtb_real_hessian_fixture():
+    output = (
+        REPO_ROOT
+        / "tests"
+        / "data"
+        / "XTBTests"
+        / "outputs"
+        / "water_ohess"
+        / "water_ohess.out"
+    )
+    summary = inspect_output(output, program="xtb", kind="xtb.hess")
+
+    assert summary["normal_termination"] is True
+    assert summary["energy"] == pytest.approx(-5.070544443465)
+
+
+def test_fake_xtb_output_is_normal_termination(tmp_path):
+    # The fake runner emits the same marker, so agent test-mode runs render as
+    # completed rather than failed.
+    output = tmp_path / "water_sp_fake.out"
+    output.write_text(
+        "* xtb version 0.0.0 (Fake)\n* finished run (fake xtb)\n",
+        encoding="utf-8",
+    )
+
+    summary = inspect_output(output, program="xtb", kind="xtb.sp")
+
+    assert summary["normal_termination"] is True
+
+
 def test_job_specific_orca_receipts_use_real_outputs():
     output_root = REPO_ROOT / "tests" / "data" / "ORCATests" / "outputs"
 

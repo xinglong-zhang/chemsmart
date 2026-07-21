@@ -347,12 +347,36 @@ def _observed_chemistry(
         )
         if proportion is not None:
             chemistry["proportion_structures_to_use"] = proportion
+    if parsed.program == "xtb":
+        _merge_xtb_options(chemistry, tokens)
     return chemistry
+
+
+def _merge_xtb_options(chemistry: dict[str, Any], tokens: list[str]) -> None:
+    """Attach the xTB method options and undo generic alias collisions.
+
+    xTB carries its Hamiltonian on the command line, where ``-g`` means
+    ``--gfn-version``. The generic chemistry scan is deliberately broad and
+    reads the same flag as a grouping strategy, so the xTB meaning is
+    restored once the program is known.
+    """
+
+    chemistry.pop("grouping_strategy", None)
+    gfn_version = _option_value(tokens, ("-g", "--gfn-version"))
+    if gfn_version is not None:
+        chemistry["gfn_version"] = gfn_version
+    optimization_level = _option_value(tokens, ("--optimization-level",))
+    if optimization_level is not None:
+        chemistry["optimization_level"] = optimization_level
 
 
 def _merge_parsed_route_options(
     chemistry: dict[str, Any], parsed: Any
 ) -> None:
+    for key in ("solvent_model", "solvent_id"):
+        value = getattr(parsed, key, None)
+        if value is not None:
+            chemistry[key] = value
     if (
         "num_steps" not in chemistry
         and "num_steps_or_every_n_points" in chemistry

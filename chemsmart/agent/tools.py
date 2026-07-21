@@ -7,6 +7,9 @@ from typing import Any, Literal
 
 from chemsmart.agent.harness.workflow_state import current_workflow_state
 from chemsmart.agent.services.job_cli import (
+    SUBMIT_JOBTYPES_BY_PROGRAM,
+)
+from chemsmart.agent.services.job_cli import (
     SUPPORTED_SUBMIT_JOBTYPES as _SUPPORTED_SUBMIT_JOBTYPES,
 )
 from chemsmart.agent.services.job_cli import dry_run_input as _dry_run_input
@@ -48,6 +51,10 @@ from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.xtb.hess import XTBHessJob
+from chemsmart.jobs.xtb.opt import XTBOptJob
+from chemsmart.jobs.xtb.settings import XTBJobSettings
+from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments
 
@@ -87,6 +94,9 @@ JobKind = Literal[
     "orca.sp",
     "orca.irc",
     "orca.scan",
+    "xtb.opt",
+    "xtb.sp",
+    "xtb.hess",
 ]
 _CANONICAL_JOB_KINDS: tuple[JobKind, ...] = (
     "gaussian.opt",
@@ -101,6 +111,9 @@ _CANONICAL_JOB_KINDS: tuple[JobKind, ...] = (
     "orca.sp",
     "orca.irc",
     "orca.scan",
+    "xtb.opt",
+    "xtb.sp",
+    "xtb.hess",
 )
 _JOBTYPE_BY_KIND_SUFFIX = {
     "opt": "opt",
@@ -109,6 +122,7 @@ _JOBTYPE_BY_KIND_SUFFIX = {
     "sp": "sp",
     "irc": "irc",
     "scan": "scan",
+    "hess": "hess",
 }
 _JOB_CLASS_BY_KIND = {
     "gaussian.opt": GaussianOptJob,
@@ -123,10 +137,15 @@ _JOB_CLASS_BY_KIND = {
     "orca.sp": ORCASinglePointJob,
     "orca.irc": ORCAIRCJob,
     "orca.scan": ORCAScanJob,
+    "xtb.opt": XTBOptJob,
+    "xtb.sp": XTBSinglePointJob,
+    "xtb.hess": XTBHessJob,
 }
 _JOB_KIND_ALIASES = {
     "gaussian.singlepoint": "gaussian.sp",
     "orca.singlepoint": "orca.sp",
+    "xtb.singlepoint": "xtb.sp",
+    "xtb.freq": "xtb.hess",
 }
 _SUPPORTED_JOB_KINDS = _CANONICAL_JOB_KINDS
 _ORCA_AB_INITIO_KEYWORDS = (
@@ -373,6 +392,56 @@ def build_orca_settings(
         **extras,
     )
     _attach_selected_project(settings, "orca")
+    return settings
+
+
+def build_xtb_settings(
+    gfn_version="gfn2",
+    charge=0,
+    multiplicity=1,
+    optimization_level=None,
+    solvent_model=None,
+    solvent_id=None,
+    grad=False,
+    jobtype=None,
+    title=None,
+    **extras,
+) -> XTBJobSettings:
+    """Build validated xTB job settings from planner-supplied fields.
+
+    xTB has no functional or basis set: the GFN Hamiltonian is the method,
+    and implicit solvation needs both a model (alpb, gbsa) and a solvent
+    identifier. Each field maps one-to-one onto a ``chemsmart run xtb``
+    flag so the grounded command stays equivalent to the built job.
+    """
+
+    if solvent_model is not None and solvent_id is None:
+        raise ValueError(
+            "xTB solvation requires solvent_id alongside solvent_model; "
+            "a model alone runs in the gas phase."
+        )
+    if solvent_id is not None and solvent_model is None:
+        raise ValueError(
+            "xTB solvation requires solvent_model alongside solvent_id, "
+            "for example solvent_model='alpb'."
+        )
+    settings = XTBJobSettings(
+        gfn_version=gfn_version,
+        charge=charge,
+        multiplicity=multiplicity,
+        jobtype=jobtype,
+        title=title,
+        grad=grad,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+        **(
+            {}
+            if optimization_level is None
+            else {"optimization_level": optimization_level}
+        ),
+        **extras,
+    )
+    _attach_selected_project(settings, "xtb")
     return settings
 
 
@@ -624,10 +693,14 @@ def _jobtype_name(job: Job) -> str:
     jobtype = jobtype.lower()
     if jobtype == "singlepoint":
         return "sp"
-    if jobtype not in _SUPPORTED_SUBMIT_JOBTYPES:
-        supported = ", ".join(sorted(_SUPPORTED_SUBMIT_JOBTYPES))
+    program = str(getattr(job, "PROGRAM", "") or "").lower()
+    supported = SUBMIT_JOBTYPES_BY_PROGRAM.get(
+        program, _SUPPORTED_SUBMIT_JOBTYPES
+    )
+    if jobtype not in supported:
+        names = ", ".join(sorted(supported))
         raise ValueError(
-            f"Unsupported submit jobtype {jobtype!r}. Supported: {supported}"
+            f"Unsupported submit jobtype {jobtype!r}. Supported: {names}"
         )
     return jobtype
 

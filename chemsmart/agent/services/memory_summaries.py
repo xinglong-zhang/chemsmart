@@ -6,6 +6,8 @@ import re
 from collections import Counter
 from typing import Any
 
+from chemsmart.agent.handles import SETTINGS_BUILDER_TOOLS
+
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#.*$", re.MULTILINE)
 _ORCA_ROUTE_RE = re.compile(r"^\s*!.*$", re.MULTILINE)
 _MOLECULE_REPR_RE = re.compile(r"Molecule<([^,>]+)")
@@ -31,7 +33,7 @@ def summarize_tool_result(
         return f"recommend_method suggested {method}." if method else None
     if tool in _PROJECT_YAML_TOOLS:
         return _project_yaml_summary(tool, result)
-    if tool in {"build_gaussian_settings", "build_orca_settings"}:
+    if tool in SETTINGS_BUILDER_TOOLS:
         method = _method_summary(result)
         return f"{tool} prepared {method} settings." if method else None
     if tool == "build_job":

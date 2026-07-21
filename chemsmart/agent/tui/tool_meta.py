@@ -101,6 +101,12 @@ _TOOL_META = {
         "style": "warning",
         "summary": "builds validated ORCA settings",
     },
+    "build_xtb_settings": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "builds validated xTB settings",
+    },
     "build_job": {
         "risk": "local-state",
         "read_only": False,
