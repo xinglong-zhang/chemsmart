@@ -3,11 +3,11 @@ import os.path
 from typing import Optional
 
 from chemsmart.io.yaml import YAMLFile
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.utils.utils import strip_out_comments
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 

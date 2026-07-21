@@ -144,7 +144,8 @@ xTB Main Output Files (.out)
 
 An xTB calculation writes its results to a **directory** (containing ``charges``, ``xtbopt.log``, ``g98.out``, and so
 on). For geometry input you can point ``-f`` at the xTB main output file; when given a file path, CHEMSMART
-automatically resolves it to the parent calculation directory before reading.
+automatically resolves it to the parent calculation directory and reads the associated auxiliary files. Each xTB
+calculation directory must contain exactly one xTB main output.
 
 .. code:: bash
 
@@ -206,11 +207,11 @@ For full details on organometallic complex support and its restrictions, see :do
  Molecular Databases
 *********************
 
-Chemsmart Database Files (.db)
+CHEMSMART Database Files (.db)
 ==============================
 
-Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
-:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, CHEMSMART first selects the requested
 record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
 (see :doc:`database-workflow`).
 
@@ -393,7 +394,7 @@ CHEMSMART automatically detects file formats based on extensions:
 -  ``.inp`` → ORCA input
 -  ``.out`` → Gaussian/ORCA/xTB output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
--  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
+-  ``.db`` → CHEMSMART/ASE database (auto-detected by validating the database schema)
 -  ``.traj`` → ASE trajectory
 
 .. note::

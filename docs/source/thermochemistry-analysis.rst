@@ -2,8 +2,8 @@
  Thermochemistry Analysis
 ##########################
 
-CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
-output files and xTB calculation folders.
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA, and
+xTB output files.
 
 *******************************
  Thermochemistry Analysis Jobs
@@ -12,9 +12,8 @@ output files and xTB calculation folders.
 The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
 entropy, and Gibbs free energy.
 
-When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from the
-file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or ``.out``.
-For xTB, use ``-d`` with ``-p xtb`` (calculation directories, not individual files).
+When processing a directory, use ``-p/--program`` when chemsmart needs to identify the program from the file content,
+and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or ``.out``.
 
 Usage
 =====
@@ -41,8 +40,12 @@ Options
       -  Description
 
    -  -  ``-d, --directory``
+
       -  string
-      -  Directory for batch processing (mutually exclusive with ``-f``)
+
+      -  Directory for batch processing (mutually exclusive with ``-f``). Gaussian/ORCA and suffix-based searches
+         inspect the current directory only. With ``-p xtb``, only immediate child calculation directories are
+         inspected.
 
    -  -  ``-p, --program``
       -  string
@@ -56,7 +59,7 @@ Options
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific Gaussian or ORCA file(s) to analyze (repeatable, mutually exclusive with ``-d``)
+      -  Specific Gaussian, ORCA, or xTB output file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -150,7 +153,7 @@ Examples
 
 **Single file analysis:**
 
-Analyze a single Gaussian/ORCA output file.
+Analyze a single Gaussian, ORCA, or xTB output file.
 
 .. code:: bash
 
@@ -164,31 +167,24 @@ Output:
    ================================================================================
    water_opt               -76.323311   0.021581  -76.297951   0.021430  -76.319381
 
-**Single xTB calculation directory:**
-
-Analyze a single xTB calculation directory containing all relevant xTB output files.
-
-.. code:: bash
-
-   chemsmart run thermochemistry -T 298.15 -d water_ohess/ -p xtb
-
 **Multiple files:**
 
-Analyze multiple Gaussian/ORCA output files in a single run.
+Analyze multiple Gaussian, ORCA, or xTB output files in a single run.
 
 .. code:: bash
 
-   chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out
+   chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out -f he_xtb/he_xtb.out
 
 **Batch processing of Gaussian/ORCA output files:**
 
-Automatically discover and analyze Gaussian or ORCA output files within a directory.
+Automatically discover and analyze Gaussian or ORCA output files in the specified directory. This search is
+non-recursive.
 
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -d . -p gaussian -o thermo.dat
 
-Select files by extension only:
+Select files by extension only. Suffix-based discovery is also non-recursive:
 
 .. code:: bash
 
@@ -212,9 +208,10 @@ Example directory layout:
 
    chemsmart run thermochemistry -T 298.15 -d molecules/ -p xtb -o thermo_xtb.dat
 
-The specified directory is scanned for xTB calculation folders. If the given directory itself is not an xTB calculation
-directory, only its immediate subdirectories (one level deep) are inspected. Thermochemistry analysis is performed for
-each identified calculation directory.
+Only immediate subdirectories of the specified parent directory are inspected; nested grandchildren are not scanned, and
+the parent itself is not treated as a calculation directory. Use ``-f path/to/main.out`` for one xTB calculation. Each
+child calculation directory must contain exactly one xTB main output and the required auxiliary files. Invalid or
+ambiguous child directories are logged as errors and skipped while valid sibling calculations continue.
 
 **Batch processing with custom pressure:**
 

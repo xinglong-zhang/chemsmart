@@ -7,10 +7,10 @@ from functools import lru_cache
 
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin, cached_property
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 

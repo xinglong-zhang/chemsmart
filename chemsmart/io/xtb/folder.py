@@ -54,15 +54,15 @@ class XTBFolder(BaseFolder):
         Check if this folder is a valid xTB calculation directory.
 
         Uses a two-level validation:
-        1. Must contain at least one xTB output file (*.out with xTB keywords)
+        1. Must contain exactly one xTB output file (*.out with xTB keywords)
         2. Must contain at least one common xTB auxiliary file (xtbrestart,
            charges, xtbtopo.mol, or wbo)
 
         Returns:
             bool: True if this is a valid xTB calculation directory.
         """
-        # First check: must have at least one xTB output file
-        if not self.is_program_calculation_directory(program="xtb"):
+        # First check: must have exactly one xTB output file
+        if self._xtb_out() is None:
             return False
         # Second check: must have at least one common auxiliary file
         for filename in self.XTB_DIRECTORY_MARKERS:
@@ -80,8 +80,7 @@ class XTBFolder(BaseFolder):
         """
         Return the path to the main XTB output file.
 
-        If multiple xTB output files are found, logs a warning and returns
-        the most recently modified one.
+        Raises an error if multiple xTB main output files are found.
 
         Returns:
             str | None: Path to the xTB output file, or None if not found.
@@ -92,15 +91,14 @@ class XTBFolder(BaseFolder):
         if not xtbout:
             return None
         if len(xtbout) > 1:
-            # Sort by modification time (most recent first)
-            xtbout_sorted = sorted(
-                xtbout, key=lambda f: os.path.getmtime(f), reverse=True
+            filenames = ", ".join(
+                sorted(os.path.basename(path) for path in xtbout)
             )
-            logger.warning(
-                f"Multiple xTB output files found in {self.folder}, "
-                f"using the most recent one: {os.path.basename(xtbout_sorted[0])}"
+            raise ValueError(
+                f"Multiple xTB main output files found in '{self.folder}': "
+                f"{filenames}. Each xTB calculation directory must contain "
+                f"exactly one main output file."
             )
-            return xtbout_sorted[0]
         return xtbout[0]
 
     def _xtbopt_log(self):

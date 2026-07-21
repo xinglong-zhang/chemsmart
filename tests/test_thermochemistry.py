@@ -1,9 +1,11 @@
+import importlib
 import os.path
 from shutil import copyfile
 
 import numpy as np
 import pytest
 from ase import units
+from click.testing import CliRunner
 
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
@@ -201,6 +203,7 @@ class TestThermochemistry:
     def test_thermochemistry_co2(
         self,
         tmpdir,
+        monkeypatch,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_scratch,
         orca_co2_output,
@@ -211,7 +214,7 @@ class TestThermochemistry:
         mol = Molecule.from_filepath(orca_co2_output)
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
-        os.chdir(tmpdir)
+        monkeypatch.chdir(tmpdir)
         mol.write_com(tmp_path)
 
         # get project settings
@@ -4400,6 +4403,17 @@ class TestThermochemistryCLI:
         assert settings is not None
         assert settings.check_imaginary_frequencies is False
 
+    def test_xtb_output_file_is_accepted(
+        self, run_thermochemistry_and_capture_settings
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            filename="water_opt/water_opt.out",
+            detected_program="xtb",
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
 
 class TestThermochemistryCLIFolderOptions:
     """Folder options are wired correctly into the ``thermochemistry`` CLI."""
@@ -4523,3 +4537,43 @@ class TestThermochemistryCLIFolderOptions:
         )
         assert result.exit_code == 0, result.output
         assert mock_from_filename.call_count == 2
+
+    def test_xtb_parent_directory_discovers_output_files(
+        self,
+        xtb_water_outfolder,
+        mocker,
+    ):
+        parent_directory = os.path.dirname(xtb_water_outfolder)
+        xtb_output = os.path.join(xtb_water_outfolder, "water_ohess.out")
+
+        thermochemistry_module = importlib.import_module(
+            "chemsmart.cli.thermochemistry.thermochemistry"
+        )
+        mock_job = mocker.MagicMock()
+        mock_job.label = "water_ohess"
+        mock_from_filename = mocker.patch.object(
+            thermochemistry_module.ThermochemistryJob,
+            "from_filename",
+            return_value=mock_job,
+        )
+
+        result = CliRunner().invoke(
+            thermochemistry_module.thermochemistry,
+            [
+                "-d",
+                parent_directory,
+                "-p",
+                "xtb",
+                "-T",
+                "298.15",
+                "-o",
+                "thermo.dat",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        discovered_files = [
+            call.kwargs["filename"]
+            for call in mock_from_filename.call_args_list
+        ]
+        assert xtb_output in discovered_files
