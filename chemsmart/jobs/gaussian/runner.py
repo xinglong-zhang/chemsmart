@@ -46,6 +46,7 @@ class GaussianJobRunner(JobRunner):
         JOBTYPES (list): Supported Gaussian job type identifiers.
         PROGRAM (str): Program identifier ('gaussian').
         FAKE (bool): Whether to run in fake/test mode.
+        SCRATCH (bool): Whether to use scratch directories by default.
         server: Server configuration used for execution.
         scratch (bool): Whether to use a scratch directory for I/O.
         scratch_dir (str): Path to the scratch directory when enabled.
@@ -94,8 +95,14 @@ class GaussianJobRunner(JobRunner):
     PROGRAM = "gaussian"
 
     FAKE = False
+    SCRATCH = True
+    # Default to use scratch for Gaussian jobs - class attribute instead
+    # of instance attribute so it needs not be set at
+    # instance level - set during initialization (__init__).
 
-    def __init__(self, server, fake=False, scratch_dir=None, **kwargs):
+    def __init__(
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
+    ):
         """
         Initialize Gaussian job runner with server and execution settings.
 
@@ -105,12 +112,14 @@ class GaussianJobRunner(JobRunner):
 
         Args:
             server: Server configuration object for job execution.
+            scratch (bool, optional): Whether to use scratch directories.
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
         super().__init__(
             server=server,
+            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,
@@ -359,6 +368,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         FAKE (bool): Flag indicating fake/test mode (True for this runner).
         JOBTYPES (list): Supported Gaussian job types (inherited).
         PROGRAM (str): Program identifier ('gaussian').
+        SCRATCH (bool): Whether to use scratch
+        directories by default (inherited).
         server: Server configuration used for execution (inherited).
         scratch (bool): Whether to use a scratch directory (inherited).
         scratch_dir (str): Path to the scratch directory (inherited/derived).
@@ -375,7 +386,9 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, fake=True, scratch_dir=None, **kwargs):
+    def __init__(
+        self, server, scratch=False, fake=True, scratch_dir=None, **kwargs
+    ):
         """
         Initialize the fake Gaussian job runner.
 
@@ -384,12 +397,14 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
+            scratch: Whether to use scratch directories (default: None).
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.
         """
         super().__init__(
             server=server,
+            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,

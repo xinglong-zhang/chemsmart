@@ -33,6 +33,7 @@ class NCIPLOTJobRunner(JobRunner):
         PROGRAM (str): Program identifier ('NCIPLOT').
         JOBTYPES (list): Supported job types (['nciplot']).
         FAKE (bool): Whether this runner operates in fake/test mode.
+        SCRATCH (bool): Whether to use scratch directories by default.
         server: Server configuration used for execution.
         scratch (bool): Whether scratch is enabled for this runner.
         scratch_dir (str): Path to scratch directory, if used.
@@ -47,19 +48,25 @@ class NCIPLOTJobRunner(JobRunner):
     ]
 
     FAKE = False
+    SCRATCH = True  # default to using scratch for NCIPLOT Jobs
 
-    def __init__(self, server, fake=False, scratch_dir=None, **kwargs):
+    def __init__(
+        self, server, scratch=False, fake=False, scratch_dir=None, **kwargs
+    ):
         """
         Initialize the NCIPLOTJobRunner.
 
         Args:
             server: Server configuration for job execution
+            scratch: Whether to use scratch
+            directory (defaults to class SCRATCH)
             fake: Whether to run in fake mode for testing
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
         """
         super().__init__(
             server=server,
+            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,
@@ -393,6 +400,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
 
     Attributes:
         FAKE (bool): True for this runner to indicate fake mode.
+        SCRATCH (bool): Whether to use scratch directories (inherited default).
         server: Server configuration used for
         execution (retained/used normally).
         scratch (bool): Whether scratch is enabled for this runner.
@@ -404,18 +412,22 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
 
     FAKE = True
 
-    def __init__(self, server, fake=True, scratch_dir=None, **kwargs):
+    def __init__(
+        self, server, scratch=False, fake=True, scratch_dir=None, **kwargs
+    ):
         """
         Initialize FakeNCIPLOTJobRunner.
 
         Args:
             server: Server configuration (ignored in fake mode)
+            scratch: Whether to use scratch directory
             fake: Always True for this class
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
         """
         super().__init__(
             server=server,
+            scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
             **kwargs,
