@@ -4538,7 +4538,9 @@ class TestThermochemistryCLIFolderOptions:
     def test_xtb_parent_directory_processes_subdirectory_output_files(
         self, tmp_path, run_thermochemistry_with_directory
     ):
-        xtb_output = str(tmp_path / "water_opt" / "water_opt.out")
+        calculation_directory = tmp_path / "water_opt"
+        calculation_directory.mkdir()
+        xtb_output = str(calculation_directory / "water_opt.out")
 
         result, mock_from_filename = run_thermochemistry_with_directory(
             [

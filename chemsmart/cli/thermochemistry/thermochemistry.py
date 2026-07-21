@@ -267,16 +267,18 @@ def thermochemistry(
     if directory:
         if program and program.lower() == "xtb":
             directory = os.path.abspath(directory)
-            files = BaseFolder(
-                folder=directory
-            ).get_all_output_files_in_current_folder_and_subfolders_by_program(
-                program="xtb"
-            )
-            files = [
-                file
-                for file in files
-                if os.path.abspath(os.path.dirname(file)) != directory
-            ]
+            # Each immediate subdirectory represents one xTB calculation.
+            # Do not recurse, matching Gaussian and ORCA directory handling.
+            for entry in os.listdir(directory):
+                subdir = os.path.join(directory, entry)
+                if os.path.isdir(subdir):
+                    files.extend(
+                        BaseFolder(
+                            folder=subdir
+                        ).get_all_output_files_in_current_folder_by_program(
+                            program="xtb"
+                        )
+                    )
             if not files:
                 raise ValueError(
                     f"No xTB output files found in calculation subdirectories "
