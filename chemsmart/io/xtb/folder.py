@@ -191,6 +191,7 @@ class XTBFolder(BaseFolder):
             - xtbopt.poscar  → VASP POSCAR format
             - xtbopt.gen     → DFTB+ gen format
             - xtbopt.EIn     → Gaussian External format
+        Support for these additional formats is planned for a future release.
 
         Returns:
             str | None: Path to optimized geometry file, or None if
