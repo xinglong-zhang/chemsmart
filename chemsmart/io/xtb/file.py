@@ -206,6 +206,8 @@ class XTBMainOut(XTBFileMixin):
     def optimization_level(self):
         """Optimization level."""
         opt_level = self._get_setup_information("optimization level")
+        if opt_level and opt_level.lower() == "verytight":
+            return "vtight"
         return opt_level
 
     @property

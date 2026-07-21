@@ -228,6 +228,33 @@ class XTBJobSettings:
             self.update_solvent(**kwargs)
 
     @classmethod
+    def from_outfile(cls, filepath):
+        """Create xTB settings from an xTB main output file.
+
+        Inherits all xTB-specific settings: GFN version, optimization level,
+        charge, multiplicity, jobtype, gradient, and solvent configuration.
+        This is same-program inheritance, analogous to Gaussian from_logfile
+        or ORCA from_outfile.
+        """
+        from chemsmart.io.xtb.file import XTBMainOut
+
+        output = XTBMainOut(filename=os.path.abspath(filepath))
+
+        return cls(
+            gfn_version=output.method,
+            optimization_level=output.optimization_level,
+            charge=output.net_charge,
+            multiplicity=output.multiplicity,
+            jobtype=output.jobtype,
+            title=(
+                f"Job prepared from xTB file " f"{os.path.basename(filepath)}"
+            ),
+            grad=output.route_object.grad,
+            solvent_model=output.solvent_model,
+            solvent_id=output.solvent_id,
+        )
+
+    @classmethod
     def from_filepath(cls, filepath, **kwargs):
         filepath = os.path.abspath(filepath)
         if filepath.endswith((".com", ".gjf")):
@@ -252,11 +279,28 @@ class XTBJobSettings:
                 keywords=("charge", "multiplicity", "title"),
             )
         if filepath.endswith(".out"):
-            from chemsmart.io.orca.output import ORCAOutput
+            from chemsmart.utils.io import get_program_type_from_file
 
-            return cls.default().merge(
-                ORCAOutput(filename=filepath).read_settings(),
-                keywords=("charge", "multiplicity", "title"),
+            program = get_program_type_from_file(filepath)
+            if program == "xtb":
+                return cls.from_outfile(filepath)
+            if program == "gaussian":
+                from chemsmart.io.gaussian.output import Gaussian16Output
+
+                return cls.default().merge(
+                    Gaussian16Output(filename=filepath).read_settings(),
+                    keywords=("charge", "multiplicity", "title"),
+                )
+            if program == "orca":
+                from chemsmart.io.orca.output import ORCAOutput
+
+                return cls.default().merge(
+                    ORCAOutput(filename=filepath).read_settings(),
+                    keywords=("charge", "multiplicity", "title"),
+                )
+            raise ValueError(
+                f"Unsupported .out file program type: {program}. "
+                "Only Gaussian, ORCA, and xTB outputs are supported."
             )
         return cls.default()
 

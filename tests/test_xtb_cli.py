@@ -8,6 +8,7 @@ from chemsmart.cli.sub import sub
 from chemsmart.cli.xtb.xtb import xtb
 from chemsmart.jobs.xtb.hess import XTBHessJob
 from chemsmart.jobs.xtb.opt import XTBOptJob
+from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 
 
@@ -119,6 +120,53 @@ class TestXTBCLISettings:
         )
         assert result.exit_code == 0, result.output
         assert settings.additional_route_parameters == "--copy --json"
+
+    def test_settings_from_xtb_main_output(self, xtb_p_benzyne_opt_outfolder):
+        filepath = (
+            f"{xtb_p_benzyne_opt_outfolder}/" f"p_benzyne_opt_alpb_toluene.out"
+        )
+        settings = XTBJobSettings.from_filepath(filepath)
+
+        assert settings.gfn_version == "gfn2"
+        assert settings.optimization_level == "loose"
+        assert settings.charge == 0
+        assert settings.multiplicity == 3
+        assert settings.jobtype == "opt"
+        assert settings.grad is True
+        assert settings.solvent_model == "alpb"
+        assert settings.solvent_id == "toluene"
+
+    def test_settings_from_xtb_sp_output(self, xtb_p_benzyne_sp_outfolder):
+        filepath = (
+            f"{xtb_p_benzyne_sp_outfolder}/" f"p_benzyne_sp_alpb_toluene.out"
+        )
+        settings = XTBJobSettings.from_filepath(filepath)
+
+        assert settings.gfn_version == "gfn2"
+        assert settings.optimization_level is None
+        assert settings.charge == 0
+        assert settings.multiplicity == 3
+        assert settings.jobtype == "sp"
+        assert settings.grad is False
+        assert settings.solvent_model == "alpb"
+        assert settings.solvent_id == "toluene"
+
+    def test_hess_accepts_xtb_main_output(self, xtb_co2_outfolder):
+        xtb_main_output = str(Path(xtb_co2_outfolder) / "co2_ohess.out")
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.hess.XTBHessJob",
+            ["-p", "test", "-f", xtb_main_output, "hess"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.jobtype == "hess"
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert (
+            mock_job_cls.call_args.kwargs["molecule"].empirical_formula
+            == "CO2"
+        )
+        assert mock_job_cls.call_args.kwargs["label"] == "co2_ohess_hess"
 
 
 class TestXTBJobClasses:
