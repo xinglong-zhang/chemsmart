@@ -7,7 +7,6 @@ import pytest
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import (
     JobRunner,
-    get_submitter_worker_count,
     run_phase_jobs,
 )
 
@@ -72,17 +71,6 @@ class TestJobRunner:
         mock_execute.assert_called_once()
         assert mock_execute.call_args.kwargs["no_run_in_parallel"] is True
 
-    def test_submitter_worker_count_uses_policy_cap(self, pbs_server):
-        runner = JobRunner(server=pbs_server, fake=True)
-        assert get_submitter_worker_count(runner, 1000) == runner.num_cores
-
-    def test_submitter_worker_count_honors_env_override(
-        self, pbs_server, monkeypatch
-    ):
-        monkeypatch.setenv("CHEMSMART_MAX_SUBMITTERS", "3")
-        runner = JobRunner(server=pbs_server, fake=True)
-        assert get_submitter_worker_count(runner, 1000) == 3
-
 
 class TestSerialExecution:
     """Test serial execution enforcement for jobs with subjobs."""
@@ -138,40 +126,7 @@ class TestBatchJobRefactor:
         class DummyBatchJob(BatchJob):
             PROGRAM = "dummy"
 
-            def _configure_runner_for_node(self, runner, node, job):
-                return runner
-
         return DummyBatchJob
-
-    def test_split_jobs_across_nodes_balances_chunks(self):
-        from chemsmart.jobs.batch import BatchJob
-
-        jobs = [1, 2, 3, 4, 5]
-        chunks = BatchJob._split_jobs_across_nodes(jobs, 3)
-
-        assert chunks == [[1, 2], [3, 4], [5]]
-
-    def test_orca_and_gaussian_batch_pin_runner_to_slurm_node(
-        self, pbs_server, monkeypatch
-    ):
-        """Engine wrappers should pin child commands via srun --nodelist."""
-        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-        from chemsmart.jobs.orca.batch import OrcaBatchJob
-
-        monkeypatch.setenv("SLURM_JOB_NODELIST", "nodeA")
-
-        for batch_cls in (GaussianBatchJob, OrcaBatchJob):
-            runner = JobRunner(server=pbs_server, fake=True)
-            runner._get_command = Mock(return_value="run.exe job.inp")
-            batch = batch_cls(jobs=[], jobrunner=runner)
-            pinned = batch._configure_runner_for_node(
-                runner=runner, node="nodeA", job=Mock()
-            )
-            command = pinned._get_command(Mock())
-            assert command.startswith(
-                "srun --nodelist=nodeA --exclusive -N1 -n1 "
-            )
-            assert command.endswith("run.exe job.inp")
 
     def test_batch_serial_mode_when_unset(self, pbs_server):
         """Test that BatchJob runs all jobs when they are unset."""
@@ -423,54 +378,6 @@ class TestBatchJobRefactor:
         assert child_a.jobrunner.mem_gb == 32
         assert child_b.jobrunner.num_cores == 16
         assert child_b.jobrunner.mem_gb == 32
-
-    def test_batch_run_multi_node_records_node_future_exception(
-        self, pbs_server, mocker
-    ):
-        dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=False
-        )
-
-        job1 = Mock()
-        job1.label = "job1"
-        job2 = Mock()
-        job2.label = "job2"
-
-        batch = dummy_batch_cls(
-            jobs=[job1, job2],
-            no_run_in_parallel=False,
-            jobrunner=runner,
-            label="batch_node_future_failure",
-        )
-
-        def _chunk_side_effect(jobs_chunk, node, **kwargs):
-            if node == "n2":
-                raise RuntimeError("node future failure")
-            return [
-                {
-                    "label": jobs_chunk[0].label,
-                    "success": True,
-                    "error": "",
-                    "node": node,
-                }
-            ]
-
-        mocker.patch.object(
-            batch, "_run_chunk_on_node", side_effect=_chunk_side_effect
-        )
-
-        outcomes = batch._run_multi_node(nodes=["n1", "n2"])
-
-        assert any(item["success"] for item in outcomes)
-        node_failure = [
-            item
-            for item in outcomes
-            if (not item["success"]) and item["node"] == "n2"
-        ]
-        assert len(node_failure) == 1
-        assert node_failure[0]["label"].startswith("node:n2:")
-        assert "node future failure" in node_failure[0]["error"]
 
 
 class TestGaussianBatchDelegation:
@@ -974,9 +881,6 @@ class TestRunListFailureAggregation:
         class _DummyBatch(BatchJob):
             PROGRAM = "test"
 
-            def _configure_runner_for_node(self, runner, node, job):
-                return runner
-
         batch = _DummyBatch(
             jobs=[child],
             no_run_in_parallel=False,
@@ -1014,9 +918,6 @@ class TestRunListFailureAggregation:
         class _DummyBatch(BatchJob):
             PROGRAM = "test"
 
-            def _configure_runner_for_node(self, runner, node, job):
-                return runner
-
         batch = _DummyBatch(
             jobs=[child_a, child_b],
             no_run_in_parallel=True,
@@ -1042,9 +943,6 @@ class TestBatchSerialExecutionPolicy:
 
         class DummyBatchJob(BatchJob):
             PROGRAM = "dummy"
-
-            def _configure_runner_for_node(self, runner, node, job):
-                return runner
 
         return DummyBatchJob
 
@@ -1254,9 +1152,6 @@ class TestBatchExecutionModes:
         class DummyBatchJob(BatchJob):
             PROGRAM = "dummy"
 
-            def _configure_runner_for_node(self, runner, node, job):
-                return runner
-
         return DummyBatchJob
 
     def test_batch_execution_mode_enum_values(self):
@@ -1264,7 +1159,7 @@ class TestBatchExecutionModes:
 
         assert BatchExecutionMode.LOCAL_BATCH.value == "local_batch"
         assert BatchExecutionMode.ARRAY_TASK.value == "array_task"
-        assert BatchExecutionMode.MULTI_NODE.value == "multi_node"
+        assert not hasattr(BatchExecutionMode, "MULTI_NODE")
 
     def test_resolve_batch_execution_mode_defaults_to_local_batch(
         self, monkeypatch
@@ -1565,15 +1460,17 @@ class TestBatchExecutionModes:
         assert batch.nested_serial is True
         assert batch.label == "crest_parent_children"
 
-    def test_multi_node_logs_multi_node_execution(
+    def test_slurm_nodelist_still_runs_serial_local_batch(
         self, pbs_server, monkeypatch, caplog
     ):
+        """Multi-node SLURM allocation does not enable in-process fan-out."""
         import logging
 
         from chemsmart.jobs.batch import BatchExecutionMode
 
         for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
             monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("SLURM_JOB_NODELIST", "nodeA,nodeB")
 
         runner = JobRunner(
             server=pbs_server, fake=True, no_run_in_parallel=True
@@ -1591,26 +1488,21 @@ class TestBatchExecutionModes:
             jobrunner=runner,
             label="multi_node_batch",
         )
-        monkeypatch.setattr(
-            batch, "_get_allocated_nodes", lambda: ["nodeA", "nodeB"]
-        )
-        monkeypatch.setattr(
-            batch,
-            "_run_multi_node",
-            lambda nodes, **kwargs: [
-                {"label": c.label, "success": True, "error": None}
-                for c in children
-            ],
-        )
         with caplog.at_level(logging.INFO):
             batch.run()
 
         assert any(
-            f"execution={BatchExecutionMode.MULTI_NODE.value}"
+            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
             in record.message
             and "children=2" in record.message
             for record in caplog.records
         )
+        assert not any(
+            "execution=multi_node" in record.message
+            for record in caplog.records
+        )
+        children[0].run.assert_called_once()
+        children[1].run.assert_called_once()
 
     def test_pbs_arrayid_selects_array_task_mode(
         self, pbs_server, monkeypatch

@@ -7,28 +7,23 @@ of engine-specific jobs. Engine-agnostic behavior includes:
 - serial local child-job execution with full resources per child
 - array-task execution of a single child (scheduler array env)
 - fault-tolerant execution with aggregated failures
-- scheduler/node allocation detection (SLURM/PBS)
-- distribution of child jobs across allocated nodes
 
-Subclasses implement engine-specific runner adaptation (for example,
-pinning a copied runner to a scheduler node).
+Cluster concurrency is via ``chemsmart sub`` scheduler arrays, not
+in-process multi-node fan-out.
 """
 
 import logging
 import os
-import subprocess
 import threading
 import time
-import types
-from abc import ABCMeta, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from abc import ABCMeta
 from contextlib import contextmanager, suppress
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
+from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.mixins import RegistryMeta
 
 logger = logging.getLogger(__name__)
@@ -43,14 +38,10 @@ class BatchExecutionMode(str, Enum):
         Run all children in-process (serial policy by default).
     ``ARRAY_TASK``
         Run one child selected by the scheduler array task id.
-    ``MULTI_NODE``
-        Distribute children across an allocated multi-node partition
-        (still entered from the local-batch path when nodes > 1).
     """
 
     LOCAL_BATCH = "local_batch"
     ARRAY_TASK = "array_task"
-    MULTI_NODE = "multi_node"
 
 
 _ARRAY_TASK_ID_ENV_VARS = (
@@ -100,8 +91,7 @@ def cleared_array_task_env() -> Iterator[None]:
 def resolve_batch_execution_mode() -> BatchExecutionMode:
     """Return ``ARRAY_TASK`` when a scheduler array task id is set.
 
-    Otherwise return ``LOCAL_BATCH``. Multi-node distribution is resolved
-    later inside ``_run_local_batch`` when more than one node is allocated.
+    Otherwise return ``LOCAL_BATCH``.
     """
     if resolve_array_task_id() is not None:
         return BatchExecutionMode.ARRAY_TASK
@@ -137,15 +127,14 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     """
     Abstract controller for running a batch of child jobs.
 
-    Orchestration is engine-agnostic. Subclasses implement
-    ``_configure_runner_for_node`` for engine-specific node adaptation.
+    Orchestration is engine-agnostic. Subclasses set ``PROGRAM`` and hold
+    the child job list.
 
     ``run()`` selects execution mode from the environment:
 
     - ``array_task`` — one child at the 1-based scheduler array task id,
       with full resources
     - ``local_batch`` — all children serially with full resources
-      (``multi_node`` when more than one node is allocated)
 
     ``no_run_in_parallel`` may still be set by callers for CLI/submit
     policy, but in-process concurrent children are not used.
@@ -290,7 +279,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         )
         # Isolate nestable selection from this outer array task id.
         with cleared_array_task_env():
-            outcome = self._submit_job(child, node=None, **kwargs)
+            outcome = self._submit_job(child, **kwargs)
         outcomes = [outcome]
         self._last_batch_outcomes = outcomes
         if self.write_outcome_logs:
@@ -298,47 +287,36 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._raise_if_failures(outcomes, total_jobs=1)
 
     def _run_local_batch(self, **kwargs: Any) -> None:
-        """Run all children serially, or distribute across multi-node allocations."""
-        nodes = self._get_allocated_nodes()
+        """Run all children serially with full resources per child."""
         total_jobs = len(self.jobs)
 
-        if nodes and len(nodes) > 1:
-            logger.info(
-                "BatchJob %r: execution=%s, children=%s, nodes=%s",
-                self.label,
-                BatchExecutionMode.MULTI_NODE.value,
+        if not self.no_run_in_parallel:
+            logger.warning(
+                "BatchJob in-process parallel execution is disabled; "
+                "running %s child job(s) serially with full resources. "
+                "Use chemsmart sub for cluster concurrency.",
                 total_jobs,
-                list(nodes),
             )
-            outcomes = self._run_multi_node(nodes, **kwargs)
+            self.no_run_in_parallel = True
+        runner = self.jobrunner
+        if runner is not None:
+            cores = runner.num_cores
+            mem_gb = runner.mem_gb
         else:
-            if not self.no_run_in_parallel:
-                logger.warning(
-                    "BatchJob in-process parallel execution is disabled; "
-                    "running %s child job(s) serially with full resources. "
-                    "Use chemsmart sub for cluster concurrency.",
-                    total_jobs,
-                )
-                self.no_run_in_parallel = True
-            runner = self.jobrunner
-            if runner is not None:
-                cores = runner.num_cores
-                mem_gb = runner.mem_gb
-            else:
-                cores = None
-                mem_gb = None
-            policy = "serial_nested" if self.nested_serial else "serial"
-            logger.info(
-                "BatchJob %r: execution=%s, children=%s, policy=%s, "
-                "cores=%s, mem_gb=%s",
-                self.label,
-                BatchExecutionMode.LOCAL_BATCH.value,
-                total_jobs,
-                policy,
-                cores,
-                mem_gb,
-            )
-            outcomes = self._run_jobs_serially(self.jobs, **kwargs)
+            cores = None
+            mem_gb = None
+        policy = "serial_nested" if self.nested_serial else "serial"
+        logger.info(
+            "BatchJob %r: execution=%s, children=%s, policy=%s, "
+            "cores=%s, mem_gb=%s",
+            self.label,
+            BatchExecutionMode.LOCAL_BATCH.value,
+            total_jobs,
+            policy,
+            cores,
+            mem_gb,
+        )
+        outcomes = self._run_jobs_serially(self.jobs, **kwargs)
 
         self._last_batch_outcomes = outcomes
         if self.write_outcome_logs:
@@ -373,7 +351,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def _run_jobs_serially(
         self,
         jobs: Sequence[Job],
-        node: Optional[str] = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Submit child jobs one-by-one.
@@ -384,7 +361,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         """
         outcomes: list[dict[str, Any]] = []
         for index, job in enumerate(jobs):
-            outcome = self._submit_job(job, node=node, **kwargs)
+            outcome = self._submit_job(job, **kwargs)
             outcomes.append(outcome)
             if self.fail_fast and not outcome["success"]:
                 remaining = len(jobs) - (index + 1)
@@ -400,37 +377,32 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def _submit_job(
         self,
         job: Job,
-        node: Optional[str] = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Configure a runner copy and execute a single child job."""
         try:
-            self._build_jobrunner(job, node=node)
+            self._build_jobrunner(job)
             job.run(**kwargs)
             is_complete = self._job_is_complete_cached(
                 job,
                 force_refresh=True,
             )
             if not is_complete:
-                location = f" on node {node}" if node else ""
                 msg = "job incomplete after execution"
-                logger.error(f"Job {job.label}{location}: {msg}")
+                logger.error(f"Job {job.label}: {msg}")
                 return {
                     "label": job.label,
                     "success": False,
                     "error": msg,
-                    "node": node,
                 }
             return {
                 "label": job.label,
                 "success": True,
                 "error": "",
-                "node": node,
             }
         except Exception as e:
-            location = f" on node {node}" if node else ""
             logger.error(
-                f"Job {job.label} failed during batch execution{location}: {e}",
+                f"Job {job.label} failed during batch execution: {e}",
                 exc_info=True,
             )
             self._invalidate_status_cache(job)
@@ -438,119 +410,15 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 "label": job.label,
                 "success": False,
                 "error": str(e),
-                "node": node,
             }
 
-    def _build_jobrunner(
-        self,
-        job: Job,
-        node: Optional[str] = None,
-    ) -> Any:
+    def _build_jobrunner(self, job: Job) -> Any:
         """Copy the batch runner onto *job* with full resource allocation.
 
         Serial local batches do not split ``num_cores`` or ``mem_gb`` across
-        children. Optional *node* adaptation is applied after the copy.
+        children.
         """
-        child_runner = Job._propagate_runner(self.jobrunner, job)
-        if child_runner is not None and node is not None:
-            child_runner = self._configure_runner_for_node(
-                runner=child_runner,
-                node=node,
-                job=job,
-            )
-            job.jobrunner = child_runner
-        return child_runner
-
-    def _get_allocated_nodes(self) -> Optional[list[str]]:
-        """
-        Detect allocated compute nodes from environment variables.
-
-        Supports SLURM and PBS and returns a list of unique node names, or
-        ``None`` when no multi-node allocation is detected.
-        """
-        nodelist = os.environ.get("SLURM_JOB_NODELIST")
-        if nodelist:
-            try:
-                output = subprocess.check_output(
-                    ["scontrol", "show", "hostnames", nodelist],
-                    universal_newlines=True,
-                )
-                nodes = [
-                    node.strip()
-                    for node in output.strip().split("\n")
-                    if node.strip()
-                ]
-                return nodes or None
-            except (subprocess.SubprocessError, FileNotFoundError):
-                return [
-                    node.strip()
-                    for node in nodelist.split(",")
-                    if node.strip()
-                ] or None
-
-        nodefile = os.environ.get("PBS_NODEFILE")
-        if nodefile and os.path.exists(nodefile):
-            with open(nodefile, "r") as f:
-                nodes = [line.strip() for line in f if line.strip()]
-            return sorted(set(nodes)) or None
-
-        return None
-
-    def _run_multi_node(
-        self, nodes: Sequence[str], **kwargs: Any
-    ) -> list[dict[str, Any]]:
-        """Distribute and execute child jobs across scheduler-allocated nodes."""
-        num_nodes = len(nodes)
-        logger.info(
-            f"Distributing {len(self.jobs)} jobs across {num_nodes} nodes: {nodes}"
-        )
-
-        job_chunks = self._split_jobs_across_nodes(self.jobs, num_nodes)
-
-        outcomes: list[dict[str, Any]] = []
-        max_workers = get_submitter_worker_count(self.jobrunner, num_nodes)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_node_chunk: dict[Any, tuple[str, Sequence[Job]]] = {}
-            for node, jobs_chunk in zip(nodes, job_chunks):
-                if jobs_chunk:
-                    future = executor.submit(
-                        self._run_chunk_on_node,
-                        jobs_chunk,
-                        node,
-                        **kwargs,
-                    )
-                    future_to_node_chunk[future] = (node, jobs_chunk)
-
-            for future in as_completed(future_to_node_chunk):
-                node, jobs_chunk = future_to_node_chunk[future]
-                try:
-                    outcomes.extend(future.result())
-                except Exception as e:
-                    logger.error(f"Node execution failed: {e}", exc_info=True)
-                    first_job_label = (
-                        jobs_chunk[0].label if jobs_chunk else "unknown_chunk"
-                    )
-                    outcomes.append(
-                        {
-                            "label": f"node:{node}:{first_job_label}",
-                            "success": False,
-                            "error": str(e),
-                            "node": node,
-                        }
-                    )
-        return outcomes
-
-    def _run_chunk_on_node(
-        self,
-        jobs: Sequence[Job],
-        node: str,
-        **kwargs: Any,
-    ) -> list[dict[str, Any]]:
-        """Run one chunk of jobs serially on a single node."""
-        logger.info(f"Node {node} starting to process {len(jobs)} jobs.")
-        outcomes = self._run_jobs_serially(jobs, node=node, **kwargs)
-        logger.info(f"Node {node} finished processing.")
-        return outcomes
+        return Job._propagate_runner(self.jobrunner, job)
 
     def _write_outcome_logs(self, outcomes: Sequence[dict[str, Any]]) -> None:
         """Write batch outcomes to success.log and failed.log."""
@@ -568,38 +436,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             for item in failures:
                 error = item["error"] or "unknown error"
                 fh.write(f"{item['label']}\t{error}\n")
-
-    @staticmethod
-    def _split_jobs_across_nodes(
-        jobs: Sequence[Job],
-        num_nodes: int,
-    ) -> list[list[Job]]:
-        """Split jobs into near-even chunks while preserving input order."""
-        if num_nodes <= 0:
-            return []
-
-        base_size, remainder = divmod(len(jobs), num_nodes)
-        chunks = []
-        start = 0
-        for idx in range(num_nodes):
-            stop = start + base_size + (1 if idx < remainder else 0)
-            chunks.append(jobs[start:stop])
-            start = stop
-        return chunks
-
-    @abstractmethod
-    def _configure_runner_for_node(
-        self,
-        runner: Any,
-        node: str,
-        job: Job,
-    ) -> Any:
-        """
-        Adapt a copied jobrunner for execution on a specific node.
-
-        Subclasses can patch engine-specific command generation here.
-        """
-        raise NotImplementedError
 
     def _backup_files(self) -> None:
         pass
@@ -678,27 +514,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         with self._status_cache_lock:
             self._status_cache[key] = (signature, now, value)
         return value
-
-    def _wrap_runner_command_for_node(self, runner: Any, node: str) -> Any:
-        """Apply SLURM node pinning to runner command generation."""
-        if not os.environ.get("SLURM_JOB_NODELIST"):
-            return runner
-
-        try:
-            original_get_command = runner._get_command
-        except AttributeError:
-            return runner
-
-        def patched_get_command_slurm(self_runner: Any, job_obj: Job) -> str:
-            command = original_get_command(job_obj)
-            prefix = f"srun --nodelist={node} --exclusive -N1 -n1 "
-            return prefix + command
-
-        runner._get_command = types.MethodType(
-            patched_get_command_slurm,
-            runner,
-        )
-        return runner
 
     def is_complete(self) -> bool:
         """Return True when all child jobs are complete."""
@@ -783,10 +598,6 @@ def run_selected_array_child(
     Top-level ``BatchJob._run_array_task`` clears array-task env vars before
     running a selected child, so nestable selection does not fire for
     parents that are themselves top-level array children.
-
-    The selected child receives a copied parent jobrunner (via
-    ``Job._propagate_runner``). After ``child.run()``, raises
-    ``BatchExecutionError`` if the child is incomplete.
 
     Returns:
         True if an array task was handled; False if no array env is set

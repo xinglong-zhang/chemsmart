@@ -141,47 +141,6 @@ def get_configured_array_concurrency_limit(
     return None
 
 
-def get_configured_max_submitters(jobrunner=None) -> int:
-    """Return configured submitter concurrency limit.
-
-    Used for in-process multi-node batch worker threads, not SLURM array
-    ``%M`` throttling (see ``get_configured_array_concurrency_limit``).
-
-    Resolution order:
-    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
-    2. ``jobrunner.max_submitters`` (if present)
-    3. ``jobrunner.server.max_submitters`` (if present)
-    4. ``jobrunner.num_cores``
-    5. ``jobrunner.server.num_cores``
-    6. ``os.cpu_count()``
-    """
-    array_limit = get_configured_array_concurrency_limit(jobrunner)
-    if array_limit is not None:
-        return array_limit
-
-    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
-    if cores_value is not None:
-        return cores_value
-
-    server = jobrunner.server if jobrunner is not None else None
-    server_cores_value = _positive_int_or_none(
-        getattr(server, "num_cores", None)
-    )
-    if server_cores_value is not None:
-        return server_cores_value
-
-    cpu_count = _positive_int_or_none(os.cpu_count())
-    return cpu_count if cpu_count is not None else 1
-
-
-def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
-    """Return bounded worker count for batch/list submitter threads."""
-    if num_jobs <= 0:
-        return 1
-    configured_max_submitters = get_configured_max_submitters(jobrunner)
-    return max(1, min(num_jobs, configured_max_submitters))
-
-
 def decide_phase_transition(
     *,
     phase_name: str,
