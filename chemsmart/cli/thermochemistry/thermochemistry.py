@@ -226,8 +226,16 @@ def thermochemistry(
 
     `chemsmart run thermochemistry -d xtb_calculations/ -p xtb -T 298.15
     -o thermo.dat`
-    will compute thermochemistry for xTB output files in calculation
-    subdirectories and save the combined results to `thermo.dat`.
+    will compute thermochemistry for valid xTB calculation directories located
+    directly below `xtb_calculations/` and save the combined results to
+    `thermo.dat`.
+
+    Directory discovery is non-recursive. For Gaussian and ORCA,
+    only matching output files directly inside the specified directory are
+    processed. For xTB, each immediate child directory is treated as one
+    candidate calculation because an xTB calculation consists of one main
+    output plus associated auxiliary files. The parent directory itself and
+    nested calculation directories at greater depths are not searched.
     """
     # validate input
     if directory and filenames:
