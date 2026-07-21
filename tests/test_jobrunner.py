@@ -308,7 +308,7 @@ class TestScratchCLI:
         assert captured["job"].jobrunner.scratch is True
 
     def test_from_job_passes_scratch_through(self, pbs_server, tmp_path):
-        """``from_job`` passes ``scratch`` from the caller; server YAML does not override it."""
+        """``pbs_server`` has ``GAUSSIAN.SCRATCH: True``; ``scratch=False`` is kept."""
         job = SimpleNamespace(TYPE="g16opt")
         runner = JobRunner.from_job(
             job=job,
