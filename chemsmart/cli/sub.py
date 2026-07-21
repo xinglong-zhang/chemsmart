@@ -65,7 +65,7 @@ def sub(
     num_cores,
     num_gpus,
     mem_gb,
-    num_nodes,
+    array_concurrency,
     fake,
     scratch,
     delete_scratch,
@@ -96,8 +96,6 @@ def sub(
         server = Server.from_servername(server)
         if time_hours is not None:
             server.num_hours = time_hours
-        if num_nodes is not None:
-            server.num_nodes = num_nodes
         if queue is not None:
             server.queue_name = queue
 
@@ -110,7 +108,7 @@ def sub(
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
-        num_nodes=num_nodes,
+        array_concurrency=array_concurrency,
     )
 
     # Log the scratch value for debugging purposes

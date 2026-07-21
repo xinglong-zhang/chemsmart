@@ -180,7 +180,7 @@ class TestArraySubmitInfrastructure:
 
         submitter.write_array_job(
             jobs=children,
-            num_nodes=2,
+            array_concurrency=2,
             cli_args=shared_cli,
             batch_label="mols_batch",
         )
@@ -250,7 +250,7 @@ class TestArraySubmitInfrastructure:
         ]
         server.submit_array_job(
             jobs=children,
-            num_nodes=1,
+            array_concurrency=1,
             test=True,
             cli_args=["gaussian", "opt"],
             batch_label="pka_batch",
@@ -272,15 +272,15 @@ class TestSchedulerArrayPolicy:
         from chemsmart.settings.server import SchedulerArrayPolicy
 
         policy = SchedulerArrayPolicy(
-            no_run_in_parallel=True, num_nodes=4, max_concurrent=8
+            no_run_in_parallel=True, array_concurrency=4, max_concurrent=8
         )
         assert policy.array_throttle(10) == 1
 
-    def test_num_nodes_preferred_over_max_concurrent(self):
+    def test_array_concurrency_preferred_over_max_concurrent(self):
         from chemsmart.settings.server import SchedulerArrayPolicy
 
         policy = SchedulerArrayPolicy(
-            no_run_in_parallel=False, num_nodes=3, max_concurrent=8
+            no_run_in_parallel=False, array_concurrency=3, max_concurrent=8
         )
         assert policy.array_throttle(10) == 3
 
@@ -288,7 +288,7 @@ class TestSchedulerArrayPolicy:
         from chemsmart.settings.server import SchedulerArrayPolicy
 
         policy = SchedulerArrayPolicy(
-            no_run_in_parallel=False, num_nodes=None, max_concurrent=2
+            no_run_in_parallel=False, array_concurrency=None, max_concurrent=2
         )
         assert policy.array_throttle(10) == 2
 
@@ -296,11 +296,13 @@ class TestSchedulerArrayPolicy:
         from chemsmart.settings.server import SchedulerArrayPolicy
 
         policy = SchedulerArrayPolicy(
-            no_run_in_parallel=False, num_nodes=None, max_concurrent=None
+            no_run_in_parallel=False,
+            array_concurrency=None,
+            max_concurrent=None,
         )
         assert policy.array_throttle(10) == 10
 
-    def test_from_jobrunner_uses_cli_num_nodes_not_server_default(
+    def test_from_jobrunner_uses_cli_array_concurrency_not_server_default(
         self, pbs_server
     ):
         from chemsmart.jobs.runner import JobRunner
@@ -313,7 +315,7 @@ class TestSchedulerArrayPolicy:
             num_cores=64,
         )
         policy = SchedulerArrayPolicy.from_jobrunner(runner)
-        assert policy.num_nodes is None
+        assert policy.array_concurrency is None
         assert policy.array_throttle(5) == 5
 
     def test_from_jobrunner(self, pbs_server):
@@ -324,12 +326,12 @@ class TestSchedulerArrayPolicy:
             server=pbs_server,
             fake=True,
             no_run_in_parallel=True,
-            num_nodes=4,
+            array_concurrency=4,
             num_cores=8,
         )
         policy = SchedulerArrayPolicy.from_jobrunner(runner)
         assert policy.no_run_in_parallel is True
-        assert policy.num_nodes == 4
+        assert policy.array_concurrency == 4
         assert policy.array_throttle(10) == 1
 
 
@@ -362,7 +364,7 @@ class TestSubmitBatch:
         def _fake_submit_array(
             self,
             jobs,
-            num_nodes=None,
+            array_concurrency=None,
             test=False,
             cli_args=None,
             batch_label=None,
@@ -371,7 +373,7 @@ class TestSubmitBatch:
             captured.update(
                 {
                     "jobs": list(jobs),
-                    "num_nodes": num_nodes,
+                    "array_concurrency": array_concurrency,
                     "test": test,
                     "cli_args": cli_args,
                     "batch_label": batch_label,
@@ -411,7 +413,7 @@ class TestSubmitBatch:
         )
 
         assert captured["batch_label"] == "mols_batch"
-        assert captured["num_nodes"] == 1
+        assert captured["array_concurrency"] == 1
         assert captured["test"] is True
         assert len(captured["jobs"]) == 2
         assert captured["cli_args"] == [

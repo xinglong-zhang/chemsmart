@@ -120,7 +120,7 @@ class Submitter(RegistryMixin):
         self.server = server
         self.kwargs = kwargs
         self.jobs = None
-        self.num_nodes = None
+        self.array_concurrency = None
         self.batch_label = None
 
     def __str__(self):
@@ -295,7 +295,7 @@ class Submitter(RegistryMixin):
         self._write_submitscript()
 
     def write_array_job(
-        self, jobs, num_nodes=None, cli_args=None, batch_label=None
+        self, jobs, array_concurrency=None, cli_args=None, batch_label=None
     ):
         """Write scripts for a scheduler array job over *jobs*.
 
@@ -307,7 +307,7 @@ class Submitter(RegistryMixin):
 
         Args:
             jobs: Child jobs in array order (task id 1 → ``jobs[0]``).
-            num_nodes: Optional concurrency throttle ``%M`` for SLURM
+            array_concurrency: Optional concurrency throttle ``%M`` for SLURM
                 ``--array=1-N%M``. When ``None``, no throttle is applied.
             cli_args: Shared CLI args for every task, or a sequence of
                 per-job CLI arg lists with the same length as *jobs*.
@@ -319,12 +319,12 @@ class Submitter(RegistryMixin):
             return
 
         self.jobs = list(jobs)
-        self.num_nodes = num_nodes
+        self.array_concurrency = array_concurrency
         if batch_label is not None:
             self.batch_label = batch_label
 
         self._write_array_runscripts(self.jobs, cli_args)
-        self._write_array_submitscript(num_nodes)
+        self._write_array_submitscript(array_concurrency)
 
     def _write_array_runscripts(self, jobs, cli_args):
         """Write 1-based ``chemsmart_run_array_<task_id>.py`` scripts."""
@@ -346,20 +346,20 @@ class Submitter(RegistryMixin):
             )
             runscript.write()
 
-    def _write_array_submitscript(self, num_nodes):
+    def _write_array_submitscript(self, array_concurrency):
         """Write the array job submission script."""
         with open(self.array_submit_script, "w") as f:
             logger.debug(
                 f"Writing array submission script: {self.array_submit_script}"
             )
             self._write_bash_header(f)
-            self._write_array_scheduler_options(f, num_nodes)
+            self._write_array_scheduler_options(f, array_concurrency)
             self._write_program_specifics(f)
             self._write_extra_commands(f)
             self._write_change_to_job_directory(f)
             self._write_array_job_command(f)
 
-    def _write_array_scheduler_options(self, f, num_nodes):
+    def _write_array_scheduler_options(self, f, array_concurrency):
         """Write scheduler options for array submission.
 
         Subclasses override for scheduler-specific array directives.
@@ -773,12 +773,12 @@ class SLURMSubmitter(Submitter):
         f.write("\n")
         f.write("\n")
 
-    def _write_array_scheduler_options(self, f, num_nodes):
+    def _write_array_scheduler_options(self, f, array_concurrency):
         """
         Write SLURM array directives for one task per child job.
 
         Each array task uses one node with the server's full cores/memory.
-        ``num_nodes`` is the optional concurrency throttle ``%M`` on
+        ``array_concurrency`` is the optional concurrency throttle ``%M`` on
         ``--array=1-N%M`` (maximum concurrent tasks), not nodes per task.
         """
         num_jobs = len(self.jobs) if self.jobs is not None else 1
@@ -788,8 +788,8 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --output={label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={label}_array_%a.slurmerr\n")
 
-        if num_nodes is not None:
-            f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
+        if array_concurrency is not None:
+            f.write(f"#SBATCH --array=1-{num_jobs}%{array_concurrency}\n")
         else:
             f.write(f"#SBATCH --array=1-{num_jobs}\n")
 

@@ -911,7 +911,7 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         assert mock_submit_array.call_args.kwargs["test"] is True
-        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
         assert (
             mock_submit_array.call_args.kwargs["batch_label"] == "mols_batch"
         )
@@ -978,9 +978,9 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         # -N 4 ignored for throttle when serial default applies
-        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
 
-    def test_sub_run_in_parallel_uses_num_nodes_as_array_throttle(
+    def test_sub_run_in_parallel_uses_array_concurrency_throttle(
         self,
         multiple_molecules_xyz_file,
         pbs_server,
@@ -1040,7 +1040,7 @@ class TestGaussianRunSubNoParallelIntegration:
 
         assert result.exit_code == 0, result.output
         assert mock_submit_array.call_count == 1
-        assert mock_submit_array.call_args.kwargs["num_nodes"] == 2
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 2
         assert len(mock_submit_array.call_args.kwargs["jobs"]) == 3
 
     def test_sub_run_in_parallel_without_n_ignores_num_cores(
@@ -1102,7 +1102,7 @@ class TestGaussianRunSubNoParallelIntegration:
             )
 
         assert result.exit_code == 0, result.output
-        assert mock_submit_array.call_args.kwargs["num_nodes"] == 3
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 3
 
     def test_sub_run_in_parallel_expands_qrc_to_array(
         self,

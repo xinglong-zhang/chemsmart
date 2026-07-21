@@ -718,7 +718,7 @@ class TestORCARunSubNoParallelIntegration:
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         assert mock_submit_array.call_args.kwargs["test"] is True
-        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
         assert (
             mock_submit_array.call_args.kwargs["batch_label"] == "mols_batch"
         )

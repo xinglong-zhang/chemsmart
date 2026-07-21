@@ -46,7 +46,7 @@ def run(
     num_cores,
     num_gpus,
     mem_gb,
-    num_nodes,
+    array_concurrency,
     fake,
     scratch,
     delete_scratch,
@@ -80,7 +80,7 @@ def run(
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
-        num_nodes=num_nodes,
+        array_concurrency=array_concurrency,
     )
 
     # Log the scratch value for debugging purposes

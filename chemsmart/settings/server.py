@@ -25,13 +25,13 @@ class SchedulerArrayPolicy:
     Controls the SLURM ``--array=1-N%M`` throttle ``M``:
 
     - ``no_run_in_parallel`` → ``M=1``
-    - else explicit CLI ``-N`` (``cli_num_nodes``) when set and positive
+    - else explicit CLI ``-N`` / ``--array-concurrency`` when set and positive
     - else ``min(num_jobs, max_concurrent)`` from env/server max submitters
     - else all tasks at once (``M=num_jobs``)
     """
 
     no_run_in_parallel: bool = False
-    num_nodes: Optional[int] = None
+    array_concurrency: Optional[int] = None
     max_concurrent: Optional[int] = None
 
     @classmethod
@@ -43,7 +43,7 @@ class SchedulerArrayPolicy:
 
         return cls(
             no_run_in_parallel=bool(jobrunner.no_run_in_parallel),
-            num_nodes=jobrunner.cli_num_nodes,
+            array_concurrency=jobrunner.cli_array_concurrency,
             max_concurrent=get_configured_array_concurrency_limit(jobrunner),
         )
 
@@ -53,8 +53,8 @@ class SchedulerArrayPolicy:
             return 1
         if self.no_run_in_parallel:
             return 1
-        if self.num_nodes is not None and self.num_nodes > 0:
-            return min(num_jobs, int(self.num_nodes))
+        if self.array_concurrency is not None and self.array_concurrency > 0:
+            return min(num_jobs, int(self.array_concurrency))
         if self.max_concurrent is not None and self.max_concurrent > 0:
             return min(num_jobs, int(self.max_concurrent))
         return num_jobs
@@ -723,7 +723,7 @@ class Server(RegistryMixin):
     def submit_array_job(
         self,
         jobs,
-        num_nodes=None,
+        array_concurrency=None,
         test=False,
         cli_args=None,
         batch_label=None,
@@ -737,7 +737,8 @@ class Server(RegistryMixin):
 
         Args:
             jobs: Child ``Job`` instances in array order.
-            num_nodes: Optional SLURM array concurrency throttle ``%M``.
+            array_concurrency: Optional SLURM array concurrency throttle
+                ``%M`` in ``--array=1-N%M``.
             test: If True, write scripts only (do not submit).
             cli_args: Shared or per-job CLI arguments for run scripts.
             batch_label: Label for ``chemsmart_sub_array_<label>.sh``.
@@ -766,7 +767,7 @@ class Server(RegistryMixin):
         submitter = self.get_submitter(first_job, **kwargs)
         submitter.write_array_job(
             jobs=jobs,
-            num_nodes=num_nodes,
+            array_concurrency=array_concurrency,
             cli_args=cli_args,
             batch_label=batch_label,
         )
@@ -872,7 +873,7 @@ class Server(RegistryMixin):
         )
         return self.submit_array_job(
             jobs=batch_job.jobs,
-            num_nodes=throttle,
+            array_concurrency=throttle,
             test=test,
             cli_args=array_cli_args,
             batch_label=batch_job.label,

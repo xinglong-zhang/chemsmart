@@ -160,7 +160,12 @@ def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
     captured = {"submissions": []}
 
     def _fake_submit_array(
-        jobs, num_nodes=None, test=False, cli_args=None, batch_label=None, **kw
+        jobs,
+        array_concurrency=None,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kw,
     ):
         captured["submissions"].append(
             {
@@ -168,7 +173,7 @@ def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
                 "test": test,
                 "cli_args": cli_args,
                 "batch_label": batch_label,
-                "num_nodes": num_nodes,
+                "array_concurrency": array_concurrency,
             }
         )
 
@@ -227,7 +232,12 @@ def _attach_fake_array_server(monkeypatch, captured=None):
     fake_server = Server(name="dummy")
 
     def _fake_submit_array(
-        jobs, num_nodes=None, test=False, cli_args=None, batch_label=None, **kw
+        jobs,
+        array_concurrency=None,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kw,
     ):
         captured["submissions"].append(
             {
@@ -235,7 +245,7 @@ def _attach_fake_array_server(monkeypatch, captured=None):
                 "test": test,
                 "cli_args": cli_args,
                 "batch_label": batch_label,
-                "num_nodes": num_nodes,
+                "array_concurrency": array_concurrency,
             }
         )
 
@@ -246,7 +256,7 @@ def _attach_fake_array_server(monkeypatch, captured=None):
                 "test": test,
                 "cli_args": cli_args,
                 "batch_label": None,
-                "num_nodes": None,
+                "array_concurrency": None,
             }
         )
 

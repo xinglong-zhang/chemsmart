@@ -242,6 +242,7 @@ class JobRunner(RegistryMixin):
         fake=False,
         no_run_in_parallel=False,
         num_cores=None,
+        array_concurrency=None,
         num_nodes=None,
         num_gpus=None,
         mem_gb=None,
@@ -274,7 +275,8 @@ class JobRunner(RegistryMixin):
         else:
             self.num_cores = self.server.num_cores
 
-        self.cli_num_nodes = num_nodes
+        # CLI -N/--array-concurrency only; never overrides server.num_nodes.
+        self.cli_array_concurrency = array_concurrency
         if num_nodes is not None:
             self.num_nodes = num_nodes
         else:
