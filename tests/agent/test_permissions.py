@@ -576,6 +576,7 @@ def test_safe_fake_and_submission_preview_are_automatic(case_request):
 def test_runtime_permission_mode_placeholders_are_stable():
     assert READ_ONLY_TOOLS == {
         "read",
+        "list_workspace",
         "ssh_probe",
         "scheduler_query",
         "log_tail",

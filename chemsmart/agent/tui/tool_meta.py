@@ -173,6 +173,18 @@ _TOOL_META = {
         "style": "warning",
         "summary": "reads local file lines",
     },
+    "list_workspace": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "lists workspace geometries, projects, and outputs",
+    },
+    "save_geometry": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes a geometry .xyz file into the workspace",
+    },
     "ssh_probe": {
         "risk": "inspection",
         "read_only": True,

@@ -40,9 +40,11 @@ ALWAYS_REQUIRE_APPROVAL = {
     "execute_chemsmart_command",
     "run_local",
     "submit_hpc",
+    "save_geometry",
 }
 READ_ONLY_TOOLS = {
     "read",
+    "list_workspace",
     "ssh_probe",
     "scheduler_query",
     "log_tail",

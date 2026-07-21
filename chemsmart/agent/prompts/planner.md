@@ -82,6 +82,9 @@ Composite workflow rules:
 - Multi-program workflows (for example Gaussian opt then ORCA single point) are separate steps with separate settings objects.
 - Gaussian opt -> ORCA SP workflow should usually be:
   build_molecule -> recommend_method -> build_gaussian_settings -> build_job(kind=gaussian.opt) -> dry_run_input -> validate_runtime -> run_local -> extract_optimized_geometry(job="$step4") -> build_orca_settings -> build_job(kind=orca.sp, molecule="$step8") -> dry_run_input -> validate_runtime -> submit_hpc
+- xTB pre-optimization -> heavy DFT job (cheap coordinates first) should usually be:
+  build_molecule -> build_xtb_settings -> build_job(kind=xtb.opt) -> dry_run_input -> validate_runtime -> run_local -> extract_optimized_geometry(job="$step3") -> save_geometry(molecule="$step7", filename="<label>_xtbopt.xyz") -> recommend_method -> build_gaussian_settings/build_orca_settings -> build_job(kind=gaussian.opt or orca.opt, molecule="$step7") -> dry_run_input -> validate_runtime -> submit_hpc
+- Offer that xTB pre-optimization when the starting structure is rough (hand-drawn, generated, or unrelaxed) and the target job is an expensive DFT opt/ts. Running the real xTB step still needs run_local approval under the active policy; never skip the approval gate.
 - Gaussian scan requires `scan_definition` in `build_gaussian_settings`. Example:
   `build_gaussian_settings(functional="B3LYP", basis="6-31G*", scan_definition="D 1 2 3 4 S 10 36.0")`
   where `D` = dihedral, `1 2 3 4` = atom indices (1-based), and `S 10 36.0` = 10 steps of 36°. Bond scans look like `B 1 2 S 10 0.05`.
@@ -114,5 +117,7 @@ Tool return types and step-reference guide:
 - dry_run_input → pass job="$stepN" (Job). Returns dict with keys: inputfile, content.
 - validate_runtime → requires job="$stepN"; optional server. Returns dict with keys: ok ("ok"/"partial"/"fail"), local_issues, remote_unknown.
 - run_local → pass job="$stepN". Returns dict with keys: ok, returncode, stdout_path, stderr_path, output_summary. After `run_local` on a Gaussian opt job, call `extract_optimized_geometry` with the earlier Gaussian optimization `build_job` result, not the `run_local` dict.
-- extract_optimized_geometry → pass job="$stepN" where `$stepN` is the completed Gaussian or ORCA optimization job object. Returns a Molecule object containing the final optimized geometry for handoff into the next build_job step.
+- extract_optimized_geometry → pass job="$stepN" where `$stepN` is the completed Gaussian, ORCA, or xTB optimization job object (for xTB it reads the xtbopt.* file the optimizer wrote). Returns a Molecule object containing the final optimized geometry for handoff into the next build_job or save_geometry step.
+- save_geometry → pass molecule="$stepN" (a Molecule from build_molecule or extract_optimized_geometry) and a filename ending in .xyz. Writes the coordinates into the workspace and grounds them as a real `-f` input path for follow-up jobs. Refuses to overwrite unless overwrite=true. Requires approval.
+- list_workspace → optional subdir. Returns workspace geometry files, project YAMLs, and recent job outputs. Call it before asking the user which file to use when the request refers to workspace files you have not seen.
 - submit_hpc → pass job="$stepN". If the user specifies a server or multiple configured servers may exist, also pass `server`. When exactly one server is configured, `server` may be omitted and the tool will use that default. Risky tool — placed after critic gating.

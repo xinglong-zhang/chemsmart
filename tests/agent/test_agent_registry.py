@@ -76,7 +76,15 @@ def test_registry_exposes_typed_handles_and_hides_runtime_owned_fields():
     }
 
     build_job = definitions["build_job"]
-    assert build_job["properties"]["molecule"]["pattern"].startswith("^mol_")
+    # extract_optimized_geometry results (geom handles) feed chained jobs,
+    # e.g. an xTB pre-optimization consumed by a Gaussian/ORCA build_job.
+    assert build_job["properties"]["molecule"]["pattern"].startswith(
+        "^(?:mol|geom)"
+    )
+    save_geometry = definitions["save_geometry"]
+    assert save_geometry["properties"]["molecule"]["pattern"].startswith(
+        "^(?:mol|geom)"
+    )
     assert build_job["properties"]["settings"]["pattern"].startswith(
         "^(?:gset|oset|xset)"
     )
@@ -218,12 +226,27 @@ def test_registry_default_registration_sets_read_tool_metadata():
         read_only=True,
         ui_summary_template="Inspect calculation {run_id}",
     )
+    list_workspace_tool = registry.get_tool("list_workspace")
+    assert list_workspace_tool is not None
+    assert list_workspace_tool.metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="List workspace {subdir}",
+    )
+    save_geometry_tool = registry.get_tool("save_geometry")
+    assert save_geometry_tool is not None
+    assert save_geometry_tool.metadata == RuntimeToolMetadata(
+        read_only=False,
+        ui_summary_template="Save geometry {filename}",
+        side_effect="writes a geometry file in the workspace",
+    )
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
         if tool.name
         not in {
             "read",
+            "list_workspace",
+            "save_geometry",
             "ssh_probe",
             "scheduler_query",
             "log_tail",
