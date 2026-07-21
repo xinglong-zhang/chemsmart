@@ -370,7 +370,7 @@ class TestScratchCLIDefaults:
         assert captured["job"].jobrunner.scratch is True
         assert captured["job"].jobrunner.scratch_from_cli is True
 
-    def test_from_job_omitted_uses_yaml_scratch(self, pbs_server, tmp_path):
+    def test_from_job_omitted_uses_class_scratch(self, pbs_server, tmp_path):
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
         job = SimpleNamespace(TYPE="g16opt")
@@ -383,19 +383,7 @@ class TestScratchCLIDefaults:
             scratch_dir=str(scratch_dir),
         )
         assert runner.scratch_from_cli is False
-        assert runner.scratch is True
-
-    def test_from_job_omitted_orca_uses_yaml_scratch_false(self, pbs_server):
-        job = SimpleNamespace(TYPE="orcaopt")
-        runner = JobRunner.from_job(
-            job=job,
-            server=pbs_server,
-            scratch=False,
-            scratch_from_cli=False,
-            fake=True,
-        )
-        assert runner.scratch_from_cli is False
-        assert runner.scratch is False
+        assert runner.scratch is FakeGaussianJobRunner.SCRATCH
 
     def test_from_job_explicit_no_scratch_ignores_program_default(
         self, pbs_server

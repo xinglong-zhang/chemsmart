@@ -10,7 +10,6 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
-from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -19,29 +18,6 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
-
-
-def _executable_class_for_program(program):
-    """Return Executable subclass for a runner PROGRAM name, if any."""
-    if not program:
-        return None
-    key = str(program).upper()
-    for exe_cls in Executable.subclasses():
-        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
-            return exe_cls
-    return None
-
-
-def _scratch_from_server_yaml(runner_cls, server):
-    """Return program ``SCRATCH`` from server YAML when explicitly set."""
-    program = runner_cls.PROGRAM
-    if program is NotImplemented or not program or server is None:
-        return None
-    exe_cls = _executable_class_for_program(program)
-    if exe_cls is None:
-        return None
-    servername = server.name if isinstance(server, Server) else server
-    return exe_cls.program_scratch_from_servername(servername)
 
 
 @dataclass(frozen=True)
@@ -182,8 +158,7 @@ class JobRunner(RegistryMixin):
             job finishes normally.
         fake (bool): Whether to use fake job runner.
         scratch_from_cli (bool): True if ``--scratch``/``--no-scratch`` was
-            passed; when False, ``from_job`` uses the runner class ``SCRATCH``,
-            overridden by program ``SCRATCH`` in server YAML when that key is set.
+            passed; when False, ``from_job`` uses the runner class ``SCRATCH``.
         **kwargs: Additional keyword arguments.
     """
 
@@ -453,14 +428,9 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # Omit → class SCRATCH, with optional YAML override; CLI → bool.
+            # Omit → class SCRATCH; CLI flag → honor scratch bool.
             if not scratch_from_cli:
                 scratch = selected_runner.SCRATCH
-                yaml_scratch = _scratch_from_server_yaml(
-                    selected_runner, server
-                )
-                if yaml_scratch is not None:
-                    scratch = yaml_scratch
             logger.info(
                 f"Using scratch={scratch} "
                 f"(scratch_from_cli={scratch_from_cli}) for job runner: "
