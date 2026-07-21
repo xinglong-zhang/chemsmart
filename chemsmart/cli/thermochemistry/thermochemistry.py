@@ -10,6 +10,7 @@ from chemsmart.cli.job import (
     click_job_options,
 )
 from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
@@ -272,13 +273,25 @@ def thermochemistry(
             for entry in os.listdir(directory):
                 subdir = os.path.join(directory, entry)
                 if os.path.isdir(subdir):
-                    files.extend(
-                        BaseFolder(
-                            folder=subdir
-                        ).get_all_output_files_in_current_folder_by_program(
-                            program="xtb"
-                        )
+                    output_files = BaseFolder(
+                        folder=subdir
+                    ).get_all_output_files_in_current_folder_by_program(
+                        program="xtb"
                     )
+                    if not output_files:
+                        continue
+                    try:
+                        is_calculation_directory = XTBFolder(
+                            folder=subdir
+                        ).is_xtb_calculation_directory
+                    except ValueError as e:
+                        logger.error(
+                            f"Skipping invalid xTB calculation directory "
+                            f"'{subdir}': {e}"
+                        )
+                        continue
+                    if is_calculation_directory:
+                        files.extend(output_files)
             if not files:
                 raise ValueError(
                     f"No xTB output files found in calculation subdirectories "
@@ -319,11 +332,18 @@ def thermochemistry(
                 f"No output files matching {selector} found in '{directory}'."
             )
         for file in files:
-            job = ThermochemistryJob.from_filename(
-                filename=file,
-                settings=job_settings,
-                skip_completed=skip_completed,
-            )
+            try:
+                job = ThermochemistryJob.from_filename(
+                    filename=file,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Skipping invalid thermochemistry output file "
+                    f"'{file}': {e}"
+                )
+                continue
             if outputfile is not None:
                 job_settings.overwrite = False
                 job_settings.write_header = False

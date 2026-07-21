@@ -1,9 +1,11 @@
+import importlib
 import os.path
 from shutil import copyfile
 
 import numpy as np
 import pytest
 from ase import units
+from click.testing import CliRunner
 
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
@@ -4535,17 +4537,30 @@ class TestThermochemistryCLIFolderOptions:
         assert result.exit_code == 0, result.output
         assert mock_from_filename.call_count == 2
 
-    def test_xtb_parent_directory_processes_subdirectory_output_files(
-        self, tmp_path, run_thermochemistry_with_directory
+    def test_xtb_parent_directory_discovers_output_files(
+        self,
+        xtb_water_outfolder,
+        mocker,
     ):
-        calculation_directory = tmp_path / "water_opt"
-        calculation_directory.mkdir()
-        xtb_output = str(calculation_directory / "water_opt.out")
+        parent_directory = os.path.dirname(xtb_water_outfolder)
+        xtb_output = os.path.join(xtb_water_outfolder, "water_ohess.out")
 
-        result, mock_from_filename = run_thermochemistry_with_directory(
+        thermochemistry_module = importlib.import_module(
+            "chemsmart.cli.thermochemistry.thermochemistry"
+        )
+        mock_job = mocker.MagicMock()
+        mock_job.label = "water_ohess"
+        mock_from_filename = mocker.patch.object(
+            thermochemistry_module.ThermochemistryJob,
+            "from_filename",
+            return_value=mock_job,
+        )
+
+        result = CliRunner().invoke(
+            thermochemistry_module.thermochemistry,
             [
                 "-d",
-                str(tmp_path),
+                parent_directory,
                 "-p",
                 "xtb",
                 "-T",
@@ -4553,9 +4568,11 @@ class TestThermochemistryCLIFolderOptions:
                 "-o",
                 "thermo.dat",
             ],
-            mock_files=[xtb_output],
         )
 
         assert result.exit_code == 0, result.output
-        mock_from_filename.assert_called_once()
-        assert mock_from_filename.call_args.kwargs["filename"] == xtb_output
+        discovered_files = [
+            call.kwargs["filename"]
+            for call in mock_from_filename.call_args_list
+        ]
+        assert xtb_output in discovered_files

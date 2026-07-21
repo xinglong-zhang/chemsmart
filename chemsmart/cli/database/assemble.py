@@ -109,11 +109,19 @@ def assemble(
                 for output_file in output_files
             }
             if prog == "xtb":
-                folders.extend(
-                    folder
-                    for folder in candidate_folders
-                    if XTBFolder(folder=folder).is_xtb_calculation_directory
-                )
+                for folder in sorted(candidate_folders):
+                    try:
+                        is_calculation_directory = XTBFolder(
+                            folder=folder
+                        ).is_xtb_calculation_directory
+                    except ValueError as e:
+                        logger.error(
+                            f"Skipping invalid xTB calculation directory "
+                            f"'{folder}': {e}"
+                        )
+                        continue
+                    if is_calculation_directory:
+                        folders.append(folder)
         folders = sorted(set(folders))
 
     if not files and not folders:
