@@ -317,9 +317,11 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether Gaussian jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
-CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
-the job folder. If this key is omitted or ``null``, the Gaussian job-runner class default (``True``) is used.
+**Description:** Default scratch mode for Gaussian when the user omits both ``--scratch`` and ``--no-scratch`` on the
+CLI (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the Gaussian job-runner class default (``True``)—that is **not** the same as omitting
+the CLI flags; CLI omission triggers the lookup of this key in the first place.
 
 **Example:**
 
@@ -430,9 +432,10 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether ORCA jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the CLI.
-When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in the
-job folder. If this key is omitted or ``null``, the ORCA job-runner class default (``True``) is used.
+**Description:** Default scratch mode for ORCA when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
+(see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the ORCA job-runner class default (``True``).
 
 **Example:**
 
@@ -526,9 +529,10 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether NCIPLOT jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
-CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
-the job folder. If this key is omitted or ``null``, the NCIPLOT job-runner class default (``True``) is used.
+**Description:** Default scratch mode for NCIPLOT when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
+(see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the NCIPLOT job-runner class default (``True``).
 
 **Example:**
 
