@@ -31,10 +31,9 @@ class XTBFolder(BaseFolder):
         └─ ...              → other auxiliary files
     """
 
-    PARSEABLE_GEOMETRY_EXTENSIONS = (".xyz", ".sdf")
+    PARSEABLE_GEOMETRY_EXTENSIONS = (".xyz", ".sdf", ".pdb")
     UNSUPPORTED_GEOMETRY_EXTENSIONS = (
         ".coord",
-        ".pdb",
         ".poscar",
         ".gen",
         ".EIn",
@@ -168,7 +167,7 @@ class XTBFolder(BaseFolder):
                 if not basename.startswith("xtbopt"):
                     logger.warning(
                         f"Found input geometry file {filepath}, but format {ext} "
-                        "is not yet supported by chemsmart."
+                        "is not yet supported by CHEMSMART."
                     )
                     return filepath
         # No input geometry file found
@@ -185,13 +184,14 @@ class XTBFolder(BaseFolder):
         Search priority (parseable formats only):
             1. xtbopt.xyz     → XYZ format (supported)
             2. xtbopt.sdf     → SDF format (supported)
+            3. xtbopt.pdb     → PDB format (supported)
 
         Unsupported formats (will show warning):
             - xtbopt.coord   → Turbomole coord format
-            - xtbopt.pdb     → PDB format
             - xtbopt.poscar  → VASP POSCAR format
             - xtbopt.gen     → DFTB+ gen format
             - xtbopt.EIn     → Gaussian External format
+        Support for these additional formats is planned for a future release.
 
         Returns:
             str | None: Path to optimized geometry file, or None if
@@ -209,7 +209,7 @@ class XTBFolder(BaseFolder):
             if os.path.exists(filepath):
                 logger.warning(
                     f"Found optimized geometry file {filepath}, but format {ext} "
-                    "is not yet supported by chemsmart."
+                    "is not yet supported by CHEMSMART."
                 )
                 return filepath
         # No xtbopt.* file found
