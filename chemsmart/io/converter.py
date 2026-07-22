@@ -10,6 +10,7 @@ from chemsmart.io.gaussian.folder import (
 )
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.folder import ORCAInputFolder, ORCAOutputFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
@@ -356,3 +357,64 @@ class FileConverter:
                 logger.warning(
                     f"Could not remove temporary XYZ {xyz_filename}: {exc}"
                 )
+
+    @staticmethod
+    def convert_file(input_path, output_path):
+        """
+        Convert a single input file to a single output file via ``Molecule``.
+
+        The input format is inferred from the file extension by
+        ``Molecule.from_filepath`` and the output format is inferred from
+        *output_path*. When the input file contains multiple structures,
+        each structure is written to a separate file with a ``_1``, ``_2``,
+        ... suffix.
+
+        Args:
+            input_path (str): Path to the input file.
+            output_path (str): Path to the output file. Used to infer the
+                output format from its extension.
+
+        Raises:
+            FileNotFoundError: If *input_path* does not exist.
+            ValueError: If the output format is not supported by
+                ``Molecule.write``.
+        """
+        input_path = os.path.abspath(input_path)
+        output_path = os.path.abspath(output_path)
+
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+
+        logger.info(f"Converting {input_path} -> {output_path}")
+
+        molecules = Molecule.from_filepath(
+            input_path, index=":", return_list=True
+        )
+        if molecules is None:
+            raise ValueError(f"No molecule could be read from {input_path}")
+        if not isinstance(molecules, list):
+            molecules = [molecules]
+        if len(molecules) == 0:
+            raise ValueError(f"No molecules found in {input_path}")
+
+        output_dir, output_name = os.path.split(output_path)
+        if output_dir and not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        output_basename, output_ext = os.path.splitext(output_name)
+        output_ext = output_ext.lstrip(".").lower()
+        if not output_ext:
+            raise ValueError(
+                f"Output path must include a file extension: {output_path}"
+            )
+
+        if len(molecules) == 1:
+            molecules[0].write(output_path, format=output_ext)
+            logger.info(f"Created: {output_path}")
+        else:
+            for i, molecule in enumerate(molecules, start=1):
+                path = os.path.join(
+                    output_dir, f"{output_basename}_{i}.{output_ext}"
+                )
+                molecule.write(path, format=output_ext)
+                logger.info(f"Created: {path}")

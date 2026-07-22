@@ -3,7 +3,9 @@ from shutil import copy, copytree, rmtree
 
 import numpy as np
 import pytest
+from click.testing import CliRunner
 
+from chemsmart.cli.main import entry_point
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
     GaussianInputFolder,
@@ -833,3 +835,157 @@ class TestPDBFile:
         assert os.path.exists(
             os.path.join(tmp_cdxml_folder, "two_molecules_2.com")
         )
+
+
+class TestConverterTwoWay:
+    """Tests for the generic two-way ``FileConverter.convert_file`` method."""
+
+    def test_convert_file_pdb_to_xyz(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".xyz")
+        FileConverter.convert_file(single_model_pdb_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 3
+        assert list(mol.symbols) == ["O", "H", "H"]
+
+    def test_convert_file_xyz_to_pdb(self, single_model_pdb_file):
+        xyz_path = single_model_pdb_file.replace(".pdb", ".xyz")
+        FileConverter.convert_file(single_model_pdb_file, xyz_path)
+
+        pdb_path = single_model_pdb_file.replace(".pdb", "_roundtrip.pdb")
+        FileConverter.convert_file(xyz_path, pdb_path)
+
+        assert os.path.exists(pdb_path)
+        mol = Molecule.from_filepath(pdb_path)
+        assert mol.num_atoms == 3
+        assert list(mol.symbols) == ["O", "H", "H"]
+
+    def test_convert_file_pdb_to_com(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".com")
+        FileConverter.convert_file(single_model_pdb_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert mol.num_atoms == 3
+        assert mol.chemical_formula == "H2O"
+
+    def test_convert_file_com_to_xyz(self, tmpdir, gaussian_opt_inputfile):
+        tmp_path = os.path.join(tmpdir, "gaussian_opt.com")
+        copy(gaussian_opt_inputfile, tmp_path)
+
+        output_path = os.path.join(tmp_path.replace(".com", ".xyz"))
+        FileConverter.convert_file(tmp_path, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 14
+        assert mol.chemical_formula == "C7H5ClO"
+
+    def test_convert_file_xyz_to_com(self, tmpdir, gaussian_opt_inputfile):
+        tmp_path = os.path.join(tmpdir, "gaussian_opt.com")
+        copy(gaussian_opt_inputfile, tmp_path)
+        xyz_path = tmp_path.replace(".com", ".xyz")
+        FileConverter.convert_file(tmp_path, xyz_path)
+
+        com_path = tmp_path.replace(".com", "_from_xyz.com")
+        FileConverter.convert_file(xyz_path, com_path)
+
+        assert os.path.exists(com_path)
+        mol = Molecule.from_filepath(com_path)
+        assert mol.num_atoms == 14
+        assert mol.chemical_formula == "C7H5ClO"
+
+    def test_convert_file_multi_model_pdb_splits(self, multi_model_pdb_file):
+        output_path = multi_model_pdb_file.replace(".pdb", ".xyz")
+        FileConverter.convert_file(multi_model_pdb_file, output_path)
+
+        assert not os.path.exists(output_path)
+        output_dir = os.path.dirname(output_path)
+        output_basename = os.path.splitext(os.path.basename(output_path))[0]
+        output_1 = os.path.join(output_dir, f"{output_basename}_1.xyz")
+        output_2 = os.path.join(output_dir, f"{output_basename}_2.xyz")
+        assert os.path.exists(output_1)
+        assert os.path.exists(output_2)
+
+        mol1 = Molecule.from_filepath(output_1)
+        mol2 = Molecule.from_filepath(output_2)
+        assert mol1.num_atoms == 2
+        assert mol2.num_atoms == 2
+        assert not np.allclose(mol1.positions, mol2.positions)
+
+    def test_convert_file_missing_input_raises(self, tmpdir):
+        missing_input = os.path.join(tmpdir, "missing.xyz")
+        output_path = os.path.join(tmpdir, "out.xyz")
+        with pytest.raises(FileNotFoundError):
+            FileConverter.convert_file(missing_input, output_path)
+
+    def test_convert_file_missing_extension_raises(
+        self, single_model_pdb_file
+    ):
+        output_path = single_model_pdb_file.replace(".pdb", "")
+        with pytest.raises(ValueError, match="file extension"):
+            FileConverter.convert_file(single_model_pdb_file, output_path)
+
+
+class TestConvertCLI:
+    """Tests for ``chemsmart run convert``."""
+
+    def test_cli_convert_pdb_to_xyz(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".xyz")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                output_path,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+        mol = Molecule.from_filepath(output_path)
+        assert mol.num_atoms == 3
+
+    def test_cli_convert_short_flags(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".com")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "-i",
+                single_model_pdb_file,
+                "-o",
+                output_path,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+    def test_cli_convert_missing_input_fails(self, tmpdir):
+        missing_input = os.path.join(tmpdir, "missing.pdb")
+        output_path = os.path.join(tmpdir, "out.xyz")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                missing_input,
+                "--output",
+                output_path,
+            ],
+        )
+        assert result.exit_code != 0

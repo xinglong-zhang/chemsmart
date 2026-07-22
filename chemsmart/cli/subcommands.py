@@ -1,3 +1,4 @@
+from chemsmart.cli.convert import convert
 from chemsmart.cli.database import database
 from chemsmart.cli.gaussian import gaussian
 from chemsmart.cli.grouper import grouper
@@ -9,6 +10,7 @@ from chemsmart.cli.pka import pka
 from chemsmart.cli.thermochemistry import thermochemistry
 
 subcommands = [
+    convert,
     gaussian,
     grouper,
     orca,
