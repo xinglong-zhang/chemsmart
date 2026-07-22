@@ -19,7 +19,6 @@ import time
 from abc import ABCMeta
 from contextlib import contextmanager, suppress
 from enum import Enum
-from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
@@ -244,27 +243,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         else:
             cores = None
             mem_gb = None
-
-        from chemsmart.jobs.batch_manifest import (
-            batch_manifest_filename,
-            load_batch_manifest_entry,
-        )
-
-        folder = child.folder
-        try:
-            manifest_path = Path(folder) / batch_manifest_filename(self.label)
-        except TypeError:
-            manifest_path = None
-        if manifest_path is not None and manifest_path.is_file():
-            try:
-                entry = load_batch_manifest_entry(manifest_path, task_id)
-                logger.debug(
-                    "Loaded batch manifest entry for task %s: %s",
-                    task_id,
-                    entry.get("label"),
-                )
-            except KeyError as exc:
-                logger.warning("%s", exc)
 
         logger.info(
             "BatchJob %r: execution=%s, task=%s/%s, cores=%s, "

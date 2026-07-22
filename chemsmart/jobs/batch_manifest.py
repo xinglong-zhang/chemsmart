@@ -1,9 +1,9 @@
 """Batch manifest helpers for scheduler array submissions.
 
-Writes and reads ``chemsmart_batch_<label>.json`` describing top-level
-``BatchJob`` children. Callers that need per-task CLI rewriting (e.g. pKa
-table rows) pass a ``rewrite_cli`` callback; this module stays engine- and
-job-type agnostic.
+Writes ``chemsmart_batch_<label>.json`` at submit time describing top-level
+``BatchJob`` children and their per-task CLI args. Array execution uses the
+rewritten CLI in each ``chemsmart_run_array_<task_id>.py`` runscript, not a
+runtime manifest load.
 """
 
 from __future__ import annotations
