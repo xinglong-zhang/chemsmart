@@ -10,6 +10,7 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -18,6 +19,44 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program or program is NotImplemented:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML when the key is set."""
+    exe_cls = _executable_class_for_program(runner_cls.PROGRAM)
+    if exe_cls is None or server is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
+
+
+def _resolve_scratch(scratch, runner_cls, server):
+    """Resolve scratch: CLI wins; else YAML program SCRATCH; else class default.
+
+    Priority when constructing a typed runner:
+
+    1. Explicit CLI/API ``scratch`` (``True``/``False``) wins.
+    2. If omitted (``None``), use program-block ``SCRATCH`` from server YAML
+       when that key is present (for example ``ORCA.SCRATCH: False``).
+    3. If the YAML key is absent, use the runner class ``SCRATCH`` default.
+    """
+    if scratch is not None:
+        return scratch
+    yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
+    if yaml_scratch is not None:
+        return yaml_scratch
+    return runner_cls.SCRATCH
 
 
 @dataclass(frozen=True)
@@ -153,10 +192,10 @@ class JobRunner(RegistryMixin):
     Args:
         server (Server): Server to run the job on.
         scratch (bool or None): Whether to use a scratch directory.
-            None means unset: typed runners substitute their SCRATCH class
-            default in ``from_job`` or ``__init__``. False or True would
-            force scratch off or on for every program regardless of those
-            defaults.
+            None means unset: ``from_job`` uses program ``SCRATCH`` from
+            server YAML when that key is set, otherwise the typed runner's
+            ``SCRATCH`` class default. Explicit False or True forces
+            scratch off or on regardless of YAML or class defaults.
         scratch_dir (str or None): Path to scratch directory, or None to
             resolve from executable ENVARS, server YAML, then user settings.
         delete_scratch (bool): whether to delete scratch after
@@ -416,14 +455,9 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # None means the caller did not pass --scratch/--no-scratch (or
-            # equivalent). Use the selected runner's SCRATCH default so
-            # Gaussian/ORCA keep scratch on while lightweight runners stay
-            # off. Only explicit True/False should override that default.
-            if scratch is not None:
-                scratch = scratch
-            else:
-                scratch = selected_runner.SCRATCH
+            # CLI True/False wins; omit → YAML program SCRATCH if set;
+            # otherwise runner class SCRATCH.
+            scratch = _resolve_scratch(scratch, selected_runner, server)
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )

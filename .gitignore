@@ -141,3 +141,6 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# Local HPC scratch audit/test harness (not for commit)
+tests/data/scratch_server_yamls/

@@ -46,9 +46,9 @@ def click_jobrunner_options(f):
         type=bool,
         help=(
             "Run in scratch mode or without a scratch folder. "
-            "Default None (omit both flags) leaves the choice to each "
-            "job runner's SCRATCH class default; use --scratch or "
-            "--no-scratch to override explicitly."
+            "Omit both flags to use program SCRATCH from the server YAML "
+            "when set, otherwise the job runner's SCRATCH class default; "
+            "use --scratch or --no-scratch to override explicitly."
         ),
     )
     @click.option(

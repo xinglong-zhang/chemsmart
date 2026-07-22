@@ -282,3 +282,164 @@ class TestScratchCLI:
         assert result.exit_code == 0, result.output
         assert "--no-scratch" not in captured["cli_args"]
         assert "--scratch" not in captured["cli_args"]
+
+
+def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
+    """Write a minimal server YAML with optional program SCRATCH keys."""
+    gaussian_line = (
+        f"    SCRATCH: {gaussian_scratch}\n"
+        if gaussian_scratch is not None
+        else ""
+    )
+    orca_line = (
+        f"    SCRATCH: {orca_scratch}\n" if orca_scratch is not None else ""
+    )
+    path.write_text(
+        "SERVER:\n"
+        "    SCHEDULER: PBS\n"
+        "    MEM_GB: 8\n"
+        "    NUM_CORES: 2\n"
+        "    NUM_GPUS: 0\n"
+        "    NUM_THREADS: 2\n"
+        "    SUBMIT_COMMAND: qsub\n"
+        "    SCRATCH_DIR: null\n"
+        "GAUSSIAN:\n"
+        "    EXEFOLDER: ~/programs/g16\n"
+        "    LOCAL_RUN: True\n"
+        f"{gaussian_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
+        "ORCA:\n"
+        "    EXEFOLDER: ~/programs/orca\n"
+        "    LOCAL_RUN: False\n"
+        f"{orca_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
+    )
+    return path
+
+
+class TestScratchYamlOverride:
+    """CLI → YAML program SCRATCH → runner class SCRATCH."""
+
+    def test_program_scratch_from_servername_reads_yaml(self, tmp_path):
+        from chemsmart.settings.executable import (
+            GaussianExecutable,
+            ORCAExecutable,
+        )
+
+        yaml_path = _write_server_yaml(
+            tmp_path / "mixed.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        assert (
+            GaussianExecutable.program_scratch_from_servername(str(yaml_path))
+            is True
+        )
+        assert (
+            ORCAExecutable.program_scratch_from_servername(str(yaml_path))
+            is False
+        )
+
+    def test_program_scratch_from_servername_missing_key_is_none(
+        self, tmp_path
+    ):
+        from chemsmart.settings.executable import ORCAExecutable
+
+        yaml_path = _write_server_yaml(
+            tmp_path / "no_orca_scratch.yaml",
+            gaussian_scratch=True,
+            orca_scratch=None,
+        )
+        assert (
+            ORCAExecutable.program_scratch_from_servername(str(yaml_path))
+            is None
+        )
+
+    def test_omit_uses_yaml_false_over_orca_class_true(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_off.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=None,
+            fake=True,
+        )
+        assert isinstance(runner, FakeORCAJobRunner)
+        assert ORCAJobRunner.SCRATCH is True
+        assert runner.scratch is False
+
+    def test_omit_uses_yaml_true_for_gaussian(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "g16_on.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="g16opt"),
+            server=server,
+            scratch=None,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert isinstance(runner, FakeGaussianJobRunner)
+        assert runner.scratch is True
+
+    def test_omit_falls_back_to_class_when_yaml_key_absent(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_absent.yaml",
+            gaussian_scratch=True,
+            orca_scratch=None,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=None,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert runner.scratch is ORCAJobRunner.SCRATCH
+
+    def test_cli_scratch_true_overrides_yaml_false(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_off.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=True,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert runner.scratch is True
+
+    def test_cli_scratch_false_overrides_yaml_true(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "g16_on.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="g16opt"),
+            server=server,
+            scratch=False,
+            fake=True,
+        )
+        assert runner.scratch is False
