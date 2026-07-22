@@ -1938,6 +1938,20 @@ def server_yaml_file(utils_test_directory):
 
 
 @pytest.fixture()
+def gaussian_project_config_dir(tmp_path):
+    """Minimal Gaussian project config under a temporary CHEMSMART config root."""
+    config_root = tmp_path / "chemsmart_cfg"
+    gaussian_cfg = config_root / "gaussian"
+    gaussian_cfg.mkdir(parents=True)
+    (gaussian_cfg / "test.yaml").write_text(
+        "gas:\n  functional: B3LYP\n  basis: def2-SVP\n"
+        "solv:\n  functional: B3LYP\n  basis: def2-SVP\n"
+        "  solvent_model: smd\n  solvent_id: water\n"
+    )
+    return config_root
+
+
+@pytest.fixture()
 def pbs_server(server_yaml_file):
     return Server.from_yaml(server_yaml_file)
 
