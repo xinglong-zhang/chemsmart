@@ -446,8 +446,9 @@ class XTBOutput:
         This method attempts to read the optimized structure from multiple sources:
         1. First, try to read from optimized geometry file (xtbopt.xyz, xtbopt.sdf, etc.)
 
-        2. If xtbopt.* file is not available, fall back to the last structure
-           from the optimization trajectory (xtbopt.log)
+        2. If xtbopt.* exists but is not yet parseable by CHEMSMART (e.g.
+           xtbopt.coord), fall back to the last structure from the
+           optimization trajectory (xtbopt.log).
 
         Returns:
             Molecule | None: Final optimized structure with all properties,
