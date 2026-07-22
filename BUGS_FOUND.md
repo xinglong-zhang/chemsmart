@@ -383,3 +383,49 @@ test) crashes.
 
 **Suggested direction:** change to `super().__init__(self.NAME, **kwargs)`,
 matching `PBSServer`/`LSFServer`/`SGE_Server`.
+
+---
+
+## 9. `GaussianDIASJob._sample_molecules` duplicates the endpoint molecule
+
+**File:** `chemsmart/jobs/gaussian/dias.py:183-200`
+**Test:** `tests/test_gaussian_dias_job_unit.py::TestSampleMolecules::test_samples_every_n_points_and_appends_last_again`
+
+```python
+def _sample_molecules(self, molecules):
+    filtered_molecules = molecules[0 :: self.every_n_points]
+    if (self.num_molecules - 1) / self.every_n_points != 0:
+        filtered_molecules.append(molecules[-1])
+    return filtered_molecules
+```
+
+The guard uses true division (`/`) instead of modulo (`%`). The evident
+intent — based on the surrounding docstring ("ensuring the last molecule
+is always included") — was to append the final molecule **only when the
+slice `[0::every_n_points]` doesn't already land on it**, i.e. `(num_molecules
+- 1) % every_n_points != 0`. Instead, `(num_molecules - 1) / every_n_points`
+is a float that is `!= 0` for essentially any real trajectory (it's only
+`0` when `num_molecules == 1`), so the last molecule is **unconditionally
+appended a second time** regardless of whether the slice already included
+it.
+
+**Concrete example:** 5 molecules, `every_n_points=2`. The slice
+`molecules[0::2]` is `[m0, m2, m4]`, which already includes the endpoint
+`m4`. The buggy guard still evaluates `(5-1)/2 = 2.0 != 0` → `True`, so
+`m4` is appended again, producing `[m0, m2, m4, m4]` — one point processed
+(and later run as a full Gaussian job) twice, and the reported "sampled
+count" is off by one from what a caller would expect.
+
+**Impact:** Every IRC-mode DI-AS job (`GaussianDIASJob.all_molecules_jobs`
+/ `.fragment1_jobs` / `.fragment2_jobs` when `mode="irc"`) submits one
+redundant duplicate calculation for the final trajectory point, wasting
+compute and duplicating a row in the DI-AS energy analysis output.
+
+**Reproduce:**
+```python
+job._sample_molecules([m0, m1, m2, m3, m4])  # every_n_points=2
+# [m0, m2, m4, m4]  -- m4 present twice
+```
+
+**Suggested direction:** change the guard to modulo:
+`if (self.num_molecules - 1) % self.every_n_points != 0:`.
