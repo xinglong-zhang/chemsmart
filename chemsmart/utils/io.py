@@ -350,7 +350,7 @@ def get_program_type_from_file(filepath):
     """
     max_lines = 200
     try:
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for i, line in enumerate(f):
                 if i >= max_lines:
                     break
@@ -401,10 +401,10 @@ def discover_pka_target_companion_outputs(ha_gas_path, program=None):
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
     supported in CHEMMART."""
-    if program_name.lower() not in {"gaussian", "orca"}:
+    if program_name.lower() not in {"gaussian", "orca", "xtb"}:
         raise ValueError(
             f"Unsupported program '{program_name}' for thermochemistry.\n"
-            f"Please choose one of ['gaussian', 'orca']."
+            f"Please choose one of ['gaussian', 'orca', 'xtb']."
         )
 
 

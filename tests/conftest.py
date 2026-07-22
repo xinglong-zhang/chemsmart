@@ -86,6 +86,7 @@ def make_thermochemistry_mock():
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
         mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
+        mock.target = "dummy.log"
         return mock
 
     return _factory
@@ -147,19 +148,24 @@ def invoke_folder_command():
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
-    def _run(extra_args=None, ctx_obj=None):
+    def _run(
+        extra_args=None,
+        ctx_obj=None,
+        filename="dummy.log",
+        detected_program="gaussian",
+    ):
         runner = CliRunner()
         captured_settings = None
         mock_job = MagicMock()
 
-        base_args = ["-f", "dummy.log", "-T", "298.15"]
+        base_args = ["-f", filename, "-T", "298.15"]
         cli_args = base_args + (extra_args or [])
 
         with (
             patch.object(
                 thermochemistry_cli_module,
                 "get_program_type_from_file",
-                return_value="gaussian",
+                return_value=detected_program,
             ),
             patch.object(
                 thermochemistry_cli_module.ThermochemistryJob,
@@ -224,6 +230,9 @@ def run_thermochemistry_with_directory():
             mock_folder = MagicMock()
             # Configure every discovery method to return the caller-supplied list
             mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.return_value = (
                 mock_files
             )
             mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (
@@ -1683,6 +1692,69 @@ def orca_yaml_settings_custom_solv_cosmors_project_name(
     return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
 
 
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_co2_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_ohess")
+
+
+@pytest.fixture()
+def xtb_water_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
+
+
+@pytest.fixture()
+def xtb_cyclopentadienyl_anion_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "cyclopentadienyl_anion_opt")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_opt_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_opt_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_sp_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_sp_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_acetaldehyde_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "acetaldehyde_hess")
+
+
+@pytest.fixture()
+def xtb_he_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "he_hess")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -2803,6 +2875,11 @@ def database_test_directory(test_data_directory):
 @pytest.fixture()
 def database_chemsmart_file(database_test_directory):
     return os.path.join(database_test_directory, "chemsmart.db")
+
+
+@pytest.fixture()
+def database_chemsmart_xtb_file(database_test_directory):
+    return os.path.join(database_test_directory, "chemsmart_xtb.db")
 
 
 @pytest.fixture()
