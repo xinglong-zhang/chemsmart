@@ -25,7 +25,7 @@ calculations:
            ├─── ASE Atoms
            ├─── Pymatgen Molecule
            ├─── RDKit Molecule
-           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
+           ├─── File Formats (.xyz, .sdf, .pdb, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
            └─── PubChem queries (by name, CID, or SMILES)
            │
            ▼
@@ -85,6 +85,20 @@ Structure-Data Format files with 2D or 3D coordinates:
 .. code:: bash
 
    chemsmart sub -s server gaussian -p project -f molecule.sdf -c 0 -m 1 opt
+
+PDB Files
+---------
+
+Protein Data Bank (PDB) coordinate files, including single-model structures and multi-model ensembles delimited by
+``MODEL`` / ``ENDMDL`` records:
+
+.. code:: bash
+
+   # Single-model PDB
+   chemsmart sub -s server gaussian -p project -f molecule.pdb -c 0 -m 1 opt
+
+   # Multi-model PDB (select 3rd model)
+   chemsmart sub -s server gaussian -p project -f ensemble.pdb -i 3 -c 0 -m 1 opt
 
 Gaussian Files
 ==============
@@ -344,6 +358,7 @@ Always specify charge and multiplicity for:
 
 -  XYZ files
 -  SDF files
+-  PDB files
 -  ASE database/trajectory files
 -  PubChem queries
 -  ChemDraw files
@@ -374,6 +389,7 @@ CHEMSMART automatically detects file formats based on extensions:
 
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
+-  ``.pdb`` → PDB format
 -  ``.com``, ``.gjf`` → Gaussian input
 -  ``.log`` → Gaussian output
 -  ``.inp`` → ORCA input
