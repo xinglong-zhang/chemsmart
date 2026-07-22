@@ -192,10 +192,13 @@ class JobRunner(RegistryMixin):
     Args:
         server (Server): Server to run the job on.
         scratch (bool or None): Whether to use a scratch directory.
-            None means unset: ``from_job`` uses program ``SCRATCH`` from
-            server YAML when that key is set, otherwise the typed runner's
-            ``SCRATCH`` class default. Explicit False or True forces
-            scratch off or on regardless of YAML or class defaults.
+            ``None`` means unset. ``JobRunner.from_job`` (CLI path) resolves
+            unset values as: explicit CLI/API ``True``/``False`` first; else
+            program ``SCRATCH`` from server YAML when that key is set; else
+            the typed runner's ``SCRATCH`` class default. Explicit ``False``
+            or ``True`` forces scratch off or on regardless of YAML or class
+            defaults. Direct construction of a typed runner with ``None``
+            uses only that runner's class default (YAML is not re-read).
         scratch_dir (str or None): Path to scratch directory, or None to
             resolve from executable ENVARS, server YAML, then user settings.
         delete_scratch (bool): whether to delete scratch after
@@ -278,7 +281,18 @@ class JobRunner(RegistryMixin):
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
-        """Determine the scratch directory, considering multiple sources."""
+        """Determine the scratch directory from executable, server, or user settings.
+
+        Resolution order for the scratch **path** (when scratch mode is on):
+
+        1. Explicit ``scratch_dir`` already set on the runner
+        2. Executable ENVARS (for example ``SCRATCH`` export)
+        3. ``server.scratch_dir`` (``SERVER.SCRATCH_DIR``)
+        4. User settings ``SCRATCH``
+
+        If no path can be resolved, scratch mode is disabled with a warning.
+        If a path is resolved but does not exist, raises ``FileNotFoundError``.
+        """
         if self._scratch_dir is not None:
             return self._scratch_dir  # Use explicitly set directory
 

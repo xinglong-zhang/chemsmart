@@ -123,10 +123,10 @@ class Executable(RegistryMixin):
         """Return program-block ``SCRATCH`` from server YAML, or None if unset.
 
         Reads the boolean ``SCRATCH`` key under this executable's program
-        block (for example ``GAUSSIAN`` or ``ORCA``). Used when the CLI
-        omits ``--scratch``/``--no-scratch``: an explicit YAML value
-        overrides the job runner class default; a missing key leaves the
-        class default in place.
+        block (for example ``GAUSSIAN`` or ``ORCA``). Used by
+        ``JobRunner.from_job`` when the CLI omits ``--scratch`` /
+        ``--no-scratch``: an explicit YAML value overrides the job-runner
+        class default; a missing key leaves the class default in place.
 
         Args:
             servername (str): Server config name, or path to a ``.yaml`` file.

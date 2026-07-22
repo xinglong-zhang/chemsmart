@@ -204,8 +204,9 @@ SCRATCH_DIR
 **Type:** String or Null
 
 **Description:** Path to the scratch directory for temporary files. Set to ``null`` if not using a specific scratch
-location. Note that both Gaussian and ORCA calculations are by default run in scratch directory, thus, it is recommended
-to set up the path to scratch directory. See the section on setting up scratch directory.
+location. This is one source for the scratch **path** when scratch mode is enabled (see :ref:`scratch-behavior`).
+Gaussian, ORCA, and NCIPLOT runners default to scratch mode when the program ``SCRATCH`` key is absent, so it is
+recommended to configure a valid scratch path.
 
 **Examples:**
 
@@ -316,8 +317,9 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary Gaussian files. When ``True``, Gaussian will write
-temporary files to the scratch directory specified in ENVARS.
+**Description:** Whether Gaussian jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
+CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
+the job folder. If this key is omitted, the Gaussian job-runner class default (``True``) is used.
 
 **Example:**
 
@@ -427,7 +429,9 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary ORCA files.
+**Description:** Whether ORCA jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the CLI.
+When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in the
+job folder. If this key is omitted, the ORCA job-runner class default (``True``) is used.
 
 **Example:**
 
@@ -520,13 +524,16 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary NCIPLOT files.
+**Description:** Whether NCIPLOT jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
+CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
+the job folder. If this key is omitted, the NCIPLOT job-runner class default (``True``) is used.
 
 **Example:**
 
 .. code:: yaml
 
    SCRATCH: True
+   SCRATCH: False
 
 CONDA_ENV
 ^^^^^^^^^
@@ -762,6 +769,84 @@ Complete example for a local workstation without a job scheduler:
            export SCRATCH=~/scratch
            export NCIPLOT_HOME=~/bin/nciplot
 
+.. _scratch-behavior:
+
+Scratch Behavior
+================
+
+CHEMSMART resolves whether to run in scratch from the CLI, the program ``SCRATCH`` key in server YAML, and the
+job-runner class default. When scratch mode is enabled, the scratch **directory path** is resolved separately.
+
+Scratch mode (on/off)
+---------------------
+
+Resolution order for ``chemsmart run`` and ``chemsmart sub``:
+
+#. Explicit ``--scratch`` or ``--no-scratch`` wins.
+
+#. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when that key is present (for
+   example ``GAUSSIAN.SCRATCH: False`` or ``ORCA.SCRATCH: True``).
+
+#. If the YAML key is absent, use the job-runner class default:
+
+   -  ``True`` for Gaussian, ORCA, and NCIPLOT
+   -  ``False`` for PyMOL and related runners
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 25 20 35
+
+   -  -  CLI
+      -  YAML ``SCRATCH``
+      -  Final ``scratch``
+      -  Runs in
+
+   -  -  ``--no-scratch``
+      -  any
+      -  ``False``
+      -  job folder
+
+   -  -  ``--scratch``
+      -  any
+      -  ``True``
+      -  scratch directory (path must exist)
+
+   -  -  omit
+      -  ``False``
+      -  ``False``
+      -  job folder
+
+   -  -  omit
+      -  ``True``
+      -  ``True``
+      -  scratch directory (path must exist)
+
+   -  -  omit
+      -  absent *(class ``False``, e.g. PyMOL)*
+      -  ``False``
+      -  job folder
+
+   -  -  omit
+      -  absent *(class ``True``, e.g. Gaussian, ORCA, NCIPLOT)*
+      -  ``True``
+      -  scratch directory (path must exist)
+
+Scratch directory path
+----------------------
+
+When scratch mode is ``True``, the scratch directory path is resolved in this order:
+
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``NCIPLOT``)
+#. ``SERVER.SCRATCH_DIR``
+#. User settings ``SCRATCH`` (from CHEMSMART user configuration)
+
+If scratch mode is enabled but no valid directory can be resolved, or the resolved path does not exist, job setup raises
+an error. Configure a real scratch path (or pass ``--no-scratch``) before running.
+
+``chemsmart sub`` reconstructs CLI arguments for the worker ``chemsmart run`` script. When ``--scratch`` /
+``--no-scratch`` are omitted at submit time, those flags are also omitted in the reconstructed command so the worker
+applies the same YAML / class-default resolution.
+
 Customization Tips
 ==================
 
@@ -780,8 +865,9 @@ When customizing server configuration files:
 #. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
    will be automatically updated when configuring CHEMSMART during the configuration phase.
 
-#. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
-   node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
+#. **Scratch directories**: Configure program ``SCRATCH`` (mode) and a valid scratch path (``ENVARS`` / ``SCRATCH_DIR``
+   / user settings). Some HPC systems provide node-local scratch (e.g., ``/tmp``) while others use network-attached
+   scratch directories. See :ref:`scratch-behavior`.
 
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.
 

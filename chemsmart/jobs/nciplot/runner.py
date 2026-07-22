@@ -58,13 +58,17 @@ class NCIPLOTJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution
-            scratch: Whether to use scratch
-            directory (defaults to class SCRATCH)
+            scratch (bool or None): Whether to use a scratch directory.
+                ``None`` means unset. Via ``JobRunner.from_job`` (CLI path),
+                unset values resolve as CLI override, then program YAML
+                ``SCRATCH``, then this class ``SCRATCH`` default (``True``).
+                Direct construction with ``None`` uses only the class default.
             fake: Whether to run in fake mode for testing
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
         """
-        # Use default SCRATCH if scratch is not explicitly set
+        # None = unset: inherit NCIPLOTJobRunner.SCRATCH (True). YAML
+        # override is applied in from_job.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(

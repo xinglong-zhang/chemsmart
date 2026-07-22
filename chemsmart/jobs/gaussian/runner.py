@@ -113,15 +113,17 @@ class GaussianJobRunner(JobRunner):
         Args:
             server: Server configuration object for job execution.
             scratch (bool or None, optional): Whether to use scratch
-                directories. None (default) uses the class SCRATCH attribute
-                (True for Gaussian). False or True would override that
-                default even when the CLI omits --scratch/--no-scratch.
+                directories. ``None`` means unset. Via ``JobRunner.from_job``
+                (CLI path), unset values resolve as CLI override, then
+                program YAML ``SCRATCH``, then this class ``SCRATCH``
+                default (``True``). Direct construction with ``None``
+                uses only the class default.
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
         # None = unset: inherit GaussianJobRunner.SCRATCH (True). False/True
-        # would force local or scratch for every call site that passes them.
+        # force local or scratch. YAML override is applied in from_job.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(

@@ -444,7 +444,9 @@ This produces:
  Scratch Directory
 *******************
 
-Set up scratch directories for Gaussian and ORCA jobs:
+Set up a scratch directory path for Gaussian, ORCA, and NCIPLOT jobs. Scratch **mode** (on/off) is controlled by CLI
+flags and/or program ``SCRATCH`` in the server YAML; see :ref:`scratch-behavior` in
+:doc:`configuration-server-settings`.
 
 .. code:: bash
 
