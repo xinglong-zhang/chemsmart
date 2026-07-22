@@ -155,16 +155,6 @@ jobs:
             htmlcov/**
           if-no-files-found: ignore
 
-      - name: Upload coverage to Codecov
-        if: >
-          steps.changed-files.outputs.only_changed != 'true' &&
-          hashFiles('coverage.xml') != ''
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: true
-
       - name: Create coverage report
         if: >
           github.event_name == 'pull_request' &&
@@ -175,6 +165,16 @@ jobs:
         with:
           coverageFile: coverage.xml
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload coverage to Codecov
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
 
   tests_mac:
     needs: [pre-commit, build]
@@ -278,7 +278,7 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
+          auto-update-conda: false
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart

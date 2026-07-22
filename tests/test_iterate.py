@@ -13,6 +13,7 @@ pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
 
 def test_iterate_integration_workflow(
     tmpdir,
+    monkeypatch,
     iterate_integration_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
@@ -25,128 +26,116 @@ def test_iterate_integration_workflow(
     3. Compare output with expected XYZ file
     """
     # Change CWD to input directory so relative paths in TOML work
-    original_cwd = os.getcwd()
-    os.chdir(iterate_input_directory)
+    monkeypatch.chdir(iterate_input_directory)
 
-    try:
-        # 1. Load and validate configuration
-        with open(iterate_integration_config_file, "r") as f:
-            raw_config = tomlkit.load(f).unwrap()
+    # 1. Load and validate configuration
+    with open(iterate_integration_config_file, "r") as f:
+        raw_config = tomlkit.load(f).unwrap()
 
-        config = validate_config(raw_config, iterate_integration_config_file)
+    config = validate_config(raw_config, iterate_integration_config_file)
 
-        # 2. Setup Job Settings
-        job_settings = IterateJobSettings(
-            config_file=iterate_integration_config_file,
-            method="lagrange_multipliers",
+    # 2. Setup Job Settings
+    job_settings = IterateJobSettings(
+        config_file=iterate_integration_config_file,
+        method="lagrange_multipliers",
+    )
+    job_settings.skeleton_list = config["skeletons"]
+    job_settings.substituent_list = config["substituents"]
+
+    # 3. Setup Job
+    # Use a temporary file for output
+    output_file = tmpdir / "test_output"
+
+    jobrunner = iterate_jobrunner
+    job = IterateJob(
+        settings=job_settings,
+        jobrunner=jobrunner,
+        nprocs=4,
+        outputfile=str(output_file),
+    )
+
+    # 4. Run Job
+    generated_output_path = job.run()
+
+    # 5. Verify Output
+    assert os.path.exists(
+        generated_output_path
+    ), "Output file was not generated"
+
+    # Compare generated output with expected output
+    # Semantic comparison (atoms and coordinates)
+    # is preferred over byte-comparison
+    # to robustly handle floating point formatting differences in XYZ files
+    from chemsmart.io.xyz.xyzfile import XYZFile
+
+    generated_xyz = XYZFile(generated_output_path)
+    generated_structures = generated_xyz.get_molecules(
+        index=":", return_list=True
+    )
+    generated_structures_comments = generated_xyz.get_comments(
+        index=":", return_list=True
+    )
+    # attach comment to structure as molecule.info for easier comparison
+    for mol, comment in zip(
+        generated_structures, generated_structures_comments
+    ):
+        mol.info["comment"] = comment
+
+    expected_xyz = XYZFile(iterate_expected_output_file)
+    expected_structures = expected_xyz.get_molecules(
+        index=":", return_list=True
+    )
+    expected_structures_comments = expected_xyz.get_comments(
+        index=":", return_list=True
+    )
+    for mol, comment in zip(expected_structures, expected_structures_comments):
+        mol.info["comment"] = comment
+
+    # avoid silent truncation by zip()
+    assert len(generated_structures) == len(generated_structures_comments), (
+        f"Generated molecules/comments length mismatch: "
+        f"{len(generated_structures)} != {len(generated_structures_comments)}"
+    )
+    assert len(expected_structures) == len(expected_structures_comments), (
+        f"Expected molecules/comments length mismatch: "
+        f"{len(expected_structures)} != {len(expected_structures_comments)}"
+    )
+
+    # attach comment to structure as molecule.info for easier comparison
+    for mol, comment in zip(
+        generated_structures, generated_structures_comments
+    ):
+        mol.info["comment"] = (comment or "").strip()
+
+    for mol, comment in zip(expected_structures, expected_structures_comments):
+        mol.info["comment"] = (comment or "").strip()
+
+    # Sort structures by comment to ensure order-independent comparison
+    generated_structures.sort(key=lambda m: (m.info.get("comment") or ""))
+    expected_structures.sort(key=lambda m: (m.info.get("comment") or ""))
+
+    assert len(generated_structures) == len(expected_structures), (
+        f"Number of generated structures ({len(generated_structures)}) "
+        f"does not match expected ({len(expected_structures)})"
+    )
+
+    for gen, exp in zip(generated_structures, expected_structures):
+        # Compare labels/comments
+        assert gen.info.get("comment") == exp.info.get(
+            "comment"
+        ), f"Comment mismatch: {gen.info.get('comment')} != {exp.info.get('comment')}"
+
+        # Compare atom symbols
+        assert list(gen.symbols) == list(
+            exp.symbols
+        ), f"Atom symbols mismatch for {gen.info.get('comment')}"
+
+        # Compare coordinates
+        np.allclose(
+            np.asarray(gen.positions, dtype=float),
+            np.asarray(exp.positions, dtype=float),
+            atol=5e-5,
         )
-        job_settings.skeleton_list = config["skeletons"]
-        job_settings.substituent_list = config["substituents"]
-
-        # 3. Setup Job
-        # Use a temporary file for output
-        output_file = tmpdir / "test_output"
-
-        jobrunner = iterate_jobrunner
-        job = IterateJob(
-            settings=job_settings,
-            jobrunner=jobrunner,
-            nprocs=4,
-            outputfile=str(output_file),
-        )
-
-        # 4. Run Job
-        generated_output_path = job.run()
-
-        # 5. Verify Output
-        assert os.path.exists(
-            generated_output_path
-        ), "Output file was not generated"
-
-        # Compare generated output with expected output
-        # Semantic comparison (atoms and coordinates)
-        # is preferred over byte-comparison
-        # to robustly handle floating point formatting differences in XYZ files
-        from chemsmart.io.xyz.xyzfile import XYZFile
-
-        generated_xyz = XYZFile(generated_output_path)
-        generated_structures = generated_xyz.get_molecules(
-            index=":", return_list=True
-        )
-        generated_structures_comments = generated_xyz.get_comments(
-            index=":", return_list=True
-        )
-        # attach comment to structure as molecule.info for easier comparison
-        for mol, comment in zip(
-            generated_structures, generated_structures_comments
-        ):
-            mol.info["comment"] = comment
-
-        expected_xyz = XYZFile(iterate_expected_output_file)
-        expected_structures = expected_xyz.get_molecules(
-            index=":", return_list=True
-        )
-        expected_structures_comments = expected_xyz.get_comments(
-            index=":", return_list=True
-        )
-        for mol, comment in zip(
-            expected_structures, expected_structures_comments
-        ):
-            mol.info["comment"] = comment
-
-        # avoid silent truncation by zip()
-        assert len(generated_structures) == len(
-            generated_structures_comments
-        ), (
-            f"Generated molecules/comments length mismatch: "
-            f"{len(generated_structures)} != {len(generated_structures_comments)}"
-        )
-        assert len(expected_structures) == len(expected_structures_comments), (
-            f"Expected molecules/comments length mismatch: "
-            f"{len(expected_structures)} != {len(expected_structures_comments)}"
-        )
-
-        # attach comment to structure as molecule.info for easier comparison
-        for mol, comment in zip(
-            generated_structures, generated_structures_comments
-        ):
-            mol.info["comment"] = (comment or "").strip()
-
-        for mol, comment in zip(
-            expected_structures, expected_structures_comments
-        ):
-            mol.info["comment"] = (comment or "").strip()
-
-        # Sort structures by comment to ensure order-independent comparison
-        generated_structures.sort(key=lambda m: (m.info.get("comment") or ""))
-        expected_structures.sort(key=lambda m: (m.info.get("comment") or ""))
-
-        assert len(generated_structures) == len(expected_structures), (
-            f"Number of generated structures ({len(generated_structures)}) "
-            f"does not match expected ({len(expected_structures)})"
-        )
-
-        for gen, exp in zip(generated_structures, expected_structures):
-            # Compare labels/comments
-            assert gen.info.get("comment") == exp.info.get(
-                "comment"
-            ), f"Comment mismatch: {gen.info.get('comment')} != {exp.info.get('comment')}"
-
-            # Compare atom symbols
-            assert list(gen.symbols) == list(
-                exp.symbols
-            ), f"Atom symbols mismatch for {gen.info.get('comment')}"
-
-            # Compare coordinates
-            np.allclose(
-                np.asarray(gen.positions, dtype=float),
-                np.asarray(exp.positions, dtype=float),
-                atol=5e-5,
-            )
-
-    finally:
-        # Restore CWD
-        os.chdir(original_cwd)
 
 
 def test_iterate_timeout(
@@ -154,6 +143,7 @@ def test_iterate_timeout(
     iterate_input_directory,
     iterate_jobrunner,
     tmpdir,
+    monkeypatch,
     caplog,
 ):
     """
@@ -164,62 +154,57 @@ def test_iterate_timeout(
     import logging
 
     # Change CWD to input directory for relative file paths
-    original_cwd = os.getcwd()
-    os.chdir(iterate_input_directory)
+    monkeypatch.chdir(iterate_input_directory)
 
     # Capture logs
     caplog.set_level(logging.WARNING)
 
-    try:
-        # 1. Load Config
-        with open(iterate_timeout_config_file, "r") as f:
-            raw_config = tomlkit.load(f).unwrap()
-        config = validate_config(raw_config, iterate_timeout_config_file)
+    # 1. Load Config
+    with open(iterate_timeout_config_file, "r") as f:
+        raw_config = tomlkit.load(f).unwrap()
+    config = validate_config(raw_config, iterate_timeout_config_file)
 
-        # 2. Setup Job with very short timeout
-        job_settings = IterateJobSettings(
-            config_file=iterate_timeout_config_file,
-            method="lagrange_multipliers",
-        )
-        job_settings.skeleton_list = config["skeletons"]
-        job_settings.substituent_list = config["substituents"]
+    # 2. Setup Job with very short timeout
+    job_settings = IterateJobSettings(
+        config_file=iterate_timeout_config_file,
+        method="lagrange_multipliers",
+    )
+    job_settings.skeleton_list = config["skeletons"]
+    job_settings.substituent_list = config["substituents"]
 
-        output_file = tmpdir / "timeout_output"
+    output_file = tmpdir / "timeout_output"
 
-        jobrunner = iterate_jobrunner
-        job = IterateJob(
-            settings=job_settings,
-            jobrunner=jobrunner,
-            nprocs=1,  # Use 1 proc to ensure we hit it
-            timeout=0.00000001,  # Ultra short timeout
-            outputfile=str(output_file),
-        )
+    jobrunner = iterate_jobrunner
+    job = IterateJob(
+        settings=job_settings,
+        jobrunner=jobrunner,
+        nprocs=1,  # Use 1 proc to ensure we hit it
+        timeout=0.00000001,  # Ultra short timeout
+        outputfile=str(output_file),
+    )
 
-        # 4. Run Job
-        # It should not raise an exception, but handle the timeout gracefully
-        job.run()
+    # 4. Run Job
+    # It should not raise an exception, but handle the timeout gracefully
+    job.run()
 
-        # 5. Verify results
-        # Check logs for timeout warning
-        # Expected log from runner.py: "Timeout
-        # ({timeout}s) for combination: {label}"
+    # 5. Verify results
+    # Check logs for timeout warning
+    # Expected log from runner.py: "Timeout
+    # ({timeout}s) for combination: {label}"
 
-        # We need to construct the label to search for
-        # Carbene1_34_OTf_8
-        label = "Carbene1_34_OTf_8"
+    # We need to construct the label to search for
+    # Carbene1_34_OTf_8
+    label = "Carbene1_34_OTf_8"
 
-        found_timeout_log = False
-        for record in caplog.records:
-            if "Timeout" in record.message and label in record.message:
-                found_timeout_log = True
-                break
+    found_timeout_log = False
+    for record in caplog.records:
+        if "Timeout" in record.message and label in record.message:
+            found_timeout_log = True
+            break
 
-        assert (
-            found_timeout_log
-        ), f"Timeout warning log not found for the combination {label}. Logs: {[r.message for r in caplog.records]}"
-
-    finally:
-        os.chdir(original_cwd)
+    assert (
+        found_timeout_log
+    ), f"Timeout warning log not found for the combination {label}. Logs: {[r.message for r in caplog.records]}"
 
 
 def test_iterate_template_generation(tmpdir, iterate_template_file):
@@ -583,6 +568,7 @@ def test_iterate_cli_pipeline_success(
     iterate_input_directory,
     iterate_expected_output_directory,
     tmpdir,
+    monkeypatch,
 ):
     """
     Test the full Iterate pipeline via the CLI:
@@ -610,51 +596,46 @@ def test_iterate_cli_pipeline_success(
     output_xyz_path = output_base_path + ".xyz"
 
     # Change CWD to input directory so relative paths in configuration work
-    original_cwd = os.getcwd()
-    os.chdir(iterate_input_directory)
+    monkeypatch.chdir(iterate_input_directory)
 
     runner = CliRunner()
 
-    try:
-        # Pass obj={} to initialize context object
-        result = runner.invoke(
-            iterate,
-            [
-                "-f",
-                config_file,
-                "-o",
-                output_base_path,
-            ],
-            obj={},
-        )
+    # Pass obj={} to initialize context object
+    result = runner.invoke(
+        iterate,
+        [
+            "-f",
+            config_file,
+            "-o",
+            output_base_path,
+        ],
+        obj={},
+    )
 
-        assert (
-            result.exit_code == 0
-        ), f"CLI execution failed. Output:\n{result.output}"
-        assert os.path.exists(
-            output_xyz_path
-        ), "Output XYZ file was not generated."
+    assert (
+        result.exit_code == 0
+    ), f"CLI execution failed. Output:\n{result.output}"
+    assert os.path.exists(
+        output_xyz_path
+    ), "Output XYZ file was not generated."
 
-        # Verify content matches
-        with open(expected_output_file, "r") as f_exp:
-            expected_content = f_exp.read().strip()
+    # Verify content matches
+    with open(expected_output_file, "r") as f_exp:
+        expected_content = f_exp.read().strip()
 
-        with open(output_xyz_path, "r") as f_out:
-            generated_content = f_out.read().strip()
+    with open(output_xyz_path, "r") as f_out:
+        generated_content = f_out.read().strip()
 
-        # Basic check: Ensuring specific label
-        # presence which confirms combination logic ran
-        # The runner combines skeleton label,
-        # link index, sub label, and link index.
-        # e.g. Carbene1 + 8 + OTf + 8 -> Carbene1_8_OTf_8
-        assert "Carbene1_8_OTf_8" in generated_content
+    # Basic check: Ensuring specific label
+    # presence which confirms combination logic ran
+    # The runner combines skeleton label,
+    # link index, sub label, and link index.
+    # e.g. Carbene1 + 8 + OTf + 8 -> Carbene1_8_OTf_8
+    assert "Carbene1_8_OTf_8" in generated_content
 
-        # Verify line count matches (structure completeness check)
-        exp_lines = expected_content.splitlines()
-        gen_lines = generated_content.splitlines()
-        assert len(exp_lines) == len(
-            gen_lines
-        ), "Generated XYZ line count differs from expected."
-
-    finally:
-        os.chdir(original_cwd)
+    # Verify line count matches (structure completeness check)
+    exp_lines = expected_content.splitlines()
+    gen_lines = generated_content.splitlines()
+    assert len(exp_lines) == len(
+        gen_lines
+    ), "Generated XYZ line count differs from expected."

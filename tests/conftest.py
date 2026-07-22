@@ -26,6 +26,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
@@ -37,6 +38,14 @@ thermochemistry_cli_module = importlib.import_module(
 )
 
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+
+
+############ IO Fixtures ####################################
+@pytest.fixture
+def temporary_working_dir(tmp_path, monkeypatch):
+    """Run a test in an isolated temporary working directory."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 ############ Thermochemistry Mock Fixtures ##################
@@ -371,14 +380,14 @@ def chemsmart_templates_config(mocker):
 
     # Patch the Class attribute
     mocker.patch(
-        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        "chemsmart.settings.user.CHEMSMARTUserSettings.USER_CONFIG_DIR",
         str(template_dir),
     )
 
     # Patch the global instance in runner.py
-    from chemsmart.settings.user import ChemsmartUserSettings
+    from chemsmart.settings.user import CHEMSMARTUserSettings
 
-    new_settings = ChemsmartUserSettings()
+    new_settings = CHEMSMARTUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
     # Patch other module-level user_settings singletons used by the CLI path
     mocker.patch("chemsmart.settings.server.user_settings", new_settings)
@@ -1727,6 +1736,11 @@ def dna_hybrid_visualized_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def visualized_1_mer_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "1-mer.xyz")
+
+
+@pytest.fixture()
 def chemdraw_directory(structure_test_directory):
     return os.path.join(structure_test_directory, "chemdraw")
 
@@ -1833,6 +1847,12 @@ def colored_proton_two_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def pka_scale_cdxml_file(chemdraw_directory):
+    """Multi-fragment CDXML with nested groups and coloured acidic protons."""
+    return os.path.join(chemdraw_directory, "pka_scale.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -1882,6 +1902,13 @@ def pymol_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_hybrid_visualization_jobrunner(pbs_server):
     return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_scientific_style_visualization_jobrunner(pbs_server):
+    return PyMOLScientificStyleVisualizationJobRunner(
+        server=pbs_server, scratch=False
+    )
 
 
 @pytest.fixture()
