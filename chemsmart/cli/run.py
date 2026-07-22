@@ -56,10 +56,6 @@ def run(
     create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
-    # Local execution does not use scratch unless explicitly requested.
-    if scratch is None:
-        scratch = False
-
     # Instantiate the jobrunner with CLI options
     jobrunner = JobRunner(
         server=server,
