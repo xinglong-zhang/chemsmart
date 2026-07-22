@@ -119,17 +119,12 @@ class PyMOLJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            scratch (bool or None): Scratch on (``True``) or off (``False``).
-
-                **Direct construction:** ``None`` → class default
-                (``SCRATCH`` = ``False``). Server YAML is not read for PyMOL.
-
-                **CLI / ``from_job``:** omitted flags resolve the same way
-                (class default only). See ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)

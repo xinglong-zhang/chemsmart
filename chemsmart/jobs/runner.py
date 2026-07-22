@@ -33,7 +33,7 @@ def _executable_class_for_program(program):
 
 
 def _scratch_from_server_yaml(runner_cls, server):
-    """Return program ``SCRATCH`` from server YAML when the key is set."""
+    """Return program ``SCRATCH`` from server YAML for executable-backed runners."""
     exe_cls = _executable_class_for_program(runner_cls.PROGRAM)
     if exe_cls is None or server is None:
         return None
@@ -193,17 +193,11 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool or None): Scratch mode.
-
-            **CLI:** ``None`` on the placeholder runner means the user omitted
-            ``--scratch``/``--no-scratch``. Resolution happens in
-            ``JobRunner.from_job`` (see that method).
-
-            **Typed runners:** ``from_job`` always passes a ``bool`` after
-            resolution. If you construct a typed runner yourself, ``None``
-            means "class default only" and server YAML is not read.
+        scratch (bool or None): Scratch mode. See ``JobRunner.from_job`` when
+            the CLI omits ``--scratch``/``--no-scratch``.
         scratch_dir (str or None): Path to scratch directory, or None to
-            resolve from executable ENVARS, server YAML, then user settings.
+            resolve from executable ENVARS, ``SERVER.SCRATCH_DIR``, then user
+            settings.
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
@@ -217,7 +211,7 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,  # None: unset; typed subclasses map to SCRATCH default
+        scratch=None,  # CLI placeholder: None = flag omitted; see from_job
         scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
         delete_scratch=False,
         fake=False,

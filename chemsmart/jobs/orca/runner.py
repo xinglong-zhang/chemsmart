@@ -83,19 +83,14 @@ class ORCAJobRunner(JobRunner):
 
         Args:
             server: Server configuration object
-            scratch (bool or None): Scratch on (``True``) or off (``False``).
-
-                **Direct construction:** ``None`` → class default
-                (``SCRATCH`` = ``True``). YAML is not read.
-
-                **CLI / ``from_job``:** omitted flags are resolved before
-                this constructor runs (YAML ``ORCA.SCRATCH`` may apply).
-                See ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``ORCA.SCRATCH`` may apply
+                there).
             fake: Whether to use fake runner for testing
             scratch_dir: Path to scratch directory
             **kwargs: Additional keyword arguments
         """
-        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(
@@ -494,8 +489,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
         Args:
             server: Server configuration object
-            scratch (bool or None): Scratch mode. See ``ORCAJobRunner``
-                ``__init__`` and ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """

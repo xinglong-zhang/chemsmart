@@ -58,19 +58,14 @@ class NCIPLOTJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution
-            scratch (bool or None): Scratch on (``True``) or off (``False``).
-
-                **Direct construction:** ``None`` → class default
-                (``SCRATCH`` = ``True``). YAML is not read.
-
-                **CLI / ``from_job``:** omitted flags are resolved before
-                this constructor runs (YAML ``NCIPLOT.SCRATCH`` may apply).
-                See ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``NCIPLOT.SCRATCH`` may
+                apply there).
             fake: Whether to run in fake mode for testing
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
         """
-        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -429,8 +424,8 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
 
         Args:
             server: Server configuration (ignored in fake mode)
-            scratch (bool or None): Scratch mode. See ``NCIPLOTJobRunner``
-                ``__init__`` and ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Always True for this class
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments

@@ -112,20 +112,14 @@ class GaussianJobRunner(JobRunner):
 
         Args:
             server: Server configuration object for job execution.
-            scratch (bool or None, optional): Scratch on (``True``) or off
-                (``False``).
-
-                **Direct construction:** ``None`` → class default
-                (``SCRATCH`` = ``True``). YAML is not read.
-
-                **CLI / ``from_job``:** omitted flags are resolved before
-                this constructor runs (YAML ``GAUSSIAN.SCRATCH`` may apply).
-                See ``JobRunner.from_job``.
+            scratch (bool or None, optional): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``GAUSSIAN.SCRATCH`` may
+                apply there).
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -408,8 +402,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
-            scratch (bool or None): Scratch mode. See ``GaussianJobRunner``
-                ``__init__`` and ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.

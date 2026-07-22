@@ -35,13 +35,9 @@ class GrouperJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            scratch (bool or None): Scratch on (``True``) or off (``False``).
-
-                **Direct construction:** ``None`` → class default
-                (``SCRATCH`` = ``False``). Server YAML is not read.
-
-                **CLI / ``from_job``:** omitted flags resolve the same way.
-                See ``JobRunner.from_job``.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
             fake (bool): Whether to run in fake mode for testing.
             scratch_dir (str, optional): Path to scratch directory.
             **kwargs: Additional keyword arguments for the parent class.
