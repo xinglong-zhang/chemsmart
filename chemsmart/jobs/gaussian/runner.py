@@ -406,7 +406,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
-            scratch: Whether to use scratch directories (default: None).
+            scratch (bool or None): Scratch mode. ``None`` is unset; see
+                ``GaussianJobRunner`` / ``JobRunner.from_job`` for resolution.
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.

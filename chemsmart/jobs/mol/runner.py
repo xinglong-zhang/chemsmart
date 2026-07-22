@@ -121,14 +121,15 @@ class PyMOLJobRunner(JobRunner):
             server: Server configuration for job execution.
             scratch (bool or None): Whether to use scratch directories.
                 ``None`` means unset. Via ``JobRunner.from_job`` (CLI path),
-                unset values resolve as CLI override, then program YAML
-                ``SCRATCH``, then this class ``SCRATCH`` default (``False``).
-                Direct construction with ``None`` uses only the class default.
+                unset values use this class ``SCRATCH`` default (``False``);
+                server YAML ``SCRATCH`` is not read for PyMOL (only
+                Gaussian, ORCA, and NCIPLOT support YAML override). Explicit
+                CLI ``--scratch`` / ``--no-scratch`` still applies. Direct
+                construction with ``None`` uses only the class default.
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # None = unset: inherit SCRATCH=False for PyMOL jobs. YAML override
-        # is applied in from_job.
+        # None = unset: inherit SCRATCH=False for PyMOL jobs.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)

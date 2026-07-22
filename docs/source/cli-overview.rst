@@ -89,10 +89,16 @@ Execution Control Options
    Scratch mode resolution order for ``chemsmart run`` and ``chemsmart sub``:
 
    #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-   #. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when present (for example
-      ``GAUSSIAN.SCRATCH`` or ``ORCA.SCRATCH``).
-   #. If that YAML key is absent, use the job-runner class default (``True`` for Gaussian, ORCA, and NCIPLOT; ``False``
-      for PyMOL and related runners).
+
+   #. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when that key is present
+      **and** the job uses Gaussian, ORCA, or NCIPLOT (for example ``GAUSSIAN.SCRATCH: False`` or ``ORCA.SCRATCH:
+      True``).
+
+   #. If the YAML key is absent, or the job uses a runner without server executable config (PyMOL, thermochemistry,
+      iterate, grouper, etc.), use the job-runner class default:
+
+   -  ``True`` for Gaussian, ORCA, and NCIPLOT
+   -  ``False`` for PyMOL, thermochemistry, and related runners
 
    When scratch is enabled, the scratch **directory path** is resolved separately from program ``ENVARS``, then
    ``SERVER.SCRATCH_DIR``, then user settings. See :ref:`scratch-behavior` in :doc:`configuration-server-settings`.

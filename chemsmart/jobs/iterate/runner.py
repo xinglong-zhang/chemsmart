@@ -190,6 +190,19 @@ class IterateJobRunner(JobRunner):
     def __init__(
         self, server=None, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
+        """Initialize the iterate job runner.
+
+        Args:
+            server: Server configuration for job execution.
+            scratch (bool or None): Whether to use a scratch directory.
+                ``None`` means unset and uses this class ``SCRATCH`` default
+                (``False``). Server YAML ``SCRATCH`` is not read for iterate
+                jobs. Explicit CLI ``--scratch`` / ``--no-scratch`` still
+                applies via ``JobRunner.from_job``.
+            fake (bool): Whether to run in fake mode for testing.
+            scratch_dir (str, optional): Path to scratch directory.
+            **kwargs: Additional keyword arguments for the parent class.
+        """
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(

@@ -125,14 +125,16 @@ class Executable(RegistryMixin):
         Reads the boolean ``SCRATCH`` key under this executable's program
         block (for example ``GAUSSIAN`` or ``ORCA``). Used by
         ``JobRunner.from_job`` when the CLI omits ``--scratch`` /
-        ``--no-scratch``: an explicit YAML value overrides the job-runner
-        class default; a missing key leaves the class default in place.
+        ``--no-scratch``: an explicit YAML ``True``/``False`` overrides the
+        job-runner class default; a missing key or ``null`` value leaves the
+        class default in place.
 
         Args:
             servername (str): Server config name, or path to a ``.yaml`` file.
 
         Returns:
-            bool or None: YAML ``SCRATCH`` value, or None if missing/unreadable.
+            bool or None: YAML ``SCRATCH`` value, or None if missing, null,
+            or unreadable.
         """
         if cls.PROGRAM is None or not servername:
             return None
@@ -154,7 +156,10 @@ class Executable(RegistryMixin):
             program_cfg = contents.get(cls.PROGRAM)
             if not program_cfg or "SCRATCH" not in program_cfg:
                 return None
-            return bool(program_cfg["SCRATCH"])
+            value = program_cfg["SCRATCH"]
+            if value is None:
+                return None
+            return bool(value)
         except (FileNotFoundError, OSError, TypeError, ValueError) as e:
             logger.debug(
                 f"Could not read {cls.PROGRAM} SCRATCH from "

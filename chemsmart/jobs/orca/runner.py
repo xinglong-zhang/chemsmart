@@ -492,7 +492,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory
+            scratch (bool or None): Scratch mode. ``None`` is unset; see
+                ``ORCAJobRunner`` / ``JobRunner.from_job`` for resolution.
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """

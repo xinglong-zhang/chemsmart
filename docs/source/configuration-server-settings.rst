@@ -319,7 +319,7 @@ SCRATCH
 
 **Description:** Whether Gaussian jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
 CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
-the job folder. If this key is omitted, the Gaussian job-runner class default (``True``) is used.
+the job folder. If this key is omitted or ``null``, the Gaussian job-runner class default (``True``) is used.
 
 **Example:**
 
@@ -327,6 +327,7 @@ the job folder. If this key is omitted, the Gaussian job-runner class default (`
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -431,7 +432,7 @@ SCRATCH
 
 **Description:** Whether ORCA jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the CLI.
 When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in the
-job folder. If this key is omitted, the ORCA job-runner class default (``True``) is used.
+job folder. If this key is omitted or ``null``, the ORCA job-runner class default (``True``) is used.
 
 **Example:**
 
@@ -439,6 +440,7 @@ job folder. If this key is omitted, the ORCA job-runner class default (``True``)
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -526,7 +528,7 @@ SCRATCH
 
 **Description:** Whether NCIPLOT jobs use a scratch directory when ``--scratch`` / ``--no-scratch`` are omitted on the
 CLI. When ``True``, jobs run under the resolved scratch path (see :ref:`scratch-behavior`). When ``False``, jobs run in
-the job folder. If this key is omitted, the NCIPLOT job-runner class default (``True``) is used.
+the job folder. If this key is omitted or ``null``, the NCIPLOT job-runner class default (``True``) is used.
 
 **Example:**
 
@@ -534,6 +536,7 @@ the job folder. If this key is omitted, the NCIPLOT job-runner class default (``
 
    SCRATCH: True
    SCRATCH: False
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -784,13 +787,20 @@ Resolution order for ``chemsmart run`` and ``chemsmart sub``:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
 
-#. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when that key is present (for
-   example ``GAUSSIAN.SCRATCH: False`` or ``ORCA.SCRATCH: True``).
+#. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when that key is present **and**
+   the job uses Gaussian, ORCA, or NCIPLOT (for example ``GAUSSIAN.SCRATCH: False`` or ``ORCA.SCRATCH: True``).
 
-#. If the YAML key is absent, use the job-runner class default:
+#. If the YAML key is absent, or the job uses a runner without server executable config (PyMOL, thermochemistry,
+   iterate, grouper, etc.), use the job-runner class default:
 
    -  ``True`` for Gaussian, ORCA, and NCIPLOT
-   -  ``False`` for PyMOL and related runners
+   -  ``False`` for PyMOL, thermochemistry, and related runners
+
+.. note::
+
+   Server YAML ``SCRATCH`` is read only for programs with executable configuration blocks (``GAUSSIAN``, ``ORCA``,
+   ``NCIPLOT``). A ``PYMOL:`` or other block without executable config does not affect scratch mode when the CLI flag is
+   omitted; those jobs fall back to the runner class default.
 
 .. list-table::
    :header-rows: 1
@@ -809,7 +819,7 @@ Resolution order for ``chemsmart run`` and ``chemsmart sub``:
    -  -  ``--scratch``
       -  any
       -  ``True``
-      -  scratch directory (path must exist)
+      -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
       -  ``False``
@@ -819,17 +829,21 @@ Resolution order for ``chemsmart run`` and ``chemsmart sub``:
    -  -  omit
       -  ``True``
       -  ``True``
-      -  scratch directory (path must exist)
+      -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
-      -  absent *(class ``False``, e.g. PyMOL)*
+      -  absent *(class ``False``, e.g. PyMOL, thermochemistry)*
       -  ``False``
       -  job folder
 
    -  -  omit
       -  absent *(class ``True``, e.g. Gaussian, ORCA, NCIPLOT)*
       -  ``True``
-      -  scratch directory (path must exist)
+      -  scratch directory if path exists; else job folder (warning)
+
+When scratch mode resolves to ``True`` but no scratch path can be found, CHEMSMART logs a warning, sets
+``scratch=False``, and runs in the job folder. When a path is found but the directory does not exist, job setup raises
+``FileNotFoundError``.
 
 Scratch directory path
 ----------------------
@@ -840,8 +854,9 @@ When scratch mode is ``True``, the scratch directory path is resolved in this or
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
-If scratch mode is enabled but no valid directory can be resolved, or the resolved path does not exist, job setup raises
-an error. Configure a real scratch path (or pass ``--no-scratch``) before running.
+If scratch mode is enabled but no scratch path can be resolved, CHEMSMART disables scratch with a warning and runs in
+the job folder. If a path is resolved but that directory does not exist, job setup raises ``FileNotFoundError``.
+Configure a real scratch path (or pass ``--no-scratch``) before relying on scratch execution.
 
 ``chemsmart sub`` reconstructs CLI arguments for the worker ``chemsmart run`` script. When ``--scratch`` /
 ``--no-scratch`` are omitted at submit time, those flags are also omitted in the reconstructed command so the worker

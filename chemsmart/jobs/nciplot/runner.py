@@ -427,7 +427,8 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
 
         Args:
             server: Server configuration (ignored in fake mode)
-            scratch: Whether to use scratch directory
+            scratch (bool or None): Scratch mode. ``None`` is unset; see
+                ``NCIPLOTJobRunner`` / ``JobRunner.from_job`` for resolution.
             fake: Always True for this class
             scratch_dir: Custom scratch directory path
             **kwargs: Additional keyword arguments
