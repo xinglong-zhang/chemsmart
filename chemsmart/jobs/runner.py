@@ -99,7 +99,7 @@ def _positive_int_or_none(value) -> Optional[int]:
 def get_configured_array_concurrency_limit(
     jobrunner=None,
 ) -> Optional[int]:
-    """Return optional SLURM array throttle from env or server policy.
+    """Return optional scheduler array throttle from env or server policy.
 
     Used for ``chemsmart sub --run-in-parallel`` when ``-N`` is not passed.
     Does not fall back to ``num_cores`` (cores per task and array concurrency

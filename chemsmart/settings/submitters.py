@@ -104,6 +104,7 @@ class Submitter(RegistryMixin):
     """
 
     NAME: Optional[str] = None
+    SUPPORTS_ARRAY_JOBS: bool = False
 
     def __init__(self, name, job, server, **kwargs):
         """
@@ -307,8 +308,9 @@ class Submitter(RegistryMixin):
 
         Args:
             jobs: Child jobs in array order (task id 1 → ``jobs[0]``).
-            array_concurrency: Optional concurrency throttle ``%M`` for SLURM
-                ``--array=1-N%M``. When ``None``, no throttle is applied.
+            array_concurrency: Optional concurrency throttle for scheduler
+                array directives (SLURM ``--array=1-N%M``, PBS ``-J 1-N%M``,
+                LSF ``-J name[1-N%M]``). When ``None``, no throttle is applied.
             cli_args: Shared CLI args for every task, or a sequence of
                 per-job CLI arg lists with the same length as *jobs*.
             batch_label: Optional label for array script naming
@@ -317,6 +319,14 @@ class Submitter(RegistryMixin):
         if not jobs:
             logger.warning("No jobs provided for array job")
             return
+
+        if not self.SUPPORTS_ARRAY_JOBS:
+            scheduler = self.NAME or self.name
+            raise ValueError(
+                f"Batch array submission is not supported for scheduler "
+                f"{scheduler!r}. Use SLURM, PBS, or LSF (SLF), or submit "
+                f"child jobs individually."
+            )
 
         self.jobs = list(jobs)
         self.array_concurrency = array_concurrency
@@ -362,10 +372,15 @@ class Submitter(RegistryMixin):
     def _write_array_scheduler_options(self, f, array_concurrency):
         """Write scheduler options for array submission.
 
-        Subclasses override for scheduler-specific array directives.
-        Default falls back to non-array scheduler options.
+        Subclasses that set ``SUPPORTS_ARRAY_JOBS`` override this with
+        scheduler-specific array directives.
         """
-        self._write_scheduler_options(f)
+        scheduler = self.NAME or self.name
+        raise ValueError(
+            f"Batch array submission is not supported for scheduler "
+            f"{scheduler!r}. Use SLURM, PBS, or LSF (SLF), or submit "
+            f"child jobs individually."
+        )
 
     def _write_array_job_command(self, f):
         """Write the command that runs the per-task array run script.
@@ -642,6 +657,7 @@ class PBSSubmitter(Submitter):
 
     Attributes:
         NAME (str): Identifier for PBS scheduler type ('PBS').
+        SUPPORTS_ARRAY_JOBS (bool): True; PBS array jobs use ``#PBS -J``.
         name (str): Inherited; instance identifier (often 'PBS').
         job (Job): Job instance to be submitted.
         server (Server): Server configuration used for submission.
@@ -650,6 +666,7 @@ class PBSSubmitter(Submitter):
     """
 
     NAME = "PBS"
+    SUPPORTS_ARRAY_JOBS = True
 
     def __init__(self, name="PBS", job=None, server=None, **kwargs):
         """
@@ -708,6 +725,43 @@ class PBSSubmitter(Submitter):
         """
         f.write("cd $PBS_O_WORKDIR\n\n")
 
+    def _write_array_scheduler_options(self, f, array_concurrency):
+        """Write PBS array directives for one task per child job.
+
+        Each array task uses one node with the server's full cores/memory.
+        ``array_concurrency`` is the optional throttle ``%M`` on
+        ``#PBS -J 1-N%M`` (maximum concurrent tasks).
+        """
+        num_jobs = len(self.jobs) if self.jobs is not None else 1
+        label = self.array_label if self.array_label is not None else "array"
+
+        f.write(f"#PBS -N {label}_array\n")
+        f.write(f"#PBS -o {label}_array_${{PBS_ARRAYID}}.pbsout\n")
+        f.write(f"#PBS -e {label}_array_${{PBS_ARRAYID}}.pbserr\n")
+        if array_concurrency is not None:
+            f.write(f"#PBS -J 1-{num_jobs}%{array_concurrency}\n")
+        else:
+            f.write(f"#PBS -J 1-{num_jobs}\n")
+        if self.server.num_gpus > 0:
+            f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
+        f.write(
+            f"#PBS -l select=1:ncpus={self.server.num_cores}:"
+            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
+        )
+        if self.server.queue_name:
+            f.write(f"#PBS -q {self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#PBS -l walltime={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
+                f.write("#PBS -m abe\n")
+        self._write_extra_scheduler_directives(f)
+        f.write("\n")
+        f.write("\n")
+
 
 class SLURMSubmitter(Submitter):
     """
@@ -727,6 +781,7 @@ class SLURMSubmitter(Submitter):
     """
 
     NAME = "SLURM"
+    SUPPORTS_ARRAY_JOBS = True
 
     def __init__(self, name="SLURM", job=None, server=None, **kwargs):
         """
@@ -847,6 +902,7 @@ class SLFSubmitter(Submitter):
     """
 
     NAME = "SLF"
+    SUPPORTS_ARRAY_JOBS = True
 
     def __init__(self, name="SLF", job=None, server=None, **kwargs):
         """
@@ -896,6 +952,36 @@ class SLFSubmitter(Submitter):
             f: File handle for writing directory change command.
         """
         f.write("cd $LS_SUBCWD\n\n")
+
+    def _write_array_scheduler_options(self, f, array_concurrency):
+        """Write LSF array directives for one task per child job.
+
+        Each array task uses the server's node/GPU allocation.
+        ``array_concurrency`` is the optional throttle ``%M`` in
+        ``#BSUB -J name[1-N%M]`` (maximum concurrent tasks).
+        """
+        num_jobs = len(self.jobs) if self.jobs is not None else 1
+        label = self.array_label if self.array_label is not None else "array"
+
+        if array_concurrency is not None:
+            f.write(
+                f"#BSUB -J {label}_array[1-{num_jobs}%{array_concurrency}]\n"
+            )
+        else:
+            f.write(f"#BSUB -J {label}_array[1-{num_jobs}]\n")
+        f.write(f"#BSUB -o {label}_array_%I.bsubout\n")
+        f.write(f"#BSUB -e {label}_array_%I.bsuberr\n")
+        if user_settings is not None:
+            project_number = user_settings.data.get("PROJECT")
+        if project_number is not None:
+            f.write(f"#BSUB -P {project_number}\n")
+        f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
+        if self.server.num_gpus:
+            f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
+        f.write(f"#BSUB -W {self.server.num_hours}\n")
+        f.write("#BSUB -alloc_flags gpumps\n")
+        f.write("\n")
+        f.write("\n")
 
 
 class FUGAKUSubmitter(Submitter):

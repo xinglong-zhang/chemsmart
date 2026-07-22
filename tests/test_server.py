@@ -6,7 +6,11 @@ import pytest
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
-from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
+from chemsmart.settings.submitters import (
+    PBSSubmitter,
+    SLFSubmitter,
+    SLURMSubmitter,
+)
 
 
 class TestServer:
@@ -265,6 +269,105 @@ class TestArraySubmitInfrastructure:
             tmp_path / "chemsmart_sub_array_pka_batch.sh"
         ).read_text()
         assert "#SBATCH --array=1-2%1\n" in submit_text
+
+    @staticmethod
+    def _array_children(tmp_path, count=4):
+        return [
+            type(
+                "Child",
+                (),
+                {
+                    "label": f"mol{i}",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )()
+            for i in range(1, count + 1)
+        ]
+
+    def test_pbs_write_array_job_creates_array_directives(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.setattr(
+            PBSSubmitter,
+            "_write_program_specifics",
+            lambda self, f: None,
+        )
+        monkeypatch.setattr(
+            PBSSubmitter,
+            "_write_extra_commands",
+            lambda self, f: None,
+        )
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-pbs",
+            SCHEDULER="PBS",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+        )
+        children = self._array_children(tmp_path)
+        submitter = PBSSubmitter(job=children[0], server=server)
+
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=2,
+            cli_args=["gaussian", "opt"],
+            batch_label="mols_batch",
+        )
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_mols_batch.sh"
+        ).read_text()
+        assert "#PBS -J 1-4%2\n" in submit_text
+        assert (
+            "#PBS -o mols_batch_array_${PBS_ARRAYID}.pbsout\n" in submit_text
+        )
+        assert "TASK_ID=$PBS_ARRAYID" in submit_text
+        assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+
+    def test_lsf_write_array_job_creates_array_directives(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            SLFSubmitter,
+            "_write_program_specifics",
+            lambda self, f: None,
+        )
+        monkeypatch.setattr(
+            SLFSubmitter,
+            "_write_extra_commands",
+            lambda self, f: None,
+        )
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-lsf",
+            SCHEDULER="SLF",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            NUM_NODES=1,
+        )
+        children = self._array_children(tmp_path, count=3)
+        submitter = SLFSubmitter(job=children[0], server=server)
+
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=1,
+            cli_args=["gaussian", "opt"],
+            batch_label="pka_batch",
+        )
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_pka_batch.sh"
+        ).read_text()
+        assert "#BSUB -J pka_batch_array[1-3%1]\n" in submit_text
+        assert "#BSUB -o pka_batch_array_%I.bsubout\n" in submit_text
+        assert "TASK_ID=$LSB_JOBINDEX" in submit_text
 
 
 class TestSchedulerArrayPolicy:

@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 class SchedulerArrayPolicy:
     """Concurrency policy for submitting a ``BatchJob`` as a scheduler array.
 
-    Controls the SLURM ``--array=1-N%M`` throttle ``M``:
+    Controls the array concurrency throttle ``M`` (SLURM ``--array=1-N%M``,
+    PBS ``#PBS -J 1-N%M``, LSF ``#BSUB -J name[1-N%M]``):
 
     - ``no_run_in_parallel`` → ``M=1``
     - else explicit CLI ``-N`` / ``--array-concurrency`` when set and positive
@@ -737,8 +738,8 @@ class Server(RegistryMixin):
 
         Args:
             jobs: Child ``Job`` instances in array order.
-            array_concurrency: Optional SLURM array concurrency throttle
-                ``%M`` in ``--array=1-N%M``.
+            array_concurrency: Optional array concurrency throttle ``M``
+                (SLURM ``--array=1-N%M``, PBS ``-J 1-N%M``, LSF ``-J name[1-N%M]``).
             test: If True, write scripts only (do not submit).
             cli_args: Shared or per-job CLI arguments for run scripts.
             batch_label: Label for ``chemsmart_sub_array_<label>.sh``.

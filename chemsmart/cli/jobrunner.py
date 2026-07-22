@@ -6,18 +6,20 @@ import click
 logger = logging.getLogger(__name__)
 
 PARALLEL_HELP_SUB = (
-    "Max concurrent SLURM array tasks when submitting a batch, and expand "
-    "nestable jobs (crest/QRC/dias/traj) into one array task per child. "
-    "Default is serial: top-level batches use one array task at a time (%1), "
-    "and nestable jobs submit as a single parent with nested serial children. "
-    "Pass --run-in-parallel to enable concurrent array tasks / nestable "
-    "expansion; cap concurrency with -N/--array-concurrency."
+    "Max concurrent scheduler array tasks when submitting a batch (SLURM, "
+    "PBS, or LSF), and expand nestable jobs (crest/QRC/dias/traj) into one "
+    "array task per child. Default is serial: top-level batches use one "
+    "array task at a time (%1), and nestable jobs submit as a single parent "
+    "with nested serial children. Pass --run-in-parallel to enable "
+    "concurrent array tasks / nestable expansion; cap concurrency with "
+    "-N/--array-concurrency."
 )
 
 ARRAY_CONCURRENCY_HELP_SUB = (
-    "With chemsmart sub --run-in-parallel: max concurrent SLURM array tasks "
-    "(%M in --array=1-N%M). Ignored under the serial default. Each array "
-    "task still uses one node (--nodes=1); -n sets cores per task. "
+    "With chemsmart sub --run-in-parallel: max concurrent scheduler array "
+    "tasks (SLURM ``--array=1-N%M``, PBS ``-J 1-N%M``, LSF "
+    "``-J name[1-N%M]``). Ignored under the serial default. Each array task "
+    "still uses one node (--nodes=1 on SLURM); -n sets cores per task. "
     "--num-nodes is an accepted alias."
 )
 

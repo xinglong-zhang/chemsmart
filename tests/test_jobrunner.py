@@ -172,7 +172,7 @@ class TestParallelFlagHelpText:
         assert result.exit_code == 0
         help_text = " ".join(result.output.split())
         assert (
-            "Max concurrent SLURM array tasks when submitting a batch"
+            "Max concurrent scheduler array tasks when submitting a batch"
             in help_text
         )
         assert "Batch children always run serially" not in help_text
