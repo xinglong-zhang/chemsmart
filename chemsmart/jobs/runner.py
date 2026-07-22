@@ -193,8 +193,11 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool or None): Scratch mode. See ``JobRunner.from_job`` when
-            the CLI omits ``--scratch``/``--no-scratch``.
+        scratch (bool or None): Whether to use a scratch directory.
+            None means unset: ``from_job`` uses program ``SCRATCH`` from
+            server YAML when that key is set, otherwise the typed runner's
+            ``SCRATCH`` class default. Explicit False or True forces
+            scratch off or on regardless of YAML or class defaults.
         scratch_dir (str or None): Path to scratch directory, or None to
             resolve from executable ENVARS, ``SERVER.SCRATCH_DIR``, then user
             settings.
