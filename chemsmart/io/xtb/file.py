@@ -554,7 +554,7 @@ class XTBMainOut(XTBFileMixin):
         return dipole_lines
 
     @property
-    def qonly_molecular_dipole(self):
+    def molecular_dipole_qonly(self):
         """Charge only dipole, computed only from atomic partial charges
         (electrostatic contribution)."""
         if self.molecular_dipole_lines is not None:
@@ -564,7 +564,7 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def full_molecular_dipole(self):
+    def molecular_dipole_full(self):
         """Actual dipole moment including both charge distribution
         and electronic polarization contributions"""
         if self.molecular_dipole_lines is not None:
@@ -594,7 +594,7 @@ class XTBMainOut(XTBFileMixin):
         return quadrupole_lines
 
     @property
-    def qonly_molecular_quadrupole(self):
+    def molecular_quadrupole_qonly(self):
         """Charge-only quadrupole moment, computed from atomic partial charges."""
         if self.molecular_quadrupole_lines is not None:
             for line in self.molecular_quadrupole_lines:
@@ -607,7 +607,7 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def q_dip_molecular_quadrupole(self):
+    def molecular_quadrupole_q_dip(self):
         """Molecular quadrupole from both charge and dipole moment contributions."""
         if self.molecular_quadrupole_lines is not None:
             for line in self.molecular_quadrupole_lines:
@@ -620,7 +620,7 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def full_molecular_quadrupole(self):
+    def molecular_quadrupole_full(self):
         """Full molecular quadrupole moment, including charge, dipole, and quadrupole
         contributions."""
         if self.molecular_quadrupole_lines is not None:

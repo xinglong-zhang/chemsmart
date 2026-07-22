@@ -192,22 +192,22 @@ class TestXTBMainOut:
         assert co2_main_out.c8_coefficient == 4029.884814
         assert co2_main_out.alpha_coefficient == 19.088396
         assert np.allclose(
-            co2_main_out.qonly_molecular_dipole, [0.0, -0.0, -0.0]
+            co2_main_out.molecular_dipole_qonly, [0.0, -0.0, -0.0]
         )
         assert np.allclose(
-            co2_main_out.full_molecular_dipole, [0.0, 0.0, -0.0]
+            co2_main_out.molecular_dipole_full, [0.0, 0.0, -0.0]
         )
         assert co2_main_out.total_molecular_dipole_moment == 0.0
         assert np.allclose(
-            co2_main_out.qonly_molecular_quadrupole,
+            co2_main_out.molecular_quadrupole_qonly,
             [[-2.169, 0.0, 0.0], [0.0, 1.084, -0.0], [0.0, -0.0, 1.084]],
         )
         assert np.allclose(
-            co2_main_out.q_dip_molecular_quadrupole,
+            co2_main_out.molecular_quadrupole_q_dip,
             [[-3.107, 0.0, 0.0], [0.0, 1.553, -0.0], [0.0, -0.0, 1.553]],
         )
         assert np.allclose(
-            co2_main_out.full_molecular_quadrupole,
+            co2_main_out.molecular_quadrupole_full,
             [[-4.360, 0.0, 0.0], [0.0, 2.180, -0.0], [0.0, -0.0, 2.180]],
         )
         assert co2_main_out.molecular_mass == 44.0095457
