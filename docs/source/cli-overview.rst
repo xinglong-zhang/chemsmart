@@ -92,8 +92,8 @@ Execution Control Options
    the typed runner is built:
 
    #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-   #. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
-   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for PyMOL, thermochemistry,
+   #. Else program ``SCRATCH`` in server YAML for executable-backed runners.
+   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for xTB, PyMOL, thermochemistry,
       etc.).
 
    **Programmatic API (direct constructor)**

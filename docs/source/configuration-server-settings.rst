@@ -886,7 +886,7 @@ When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job``
 runner is constructed:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-#. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
+#. Else program ``SCRATCH`` in server YAML for executable-backed runners.
 #. Else the job-runner class default.
 
 Programmatic API (direct constructor)
@@ -898,8 +898,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 
 .. note::
 
-   Server YAML ``SCRATCH`` is read only for ``GAUSSIAN``, ``ORCA``, and ``NCIPLOT``. A ``PYMOL:`` block (or other
-   non-executable program) does not affect scratch when the CLI flag is omitted.
+   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``, and
+   ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI flag is
+   omitted.
 
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -936,7 +937,7 @@ Resolution table (CLI path)
       -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
-      -  absent *(class ``False``, e.g. PyMOL, thermochemistry)*
+      -  absent *(class ``False``, e.g. xTB, PyMOL, thermochemistry)*
       -  ``False``
       -  job folder
 
@@ -954,7 +955,7 @@ Scratch directory path
 
 When scratch mode is ``True``, the scratch directory path is resolved in this order:
 
-#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``NCIPLOT``)
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``NCIPLOT``)
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
