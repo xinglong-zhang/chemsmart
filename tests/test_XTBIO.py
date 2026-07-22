@@ -292,6 +292,16 @@ class TestXTBMainOut:
             p_benzyne_opt_main_out.route_string
             == "xtb p_benzyne.xyz --opt loose --alpb toluene --uhf 2 --grad --json"
         )
+        # Open-shell (--uhf 2): unpaired electrons, multiplicity, and FMO levels
+        assert p_benzyne_opt_main_out.net_charge == 0
+        assert p_benzyne_opt_main_out.unpaired_electrons == 2
+        assert p_benzyne_opt_main_out.multiplicity == 3
+        assert p_benzyne_opt_main_out.spin == "unrestricted"
+        assert p_benzyne_opt_main_out.homo_energy == -8.4
+        assert p_benzyne_opt_main_out.lumo_energy == -6.391
+        assert p_benzyne_opt_main_out.fmo_gap == 2.009059622602
+        assert p_benzyne_opt_main_out.alpha_occ_eigenvalues is None
+        assert p_benzyne_opt_main_out.beta_occ_eigenvalues is None
         assert p_benzyne_opt_main_out.solvent_on
         assert p_benzyne_opt_main_out.solvent_model == "ALPB"
         assert p_benzyne_opt_main_out.solvent_id == "toluene"
