@@ -7,11 +7,16 @@ from chemsmart.io.xtb.file import (
     XTBEnergyFile,
     XTBEngradFile,
     XTBG98File,
+    XTBGradientFile,
+    XTBHessianFile,
     XTBMainOut,
+    XTBVibSpectrumFile,
+    XTBWibergBondOrderFile,
 )
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestXTBInput:
@@ -126,7 +131,8 @@ class TestXTBMainOut:
         assert not co2_main_out.restart
         assert not co2_main_out.solvent_on
         assert not co2_main_out.pc_potential
-        assert co2_main_out.temperature_in_K == 300.0
+        assert co2_main_out.electronic_temperature == 300.0
+        assert co2_main_out.temperature_in_K == 298.15
         assert co2_main_out.accuracy == 1.0
         assert co2_main_out.integral_cutoff == 25.0
         assert co2_main_out.integral_neglect == 1e-8
@@ -270,6 +276,29 @@ class TestXTBMainOut:
         assert co2_main_out.gibbs_free_energy == -10.317252637172
         assert co2_main_out.gradient_norm == 0.000000274582
         assert co2_main_out.fmo_gap == 8.448655866329
+        assert np.isclose(
+            co2_main_out.electronic_entropy,
+            (51.1857 - 0.915 - 13.017 - 37.255)
+            * 1e-3
+            * kcal_per_mol_to_hartree,
+        )
+        assert np.isclose(
+            co2_main_out.vibrational_entropy,
+            0.915 * 1e-3 * kcal_per_mol_to_hartree,
+        )
+        assert np.isclose(
+            co2_main_out.rotational_entropy,
+            13.017 * 1e-3 * kcal_per_mol_to_hartree,
+        )
+        assert np.isclose(
+            co2_main_out.translational_entropy,
+            37.255 * 1e-3 * kcal_per_mol_to_hartree,
+        )
+        assert np.isclose(
+            co2_main_out.entropy,
+            51.1857 * 1e-3 * kcal_per_mol_to_hartree,
+        )
+        assert np.isclose(co2_main_out.entropy_times_temperature, 0.243200e-01)
         # Time Information
         assert np.isclose(co2_main_out.total_elapsed_walltime * 3600, 0.468)
         assert np.isclose(co2_main_out.total_core_hours * 3600, 0.088)
@@ -307,7 +336,7 @@ class TestXTBMainOut:
         assert p_benzyne_opt_main_out.solvent_id == "toluene"
         assert p_benzyne_opt_main_out.dielectric_constant == 7.0
         assert p_benzyne_opt_main_out.free_energy_shift == 2.2081e-03
-        assert p_benzyne_opt_main_out.temperature == 298.15
+        assert p_benzyne_opt_main_out.solvent_temperature == 298.15
         assert p_benzyne_opt_main_out.density == 0.867
         assert p_benzyne_opt_main_out.solvent_mass == 78.11
         assert not p_benzyne_opt_main_out.h_bond_correction
@@ -489,6 +518,145 @@ class TestXTBEngradFile:
             p_benzyne_opt_engrad.forces[0][9],
             [0.000030673290, -0.000097710620, -0.000035539462],
         )
+
+
+class TestXTBGradientFile:
+    """Tests for XTBGradientFile class."""
+
+    def test_gradient_co2(self, xtb_water_outfolder):
+        gradient_file = os.path.join(xtb_water_outfolder, "gradient")
+        grad = XTBGradientFile(gradient_file)
+        assert np.isclose(grad.energy, -5.07054444346)
+        assert grad.gradients[0].shape == (3, 3)
+        assert np.allclose(
+            grad.gradients[-1][0],
+            [1.2982149851656e-10, -3.3293838441823e-18, 5.7137032470948e-05],
+        )
+        assert np.allclose(
+            grad.gradients[-1][1],
+            [-1.9065815509550e-05, -1.9010909790127e-17, -2.8568564065665e-05],
+        )
+        assert np.allclose(
+            grad.gradients[-1][2],
+            [1.9065685688053e-05, 2.2340293634309e-17, -2.8568468405277e-05],
+        )
+        assert np.allclose(grad.forces[-1], -grad.gradients[-1])
+
+
+class TestXTBHessianFile:
+    """Tests for XTBHessianFile class."""
+
+    def test_hessian_co2(self, xtb_co2_outfolder):
+        hessian_file = os.path.join(xtb_co2_outfolder, "hessian")
+        hess = XTBHessianFile(hessian_file)
+        assert hess.hessian.shape == (9, 9)
+        assert np.allclose(
+            hess.hessian[0],
+            np.array(
+                [
+                    1.1701657400,
+                    -0.0000059805,
+                    -0.0000039870,
+                    -0.0589478867,
+                    0.0000004551,
+                    0.0000003034,
+                    -1.1111279332,
+                    0.0000069650,
+                    0.0000046434,
+                ]
+            ),
+        )
+        assert np.allclose(
+            hess.hessian[-1],
+            np.array(
+                [
+                    0.0000046434,
+                    -0.0000000000,
+                    -0.0595361130,
+                    0.0000046434,
+                    -0.0000000000,
+                    -0.0595361130,
+                    -0.0000092863,
+                    0.0000000001,
+                    0.1191272426,
+                ]
+            ),
+        )
+
+
+class TestXTBVibSpectrumFile:
+    """Tests for XTBVibSpectrumFile class."""
+
+    def test_vibspectrum_co2(self, xtb_acetaldehyde_outfolder):
+        vib_file = os.path.join(xtb_acetaldehyde_outfolder, "vibspectrum")
+        vib = XTBVibSpectrumFile(vib_file)
+        assert vib.vibrational_frequencies == [
+            151.34,
+            501.81,
+            769.05,
+            947.27,
+            1045.68,
+            1107.27,
+            1355.34,
+            1389.38,
+            1446.60,
+            1447.86,
+            1798.58,
+            2748.94,
+            3018.34,
+            3026.55,
+            3059.76,
+        ]
+        assert vib.ir_intensities == [
+            0.04462,
+            11.45411,
+            2.91256,
+            15.16489,
+            16.51912,
+            60.12317,
+            12.40125,
+            46.09384,
+            16.02810,
+            10.90711,
+            300.93898,
+            142.63122,
+            6.53630,
+            3.41138,
+            14.20614,
+        ]
+        assert vib.vibrational_mode_symmetries == [
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+        ]
+
+
+class TestXTBWibergBondOrderFile:
+    """Tests for XTBWibergBondOrderFile class."""
+
+    def test_wbo_water(self, xtb_water_outfolder):
+        wbo_file = os.path.join(xtb_water_outfolder, "wbo")
+        wbo = XTBWibergBondOrderFile(wbo_file)
+        assert len(wbo.bond_orders) == 2
+        assert wbo.bond_orders[0] == (1, 2, 0.92021379026732564)
+        assert wbo.bond_orders[1] == (1, 3, 0.92021379039282269)
+        assert wbo.bond_order_matrix.shape == (3, 3)
+        assert np.isclose(wbo.bond_order_matrix[0, 1], 0.92021379026732564)
+        assert np.isclose(wbo.bond_order_matrix[1, 0], 0.92021379026732564)
+        assert np.isclose(wbo.bond_order_matrix[0, 2], 0.92021379039282269)
+        assert np.isclose(wbo.bond_order_matrix[2, 0], 0.92021379039282269)
 
 
 class TestXTBG98File:

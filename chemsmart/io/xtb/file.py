@@ -4,6 +4,7 @@ from functools import cached_property
 
 import numpy as np
 
+from chemsmart.utils.constants import cal_to_joules, joule_per_mol_to_hartree
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.repattern import normal_mode_pattern
@@ -138,9 +139,23 @@ class XTBMainOut(XTBFileMixin):
         return pc_pot.lower() == "true"
 
     @property
-    def temperature_in_K(self):
+    def electronic_temperature(self):
+        """Electronic/Fermi temperature in K."""
         electronic_temp = self._get_setup_information("electronic temp.")
         return float(electronic_temp) if electronic_temp else None
+
+    @property
+    def temperature_in_K(self):
+        """Thermochemistry temperature in K."""
+        for i, line_i in enumerate(self.contents):
+            if "partition function" in line_i and "entropy" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "T/K" in line_j and "H(T)" in line_j:
+                        break
+                    parts = line_j.split()
+                    if "VIB" in parts:
+                        return float(parts[0])
+        return None
 
     @property
     def accuracy(self):
@@ -248,7 +263,7 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def gradient_convergence(self):
-        """Gradient convergence threshold, in Eh/alpha."""
+        """Gradient convergence threshold, in Hartree/alpha."""
         gradient_conv = self._get_setup_information("grad. convergence")
         return float(gradient_conv) if gradient_conv else None
 
@@ -533,7 +548,7 @@ class XTBMainOut(XTBFileMixin):
     def rms_gradient(self):
         """Root mean square (RMS) gradient, a measure of the convergence of the
         numerical Hessian calculation. Lower values indicate better convergence.
-        Generally, values below 0.001 Eh/a₀ suggest a well-converged structure.
+        Generally, values below 0.001 Hartree/a₀ suggest a well-converged structure.
         """
         if self.numerical_hessian_block:
             for line in self.numerical_hessian_block:
@@ -646,11 +661,14 @@ class XTBMainOut(XTBFileMixin):
         if self.solvent_on:
             for line in self.contents:
                 if "Free energy shift" in line:
-                    return float(line.split()[-4])  # free energy shift in Eh
+                    return float(
+                        line.split()[-4]
+                    )  # free energy shift in Hartree
         return None
 
     @property
-    def temperature(self):
+    def solvent_temperature(self):
+        """Solvent model temperature in K from the GBSA/ALPB block."""
         if self.solvent_on:
             for line in self.contents:
                 if "Temperature" in line:
@@ -694,7 +712,9 @@ class XTBMainOut(XTBFileMixin):
         if self.solvent_on:
             for line in self.contents:
                 if "Surface tension" in line:
-                    return float(line.split()[-4])  # surface tension in Eh
+                    return float(
+                        line.split()[-4]
+                    )  # surface tension in Hartree
         return None
 
     """
@@ -955,18 +975,18 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def zero_point_energy(self):
-        """Zero point energy in Eh"""
+        """Zero point energy in Hartree."""
         return self._extract_thermodynamics_information("zero point energy")
 
     @property
     def grrho_without_zpve(self):
-        """Free energy in Eh within the rigid-rotor-harmonic-oscillator (RRHO) approximation,
-        excluding zero-point vibrational energy (ZPVE)"""
+        """Free energy in Hartree within the rigid-rotor-harmonic-oscillator (RRHO)
+        approximation, excluding zero-point vibrational energy (ZPVE)."""
         return self._extract_thermodynamics_information("G(RRHO) w/o ZPVE")
 
     @property
     def grrho_contribution(self):
-        """Contribution of RRHO approximation to free energy in Eh"""
+        """Contribution of RRHO approximation to free energy in Hartree."""
         return self._extract_thermodynamics_information("G(RRHO) contrib.")
 
     @cached_property
@@ -999,13 +1019,13 @@ class XTBMainOut(XTBFileMixin):
     def total_energy(self):
         return self._extract_final_information(
             "TOTAL ENERGY"
-        )  # total energy in Eh
+        )  # total energy in Hartree
 
     @property
     def gradient_norm(self):
         return self._extract_final_information(
             "GRADIENT NORM"
-        )  # gradient norm in Eh/α
+        )  # gradient norm in Hartree/α
 
     @property
     def fmo_gap(self):
@@ -1018,12 +1038,12 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def enthalpy(self):
-        """Total enthalpy in Eh"""
+        """Total enthalpy in Hartree."""
         return self._extract_final_information("TOTAL ENTHALPY")
 
     @property
     def gibbs_free_energy(self):
-        """Total free energy in Eh"""
+        """Total free energy in Hartree."""
         return self._extract_final_information("TOTAL FREE ENERGY")
 
     @property
@@ -1078,34 +1098,156 @@ class XTBMainOut(XTBFileMixin):
     def internal_energy(self):
         return None
 
-    @property
+    @cached_property
+    def electronic_entropy_no_temperature_in_SI(self):
+        """
+        Electronic entropy in J/mol/K.
+
+        xTB does not print a separate electronic entropy line; obtain it as
+        total minus vibrational, rotational and translational contributions.
+        """
+        if (
+            self.entropy_no_temperature_in_SI is not None
+            and self.vibrational_entropy_no_temperature_in_SI is not None
+            and self.rotational_entropy_no_temperature_in_SI is not None
+            and self.translational_entropy_no_temperature_in_SI is not None
+        ):
+            return (
+                self.entropy_no_temperature_in_SI
+                - self.vibrational_entropy_no_temperature_in_SI
+                - self.rotational_entropy_no_temperature_in_SI
+                - self.translational_entropy_no_temperature_in_SI
+            )
+        return None
+
+    @cached_property
     def electronic_entropy(self):
-        # TODO
+        """
+        Electronic entropy in Hartree/K.
+        """
+        if self.electronic_entropy_no_temperature_in_SI is not None:
+            return (
+                self.electronic_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
         return None
 
-    @property
+    @cached_property
+    def vibrational_entropy_no_temperature_in_SI(self):
+        """
+        Vibrational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "partition function" in line_i and "entropy" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "T/K" in line_j and "H(T)" in line_j:
+                        break
+                    if "VIB" in line_j.split():
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
     def vibrational_entropy(self):
-        # TODO
+        """
+        Vibrational entropy in Hartree/K.
+        """
+        if self.vibrational_entropy_no_temperature_in_SI is not None:
+            return (
+                self.vibrational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
         return None
 
-    @property
+    @cached_property
+    def rotational_entropy_no_temperature_in_SI(self):
+        """
+        Rotational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "partition function" in line_i and "entropy" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "T/K" in line_j and "H(T)" in line_j:
+                        break
+                    if "ROT" in line_j.split():
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
     def rotational_entropy(self):
-        # TODO
+        """
+        Rotational entropy in Hartree/K.
+        """
+        if self.rotational_entropy_no_temperature_in_SI is not None:
+            return (
+                self.rotational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
         return None
 
-    @property
+    @cached_property
+    def translational_entropy_no_temperature_in_SI(self):
+        """
+        Translational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "partition function" in line_i and "entropy" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "T/K" in line_j and "H(T)" in line_j:
+                        break
+                    if "TR" in line_j.split():
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
     def translational_entropy(self):
-        # TODO
+        """
+        Translational entropy in Hartree/K.
+        """
+        if self.translational_entropy_no_temperature_in_SI is not None:
+            return (
+                self.translational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
         return None
 
-    @property
+    @cached_property
+    def entropy_no_temperature_in_SI(self):
+        """
+        Total entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "partition function" in line_i and "entropy" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "T/K" in line_j and "H(T)" in line_j:
+                        break
+                    if "TOT" in line_j.split():
+                        return float(line_j.split()[-2]) * cal_to_joules
+        return None
+
+    @cached_property
     def entropy(self):
-        # TODO
+        """
+        Total entropy in Hartree/K.
+        """
+        if self.entropy_no_temperature_in_SI is not None:
+            return self.entropy_no_temperature_in_SI * joule_per_mol_to_hartree
         return None
 
-    @property
+    @cached_property
     def entropy_times_temperature(self):
-        # TODO
+        """
+        The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
+        Return value in Hartree.
+        """
+        if (
+            self.temperature_in_K
+            and self.entropy_no_temperature_in_SI is not None
+        ):
+            return (
+                self.entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+                * self.temperature_in_K
+            )
         return None
 
     @property
@@ -1614,7 +1756,67 @@ class XTBGradientFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for gradient.
+    @cached_property
+    def energy(self):
+        """SCF energy in Hartree from the last gradient cycle."""
+        energy = None
+        for line in self.contents:
+            if "SCF energy" in line:
+                energy = float(
+                    line.split("SCF energy")[1].split("=")[1].split()[0]
+                )
+        return energy
+
+    @cached_property
+    def gradients(self):
+        """Energy gradients in Hartree/Bohr, list of (N, 3) arrays for last gradient cycle."""
+        symbols = []
+        gradients = []
+        in_grad = False
+        reading_coords = False
+        for line in self.contents:
+            stripped = line.strip()
+            if stripped.startswith("$grad"):
+                in_grad = True
+                symbols = []
+                gradients = []
+                reading_coords = False
+                continue
+            if not in_grad:
+                continue
+            if stripped.startswith("$end"):
+                break
+            if "SCF energy" in line:
+                reading_coords = True
+                continue
+            parts = stripped.split()
+            if reading_coords and len(parts) == 4:
+                try:
+                    float(parts[0])
+                    float(parts[1])
+                    float(parts[2])
+                    symbols.append(parts[3])
+                    continue
+                except ValueError:
+                    pass
+            if symbols and len(parts) == 3:
+                reading_coords = False
+                try:
+                    gradients.append(
+                        [float(parts[0]), float(parts[1]), float(parts[2])]
+                    )
+                except ValueError:
+                    continue
+        if not gradients:
+            return None
+        return [np.array(gradients, dtype=float)]
+
+    @cached_property
+    def forces(self):
+        """Obtain forces on the atoms in Hartree/Bohr."""
+        if self.gradients is not None:
+            return [-self.gradients[0]]
+        return None
 
 
 class XTBHessianFile(FileMixin):
@@ -1642,7 +1844,24 @@ class XTBHessianFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for hessian.
+    @cached_property
+    def hessian(self):
+        """Cartesian Hessian matrix in Hartree/Bohr², shape (3N, 3N)."""
+        values = []
+        for line in self.contents:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("$"):
+                continue
+            values.extend(float(token) for token in stripped.split())
+        if not values:
+            return None
+        dim = int(round(np.sqrt(len(values))))
+        if dim * dim != len(values):
+            raise ValueError(
+                f"Hessian in {self.filename} has {len(values)} values, "
+                f"which is not a square matrix."
+            )
+        return np.array(values, dtype=float).reshape(dim, dim)
 
 
 class XTBVibSpectrumFile(FileMixin):
@@ -1675,7 +1894,68 @@ class XTBVibSpectrumFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for vibrational spectrum.
+    @property
+    def frequencies(self):
+        """All mode frequencies in cm^-1, including translations and rotations."""
+        return self._get_frequencies_data("frequency", all_modes=True)
+
+    @property
+    def vibrational_frequencies(self):
+        """Vibrational frequencies in cm^-1."""
+        return self._get_frequencies_data("frequency")
+
+    @property
+    def ir_intensities(self):
+        """IR intensities in km/mol for vibrational modes."""
+        return self._get_frequencies_data("ir_intensity")
+
+    @property
+    def vibrational_mode_symmetries(self):
+        """Symmetry labels for vibrational modes."""
+        return self._get_frequencies_data("symmetry")
+
+    @cached_property
+    def _frequencies_data(self):
+        """Parse vibspectrum mode rows."""
+        rows = []
+        for line in self.contents:
+            stripped = line.strip()
+            if (
+                not stripped
+                or stripped.startswith("#")
+                or stripped.startswith("$")
+            ):
+                continue
+            parts = stripped.split()
+            try:
+                int(parts[0])
+            except (ValueError, IndexError):
+                continue
+            symmetry = None
+            floats = []
+            for token in parts[1:]:
+                try:
+                    floats.append(float(token))
+                except ValueError:
+                    if symmetry is None and not floats:
+                        symmetry = token
+            rows.append(
+                {
+                    "frequency": floats[0] if floats else None,
+                    "ir_intensity": floats[1] if floats else None,
+                    "symmetry": symmetry,
+                }
+            )
+        return rows or None
+
+    def _get_frequencies_data(self, key, all_modes=False):
+        """Return one column from the vibspectrum mode table."""
+        rows = self._frequencies_data
+        if rows is None:
+            return []
+        if not all_modes:
+            rows = [row for row in rows if row["frequency"] != 0.0]
+        return [row[key] for row in rows]
 
 
 class XTBWibergBondOrderFile(FileMixin):
@@ -1696,4 +1976,31 @@ class XTBWibergBondOrderFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for bond order.
+    @cached_property
+    def bond_orders(self):
+        """List of (atom_i, atom_j, order) with 1-based atom indices."""
+        pairs = []
+        for line in self.contents:
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                atom_i = int(parts[0])
+                atom_j = int(parts[1])
+                order = float(parts[2])
+            except ValueError:
+                continue
+            pairs.append((atom_i, atom_j, order))
+        return pairs
+
+    @cached_property
+    def bond_order_matrix(self):
+        """Symmetric Wiberg bond-order matrix, or None if empty."""
+        if not self.bond_orders:
+            return None
+        n_atoms = max(max(i, j) for i, j, _ in self.bond_orders)
+        matrix = np.zeros((n_atoms, n_atoms), dtype=float)
+        for atom_i, atom_j, order in self.bond_orders:
+            matrix[atom_i - 1, atom_j - 1] = order
+            matrix[atom_j - 1, atom_i - 1] = order
+        return matrix
