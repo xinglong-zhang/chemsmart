@@ -127,6 +127,10 @@ orca_date_pattern = (
     r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
 )
 
+xtb_date_pattern = (
+    r"\* finished run on (\d{4}/\d{2}/\d{2}) at (\d{2}:\d{2}:\d{2})"
+)
+
 
 # filename pattern for gaussian output files
 
