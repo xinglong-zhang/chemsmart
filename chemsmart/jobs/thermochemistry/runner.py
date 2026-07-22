@@ -53,18 +53,18 @@ class ThermochemistryJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution
-            scratch (bool or None): Whether to use a scratch directory.
-                ``None`` means unset. Via ``JobRunner.from_job`` (CLI path),
-                unset values use this class ``SCRATCH`` default (``False``);
-                server YAML ``SCRATCH`` is not read for thermochemistry (only
-                Gaussian, ORCA, and NCIPLOT support YAML override). Explicit
-                CLI ``--scratch`` / ``--no-scratch`` still applies. Direct
-                construction with ``None`` uses only the class default.
+            scratch (bool or None): Scratch on (``True``) or off (``False``).
+
+                **Direct construction:** ``None`` → class default
+                (``SCRATCH`` = ``False``). Server YAML is not read.
+
+                **CLI / ``from_job``:** omitted flags resolve the same way.
+                See ``JobRunner.from_job``.
             fake (bool): Whether to run in fake mode for testing
             scratch_dir (str, optional): Path to scratch directory
             **kwargs: Additional keyword arguments for parent class
         """
-        # None = unset: inherit ThermochemistryJobRunner.SCRATCH (False).
+        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(

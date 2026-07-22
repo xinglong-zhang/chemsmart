@@ -193,15 +193,15 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool or None): Whether to use a scratch directory.
-            ``None`` means unset. ``JobRunner.from_job`` (CLI path) resolves
-            unset values as: explicit CLI/API ``True``/``False`` first; else
-            program ``SCRATCH`` from server YAML when that key is set and the
-            runner maps to an ``Executable`` subclass (Gaussian, ORCA, or
-            NCIPLOT); else the typed runner's ``SCRATCH`` class default.
-            Explicit ``False`` or ``True`` forces scratch off or on regardless
-            of YAML or class defaults. Direct construction of a typed runner
-            with ``None`` uses only that runner's class default.
+        scratch (bool or None): Scratch mode.
+
+            **CLI:** ``None`` on the placeholder runner means the user omitted
+            ``--scratch``/``--no-scratch``. Resolution happens in
+            ``JobRunner.from_job`` (see that method).
+
+            **Typed runners:** ``from_job`` always passes a ``bool`` after
+            resolution. If you construct a typed runner yourself, ``None``
+            means "class default only" and server YAML is not read.
         scratch_dir (str or None): Path to scratch directory, or None to
             resolve from executable ENVARS, server YAML, then user settings.
         delete_scratch (bool): whether to delete scratch after
@@ -446,20 +446,27 @@ class JobRunner(RegistryMixin):
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         """Select and construct a typed job runner for ``job``.
 
-        Scratch mode is resolved before the typed runner is built:
+        **When the CLI omits ``--scratch``/``--no-scratch``**
 
-        1. Explicit ``scratch`` (``True``/``False``) wins.
-        2. If ``scratch`` is ``None``, use program-block ``SCRATCH`` from
-           the server YAML when that key is set and the selected runner maps
-           to an ``Executable`` subclass (Gaussian, ORCA, or NCIPLOT).
-        3. Otherwise use the selected runner class ``SCRATCH`` default.
+        ``scratch`` arrives as ``None``. It is resolved here, in order:
 
-        The constructed runner therefore receives a concrete ``bool``.
+        1. Explicit ``True``/``False`` from ``--scratch`` or ``--no-scratch``
+        2. Program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only)
+        3. The selected runner's class ``SCRATCH`` default
+
+        The typed runner is then constructed with that resolved ``bool``.
+
+        **When calling a typed runner constructor directly**
+
+        ``scratch=None`` does not pass through ``from_job``. It means "use the
+        class ``SCRATCH`` default" and YAML is not read. That can differ from
+        step 2 above when YAML would override the class default.
 
         Args:
             job: Job instance whose ``TYPE`` selects the runner.
             server: Server name or ``Server`` instance.
-            scratch (bool or None): Scratch mode override, or unset.
+            scratch (bool or None): ``True``/``False`` from CLI flags, or
+                ``None`` when both flags were omitted.
             fake (bool): Prefer a fake runner when one is registered.
             **kwargs: Forwarded to the typed runner constructor.
 

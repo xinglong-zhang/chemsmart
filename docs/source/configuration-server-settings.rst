@@ -783,28 +783,36 @@ job-runner class default. When scratch mode is enabled, the scratch **directory 
 Scratch mode (on/off)
 ---------------------
 
-Resolution order for ``chemsmart run`` and ``chemsmart sub``:
+CLI (``chemsmart run`` / ``chemsmart sub``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job`` resolves scratch **before** the typed
+runner is constructed:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
+#. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
+#. Else the job-runner class default.
 
-#. If both flags are omitted, use the program-block ``SCRATCH`` key in the server YAML when that key is present **and**
-   the job uses Gaussian, ORCA, or NCIPLOT (for example ``GAUSSIAN.SCRATCH: False`` or ``ORCA.SCRATCH: True``).
+Programmatic API (direct constructor)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-#. If the YAML key is absent, or the job uses a runner without server executable config (PyMOL, thermochemistry,
-   iterate, grouper, etc.), use the job-runner class default:
-
-   -  ``True`` for Gaussian, ORCA, and NCIPLOT
-   -  ``False`` for PyMOL, thermochemistry, and related runners
+If you call a typed runner constructor with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
+default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI flag yields scratch off, but
+``NCIPLOTJobRunner(..., scratch=None)`` still uses the class default (on).
 
 .. note::
 
-   Server YAML ``SCRATCH`` is read only for programs with executable configuration blocks (``GAUSSIAN``, ``ORCA``,
-   ``NCIPLOT``). A ``PYMOL:`` or other block without executable config does not affect scratch mode when the CLI flag is
-   omitted; those jobs fall back to the runner class default.
+   Server YAML ``SCRATCH`` is read only for ``GAUSSIAN``, ``ORCA``, and ``NCIPLOT``. A ``PYMOL:`` block (or other
+   non-executable program) does not affect scratch when the CLI flag is omitted.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 20 25 20 35
+Resolution table (CLI path)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   :header-rows:
+      1
+
+   :widths:
+      20 25 20 35
 
    -  -  CLI
       -  YAML ``SCRATCH``

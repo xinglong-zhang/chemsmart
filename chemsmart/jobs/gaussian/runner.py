@@ -112,18 +112,20 @@ class GaussianJobRunner(JobRunner):
 
         Args:
             server: Server configuration object for job execution.
-            scratch (bool or None, optional): Whether to use scratch
-                directories. ``None`` means unset. Via ``JobRunner.from_job``
-                (CLI path), unset values resolve as CLI override, then
-                program YAML ``SCRATCH``, then this class ``SCRATCH``
-                default (``True``). Direct construction with ``None``
-                uses only the class default.
+            scratch (bool or None, optional): Scratch on (``True``) or off
+                (``False``).
+
+                **Direct construction:** ``None`` → class default
+                (``SCRATCH`` = ``True``). YAML is not read.
+
+                **CLI / ``from_job``:** omitted flags are resolved before
+                this constructor runs (YAML ``GAUSSIAN.SCRATCH`` may apply).
+                See ``JobRunner.from_job``.
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # None = unset: inherit GaussianJobRunner.SCRATCH (True). False/True
-        # force local or scratch. YAML override is applied in from_job.
+        # Direct construction only: from_job passes a resolved bool.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -406,8 +408,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
-            scratch (bool or None): Scratch mode. ``None`` is unset; see
-                ``GaussianJobRunner`` / ``JobRunner.from_job`` for resolution.
+            scratch (bool or None): Scratch mode. See ``GaussianJobRunner``
+                ``__init__`` and ``JobRunner.from_job``.
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.
