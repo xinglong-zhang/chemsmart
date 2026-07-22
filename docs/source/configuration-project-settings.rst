@@ -497,7 +497,8 @@ it into ``~/.chemsmart/xtb/`` and rename it for your project.
  Scratch Directory
 *******************
 
-Set up scratch directories for jobs that enable scratch in server settings:
+Set up a scratch directory path for Gaussian, ORCA, xTB, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved by
+``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. code:: bash
 

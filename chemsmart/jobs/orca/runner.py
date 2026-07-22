@@ -83,12 +83,14 @@ class ORCAJobRunner(JobRunner):
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory (default: True)
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``ORCA.SCRATCH`` may apply
+                there).
             fake: Whether to use fake runner for testing
             scratch_dir: Path to scratch directory
             **kwargs: Additional keyword arguments
         """
-        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(
@@ -487,7 +489,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """
