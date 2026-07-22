@@ -429,3 +429,68 @@ job._sample_molecules([m0, m1, m2, m3, m4])  # every_n_points=2
 
 **Suggested direction:** change the guard to modulo:
 `if (self.num_molecules - 1) % self.every_n_points != 0:`.
+
+---
+
+## 10. `GaussianDIASLogFolder` DI-AS analysis crashes on normal filenames
+
+**Files:** `chemsmart/analysis/dias.py:439`,
+`chemsmart/utils/repattern.py:135`
+**Test:** `tests/test_dias_analysis_unit.py::TestGaussianDIASBugFullMoleculeGroupIndex::test_full_molecule_scan_crashes_without_dias_in_filename`
+
+`GaussianDIASLogFolder._get_all_files_full_molecule` matches candidate
+filenames against
+`gaussian_dias_filename_point_without_fragment_without_reactant`:
+
+```python
+# chemsmart/utils/repattern.py:135
+gaussian_dias_filename_point_without_fragment_without_reactant = (
+    r"(?:(?!.*_r[12](?:_|\.)).*dias_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
+    r"|(?:(?!.*_r[12](?:_|\.)).*_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
+)
+```
+
+This is a two-alternative regex. The **first** alternative requires the
+literal substring `dias_p` in the filename and puts the point number in
+capture group 1. The **second** (fallback, plain `_p<digits>`)
+alternative puts the point number in group 3 instead, leaving group 1
+as `None`. But the calling code always reads group 1:
+
+```python
+# chemsmart/analysis/dias.py:439
+match = full_molecule_pattern.match(filename)
+if match:
+    number_after_p = int(match.group(1))  # None when 2nd alt matched
+```
+
+**Concrete example:** a full-molecule output named `rxn_p1.log` (no
+"dias" substring) matches via the second alternative —
+`match.groups() == (None, None, '1', None)` — so
+`int(match.group(1))` raises
+`TypeError: int() argument must be a string, a bytes-like object or a
+real number, not 'NoneType'`.
+
+**Impact:** Real `GaussianDIASJob` output files are named
+`f"{label}_p{i}.log"` (see `chemsmart/jobs/gaussian/dias.py:316`), with
+no "dias" substring unless the user's job `label` happens to contain
+the word "dias". So `GaussianDIASLogFolder` — used for the
+post-processing/plotting analysis step, separate from the job
+submission itself — crashes on essentially any normally-named DI-AS
+job folder. (`ORCADIASOutFolder`'s equivalent pattern,
+`orca_dias_filename_point_without_fragment`, has only one alternative
+and does not have this bug.)
+
+**Reproduce:**
+```python
+import re
+from chemsmart.utils.repattern import (
+    gaussian_dias_filename_point_without_fragment_without_reactant as p,
+)
+re.compile(p).match("rxn_p1.log").groups()
+# (None, None, '1', None)  -- group(1) is None
+```
+
+**Suggested direction:** either read whichever group is non-`None`
+(e.g. `next(g for g in match.groups() if g is not None)`), or collapse
+the regex to a single alternative with an optional non-capturing
+`dias_` prefix so the point number always lands in the same group.
