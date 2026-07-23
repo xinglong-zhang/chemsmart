@@ -12,7 +12,7 @@ import logging
 
 from chemsmart.jobs.batch import (
     run_child_jobs_as_batch,
-    run_selected_array_child,
+    run_nestable_job,
 )
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
@@ -426,11 +426,13 @@ class GaussianDIASJob(GaussianJob):
         Args:
             **kwargs: Additional keyword arguments for job execution.
         """
-        if run_selected_array_child(self.get_array_child_jobs(), parent=self):
-            return
-        self._run_all_molecules_jobs()
-        self._run_fragment1_jobs()
-        self._run_fragment2_jobs()
+
+        def run_local() -> None:
+            self._run_all_molecules_jobs()
+            self._run_fragment1_jobs()
+            self._run_fragment2_jobs()
+
+        run_nestable_job(self, run_local)
 
     def is_complete(self):
         """

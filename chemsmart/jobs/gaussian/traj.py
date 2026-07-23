@@ -13,7 +13,7 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.batch import run_child_jobs_as_batch
+from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
@@ -385,14 +385,14 @@ class GaussianTrajJob(GaussianJob):
             fail_fast=False,
         )
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the trajectory structure processing workflow.
 
         Main execution method that initiates all configured structure
         calculations. Called internally by the job runner framework.
         """
-        self._run_all_jobs()
+        run_nestable_job(self, self._run_all_jobs)
 
     def is_complete(self):
         """

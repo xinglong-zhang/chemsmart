@@ -9,7 +9,7 @@ progress and completion tracking across the ensemble.
 
 import logging
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch
+from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
@@ -247,14 +247,14 @@ class GaussianCrestJob(GaussianJob):
             fail_fast=False,
         )
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the CREST conformer ensemble calculation.
 
         Main execution method that initiates all conformer optimization
         jobs. This is called internally by the job runner framework.
         """
-        self._run_all_jobs()
+        run_nestable_job(self, self._run_all_jobs)
 
     def is_complete(self):
         """

@@ -9,7 +9,7 @@ import logging
 
 import numpy as np
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch
+from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
 from chemsmart.jobs.orca.batch import OrcaBatchJob
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 
@@ -168,11 +168,11 @@ class ORCAQRCJob(ORCAJob):
             fail_fast=False,
         )
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the QRC jobs calculation.
         """
-        self._run_both_jobs()
+        run_nestable_job(self, self._run_both_jobs)
 
     def is_complete(self):
         """

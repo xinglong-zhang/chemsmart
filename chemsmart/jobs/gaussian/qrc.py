@@ -9,7 +9,7 @@ import logging
 
 import numpy as np
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch
+from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
@@ -174,11 +174,11 @@ class GaussianQRCJob(GaussianJob):
             logger.error(f"Error executing QRC batch job: {e}", exc_info=True)
             raise
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the QRC jobs calculation.
         """
-        self._run_both_jobs()
+        run_nestable_job(self, self._run_both_jobs)
 
     def is_complete(self):
         """

@@ -326,6 +326,81 @@ class TestBatchJobRefactor:
         assert child_b.jobrunner.num_cores == 16
         assert child_b.jobrunner.mem_gb == 32
 
+    def test_run_child_jobs_as_batch_ignores_array_env(
+        self, pbs_server, monkeypatch
+    ):
+        """Nested phase batches stay serial; array selection is at ``_run`` only."""
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        dummy_batch_cls = self._dummy_batch_cls()
+        parent = Mock()
+        parent.label = "parent"
+        parent.jobrunner = JobRunner(
+            server=pbs_server, fake=True, num_cores=8, mem_gb=16
+        )
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        run_child_jobs_as_batch(
+            batch_cls=dummy_batch_cls,
+            jobs=[child_a, child_b],
+            parent=parent,
+            label_suffix="_batch",
+        )
+
+        child_a.run.assert_called_once()
+        child_b.run.assert_called_once()
+
+    def test_dias_array_task_selects_from_flattened_phases(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Multi-phase DIAS must index the flattened child list at ``_run``."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "4")
+        settings = GaussianJobSettings()
+        job = GaussianDIASJob(
+            molecules=[MockMolecule(), MockMolecule()],
+            settings=settings,
+            label="dias_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+        mol_jobs = [Mock(label="mol_p1"), Mock(label="mol_p2")]
+        f1_jobs = [Mock(label="f1_p1"), Mock(label="f1_p2")]
+        f2_jobs = [Mock(label="f2_p1"), Mock(label="f2_p2")]
+        for child in mol_jobs + f1_jobs + f2_jobs:
+            child.run.return_value = None
+            child.is_complete.return_value = True
+
+        mocker.patch.object(
+            job,
+            "get_array_child_jobs",
+            return_value=mol_jobs + f1_jobs + f2_jobs,
+        )
+
+        mock_mol_batch = mocker.patch.object(job, "_run_all_molecules_jobs")
+        mock_f1_batch = mocker.patch.object(job, "_run_fragment1_jobs")
+        mock_f2_batch = mocker.patch.object(job, "_run_fragment2_jobs")
+
+        job._run()
+
+        # Flattened order: mol_p1, mol_p2, f1_p1, f1_p2, f2_p1, f2_p2
+        for child in mol_jobs + [f1_jobs[0]] + f2_jobs:
+            child.run.assert_not_called()
+        f1_jobs[1].run.assert_called_once()
+        mock_mol_batch.assert_not_called()
+        mock_f1_batch.assert_not_called()
+        mock_f2_batch.assert_not_called()
+
 
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""
@@ -436,7 +511,7 @@ class TestGaussianBatchDelegation:
             "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
         )
 
-        job._run_all_jobs()
+        job._run()
 
         # Stable last-3 is c3,c4,c5; task 2 runs c4 only.
         prepared[0].run.assert_not_called()
@@ -584,7 +659,7 @@ class TestGaussianBatchDelegation:
             "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
         )
 
-        job._run_both_jobs()
+        job._run()
 
         child_f.run.assert_not_called()
         child_r.run.assert_called_once()
@@ -625,7 +700,7 @@ class TestGaussianBatchDelegation:
         with pytest.raises(
             BatchExecutionError, match="incomplete after execution"
         ):
-            job._run_both_jobs()
+            job._run()
 
         child_f.run.assert_called_once()
         child_r.run.assert_not_called()

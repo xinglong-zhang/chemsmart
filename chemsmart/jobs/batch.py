@@ -17,7 +17,7 @@ import os
 from abc import ABCMeta
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Iterator, Optional, Sequence, Type, TypeVar
+from typing import Any, Callable, Iterator, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
 from chemsmart.utils.mixins import RegistryMeta
@@ -374,6 +374,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         return all(job.is_complete() for job in self.jobs)
 
 
+def run_nestable_job(parent: Job, run_local: Callable[[], None]) -> None:
+    """Run a nestable parent in array or local serial mode.
+
+    Nestable parents (crest/QRC/dias/traj) call this from ``_run``. When a
+    scheduler array task id is set (``chemsmart sub --run-in-parallel``),
+    only the child selected from ``parent.get_array_child_jobs()`` runs.
+    Otherwise *run_local* executes the serial phase batches (typically via
+    ``run_child_jobs_as_batch``).
+    """
+    if run_selected_array_child(parent.get_array_child_jobs(), parent=parent):
+        return
+    run_local()
+
+
 def run_child_jobs_as_batch(
     *,
     batch_cls: Type[BatchJobT],
@@ -389,24 +403,14 @@ def run_child_jobs_as_batch(
     used. Independent parent jobs may still run concurrently when submitted
     as a top-level batch via ``chemsmart sub``.
 
-    When a scheduler array task id is set (nestable parent submitted with
-    ``chemsmart sub --run-in-parallel``), only the selected child runs.
+    Scheduler array selection is handled at the nestable parent ``_run``
+    boundary via ``run_nestable_job``, not in this helper.
 
     ``fail_fast`` controls whether execution stops after the first
     unsuccessful child (default: run all children, then raise on failures).
 
-    Returns the completed ``BatchJob`` instance (or ``None``-like unused
-    when array mode runs a single child without building a batch).
+    Returns the completed ``BatchJob`` instance.
     """
-    if run_selected_array_child(jobs, parent=parent):
-        return batch_cls(
-            jobs=list(jobs),
-            fail_fast=fail_fast,
-            label=f"{parent.label}{label_suffix}",
-            jobrunner=parent.jobrunner,
-            nested_serial=True,
-        )
-
     runner = parent.jobrunner
     if runner is not None:
         cores = runner.num_cores
@@ -428,7 +432,8 @@ def run_child_jobs_as_batch(
         jobrunner=parent.jobrunner,
         nested_serial=True,
     )
-    batch_job.run()
+    with cleared_array_task_env():
+        batch_job.run()
     return batch_job
 
 
@@ -439,10 +444,9 @@ def run_selected_array_child(
 ) -> bool:
     """Run one nested child when a scheduler array task id is set.
 
-    Used when a nestable parent (crest/QRC/dias/traj) was submitted with
-    ``chemsmart sub --run-in-parallel``: each array task re-invokes the
-    parent CLI, and this helper runs only ``jobs[task_id - 1]`` with the
-    parent's full resources.
+    Called from ``run_nestable_job`` at the nestable parent ``_run``
+    boundary. Each array task re-invokes the parent CLI and runs only
+    ``jobs[task_id - 1]`` with the parent's full resources.
 
     Top-level ``BatchJob._run_array_task`` clears array-task env vars before
     running a selected child, so nestable selection does not fire for
@@ -450,7 +454,7 @@ def run_selected_array_child(
 
     Returns:
         True if an array task was handled; False if no array env is set
-        (caller should run the full nested batch).
+        (caller should run the full nested workflow).
     """
     task_id = resolve_array_task_id()
     if task_id is None:
