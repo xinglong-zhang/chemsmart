@@ -580,3 +580,84 @@ error; the unused intermediate parameters are simply ignored by
 condition from the `raise` so the check fires whenever
 `not requires_qm2 and has_intermediate_params`, matching the error
 message's stated intent.
+
+---
+
+## 13. `GaussianCrestJob` empty/non-list `molecules` bypasses its own validation
+
+**File:** `chemsmart/jobs/gaussian/crest.py:81-82`
+**Test:** `tests/test_gaussian_crest_job_unit.py::TestGaussianCrestJobConstruction::test_empty_molecules_list_bypasses_validation_and_crashes`
+
+```python
+if not isinstance(molecules, list) and len(molecules) == 0:
+    raise ValueError("Molecules must be a list of Molecule objects.")
+```
+
+The guard uses `and` where the intent (per the error message, which
+complains about *either* condition) is clearly `or`. Consequences:
+
+* An **empty list** — `not isinstance([], list)` is `False` — makes the
+  whole condition `False`, so the intended `ValueError` never fires.
+  Execution instead reaches `molecules[0]` a few lines later and crashes
+  with an unrelated `IndexError: list index out of range`.
+* A **non-list, non-empty** iterable (e.g. a tuple) — `not isinstance(x,
+  list)` is `True` but `len(x) == 0` is `False` — also makes the
+  condition `False`, so passing a tuple instead of a list is silently
+  accepted rather than rejected as the message promises.
+
+**Reproduce:**
+```python
+from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+GaussianCrestJob(molecules=[])
+# IndexError: list index out of range  (not the intended ValueError)
+```
+
+**Suggested direction:** change `and` to `or`:
+`if not isinstance(molecules, list) or len(molecules) == 0:`.
+
+---
+
+## 14. `GaussianLinkJob.backup_files` is unreachable dead code
+
+**File:** `chemsmart/jobs/gaussian/link.py:183-193`
+**Test:** `tests/test_gaussian_link_job_unit.py::TestBackupFilesIsDeadCode::test_backup_files_is_not_the_method_invoked_by_backup`
+
+`Job.backup(**kwargs)` (the only call site for backups in the codebase)
+invokes the private, underscore-prefixed hook:
+
+```python
+# chemsmart/jobs/job.py:183-187
+def backup(self, **kwargs):
+    self._backup_files(**kwargs)
+```
+
+`GaussianLinkJob` defines an IRC-aware override named `backup_files`
+(no leading underscore) instead of `_backup_files`:
+
+```python
+# chemsmart/jobs/gaussian/link.py:183
+def backup_files(self, backup_chk=False):
+    if self._is_irc_job():
+        irc_jobs = self._get_irc_jobs()
+        for job in irc_jobs:
+            self.backup_file(job.inputfile)
+            ...
+```
+
+Because the method name doesn't match the hook `Job.backup()` actually
+calls, `GaussianLinkJob` silently inherits `GaussianJob._backup_files`
+unchanged — confirmed directly: `GaussianLinkJob._backup_files is
+GaussianJob._backup_files`. The IRC-subjob-aware backup logic in
+`backup_files` is never invoked by the normal job lifecycle; it only
+runs if a caller happens to spell out `job.backup_files(...)` explicitly
+instead of `job.backup(...)`.
+
+**Impact:** Calling `.backup()` on an IRC-mode `GaussianLinkJob` backs up
+only the link job's own (largely unused, since IRC link jobs delegate to
+forward/reverse subjobs) files, not the forward/reverse subjobs'
+`.com`/`.log`/`.chk` files that the override was clearly written to
+protect.
+
+**Suggested direction:** rename `backup_files` to `_backup_files` (and
+match the base class's `backup_chk` keyword-argument handling via
+`**kwargs` if needed for signature compatibility with `Job.backup`).
