@@ -297,14 +297,12 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         else:
             cores = None
             mem_gb = None
-        policy = "serial"
         logger.info(
-            "BatchJob %r: execution=%s, children=%s, policy=%s, "
+            "BatchJob %r: execution=%s, children=%s, policy=serial, "
             "cores=%s, mem_gb=%s",
             self.label,
             BatchExecutionMode.LOCAL_BATCH.value,
             total_jobs,
-            policy,
             cores,
             mem_gb,
         )
