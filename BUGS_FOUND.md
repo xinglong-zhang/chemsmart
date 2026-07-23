@@ -706,3 +706,46 @@ supplying `settings` explicitly hits this immediately.
 **Suggested direction:** default to `settings = settings or
 NCIPLOTJobSettings()` before validating/copying, matching the pattern
 other job classes use for optional settings.
+
+---
+
+## 16. `GaussianNCIJob.__init__` ignores its `jobrunner` argument
+
+**File:** `chemsmart/jobs/gaussian/nci.py:32-51`
+**Test:** `tests/test_gaussian_small_job_wrappers_unit.py::TestGaussianNCIJob::test_jobrunner_argument_is_ignored_and_class_used_instead`
+
+```python
+from chemsmart.jobs.runner import JobRunner
+
+class GaussianNCIJob(GaussianJob):
+    def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
+        super().__init__(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=JobRunner,   # <-- the class, not the `jobrunner` param
+            **kwargs,
+        )
+```
+
+`__init__` accepts a `jobrunner` parameter but never uses it — it passes
+the literal `JobRunner` class object to the parent constructor instead.
+Every `GaussianNCIJob` therefore gets `self.jobrunner is JobRunner` (the
+abstract base class itself, not an instance), regardless of what the
+caller supplied.
+
+**Reproduce:**
+```python
+job = GaussianNCIJob(molecule=mol, settings=settings, label="x", jobrunner=my_runner)
+job.jobrunner is my_runner   # False
+job.jobrunner is JobRunner   # True -- the class itself
+```
+
+**Impact:** Any caller-supplied jobrunner (e.g. a configured
+`GaussianJobRunner` instance from `JobRunner.from_job`) is silently
+discarded. Calling `.run()` on a `GaussianNCIJob` would invoke methods
+on the `JobRunner` class rather than a real runner instance, which is
+very unlikely to work correctly for actual job submission.
+
+**Suggested direction:** pass through the `jobrunner` parameter like
+every other Gaussian job class does: `jobrunner=jobrunner`.
