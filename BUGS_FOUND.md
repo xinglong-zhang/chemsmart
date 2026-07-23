@@ -494,3 +494,89 @@ re.compile(p).match("rxn_p1.log").groups()
 (e.g. `next(g for g in match.groups() if g is not None)`), or collapse
 the regex to a single alternative with an optional non-capturing
 `dias_` prefix so the point number always lands in the same group.
+
+---
+
+## 11. `GaussianUVVISJob.__init__` always crashes
+
+**File:** `chemsmart/jobs/gaussian/uvvis.py:59`
+**Test:** `tests/test_gaussian_uvvis_job_unit.py::TestGaussianUVVISJobInitCrash::test_init_always_raises_typeerror`
+
+```python
+def __init__(self, folder, atoms, settings):
+    super().__init__(folder=folder, atoms=atoms, settings=settings)
+```
+
+`GaussianUVVISJob` extends `GaussianJob`, whose `__init__` signature is
+`__init__(self, molecule, settings=None, label=None, jobrunner=None,
+**kwargs)` — it takes `molecule`, not `atoms`, and `molecule` has no
+default. Passing `atoms=` instead means `molecule` is never supplied, so
+every construction fails immediately:
+
+```
+TypeError: GaussianJob.__init__() missing 1 required positional argument: 'molecule'
+```
+
+**Impact:** `GaussianUVVISJob` cannot be instantiated at all today. It is
+already flagged `# TODO: incomplete job` in the source and is not wired
+into any CLI command (`grep` finds no caller outside
+`chemsmart/jobs/gaussian/runner.py`'s `TYPE` registry and the package
+`__init__.py` export), so this doesn't affect any currently-reachable
+user workflow — but the class is public API and crashes on the most
+basic possible use.
+
+**Suggested direction:** rename the `atoms` parameter/kwarg to
+`molecule` to match `GaussianJob.__init__`.
+
+---
+
+## 12. `ORCAQMMMJobSettings` intermediate-layer validation has a silent gap
+
+**File:** `chemsmart/jobs/orca/settings.py:1898-1965`
+**Test:** `tests/test_orca_qmmm_neb_settings_unit.py::TestQMMMIntermediateValidation::test_intermediate_params_for_non_qm2_jobtype_without_low_level_is_silently_accepted`
+
+`_validate_intermediate_parameters` is meant to reject intermediate-level
+(QM2) parameters supplied for a job type that doesn't use a QM2 layer
+(anything other than `QM/QM2` or `QM/QM2/MM`):
+
+```python
+if not requires_qm2 and has_intermediate_params:
+    provided_params = [...]
+    if self.low_level_method is not None:
+        raise ValueError(
+            f"Job type '{self.jobtype}' does not require QM2 (intermediate) layer, but "
+            ...
+        )
+```
+
+The `provided_params` list is built unconditionally but the `raise` is
+additionally gated on `self.low_level_method is not None`. So a plain
+`QMMM` job (or any non-QM2 job type) that specifies
+`intermediate_level_functional`/`intermediate_level_basis`/
+`intermediate_level_method` **without** also setting `low_level_method`
+passes construction silently, even though the error message's own logic
+("does not require QM2 layer, but intermediate-level parameters were
+provided") says it should be rejected.
+
+**Reproduce:**
+```python
+from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+s = ORCAQMMMJobSettings(
+    jobtype="QMMM",
+    intermediate_level_functional="B3LYP",
+    intermediate_level_basis="def2-SVP",
+    charge_total=0,
+    mult_total=1,
+)
+s.intermediate_level_functional  # "B3LYP" -- no error raised
+```
+
+**Impact:** A caller who misconfigures a `QMMM` job with a leftover/typo'd
+intermediate-level layer (but no `low_level_method`) gets no validation
+error; the unused intermediate parameters are simply ignored by
+`_get_level_of_theory_string`/`_write_qmmm_block` rather than flagged.
+
+**Suggested direction:** drop the `self.low_level_method is not None`
+condition from the `raise` so the check fires whenever
+`not requires_qm2 and has_intermediate_params`, matching the error
+message's stated intent.
