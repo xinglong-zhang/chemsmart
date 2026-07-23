@@ -1,0 +1,9 @@
+{
+    "makefile.configureOnOpen": false,
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+
+    "python.analysis.extraPaths": ["./"],
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.indexing": true
+}

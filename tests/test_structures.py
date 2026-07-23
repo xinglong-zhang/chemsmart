@@ -1315,6 +1315,158 @@ class TestMoleculeAdvanced:
         assert last_model.residue_numbers == [2]
 
 
+class TestDescriptors:
+    from dbstep import Dbstep
+    from rdkit.Chem import AllChem, Descriptors
+
+    @staticmethod
+    def _rdkit_embed_and_optimize(smiles, seed=1):
+        """Return an RDKit Mol with a single optimized 3D conformer (Hs added)."""
+        m = Chem.MolFromSmiles(smiles)
+        m = Chem.AddHs(m)
+        # fixed seed for deterministic embedding
+        params = Chem.AllChem.ETKDGv3()
+        params.randomSeed = seed
+        Chem.AllChem.EmbedMolecule(m, params)
+        Chem.AllChem.UFFOptimizeMolecule(m)
+        return m
+
+    def test_2d_descriptors_match_rdkit(self):
+        """2D Descriptors should match the result from rdkit"""
+
+        from rdkit.Chem import Descriptors
+
+        smiles = "CCO"  # Ethanol
+        rdkit_mol = self._rdkit_embed_and_optimize(smiles=smiles)
+
+        mol = Molecule.from_rdkit_mol(rdkit_mol)
+
+        desc2D = mol.twod_descriptors
+        expected = {
+            # Few important descriptors
+            "MolWt": Descriptors.MolWt(rdkit_mol),
+            "HeavyAtomMolWt": Descriptors.HeavyAtomMolWt(rdkit_mol),
+            "NumValenceElectrons": Descriptors.NumValenceElectrons(rdkit_mol),
+        }
+
+        assert isinstance(desc2D, dict)
+        for k, v in expected.items():
+            assert k in desc2D
+            assert isinstance(desc2D[k], (int, float))
+            assert np.isclose(desc2D[k], v)
+
+    def test_3d_descriptors_rotation_and_translation_invariance(self):
+        """3D descriptors should be invariant to rigid transforms (rotation+translation)."""
+        import math
+
+        smiles = "CCO"  # ethanol with a 3D conformer
+        rd_m = self._rdkit_embed_and_optimize(smiles, seed=42)
+        mol = Molecule.from_rdkit_mol(rd_m)
+        desc3_a = mol.threed_descriptors
+        assert isinstance(desc3_a, dict)
+        # basic value types
+        for k, v in desc3_a.items():
+            assert isinstance(v, (int, float))
+
+        # apply a random rigid rotation + translation to positions
+        pos = np.array(mol.positions, dtype=float)
+        # random rotation with deterministic seed
+        rng = np.random.RandomState(42)
+        theta = rng.rand() * 2 * math.pi
+        u = rng.randn(3)
+        u /= np.linalg.norm(u)
+        # Rodrigues' rotation formula
+        K = np.array([[0, -u[2], u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]])
+        R = np.eye(3) + math.sin(theta) * K + (1 - math.cos(theta)) * (K @ K)
+        pos_rot = (pos @ R.T) + np.array([3.2, -1.7, 0.5])  # translate
+
+        mol2 = Molecule(symbols=mol.symbols, positions=pos_rot)
+        desc3_b = mol2.threed_descriptors
+
+        # same keys and numerically close values (allow small numerical tolerance)
+        assert set(desc3_a.keys()) == set(desc3_b.keys())
+        for k in desc3_a:
+            assert np.isclose(
+                desc3_a[k], desc3_b[k], rtol=1e-5, atol=1e-5
+            ), f"3D descriptor {k} changed under rigid transform: {desc3_a[k]} vs {desc3_b[k]}"
+
+    def test_descriptors_repeatability(self):
+        """Repeated access returns identical results (no caching flakiness)."""
+        rd_m = self._rdkit_embed_and_optimize("c1ccccc1")  # benzene
+        mol = Molecule.from_rdkit_mol(rd_m)
+        d1 = mol.twod_descriptors
+        d2 = mol.twod_descriptors
+        assert d1 == d2
+        e1 = mol.threed_descriptors
+        e2 = mol.threed_descriptors
+        # compare floats within tolerance
+        assert set(e1.keys()) == set(e2.keys())
+        for k in e1:
+            assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
+
+    def test_sterimol_translation_rotation(self):
+        """Ensure the molecule rotate and translate properly"""
+        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1")
+        rdmol = Chem.AddHs(rdmol)
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1, atom2 = 0, 1
+        mol.calculate_sterimol_parameters(atom1, atom2)
+        pos = mol.sterimol_parameter["pos"]
+
+        # Test atom1 and atom2 on origin/z-axis
+        assert np.allclose(pos[atom1], np.array([0, 0, 0]))
+        assert np.isclose(pos[atom2][0], 0.0)
+        assert np.isclose(pos[atom2][1], 0.0)
+
+        # Test relative distance of bonds
+        old_pos = mol.positions
+        old_bond1 = np.linalg.norm(old_pos[0] - old_pos[1])
+        old_bond2 = np.linalg.norm(old_pos[1] - old_pos[2])
+        old_bond3 = np.linalg.norm(old_pos[2] - old_pos[10])
+        new_bond1 = np.linalg.norm(pos[0] - pos[1])
+        new_bond2 = np.linalg.norm(pos[1] - pos[2])
+        new_bond3 = np.linalg.norm(pos[2] - pos[10])
+        assert np.isclose(old_bond1, new_bond1)
+        assert np.isclose(old_bond2, new_bond2)
+        assert np.isclose(old_bond3, new_bond3)
+
+    def test_sterimol_close(self):
+        """Ensure the sterimol calculation fits the database data"""
+
+        atom1, atom2 = 0, 1
+        ATOL = 0.1
+
+        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol1 = Molecule.from_rdkit_mol(rdmol)
+        mol1.calculate_sterimol_parameters(atom1, atom2)  # Benzyl
+
+        sterimol1 = mol1.sterimol_parameter
+        assert np.isclose(sterimol1["B1"], 1.70, atol=ATOL)
+        assert np.isclose(sterimol1["B5"], 3.25, atol=ATOL)
+        assert np.isclose(sterimol1["L"], 6.47, atol=ATOL)
+
+        rdmol = self._rdkit_embed_and_optimize("C1(C)=COC=C1", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol2 = Molecule.from_rdkit_mol(rdmol)
+        mol2.calculate_sterimol_parameters(atom1, atom2)  # Furanyl
+
+        sterimol2 = mol2.sterimol_parameter
+        assert np.isclose(sterimol2["B1"], 1.70, atol=ATOL)
+        assert np.isclose(sterimol2["B5"], 3.29, atol=ATOL)
+        assert np.isclose(sterimol2["L"], 5.70, atol=ATOL)
+
+        rdmol = self._rdkit_embed_and_optimize("CC", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol3 = Molecule.from_rdkit_mol(rdmol)
+        mol3.calculate_sterimol_parameters(2, 0)  # Ethyl
+
+        sterimol3 = mol3.sterimol_parameter
+        assert np.isclose(sterimol3["B1"], 1.88, atol=ATOL)
+        assert np.isclose(sterimol3["B5"], 3.16, atol=ATOL)
+        assert np.isclose(sterimol3["L"], 4.59, atol=ATOL)
+
+
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
         """Test parsing of mixed coordinate formats."""

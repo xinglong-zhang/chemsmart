@@ -13,7 +13,7 @@ from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
-from rdkit.Chem import rdchem
+from rdkit.Chem import Descriptors, Descriptors3D, rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
@@ -81,6 +81,12 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    twod_descriptors: dict | None
+        The full set of 2D descriptors for a molecule.
+    threed_descriptors: dict | None
+        Descriptors derived from a molecule’s 3D structure
+    sterimol_parameter: dbstep.dbstep | None
+        A DBSTEP results object containing directional steric descriptors (L, Bmin, Bmax).
     """
 
     def __init__(
@@ -912,6 +918,105 @@ class Molecule:
             # for linear molecule, has only one rotational temperature
             return [result[-1]]
         return result
+
+    @cached_property
+    def sterimol_parameter(self):
+        return self._sterimol
+
+    def calculate_sterimol_parameters(self, atom1: int, atom2: int):
+        """Sterimol Parameters: B1, B5, and L"""
+        # Translate and Rotate to place atom1 and atom2 on z-axis
+        positions = self.positions
+        positions -= self.positions[atom1]
+
+        # Rodringues Rotation to rotate atom2 on z-axis
+        # v: rotational axis, z: z-axis, theta: rotational angle
+        z = np.array([0.0, 0.0, 1.0])
+        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+            raise ValueError(
+                "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
+            )
+        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        v = np.cross(norm_atom2, z)
+        if not np.isclose(np.linalg.norm(v), 0):
+            v /= np.linalg.norm(v)
+            cos_theta = np.dot(z, norm_atom2)
+            theta = np.arccos(np.clip(cos_theta, -1, 1))
+
+            k = np.array(
+                [[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]]
+            )
+
+            identity = np.eye(3)
+            r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
+            positions = positions @ r.T
+
+        elif positions[atom2][2] < 0:
+            # Atom2 on negative z, flip
+            positions *= -1
+
+        old_pos = positions
+
+        # Compute Sterimol
+        x, y, z = positions.T
+        pt = rdchem.GetPeriodicTable()
+        # VDW radii
+        pt = rdchem.GetPeriodicTable()
+        radii_list = []
+
+        radii_list = [
+            1.09 if symb == "H" else pt.GetRvdw(symb) for symb in self.symbols
+        ]
+        radii = np.array(radii_list)
+
+        # Mask the atom1
+        x = np.delete(x, atom1)
+        y = np.delete(y, atom1)
+        z = np.delete(z, atom1)
+        radii = np.delete(radii, atom1)
+        positions = np.delete(positions, obj=atom1, axis=0)
+
+        # Compute L
+        l = np.max(np.abs(z) + radii)
+
+        # Compute B5
+        radial_dist = np.hypot(x, y)
+        b5 = np.max(radial_dist + radii)
+        # Compute B1
+        # Create a normalised rotating vector on xy-plane and project every atom on it
+        b_vals = []
+        for j in range(361):
+            phi = 2 * np.pi / 360 * j
+            cos_phi, sin_phi = np.cos(phi), np.sin(phi)
+            # unit vector for projection
+            u = np.array([cos_phi, sin_phi, 0])
+            proj = positions @ u.T + radii
+            b_vals.append(np.max(proj))
+        b1 = np.min(b_vals)
+
+        self._sterimol = {
+            "L": l,
+            "B1": b1,
+            "B5": b5,
+            "pos": old_pos,
+        }
+
+    @cached_property
+    def twod_descriptors(self):
+        """A list of 2D descriptors"""
+        return Descriptors.CalcMolDescriptors(self.to_rdkit())
+
+    @cached_property
+    def threed_descriptors(self):
+        """
+        Calculate 3D descriptors for the molecule.
+
+        Returns:
+            dict: Dictionary containing 3D descriptors.
+        """
+        rdmol = self.to_rdkit()
+        self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
+        return self._threed_descriptors
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
