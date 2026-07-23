@@ -407,6 +407,46 @@ class TestBatchJobRefactor:
         mock_f1_batch.assert_not_called()
         mock_f2_batch.assert_not_called()
 
+    def test_dias_array_child_api_is_lazy(
+        self, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """``num_array_children`` and ``get_array_child_job`` must not bulk-build."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = GaussianDIASJob(
+            molecules=[molecule, molecule, molecule],
+            settings=settings,
+            label="dias_lazy",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+
+        assert job.num_array_children == 3
+        bulk_spy.assert_not_called()
+
+        child = job.get_array_child_job(1)
+        bulk_spy.assert_not_called()
+        assert child.label == "dias_lazy_p1_f1"
+
+        with pytest.raises(ValueError, match="out of range"):
+            job.get_array_child_job(99)
+
+        assert [j.label for j in job.get_array_child_jobs()] == [
+            job.get_array_child_job(i).label
+            for i in range(job.num_array_children)
+        ]
+
 
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""

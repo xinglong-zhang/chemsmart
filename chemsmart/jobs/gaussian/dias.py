@@ -214,6 +214,77 @@ class GaussianDIASJob(NestableJobMixin, GaussianJob):
         return filtered_molecules
 
     @property
+    def _num_sampled_points_per_phase(self) -> int:
+        """Number of sampled coordinate points in each DI-AS phase."""
+        mode = self.mode.lower()
+        if mode == "ts":
+            return 1
+        if mode == "irc":
+            return len(self._sample_molecules(self.all_molecules))
+        raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")
+
+    def _sampled_whole_molecule_at_point(self, point_index: int):
+        """Return the complete molecule for one sampled coordinate point."""
+        mode = self.mode.lower()
+        if mode == "irc":
+            return self._sample_molecules(self.all_molecules)[point_index]
+        if mode == "ts":
+            return self.all_molecules[-1]
+        raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")
+
+    def _build_molecule_job_at_point(self, point_index: int):
+        """Build one complete-molecule child at a sampled point."""
+        mode = self.mode.lower()
+        molecule = self._sampled_whole_molecule_at_point(point_index)
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}"
+        else:
+            label = f"{self.label}_p1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _build_fragment1_job_at_point(self, point_index: int):
+        """Build one fragment 1 child at a sampled point."""
+        mode = self.mode.lower()
+        molecule, _ = self._fragment_structure(
+            self._sampled_whole_molecule_at_point(point_index)
+        )
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}_f1"
+        else:
+            label = f"{self.label}_p1_f1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment1_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _build_fragment2_job_at_point(self, point_index: int):
+        """Build one fragment 2 child at a sampled point."""
+        mode = self.mode.lower()
+        _, molecule = self._fragment_structure(
+            self._sampled_whole_molecule_at_point(point_index)
+        )
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}_f2"
+        else:
+            label = f"{self.label}_p1_f2"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment2_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
     def fragment1_jobs(self):
         """
         Generate calculation jobs for fragment 1 structures.
@@ -352,13 +423,19 @@ class GaussianDIASJob(NestableJobMixin, GaussianJob):
             ]
 
     def get_array_child_job(self, index: int):
-        """Return one flattened DI-AS child at 0-based *index*."""
-        return self.get_array_child_jobs()[index]
+        """Build one flattened DI-AS child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        n = self._num_sampled_points_per_phase
+        if index < n:
+            return self._build_molecule_job_at_point(index)
+        if index < 2 * n:
+            return self._build_fragment1_job_at_point(index - n)
+        return self._build_fragment2_job_at_point(index - 2 * n)
 
     @property
     def num_array_children(self) -> int:
         """Flattened molecule + fragment child count."""
-        return len(self.get_array_child_jobs())
+        return 3 * self._num_sampled_points_per_phase
 
     def get_array_child_jobs(self):
         """Return molecule + fragment jobs for scheduler array submission.
