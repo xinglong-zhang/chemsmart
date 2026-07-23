@@ -752,11 +752,11 @@ class Server(RegistryMixin):
         if batch_label is not None:
             # Duplicate-check the batch container label, not every child.
             from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-            from chemsmart.jobs.orca.batch import OrcaBatchJob
+            from chemsmart.jobs.orca.batch import ORCABatchJob
 
             program = first_job.PROGRAM.lower() if first_job.PROGRAM else ""
             if program == "orca":
-                check_job = OrcaBatchJob(jobs=jobs, label=batch_label)
+                check_job = ORCABatchJob(jobs=jobs, label=batch_label)
             else:
                 check_job = GaussianBatchJob(jobs=jobs, label=batch_label)
             self._check_running_jobs(check_job)
@@ -792,9 +792,10 @@ class Server(RegistryMixin):
     ):
         """Submit a top-level ``BatchJob`` as a scheduler array.
 
-        Resolves per-task CLI args (optional *rewrite_cli* when children carry
-        ``batch_entry``), applies *policy* array concurrency throttle, then
-        delegates to ``submit_array_job``.
+        Resolves per-task CLI args from *rewrite_cli* or
+        ``batch_job.rewrite_cli`` when children carry ``batch_entry``, applies
+        *policy* array concurrency throttle, then delegates to
+        ``submit_array_job``.
 
         Args:
             batch_job: Top-level ``BatchJob`` whose children become array tasks.
@@ -803,7 +804,7 @@ class Server(RegistryMixin):
             test: If True, write scripts only (do not queue).
             cli_args: Shared reconstructed ``chemsmart run`` CLI tokens.
             rewrite_cli: Optional callback to rewrite shared CLI for each
-                child ``batch_entry`` (homogeneous multi-molecule or pKa).
+                child ``batch_entry``. Defaults to ``batch_job.rewrite_cli``.
             **kwargs: Extra submitter construction parameters.
         """
         from chemsmart.jobs.batch import (
@@ -825,15 +826,19 @@ class Server(RegistryMixin):
             policy = SchedulerArrayPolicy()
 
         shared_cli_args = list(cli_args) if cli_args is not None else []
+        active_rewrite = (
+            rewrite_cli if rewrite_cli is not None else batch_job.rewrite_cli
+        )
         has_batch_entries = any(
             get_job_batch_entry(job) is not None for job in batch_job.jobs
         )
-        if has_batch_entries and rewrite_cli is None:
+        if has_batch_entries and active_rewrite is None:
             raise ValueError(
                 "BatchJob children have batch_entry but no "
                 "rewrite_cli callback was provided for per-task CLI args."
             )
-        active_rewrite = rewrite_cli if has_batch_entries else None
+        if not has_batch_entries:
+            active_rewrite = None
         array_cli_args = resolve_array_cli_args(
             batch_job.jobs,
             shared_cli_args,

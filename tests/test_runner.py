@@ -249,7 +249,7 @@ class TestBatchJobRefactor:
         assert "later_job" not in str(exc_info.value)
         fail_job.run.assert_called_once()
         later_job.run.assert_not_called()
-        assert batch._jobs_not_started == 1
+        assert len(batch._last_batch_outcomes) == 1
 
     def test_parallel_request_falls_back_to_serial(self, pbs_server):
         """In-process parallel is disabled; children run serially."""

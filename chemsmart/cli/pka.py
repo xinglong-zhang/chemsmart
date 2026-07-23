@@ -783,7 +783,8 @@ def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
 
     When more than one pKa child job is created, the returned batch container
     is submitted and executed as one orchestration unit (matching Gaussian/ORCA
-    multi-target fan-out).
+    multi-target fan-out). Multi-job batches carry ``rewrite_cli`` for
+    per-task array runscript rewriting.
     """
     if not jobs:
         raise ValueError("No pKa jobs to submit.")
@@ -793,6 +794,7 @@ def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
         jobs=jobs,
         label=label,
         jobrunner=jobrunner,
+        rewrite_cli=rewrite_pka_batch_cli_args,
     )
 
 

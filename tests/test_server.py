@@ -515,13 +515,16 @@ class TestSubmitBatch:
         set_job_batch_entry(
             children[1], {"filepath": "mols.xyz", "molecule_index": 2}
         )
-        batch = GaussianBatchJob(jobs=children, label="mols_batch")
+        batch = GaussianBatchJob(
+            jobs=children,
+            label="mols_batch",
+            rewrite_cli=rewrite_batch_cli_args,
+        )
         server.submit_batch(
             batch,
             policy=SchedulerArrayPolicy(no_run_in_parallel=True),
             test=True,
             cli_args=["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"],
-            rewrite_cli=rewrite_batch_cli_args,
         )
 
         assert captured["batch_label"] == "mols_batch"

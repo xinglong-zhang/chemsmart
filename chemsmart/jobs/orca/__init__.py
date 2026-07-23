@@ -5,7 +5,7 @@ This module provides ORCA job functionality including various job types,
 settings, and runners for ORCA quantum chemistry calculations.
 """
 
-from .batch import ORCABatchJob, OrcaBatchJob
+from .batch import ORCABatchJob
 from .irc import ORCAIRCJob
 from .job import ORCAGeneralJob, ORCAInpJob, ORCAJob
 from .modred import ORCAModredJob
@@ -24,7 +24,6 @@ jobs = ORCAJob.subclasses()
 __all__ = [
     "ORCAOptJob",
     "ORCAIRCJob",
-    "OrcaBatchJob",
     "ORCABatchJob",
     "ORCAJob",
     "ORCAInpJob",

@@ -11,18 +11,15 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import (
     BatchJob,
-    get_job_batch_entry,
     get_nestable_array_children,
-    rewrite_batch_cli_args,
     warn_legacy_job_list,
 )
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.orca.batch import OrcaBatchJob
+from chemsmart.jobs.orca.batch import ORCABatchJob
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import SchedulerArrayPolicy, Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -208,7 +205,7 @@ def process_pipeline(ctx, *args, **kwargs):
             )
 
         program = (parent_job.PROGRAM or "").lower()
-        batch_cls = OrcaBatchJob if program == "orca" else GaussianBatchJob
+        batch_cls = ORCABatchJob if program == "orca" else GaussianBatchJob
 
         batch_job = batch_cls(
             jobs=children,
@@ -228,7 +225,6 @@ def process_pipeline(ctx, *args, **kwargs):
             policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
             test=kwargs.get("test"),
             cli_args=shared_cli_args,
-            rewrite_cli=None,
         )
 
     def _process_batch_job(batch_job):
@@ -237,24 +233,12 @@ def process_pipeline(ctx, *args, **kwargs):
             logger.warning('Not submitting as "test" flag specified.')
 
         shared_cli_args = _reconstruct_cli_args(ctx)
-        rewrite_cli = None
-        entries = [get_job_batch_entry(job) for job in batch_job.jobs]
-        if any(entry is not None for entry in entries):
-            if any(
-                entry is not None and "proton_index" in entry
-                for entry in entries
-            ):
-                rewrite_cli = rewrite_pka_batch_cli_args
-            else:
-                rewrite_cli = rewrite_batch_cli_args
-
         server = Server.from_servername(kwargs.get("server"))
         server.submit_batch(
             batch_job,
             policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
             test=kwargs.get("test"),
             cli_args=shared_cli_args,
-            rewrite_cli=rewrite_cli,
         )
 
     ctx = _clean_command(ctx)

@@ -120,12 +120,13 @@ def scan(
                     **kwargs,
                 )
                 jobs.append(job)
-            prepare_batch_jobs(
+            rewrite_cli = prepare_batch_jobs(
                 jobs, molecule_indices, filepath=ctx.obj.get("filename")
             )
             return GaussianBatchJob(
                 jobs=jobs,
                 label=f"{label}_batch",
+                rewrite_cli=rewrite_cli,
             )
         else:
             # Single molecule case

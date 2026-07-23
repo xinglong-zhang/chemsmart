@@ -10,7 +10,7 @@ import logging
 import numpy as np
 
 from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
-from chemsmart.jobs.orca.batch import OrcaBatchJob
+from chemsmart.jobs.orca.batch import ORCABatchJob
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 
 logger = logging.getLogger(__name__)
@@ -154,14 +154,14 @@ class ORCAQRCJob(ORCAJob):
 
     def _run_both_jobs(self):
         """
-        Execute both QRC jobs (forward and reverse) via ``OrcaBatchJob``.
+        Execute both QRC jobs (forward and reverse) via ``ORCABatchJob``.
 
         Forward and reverse children run serially, each with the parent
         jobrunner's full resources. Failure policy is run-all-then-raise.
         """
-        logger.info("Running QRC jobs using OrcaBatchJob")
+        logger.info("Running QRC jobs using ORCABatchJob")
         run_child_jobs_as_batch(
-            batch_cls=OrcaBatchJob,
+            batch_cls=ORCABatchJob,
             jobs=self.both_qrc_jobs,
             parent=self,
             label_suffix="_batch",

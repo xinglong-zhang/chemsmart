@@ -66,12 +66,19 @@ def test_rewrite_pka_batch_cli_args_builds_on_shared_rewrite():
 
 def test_prepare_batch_jobs_attaches_entries():
     jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
-    prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
+    rewrite_cli = prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
+    assert rewrite_cli is rewrite_batch_cli_args
     assert get_job_batch_entry(jobs[0]) == {
         "filepath": "mols.xyz",
         "molecule_index": 1,
     }
     assert get_job_batch_entry(jobs[1])["molecule_index"] == 2
+
+
+def test_prepare_batch_jobs_returns_none_for_single_job():
+    jobs = [SimpleNamespace(label="a")]
+    assert prepare_batch_jobs(jobs, [1], filepath="mols.xyz") is None
+    assert get_job_batch_entry(jobs[0]) is None
 
 
 def test_resolve_array_cli_args_requires_rewrite_cli_when_entries_present():

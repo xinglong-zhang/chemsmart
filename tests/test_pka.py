@@ -1850,14 +1850,14 @@ class TestPKa:
         captured = {"runs": []}
 
         from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-        from chemsmart.jobs.orca.batch import OrcaBatchJob
+        from chemsmart.jobs.orca.batch import ORCABatchJob
 
         def _fake_batch_run(self, **kwargs):
             for child in self.jobs:
                 captured["runs"].append(child.label)
 
         monkeypatch.setattr(GaussianBatchJob, "run", _fake_batch_run)
-        monkeypatch.setattr(OrcaBatchJob, "run", _fake_batch_run)
+        monkeypatch.setattr(ORCABatchJob, "run", _fake_batch_run)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1905,14 +1905,14 @@ class TestPKa:
         captured = {"runs": []}
 
         from chemsmart.jobs.gaussian.batch import GaussianBatchJob
-        from chemsmart.jobs.orca.batch import OrcaBatchJob
+        from chemsmart.jobs.orca.batch import ORCABatchJob
 
         def _fake_batch_run(self, **kwargs):
             for child in self.jobs:
                 captured["runs"].append(child.label)
 
         monkeypatch.setattr(GaussianBatchJob, "run", _fake_batch_run)
-        monkeypatch.setattr(OrcaBatchJob, "run", _fake_batch_run)
+        monkeypatch.setattr(ORCABatchJob, "run", _fake_batch_run)
 
         runner = CliRunner()
         result = runner.invoke(

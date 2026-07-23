@@ -37,7 +37,7 @@ from chemsmart.cli.pka import (
 )
 from chemsmart.io.file import PKaCDXFile
 from chemsmart.jobs.batch import set_job_batch_entry
-from chemsmart.jobs.orca.batch import OrcaBatchJob
+from chemsmart.jobs.orca.batch import ORCABatchJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.utils.cli import MyCommand, MyGroup
 
@@ -231,7 +231,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
         ]
         return wrap_pka_jobs_in_batch(
             jobs,
-            OrcaBatchJob,
+            ORCABatchJob,
             jobrunner,
             label=f"{base_label}_batch",
         )
@@ -410,7 +410,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
     table_label = Path(input_table_path).stem or "pka_batch"
     return wrap_pka_jobs_in_batch(
         jobs,
-        OrcaBatchJob,
+        ORCABatchJob,
         jobrunner,
         label=f"{table_label}_pka_batch",
     )
@@ -478,7 +478,7 @@ def _create_orca_pka_jobs_from_molecules(
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from multi-fragment CDXML")
     return wrap_pka_jobs_in_batch(
         jobs,
-        OrcaBatchJob,
+        ORCABatchJob,
         jobrunner,
         label=f"{base_name}_pka_batch",
     )

@@ -17,7 +17,7 @@ sequentially via ``run_phase_jobs``. The CLI ``--run-in-parallel`` flag does
 not submit HA and A- optimizations concurrently inside one pKa job.
 
 Parallelism applies only across separate pKa target jobs (for example
-multi-molecule ``OrcaBatchJob`` fan-out), not within the thermodynamic-cycle
+multi-molecule ``ORCABatchJob`` fan-out), not within the thermodynamic-cycle
 sub-jobs of a single molecule.
 """
 

@@ -348,12 +348,13 @@ def irc(
                 )
             )
 
-        prepare_batch_jobs(
+        rewrite_cli = prepare_batch_jobs(
             jobs, molecule_indices, filepath=ctx.obj.get("filename")
         )
         return ORCABatchJob(
             jobs=jobs,
             label=f"{label}_batch",
+            rewrite_cli=rewrite_cli,
         )
 
     molecule = molecules[-1]

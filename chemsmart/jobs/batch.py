@@ -35,6 +35,10 @@ from chemsmart.utils.mixins import RegistryMeta
 logger = logging.getLogger(__name__)
 
 BatchJobT = TypeVar("BatchJobT", bound="BatchJob")
+RewriteCliFn = Callable[
+    [Sequence[str], Optional[Mapping[str, Any]]],
+    list[str],
+]
 
 
 class BatchExecutionMode(str, Enum):
@@ -146,6 +150,8 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     unsuccessful outcome.
     ``nested_serial`` marks crest/QRC/dias/traj nested batches for
     ``policy=serial_nested`` logging.
+    ``rewrite_cli`` is the optional per-task CLI rewriter used by
+    ``chemsmart sub`` when submitting this batch as a scheduler array.
     """
 
     PROGRAM: Optional[str] = None
@@ -159,6 +165,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         label: str = "batch_job",
         jobrunner: Any = None,
         nested_serial: bool = False,
+        rewrite_cli: Optional[RewriteCliFn] = None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -171,12 +178,11 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self.fail_fast = bool(fail_fast)
         self.write_outcome_logs = bool(write_outcome_logs)
         self.nested_serial = bool(nested_serial)
+        self.rewrite_cli = rewrite_cli
         self._last_batch_outcomes: list[dict[str, Any]] = []
-        self._jobs_not_started: int = 0
 
     def run(self, **kwargs: Any) -> None:
         """Run this batch in ``local_batch`` or ``array_task`` mode."""
-        self._jobs_not_started = 0
         mode = resolve_batch_execution_mode()
         if mode is BatchExecutionMode.ARRAY_TASK:
             self._run_array_task(**kwargs)
@@ -298,8 +304,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         """Submit child jobs one-by-one.
 
         When ``fail_fast`` is enabled, stop after the first unsuccessful
-        outcome. Jobs not started are omitted from the returned outcomes and
-        counted via ``_jobs_not_started``.
+        outcome. Jobs not started are omitted from the returned outcomes;
+        ``_raise_if_failures`` derives the not-started count from
+        ``total_jobs - len(outcomes)``.
         """
         outcomes: list[dict[str, Any]] = []
         for index, job in enumerate(jobs):
@@ -307,7 +314,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             outcomes.append(outcome)
             if self.fail_fast and not outcome["success"]:
                 remaining = len(jobs) - (index + 1)
-                self._jobs_not_started += remaining
                 if remaining:
                     logger.warning(
                         "fail_fast enabled: stopping serial batch after "
@@ -525,11 +531,6 @@ def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
 # Submit-time batch_entry / per-task CLI helpers
 # ---------------------------------------------------------------------------
 
-RewriteCliFn = Callable[
-    [Sequence[str], Optional[Mapping[str, Any]]],
-    list[str],
-]
-
 _FILENAME_OPTIONS = frozenset({"-f", "--filename"})
 _INDEX_OPTIONS = frozenset({"-i", "--index", "--si", "--structure-index"})
 _PROGRAM_TOKENS = frozenset({"gaussian", "orca", "run", "sub"})
@@ -570,14 +571,17 @@ def prepare_batch_jobs(
     molecule_indices: Optional[Sequence[int]],
     *,
     filepath: Optional[str] = None,
-) -> None:
+) -> Optional[RewriteCliFn]:
     """Attach per-task entries that narrow shared multi-molecule CLI args.
 
     Used by homogeneous fan-out (opt/sp/ts/…). Each entry keeps the shared
     ``filepath`` and a single ``molecule_index`` for ``-i`` narrowing.
+
+    Returns ``rewrite_batch_cli_args`` when entries were attached, else
+    ``None``. Callers should pass the return value as ``BatchJob.rewrite_cli``.
     """
     if molecule_indices is None or len(jobs) <= 1:
-        return
+        return None
     paired_jobs: list[Any] = []
     entries: list[dict[str, Any]] = []
     for job, index in zip(jobs, molecule_indices):
@@ -587,6 +591,7 @@ def prepare_batch_jobs(
         paired_jobs.append(job)
         entries.append(entry)
     attach_batch_entries(paired_jobs, entries)
+    return rewrite_batch_cli_args
 
 
 def drop_cli_option(

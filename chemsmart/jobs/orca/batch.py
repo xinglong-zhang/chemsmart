@@ -3,10 +3,7 @@
 from chemsmart.jobs.batch import BatchJob
 
 
-class OrcaBatchJob(BatchJob):
+class ORCABatchJob(BatchJob):
     """Batch controller for a collection of ORCA child jobs."""
 
     PROGRAM = "orca"
-
-
-ORCABatchJob = OrcaBatchJob
