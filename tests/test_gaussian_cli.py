@@ -821,7 +821,7 @@ class TestGaussianRunSubNoParallelIntegration:
                     "run",
                     "-s",
                     "PBS",
-                    "-N",
+                    "-M",
                     "1",
                     "--no-run-in-parallel",
                     "--no-scratch",
@@ -884,7 +884,7 @@ class TestGaussianRunSubNoParallelIntegration:
                     "sub",
                     "-s",
                     "PBS",
-                    "-N",
+                    "-M",
                     "1",
                     "--no-run-in-parallel",
                     "--test",
@@ -954,7 +954,7 @@ class TestGaussianRunSubNoParallelIntegration:
                     "sub",
                     "-s",
                     "PBS",
-                    "-N",
+                    "-M",
                     "4",
                     "--test",
                     "gaussian",
@@ -977,7 +977,7 @@ class TestGaussianRunSubNoParallelIntegration:
         assert result.exit_code == 0, result.output
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
-        # -N 4 ignored for throttle when serial default applies
+        # -M 4 ignored for throttle when serial default applies
         assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
 
     def test_sub_run_in_parallel_uses_array_concurrency_throttle(
@@ -985,7 +985,7 @@ class TestGaussianRunSubNoParallelIntegration:
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """`sub --run-in-parallel -N 2` throttles array concurrency to 2."""
+        """`sub --run-in-parallel -M 2` throttles to 2."""
         from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 
         runner = CliRunner()
@@ -1017,7 +1017,7 @@ class TestGaussianRunSubNoParallelIntegration:
                     "sub",
                     "-s",
                     "PBS",
-                    "-N",
+                    "-M",
                     "2",
                     "--run-in-parallel",
                     "--test",
@@ -1048,7 +1048,7 @@ class TestGaussianRunSubNoParallelIntegration:
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """Parallel batch without -N must not use num_cores as array throttle."""
+        """Parallel batch without -M must not use num_cores."""
         from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 
         runner = CliRunner()

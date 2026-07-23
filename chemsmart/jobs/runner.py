@@ -140,7 +140,7 @@ def get_configured_array_concurrency_limit(
 ) -> Optional[int]:
     """Return optional scheduler array throttle from env or server policy.
 
-    Used for ``chemsmart sub --run-in-parallel`` when ``-N`` is not passed.
+    Used for ``chemsmart sub --run-in-parallel`` when ``-M`` / ``--max-tasks`` is not passed.
     Does not fall back to ``num_cores`` (cores per task and array concurrency
     are unrelated).
 
@@ -278,7 +278,7 @@ class JobRunner(RegistryMixin):
         else:
             self.num_cores = self.server.num_cores
 
-        # CLI -N/--array-concurrency only; never overrides server.num_nodes.
+        # CLI -M/--max-tasks only; never overrides server.num_nodes.
         self.cli_array_concurrency = array_concurrency
         if num_nodes is not None:
             self.num_nodes = num_nodes

@@ -26,7 +26,7 @@ class SchedulerArrayPolicy:
     PBS ``#PBS -J 1-N%M``, LSF ``#BSUB -J name[1-N%M]``):
 
     - ``no_run_in_parallel`` → ``M=1``
-    - else explicit CLI ``-N`` / ``--array-concurrency`` when set and positive
+    - else explicit CLI ``-M`` / ``--max-tasks`` when set and positive
     - else ``min(num_jobs, max_concurrent)`` from env/server max submitters
     - else all tasks at once (``M=num_jobs``)
     """

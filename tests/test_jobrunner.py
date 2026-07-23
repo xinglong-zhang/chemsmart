@@ -1,8 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
+import click
+import pytest
 from click.testing import CliRunner
 
+from chemsmart.cli import jobrunner as jobrunner_cli
 from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
 from chemsmart.jobs.gaussian.runner import (
@@ -461,8 +465,123 @@ class TestParallelFlagHelpText:
         result = CliRunner().invoke(sub, ["--help"])
         assert result.exit_code == 0
         help_text = " ".join(result.output.split())
-        assert (
-            "Max concurrent scheduler array tasks when submitting a batch"
-            in help_text
-        )
+        assert "cap concurrency with -M/--max-tasks" in help_text
         assert "Batch children always run serially" not in help_text
+
+
+class TestMaxTasksCliOptions:
+    @pytest.fixture(autouse=True)
+    def _reset_deprecated_max_tasks_warnings(self):
+        jobrunner_cli._deprecated_max_tasks_warnings_emitted.clear()
+
+    @staticmethod
+    def _ctx_with_sources(**sources):
+        ctx = Mock(spec=click.Context)
+
+        def _source(name):
+            if name in sources and sources[name] is not None:
+                return click.core.ParameterSource.COMMANDLINE
+            return click.core.ParameterSource.DEFAULT
+
+        ctx.get_parameter_source.side_effect = _source
+        return ctx
+
+    def test_merge_uses_primary_max_tasks(self):
+        ctx = self._ctx_with_sources(array_concurrency=2)
+        merged = jobrunner_cli.merge_max_tasks_options(ctx, 2, None, None)
+        assert merged == 2
+
+    def test_merge_uses_num_nodes_alias_value(self):
+        ctx = self._ctx_with_sources(max_tasks_num_nodes_alias=3)
+        merged = jobrunner_cli.merge_max_tasks_options(ctx, None, None, 3)
+        assert merged == 3
+
+    def test_merge_uses_n_alias_value(self):
+        ctx = self._ctx_with_sources(max_tasks_n_alias=4)
+        merged = jobrunner_cli.merge_max_tasks_options(ctx, None, 4, None)
+        assert merged == 4
+
+    def test_merge_rejects_conflicting_primary_and_alias_values(self):
+        ctx = self._ctx_with_sources(
+            array_concurrency=2,
+            max_tasks_num_nodes_alias=3,
+        )
+        with pytest.raises(click.UsageError, match="Conflicting max-task"):
+            jobrunner_cli.merge_max_tasks_options(ctx, 2, None, 3)
+
+    def test_warns_once_for_num_nodes_alias(self, caplog):
+        caplog.set_level("WARNING")
+        ctx = self._ctx_with_sources(max_tasks_num_nodes_alias=2)
+
+        jobrunner_cli.merge_max_tasks_options(ctx, None, None, 2)
+        jobrunner_cli.merge_max_tasks_options(ctx, None, None, 2)
+
+        matches = [
+            record
+            for record in caplog.records
+            if "deprecated" in record.message.lower()
+            or "server.num_nodes" in record.message
+        ]
+        assert len(matches) == 1
+
+    def test_warns_once_for_n_alias(self, caplog):
+        caplog.set_level("WARNING")
+        ctx = self._ctx_with_sources(max_tasks_n_alias=2)
+
+        jobrunner_cli.merge_max_tasks_options(ctx, None, 2, None)
+        jobrunner_cli.merge_max_tasks_options(ctx, None, 2, None)
+
+        matches = [
+            record
+            for record in caplog.records
+            if "-N is deprecated" in record.message
+        ]
+        assert len(matches) == 1
+
+    def test_sub_cli_accepts_m_short_flag_without_warning(self, caplog):
+        caplog.set_level("WARNING")
+        result = CliRunner().invoke(
+            sub,
+            ["-M", "2", "gaussian", "--help"],
+        )
+        assert result.exit_code == 0
+        assert not any(
+            "deprecated" in record.message.lower() for record in caplog.records
+        )
+
+    def test_sub_cli_accepts_max_tasks_long_form_without_warning(self, caplog):
+        caplog.set_level("WARNING")
+        result = CliRunner().invoke(
+            sub,
+            ["--max-tasks", "2", "gaussian", "--help"],
+        )
+        assert result.exit_code == 0
+        assert not any(
+            "deprecated" in record.message.lower() for record in caplog.records
+        )
+
+    def test_sub_cli_accepts_max_concurrency_alias_without_warning(
+        self, caplog
+    ):
+        caplog.set_level("WARNING")
+        result = CliRunner().invoke(
+            sub,
+            ["--max-concurrency", "2", "gaussian", "--help"],
+        )
+        assert result.exit_code == 0
+        assert not any(
+            "deprecated" in record.message.lower() for record in caplog.records
+        )
+
+    def test_sub_cli_warns_when_num_nodes_alias_used(self, caplog):
+        caplog.set_level("WARNING")
+        result = CliRunner().invoke(
+            sub,
+            ["--num-nodes", "2", "gaussian", "--help"],
+        )
+        assert result.exit_code == 0
+        assert any(
+            "deprecated" in record.message.lower()
+            or "server.num_nodes" in record.message
+            for record in caplog.records
+        )
