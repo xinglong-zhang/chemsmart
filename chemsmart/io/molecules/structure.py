@@ -903,53 +903,94 @@ class Molecule:
             for i in range(3)
         ]
 
-    @property
-    def sterimol_parameters(self):
-        """dbstep.dbstep | None: Holds the most recently computed DBSTEP results object,
-        or None if no compute_sterimol_parameters() has been run yet."""
-        return getattr(self, "_sterimol_parameters", None)
+    @cached_property
+    def sterimol_parameter(self):
+        return self._sterimol
 
-    def compute_sterimol_parameters(
-        self, atom1: int, atom2: int, grid_measure: bool = False
-    ):
-        """Calculate sterimol parameters.
-        If grid_measure=True, a grid-based (voxelized) approach is used instead of the classical analytical method.
-        This is ideal for processing quantum-mechanical electron density surfaces,
-        though it is more computationally intensive.
+    def calculate_sterimol_parameters(self, atom1: int, atom2: int):
+        """Sterimol Parameters: B1, B5, and L"""
+        # Translate and Rotate to place atom1 and atom2 on z-axis
+        positions = self.positions
+        positions -= self.positions[atom1]
 
-        Args:
-            atom1 (int): The index of the anchor atom (1-based depending on framework).
-            atom2 (int): The index of the directional atom establishing the measurement axis.
-            grid_measure (bool): Toggle between classical analytical or cubic grid-based measurements.
+        # Rodringues Rotation to rotate atom2 on z-axis
+        # v: rotational axis, z: z-axis, theta: rotational angle
+        z = np.array([0.0, 0.0, 1.0])
+        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+            raise ValueError(
+                "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
+            )
+        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        v = np.cross(norm_atom2, z)
+        if not np.isclose(np.linalg.norm(v), 0):
+            v /= np.linalg.norm(v)
+            cos_theta = np.dot(z, norm_atom2)
+            theta = np.arccos(np.clip(cos_theta, -1, 1))
 
-        Returns:
-            dbstep.dbstep: A DBSTEP object containing the computed L, Bmin, and Bmax parameters.
-        """
+            k = np.array(
+                [[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]]
+            )
 
-        import dbstep.Dbstep as db
+            identity = np.eye(3)
+            r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
+            positions = positions @ r.T
 
-        mol = self.to_rdkit()
+        elif positions[atom2][2] < 0:
+            # Atom2 on negative z, flip
+            positions *= -1
 
-        # Saves to the instance attribute which is immediately visible to the @property
-        self._sterimol_parameters = db.dbstep(
-            mol,
-            atom1=atom1,
-            atom2=atom2,
-            sterimol=True,
-            grid_measure=grid_measure,
-        )
-        return self._sterimol_parameters
+        old_pos = positions
 
-    @property
+        # Compute Sterimol
+        x, y, z = positions.T
+        pt = rdchem.GetPeriodicTable()
+        # VDW radii
+        pt = rdchem.GetPeriodicTable()
+        radii_list = []
+
+        radii_list = [
+            1.09 if symb == "H" else pt.GetRvdw(symb) for symb in self.symbols
+        ]
+        radii = np.array(radii_list)
+
+        # Mask the atom1
+        x = np.delete(x, atom1)
+        y = np.delete(y, atom1)
+        z = np.delete(z, atom1)
+        radii = np.delete(radii, atom1)
+        positions = np.delete(positions, obj=atom1, axis=0)
+
+        # Compute L
+        l = np.max(np.abs(z) + radii)
+
+        # Compute B5
+        radial_dist = np.hypot(x, y)
+        b5 = np.max(radial_dist + radii)
+        # Compute B1
+        # Create a normalised rotating vector on xy-plane and project every atom on it
+        b_vals = []
+        for j in range(361):
+            phi = 2 * np.pi / 360 * j
+            cos_phi, sin_phi = np.cos(phi), np.sin(phi)
+            # unit vector for projection
+            u = np.array([cos_phi, sin_phi, 0])
+            proj = positions @ u.T + radii
+            b_vals.append(np.max(proj))
+        b1 = np.min(b_vals)
+
+        self._sterimol = {
+            "L": l,
+            "B1": b1,
+            "B5": b5,
+            "pos": old_pos,
+        }
+
+    @cached_property
     def twod_descriptors(self):
         """A list of 2D descriptors"""
-        if getattr(self, "_twod_descriptors", None) is None:
-            self._twod_descriptors = Descriptors.CalcMolDescriptors(
-                self.to_rdkit()
-            )
-        return self._twod_descriptors
+        return Descriptors.CalcMolDescriptors(self.to_rdkit())
 
-    @property
+    @cached_property
     def threed_descriptors(self):
         """
         Calculate 3D descriptors for the molecule.
@@ -957,20 +998,7 @@ class Molecule:
         Returns:
             dict: Dictionary containing 3D descriptors.
         """
-        if getattr(self, "_threed_descriptors", None) is None:
-            self.calculate_3d_descriptors()
-        return self._threed_descriptors
-
-    def calculate_3d_descriptors(self):
-        """
-        Calculate 3D descriptors for the molecule.
-
-        Returns:
-            dict: Dictionary containing 3D descriptors.
-        """
-        rdmol = self.to_rdkit(
-            add_bonds=True, bond_cutoff_buffer=0.1, adjust_H=True
-        )
+        rdmol = self.to_rdkit()
         self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
         return self._threed_descriptors
 

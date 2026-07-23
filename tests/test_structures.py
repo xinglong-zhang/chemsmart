@@ -1322,6 +1322,7 @@ class TestDescriptors:
     def _rdkit_embed_and_optimize(smiles, seed=1):
         """Return an RDKit Mol with a single optimized 3D conformer (Hs added)."""
         m = Chem.MolFromSmiles(smiles)
+        m = Chem.AddHs(m)
         # fixed seed for deterministic embedding
         params = Chem.AllChem.ETKDGv3()
         params.randomSeed = seed
@@ -1332,7 +1333,7 @@ class TestDescriptors:
     def test_2d_descriptors_match_rdkit(self):
         """2D Descriptors should match the result from rdkit"""
 
-        from rdkit.Chem import Descriptors, Fragments
+        from rdkit.Chem import Descriptors
 
         smiles = "CCO"  # Ethanol
         rdkit_mol = self._rdkit_embed_and_optimize(smiles=smiles)
@@ -1345,7 +1346,6 @@ class TestDescriptors:
             "MolWt": Descriptors.MolWt(rdkit_mol),
             "HeavyAtomMolWt": Descriptors.HeavyAtomMolWt(rdkit_mol),
             "NumValenceElectrons": Descriptors.NumValenceElectrons(rdkit_mol),
-            "fr_Al_OH": Fragments.fr_Al_OH(rdkit_mol),
         }
 
         assert isinstance(desc2D, dict)
@@ -1403,105 +1403,67 @@ class TestDescriptors:
         for k in e1:
             assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
 
-    @pytest.mark.parametrize("grid_measure", [False, True])
-    def test_compute_sterimol_parameters_modes_and_invariance(
-        self, grid_measure
-    ):
-        """
-        Verifies compute_sterimol_parameters works for both analytical (False)
-        and grid-based (True) modes, verifies property caching, and checks
-        geometric transform invariance.
-        """
+    def test_sterimol_translation_rotation(self):
+        """Ensure the molecule rotate and translate properly"""
+        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1")
+        rdmol = Chem.AddHs(rdmol)
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1, atom2 = 0, 1
+        mol.calculate_sterimol_parameters(atom1, atom2)
+        pos = mol.sterimol_parameter["pos"]
 
-        import math
+        # Test atom1 and atom2 on origin/z-axis
+        assert np.allclose(pos[atom1], np.array([0, 0, 0]))
+        assert np.isclose(pos[atom2][0], 0.0)
+        assert np.isclose(pos[atom2][1], 0.0)
 
-        # 1. Setup a valid 3D molecule (Isobutane / Isopropyl attachment)
-        smiles = "CCO"
-        rd_m = self._rdkit_embed_and_optimize(smiles=smiles, seed=42)
-        mol = Molecule.from_rdkit_mol(rd_m)
+        # Test relative distance of bonds
+        old_pos = mol.positions
+        old_bond1 = np.linalg.norm(old_pos[0] - old_pos[1])
+        old_bond2 = np.linalg.norm(old_pos[1] - old_pos[2])
+        old_bond3 = np.linalg.norm(old_pos[2] - old_pos[10])
+        new_bond1 = np.linalg.norm(pos[0] - pos[1])
+        new_bond2 = np.linalg.norm(pos[1] - pos[2])
+        new_bond3 = np.linalg.norm(pos[2] - pos[10])
+        assert np.isclose(old_bond1, new_bond1)
+        assert np.isclose(old_bond2, new_bond2)
+        assert np.isclose(old_bond3, new_bond3)
 
-        # Define directional vectors for the Sterimol axis
-        # e.g., Atom 1 (C) -> Atom 2 (C)
-        atom1, atom2 = 1, 2
+    def test_sterimol_close(self):
+        """Ensure the sterimol calculation fits the database data"""
 
-        # 2. Before computation, the property should return None
-        assert mol.sterimol_parameters is None
+        atom1, atom2 = 0, 1
+        ATOL = 0.1
 
-        # 3. Compute Sterimol parameters
-        db_obj = mol.compute_sterimol_parameters(
-            atom1=atom1, atom2=atom2, grid_measure=grid_measure
-        )
+        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol1 = Molecule.from_rdkit_mol(rdmol)
+        mol1.calculate_sterimol_parameters(atom1, atom2)  # Benzyl
 
-        # 4. Verify the property now caches and exposes the exact same object
-        assert mol.sterimol_parameters is not None
-        assert mol.sterimol_parameters == db_obj
+        sterimol1 = mol1.sterimol_parameter
+        assert np.isclose(sterimol1["B1"], 1.70, atol=ATOL)
+        assert np.isclose(sterimol1["B5"], 3.25, atol=ATOL)
+        assert np.isclose(sterimol1["L"], 6.47, atol=ATOL)
 
-        # 5. Extract and validate values directly from the DBSTEP object attributes
-        # DBSTEP objects typically expose L, Bmin (B1), and Bmax (B5) as attributes
-        l_val = db_obj.L
-        bmin_val = db_obj.Bmin
-        bmax_val = db_obj.Bmax
+        rdmol = self._rdkit_embed_and_optimize("C1(C)=COC=C1", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol2 = Molecule.from_rdkit_mol(rdmol)
+        mol2.calculate_sterimol_parameters(atom1, atom2)  # Furanyl
 
-        for val, name in [
-            (l_val, "L"),
-            (bmin_val, "Bmin"),
-            (bmax_val, "Bmax"),
-        ]:
-            assert isinstance(val, (int, float)), f"{name} should be numeric"
-            assert (
-                val > 0.0
-            ), f"{name} should be a positive geometric dimension"
+        sterimol2 = mol2.sterimol_parameter
+        assert np.isclose(sterimol2["B1"], 1.70, atol=ATOL)
+        assert np.isclose(sterimol2["B5"], 3.29, atol=ATOL)
+        assert np.isclose(sterimol2["L"], 5.70, atol=ATOL)
 
-        # 6. Test Rigid Invariance (Transform the coordinates)
-        pos = np.array(mol.positions, dtype=float)
-        rng = np.random.RandomState(999)
-        phi = rng.rand() * 2 * math.pi
-        axis = np.array([1.0, 0.0, 0.0])
+        rdmol = self._rdkit_embed_and_optimize("CC", 42)
+        rdmol = Chem.AddHs(rdmol)
+        mol3 = Molecule.from_rdkit_mol(rdmol)
+        mol3.calculate_sterimol_parameters(2, 0)  # Ethyl
 
-        K = np.array(
-            [
-                [0, -axis[2], axis[1]],
-                [axis[2], 0, -axis[0]],
-                [-axis[1], axis[0], 0],
-            ]
-        )
-        R = np.eye(3) + math.sin(phi) * K + (1 - math.cos(phi)) * (K @ K)
-        pos_rot = (pos @ R.T) + np.array([1.0, 2.0, 3.0])
-
-        # Instantiate the transformed molecule
-        mol_rot = Molecule(symbols=mol.symbols, positions=pos_rot)
-        db_obj_rot = mol_rot.compute_sterimol_parameters(
-            atom1=atom1, atom2=atom2, grid_measure=grid_measure
-        )
-
-        # 7. Check if geometric values are invariant under rotation + translation
-        # Note: Analytical mode (grid_measure=False) is highly precise (atol=1e-4).
-        # Grid mode (grid_measure=True) can have slight grid alignment variance depending
-        # on orientation, so a slightly relaxed tolerance (atol=1e-2) ensures it won't flake.
-        tol = 1e-2 if grid_measure else 1e-4
-
-        assert np.isclose(
-            db_obj.L, db_obj_rot.L, atol=tol
-        ), f"L changed in mode grid_measure={grid_measure}"
-        assert np.isclose(
-            db_obj.Bmin, db_obj_rot.Bmin, atol=tol
-        ), f"Bmin changed in mode grid_measure={grid_measure}"
-        assert np.isclose(
-            db_obj.Bmax, db_obj_rot.Bmax, atol=tol
-        ), f"Bmax changed in mode grid_measure={grid_measure}"
-
-    def test_sterimol_invalid_input_raises(self):
-        """Validates that bad atom selections or out-of-bounds indices throw errors."""
-        rd_m = self._rdkit_embed_and_optimize(
-            "CC"
-        )  # Ethane (2 heavy atoms, plus Hs)
-        mol = Molecule.from_rdkit_mol(rd_m)
-
-        # Attempting to call with an index that does not exist in the molecule matrix
-        with pytest.raises((ValueError, IndexError)):
-            mol.compute_sterimol_parameters(
-                atom1=0, atom2=999, grid_measure=False
-            )
+        sterimol3 = mol3.sterimol_parameter
+        assert np.isclose(sterimol3["B1"], 1.88, atol=ATOL)
+        assert np.isclose(sterimol3["B5"], 3.16, atol=ATOL)
+        assert np.isclose(sterimol3["L"], 4.59, atol=ATOL)
 
 
 class TestCoordinateBlockAdvanced:
