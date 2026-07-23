@@ -1,5 +1,6 @@
 import os.path
 from shutil import copy, copytree, rmtree
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -929,6 +930,56 @@ class TestConverterTwoWay:
         with pytest.raises(ValueError, match="file extension"):
             FileConverter.convert_file(single_model_pdb_file, output_path)
 
+    def test_convert_file_creates_missing_output_dir(
+        self, single_model_pdb_file, tmpdir
+    ):
+        output_dir = os.path.join(tmpdir, "nested", "out")
+        output_path = os.path.join(output_dir, "water.xyz")
+        assert not os.path.isdir(output_dir)
+
+        FileConverter.convert_file(single_model_pdb_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert mol.num_atoms == 3
+
+    def test_convert_file_none_molecules_raises(
+        self, single_model_pdb_file, tmpdir
+    ):
+        output_path = os.path.join(tmpdir, "out.xyz")
+        with patch(
+            "chemsmart.io.converter.Molecule.from_filepath",
+            return_value=None,
+        ):
+            with pytest.raises(ValueError, match="No molecule could be read"):
+                FileConverter.convert_file(single_model_pdb_file, output_path)
+
+    def test_convert_file_empty_list_raises(
+        self, single_model_pdb_file, tmpdir
+    ):
+        output_path = os.path.join(tmpdir, "out.xyz")
+        with patch(
+            "chemsmart.io.converter.Molecule.from_filepath",
+            return_value=[],
+        ):
+            with pytest.raises(ValueError, match="No molecules found"):
+                FileConverter.convert_file(single_model_pdb_file, output_path)
+
+    def test_convert_file_non_list_molecule_wrapped(
+        self, single_model_pdb_file, tmpdir
+    ):
+        """Hit the defensive ``not isinstance(molecules, list)`` branch."""
+        output_path = os.path.join(tmpdir, "out.xyz")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        with patch(
+            "chemsmart.io.converter.Molecule.from_filepath",
+            return_value=mol,
+        ):
+            FileConverter.convert_file(single_model_pdb_file, output_path)
+        assert os.path.exists(output_path)
+        written = Molecule.from_filepath(output_path)
+        assert written.num_atoms == 3
+
 
 class TestConvertCLI:
     """Tests for ``chemsmart run convert``."""
@@ -989,3 +1040,23 @@ class TestConvertCLI:
             ],
         )
         assert result.exit_code != 0
+
+    def test_cli_convert_with_debug_and_stream(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", "_dbg.xyz")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                output_path,
+                "--debug",
+                "--stream",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
