@@ -9,12 +9,7 @@ progress and completion tracking across the ensemble.
 
 import logging
 
-from chemsmart.jobs.batch import (
-    NestableJobMixin,
-    run_child_jobs_as_batch,
-    run_nestable_job,
-)
-from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+from chemsmart.jobs.batch import NestableJobMixin, run_nestable_job
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
@@ -254,19 +249,12 @@ class GaussianCrestJob(NestableJobMixin, GaussianJob):
         """
         Execute all conformer optimization jobs up to the specified limit.
 
-        Runs conformer jobs serially through ``GaussianBatchJob``, each with
-        the parent jobrunner's full resources. Failure policy is
-        run-all-then-raise.
+        Runs the conformer optimization jobs sequentially up to the
+        number specified in num_confs_to_opt. This allows for partial
+        ensemble processing when needed.
         """
-        jobs_to_run = self.all_conformers_jobs[: self.num_confs_to_opt]
-        logger.info("Running conformer jobs using GaussianBatchJob")
-        run_child_jobs_as_batch(
-            batch_cls=GaussianBatchJob,
-            jobs=jobs_to_run,
-            parent=self,
-            label_suffix="_batch",
-            fail_fast=False,
-        )
+        for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
+            job.run()
 
     def _run(self, **kwargs):
         """

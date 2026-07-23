@@ -451,7 +451,7 @@ class TestBatchJobRefactor:
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""
 
-    def test_crest_job_nested_batch_always_serial(
+    def test_crest_job_local_run_calls_child_jobs_directly(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.crest import GaussianCrestJob
@@ -460,7 +460,6 @@ class TestGaussianBatchDelegation:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        # Nested crest children run serially regardless of runner policy.
         gaussian_jobrunner_no_scratch.no_run_in_parallel = False
         job = GaussianCrestJob(
             molecules=mock_molecules,
@@ -469,25 +468,19 @@ class TestGaussianBatchDelegation:
             jobrunner=gaussian_jobrunner_no_scratch,
         )
 
-        mock_jobs = [Mock(label="conf_1"), Mock(label="conf_2")]
+        mock_jobs = [
+            Mock(label="conf_1"),
+            Mock(label="conf_2"),
+            Mock(label="conf_3"),
+        ]
         mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
-
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
-        )
-        mock_batch = mock_batch_cls.return_value
 
         job._run_all_jobs()
 
-        mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args.kwargs
-        assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["fail_fast"] is False
-        assert call_kwargs["label"] == "test_crest_batch"
-        assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
-        mock_batch.run.assert_called_once()
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
 
-    def test_traj_job_nested_batch_always_serial(
+    def test_traj_job_local_run_calls_child_jobs_directly(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -505,23 +498,17 @@ class TestGaussianBatchDelegation:
             proportion_structures_to_use=1.0,
         )
 
-        mock_jobs = [Mock(label="traj_1"), Mock(label="traj_2")]
+        mock_jobs = [
+            Mock(label="traj_1"),
+            Mock(label="traj_2"),
+            Mock(label="traj_3"),
+        ]
         mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
-
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
-        )
-        mock_batch = mock_batch_cls.return_value
 
         job._run_all_jobs()
 
-        mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args.kwargs
-        assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["fail_fast"] is False
-        assert call_kwargs["label"] == "test_traj_batch"
-        assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
-        mock_batch.run.assert_called_once()
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
 
     def test_traj_array_task_maps_stable_end_slice(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
@@ -565,9 +552,6 @@ class TestGaussianBatchDelegation:
             new_callable=mocker.PropertyMock,
             return_value=3,
         )
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
-        )
 
         job._run()
 
@@ -577,9 +561,8 @@ class TestGaussianBatchDelegation:
         prepared[2].run.assert_not_called()
         prepared[3].run.assert_called_once()
         prepared[4].run.assert_not_called()
-        mock_batch_cls.return_value.run.assert_not_called()
 
-    def test_traj_job_serial_mode_uses_batch_without_fail_fast(
+    def test_traj_job_serial_mode_runs_prepared_jobs_directly(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -597,24 +580,19 @@ class TestGaussianBatchDelegation:
             proportion_structures_to_use=1.0,
         )
 
-        mock_jobs = [Mock(label="traj_1"), Mock(label="traj_2")]
+        mock_jobs = [
+            Mock(label="traj_1"),
+            Mock(label="traj_2"),
+            Mock(label="traj_3"),
+        ]
         mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
-
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
-        )
-        mock_batch = mock_batch_cls.return_value
 
         job._run_all_jobs()
 
-        mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args.kwargs
-        assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["fail_fast"] is False
-        assert call_kwargs["label"] == "test_traj_serial_batch"
-        mock_batch.run.assert_called_once()
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
 
-    def test_crest_job_serial_mode_uses_batch_without_fail_fast(
+    def test_crest_job_serial_mode_runs_prepared_jobs_directly(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.crest import GaussianCrestJob
@@ -634,17 +612,10 @@ class TestGaussianBatchDelegation:
         mock_jobs = [Mock(label="conf_1"), Mock(label="conf_2")]
         mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
 
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
-        )
-        mock_batch = mock_batch_cls.return_value
-
         job._run_all_jobs()
 
-        mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args.kwargs
-        assert call_kwargs["fail_fast"] is False
-        mock_batch.run.assert_called_once()
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
 
     def test_qrc_job_nested_batch_always_serial(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker

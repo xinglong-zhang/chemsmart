@@ -655,7 +655,7 @@ class TestGaussianTrajJobs:
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """-ns N selects last N prepared jobs, not incompletes."""
+        """Array submit uses stable last-N labels via ``get_array_child_jobs``."""
         from chemsmart.jobs.gaussian.traj import GaussianTrajJob
         from chemsmart.settings.gaussian import GaussianProjectSettings
 
@@ -687,12 +687,6 @@ class TestGaussianTrajJobs:
             num_structures_to_run=3,
         )
 
-        selected = job._selected_structure_run_jobs()
-        assert [j.label for j in selected] == [
-            "traj_ns_c3",
-            "traj_ns_c4",
-            "traj_ns_c5",
-        ]
         assert [j.label for j in job.get_array_child_jobs()] == [
             "traj_ns_c3",
             "traj_ns_c4",

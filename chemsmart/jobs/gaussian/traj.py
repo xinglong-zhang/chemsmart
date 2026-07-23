@@ -13,12 +13,7 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.batch import (
-    NestableJobMixin,
-    run_child_jobs_as_batch,
-    run_nestable_job,
-)
-from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+from chemsmart.jobs.batch import NestableJobMixin, run_nestable_job
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
 
@@ -290,7 +285,6 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
                     settings=self.settings,
                     label=label,
                     jobrunner=self.jobrunner,
-                    skip_completed=self.skip_completed,
                 )
             ]
         return jobs
@@ -305,21 +299,6 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
                 structure processing.
         """
         return self._prepare_all_jobs()
-
-    def _selected_structure_run_jobs(self):
-        """Return the stable structure-job slice for submit and run.
-
-        When ``num_structures_to_run`` is set, selects the last N prepared
-        jobs (end of trajectory). Completion is handled per child via
-        ``skip_completed``, not by filtering incompletes for indexing.
-        """
-        jobs = list(self.all_structures_run_jobs)
-        if self.num_structures_to_run is None:
-            return jobs
-        n = self.num_structures_to_run
-        if n <= 0:
-            return []
-        return jobs[-n:]
 
     def _selected_structure_indices(self) -> list[int]:
         """Return 0-based indices into ``unique_structures`` for nestable run."""
@@ -402,21 +381,19 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
         """
         Execute structure calculation jobs based on configuration.
 
-        Runs either all available jobs or a specified subset based on
-        ``num_structures_to_run`` (last N prepared jobs). Nested structure
-        jobs run serially through ``GaussianBatchJob``, each with the
-        parent jobrunner's full resources.
+        Runs either all available jobs or a specified subset based
+        on the num_structures_to_run setting. Handles both complete
+        processing and selective structure optimization.
         """
-        jobs_to_run = self._selected_structure_run_jobs()
-
-        logger.info("Running trajectory structure jobs using GaussianBatchJob")
-        run_child_jobs_as_batch(
-            batch_cls=GaussianBatchJob,
-            jobs=jobs_to_run,
-            parent=self,
-            label_suffix="_batch",
-            fail_fast=False,
-        )
+        if self.num_structures_to_run is None:
+            # run all jobs if num_structures_to_run is not specified
+            jobs_to_run = self.all_structures_run_jobs
+        else:
+            jobs_to_run = self.incomplete_structure_run_jobs[
+                : self.num_structures_to_run
+            ]
+        for job in jobs_to_run:
+            job.run()
 
     def _run(self, **kwargs):
         """
@@ -441,13 +418,20 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
         """
         Verify completion status of all required structure jobs.
 
-        Checks the same stable selection used for submit and run
-        (all jobs, or the last ``num_structures_to_run`` jobs).
+        Checks completion based on whether all jobs or a subset
+        (num_structures_to_run) should be processed.
 
         Returns:
             bool: True if all required jobs are complete,
                 False otherwise.
         """
+        if self.num_structures_to_run is None:
+            return all(
+                job.is_complete() for job in self.all_structures_run_jobs
+            )
         return all(
-            job.is_complete() for job in self._selected_structure_run_jobs()
+            job.is_complete()
+            for job in self.all_structures_run_jobs[
+                : self.num_structures_to_run
+            ]
         )
