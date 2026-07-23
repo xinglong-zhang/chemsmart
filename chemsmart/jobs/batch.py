@@ -14,15 +14,12 @@ in-process multi-node fan-out.
 
 import logging
 import os
-import threading
-import time
 from abc import ABCMeta
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from enum import Enum
 from typing import Any, Iterator, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.mixins import RegistryMeta
 
 logger = logging.getLogger(__name__)
@@ -135,8 +132,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
       with full resources
     - ``local_batch`` — all children serially with full resources
 
-    ``no_run_in_parallel`` may still be set by callers for CLI/submit
-    policy, but in-process concurrent children are not used.
     ``fail_fast`` stops serial local submission after the first
     unsuccessful outcome.
     ``nested_serial`` marks crest/QRC/dias/traj nested batches for
@@ -149,7 +144,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def __init__(
         self,
         jobs: Optional[Sequence[Job]],
-        no_run_in_parallel: Optional[bool] = None,
         fail_fast: bool = False,
         write_outcome_logs: bool = False,
         label: str = "batch_job",
@@ -164,51 +158,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             **kwargs,
         )
         self.jobs: list[Job] = list(jobs) if jobs is not None else []
-        runner_serial_mode = get_serial_mode(jobrunner)
-        # - explicit True/False at call site wins
-        # - None defers to runner policy
-        if no_run_in_parallel is None:
-            self.no_run_in_parallel = runner_serial_mode.no_run_in_parallel
-        else:
-            self.no_run_in_parallel = bool(no_run_in_parallel)
         self.fail_fast = bool(fail_fast)
         self.write_outcome_logs = bool(write_outcome_logs)
         self.nested_serial = bool(nested_serial)
-
-        # Cache completion checks to avoid repeatedly reparsing output files
-        # from the head-node monitoring loop.
-        self._status_cache: dict[
-            int,
-            tuple[Optional[tuple[tuple[str, float], ...]], float, bool],
-        ] = {}
-        self._status_cache_ttl_seconds: float = 2.0
-        self._status_cache_lock = threading.Lock()
         self._last_batch_outcomes: list[dict[str, Any]] = []
         self._jobs_not_started: int = 0
 
     def run(self, **kwargs: Any) -> None:
         """Run this batch in ``local_batch`` or ``array_task`` mode."""
-        self._invalidate_status_cache()
         self._jobs_not_started = 0
         mode = resolve_batch_execution_mode()
         if mode is BatchExecutionMode.ARRAY_TASK:
             self._run_array_task(**kwargs)
             return
         self._run_local_batch(**kwargs)
-
-    def enable_serial_local_execution(self) -> None:
-        """Configure this batch for serial local execution with full resources.
-
-        Children run one at a time. Each child receives the batch jobrunner's
-        full ``num_cores`` and ``mem_gb`` (no core/memory splitting).
-        """
-        if not self.no_run_in_parallel:
-            logger.info(
-                "BatchJob local execution is serial with full resources; "
-                "concurrent children are disabled. Use chemsmart sub for "
-                "cluster concurrency."
-            )
-        self.no_run_in_parallel = True
 
     def _run_array_task(self, **kwargs: Any) -> None:
         """Run the single child selected by the scheduler array task id.
@@ -267,15 +230,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def _run_local_batch(self, **kwargs: Any) -> None:
         """Run all children serially with full resources per child."""
         total_jobs = len(self.jobs)
-
-        if not self.no_run_in_parallel:
-            logger.warning(
-                "BatchJob in-process parallel execution is disabled; "
-                "running %s child job(s) serially with full resources. "
-                "Use chemsmart sub for cluster concurrency.",
-                total_jobs,
-            )
-            self.no_run_in_parallel = True
         runner = self.jobrunner
         if runner is not None:
             cores = runner.num_cores
@@ -361,11 +315,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         try:
             self._build_jobrunner(job)
             job.run(**kwargs)
-            is_complete = self._job_is_complete_cached(
-                job,
-                force_refresh=True,
-            )
-            if not is_complete:
+            if not job.is_complete():
                 msg = "job incomplete after execution"
                 logger.error(f"Job {job.label}: {msg}")
                 return {
@@ -383,7 +333,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 f"Job {job.label} failed during batch execution: {e}",
                 exc_info=True,
             )
-            self._invalidate_status_cache(job)
             return {
                 "label": job.label,
                 "success": False,
@@ -418,86 +367,11 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def _backup_files(self) -> None:
         pass
 
-    @staticmethod
-    def _append_str_path(candidates: list[str], path: Any) -> None:
-        """Append *path* to *candidates* when it is a non-empty string."""
-        if isinstance(path, str) and path:
-            candidates.append(path)
-
-    def _job_status_signature(
-        self,
-        job: Job,
-    ) -> Optional[tuple[tuple[str, float], ...]]:
-        """Return file-mtime signature used to validate cached status."""
-        candidates: list[str] = []
-        try:
-            self._append_str_path(candidates, job.outputfile)
-        except AttributeError:
-            pass
-        try:
-            self._append_str_path(candidates, job.joblog)
-        except AttributeError:
-            pass
-        try:
-            self._append_str_path(candidates, job.errfile)
-        except AttributeError:
-            pass
-
-        signature: list[tuple[str, float]] = []
-        for path in candidates:
-            if os.path.exists(path):
-                with suppress(OSError):
-                    signature.append((path, os.path.getmtime(path)))
-
-        if not signature:
-            return None
-        signature.sort(key=lambda item: item[0])
-        return tuple(signature)
-
-    def _invalidate_status_cache(self, job: Optional[Job] = None) -> None:
-        """Invalidate status cache for all jobs or a single job."""
-        with self._status_cache_lock:
-            if job is None:
-                self._status_cache.clear()
-                return
-            self._status_cache.pop(id(job), None)
-
-    def _job_is_complete_cached(
-        self,
-        job: Job,
-        *,
-        force_refresh: bool = False,
-    ) -> bool:
-        """Return child completion status using a short-lived cache."""
-        now = time.monotonic()
-        signature = self._job_status_signature(job)
-        key = id(job)
-
-        if not force_refresh:
-            with self._status_cache_lock:
-                cached = self._status_cache.get(key)
-            if cached is not None:
-                cached_signature, cached_at, cached_value = cached
-                signature_match = (
-                    signature is not None and cached_signature == signature
-                )
-                ttl_match = (
-                    signature is None
-                    and (now - cached_at) <= self._status_cache_ttl_seconds
-                )
-                if signature_match or ttl_match:
-                    return cached_value
-
-        value = job.is_complete()
-        with self._status_cache_lock:
-            self._status_cache[key] = (signature, now, value)
-        return value
-
     def is_complete(self) -> bool:
         """Return True when all child jobs are complete."""
         if not self.jobs:
             return True
-        return all(self._job_is_complete_cached(job) for job in self.jobs)
+        return all(job.is_complete() for job in self.jobs)
 
 
 def run_child_jobs_as_batch(
@@ -527,7 +401,6 @@ def run_child_jobs_as_batch(
     if run_selected_array_child(jobs, parent=parent):
         return batch_cls(
             jobs=list(jobs),
-            no_run_in_parallel=True,
             fail_fast=fail_fast,
             label=f"{parent.label}{label_suffix}",
             jobrunner=parent.jobrunner,
@@ -550,13 +423,11 @@ def run_child_jobs_as_batch(
     )
     batch_job = batch_cls(
         jobs=jobs,
-        no_run_in_parallel=True,
         fail_fast=fail_fast,
         label=f"{parent.label}{label_suffix}",
         jobrunner=parent.jobrunner,
         nested_serial=True,
     )
-    batch_job.enable_serial_local_execution()
     batch_job.run()
     return batch_job
 

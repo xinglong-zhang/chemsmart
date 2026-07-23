@@ -845,7 +845,6 @@ class TestGaussianRunSubNoParallelIntegration:
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
-        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
         assert mock_batch_run.call_count == 1
 
@@ -908,7 +907,6 @@ class TestGaussianRunSubNoParallelIntegration:
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
-        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         assert mock_submit_array.call_args.kwargs["test"] is True
         assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
@@ -927,23 +925,14 @@ class TestGaussianRunSubNoParallelIntegration:
         pbs_server,
     ):
         """Default ``sub`` (no parallel flag) uses %1 array throttle."""
-        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 
         runner = CliRunner()
-        mock_batch_job = GaussianBatchJob(
-            jobs=[MagicMock(label="j1"), MagicMock(label="j2")],
-            label="mols_batch",
-        )
         with (
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
                 return_value=pbs_server,
             ),
             patch("chemsmart.jobs.gaussian.opt.GaussianOptJob"),
-            patch(
-                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
-                return_value=mock_batch_job,
-            ) as mock_batch_cls,
             patch(
                 "chemsmart.settings.server.Server.submit_array_job"
             ) as mock_submit_array,
@@ -975,7 +964,6 @@ class TestGaussianRunSubNoParallelIntegration:
             )
 
         assert result.exit_code == 0, result.output
-        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         # -M 4 ignored for throttle when serial default applies
         assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1

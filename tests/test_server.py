@@ -505,9 +505,7 @@ class TestSubmitBatch:
                 },
             )(),
         ]
-        batch = GaussianBatchJob(
-            jobs=children, label="mols_batch", no_run_in_parallel=True
-        )
+        batch = GaussianBatchJob(jobs=children, label="mols_batch")
         server.submit_batch(
             batch,
             policy=SchedulerArrayPolicy(no_run_in_parallel=True),

@@ -88,7 +88,6 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
             jobs.append(job)
         return GaussianBatchJob(
             jobs=jobs,
-            no_run_in_parallel=jobrunner.no_run_in_parallel,
             label=f"{label}_batch",
         )
     else:

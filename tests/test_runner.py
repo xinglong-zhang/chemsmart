@@ -49,14 +49,12 @@ class TestJobRunner:
         )
         assert runner.no_run_in_parallel is False
 
-    def test_run_phase_jobs_defaults_serial_mode_from_parent_runner(
+    def test_run_phase_jobs_passes_stop_on_incomplete(
         self, pbs_server, mocker
     ):
         from chemsmart.jobs.job import Job
 
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=True
-        )
+        runner = JobRunner(server=pbs_server, fake=True)
         mock_child = Mock()
         mock_child.run.return_value = None
         mock_child.is_complete.return_value = True
@@ -65,11 +63,12 @@ class TestJobRunner:
         run_phase_jobs(
             parent_runner=runner,
             jobs=[mock_child],
+            stop_on_incomplete=True,
             phase_label="test phase",
         )
 
         mock_execute.assert_called_once()
-        assert mock_execute.call_args.kwargs["no_run_in_parallel"] is True
+        assert mock_execute.call_args.kwargs["stop_on_incomplete"] is True
 
 
 class TestSerialExecution:
@@ -128,49 +127,6 @@ class TestBatchJobRefactor:
 
         return DummyBatchJob
 
-    def test_batch_serial_mode_when_unset(self, pbs_server):
-        """Test that BatchJob runs all jobs when they are unset."""
-        dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=True
-        )
-
-        batch = dummy_batch_cls(
-            jobs=[],
-            jobrunner=runner,
-        )
-
-        assert batch.no_run_in_parallel is True
-
-    def test_batch_serial_mode_keeps_explicit_false(self, pbs_server):
-        """Test that BatchJob runs all jobs when they are unset."""
-        dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=True
-        )
-
-        batch = dummy_batch_cls(
-            jobs=[],
-            no_run_in_parallel=False,
-            jobrunner=runner,
-        )
-
-        assert batch.no_run_in_parallel is False
-
-    def test_batch_serial_mode_keeps_explicit_true(self, pbs_server):
-        dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=False
-        )
-
-        batch = dummy_batch_cls(
-            jobs=[],
-            no_run_in_parallel=True,
-            jobrunner=runner,
-        )
-
-        assert batch.no_run_in_parallel is True
-
     def test_batch_writes_success_and_failed_logs(self, pbs_server, tmp_path):
         from chemsmart.jobs.batch import BatchExecutionError
 
@@ -191,7 +147,6 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[success_job, fail_job],
-            no_run_in_parallel=False,
             write_outcome_logs=True,
             jobrunner=runner,
             label="batch_logs_test",
@@ -224,7 +179,6 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[fail_job],
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="batch_raise_test",
         )
@@ -251,7 +205,6 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[fail_job, ok_job],
-            no_run_in_parallel=True,
             fail_fast=False,
             jobrunner=runner,
         )
@@ -283,7 +236,6 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[fail_job, later_job],
-            no_run_in_parallel=True,
             fail_fast=True,
             jobrunner=runner,
         )
@@ -307,7 +259,6 @@ class TestBatchJobRefactor:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=False,
             num_cores=16,
             mem_gb=32,
         )
@@ -322,7 +273,6 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[fail_job, later_job],
-            no_run_in_parallel=False,
             fail_fast=True,
             jobrunner=runner,
         )
@@ -332,7 +282,6 @@ class TestBatchJobRefactor:
         ):
             batch.run()
 
-        assert batch.no_run_in_parallel is True
         fail_job.run.assert_called_once()
         later_job.run.assert_not_called()
         assert fail_job.jobrunner.num_cores == 16
@@ -346,7 +295,6 @@ class TestBatchJobRefactor:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=False,
             num_cores=16,
             mem_gb=32,
         )
@@ -369,7 +317,6 @@ class TestBatchJobRefactor:
             fail_fast=False,
         )
 
-        assert batch.no_run_in_parallel is True
         assert batch.fail_fast is False
         assert batch.label == "parent_batch"
         child_a.run.assert_called_once()
@@ -414,7 +361,6 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_crest_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
@@ -451,7 +397,6 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_traj_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
@@ -532,7 +477,6 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_traj_serial_batch"
         mock_batch.run.assert_called_once()
@@ -566,7 +510,6 @@ class TestGaussianBatchDelegation:
 
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
-        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         mock_batch.run.assert_called_once()
 
@@ -603,7 +546,6 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["no_run_in_parallel"] is True
         assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_qrc_batch"
         mock_batch.run.assert_called_once()
@@ -731,7 +673,6 @@ class TestGaussianBatchDelegation:
 
         batch = ORCABatchJob(
             jobs=qrc_parents,
-            no_run_in_parallel=True,
             label="mols_qrc_batch",
             jobrunner=orca_jobrunner_no_scratch,
         )
@@ -864,7 +805,6 @@ class TestRunListFailureAggregation:
         jobrunner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=False,
             num_cores=16,
             mem_gb=32,
         )
@@ -883,7 +823,6 @@ class TestRunListFailureAggregation:
 
         batch = _DummyBatch(
             jobs=[child],
-            no_run_in_parallel=False,
             jobrunner=jobrunner,
             label="top_batch",
         )
@@ -891,7 +830,6 @@ class TestRunListFailureAggregation:
 
         process_pipeline.__wrapped__(ctx, batch)
 
-        assert batch.no_run_in_parallel is True
         child.run.assert_called_once()
         assert child.jobrunner.num_cores == 16
         assert child.jobrunner.mem_gb == 32
@@ -903,7 +841,6 @@ class TestRunListFailureAggregation:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=True,
             num_cores=16,
             mem_gb=32,
         )
@@ -920,7 +857,6 @@ class TestRunListFailureAggregation:
 
         batch = _DummyBatch(
             jobs=[child_a, child_b],
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="resource_batch",
         )
@@ -958,7 +894,6 @@ class TestBatchSerialExecutionPolicy:
         jobrunner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=False,
             num_cores=16,
             mem_gb=32,
         )
@@ -985,7 +920,6 @@ class TestBatchSerialExecutionPolicy:
         batch_cls = self._dummy_batch_cls()
         batch = batch_cls(
             jobs=children,
-            no_run_in_parallel=False,
             jobrunner=jobrunner,
             label="mols_batch",
         )
@@ -993,7 +927,6 @@ class TestBatchSerialExecutionPolicy:
 
         process_pipeline.__wrapped__(ctx, batch)
 
-        assert batch.no_run_in_parallel is True
         assert call_order == ["mol_0", "mol_1", "mol_2", "mol_3"]
         assert cores_seen == [16, 16, 16, 16]
         assert mem_seen == [32, 32, 32, 32]
@@ -1013,7 +946,6 @@ class TestBatchSerialExecutionPolicy:
         jobrunner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=False,
             num_cores=parent_cores,
             mem_gb=parent_mem,
         )
@@ -1031,7 +963,6 @@ class TestBatchSerialExecutionPolicy:
         batch_cls = self._dummy_batch_cls()
         batch = batch_cls(
             jobs=children,
-            no_run_in_parallel=False,
             jobrunner=jobrunner,
             label="parallel_flag_batch",
         )
@@ -1068,11 +999,7 @@ class TestBatchSerialExecutionPolicy:
         mocker.patch.object(
             crest, "_prepare_all_jobs", return_value=crest_jobs
         )
-        crest_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
-        )
         crest._run_all_jobs()
-        assert crest_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
 
         qrc = GaussianQRCJob(
             molecule=MockMolecule(),
@@ -1087,11 +1014,7 @@ class TestBatchSerialExecutionPolicy:
             new_callable=mocker.PropertyMock,
             return_value=qrc_jobs,
         )
-        qrc_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
-        )
         qrc._run_both_jobs()
-        assert qrc_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
 
         orca_settings = ORCAJobSettings()
         orca_qrc = ORCAQRCJob(
@@ -1107,16 +1030,13 @@ class TestBatchSerialExecutionPolicy:
             new_callable=mocker.PropertyMock,
             return_value=orca_jobs,
         )
-        orca_batch_cls = mocker.patch("chemsmart.jobs.orca.qrc.OrcaBatchJob")
         orca_qrc._run_both_jobs()
-        assert orca_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
 
     def test_single_child_keeps_full_engine_resources(self, pbs_server):
         """A single child still receives the parent full core/memory allocation."""
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=True,
             num_cores=64,
             mem_gb=128,
         )
@@ -1126,7 +1046,6 @@ class TestBatchSerialExecutionPolicy:
 
         batch = self._dummy_batch_cls()(
             jobs=[child],
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="single_child_batch",
         )
@@ -1198,7 +1117,6 @@ class TestBatchExecutionModes:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=True,
             num_cores=16,
             mem_gb=32,
         )
@@ -1211,7 +1129,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="mols_batch",
         )
@@ -1235,7 +1152,6 @@ class TestBatchExecutionModes:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=True,
             num_cores=16,
             mem_gb=32,
         )
@@ -1248,7 +1164,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="array_batch",
         )
@@ -1288,7 +1203,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="array_batch",
         )
@@ -1341,7 +1255,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="local_batch",
         )
@@ -1363,7 +1276,6 @@ class TestBatchExecutionModes:
         runner = JobRunner(
             server=pbs_server,
             fake=True,
-            no_run_in_parallel=True,
             num_cores=8,
             mem_gb=16,
         )
@@ -1378,7 +1290,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="mols_batch",
         )
@@ -1415,7 +1326,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="crest_children",
             nested_serial=True,
@@ -1484,7 +1394,6 @@ class TestBatchExecutionModes:
 
         batch = self._dummy_batch_cls()(
             jobs=children,
-            no_run_in_parallel=True,
             jobrunner=runner,
             label="multi_node_batch",
         )

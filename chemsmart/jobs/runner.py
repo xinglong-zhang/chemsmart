@@ -59,27 +59,9 @@ def _resolve_scratch(scratch, runner_cls, server):
     return runner_cls.SCRATCH
 
 
-@dataclass(frozen=True)
-class SerialMode:
-    """Simple view of serial-mode flags derived from a jobrunner."""
-
-    no_run_in_parallel: bool
-    run_in_parallel: bool
-
-
-@dataclass(frozen=True)
-class PhaseTransitionDecision:
-    """Decision payload for moving from one workflow phase to the next."""
-
-    proceed: bool
-    should_raise: bool
-    message: Optional[str] = None
-
-
 def run_phase_jobs(
     *,
     parent_runner,
-    serial_mode: Optional[SerialMode] = None,
     jobs: Optional[Sequence] = None,
     jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
     stop_on_incomplete: bool = False,
@@ -89,23 +71,18 @@ def run_phase_jobs(
 ) -> None:
     """Run a workflow phase of child jobs through ``Job._execute_phase_jobs``.
 
-    Phase siblings are always executed sequentially. The derived ``serial_mode``
-    (from ``parent_runner`` when omitted) only controls whether an incomplete
-    child stops the phase early when ``stop_on_incomplete`` is true; it does not
-    run HA/A (or other intra-phase sub-jobs) concurrently.
+    Phase siblings are always executed sequentially. When
+    ``stop_on_incomplete`` is true, an incomplete child stops the phase early.
 
     For pKa, intra-molecule phases (gas opt, solvation SP, reference legs, etc.)
     never run in parallel by design. ``--run-in-parallel`` applies to separate
     pKa target jobs wrapped in ``BatchJob``, not to sub-jobs inside one pKa
     thermodynamic cycle.
     """
-    if serial_mode is None:
-        serial_mode = get_serial_mode(parent_runner)
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
         jobs_factory=jobs_factory,
-        no_run_in_parallel=serial_mode.no_run_in_parallel,
         stop_on_incomplete=stop_on_incomplete,
         before_run=before_run,
         logger_obj=logger_obj,
@@ -113,16 +90,13 @@ def run_phase_jobs(
     )
 
 
-def get_serial_mode(jobrunner) -> SerialMode:
-    """Return serial-mode flags from a jobrunner."""
-    if jobrunner is None:
-        no_run_in_parallel = False
-    else:
-        no_run_in_parallel = bool(jobrunner.no_run_in_parallel)
-    return SerialMode(
-        no_run_in_parallel=no_run_in_parallel,
-        run_in_parallel=not no_run_in_parallel,
-    )
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
 
 
 def _positive_int_or_none(value) -> Optional[int]:

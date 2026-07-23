@@ -347,10 +347,8 @@ def irc(
                 )
             )
 
-        no_run_in_parallel = ctx.obj["jobrunner"].no_run_in_parallel
         return ORCABatchJob(
             jobs=jobs,
-            no_run_in_parallel=no_run_in_parallel,
             label=f"{label}_batch",
         )
 

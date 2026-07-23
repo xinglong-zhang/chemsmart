@@ -172,7 +172,6 @@ def process_pipeline(ctx, *args, **kwargs):
         if not job.jobs:
             raise ValueError(f"BatchJob {job} has no child jobs to run.")
         job.jobrunner = _prepare_runner(job.jobs[0])
-        job.enable_serial_local_execution()
         job.run()
         return None
 

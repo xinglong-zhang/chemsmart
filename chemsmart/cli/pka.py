@@ -791,7 +791,6 @@ def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
         return jobs[0]
     return batch_cls(
         jobs=jobs,
-        no_run_in_parallel=jobrunner.no_run_in_parallel,
         label=label,
         jobrunner=jobrunner,
     )

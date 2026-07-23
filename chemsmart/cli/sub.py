@@ -211,7 +211,6 @@ def process_pipeline(ctx, *args, **kwargs):
 
         batch_job = batch_cls(
             jobs=children,
-            no_run_in_parallel=jobrunner.no_run_in_parallel,
             label=f"{parent_job.label}_array",
             jobrunner=jobrunner,
         )

@@ -648,7 +648,6 @@ class TestORCARunSubNoParallelIntegration:
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
-        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
         assert mock_batch_run.call_count == 1
 
@@ -715,7 +714,6 @@ class TestORCARunSubNoParallelIntegration:
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
-        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
         assert mock_submit_array.call_count == 1
         assert mock_submit_array.call_args.kwargs["test"] is True
         assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
