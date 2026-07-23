@@ -581,6 +581,24 @@ class TestORCACpcmBlockOptions:
 class TestORCARunSubNoParallelIntegration:
     """Integration-style tests for `run/sub --no-run-in-parallel` on ORCA."""
 
+    @staticmethod
+    def _cli_index(args):
+        for opt in ("-i", "--index"):
+            if opt in args:
+                return args[args.index(opt) + 1]
+        raise AssertionError(f"index option missing from {args!r}")
+
+    @staticmethod
+    def _mock_opt_job_factory(*, prefix="job"):
+        counter = {"n": 0}
+
+        def _factory(*args, **kwargs):
+            counter["n"] += 1
+            label = kwargs.get("label", f"{prefix}{counter['n']}")
+            return MagicMock(label=label)
+
+        return _factory
+
     def test_run_no_run_in_parallel_builds_serial_batch_job(
         self,
         multiple_molecules_xyz_file,
@@ -657,15 +675,11 @@ class TestORCARunSubNoParallelIntegration:
         pbs_server,
     ):
         """`sub --no-run-in-parallel` submits ORCA BatchJob as array with %1."""
-        from chemsmart.jobs.orca.batch import ORCABatchJob
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
 
         job_settings = ORCAJobSettings.default()
 
         runner = CliRunner()
-        mock_batch_job = ORCABatchJob(
-            jobs=[MagicMock(label="j1"), MagicMock(label="j2")],
-            label="mols_batch",
-        )
         with (
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
@@ -675,11 +689,15 @@ class TestORCARunSubNoParallelIntegration:
                 "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
                 return_value=job_settings,
             ),
-            patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls,
             patch(
-                "chemsmart.jobs.orca.batch.ORCABatchJob",
-                return_value=mock_batch_job,
-            ) as mock_batch_cls,
+                "chemsmart.jobs.orca.opt.ORCAOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ) as mock_job_cls,
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
             patch(
                 "chemsmart.settings.server.Server.submit_array_job"
             ) as mock_submit_array,
@@ -713,17 +731,21 @@ class TestORCARunSubNoParallelIntegration:
 
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
-        assert mock_batch_cls.call_count == 1
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        assert batch_job.rewrite_cli is rewrite_batch_cli_args
         assert mock_submit_array.call_count == 1
         assert mock_submit_array.call_args.kwargs["test"] is True
         assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
         assert (
-            mock_submit_array.call_args.kwargs["batch_label"] == "mols_batch"
+            mock_submit_array.call_args.kwargs["batch_label"]
+            == batch_job.label
         )
-        assert (
-            "--no-run-in-parallel"
-            in mock_submit_array.call_args.kwargs["cli_args"]
-        )
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+        assert self._cli_index(cli_args[0]) == "1"
+        assert self._cli_index(cli_args[1]) == "2"
+        assert all("--no-run-in-parallel" in args for args in cli_args)
 
 
 class TestORCALabelAndAuxBasisOptions:
