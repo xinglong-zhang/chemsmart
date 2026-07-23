@@ -5,7 +5,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from chemsmart.io.yaml import YAMLFile
@@ -794,9 +793,8 @@ class Server(RegistryMixin):
         """Submit a top-level ``BatchJob`` as a scheduler array.
 
         Resolves per-task CLI args (optional *rewrite_cli* when children carry
-        ``batch_entry``), writes a batch manifest when needed, applies *policy*
-        the array concurrency throttle, then delegates to
-        ``submit_array_job``.
+        ``batch_entry``), applies *policy* array concurrency throttle, then
+        delegates to ``submit_array_job``.
 
         Args:
             batch_job: Top-level ``BatchJob`` whose children become array tasks.
@@ -810,10 +808,8 @@ class Server(RegistryMixin):
         """
         from chemsmart.jobs.batch import (
             BatchJob,
-            build_manifest_children,
             get_job_batch_entry,
             resolve_array_cli_args,
-            write_batch_manifest,
         )
 
         if not isinstance(batch_job, BatchJob):
@@ -843,26 +839,6 @@ class Server(RegistryMixin):
             shared_cli_args,
             rewrite_cli=active_rewrite,
         )
-
-        if has_batch_entries:
-            program = batch_job.PROGRAM or batch_job.jobs[0].PROGRAM
-            first_folder = batch_job.jobs[0].folder
-            try:
-                manifest_dir = (
-                    Path(first_folder) if first_folder else Path(".")
-                )
-            except TypeError:
-                manifest_dir = Path(".")
-            write_batch_manifest(
-                batch_label=batch_job.label,
-                program=str(program).lower() if program else "unknown",
-                children=build_manifest_children(
-                    batch_job.jobs,
-                    shared_cli_args,
-                    rewrite_cli=active_rewrite,
-                ),
-                directory=manifest_dir,
-            )
 
         throttle = policy.array_throttle(len(batch_job.jobs))
         logger.info(

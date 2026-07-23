@@ -1,4 +1,4 @@
-"""Tests for batch manifest helpers used by array submissions."""
+"""Tests for batch submit-time CLI helpers used by array submissions."""
 
 from __future__ import annotations
 
@@ -8,15 +8,11 @@ import pytest
 
 from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.jobs.batch import (
-    batch_manifest_filename,
-    build_manifest_children,
     get_job_batch_entry,
-    load_batch_manifest_entry,
     prepare_batch_jobs,
     resolve_array_cli_args,
     rewrite_batch_cli_args,
     set_job_batch_entry,
-    write_batch_manifest,
 )
 
 
@@ -128,34 +124,3 @@ def test_resolve_array_cli_args_pka_entries_use_rewrite_callback():
     assert "acid1.xyz" in cli_lists[0]
     assert "acid2.xyz" in cli_lists[1]
     assert all("submit" in args for args in cli_lists)
-
-
-def test_write_and_load_batch_manifest(tmp_path):
-    job1 = SimpleNamespace(label="acid1")
-    set_job_batch_entry(
-        job1,
-        {
-            "filepath": "acid1.xyz",
-            "proton_index": 2,
-            "charge": 0,
-            "multiplicity": 1,
-            "scheme": "direct",
-            "label": "acid1",
-        },
-    )
-    shared = ["gaussian", "-f", "table.csv", "pka", "batch"]
-    children = build_manifest_children(
-        [job1], shared, rewrite_cli=rewrite_pka_batch_cli_args
-    )
-    path = write_batch_manifest(
-        batch_label="pka_scale_pka_batch",
-        program="gaussian",
-        children=children,
-        directory=tmp_path,
-    )
-    assert path.name == batch_manifest_filename("pka_scale_pka_batch")
-    entry = load_batch_manifest_entry(path, 1)
-    assert entry["label"] == "acid1"
-    assert entry["task_id"] == 1
-    assert get_job_batch_entry(job1)["filepath"] == "acid1.xyz"
-    assert "submit" in entry["cli_args"]

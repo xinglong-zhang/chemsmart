@@ -7,20 +7,17 @@ of engine-specific jobs, plus submit-time helpers for scheduler arrays:
 - serial local child-job execution with full resources per child
 - array-task execution of a single child (scheduler array env)
 - fault-tolerant execution with aggregated failures
-- ``batch_entry`` attach and per-task CLI rewrite for array submit
-- batch manifest write/load for heterogeneous and homogeneous batches
+- ``batch_entry`` attach and per-task CLI rewrite for array runscripts
 
 Cluster concurrency is via ``chemsmart sub`` scheduler arrays, not
 in-process multi-node fan-out.
 """
 
-import json
 import logging
 import os
 from abc import ABCMeta
 from contextlib import contextmanager
 from enum import Enum
-from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -525,7 +522,7 @@ def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
 
 
 # ---------------------------------------------------------------------------
-# Submit-time batch_entry / manifest / per-task CLI helpers
+# Submit-time batch_entry / per-task CLI helpers
 # ---------------------------------------------------------------------------
 
 RewriteCliFn = Callable[
@@ -536,11 +533,6 @@ RewriteCliFn = Callable[
 _FILENAME_OPTIONS = frozenset({"-f", "--filename"})
 _INDEX_OPTIONS = frozenset({"-i", "--index", "--si", "--structure-index"})
 _PROGRAM_TOKENS = frozenset({"gaussian", "orca", "run", "sub"})
-
-
-def batch_manifest_filename(batch_label: str) -> str:
-    """Return the manifest filename for *batch_label*."""
-    return f"chemsmart_batch_{batch_label}.json"
 
 
 def get_job_batch_entry(job: Any) -> Optional[dict[str, Any]]:
@@ -769,73 +761,6 @@ def rewrite_batch_cli_args(
         insert_before=find_job_subcommand_token(args),
     )
     return args
-
-
-def build_manifest_children(
-    jobs: Sequence[Any],
-    shared_cli_args: Sequence[str],
-    rewrite_cli: Optional[RewriteCliFn] = None,
-) -> list[dict[str, Any]]:
-    """Build manifest child records (1-based task ids) from *jobs*.
-
-    When a child has ``batch_entry`` and *rewrite_cli* is provided, store the
-    rewritten per-task CLI. Otherwise store the shared CLI list.
-    """
-    children: list[dict[str, Any]] = []
-    for task_id, job in enumerate(jobs, start=1):
-        entry = get_job_batch_entry(job)
-        child: dict[str, Any] = {
-            "task_id": task_id,
-            "label": job.label,
-        }
-        if entry is not None:
-            child["batch_entry"] = dict(entry)
-            if rewrite_cli is not None:
-                child["cli_args"] = rewrite_cli(shared_cli_args, entry)
-            else:
-                child["cli_args"] = list(shared_cli_args)
-        else:
-            child["cli_args"] = list(shared_cli_args)
-        children.append(child)
-    return children
-
-
-def write_batch_manifest(
-    *,
-    batch_label: str,
-    program: str,
-    children: Sequence[Mapping[str, Any]],
-    directory: Optional[str | Path] = None,
-) -> Path:
-    """Write ``chemsmart_batch_<label>.json`` and return its path."""
-    payload = {
-        "batch_label": batch_label,
-        "program": program,
-        "children": [dict(child) for child in children],
-    }
-    path = Path(directory or ".") / batch_manifest_filename(batch_label)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n")
-    logger.info("Wrote batch manifest: %s", path)
-    return path
-
-
-def load_batch_manifest(path: str | Path) -> dict[str, Any]:
-    """Load a batch manifest JSON file."""
-    with open(path, "r") as handle:
-        return json.load(handle)
-
-
-def load_batch_manifest_entry(
-    path: str | Path,
-    task_id: int,
-) -> dict[str, Any]:
-    """Return the manifest child record for 1-based *task_id*."""
-    payload = load_batch_manifest(path)
-    for child in payload.get("children", []):
-        if int(child["task_id"]) == int(task_id):
-            return dict(child)
-    raise KeyError(f"No manifest entry for task_id={task_id} in {path}")
 
 
 def resolve_array_cli_args(
