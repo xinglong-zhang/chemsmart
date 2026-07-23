@@ -613,18 +613,6 @@ def drop_cli_option(
         idx += 1
 
 
-def drop_cli_option_pair(
-    tokens: list[str], option_names: set[str] | frozenset[str]
-) -> None:
-    """Remove option/value pairs whose option name is in *option_names*."""
-    idx = 0
-    while idx < len(tokens):
-        if tokens[idx] in option_names:
-            del tokens[idx : idx + 2]
-            continue
-        idx += 1
-
-
 def set_cli_option(
     tokens: list[str],
     *,
@@ -662,7 +650,7 @@ def set_cli_option_after(
     insert_after: Optional[str] = None,
 ) -> None:
     """Replace an option pair, inserting after *insert_after* when absent."""
-    drop_cli_option_pair(tokens, {long_opt, short_opt})
+    drop_cli_option(tokens, {long_opt, short_opt})
     insert_idx = len(tokens)
     if insert_after is not None and insert_after in tokens:
         insert_idx = tokens.index(insert_after) + 1
@@ -709,7 +697,7 @@ def apply_shared_batch_cli_options(
     index_value = _resolve_index_value(batch_entry)
     if index_value is not None:
         prefer_short = any(token in {"-i", "--si"} for token in args)
-        drop_cli_option_pair(args, _INDEX_OPTIONS)
+        drop_cli_option(args, _INDEX_OPTIONS)
         set_cli_option(
             args,
             long_opt="--index",
