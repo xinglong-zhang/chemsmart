@@ -582,6 +582,11 @@ def prepare_batch_jobs(
     """
     if molecule_indices is None or len(jobs) <= 1:
         return None
+    if len(jobs) != len(molecule_indices):
+        raise ValueError(
+            f"Cannot prepare batch jobs: {len(jobs)} job(s) vs "
+            f"{len(molecule_indices)} molecule index(es)."
+        )
     paired_jobs: list[Any] = []
     entries: list[dict[str, Any]] = []
     for job, index in zip(jobs, molecule_indices):

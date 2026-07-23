@@ -81,6 +81,19 @@ def test_prepare_batch_jobs_returns_none_for_single_job():
     assert get_job_batch_entry(jobs[0]) is None
 
 
+def test_prepare_batch_jobs_rejects_length_mismatch():
+    jobs = [
+        SimpleNamespace(label="a"),
+        SimpleNamespace(label="b"),
+        SimpleNamespace(label="c"),
+    ]
+    with pytest.raises(ValueError, match="3 job\\(s\\) vs 2 molecule index"):
+        prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
+    assert get_job_batch_entry(jobs[0]) is None
+    assert get_job_batch_entry(jobs[1]) is None
+    assert get_job_batch_entry(jobs[2]) is None
+
+
 def test_resolve_array_cli_args_requires_rewrite_cli_when_entries_present():
     job = SimpleNamespace(label="acid1")
     set_job_batch_entry(
