@@ -145,21 +145,6 @@ class GaussianCrestJob(NestableJobMixin, GaussianJob):
         return len(self.all_conformers)
 
     @property
-    def last_run_job_index(self):
-        """
-        Get the index of the first incomplete job.
-
-        Tracks progress through the conformer ensemble by identifying
-        the next job to run. Useful for resuming interrupted
-        calculations.
-
-        Returns:
-            int: Index of the first incomplete job; equals total number
-                of conformers if all jobs are complete.
-        """
-        return self._check_last_finished_job_index()
-
-    @property
     def all_conformers_jobs(self):
         """
         Get all conformer optimization jobs in the ensemble.
@@ -185,40 +170,6 @@ class GaussianCrestJob(NestableJobMixin, GaussianJob):
     def num_array_children(self) -> int:
         """Number of conformer children submitted for array/local nestable run."""
         return min(self.num_confs_to_opt, self.num_conformers)
-
-    @property
-    def incomplete_conformers_jobs(self):
-        """
-        Get incomplete conformer optimization jobs.
-
-        Filters the job list to return only those jobs that have not
-        yet completed successfully. Useful for selective resubmission.
-
-        Returns:
-            list: List of incomplete GaussianGeneralJob objects.
-        """
-        return [
-            job for job in self.all_conformers_jobs if not job.is_complete()
-        ]
-
-    def _check_last_finished_job_index(self):
-        """
-        Find the index of the first incomplete job in the sequence.
-
-        Iterates through all conformer jobs to identify the last
-        point of progress. This is used for progress tracking and
-        resuming calculations.
-
-        Returns:
-            int: Index of the first incomplete job, or total number of
-                conformers if all jobs are complete.
-        """
-        for i, job in enumerate(self.all_conformers_jobs):
-            if not job.is_complete():
-                return i
-
-        # If all complete
-        return self.num_conformers
 
     def _prepare_all_jobs(self):
         """

@@ -90,16 +90,6 @@ class ORCAQRCJob(NestableJobMixin, ORCAJob):
         self.jobtype = self.settings.__dict__["jobtype"]
 
     @property
-    def both_qrc_jobs(self):
-        """
-        Both QRC forward and reverse jobs.
-
-        Returns:
-            list: List of ORCAGeneralJob objects for QRC.
-        """
-        return self.get_array_child_jobs()
-
-    @property
     def num_array_children(self) -> int:
         """Forward and reverse QRC children."""
         return 2
@@ -171,7 +161,7 @@ class ORCAQRCJob(NestableJobMixin, ORCAJob):
         logger.info("Running QRC jobs using ORCABatchJob")
         run_child_jobs_as_batch(
             batch_cls=ORCABatchJob,
-            jobs=self.both_qrc_jobs,
+            jobs=self.get_array_child_jobs(),
             parent=self,
             label_suffix="_batch",
             fail_fast=False,
@@ -187,10 +177,4 @@ class ORCAQRCJob(NestableJobMixin, ORCAJob):
         """
         Check if both QRC jobs are complete.
         """
-        return self._both_qrc_jobs_are_complete()
-
-    def _both_qrc_jobs_are_complete(self):
-        """
-        Verify completion status of both QRC jobs.
-        """
-        return all(job.is_complete() for job in self.both_qrc_jobs)
+        return all(job.is_complete() for job in self.get_array_child_jobs())

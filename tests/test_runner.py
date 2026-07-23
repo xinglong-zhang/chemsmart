@@ -634,10 +634,7 @@ class TestGaussianBatchDelegation:
 
         mock_jobs = [Mock(label="qrc_f"), Mock(label="qrc_r")]
         mocker.patch.object(
-            type(job),
-            "both_qrc_jobs",
-            new_callable=mocker.PropertyMock,
-            return_value=mock_jobs,
+            job, "get_array_child_jobs", return_value=mock_jobs
         )
 
         mock_batch_cls = mocker.patch(
@@ -1161,12 +1158,7 @@ class TestBatchSerialExecutionPolicy:
             jobrunner=gaussian_jobrunner_no_scratch,
         )
         qrc_jobs = [Mock(label="qf"), Mock(label="qr")]
-        mocker.patch.object(
-            type(qrc),
-            "both_qrc_jobs",
-            new_callable=mocker.PropertyMock,
-            return_value=qrc_jobs,
-        )
+        mocker.patch.object(qrc, "get_array_child_jobs", return_value=qrc_jobs)
         qrc._run_both_jobs()
 
         orca_settings = ORCAJobSettings()
@@ -1178,10 +1170,7 @@ class TestBatchSerialExecutionPolicy:
         )
         orca_jobs = [Mock(label="of"), Mock(label="or")]
         mocker.patch.object(
-            type(orca_qrc),
-            "both_qrc_jobs",
-            new_callable=mocker.PropertyMock,
-            return_value=orca_jobs,
+            orca_qrc, "get_array_child_jobs", return_value=orca_jobs
         )
         orca_qrc._run_both_jobs()
 

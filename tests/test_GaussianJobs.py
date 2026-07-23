@@ -746,8 +746,3 @@ class TestGaussianTrajJobs:
             "traj_stable_c4",
             "traj_stable_c5",
         ]
-        # Incomplete filter would have been [c1,c2,c3,c5][:3] = c1,c2,c3
-        incomplete_labels = [
-            j.label for j in job.incomplete_structure_run_jobs
-        ]
-        assert incomplete_labels != [j.label for j in selected]

@@ -90,16 +90,6 @@ class GaussianQRCJob(NestableJobMixin, GaussianJob):
         self.jobtype = self.settings.__dict__["jobtype"]
 
     @property
-    def both_qrc_jobs(self):
-        """
-        Both QRC forward and reverse jobs.
-
-        Returns:
-            list: List of GaussianGeneralJob objects for QRC.
-        """
-        return self.get_array_child_jobs()
-
-    @property
     def num_array_children(self) -> int:
         """Forward and reverse QRC children."""
         return 2
@@ -174,7 +164,7 @@ class GaussianQRCJob(NestableJobMixin, GaussianJob):
         try:
             run_child_jobs_as_batch(
                 batch_cls=GaussianBatchJob,
-                jobs=self.both_qrc_jobs,
+                jobs=self.get_array_child_jobs(),
                 parent=self,
                 label_suffix="_batch",
                 fail_fast=False,
@@ -193,10 +183,4 @@ class GaussianQRCJob(NestableJobMixin, GaussianJob):
         """
         Check if both QRC jobs are complete.
         """
-        return self._both_qrc_jobs_are_complete()
-
-    def _both_qrc_jobs_are_complete(self):
-        """
-        Verify completion status of both QRC jobs.
-        """
-        return all(job.is_complete() for job in self.both_qrc_jobs)
+        return all(job.is_complete() for job in self.get_array_child_jobs())

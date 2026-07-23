@@ -329,54 +329,6 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
             skip_completed=self.skip_completed,
         )
 
-    @property
-    def last_run_job_index(self):
-        """
-        Get the index of the last completed job.
-
-        Tracks progress through the structure job list for resuming
-        interrupted calculations.
-
-        Returns:
-            int: Index of last finished job, or total number if
-                all jobs are complete.
-        """
-        return self._check_last_finished_job_index()
-
-    @property
-    def incomplete_structure_run_jobs(self):
-        """
-        Get incomplete structure calculation jobs.
-
-        Filters the job list to return only those that have not
-        completed successfully, useful for selective resubmission.
-
-        Returns:
-            list: Incomplete GaussianGeneralJob objects.
-        """
-        return [
-            job
-            for job in self.all_structures_run_jobs
-            if not job.is_complete()
-        ]
-
-    def _check_last_finished_job_index(self):
-        """
-        Find the index of the last completed job in sequence.
-
-        Iterates through structure jobs to identify progress and
-        determine where to resume if needed.
-
-        Returns:
-            int: Index of last finished job, or total number of unique
-                structures if all jobs are complete.
-        """
-        for i, job in enumerate(self.all_structures_run_jobs):
-            if not job.is_complete():
-                return i
-        # If all complete
-        return self.num_unique_structures
-
     def _run_all_jobs(self):
         """
         Execute structure calculation jobs based on configuration.
