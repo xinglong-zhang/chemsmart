@@ -34,7 +34,7 @@ from chemsmart.cli.pka import (
     wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
-from chemsmart.jobs.batch_manifest import set_job_batch_entry
+from chemsmart.jobs.batch import set_job_batch_entry
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings

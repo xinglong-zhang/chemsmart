@@ -15,10 +15,11 @@ from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import (
     BatchJob,
+    get_job_batch_entry,
     get_nestable_array_children,
+    rewrite_batch_cli_args,
     warn_legacy_job_list,
 )
-from chemsmart.jobs.batch_manifest import get_job_batch_entry
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.batch import OrcaBatchJob
@@ -236,10 +237,16 @@ def process_pipeline(ctx, *args, **kwargs):
             logger.warning('Not submitting as "test" flag specified.')
 
         shared_cli_args = _reconstruct_cli_args(ctx)
-        # Currently only pKa attaches batch_entry; pass its CLI rewriter.
         rewrite_cli = None
-        if any(get_job_batch_entry(job) is not None for job in batch_job.jobs):
-            rewrite_cli = rewrite_pka_batch_cli_args
+        entries = [get_job_batch_entry(job) for job in batch_job.jobs]
+        if any(entry is not None for entry in entries):
+            if any(
+                entry is not None and "proton_index" in entry
+                for entry in entries
+            ):
+                rewrite_cli = rewrite_pka_batch_cli_args
+            else:
+                rewrite_cli = rewrite_batch_cli_args
 
         server = Server.from_servername(kwargs.get("server"))
         server.submit_batch(

@@ -36,7 +36,7 @@ from chemsmart.cli.pka import (
     wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
-from chemsmart.jobs.batch_manifest import set_job_batch_entry
+from chemsmart.jobs.batch import set_job_batch_entry
 from chemsmart.jobs.orca.batch import OrcaBatchJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.utils.cli import MyCommand, MyGroup

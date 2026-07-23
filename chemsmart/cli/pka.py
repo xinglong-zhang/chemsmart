@@ -799,105 +799,50 @@ def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
 def rewrite_pka_batch_cli_args(cli_args, batch_entry):
     """Rewrite a shared ``pka batch`` CLI into a single-row ``pka submit``.
 
-    Used when array-submitting heterogeneous pKa table/CDXML children: replace
-    the table/CDXML ``-f`` path, switch ``batch`` → ``submit``, and inject
-    row-specific options (proton index, charge, multiplicity, scheme, label).
+    Starts from the shared batch-entry rewriter (filepath, index, charge,
+    multiplicity, label), then applies pKa-only changes: ``batch`` →
+    ``submit``, ``--proton-index``, scheme, and drop reference options for
+    the direct scheme.
     """
+    from chemsmart.jobs.batch import (
+        apply_shared_batch_cli_options,
+        drop_cli_option,
+        set_cli_option,
+        set_cli_option_after,
+    )
+
     if not batch_entry:
         return list(cli_args)
 
     args = list(cli_args)
-    table_option_names = {"-f", "--filename"}
-
-    for idx in range(len(args) - 1):
-        if args[idx] in table_option_names:
-            args[idx + 1] = str(batch_entry["filepath"])
-            break
+    insert_before = "pka" if "pka" in args else None
+    apply_shared_batch_cli_options(
+        args, batch_entry, insert_before=insert_before
+    )
 
     if "batch" in args:
         args[args.index("batch")] = "submit"
 
-    option_map = {
-        "--proton-index": str(batch_entry["proton_index"]),
-        "-pi": str(batch_entry["proton_index"]),
-        "--charge": str(batch_entry["charge"]),
-        "-c": str(batch_entry["charge"]),
-        "--multiplicity": str(batch_entry["multiplicity"]),
-        "-m": str(batch_entry["multiplicity"]),
-    }
-
-    fragment_index = batch_entry.get("fragment_index")
-    if fragment_index is not None:
-        option_map["--index"] = str(fragment_index)
-        option_map["-i"] = str(fragment_index)
-
-    batch_label = batch_entry.get("label")
-    if batch_label is not None:
-        option_map["--label"] = str(batch_label)
-        option_map["-l"] = str(batch_label)
-
-    def _drop_option(tokens, option_names):
-        idx = 0
-        while idx < len(tokens):
-            if tokens[idx] in option_names:
-                del tokens[idx]
-                if idx < len(tokens):
-                    del tokens[idx]
-                continue
-            idx += 1
-
-    def _drop_option_pair(tokens, option_names):
-        idx = 0
-        while idx < len(tokens):
-            if tokens[idx] in option_names:
-                del tokens[idx : idx + 2]
-                continue
-            idx += 1
-
-    def _set_option(tokens, long_opt, short_opt, insert_before=None):
-        if long_opt in tokens:
-            pos = tokens.index(long_opt)
-            if pos + 1 < len(tokens):
-                tokens[pos + 1] = option_map[long_opt]
-            return
-        if short_opt in tokens:
-            pos = tokens.index(short_opt)
-            if pos + 1 < len(tokens):
-                tokens[pos + 1] = option_map[short_opt]
-            return
-
-        insert_idx = len(tokens)
-        if insert_before in tokens:
-            insert_idx = tokens.index(insert_before)
-        tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-    def _set_option_after(tokens, long_opt, short_opt, insert_after=None):
-        _drop_option_pair(tokens, {long_opt, short_opt})
-        insert_idx = len(tokens)
-        if insert_after in tokens:
-            insert_idx = tokens.index(insert_after) + 1
-        tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-    _set_option_after(args, "--proton-index", "-pi", insert_after="submit")
-    _set_option(args, "--charge", "-c", insert_before="pka")
-    _set_option(args, "--multiplicity", "-m", insert_before="pka")
-    if fragment_index is not None:
-        _set_option(args, "--index", "-i", insert_before="pka")
-    if batch_label is not None:
-        _set_option(args, "--label", "-l", insert_before="pka")
+    if batch_entry.get("proton_index") is not None:
+        set_cli_option_after(
+            args,
+            long_opt="--proton-index",
+            short_opt="-pi",
+            value=str(batch_entry["proton_index"]),
+            insert_after="submit" if "submit" in args else None,
+        )
 
     batch_scheme = batch_entry.get("scheme")
     if batch_scheme is not None:
-        option_map.update(
-            {
-                "--scheme": str(batch_scheme),
-                "-s": str(batch_scheme),
-            }
+        set_cli_option(
+            args,
+            long_opt="--scheme",
+            short_opt="-s",
+            value=str(batch_scheme),
+            insert_before="submit" if "submit" in args else insert_before,
         )
-        _set_option(args, "--scheme", "-s", insert_before="submit")
-
         if batch_scheme == "direct":
-            _drop_option(
+            drop_cli_option(
                 args,
                 {
                     "--reference",

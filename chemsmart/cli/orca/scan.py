@@ -19,6 +19,7 @@ from chemsmart.cli.orca.orca import (
     orca,
 )
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -159,6 +160,9 @@ def scan(
                 jobs.append(job)
             logger.debug(f"Created {len(jobs)} ORCA scan jobs")
 
+            prepare_batch_jobs(
+                jobs, molecule_indices, filepath=ctx.obj.get("filename")
+            )
             return ORCABatchJob(
                 jobs=jobs,
                 label=f"{label}_batch",

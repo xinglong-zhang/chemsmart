@@ -14,6 +14,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_solvent_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -156,6 +157,9 @@ def opt(
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA optimization jobs")
 
+        prepare_batch_jobs(
+            jobs, molecule_indices, filepath=ctx.obj.get("filename")
+        )
         return ORCABatchJob(
             jobs=jobs,
             label=f"{label}_batch",

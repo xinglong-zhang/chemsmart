@@ -793,8 +793,8 @@ class Server(RegistryMixin):
     ):
         """Submit a top-level ``BatchJob`` as a scheduler array.
 
-        Resolves per-task CLI args (optional *rewrite_cli* for heterogeneous
-        children), writes a batch manifest when needed, applies *policy* for
+        Resolves per-task CLI args (optional *rewrite_cli* when children carry
+        ``batch_entry``), writes a batch manifest when needed, applies *policy*
         the array concurrency throttle, then delegates to
         ``submit_array_job``.
 
@@ -805,11 +805,11 @@ class Server(RegistryMixin):
             test: If True, write scripts only (do not queue).
             cli_args: Shared reconstructed ``chemsmart run`` CLI tokens.
             rewrite_cli: Optional callback to rewrite shared CLI for each
-                child ``batch_entry`` (e.g. pKa per-row submit).
+                child ``batch_entry`` (homogeneous multi-molecule or pKa).
             **kwargs: Extra submitter construction parameters.
         """
-        from chemsmart.jobs.batch import BatchJob
-        from chemsmart.jobs.batch_manifest import (
+        from chemsmart.jobs.batch import (
+            BatchJob,
             build_manifest_children,
             get_job_batch_entry,
             resolve_array_cli_args,
@@ -834,7 +834,7 @@ class Server(RegistryMixin):
         )
         if has_batch_entries and rewrite_cli is None:
             raise ValueError(
-                "Heterogeneous BatchJob children have batch_entry but no "
+                "BatchJob children have batch_entry but no "
                 "rewrite_cli callback was provided for per-task CLI args."
             )
         active_rewrite = rewrite_cli if has_batch_entries else None

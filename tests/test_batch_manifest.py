@@ -7,24 +7,78 @@ from types import SimpleNamespace
 import pytest
 
 from chemsmart.cli.pka import rewrite_pka_batch_cli_args
-from chemsmart.jobs.batch_manifest import (
+from chemsmart.jobs.batch import (
     batch_manifest_filename,
     build_manifest_children,
     get_job_batch_entry,
     load_batch_manifest_entry,
+    prepare_batch_jobs,
     resolve_array_cli_args,
+    rewrite_batch_cli_args,
     set_job_batch_entry,
     write_batch_manifest,
 )
 
 
-def test_resolve_array_cli_args_homogeneous_keeps_shared_list():
+def test_resolve_array_cli_args_without_batch_entry_keeps_shared_list():
     jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
     shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
     assert resolve_array_cli_args(jobs, shared) == shared
 
 
-def test_resolve_array_cli_args_heterogeneous_requires_rewrite_cli():
+def test_resolve_array_cli_args_with_batch_entry_uses_shared_rewrite():
+    job1 = SimpleNamespace(label="mol_idx1")
+    job2 = SimpleNamespace(label="mol_idx2")
+    set_job_batch_entry(job1, {"filepath": "mols.xyz", "molecule_index": 1})
+    set_job_batch_entry(job2, {"filepath": "mols.xyz", "molecule_index": 2})
+    shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+    cli_lists = resolve_array_cli_args(
+        [job1, job2],
+        shared,
+        rewrite_cli=rewrite_batch_cli_args,
+    )
+    assert cli_lists[0][cli_lists[0].index("-i") + 1] == "1"
+    assert cli_lists[1][cli_lists[1].index("-i") + 1] == "2"
+    assert all("1,2" not in args for args in cli_lists)
+
+
+def test_rewrite_batch_cli_args_narrows_shared_index():
+    shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2,3", "opt"]
+    rewritten = rewrite_batch_cli_args(
+        shared,
+        {"filepath": "mols.xyz", "molecule_index": 2},
+    )
+    assert rewritten[rewritten.index("-i") + 1] == "2"
+    assert "1,2,3" not in rewritten
+
+
+def test_rewrite_pka_batch_cli_args_builds_on_shared_rewrite():
+    entry = {
+        "filepath": "acid.xyz",
+        "proton_index": 2,
+        "charge": 0,
+        "multiplicity": 1,
+        "scheme": "direct",
+        "label": "acid",
+    }
+    shared = ["gaussian", "-f", "table.csv", "pka", "batch"]
+    rewritten = rewrite_pka_batch_cli_args(shared, entry)
+    assert "submit" in rewritten
+    assert "acid.xyz" in rewritten
+    assert rewritten[rewritten.index("--proton-index") + 1] == "2"
+
+
+def test_prepare_batch_jobs_attaches_entries():
+    jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
+    prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
+    assert get_job_batch_entry(jobs[0]) == {
+        "filepath": "mols.xyz",
+        "molecule_index": 1,
+    }
+    assert get_job_batch_entry(jobs[1])["molecule_index"] == 2
+
+
+def test_resolve_array_cli_args_requires_rewrite_cli_when_entries_present():
     job = SimpleNamespace(label="acid1")
     set_job_batch_entry(
         job,
@@ -41,7 +95,7 @@ def test_resolve_array_cli_args_heterogeneous_requires_rewrite_cli():
         resolve_array_cli_args([job], ["gaussian", "pka", "batch"])
 
 
-def test_resolve_array_cli_args_heterogeneous_uses_rewrite_callback():
+def test_resolve_array_cli_args_pka_entries_use_rewrite_callback():
     job1 = SimpleNamespace(label="acid1")
     job2 = SimpleNamespace(label="acid2")
     set_job_batch_entry(

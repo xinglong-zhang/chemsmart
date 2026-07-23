@@ -442,6 +442,10 @@ class TestSubmitBatch:
     def test_submit_batch_delegates_to_submit_array_job(
         self, tmp_path, monkeypatch
     ):
+        from chemsmart.jobs.batch import (
+            rewrite_batch_cli_args,
+            set_job_batch_entry,
+        )
         from chemsmart.jobs.gaussian.batch import GaussianBatchJob
         from chemsmart.settings.server import (
             SchedulerArrayPolicy,
@@ -505,12 +509,19 @@ class TestSubmitBatch:
                 },
             )(),
         ]
+        set_job_batch_entry(
+            children[0], {"filepath": "mols.xyz", "molecule_index": 1}
+        )
+        set_job_batch_entry(
+            children[1], {"filepath": "mols.xyz", "molecule_index": 2}
+        )
         batch = GaussianBatchJob(jobs=children, label="mols_batch")
         server.submit_batch(
             batch,
             policy=SchedulerArrayPolicy(no_run_in_parallel=True),
             test=True,
             cli_args=["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"],
+            rewrite_cli=rewrite_batch_cli_args,
         )
 
         assert captured["batch_label"] == "mols_batch"
@@ -518,12 +529,8 @@ class TestSubmitBatch:
         assert captured["test"] is True
         assert len(captured["jobs"]) == 2
         assert captured["cli_args"] == [
-            "gaussian",
-            "-f",
-            "mols.xyz",
-            "-i",
-            "1,2",
-            "opt",
+            ["gaussian", "-f", "mols.xyz", "-i", "1", "opt"],
+            ["gaussian", "-f", "mols.xyz", "-i", "2", "opt"],
         ]
 
 

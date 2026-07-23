@@ -9,6 +9,7 @@ from chemsmart.cli.gaussian.gaussian import (
 )
 from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_gaussian
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -119,6 +120,9 @@ def scan(
                     **kwargs,
                 )
                 jobs.append(job)
+            prepare_batch_jobs(
+                jobs, molecule_indices, filepath=ctx.obj.get("filename")
+            )
             return GaussianBatchJob(
                 jobs=jobs,
                 label=f"{label}_batch",
