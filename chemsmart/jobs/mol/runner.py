@@ -119,13 +119,12 @@ class PyMOLJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            scratch: Whether to use scratch directories. None (default)
-                uses PyMOLJobRunner.SCRATCH (False). Explicit False/True
-                overrides that default.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # None = unset: inherit SCRATCH=False for PyMOL jobs.
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)

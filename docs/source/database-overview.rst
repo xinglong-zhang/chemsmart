@@ -3,8 +3,9 @@
 #####################
 
 CHEMSMART provides a unified database subsystem for managing, querying, and reusing quantum chemistry calculation data.
-The ``chemsmart run database`` command group converts heterogeneous computational output files into a structured,
-identity-aware, and queryable database for downstream analysis, machine learning, and CHEMSMART workflow automation.
+The ``chemsmart run database`` command group converts heterogeneous computational output files and calculation folders
+into a structured, identity-aware, and queryable database for downstream analysis, machine learning, and CHEMSMART
+workflow automation.
 
 ************
  Motivation
@@ -45,7 +46,7 @@ These entities represent *what was computed*, *what chemical species was studied
    -  -  ``record``
       -  One calculation
       -  Identified by ``record_id``. Stores the calculation context, parsed results, runtime information, and
-         provenance for one output file.
+         provenance for one calculation.
 
    -  -  ``molecule``
       -  One chemical species
@@ -131,12 +132,16 @@ A typical CHEMSMART database workflow is:
  Usage Notes
 *************
 
--  **Supported programs.** Only Gaussian and ORCA output files are currently parsed. Files from other programs are
-   skipped during ``assemble``.
+-  **Supported programs.** Gaussian and ORCA output files and xTB calculation folders are currently parsed.
+   Files/folders from other programs are skipped during ``assemble``. Note that xTB results are organized as calculation
+   folders rather than single output files.
+
 -  **Idempotent assembly.** Re-running ``assemble`` on the same directory will not duplicate records. Entries with the
    same ``record_id`` are replaced, and the number of replaced duplicates is reported.
+
 -  **Database validation.** Every database operation first verifies that the input is a valid CHEMSMART database with
    the expected schema. Foreign ``.db`` files are rejected with a clear error.
+
 -  **Portability.** A CHEMSMART database is stored as a single portable ``.db`` file. It can be copied between machines
    and shared alongside the source outputs for reproducibility, since each record carries provenance metadata.
 

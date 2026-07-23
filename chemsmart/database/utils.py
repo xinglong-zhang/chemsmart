@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -198,6 +199,15 @@ def truncate_iso(iso_str):
 def file_size(filename):
     """Return file size in bytes."""
     return Path(filename).stat().st_size
+
+
+def directory_size(directory):
+    """Return total byte size of all files under a directory."""
+    total = 0
+    for root, _dirs, files in os.walk(directory):
+        for file in files:
+            total += file_size(Path(root) / file)
+    return total
 
 
 def human_size(size_bytes):

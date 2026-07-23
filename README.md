@@ -256,7 +256,7 @@ To submit (and run) a geometry optimization job, do:
 ```py
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> opt
 ```
-where `<server_name>` is the one of the servers specified in `~/.chemsmart/server/*.yaml` files, without `.yaml` extension; `<project>` is one of the project settings specified in `~/.chemsmart/gaussian/*.yaml` files, without `.yaml` extension; and `<input_file>` is an input file the user wishes to run job on. Note that this input file can be any format, such as `.xyz`, Gaussian `.com`, `.gjf` or `.log` file or ORCA `.inp` or `.out` file.
+where `<server_name>` is the one of the servers specified in `~/.chemsmart/server/*.yaml` files, without `.yaml` extension; `<project>` is one of the project settings specified in `~/.chemsmart/gaussian/*.yaml` files, without `.yaml` extension; and `<input_file>` is an input file the user wishes to run job on. Note that this input file can be any format, such as `.xyz`, Gaussian `.com`, `.gjf` or `.log` file, ORCA `.inp` or `.out` file, or an xTB main `.out` file.
 
 ---
 

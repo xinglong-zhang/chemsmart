@@ -73,4 +73,9 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload dist/*
+          if [[ -z "${TWINE_PASSWORD:-}" ]]; then
+            echo "::error::The PYPI_API_TOKEN GitHub secret is missing or unavailable."
+            exit 1
+          fi
+
+          python -m twine upload --non-interactive dist/*

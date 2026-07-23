@@ -5,7 +5,10 @@ import sqlite3
 import numpy as np
 import pytest
 
-from chemsmart.database.assemble import SingleFileAssembler
+from chemsmart.database.assemble import (
+    SingleFileAssembler,
+    SingleFolderAssembler,
+)
 from chemsmart.database.database import Database
 from chemsmart.database.export import DatabaseExporter
 from chemsmart.database.inspect import DatabaseInspector
@@ -39,17 +42,34 @@ from chemsmart.database.utils import (
 INCHIKEY_H2O = "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
 INCHIKEY_HE = "SWQJXJOGLNCZEY-UHFFFAOYSA-N"
 INCHIKEY_CO2 = "CURLTUGMZLYLDI-UHFFFAOYSA-N"
+INCHIKEY_C6H4 = "AIESRBVWAFETPR-UHFFFAOYSA-N"
 # Known stable record ID: Gaussian MP2/aug-cc-pVTZ geometry optimisation of water
 RECORD_ID_GAUSSIAN_MP2_WATER = (
-    "3cc5dff791c16d7218c3768e539c2ffa211742fe3e61c939870ccdf2a8842504"
+    "d69cb7535dbeff46026b5f1a786659cc1d9035ea2015c0c73404cc4f7781eb63"
 )
 # Known stable record ID: ORCA M062X/def2-SVP geometry optimisation of water
 RECORD_ID_ORCA_M062X_WATER = (
-    "59279a681dffacf2de9289109d212e8831b0eded1ab0be5a75c3b075ac1a2713"
+    "645702e39834649153f4f8c83b8f979165cd61eb86c28d4507db8e01f76e42f7"
+)
+# Known stable record ID: xTB GFN2 ohess of water
+RECORD_ID_XTB_GFN2_WATER = (
+    "cfec83b1119920c5810c9989996017b1e82117b6bf8df7e5ecb5716119c1c126"
 )
 # Known stable structure ID: He atom at origin (0,0,0)
 STRUCTURE_ID_ORIGIN_HE = (
     "4054373538ed8c659cd165de0c57822be13073206e4305ddc5dc6937fb2cd65b"
+)
+# Known stable record ID: xTB GFN2 ohess of CO2 (co2_ohess)
+RECORD_ID_XTB_CO2 = (
+    "ab59d330d3fa785dad8a23ac51f2bf4edde8569ace56347f262c716151f29598"
+)
+# Known stable record ID: xTB GFN2 hess of He (he_hess)
+RECORD_ID_XTB_HE = (
+    "5668063a53c661d8c07f6b56ee4985cf5740fd38674a7b0f563d98fa85986400"
+)
+# Known stable record ID: xTB GFN2 ALPB(toluene) opt of p-benzyne
+RECORD_ID_XTB_P_BENZYNE_OPT = (
+    "e213b34b678f7682ed077c0088dd97e9d229e721bf546321bc35003030f8558a"
 )
 
 
@@ -515,7 +535,7 @@ class TestDatabaseSchemaAndInsertion:
         # linked back to the same deduplicated species.
         co2_records = db.get_records_for_molecule(INCHIKEY_CO2)
         assert len(co2_records) == 2
-        assert {r["program"] for r in co2_records} == {"gaussian", "orca"}
+        assert {r["program"] for r in co2_records} == {"Gaussian", "ORCA"}
 
         # He has only one record and its own molecule entry.
         he_records = db.get_records_for_molecule(INCHIKEY_HE)
@@ -713,7 +733,7 @@ class TestDatabaseRecordMoleculeStructureQueries:
         # Summaries should handle mixed molecules and both supported programs.
         summaries = db.get_all_record_summaries()
         assert len(summaries) == 3
-        assert {s["program"] for s in summaries} == {"gaussian", "orca"}
+        assert {s["program"] for s in summaries} == {"Gaussian", "ORCA"}
         assert {s["chemical_formula"] for s in summaries} == {
             "C6H6",
             "CO2",
@@ -820,7 +840,7 @@ class TestDatabaseQuery:
         assert params_eq == ("orca",)
 
         # Test parsing LIKE pattern
-        like = DatabaseQuery(db.db_file, 'source_file ~ "CO2"')
+        like = DatabaseQuery(db.db_file, 'source ~ "CO2"')
         where, params = like.parse_query()
         assert params == ("%CO2%",)
 
@@ -859,11 +879,11 @@ class TestDatabaseQuery:
         assert records.count_matched() == 3
 
         # Test filtering by program with the single ORCA record in this set.
-        matched = DatabaseQuery(db.db_file, "program = 'orca'")
+        matched = DatabaseQuery(db.db_file, "program = 'ORCA'")
         assert matched.count_matched() == 1
-        assert matched.query_summaries()[0]["program"] == "orca"
+        assert matched.query_summaries()[0]["program"] == "ORCA"
 
-        matched_eq_alias = DatabaseQuery(db.db_file, "program == 'orca'")
+        matched_eq_alias = DatabaseQuery(db.db_file, "program == 'ORCA'")
         assert matched_eq_alias.count_matched() == matched.count_matched()
 
         # Test molecule-level queries: 3-atom molecules
@@ -929,7 +949,7 @@ class TestDatabaseExport:
         assert formulas == {"H2O"}
         # One from Gaussian, one from ORCA
         programs = {record["provenance"]["program"] for record in records}
-        assert programs == {"gaussian", "orca"}
+        assert programs == {"Gaussian", "ORCA"}
 
         # Test CSV export
         csv_path = tmp_path / "records.csv"
@@ -947,7 +967,7 @@ class TestDatabaseExport:
         csv_programs = {row["program"] for row in rows}
         csv_charges = {row["charge"] for row in rows}
         assert csv_formulas == {"H2O"}
-        assert csv_programs == {"gaussian", "orca"}
+        assert csv_programs == {"Gaussian", "ORCA"}
         assert csv_charges == {"0"}  # both are neutral
 
     def test_export_helpers(self, tmp_path):
@@ -1067,8 +1087,8 @@ class TestDatabaseInspect:
         stats = inspector.overview()
         assert stats["num_records"] == 2
         assert stats["num_molecules"] == 1
-        assert ("gaussian", 1) in stats["programs"]
-        assert ("orca", 1) in stats["programs"]
+        assert ("Gaussian", 1) in stats["programs"]
+        assert ("ORCA", 1) in stats["programs"]
         assert "Database Overview" in inspector.format_overview()
 
         record_inspector = DatabaseInspector(
@@ -1169,7 +1189,7 @@ class TestDatabaseAssembler:
             gaussian_mp2_outputfile
         ).assemble_data
         assert isinstance(water_gaussian, AssembledRecord)
-        assert water_gaussian.provenance["program"] == "gaussian"
+        assert water_gaussian.provenance["program"] == "Gaussian"
         assert water_gaussian.provenance["parser"] == "Gaussian16Output"
         assert water_gaussian.meta["method"] == "mp2"
         assert water_gaussian.meta["basis"] == "aug-cc-pvtz"
@@ -1179,7 +1199,7 @@ class TestDatabaseAssembler:
 
         water_orca = SingleFileAssembler(water_output_gas_path).assemble_data
         assert isinstance(water_orca, AssembledRecord)
-        assert water_orca.provenance["program"] == "orca"
+        assert water_orca.provenance["program"] == "ORCA"
         assert water_orca.provenance["parser"] == "ORCAOutput"
         assert water_orca.meta["method"] == "m062x"
         assert water_orca.meta["basis"] == "def2svp"
@@ -1198,7 +1218,7 @@ class TestDatabaseAssembler:
         unknown_output.write_text(
             "not a quantum chemistry output", encoding="utf-8"
         )
-        with pytest.raises(ValueError, match="Unsupported format"):
+        with pytest.raises(ValueError, match="Unsupported file"):
             SingleFileAssembler(unknown_output)._get_assembler(unknown_output)
 
 
@@ -1216,8 +1236,8 @@ class TestStaticDatabaseContent:
         programs = {}
         for s in db.get_all_record_summaries():
             programs[s["program"]] = programs.get(s["program"], 0) + 1
-        assert programs["gaussian"] == 36
-        assert programs["orca"] == 11
+        assert programs["Gaussian"] == 36
+        assert programs["ORCA"] == 11
 
     def test_gaussian_mp2_water_record(
         self, database_chemsmart_file, gaussian_mp2_outputfile
@@ -1230,7 +1250,7 @@ class TestStaticDatabaseContent:
         assert (
             record["provenance"]["program"]
             == assembled.provenance["program"]
-            == "gaussian"
+            == "Gaussian"
         )
         assert record["meta"]["method"] == assembled.meta["method"] == "mp2"
         assert (
@@ -1288,7 +1308,7 @@ class TestStaticDatabaseContent:
         assert (
             record["provenance"]["program"]
             == assembled.provenance["program"]
-            == "orca"
+            == "ORCA"
         )
         assert record["meta"]["method"] == assembled.meta["method"] == "m062x"
         assert record["meta"]["basis"] == assembled.meta["basis"] == "def2svp"
@@ -1322,7 +1342,7 @@ class TestStaticDatabaseContent:
         records = db.get_records_for_molecule(INCHIKEY_H2O)
         assert len(records) == 2  # water_mp2.log and water_opt.out
         programs = {r["program"] for r in records}
-        assert programs == {"gaussian", "orca"}
+        assert programs == {"Gaussian", "ORCA"}
 
     def test_he_molecule(self, database_chemsmart_file):
         """He molecule: monoatomic, single geometry, 3 records across Gaussian and ORCA."""
@@ -1336,11 +1356,11 @@ class TestStaticDatabaseContent:
         records = db.get_records_for_molecule(INCHIKEY_HE)
         assert len(records) == 3
         programs = {r["program"] for r in records}
-        assert programs == {"gaussian", "orca"}
+        assert programs == {"Gaussian", "ORCA"}
 
     def test_query_by_program(self, database_chemsmart_file):
         """Filtering by program='gaussian' returns exactly 36 of the 47 records."""
-        dq = DatabaseQuery(database_chemsmart_file, "program = 'gaussian'")
+        dq = DatabaseQuery(database_chemsmart_file, "program = 'Gaussian'")
         assert dq.count_total() == 47
         assert dq.count_matched() == 36
 
@@ -1349,7 +1369,7 @@ class TestStaticDatabaseContent:
         dq = DatabaseQuery(database_chemsmart_file, "method = 'mp2'")
         assert dq.count_matched() == 1
         result = dq.query_summaries()[0]
-        assert result["program"] == "gaussian"
+        assert result["program"] == "Gaussian"
         assert result["basis"] == "aug-cc-pvtz"
         assert result["chemical_formula"] == "H2O"
 
@@ -1366,8 +1386,8 @@ class TestStaticDatabaseContent:
         assert stats["num_records"] == 47
         assert stats["num_molecules"] == 33
         assert stats["num_structures"] == 314
-        assert ("gaussian", 36) in stats["programs"]
-        assert ("orca", 11) in stats["programs"]
+        assert ("Gaussian", 36) in stats["programs"]
+        assert ("ORCA", 11) in stats["programs"]
 
     def test_inspect_mp2_water_record(self, database_chemsmart_file):
         """Inspector record detail matches the same ground truth as
@@ -1402,3 +1422,176 @@ class TestStaticDatabaseContent:
             RECORD_ID_GAUSSIAN_MP2_WATER[:12]
         )
         assert resolved == RECORD_ID_GAUSSIAN_MP2_WATER
+
+    def test_xtb_database_counts(self, database_chemsmart_xtb_file):
+        """The xTB fixture holds exactly 7 records, 6 molecules, 41 structures."""
+        db = Database(database_chemsmart_xtb_file)
+        assert db.count_records() == 7
+        assert db.count_molecules() == 6
+        assert db.count_structures() == 41
+
+    def test_xtb_program_distribution(self, database_chemsmart_xtb_file):
+        """All 7 records are xTB."""
+        db = Database(database_chemsmart_xtb_file)
+        programs = {}
+        for s in db.get_all_record_summaries():
+            programs[s["program"]] = programs.get(s["program"], 0) + 1
+        assert programs["xTB"] == 7
+
+    def test_xtb_gfn2_water_record(
+        self, database_chemsmart_xtb_file, xtb_water_outfolder
+    ):
+        """xTB GFN2 ohess of water (water_ohess/)."""
+        db = Database(database_chemsmart_xtb_file)
+        record = db.get_record(record_id=RECORD_ID_XTB_GFN2_WATER)
+        assembled = SingleFolderAssembler(xtb_water_outfolder).assemble_data
+
+        assert (
+            record["provenance"]["program"]
+            == assembled.provenance["program"]
+            == "xTB"
+        )
+        assert record["meta"]["method"] == assembled.meta["method"] == "gfn2"
+        assert record["meta"]["basis"] == assembled.meta["basis"] == "default"
+        assert record["meta"]["jobtype"] == assembled.meta["jobtype"] == "opt"
+        assert (
+            record["meta"]["solvent_on"]
+            == assembled.meta["solvent_on"]
+            is False
+        )
+        assert np.isclose(
+            record["results"]["total_energy"],
+            assembled.results["total_energy"],
+        )
+        assert np.isclose(
+            record["results"]["total_energy"], -5.0705444, rtol=1e-6
+        )
+        assert np.isclose(
+            record["results"]["homo_energy"], assembled.results["homo_energy"]
+        )
+        assert np.isclose(
+            record["results"]["homo_energy"], -12.1467, rtol=1e-6
+        )
+        assert (
+            record["molecules"][-1]["chemical_formula"]
+            == assembled.molecules[-1]["chemical_formula"]
+            == "H2O"
+        )
+        assert (
+            record["molecules"][-1]["chemical_symbols"]
+            == assembled.molecules[-1]["chemical_symbols"]
+            == ["O", "H", "H"]
+        )
+        assert (
+            record["molecules"][-1]["charge"]
+            == assembled.molecules[-1]["charge"]
+            == 0
+        )
+        assert (
+            record["molecules"][-1]["multiplicity"]
+            == assembled.molecules[-1]["multiplicity"]
+            == 1
+        )
+        assert len(record["molecules"]) == len(assembled.molecules) == 4
+
+    def test_xtb_h2o_molecule(self, database_chemsmart_xtb_file):
+        """H2O molecule in the xTB DB links to the single water_ohess record."""
+        db = Database(database_chemsmart_xtb_file)
+        mol = db.get_molecule(INCHIKEY_H2O)
+        assert mol is not None
+        assert mol["chemical_formula"] == "H2O"
+        assert mol["element_counts"] == {"O": 1, "H": 2}
+        assert mol["is_linear"] is False
+        assert mol["is_monoatomic"] is False
+        records = db.get_records_for_molecule(INCHIKEY_H2O)
+        assert len(records) == 1
+        assert records[0]["program"] == "xTB"
+        assert records[0]["record_id"] == RECORD_ID_XTB_GFN2_WATER
+
+    def test_xtb_he_molecule(self, database_chemsmart_xtb_file):
+        """He molecule: monoatomic, single hess record in the xTB DB."""
+        db = Database(database_chemsmart_xtb_file)
+        mol = db.get_molecule(INCHIKEY_HE)
+        assert mol is not None
+        assert mol["chemical_formula"] == "He"
+        assert mol["element_counts"] == {"He": 1}
+        assert mol["number_of_atoms"] == 1
+        assert mol["is_monoatomic"] is True
+        records = db.get_records_for_molecule(INCHIKEY_HE)
+        assert len(records) == 1
+        assert records[0]["record_id"] == RECORD_ID_XTB_HE
+        assert records[0]["jobtype"] == "hess"
+
+    def test_xtb_c6h4_molecule(self, database_chemsmart_xtb_file):
+        """C6H4 (p-benzyne) links to both ALPB opt and sp records."""
+        db = Database(database_chemsmart_xtb_file)
+        mol = db.get_molecule(INCHIKEY_C6H4)
+        assert mol is not None
+        assert mol["chemical_formula"] == "C6H4"
+        assert mol["element_counts"] == {"C": 6, "H": 4}
+        records = db.get_records_for_molecule(INCHIKEY_C6H4)
+        assert len(records) == 2
+        assert {r["jobtype"] for r in records} == {"opt", "sp"}
+        assert {r["program"] for r in records} == {"xTB"}
+
+    def test_xtb_query_by_program(self, database_chemsmart_xtb_file):
+        """Filtering by program='xTB' returns all 7 records."""
+        dq = DatabaseQuery(database_chemsmart_xtb_file, "program = 'xTB'")
+        assert dq.count_total() == 7
+        assert dq.count_matched() == 7
+
+    def test_xtb_query_by_jobtype_opt(self, database_chemsmart_xtb_file):
+        """One of the seven xTB records are single point calculations."""
+        dq = DatabaseQuery(database_chemsmart_xtb_file, "jobtype = 'sp'")
+        assert dq.count_matched() == 1
+        result = dq.query_summaries()[0]
+        assert result["chemical_formula"] == "C6H4"
+        assert np.isclose(result["total_energy"], -14.66185696)
+
+    def test_xtb_query_limit(self, database_chemsmart_xtb_file):
+        """limit= truncates results but count_total() still reflects the full DB."""
+        dq = DatabaseQuery(database_chemsmart_xtb_file, None, limit=3)
+        assert len(dq.query_summaries()) == 3
+        assert dq.count_total() == 7
+
+    def test_xtb_inspect_overview(self, database_chemsmart_xtb_file):
+        """Inspector overview matches the xTB fixture statistics."""
+        inspector = DatabaseInspector(database_chemsmart_xtb_file)
+        stats = inspector.overview()
+        assert stats["num_records"] == 7
+        assert stats["num_molecules"] == 6
+        assert stats["num_structures"] == 41
+        assert ("xTB", 7) in stats["programs"]
+        assert ("gfn2", 7) in stats["methods"]
+        assert ("default", 7) in stats["basis_sets"]
+        assert stats["solvated_records"] == 2
+        assert stats["gas_phase_records"] == 5
+
+    def test_xtb_inspect_water_record(self, database_chemsmart_xtb_file):
+        """Inspector record detail for xTB water matches the stored ground truth."""
+        inspector = DatabaseInspector(
+            database_chemsmart_xtb_file,
+            record_id=RECORD_ID_XTB_GFN2_WATER[:12],
+        )
+        assert inspector.resolve_id() == RECORD_ID_XTB_GFN2_WATER
+        detail = inspector.record_detail()
+        assert detail["meta"]["method"] == "gfn2"
+        assert np.isclose(
+            detail["results"]["total_energy"], -5.07054444, rtol=1e-6
+        )
+
+    def test_xtb_inspect_molecule_h2o(self, database_chemsmart_xtb_file):
+        """Molecule inspector for H2O reports the single water_ohess record."""
+        inspector = DatabaseInspector(
+            database_chemsmart_xtb_file,
+            molecule_id=INCHIKEY_H2O,
+        )
+        mol, structures, records = inspector.molecule_detail()
+        assert mol["chemical_formula"] == "H2O"
+        assert len(records) == 1
+
+    def test_xtb_partial_id_for_water(self, database_chemsmart_xtb_file):
+        """A 12-character prefix uniquely identifies xTB water in this DB."""
+        db = Database(database_chemsmart_xtb_file)
+        resolved = db.get_record_by_partial_id(RECORD_ID_XTB_GFN2_WATER[:12])
+        assert resolved == RECORD_ID_XTB_GFN2_WATER

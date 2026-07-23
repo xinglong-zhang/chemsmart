@@ -3,6 +3,8 @@ from .assemble import (
     GaussianAssembler,
     ORCAAssembler,
     SingleFileAssembler,
+    SingleFolderAssembler,
+    XTBAssembler,
 )
 from .database import Database
 from .export import DatabaseExporter
@@ -14,7 +16,9 @@ __all__ = [
     "BaseAssembler",
     "GaussianAssembler",
     "ORCAAssembler",
+    "XTBAssembler",
     "SingleFileAssembler",
+    "SingleFolderAssembler",
     "AssembledRecord",
     "Database",
     "DatabaseInspector",

@@ -9,6 +9,7 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,
@@ -77,6 +78,7 @@ class Thermochemistry:
         **kwargs,
     ):
         self.filename = filename
+        self.program = get_program_type_from_file(self.filename)
         self.molecule = Molecule.from_filepath(filename)
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
@@ -148,11 +150,16 @@ class Thermochemistry:
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_program_type_from_file(self.filename)
+        program = self.program
         if program == "gaussian":
             output = Gaussian16Output(self.filename)
         elif program == "orca":
             output = ORCAOutput(self.filename)
+        elif program == "xtb":
+            # The main output identifies the xTB calculation directory;
+            # auxiliary files in that directory will provide additional data.
+            folder = os.path.dirname(os.path.abspath(self.filename))
+            output = XTBOutput(folder)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
