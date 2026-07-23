@@ -139,6 +139,7 @@ def _write_test_backend_project(tmp_path, backend):
 
 def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
     """Shared fixtures for sub ... pka batch submission tests."""
+    monkeypatch.chdir(tmp_path)
     acid1 = tmp_path / "acid1.xyz"
     acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
     acid2 = tmp_path / "acid2.xyz"
@@ -223,10 +224,11 @@ def _submitted_cli_args(captured):
     return first[2]
 
 
-def _attach_fake_array_server(monkeypatch, captured=None):
+def _attach_fake_array_server(monkeypatch, tmp_path, captured=None):
     """Patch Server.from_servername to capture submit_array_job calls."""
     from chemsmart.settings.server import Server
 
+    monkeypatch.chdir(tmp_path)
     if captured is None:
         captured = {"submissions": []}
     fake_server = Server(name="dummy")
@@ -620,7 +622,7 @@ class TestPKa:
         captured = {"submissions": []}
 
         fake_server, captured = _attach_fake_array_server(
-            monkeypatch, captured
+            monkeypatch, tmp_path, captured
         )
         real_from_filepath = Molecule.from_filepath
 
@@ -710,7 +712,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
         real_from_filepath = Molecule.from_filepath
 
         def _fake_from_filepath(filepath, *args, **kwargs):
@@ -803,7 +805,7 @@ class TestPKa:
         captured = {"submissions": []}
         reference_pair_call_count = {"count": 0}
 
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
         real_from_filepath = Molecule.from_filepath
         real_reference_pair_molecules = (
             ORCApKaJobSettings.reference_pair_molecules
@@ -908,7 +910,7 @@ class TestPKa:
 
         captured = {"submissions": []}
 
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
         real_from_filepath = Molecule.from_filepath
 
         def _fake_from_filepath(filepath, *args, **kwargs):
@@ -1216,7 +1218,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1263,7 +1265,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1317,7 +1319,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1400,7 +1402,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1498,7 +1500,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1543,7 +1545,7 @@ class TestPKa:
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
         captured = {"submissions": []}
-        _attach_fake_array_server(monkeypatch, captured)
+        _attach_fake_array_server(monkeypatch, tmp_path, captured)
 
         runner = CliRunner()
         result = runner.invoke(
