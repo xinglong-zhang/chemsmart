@@ -9,14 +9,18 @@ progress and completion tracking across the ensemble.
 
 import logging
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
+from chemsmart.jobs.batch import (
+    NestableJobMixin,
+    run_child_jobs_as_batch,
+    run_nestable_job,
+)
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
 
 
-class GaussianCrestJob(GaussianJob):
+class GaussianCrestJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for CREST conformer ensemble calculations.
 
@@ -55,6 +59,7 @@ class GaussianCrestJob(GaussianJob):
         grouping_strategy=None,
         num_groups=None,
         skip_completed=True,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -75,6 +80,8 @@ class GaussianCrestJob(GaussianJob):
             grouping_strategy (str, optional): Grouping strategy for molecules.
             num_groups (int, optional): Number of groups to create when grouping
                 is enabled. Takes precedence over threshold-based grouping.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -96,6 +103,7 @@ class GaussianCrestJob(GaussianJob):
             num_confs_to_run = len(molecules)
 
         self.num_confs_to_opt = num_confs_to_run
+        self.child_index = child_index
 
         # if grouping strategy is provided, set the grouper
         # and carry out the grouping before running the group of molecules
@@ -166,9 +174,22 @@ class GaussianCrestJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
-    def get_array_child_jobs(self):
-        """Return conformer jobs (up to num_confs_to_opt) for array submission."""
-        return list(self.all_conformers_jobs[: self.num_confs_to_opt])
+    def get_array_child_job(self, index: int):
+        """Build only the conformer child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        label = f"{self.label}_c{index + 1}"
+        return GaussianGeneralJob(
+            molecule=self.all_conformers[index],
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def num_array_children(self) -> int:
+        """Number of conformer children submitted for array/local nestable run."""
+        return min(self.num_confs_to_opt, self.num_conformers)
 
     @property
     def incomplete_conformers_jobs(self):

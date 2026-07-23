@@ -13,7 +13,11 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
+from chemsmart.jobs.batch import (
+    NestableJobMixin,
+    run_child_jobs_as_batch,
+    run_nestable_job,
+)
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
@@ -21,7 +25,7 @@ from chemsmart.utils.grouper import StructureGrouperFactory
 logger = logging.getLogger(__name__)
 
 
-class GaussianTrajJob(GaussianJob):
+class GaussianTrajJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for trajectory structure processing.
 
@@ -78,6 +82,7 @@ class GaussianTrajJob(GaussianJob):
         num_procs=1,
         proportion_structures_to_use=0.1,
         skip_completed=True,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -100,6 +105,8 @@ class GaussianTrajJob(GaussianJob):
             proportion_structures_to_use (float): Fraction of trajectory
                 end to use for structure extraction (default: 0.1).
             skip_completed (bool): Skip already completed jobs.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class
                 and structure grouping.
 
@@ -123,6 +130,7 @@ class GaussianTrajJob(GaussianJob):
             skip_completed=skip_completed,
             **kwargs,
         )
+        self.child_index = child_index
         self.num_structures_to_run = num_structures_to_run
         self.grouping_strategy = grouping_strategy
         self.num_procs = num_procs
@@ -313,8 +321,41 @@ class GaussianTrajJob(GaussianJob):
             return []
         return jobs[-n:]
 
+    def _selected_structure_indices(self) -> list[int]:
+        """Return 0-based indices into ``unique_structures`` for nestable run."""
+        n = self.num_unique_structures
+        if self.num_structures_to_run is None:
+            return list(range(n))
+        count = self.num_structures_to_run
+        if count <= 0:
+            return []
+        start = max(0, n - count)
+        return list(range(start, n))
+
+    @property
+    def num_array_children(self) -> int:
+        """Number of selected trajectory structure children."""
+        return len(self._selected_structure_indices())
+
+    def get_array_child_job(self, index: int):
+        """Build only the selected structure child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        structure_index = self._selected_structure_indices()[index]
+        label = f"{self.label}_c{structure_index + 1}"
+        return GaussianGeneralJob(
+            molecule=self.unique_structures[structure_index],
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
     def get_array_child_jobs(self):
-        """Return structure jobs for scheduler array submission."""
+        """Return structure jobs for scheduler array submission.
+
+        Uses the prepared structure-job slice so serial nested runs share the
+        same objects as ``_run_all_jobs``.
+        """
         return list(self._selected_structure_run_jobs())
 
     @property

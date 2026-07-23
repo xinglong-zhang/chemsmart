@@ -34,6 +34,25 @@ def click_job_options(f):
     return wrapper_common_options
 
 
+def click_nestable_options(f):
+    """Options for nestable jobs (crest/QRC/dias/traj) array child selection."""
+
+    @click.option(
+        "--child-index",
+        type=int,
+        default=None,
+        help=(
+            "1-based nestable child index. Used by scheduler array "
+            "runscripts so each task builds and runs only one child."
+        ),
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_pubchem_options(f):
     """
     PubChem integration options for molecular structure retrieval.

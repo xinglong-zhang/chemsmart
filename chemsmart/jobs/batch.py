@@ -8,6 +8,8 @@ of engine-specific jobs, plus submit-time helpers for scheduler arrays:
 - array-task execution of a single child (scheduler array env)
 - fault-tolerant execution with aggregated failures
 - ``batch_entry`` attach and per-task CLI rewrite for array runscripts
+- nestable single-child invoke via ``--child-index`` / lazy child factories
+- ``NestableJobMixin`` shared ``get_array_child_job`` / ``get_array_child_jobs`` API
 
 Cluster concurrency is via ``chemsmart sub`` scheduler arrays, not
 in-process multi-node fan-out.
@@ -131,6 +133,51 @@ def warn_legacy_job_list(*, stacklevel: int = 2) -> None:
 
 class BatchJobMeta(RegistryMeta, ABCMeta):
     """Metaclass combining registry support with abstract-base semantics."""
+
+
+class NestableJobMixin:
+    """Shared array-child API for crest/QRC/dias/traj nestable parents.
+
+    Subclasses set ``child_index`` (1-based, optional) in ``__init__`` and
+    implement:
+
+    - ``num_array_children`` — child count without necessarily building them
+    - ``get_array_child_job(index)`` — build one 0-based child lazily
+
+    ``get_array_child_jobs`` defaults to mapping those primitives. Override it
+    only when a bulk build is cheaper (e.g. DI-AS phase concatenation).
+    """
+
+    child_index: Optional[int] = None
+
+    @property
+    def num_array_children(self) -> int:
+        """Return the number of nestable array children."""
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement num_array_children"
+        )
+
+    def get_array_child_job(self, index: int) -> Job:
+        """Build the nestable child at 0-based *index*."""
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement get_array_child_job"
+        )
+
+    def validate_array_child_index(self, index: int) -> int:
+        """Validate 0-based *index*; return ``num_array_children``."""
+        total = self.num_array_children
+        if index < 0 or index >= total:
+            raise ValueError(
+                f"Array child index {index} out of range for {total} "
+                f"child job(s) of {self.label!r}; expected 0..{total - 1}."
+            )
+        return total
+
+    def get_array_child_jobs(self) -> list[Job]:
+        """Return all nestable children for scheduler array submission."""
+        return [
+            self.get_array_child_job(i) for i in range(self.num_array_children)
+        ]
 
 
 class BatchJob(Job, metaclass=BatchJobMeta):
@@ -391,15 +438,28 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
 
 def run_nestable_job(parent: Job, run_local: Callable[[], None]) -> None:
-    """Run a nestable parent in array or local serial mode.
+    """Run a nestable parent in single-child or local serial mode.
 
-    Nestable parents (crest/QRC/dias/traj) call this from ``_run``. When a
-    scheduler array task id is set (``chemsmart sub --run-in-parallel``),
-    only the child selected from ``parent.get_array_child_jobs()`` runs.
-    Otherwise *run_local* executes the serial phase batches (typically via
-    ``run_child_jobs_as_batch``).
+    Nestable parents (crest/QRC/dias/traj) call this from ``_run``.
+
+    Selection order:
+
+    1. Explicit ``parent.child_index`` (1-based), typically from
+       ``--child-index`` rewritten into array runscripts
+    2. Scheduler array task id (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` /
+       ``LSB_JOBINDEX``) as a legacy fallback
+    3. Otherwise *run_local* runs the full serial nested workflow
+
+    Selected children are built via ``parent.get_array_child_job`` so siblings
+    are not constructed.
     """
-    if run_selected_array_child(parent.get_array_child_jobs(), parent=parent):
+    child_index = parent.child_index
+    if child_index is not None:
+        _run_one_nestable_child(parent, int(child_index))
+        return
+    task_id = resolve_array_task_id()
+    if task_id is not None:
+        _run_one_nestable_child(parent, task_id)
         return
     run_local()
 
@@ -419,8 +479,8 @@ def run_child_jobs_as_batch(
     used. Independent parent jobs may still run concurrently when submitted
     as a top-level batch via ``chemsmart sub``.
 
-    Scheduler array selection is handled at the nestable parent ``_run``
-    boundary via ``run_nestable_job``, not in this helper.
+    Scheduler array / ``--child-index`` selection is handled at the nestable
+    parent ``_run`` boundary via ``run_nestable_job``, not in this helper.
 
     ``fail_fast`` controls whether execution stops after the first
     unsuccessful child (default: run all children, then raise on failures).
@@ -453,41 +513,20 @@ def run_child_jobs_as_batch(
     return batch_job
 
 
-def run_selected_array_child(
-    jobs: Sequence[Job],
-    *,
-    parent: Job,
-) -> bool:
-    """Run one nested child when a scheduler array task id is set.
-
-    Called from ``run_nestable_job`` at the nestable parent ``_run``
-    boundary. Each array task re-invokes the parent CLI and runs only
-    ``jobs[task_id - 1]`` with the parent's full resources.
-
-    Top-level ``BatchJob._run_array_task`` clears array-task env vars before
-    running a selected child, so nestable selection does not fire for
-    parents that are themselves top-level array children.
-
-    Returns:
-        True if an array task was handled; False if no array env is set
-        (caller should run the full nested workflow).
-    """
-    task_id = resolve_array_task_id()
-    if task_id is None:
-        return False
-    children = list(jobs)
-    total = len(children)
+def _run_one_nestable_child(parent: Job, child_index: int) -> None:
+    """Build and run one nestable child by 1-based *child_index*."""
+    total = parent.num_array_children
     if total == 0:
         raise ValueError(
             f"Nestable job {parent.label!r} has no child jobs for array task."
         )
-    child_index = task_id - 1
-    if child_index < 0 or child_index >= total:
+    zero_based = child_index - 1
+    if zero_based < 0 or zero_based >= total:
         raise ValueError(
-            f"Array task id {task_id} out of range for {total} "
+            f"Child index {child_index} out of range for {total} "
             f"nested child job(s) of {parent.label!r}; expected 1..{total}."
         )
-    child = children[child_index]
+    child = parent.get_array_child_job(zero_based)
     child_runner = Job._propagate_runner(parent.jobrunner, child)
     if child_runner is not None:
         cores = child_runner.num_cores
@@ -500,7 +539,7 @@ def run_selected_array_child(
         "mem_gb=%s, child=%s",
         parent.label,
         BatchExecutionMode.ARRAY_TASK.value,
-        task_id,
+        child_index,
         total,
         cores,
         mem_gb,
@@ -510,9 +549,8 @@ def run_selected_array_child(
     if not child.is_complete():
         raise BatchExecutionError(
             f"Nestable array child {child.label!r} of {parent.label!r} "
-            f"(task {task_id}/{total}) is incomplete after execution."
+            f"(task {child_index}/{total}) is incomplete after execution."
         )
-    return True
 
 
 def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
@@ -525,6 +563,41 @@ def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
     if not children:
         return None
     return children
+
+
+def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
+    """Attach 1-based ``child_index`` entries for nestable array submit.
+
+    Returns ``rewrite_nestable_cli_args`` for ``BatchJob.rewrite_cli``.
+    """
+    if not jobs:
+        raise ValueError("Cannot prepare nestable batch jobs: empty job list.")
+    entries = [
+        {"child_index": task_id, "label": job.label}
+        for task_id, job in enumerate(jobs, start=1)
+    ]
+    attach_batch_entries(jobs, entries)
+    return rewrite_nestable_cli_args
+
+
+def rewrite_nestable_cli_args(
+    cli_args: Sequence[str],
+    batch_entry: Optional[Mapping[str, Any]],
+) -> list[str]:
+    """Inject ``--child-index`` for a nestable array child."""
+    if not batch_entry:
+        return list(cli_args)
+
+    args = list(cli_args)
+    child_index = batch_entry.get("child_index")
+    if child_index is not None:
+        set_cli_option(
+            args,
+            long_opt="--child-index",
+            value=str(child_index),
+            insert_before=find_job_subcommand_token(args),
+        )
+    return args
 
 
 # ---------------------------------------------------------------------------
@@ -617,8 +690,8 @@ def set_cli_option(
     tokens: list[str],
     *,
     long_opt: str,
-    short_opt: str,
     value: str,
+    short_opt: Optional[str] = None,
     insert_before: Optional[str] = None,
     prefer_short: bool = False,
 ) -> None:
@@ -628,7 +701,7 @@ def set_cli_option(
         if pos + 1 < len(tokens):
             tokens[pos + 1] = value
         return
-    if short_opt in tokens:
+    if short_opt is not None and short_opt in tokens:
         pos = tokens.index(short_opt)
         if pos + 1 < len(tokens):
             tokens[pos + 1] = value
@@ -637,7 +710,7 @@ def set_cli_option(
     insert_idx = len(tokens)
     if insert_before is not None and insert_before in tokens:
         insert_idx = tokens.index(insert_before)
-    opt = short_opt if prefer_short else long_opt
+    opt = short_opt if prefer_short and short_opt is not None else long_opt
     tokens[insert_idx:insert_idx] = [opt, value]
 
 
@@ -645,12 +718,15 @@ def set_cli_option_after(
     tokens: list[str],
     *,
     long_opt: str,
-    short_opt: str,
     value: str,
+    short_opt: Optional[str] = None,
     insert_after: Optional[str] = None,
 ) -> None:
     """Replace an option pair, inserting after *insert_after* when absent."""
-    drop_cli_option(tokens, {long_opt, short_opt})
+    names = {long_opt}
+    if short_opt is not None:
+        names.add(short_opt)
+    drop_cli_option(tokens, names)
     insert_idx = len(tokens)
     if insert_after is not None and insert_after in tokens:
         insert_idx = tokens.index(insert_after) + 1

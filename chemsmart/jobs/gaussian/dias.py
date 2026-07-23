@@ -11,6 +11,7 @@ coordinates by computing energies of fragments and whole molecules.
 import logging
 
 from chemsmart.jobs.batch import (
+    NestableJobMixin,
     run_child_jobs_as_batch,
     run_nestable_job,
 )
@@ -21,7 +22,7 @@ from chemsmart.utils.utils import get_list_from_string_range
 logger = logging.getLogger(__name__)
 
 
-class GaussianDIASJob(GaussianJob):
+class GaussianDIASJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for DI-AS fragmentation analysis calculations.
 
@@ -66,6 +67,7 @@ class GaussianDIASJob(GaussianJob):
         multiplicity_of_fragment1=None,
         charge_of_fragment2=None,
         multiplicity_of_fragment2=None,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -90,6 +92,8 @@ class GaussianDIASJob(GaussianJob):
             charge_of_fragment2 (int, optional): Charge for fragment 2.
             multiplicity_of_fragment2 (int, optional): Multiplicity for
                 fragment 2.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class.
         """
         super().__init__(
@@ -99,6 +103,7 @@ class GaussianDIASJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
+        self.child_index = child_index
         self.all_molecules = molecules  # alone IRC coordinate
         self.fragment_indices = fragment_indices
         self.every_n_points = every_n_points
@@ -345,6 +350,16 @@ class GaussianDIASJob(GaussianJob):
                     skip_completed=self.skip_completed,
                 )
             ]
+
+    def get_array_child_job(self, index: int):
+        """Return one flattened DI-AS child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        return self.get_array_child_jobs()[index]
+
+    @property
+    def num_array_children(self) -> int:
+        """Flattened molecule + fragment child count."""
+        return len(self.get_array_child_jobs())
 
     def get_array_child_jobs(self):
         """Return molecule + fragment jobs for scheduler array submission.

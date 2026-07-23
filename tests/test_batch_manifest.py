@@ -10,8 +10,10 @@ from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.jobs.batch import (
     get_job_batch_entry,
     prepare_batch_jobs,
+    prepare_nestable_batch_jobs,
     resolve_array_cli_args,
     rewrite_batch_cli_args,
+    rewrite_nestable_cli_args,
     set_job_batch_entry,
 )
 
@@ -144,3 +146,24 @@ def test_resolve_array_cli_args_pka_entries_use_rewrite_callback():
     assert "acid1.xyz" in cli_lists[0]
     assert "acid2.xyz" in cli_lists[1]
     assert all("submit" in args for args in cli_lists)
+
+
+def test_prepare_nestable_batch_jobs_injects_child_index():
+    jobs = [SimpleNamespace(label="qf"), SimpleNamespace(label="qr")]
+    rewrite_cli = prepare_nestable_batch_jobs(jobs)
+    assert rewrite_cli is rewrite_nestable_cli_args
+    assert get_job_batch_entry(jobs[0])["child_index"] == 1
+    assert get_job_batch_entry(jobs[1])["child_index"] == 2
+
+    shared = ["gaussian", "-f", "ts.log", "qrc"]
+    cli_lists = resolve_array_cli_args(
+        jobs, shared, rewrite_cli=rewrite_nestable_cli_args
+    )
+    assert cli_lists[0][cli_lists[0].index("--child-index") + 1] == "1"
+    assert cli_lists[1][cli_lists[1].index("--child-index") + 1] == "2"
+    assert all("qrc" in args for args in cli_lists)
+
+
+def test_rewrite_nestable_cli_args_without_entry_keeps_shared():
+    shared = ["gaussian", "-f", "ts.log", "qrc"]
+    assert rewrite_nestable_cli_args(shared, None) == shared

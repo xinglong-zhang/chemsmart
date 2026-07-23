@@ -14,6 +14,7 @@ import click
 from chemsmart.cli.job import (
     click_job_options,
     click_molecule_vibrational_displacement_options,
+    click_nestable_options,
 )
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @orca.group("qrc", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_nestable_options
 @click_orca_jobtype_options
 @click_molecule_vibrational_displacement_options
 @click.pass_context
@@ -43,6 +45,7 @@ def qrc(
     normalize,
     return_xyz,
     skip_completed,
+    child_index,
     **kwargs,
 ):
     """
@@ -147,6 +150,7 @@ def qrc(
                     normalize=normalize,
                     return_xyz=return_xyz,
                     skip_completed=skip_completed,
+                    child_index=child_index,
                     **kwargs,
                 )
             )
@@ -176,6 +180,7 @@ def qrc(
         normalize=normalize,
         return_xyz=return_xyz,
         skip_completed=skip_completed,
+        child_index=child_index,
         **kwargs,
     )
 

@@ -8,7 +8,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.grouper.grouper import click_grouper_common_options
-from chemsmart.cli.job import click_job_options
+from chemsmart.cli.job import click_job_options, click_nestable_options
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
@@ -90,6 +90,7 @@ def click_grouper_sub_options(f):
 
 @gaussian.command(cls=MyCommand)
 @click_job_options
+@click_nestable_options
 @click_gaussian_jobtype_options
 @click_grouper_common_options
 @click_grouper_sub_options
@@ -118,6 +119,7 @@ def crest(
     use_weights,
     max_dev,
     skip_completed,
+    child_index,
     num_confs_to_run,
     **kwargs,
 ):
@@ -183,5 +185,6 @@ def crest(
         max_dev=max_dev,
         fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,
+        child_index=child_index,
         **kwargs,
     )

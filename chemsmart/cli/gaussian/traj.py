@@ -8,7 +8,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.grouper.grouper import click_grouper_common_options
-from chemsmart.cli.job import click_job_options
+from chemsmart.cli.job import click_job_options, click_nestable_options
 from chemsmart.jobs.gaussian import GaussianTrajJob
 from chemsmart.utils.cli import (
     MyCommand,
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command(cls=MyCommand)
 @click_job_options
+@click_nestable_options
 @click_gaussian_jobtype_options
 @click_grouper_common_options
 @click_grouper_sub_options
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 def traj(
     ctx,
     skip_completed,
+    child_index,
     jobtype,
     coordinates,
     step_size,
@@ -124,5 +126,6 @@ def traj(
         fingerprint_type=fingerprint_type,
         inversion=inversion,
         skip_completed=skip_completed,
+        child_index=child_index,
         **kwargs,
     )

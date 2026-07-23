@@ -9,14 +9,18 @@ import logging
 
 import numpy as np
 
-from chemsmart.jobs.batch import run_child_jobs_as_batch, run_nestable_job
+from chemsmart.jobs.batch import (
+    NestableJobMixin,
+    run_child_jobs_as_batch,
+    run_nestable_job,
+)
 from chemsmart.jobs.orca.batch import ORCABatchJob
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 
 logger = logging.getLogger(__name__)
 
 
-class ORCAQRCJob(ORCAJob):
+class ORCAQRCJob(NestableJobMixin, ORCAJob):
     """
     ORCA job class for quick reaction coordinate (QRC) calculations.
 
@@ -38,6 +42,7 @@ class ORCAQRCJob(ORCAJob):
         normalize=False,
         return_xyz=False,
         skip_completed=True,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -56,6 +61,8 @@ class ORCAQRCJob(ORCAJob):
                 max displacement is 1.
             return_xyz (bool): If True and `nframes` is set, return
                 a multi-frame XYZ string.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -78,6 +85,7 @@ class ORCAQRCJob(ORCAJob):
         self.phase = phase
         self.normalize = normalize
         self.return_xyz = return_xyz
+        self.child_index = child_index
 
         self.jobtype = self.settings.__dict__["jobtype"]
 
@@ -91,9 +99,16 @@ class ORCAQRCJob(ORCAJob):
         """
         return self._prepare_both_qrc_jobs()
 
-    def get_array_child_jobs(self):
-        """Return forward/reverse children for scheduler array submission."""
-        return list(self.both_qrc_jobs)
+    @property
+    def num_array_children(self) -> int:
+        """Forward and reverse QRC children."""
+        return 2
+
+    def get_array_child_job(self, index: int):
+        """Build only the forward (0) or reverse (1) QRC child."""
+        self.validate_array_child_index(index)
+        direction = "f" if index == 0 else "r"
+        return self._prepare_qrc_job(direction)
 
     @property
     def qrcf_molecule(self):
@@ -124,31 +139,34 @@ class ORCAQRCJob(ORCAJob):
             return_xyz=self.return_xyz,
         )
 
+    def _prepare_qrc_job(self, direction: str):
+        """Create one QRC child job for *direction* ``f`` or ``r``."""
+        label = f"{self.label}{direction}"
+        if self.jobtype is not None:
+            label += f"_{self.jobtype}"
+        if direction == "f":
+            mol = self.qrcf_molecule
+        elif direction == "r":
+            mol = self.qrcr_molecule
+        else:
+            raise ValueError(
+                f"Invalid QRC direction {direction!r}; expected 'f' or 'r'."
+            )
+        logger.debug(f"Molecule created: {mol} with label: {label}")
+        return ORCAGeneralJob(
+            molecule=mol,
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
     def _prepare_both_qrc_jobs(self):
         """
         Create both QRCr and QRCf jobs for the given TS/OPT file.
-        Generates two GaussianGeneralJob objects, one for each QRC job.
+        Generates two ORCAGeneralJob objects, one for each QRC job.
         """
-        jobs = []
-        for direction in ["f", "r"]:
-            label = f"{self.label}{direction}"
-            if self.jobtype is not None:
-                label += f"_{self.jobtype}"
-            mol = self.molecule
-            if direction == "f":
-                mol = self.qrcf_molecule
-            elif direction == "r":
-                mol = self.qrcr_molecule
-            logger.debug(f"Molecule created: {mol} with label: {label}")
-            jobs.append(
-                ORCAGeneralJob(
-                    molecule=mol,
-                    settings=self.settings,
-                    label=label,
-                    jobrunner=self.jobrunner,
-                    skip_completed=self.skip_completed,
-                )
-            )
+        jobs = [self._prepare_qrc_job(direction) for direction in ("f", "r")]
         logger.debug(f"QRC jobs created: {jobs}")
         return jobs
 

@@ -159,6 +159,8 @@ class TestGaussianQRCJobs:
     @pytest.fixture
     def mock_jobrunner(self):
         runner = MagicMock(spec=JobRunner)
+        runner.num_cores = 8
+        runner.mem_gb = 16
         return runner
 
     def test_init_raises_if_no_vibrations(self, mock_molecule, real_settings):

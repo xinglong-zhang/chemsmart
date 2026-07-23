@@ -383,8 +383,14 @@ class TestBatchJobRefactor:
 
         mocker.patch.object(
             job,
-            "get_array_child_jobs",
-            return_value=mol_jobs + f1_jobs + f2_jobs,
+            "get_array_child_job",
+            side_effect=lambda i: (mol_jobs + f1_jobs + f2_jobs)[i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=6,
         )
 
         mock_mol_batch = mocker.patch.object(job, "_run_all_molecules_jobs")
@@ -506,7 +512,19 @@ class TestGaussianBatchDelegation:
             child.run.return_value = None
             child.is_complete.return_value = index == 3  # c4 complete
             prepared.append(child)
-        mocker.patch.object(job, "_prepare_all_jobs", return_value=prepared)
+        # Stable last-3 indices are 2,3,4 → labels c3,c4,c5
+        selected = prepared[2:]
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: selected[i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=3,
+        )
         mock_batch_cls = mocker.patch(
             "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
         )
@@ -650,10 +668,15 @@ class TestGaussianBatchDelegation:
         child_r.run.return_value = None
         child_r.is_complete.return_value = True
         mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
             type(job),
-            "both_qrc_jobs",
+            "num_array_children",
             new_callable=mocker.PropertyMock,
-            return_value=[child_f, child_r],
+            return_value=2,
         )
         mock_batch_cls = mocker.patch(
             "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
@@ -691,16 +714,60 @@ class TestGaussianBatchDelegation:
         child_r.run.return_value = None
         child_r.is_complete.return_value = True
         mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
             type(job),
-            "both_qrc_jobs",
+            "num_array_children",
             new_callable=mocker.PropertyMock,
-            return_value=[child_f, child_r],
+            return_value=2,
         )
 
         with pytest.raises(
             BatchExecutionError, match="incomplete after execution"
         ):
             job._run()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
+
+    def test_qrc_child_index_prefers_explicit_over_slurm_env(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``--child-index`` selects the child even when SLURM env differs."""
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_child_index",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            child_index=1,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=2,
+        )
+
+        job._run()
 
         child_f.run.assert_called_once()
         child_r.run.assert_not_called()

@@ -15,6 +15,7 @@ from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import (
     BatchJob,
     get_nestable_array_children,
+    prepare_nestable_batch_jobs,
     warn_legacy_job_list,
 )
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
@@ -207,10 +208,12 @@ def process_pipeline(ctx, *args, **kwargs):
         program = (parent_job.PROGRAM or "").lower()
         batch_cls = ORCABatchJob if program == "orca" else GaussianBatchJob
 
+        rewrite_cli = prepare_nestable_batch_jobs(children)
         batch_job = batch_cls(
             jobs=children,
             label=f"{parent_job.label}_array",
             jobrunner=jobrunner,
+            rewrite_cli=rewrite_cli,
         )
         shared_cli_args = _reconstruct_cli_args(ctx)
         logger.info(

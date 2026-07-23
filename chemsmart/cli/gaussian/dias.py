@@ -3,7 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
-from chemsmart.cli.job import click_job_options
+from chemsmart.cli.job import click_job_options, click_nestable_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command(cls=MyCommand)
 @click_job_options
+@click_nestable_options
 @click.option(
     "-i",
     "--fragment-indices",
@@ -74,6 +75,7 @@ def dias(
     fragment_indices,
     every_n_points,
     skip_completed,
+    child_index,
     solv=False,
     mode="irc",
     charge_of_fragment1=None,
@@ -129,5 +131,6 @@ def dias(
         charge_of_fragment2=charge_of_fragment2,
         multiplicity_of_fragment2=multiplicity_of_fragment2,
         skip_completed=skip_completed,
+        child_index=child_index,
         **kwargs,
     )

@@ -1192,7 +1192,10 @@ class TestGaussianRunSubNoParallelIntegration:
             mock_submit_array.call_args.kwargs["batch_label"] == "ts_qrc_array"
         )
         cli_args = mock_submit_array.call_args.kwargs["cli_args"]
-        assert "qrc" in cli_args
+        assert len(cli_args) == 2
+        assert cli_args[0][cli_args[0].index("--child-index") + 1] == "1"
+        assert cli_args[1][cli_args[1].index("--child-index") + 1] == "2"
+        assert all("qrc" in args for args in cli_args)
 
     def test_sub_no_run_in_parallel_submits_qrc_as_single_parent(
         self,
