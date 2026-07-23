@@ -661,3 +661,48 @@ protect.
 **Suggested direction:** rename `backup_files` to `_backup_files` (and
 match the base class's `backup_chk` keyword-argument handling via
 `**kwargs` if needed for signature compatibility with `Job.backup`).
+
+---
+
+## 15. `NCIPLOTJob(settings=None)` always crashes
+
+**File:** `chemsmart/jobs/nciplot/job.py:67-112`
+**Test:** `tests/test_nciplot_job_unit.py::TestNCIPLOTJobSettingsDefaultCrashes::test_settings_none_always_crashes`
+
+`settings` defaults to `None` in the signature, and is only
+conditionally validated:
+
+```python
+def __init__(self, filenames=None, molecule=None, settings=None, ...):
+    ...
+    if settings is not None and not isinstance(settings, NCIPLOTJobSettings):
+        raise ValueError(...)
+    ...
+    self.settings = settings.copy()  # unconditional
+```
+
+The `isinstance` check is skipped when `settings is None` (as the
+default value is meant to allow), but `self.settings = settings.copy()`
+a few lines later runs unconditionally regardless of whether `settings`
+was ever supplied, so relying on the documented default always crashes:
+
+```
+AttributeError: 'NoneType' object has no attribute 'copy'
+```
+
+**Reproduce:**
+```python
+from chemsmart.jobs.nciplot.job import NCIPLOTJob
+NCIPLOTJob(filenames=["a.xyz"], settings=None)
+# AttributeError: 'NoneType' object has no attribute 'copy'
+```
+
+**Impact:** The CLI (`chemsmart/cli/nciplot/nciplot.py`) always builds
+and passes an explicit `NCIPLOTJobSettings` instance, so this isn't
+reachable through the current CLI entry point — but any other caller
+(scripts, notebooks, tests) that constructs `NCIPLOTJob` without
+supplying `settings` explicitly hits this immediately.
+
+**Suggested direction:** default to `settings = settings or
+NCIPLOTJobSettings()` before validating/copying, matching the pattern
+other job classes use for optional settings.
