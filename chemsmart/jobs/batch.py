@@ -85,10 +85,10 @@ def resolve_array_task_id() -> Optional[int]:
 def cleared_array_task_env() -> Iterator[None]:
     """Temporarily remove scheduler array task id environment variables.
 
-    Top-level ``BatchJob._run_array_task`` uses this around ``child.run()`` so
-    nestable parents (crest/QRC/dias/traj) do not treat the outer array task
-    id as a nested child index. Nestable array submit still re-invokes the
-    parent CLI with these variables set (no outer ``BatchJob`` array wrapper).
+    Used so nested serial ``BatchJob.run()`` stays in ``local_batch`` mode when
+    an outer scheduler array task id is present. Nestable single-child selection
+    prefers ``--child-index``; the scheduler env remains only as a legacy
+    fallback in ``run_nestable_job``.
     """
     saved: dict[str, str] = {}
     for key in _ARRAY_TASK_ID_ENV_VARS:
@@ -195,8 +195,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
     ``fail_fast`` stops serial local submission after the first
     unsuccessful outcome.
-    ``nested_serial`` marks crest/QRC/dias/traj nested batches for
-    ``policy=serial_nested`` logging.
     ``rewrite_cli`` is the optional per-task CLI rewriter used by
     ``chemsmart sub`` when submitting this batch as a scheduler array.
     """
@@ -211,7 +209,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         write_outcome_logs: bool = False,
         label: str = "batch_job",
         jobrunner: Any = None,
-        nested_serial: bool = False,
         rewrite_cli: Optional[RewriteCliFn] = None,
         **kwargs,
     ) -> None:
@@ -224,7 +221,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self.jobs: list[Job] = list(jobs) if jobs is not None else []
         self.fail_fast = bool(fail_fast)
         self.write_outcome_logs = bool(write_outcome_logs)
-        self.nested_serial = bool(nested_serial)
         self.rewrite_cli = rewrite_cli
         self._last_batch_outcomes: list[dict[str, Any]] = []
 
@@ -242,8 +238,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX`` are
         treated as 1-based indexes into ``self.jobs``.
 
-        Array-task env vars are cleared around ``child.run()`` so nestable
-        children do not reuse the outer task id for nested selection.
+        Array-task env vars are cleared around ``child.run()`` so nested
+        serial batches and legacy nestable env fallback do not reuse the
+        outer task id.
         """
         task_id = resolve_array_task_id()
         if task_id is None:
@@ -281,7 +278,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             mem_gb,
             child.label,
         )
-        # Isolate nestable selection from this outer array task id.
+        # Keep nested BatchJob.run() / legacy nestable fallback off this task id.
         with cleared_array_task_env():
             outcome = self._submit_job(child, **kwargs)
         outcomes = [outcome]
@@ -300,7 +297,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         else:
             cores = None
             mem_gb = None
-        policy = "serial_nested" if self.nested_serial else "serial"
+        policy = "serial"
         logger.info(
             "BatchJob %r: execution=%s, children=%s, policy=%s, "
             "cores=%s, mem_gb=%s",
@@ -506,7 +503,6 @@ def run_child_jobs_as_batch(
         fail_fast=fail_fast,
         label=f"{parent.label}{label_suffix}",
         jobrunner=parent.jobrunner,
-        nested_serial=True,
     )
     with cleared_array_task_env():
         batch_job.run()

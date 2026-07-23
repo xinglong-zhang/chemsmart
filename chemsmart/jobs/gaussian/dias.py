@@ -353,7 +353,6 @@ class GaussianDIASJob(NestableJobMixin, GaussianJob):
 
     def get_array_child_job(self, index: int):
         """Return one flattened DI-AS child at 0-based *index*."""
-        self.validate_array_child_index(index)
         return self.get_array_child_jobs()[index]
 
     @property

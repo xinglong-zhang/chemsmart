@@ -97,7 +97,7 @@ class GaussianQRCJob(NestableJobMixin, GaussianJob):
         Returns:
             list: List of GaussianGeneralJob objects for QRC.
         """
-        return self._prepare_both_qrc_jobs()
+        return self.get_array_child_jobs()
 
     @property
     def num_array_children(self) -> int:
@@ -160,15 +160,6 @@ class GaussianQRCJob(NestableJobMixin, GaussianJob):
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
-
-    def _prepare_both_qrc_jobs(self):
-        """
-        Create both QRCr and QRCf jobs for the given TS/OPT file.
-        Generates two GaussianGeneralJob objects, one for each QRC job.
-        """
-        jobs = [self._prepare_qrc_job(direction) for direction in ("f", "r")]
-        logger.debug(f"QRC jobs created: {jobs}")
-        return jobs
 
     def _run_both_jobs(self):
         """

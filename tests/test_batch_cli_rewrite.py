@@ -1,4 +1,4 @@
-"""Tests for batch submit-time CLI helpers used by array submissions."""
+"""Tests for batch submit-time CLI rewrite helpers used by array submissions."""
 
 from __future__ import annotations
 

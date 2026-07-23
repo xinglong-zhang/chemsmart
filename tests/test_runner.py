@@ -809,7 +809,7 @@ class TestGaussianBatchDelegation:
             nested = [forward, reverse]
             nested_pairs.append(nested)
             mocker.patch.object(
-                parent, "_prepare_both_qrc_jobs", return_value=nested
+                parent, "get_array_child_jobs", return_value=nested
             )
             qrc_parents.append(parent)
 
@@ -1446,44 +1446,7 @@ class TestBatchExecutionModes:
             for record in caplog.records
         )
 
-    def test_nested_serial_logs_serial_nested_policy(
-        self, pbs_server, monkeypatch, caplog
-    ):
-        import logging
-
-        from chemsmart.jobs.batch import BatchExecutionMode
-
-        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
-            monkeypatch.delenv(key, raising=False)
-
-        runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=True
-        )
-        children = []
-        for index in range(8):
-            child = Mock(label=f"conf_{index}")
-            child.run.return_value = None
-            child.is_complete.return_value = True
-            children.append(child)
-
-        batch = self._dummy_batch_cls()(
-            jobs=children,
-            jobrunner=runner,
-            label="crest_children",
-            nested_serial=True,
-        )
-        with caplog.at_level(logging.INFO):
-            batch.run()
-
-        assert any(
-            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
-            in record.message
-            and "children=8" in record.message
-            and "policy=serial_nested" in record.message
-            for record in caplog.records
-        )
-
-    def test_run_child_jobs_as_batch_sets_nested_serial(
+    def test_run_child_jobs_as_batch_returns_completed_batch(
         self, pbs_server, monkeypatch
     ):
         from chemsmart.jobs.batch import run_child_jobs_as_batch
@@ -1509,8 +1472,8 @@ class TestBatchExecutionModes:
             parent=parent,
             label_suffix="_children",
         )
-        assert batch.nested_serial is True
         assert batch.label == "crest_parent_children"
+        assert len(batch.jobs) == 2
 
     def test_slurm_nodelist_still_runs_serial_local_batch(
         self, pbs_server, monkeypatch, caplog

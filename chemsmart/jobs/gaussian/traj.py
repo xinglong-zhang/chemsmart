@@ -350,14 +350,6 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
             skip_completed=self.skip_completed,
         )
 
-    def get_array_child_jobs(self):
-        """Return structure jobs for scheduler array submission.
-
-        Uses the prepared structure-job slice so serial nested runs share the
-        same objects as ``_run_all_jobs``.
-        """
-        return list(self._selected_structure_run_jobs())
-
     @property
     def last_run_job_index(self):
         """
