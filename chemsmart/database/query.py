@@ -58,12 +58,12 @@ TARGET_CONFIG = {
             "enthalpy": "r.enthalpy",
             "entropy": "r.entropy",
             "gibbs_free_energy": "r.gibbs_free_energy",
-            "source_file": "r.source_file",
+            "source": "r.source",
         },
         "summary_select": f"""
             SELECT DISTINCT
                 r.record_index, r.record_id, r.program, r.method,
-                r.basis, r.jobtype, r.total_energy, r.source_file,
+                r.basis, r.jobtype, r.total_energy, r.source,
                 r.normal_termination,
                 m.chemical_formula, m.molecule_id
             {_RECORDS_JOIN}
@@ -77,7 +77,7 @@ TARGET_CONFIG = {
         "table_columns": [
             ("Idx", "record_index", 4, ">"),
             ("Record ID", "record_id", 12, "<"),
-            ("File", "source_file", 22, "<"),
+            ("Source", "source", 22, "<"),
             ("Program", "program", 8, "<"),
             ("Job", "jobtype", 6, "<"),
             ("Status", "normal_termination", 6, "<"),
@@ -88,7 +88,7 @@ TARGET_CONFIG = {
         ],
         "value_formatters": {
             "record_id": lambda v, w: str(v)[:w],
-            "source_file": lambda v, w: os.path.basename(str(v))[:w],
+            "source": lambda v, w: os.path.basename(str(v))[:w],
             "total_energy": lambda v, w: (
                 format_float(v, 2) if isinstance(v, (int, float)) else str(v)
             ),

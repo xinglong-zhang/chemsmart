@@ -821,6 +821,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
     @property
@@ -832,6 +833,9 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            logger.debug(
+                f"Moments of inertia (most abundant mass): {eigenvalues}."
+            )
             return eigenvalues
 
     @property
@@ -893,15 +897,27 @@ class Molecule:
         """
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
+
+        For linear molecules the moment of inertia along the molecular axis is
+         (effectively) zero, so the axial rotational temperature is infinite. For
+         linear molecules this property returns only the finite perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
             for i in self.moments_of_inertia
         ]
-        return [
-            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
-            for i in range(3)
-        ]
+        result = []
+        for moi in moi_in_SI_units:
+            if moi == 0.0:
+                result.append(np.inf)
+            else:
+                result.append(
+                    units._hplanck**2 / (8 * np.pi**2 * moi * units._k)
+                )
+        if self.is_linear:
+            # for linear molecule, has only one rotational temperature
+            return [result[-1]]
+        return result
 
     @cached_property
     def sterimol_parameter(self):
@@ -1140,6 +1156,37 @@ class Molecule:
             return molecule
 
     @classmethod
+    def from_directorypath(cls, folder, program="xtb", index="-1", **kwargs):
+        """
+        Create molecule from a directory containing calculation output files.
+
+        Args:
+            folder (str): Path to directory containing output files.
+            program (str): Program type ('xtb', 'gaussian', 'orca'). Default is 'xtb'.
+            index (str or int): Index for multi-structure files. Default is "-1" (last).
+
+        Returns:
+            Molecule: Molecule object from the calculation output.
+        """
+        folder = os.path.abspath(folder)
+        if not os.path.exists(folder):
+            raise FileNotFoundError(f"{folder} could not be found!")
+
+        if not os.path.isdir(folder):
+            raise NotADirectoryError(f"{folder} is not a directory!")
+
+        if program.lower() == "xtb":
+            from chemsmart.io.xtb.output import XTBOutput
+
+            output = XTBOutput(folder)
+            return output.get_molecule(index=index)
+        else:
+            raise ValueError(
+                f"Unsupported program '{program}' for from_directorypath. "
+                "Currently only 'xtb' is supported."
+            )
+
+    @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
         """
         Internal method to read molecular data from various file formats.
@@ -1179,11 +1226,13 @@ class Molecule:
             program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
-            if program == "gaussian":
+            elif program == "xtb":
+                return cls._read_xtb_outfile(filepath, index, **kwargs)
+            elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
-                "Only Gaussian and ORCA are currently supported."
+                "Only Gaussian, ORCA, and xTB are currently supported."
             )
 
         if basename.endswith(".gro"):
@@ -1322,6 +1371,29 @@ class Molecule:
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.get_molecule(index=index)
+
+    @staticmethod
+    @file_cache()
+    def _read_xtb_outfile(filepath, index, **kwargs):
+        """
+        Read XTB output from a calculation directory.
+
+        Args:
+            filepath (str): Path to an xTB main output (.out) file or to the
+            xTB calculation directory. xTB output discovery is directory-based,
+            so a file path is resolved to its parent directory before parsing.
+            index (str or int): Index for multi-structure files
+
+        Returns:
+            Molecule: Molecule object from xTB output
+        """
+        from chemsmart.io.xtb.output import XTBOutput
+
+        folder = (
+            filepath if os.path.isdir(filepath) else os.path.dirname(filepath)
+        )
+        xtb_output = XTBOutput(folder=folder)
+        return xtb_output.get_molecule(index=index)
 
     @classmethod
     def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
@@ -2113,6 +2185,124 @@ class Molecule:
                 return PDBFile.format_pdb_block(self, pdb_block)
             else:
                 raise
+
+    def delete_atoms_by_indices(self, atom_indices, *, one_based=True):
+        """Return a new :class:`Molecule` with the specified atoms removed.
+
+        Accepts one or more atom indices, builds a boolean keep-mask, and
+        constructs a fresh ``Molecule`` containing only the retained atoms.
+        Per-atom arrays (``frozen_atoms``, ``forces``, ``velocities``,
+        ``vibrational_modes``) are filtered accordingly; per-mode scalars
+        (frequencies, reduced masses, …) are passed as-is since
+        ``Molecule.__init__`` wraps them in a new ``list`` internally.
+
+        Args:
+            atom_indices (int | Iterable[int]): Index or indices of atoms
+                to delete.
+            one_based (bool): If ``True`` (default) the indices are
+                interpreted as 1-based (matching Gaussian / ORCA
+                conventions).  Set to ``False`` for 0-based indexing.
+
+        Returns:
+            Molecule: A new molecule without the deleted atoms.
+
+        Raises:
+            ValueError: If *atom_indices* is ``None``, any index is out of
+                range, or removing the atoms would leave an empty molecule.
+            TypeError: If *atom_indices* is neither ``int`` nor iterable.
+
+        Example::
+
+            mol = Molecule.from_filepath("phenol.xyz")
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=13)        # 1-based
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=[13])
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=12, one_based=False)
+        """
+        if atom_indices is None:
+            raise ValueError(
+                "atom_indices must be provided when deleting atoms"
+            )
+
+        if isinstance(atom_indices, int):
+            indices = [atom_indices]
+        else:
+            try:
+                indices = list(atom_indices)
+            except TypeError as exc:
+                raise TypeError(
+                    "atom_indices must be an int or iterable of ints"
+                ) from exc
+
+        if not indices:
+            return copy.deepcopy(self)
+
+        zero_indices = []
+        for idx in indices:
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Atom index '{idx}' is not a valid integer"
+                ) from exc
+            zero_indices.append(idx_int - 1 if one_based else idx_int)
+
+        zero_indices = sorted(set(zero_indices))
+        total_atoms = len(self.symbols)
+
+        for idx in zero_indices:
+            if idx < 0 or idx >= total_atoms:
+                label = idx + 1 if one_based else idx
+                raise ValueError(
+                    f"Atom index {label} out of range for molecule "
+                    f"with {total_atoms} atoms"
+                )
+
+        keep_mask = np.ones(total_atoms, dtype=bool)
+        keep_mask[zero_indices] = False
+
+        if not keep_mask.any():
+            raise ValueError(
+                "Deleting the requested atoms would leave an empty molecule"
+            )
+
+        def _filter(seq):
+            """Filter a per-atom list/array; return None if input is None."""
+            if seq is None:
+                return None
+            arr = np.asarray(seq)
+            if arr.shape[0] == total_atoms:
+                return (
+                    arr[keep_mask].tolist()
+                    if isinstance(seq, list)
+                    else arr[keep_mask].copy()
+                )
+            return seq
+
+        new_vib_modes = (
+            [np.asarray(m)[keep_mask].copy() for m in self.vibrational_modes]
+            if self.vibrational_modes
+            else None
+        )
+
+        return Molecule(
+            symbols=[s for s, k in zip(self.symbols, keep_mask) if k],
+            positions=np.asarray(self.positions)[keep_mask],
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=_filter(self.frozen_atoms),
+            pbc_conditions=self.pbc_conditions,
+            translation_vectors=self.translation_vectors,
+            energy=self.energy,
+            forces=_filter(self.forces),
+            velocities=_filter(self.velocities),
+            vibrational_frequencies=self.vibrational_frequencies,
+            vibrational_reduced_masses=self.vibrational_reduced_masses,
+            vibrational_force_constants=self.vibrational_force_constants,
+            vibrational_ir_intensities=self.vibrational_ir_intensities,
+            vibrational_mode_symmetries=self.vibrational_mode_symmetries,
+            vibrational_modes=new_vib_modes,
+            info=self.info,
+        )
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
@@ -3004,6 +3194,98 @@ class CoordinateBlock:
                 return [1, 1, 1]
         else:
             return None
+
+
+class PKaMolecule(Molecule):
+    """Molecule subclass for pKa calculations.
+
+    Wraps an existing ``Molecule`` and attaches a resolved
+    ``proton_index`` (1-based) that identifies the acidic proton to
+    be removed during deprotonation.
+
+    The proton index can be supplied explicitly by the user or
+    determined automatically from ChemDraw (CDXML) colour coding.
+
+    Parameters
+    ----------
+    molecule : Molecule
+        The parent molecule whose data is inherited.
+    proton_index : int
+        1-based index of the acidic proton in *molecule*.
+
+    Examples
+    --------
+    >>> mol = Molecule(symbols=["O", "H", "H"],
+    ...                positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    >>> pka_mol = PKaMolecule(molecule=mol, proton_index=2)
+    >>> pka_mol.proton_index
+    2
+    >>> pka_mol.chemical_formula
+    'H2O'
+    """
+
+    def __init__(self, molecule: "Molecule", proton_index: int):
+        if molecule is None:
+            raise ValueError(
+                "A parent Molecule must be provided to PKaMolecule."
+            )
+        if proton_index is None or proton_index < 1:
+            raise ValueError(
+                "proton_index must be a positive 1-based integer."
+            )
+        if proton_index > molecule.num_atoms:
+            raise ValueError(
+                f"proton_index {proton_index} is out of range for a "
+                f"molecule with {molecule.num_atoms} atoms."
+            )
+        atom_symbol = molecule.symbols[proton_index - 1]
+        if atom_symbol != "H":
+            raise ValueError(
+                f"Atom at index {proton_index} is '{atom_symbol}', not 'H'. "
+                "Only hydrogen atoms can be marked as the acidic proton."
+            )
+
+        # Collect valid Molecule.__init__ params from source instance state.
+        sig = inspect.signature(Molecule.__init__)
+        valid_params = set(sig.parameters.keys()) - {"self"}
+        alias_keys = {"positions": "_positions", "energy": "_energy"}
+
+        init_params = {}
+        mol_state = molecule.__dict__
+        for key in valid_params:
+            if key in mol_state:
+                init_params[key] = copy.copy(mol_state[key])
+            else:
+                alias = alias_keys.get(key)
+                if alias is not None and alias in mol_state:
+                    init_params[key] = copy.copy(mol_state[alias])
+
+        super().__init__(**init_params)
+
+        # Preserve any additional source attributes not part of __init__.
+        for key, value in mol_state.items():
+            if (
+                key not in {"_positions", "_energy"}
+                and key not in valid_params
+            ):
+                self.__dict__[key] = copy.copy(value)
+
+        self.proton_index = proton_index
+
+    @classmethod
+    def from_molecule_and_proton_index(
+        cls, molecule: "Molecule", proton_index: int
+    ):
+        """Create a ``PKaMolecule`` from an existing ``Molecule``.
+
+        Parameters
+        ----------
+        molecule : Molecule
+            Source molecule.
+        proton_index : int
+            1-based index of the acidic proton.
+        """
+        return cls(molecule=molecule, proton_index=proton_index)
 
 
 class QMMMMolecule(Molecule):

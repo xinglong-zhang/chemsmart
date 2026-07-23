@@ -3,18 +3,189 @@ import logging
 import os
 from abc import abstractmethod
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
+from typing import Callable, Optional, Sequence
 
+from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program or program is NotImplemented:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML for executable-backed runners."""
+    exe_cls = _executable_class_for_program(runner_cls.PROGRAM)
+    if exe_cls is None or server is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
+
+
+def _resolve_scratch(scratch, runner_cls, server):
+    """Resolve scratch: CLI wins; else YAML program SCRATCH; else class default.
+
+    Priority when constructing a typed runner:
+
+    1. Explicit CLI/API ``scratch`` (``True``/``False``) wins.
+    2. If omitted (``None``), use program-block ``SCRATCH`` from server YAML
+       when that key is set and the runner maps to an ``Executable`` subclass
+       (Gaussian, ORCA, or NCIPLOT).
+    3. If the YAML key is absent or the program has no executable config,
+       use the runner class ``SCRATCH`` default.
+    """
+    if scratch is not None:
+        return scratch
+    yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
+    if yaml_scratch is not None:
+        return yaml_scratch
+    return runner_cls.SCRATCH
+
+
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
+
+
+def run_phase_jobs(
+    *,
+    parent_runner,
+    jobs: Optional[Sequence] = None,
+    jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+    stop_on_incomplete: bool = False,
+    before_run: Optional[Callable[[], None]] = None,
+    logger_obj=None,
+    phase_label: str = "phase",
+) -> None:
+    """Shared phase runner wrapper."""
+    Job._execute_phase_jobs(
+        parent_runner=parent_runner,
+        jobs=jobs,
+        jobs_factory=jobs_factory,
+        stop_on_incomplete=stop_on_incomplete,
+        before_run=before_run,
+        logger_obj=logger_obj,
+        phase_label=phase_label,
+    )
+
+
+def _positive_int_or_none(value) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def get_configured_max_submitters(jobrunner=None) -> int:
+    """Return configured submitter concurrency limit.
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+    4. ``jobrunner.num_cores``
+    5. ``jobrunner.server.num_cores``
+    6. ``os.cpu_count()``
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    runner_value = _positive_int_or_none(
+        getattr(jobrunner, "max_submitters", None)
+    )
+    if runner_value is not None:
+        return runner_value
+
+    server = getattr(jobrunner, "server", None)
+    server_value = _positive_int_or_none(
+        getattr(server, "max_submitters", None)
+    )
+    if server_value is not None:
+        return server_value
+
+    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
+    if cores_value is not None:
+        return cores_value
+
+    server_cores_value = _positive_int_or_none(
+        getattr(server, "num_cores", None)
+    )
+    if server_cores_value is not None:
+        return server_cores_value
+
+    cpu_count = _positive_int_or_none(os.cpu_count())
+    return cpu_count if cpu_count is not None else 1
+
+
+def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
+    """Return bounded worker count for batch/list submitter threads."""
+    if num_jobs <= 0:
+        return 1
+    configured_max_submitters = get_configured_max_submitters(jobrunner)
+    return max(1, min(num_jobs, configured_max_submitters))
+
+
+def decide_phase_transition(
+    *,
+    phase_name: str,
+    failures: Optional[Sequence[str]] = None,
+    require_complete: bool = False,
+    is_complete: Optional[bool] = None,
+    stop_message: Optional[str] = None,
+) -> PhaseTransitionDecision:
+    """Return a shared decision for whether a workflow should enter next phase."""
+    phase_failures = [f for f in (failures or []) if f]
+    if phase_failures:
+        summary = (
+            f"{phase_name} phase failed in {len(phase_failures)} worker(s):\n"
+            + "\n".join(f"  - {item}" for item in phase_failures)
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=True,
+            message=summary,
+        )
+
+    if require_complete and is_complete is False:
+        message = (
+            stop_message or f"{phase_name} jobs incomplete, halting execution."
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=False,
+            message=message,
+        )
+
+    return PhaseTransitionDecision(proceed=True, should_raise=False)
 
 
 class JobRunner(RegistryMixin):
@@ -22,8 +193,14 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool): Whether to use scratch directory.
-        scratch_dir (str): Path to scratch directory.
+        scratch (bool or None): Whether to use a scratch directory.
+            None means unset: ``from_job`` uses program ``SCRATCH`` from
+            server YAML when that key is set, otherwise the typed runner's
+            ``SCRATCH`` class default. Explicit False or True forces
+            scratch off or on regardless of YAML or class defaults.
+        scratch_dir (str or None): Path to scratch directory, or None to
+            resolve from executable ENVARS, ``SERVER.SCRATCH_DIR``, then user
+            settings.
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
@@ -37,8 +214,8 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,
-        scratch_dir=None,  # Explicit scratch directory
+        scratch=None,  # CLI placeholder: None = flag omitted; see from_job
+        scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
         delete_scratch=False,
         fake=False,
         num_cores=None,
@@ -62,7 +239,7 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        if self.scratch:
+        if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
         self.fake = fake
@@ -104,7 +281,18 @@ class JobRunner(RegistryMixin):
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
-        """Determine the scratch directory, considering multiple sources."""
+        """Determine the scratch directory from executable, server, or user settings.
+
+        Resolution order for the scratch **path** (when scratch mode is on):
+
+        1. Explicit ``scratch_dir`` already set on the runner
+        2. Executable ENVARS (for example ``SCRATCH`` export)
+        3. ``server.scratch_dir`` (``SERVER.SCRATCH_DIR``)
+        4. User settings ``SCRATCH``
+
+        If no path can be resolved, scratch mode is disabled with a warning.
+        If a path is resolved but does not exist, raises ``FileNotFoundError``.
+        """
         if self._scratch_dir is not None:
             return self._scratch_dir  # Use explicitly set directory
 
@@ -253,6 +441,38 @@ class JobRunner(RegistryMixin):
 
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+        """Select and construct a typed job runner for ``job``.
+
+        **When the CLI omits ``--scratch``/``--no-scratch``**
+
+        ``scratch`` arrives as ``None``. It is resolved here, in order:
+
+        1. Explicit ``True``/``False`` from ``--scratch`` or ``--no-scratch``
+        2. Program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only)
+        3. The selected runner's class ``SCRATCH`` default
+
+        The typed runner is then constructed with that resolved ``bool``.
+
+        **When calling a typed runner constructor directly**
+
+        ``scratch=None`` does not pass through ``from_job``. It means "use the
+        class ``SCRATCH`` default" and YAML is not read. That can differ from
+        step 2 above when YAML would override the class default.
+
+        Args:
+            job: Job instance whose ``TYPE`` selects the runner.
+            server: Server name or ``Server`` instance.
+            scratch (bool or None): ``True``/``False`` from CLI flags, or
+                ``None`` when both flags were omitted.
+            fake (bool): Prefer a fake runner when one is registered.
+            **kwargs: Forwarded to the typed runner constructor.
+
+        Returns:
+            JobRunner: Typed runner instance for ``job``.
+
+        Raises:
+            ValueError: If no registered runner supports ``job.TYPE``.
+        """
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -281,11 +501,9 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # If scratch is None, use the runner's default scratch value
-            if scratch is not None:
-                scratch = scratch
-            else:
-                scratch = selected_runner.SCRATCH
+            # CLI True/False wins; omit → YAML program SCRATCH if set;
+            # otherwise runner class SCRATCH.
+            scratch = _resolve_scratch(scratch, selected_runner, server)
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )

@@ -17,7 +17,11 @@ ifeq ($(OS_FAMILY),Windows)
     NULL := nul
 else
     SHELL := /bin/bash
-    ENV_PREFIX := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
+    # Skip the "conda run" wrapper when the chemsmart env is already active
+    # (e.g. in CI via `conda-incubator/setup-miniconda`'s activate-environment):
+    # some conda versions fail to propagate the wrapped command's exit code,
+    # which let a failing test suite report as a passing CI step.
+    ENV_PREFIX := $(shell if [ "$$CONDA_DEFAULT_ENV" = "chemsmart" ]; then echo ""; elif conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
     SEP := /
     RM := rm -f
     RMDIR := rm -rf
@@ -51,7 +55,6 @@ endif
 
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
-	@echo Debug: USE_CONDA=$(USE_CONDA)
 ifeq ($(OS_FAMILY),Windows)
 	@if "$(USE_CONDA)"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
@@ -119,13 +122,10 @@ endif
 .PHONY: install
 install:          ## Install the project in user mode. Normal users (runtime only)
 	$(ENV_PREFIX)pip install .
-	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[voronoi]
-	$(ENV_PREFIX)pip install -e .[dev,test,docs]
-	$(ENV_PREFIX)pip install types-PyYAML
+	$(ENV_PREFIX)pip install -e .[voronoi,dev,test,docs]
 
 .PHONY: pre-commit
 pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
@@ -187,7 +187,7 @@ update-deps:          ## Automatically update new packages that are added in the
 	@echo Updating additional dependencies to pyproject.toml file...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) update deps
 	@echo Reinstalling chemsmart package...
-	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install -e .[dev,test]
 
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
@@ -199,22 +199,31 @@ lint:             ## Run linters (ruff).
 	$(ENV_PREFIX)ruff check . --fix
 
 # === Testing ===
-
 .PHONY: coverage-clean
-coverage-clean:   ## Remove any stale coverage files prior to running tests.
+coverage-clean:   ## Remove stale coverage files before running tests.
 ifeq ($(OS_FAMILY),Windows)
-	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist .coverage $(RM) .coverage 2>$(NULL)
+	-@for /R . %%f in (.coverage.*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist coverage.xml $(RM) coverage.xml 2>$(NULL)
+	-@if exist htmlcov $(RMDIR) htmlcov 2>$(NULL)
 else
-	-@rm -f .coverage .coverage.* 2>/dev/null
+	-@rm -f .coverage .coverage.* coverage.xml 2>/dev/null
+	-@rm -rf htmlcov 2>/dev/null
 endif
 
 .PHONY: test
-test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
-# Portable error ignoring: - so a bad shard cannot fail the job 
-	-$(ENV_PREFIX)coverage combine .coverage*  # combine all partial files if present  
-	-$(ENV_PREFIX)coverage xml
-	-$(ENV_PREFIX)coverage html
+test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
+	$(ENV_PREFIX)pytest \
+		-v \
+		--cov-config=pyproject.toml \
+		--cov=chemsmart \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage.xml \
+		--cov-report=html:htmlcov \
+		-l \
+		--tb=short \
+		tests/
 
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
@@ -266,13 +275,13 @@ REPOSITORY ?= testpypi
 PACKAGE_NAME := chemsmart
 VERSION_FILE := chemsmart$(SEP)VERSION
 
+GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
+
 ifeq ($(OS_FAMILY),Windows)
     VERSION := $(shell type $(VERSION_FILE))
-    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
 else
     VERSION := $(shell cat $(VERSION_FILE))
-    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >/dev/null 2>&1
 endif
 
@@ -326,7 +335,7 @@ tag: check-clean check-git-tag ## Create git tag v<VERSION>.
 	@echo "To push it: git push origin v$(VERSION)"
 
 .PHONY: release-test
-release-test: build ## Build and upload to TestPyPI.
+release-test: check-clean check-git-tag build ## Build and upload to TestPyPI.
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to TestPyPI..."
 	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
 	@echo ""
@@ -334,15 +343,19 @@ release-test: build ## Build and upload to TestPyPI.
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 
 .PHONY: release
-release: build ## Build and upload to PyPI. Use REPOSITORY=pypi or REPOSITORY=testpypi.
+release: check-clean build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
+	@echo "WARNING: This is a manual upload."
+	@echo "Do not use this target for a version that will also be published by GitHub Actions."
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
 ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
 	@echo ""
 	@echo "Test install with:"
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
 	@echo ""
 	@echo "Install with:"
 	@echo "python -m pip install $(PACKAGE_NAME)==$(VERSION)"
@@ -351,19 +364,9 @@ else
 	@exit 1
 endif
 
-.PHONY: release-tagged
-release-tagged: check-clean check-git-tag build tag ## Build, tag, and upload to PyPI/TestPyPI.
-	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
-ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
-else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
-else
-	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
-	@exit 1
-endif
-	@echo "Release complete for version $(VERSION)"
-	@echo "Remember to push commits and tags:"
-	@echo "  git push"
-	@echo "  git push origin v$(VERSION)"
-
+## # Normal production release
+## make test
+## make build
+## make tag
+## git push origin main
+## git push origin v$(make version)

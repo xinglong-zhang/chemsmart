@@ -13,12 +13,104 @@ Key functionality includes:
 - Molecular volume calculations using various methods
 """
 
+import logging
 import math
 
 import numpy as np
 
+from chemsmart.utils.periodictable import PeriodicTable
 
-def is_collinear(coords, tol=1e-5):
+logger = logging.getLogger(__name__)
+_pt = PeriodicTable()
+
+
+def get_coordinating_atoms(
+    metal_index,
+    elements,
+    coordinates,
+    tau_primary=1.15,
+    tau_secondary=1.35,
+    expand_cutoff=1.6,
+):
+    """Categorize atoms coordinating to a metal by covalent-radius ratio.
+
+    Direct ligands are assigned via metal–atom covalent-radius ratios.
+    For XYZ inputs without connectivity, a purely geometric expansion then
+    pulls in covalently bound partner atoms of those direct ligands (for
+    example the O of CO, or H of H2O) that lie within ``expand_cutoff`` of
+    any primary-sphere atom. No topology / residue metadata is used.
+
+    Parameters
+    ----------
+    metal_index : int
+        0-based index of the metal center.
+    elements : sequence of str
+        Element symbols for all atoms.
+    coordinates : array-like
+        Cartesian coordinates, shape ``(n_atoms, 3)``.
+    tau_primary, tau_secondary : float
+        Radius-ratio thresholds for the primary and secondary shells.
+    expand_cutoff : float
+        Distance (Å) used to expand from direct ligands to their bound
+        partners. Set to ``0`` or ``None`` to disable expansion.
+
+    Returns
+    -------
+    tuple[list[int], list[int]]
+        ``(primary_sphere, secondary_sphere)`` as 0-based atom indices.
+        Expanded partner atoms are placed in ``secondary_sphere`` when they
+        are not already primary.
+    """
+    primary_sphere = []
+    secondary_sphere = []
+
+    coordinates = np.asarray(coordinates, dtype=float)
+    xyz_m = coordinates[metal_index]
+    element_m = elements[metal_index]
+    r_m = _pt.covalent_radius(element_m)
+
+    distances = np.linalg.norm(coordinates - xyz_m, axis=1)
+
+    for idx, (element, dist) in enumerate(zip(elements, distances)):
+        if idx == metal_index:
+            continue
+
+        # Hydride / hydrogen exception: tight catalytic hydrides.
+        if element == "H" and dist <= 1.8:
+            primary_sphere.append(idx)
+            continue
+
+        r_a = _pt.covalent_radius(element)
+        ratio = dist / (r_m + r_a)
+
+        if ratio <= tau_primary:
+            primary_sphere.append(idx)
+        elif ratio <= tau_secondary:
+            secondary_sphere.append(idx)
+
+    # Captures the second atom of diatomic ligands and similar small molecules.
+    if primary_sphere and expand_cutoff:
+        primary_set = set(primary_sphere)
+        secondary_set = set(secondary_sphere)
+        primary_coords = coordinates[primary_sphere]
+        for idx in range(len(elements)):
+            if (
+                idx == metal_index
+                or idx in primary_set
+                or idx in secondary_set
+            ):
+                continue
+            partner_dists = np.linalg.norm(
+                primary_coords - coordinates[idx], axis=1
+            )
+            if np.min(partner_dists) <= expand_cutoff:
+                secondary_sphere.append(idx)
+                secondary_set.add(idx)
+
+    return primary_sphere, secondary_sphere
+
+
+def is_collinear(coords, tol=1e-2):
     """
     Check if three points are collinear using cross product method.
 
@@ -30,7 +122,7 @@ def is_collinear(coords, tol=1e-5):
         coords (array-like): List or array of three coordinate points,
             each containing [x, y, z] coordinates.
         tol (float, optional): Tolerance for collinearity test.
-            Defaults to 1e-5.
+            Defaults to 1e-2.
 
     Returns:
         bool: True if points are collinear within tolerance, False otherwise.
@@ -695,3 +787,154 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
     points_inside = np.sum(inside_any)
     volume_per_point = grid_spacing**3
     return points_inside * volume_per_point
+
+
+def clean_rotational_constants_by_geometry(
+    rotational_constants,
+    mode="physical",
+    linear_rel_tol=1e-4,
+    linear_abs_tol=1e-6,
+    zero_abs_tol=1e-12,
+    quasi_linear_ratio=1e4,
+    return_status=False,
+):
+    """Clean Gaussian-style rotational constants without changing units.
+
+    Gaussian prints rotational constants as ``A, B, C`` on lines such as::
+
+        Rotational constants (GHZ):   A   B   C
+
+    For ordinary nonlinear molecules, three finite constants are printed.
+    For linear and quasi-linear molecules, Gaussian may instead print an
+    overflow token such as ``*************`` for the axial constant, a huge
+    finite axial constant, or ``0.0`` for the axial constant while still
+    printing two perpendicular constants. Physically, only one perpendicular
+    rotational constant is meaningful for a linear rotor.
+
+    This helper supports two modes:
+
+    ``mode="gaussian"``
+        Preserve Gaussian's printed values exactly, except that overflow
+        tokens should already have been converted to ``np.inf`` by the parser.
+        Here ``np.inf`` is only a sentinel for an overflowed/unknown printed
+        value; it is not a true known physical infinity.
+
+    ``mode="physical"``
+        Collapse effectively linear or quasi-linear ``[A, B, C]`` triples to a
+        single perpendicular constant ``[B_perp]`` while keeping nonlinear
+        triples unchanged.
+
+    Units are preserved. For Gaussian output this usually means GHz, but this
+    utility performs no unit conversion and can be used with any consistent
+    units.
+
+    Parameters
+    ----------
+    rotational_constants : array-like
+        Rotational constants in Gaussian order ``A, B, C`` or an already
+        cleaned single-value linear-rotor representation.
+    mode : {"gaussian", "physical"}, optional
+        Cleanup mode. ``"gaussian"`` preserves the parsed values; ``"physical"``
+        applies linear/quasi-linear cleanup rules.
+    linear_rel_tol : float, optional
+        Relative tolerance for deciding whether ``B`` and ``C`` are close.
+    linear_abs_tol : float, optional
+        Absolute tolerance for deciding whether ``B`` and ``C`` are close, in
+        the same units as ``rotational_constants``.
+    zero_abs_tol : float, optional
+        Absolute tolerance for deciding whether the axial constant ``A`` is
+        effectively zero.
+    quasi_linear_ratio : float, optional
+        If ``A / B_perp`` exceeds this value and ``B``/``C`` are collapsible,
+        the rotor is treated as quasi-linear in physical mode.
+    return_status : bool, optional
+        If ``True``, also return a status string describing how the values were
+        interpreted.
+
+    Returns
+    -------
+    np.ndarray
+        Cleaned rotational constants in the same units as the input.
+    tuple[np.ndarray, str]
+
+        Always returned as ``(cleaned_constants, status)``.
+        The status is one of
+        ``"gaussian"``, ``"gaussian_overflow"``, ``"linear"``,
+        ``"quasi_linear"``, ``"nonlinear"``, or ``"unknown"``.
+
+    """
+
+    vals = np.asarray(rotational_constants, dtype=float)
+
+    if mode == "gaussian":
+        status = "gaussian_overflow" if np.isinf(vals).any() else "gaussian"
+        cleaned = vals.copy()
+    elif mode != "physical":
+        raise ValueError(
+            f"Unsupported rotational-constant cleanup mode: {mode!r}."
+        )
+    elif vals.size == 1:
+        cleaned = vals.copy()
+        status = "linear"
+    elif vals.size != 3:
+        cleaned = vals.copy()
+        status = "unknown"
+    else:
+        A, B, C = vals
+        if not (np.isfinite(B) and np.isfinite(C)):
+            cleaned = vals.copy()
+            status = "unknown"
+        elif np.isinf(A):
+            if B == C:
+                cleaned = np.array([C], dtype=float)
+                status = "linear"
+            elif np.isclose(
+                B,
+                C,
+                rtol=linear_rel_tol,
+                atol=linear_abs_tol,
+            ):
+                cleaned = np.array([0.5 * (B + C)])
+                status = "linear"
+            else:
+                cleaned = vals.copy()
+                status = "nonlinear"
+        else:
+            if B == C:
+                B_perp = C
+                bc_collapsible = True
+            elif np.isclose(
+                B,
+                C,
+                rtol=linear_rel_tol,
+                atol=linear_abs_tol,
+            ):
+                B_perp = 0.5 * (B + C)
+                bc_collapsible = True
+            else:
+                cleaned = vals.copy()
+                status = "nonlinear"
+                bc_collapsible = False
+
+            if bc_collapsible:
+                axial_zero = np.isfinite(A) and abs(A) <= zero_abs_tol
+                axial_huge = (
+                    np.isfinite(A)
+                    and A > 0.0
+                    and B_perp > 0.0
+                    and A / B_perp > quasi_linear_ratio
+                )
+                if axial_zero:
+                    cleaned = np.array([B_perp], dtype=float)
+                    status = "linear"
+                elif axial_huge:
+                    cleaned = np.array([B_perp], dtype=float)
+                    status = "quasi_linear"
+                else:
+                    cleaned = vals.copy()
+                    status = "nonlinear"
+
+    logger.debug(f"Cleaned rotational constants: {cleaned}, status: {status}")
+    if return_status:
+        return cleaned, status
+    return cleaned

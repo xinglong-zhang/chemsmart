@@ -25,7 +25,7 @@ calculations:
            ├─── ASE Atoms
            ├─── Pymatgen Molecule
            ├─── RDKit Molecule
-           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
+           ├─── File Formats (.xyz, .sdf, .pdb, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
            └─── PubChem queries (by name, CID, or SMILES)
            │
            ▼
@@ -86,6 +86,20 @@ Structure-Data Format files with 2D or 3D coordinates:
 
    chemsmart sub -s server gaussian -p project -f molecule.sdf -c 0 -m 1 opt
 
+PDB Files
+---------
+
+Protein Data Bank (PDB) coordinate files, including single-model structures and multi-model ensembles delimited by
+``MODEL`` / ``ENDMDL`` records:
+
+.. code:: bash
+
+   # Single-model PDB
+   chemsmart sub -s server gaussian -p project -f molecule.pdb -c 0 -m 1 opt
+
+   # Multi-model PDB (select 3rd model)
+   chemsmart sub -s server gaussian -p project -f ensemble.pdb -i 3 -c 0 -m 1 opt
+
 Gaussian Files
 ==============
 
@@ -135,6 +149,21 @@ Extract structures from ORCA calculations:
 .. code:: bash
 
    chemsmart sub -s server gaussian -p project -f orca_opt.out sp
+
+xTB Files
+=========
+
+xTB Main Output Files (.out)
+----------------------------
+
+An xTB calculation writes its results to a **directory** (containing ``charges``, ``xtbopt.log``, ``g98.out``, and so
+on). For geometry input you can point ``-f`` at the xTB main output file; when given a file path, CHEMSMART
+automatically resolves it to the parent calculation directory and reads the associated auxiliary files. Each xTB
+calculation directory must contain exactly one xTB main output.
+
+.. code:: bash
+
+   chemsmart sub -s server gaussian -p project -f co2_ohess/co2_ohess.out sp
 
 ChemDraw Files
 ==============
@@ -192,11 +221,11 @@ For full details on organometallic complex support and its restrictions, see :do
  Molecular Databases
 *********************
 
-Chemsmart Database Files (.db)
+CHEMSMART Database Files (.db)
 ==============================
 
-Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
-:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, CHEMSMART first selects the requested
 record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
 (see :doc:`database-workflow`).
 
@@ -344,6 +373,7 @@ Always specify charge and multiplicity for:
 
 -  XYZ files
 -  SDF files
+-  PDB files
 -  ASE database/trajectory files
 -  PubChem queries
 -  ChemDraw files
@@ -374,18 +404,20 @@ CHEMSMART automatically detects file formats based on extensions:
 
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
+-  ``.pdb`` → PDB format
 -  ``.com``, ``.gjf`` → Gaussian input
 -  ``.log`` → Gaussian output
 -  ``.inp`` → ORCA input
--  ``.out`` → ORCA/Gaussian output (auto-detected by reading file header)
+-  ``.out`` → Gaussian/ORCA/xTB output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
--  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
+-  ``.db`` → CHEMSMART/ASE database (auto-detected by validating the database schema)
 -  ``.traj`` → ASE trajectory
 
 .. note::
 
-   For ``.out`` files, CHEMSMART automatically detects whether the file is from ORCA or Gaussian by examining the file
-   header. If detection fails, an error will be raised indicating the unsupported format.
+   For ``.out`` files, CHEMSMART automatically detects whether the file is from Gaussian, ORCA, or xTB by examining the
+   file header. If detection fails, an error will be raised indicating the unsupported format. For xTB, the ``.out``
+   file is resolved to its parent calculation directory so that the associated output files can be read.
 
 For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 

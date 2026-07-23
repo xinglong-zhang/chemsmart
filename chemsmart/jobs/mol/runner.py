@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
+    PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+)
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.io import convert_string_indices_to_pymol_id_indices
@@ -38,6 +41,39 @@ from chemsmart.utils.utils import (
 pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
+
+
+_SCIENTIFIC_STYLE_TEMPLATE = "zhang_group_scientific_styles.py"
+
+# Hyphenated CLI names derived from the registry (insertion order preserved).
+PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
+    style.replace("_", "-") for style in PYMOL_SCIENTIFIC_STYLE_COMMANDS
+]
+
+PYMOL_STYLE_TEMPLATES = {
+    "pymol": "zhang_group_pymol_style.py",
+    "cylview": "zhang_group_pymol_style.py",
+    "cylview_flat": "zhang_group_pymol_style.py",
+    **dict.fromkeys(
+        PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+        _SCIENTIFIC_STYLE_TEMPLATE,
+    ),
+}
+
+
+def normalize_pymol_style(style):
+    """Return a supported PyMOL style keyword."""
+    normalized = (style or "pymol").lower().replace("-", "_")
+    if normalized not in PYMOL_STYLE_TEMPLATES:
+        raise ValueError(f"The style {style} is not available!")
+    return normalized
+
+
+def is_pymol_derived_style(style):
+    """Return True when ``style`` maps to ``zhang_group_scientific_styles.py``."""
+    if style is None:
+        return False
+    return normalize_pymol_style(style) in PYMOL_SCIENTIFIC_STYLE_COMMANDS
 
 
 class PyMOLJobRunner(JobRunner):
@@ -83,11 +119,12 @@ class PyMOLJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            scratch: Whether to use scratch directories (default: None).
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
@@ -438,10 +475,13 @@ class PyMOLJobRunner(JobRunner):
                 # no render style and no style file present
                 command += ' -d "'
         else:
-            if job.style.lower() == "pymol":
+            style = job.style.lower().replace("-", "_")
+            if style == "pymol":
                 command += f' -d "pymol_style {job.label}'
-            elif job.style.lower() == "cylview":
+            elif style == "cylview":
                 command += f' -d "cylview_style {job.label}'
+            elif style == "cylview_flat":
+                command += f' -d "cylview_flat_style {job.label}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
@@ -1020,6 +1060,73 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             f"set surface_color, {surface_color}, all\n"
             f"set transparency, {surface_transparency}, all\n"
         )
+
+
+class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for derived zhang_group_scientific_styles.py jobs."""
+
+    JOBTYPES = ["pymol_scientific_style_visualization"]
+
+    @staticmethod
+    def _format_style_command(job, selection):
+        """Build the PyMOL -d command for a derived scientific style.
+
+        ``-c`` coordinate highlights are handled by the shared
+        ``_add_coordinates_labels`` path (distance / angle / dihedral
+        measurements), matching plain ``visualize -c`` on the main branch.
+        Style commands themselves only select the look; they do not re-encode
+        bond pairs. Numeric distance labels are hidden inside
+        ``zhang_group_scientific_styles.py`` after distances are created.
+        """
+        style = normalize_pymol_style(job.style)
+        render_command = PYMOL_SCIENTIFIC_STYLE_COMMANDS.get(style)
+        if render_command is None:
+            raise ValueError(f"The style {job.style} is not available!")
+
+        return f"{render_command} {selection}"
+
+    def _generate_visualization_style_script(self, job):
+        """Copy zhang_group_scientific_styles.py for derived ``-s`` jobs."""
+        template_filename = PYMOL_STYLE_TEMPLATES[
+            normalize_pymol_style(job.style)
+        ]
+        source_style_file = self.pymol_templates_path / template_filename
+        dest_style_file = os.path.join(job.folder, template_filename)
+
+        if os.path.exists(dest_style_file):
+            logger.warning(
+                f"Style file {dest_style_file} already exists! Overwriting..."
+            )
+        logger.debug(
+            f"Copying file from {source_style_file} to {dest_style_file}."
+        )
+        shutil.copy(source_style_file, dest_style_file)
+        return dest_style_file
+
+    def _setup_style(self, job, command):
+        """Open the PyMOL ``-d`` script block; render runs after ``-c`` distances."""
+        command += ' -d "'
+        return command
+
+    def _append_style_render(self, job, command):
+        """Append the scientific style render command after ``-c`` measurements."""
+        command += f"; {self._format_style_command(job, job.label)}"
+        return command
+
+    def _get_command(self, job):
+        """Build PyMOL command with distances before style render."""
+        command = self._get_visualization_command(job)
+        command = self._setup_style(job, command)
+        command = self._setup_viewport(command)
+        command = self._add_coordinates_labels(job, command)
+        command = self._append_style_render(job, command)
+        command = self._offset_labels(job, command)
+        command = self._add_vdw(job, command)
+        command = self._add_zoom_command(job, command)
+        command = self._job_specific_commands(job, command)
+        command = self._save_pse_command(job, command)
+        command = self._quit_command(job, command)
+        return command
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
@@ -1819,6 +1926,12 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                     pymol_commands.append(f"pymol_style {name}")
                 elif job.style.lower() == "cylview":
                     pymol_commands.append(f"cylview_style {name}")
+                elif job.style.lower().replace("-", "_") == "cylview_flat":
+                    pymol_commands.append(f"cylview_flat_style {name}")
+                else:
+                    raise ValueError(
+                        f"The style {job.style} is not available!"
+                    )
 
             # Alignment commands - align all to GLOBAL
             # first molecule (not batch first molecule)
@@ -1844,6 +1957,12 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                     pymol_commands.append(f"pymol_style {name}")
                 elif job.style.lower() == "cylview":
                     pymol_commands.append(f"cylview_style {name}")
+                elif job.style.lower().replace("-", "_") == "cylview_flat":
+                    pymol_commands.append(f"cylview_flat_style {name}")
+                else:
+                    raise ValueError(
+                        f"The style {job.style} is not available!"
+                    )
 
             # Align to global first molecule (job.mol_names[0])
             global_ref = job.mol_names[0]
@@ -1936,16 +2055,20 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def _setup_style(self, job, command):
         """Set up style commands"""
+        molnames = job.mol_names
         if job.style is None or job.style.lower() == "pymol":
-            molnames = job.mol_names
             style_cmds = "; ".join(
                 [f"pymol_style {name}" for name in molnames]
             )
             command += f' -d "{style_cmds}'
         elif job.style.lower() == "cylview":
-            molnames = job.mol_names
             style_cmds = "; ".join(
                 [f"cylview_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        elif job.style.lower().replace("-", "_") == "cylview_flat":
+            style_cmds = "; ".join(
+                [f"cylview_flat_style {name}" for name in molnames]
             )
             command += f' -d "{style_cmds}'
         else:
