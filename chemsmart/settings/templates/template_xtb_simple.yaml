@@ -1,0 +1,18 @@
+sp:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+opt:
+  gfn_version: gfn2
+  optimization_level: vtight
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+hess:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false

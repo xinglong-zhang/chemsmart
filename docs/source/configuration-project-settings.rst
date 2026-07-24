@@ -2,7 +2,7 @@
  Project Settings
 ##################
 
-Configure project-specific settings for Gaussian and ORCA calculations.
+Configure project-specific settings for Gaussian, ORCA, and xTB calculations.
 
 ***************************
  Gaussian Project Settings
@@ -440,11 +440,64 @@ This produces:
    For SMD in ORCA 6.0, the model is activated by the ``SMD(solvent)`` route keyword alone — no ``SMD true`` /
    ``SMDsolvent`` lines are needed in the ``%cpcm`` block.
 
+**********************
+ xTB Project Settings
+**********************
+
+The ``~/.chemsmart/xtb/`` directory contains xTB project settings files. Supported job types are ``sp``, ``opt``, and
+``hess``. The ``xtb`` executable is used for execution; install xTB so that it is available from the conda environment
+or ``PATH`` configured in the server YAML ``XTB`` section.
+
+Example project file (``~/.chemsmart/xtb/test.yaml``):
+
+.. code:: yaml
+
+   sp:
+     gfn_version: gfn2
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+   opt:
+     gfn_version: gfn2
+     optimization_level: vtight
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+   hess:
+     gfn_version: gfn2
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+Common keys:
+
+-  ``gfn_version``: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``
+-  ``optimization_level``: used by ``opt`` (``crude`` … ``extreme``; packaged default is ``vtight``)
+-  ``grad``: whether to pass ``--grad``
+-  ``solvent_model`` / ``solvent_id``: implicit solvent; **both** must be set for solvent flags to be rendered
+-  ``additional_route_parameters``: optional extra CLI tokens appended to the xTB command
+
+Solvent example:
+
+.. code:: yaml
+
+   opt:
+     gfn_version: gfn2
+     optimization_level: vtight
+     solvent_model: alpb
+     solvent_id: water
+     grad: false
+
+A packaged template is available as ``template_xtb_simple.yaml`` under the CHEMSMART settings templates directory. Copy
+it into ``~/.chemsmart/xtb/`` and rename it for your project.
+
 *******************
  Scratch Directory
 *******************
 
-Set up a scratch directory path for Gaussian, ORCA, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved by
+Set up a scratch directory path for Gaussian, ORCA, xTB, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved by
 ``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. code:: bash

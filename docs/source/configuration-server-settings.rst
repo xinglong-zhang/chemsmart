@@ -275,8 +275,8 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
 Program-Specific Sections
 =========================
 
-Each computational chemistry program (GAUSSIAN, ORCA, NCIPLOT) has its own configuration section. These sections define
-program-specific paths, execution settings, and environment variables.
+Each computational chemistry program (GAUSSIAN, ORCA, XTB, NCIPLOT) has its own configuration section. These sections
+define program-specific paths, execution settings, and environment variables.
 
 GAUSSIAN Section
 ----------------
@@ -491,6 +491,98 @@ ENVARS
        export SCRATCH=~/scratch
        export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
        export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
+
+XTB Section
+-----------
+
+Configuration for the standalone xTB executable used by CHEMSMART xTB jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to an xTB installation directory, or ``null`` to use the ``xtb`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null  # use xtb from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat xTB as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run xTB in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``xtb`` (and CHEMSMART).
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Environment variables for xTB runs. Set ``SCRATCH`` if scratch mode is enabled.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: |
+           export SCRATCH=~/scratch
 
 NCIPLOT Section
 ---------------
@@ -794,7 +886,7 @@ When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job``
 runner is constructed:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-#. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
+#. Else program ``SCRATCH`` in server YAML for executable-backed runners.
 #. Else the job-runner class default.
 
 Programmatic API (direct constructor)
@@ -806,8 +898,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 
 .. note::
 
-   Server YAML ``SCRATCH`` is read only for ``GAUSSIAN``, ``ORCA``, and ``NCIPLOT``. A ``PYMOL:`` block (or other
-   non-executable program) does not affect scratch when the CLI flag is omitted.
+   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``, and
+   ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI flag is
+   omitted.
 
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -844,7 +937,7 @@ Resolution table (CLI path)
       -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
-      -  absent *(class ``False``, e.g. PyMOL, thermochemistry)*
+      -  absent *(class ``False``, e.g. xTB, PyMOL, thermochemistry)*
       -  ``False``
       -  job folder
 
@@ -862,7 +955,7 @@ Scratch directory path
 
 When scratch mode is ``True``, the scratch directory path is resolved in this order:
 
-#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``NCIPLOT``)
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``NCIPLOT``)
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 

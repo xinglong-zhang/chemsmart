@@ -12,6 +12,7 @@ from chemsmart.jobs.gaussian.runner import (
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 from chemsmart.settings.server import Server
 
 
@@ -72,6 +73,14 @@ class TestJobRunnerSelection:
         assert isinstance(runner, FakeORCAJobRunner)
         assert runner.fake is True
 
+    def test_fake_xtb_runner_selected_when_fake_enabled(self, pbs_server):
+        job = SimpleNamespace(TYPE="xtbhess")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeXTBJobRunner)
+        assert runner.fake is True
+
     def test_real_runner_selected_when_fake_disabled(self, pbs_server):
         gaussian_job = SimpleNamespace(TYPE="g16opt")
         gaussian_runner = JobRunner.from_job(
@@ -84,6 +93,12 @@ class TestJobRunnerSelection:
             job=orca_job, server=pbs_server, scratch=False, fake=False
         )
         assert isinstance(orca_runner, ORCAJobRunner)
+
+        xtb_job = SimpleNamespace(TYPE="xtbsp")
+        xtb_runner = JobRunner.from_job(
+            job=xtb_job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(xtb_runner, XTBJobRunner)
 
     def test_fake_flag_propagates_when_no_fake_runner_exists(self, pbs_server):
         job = SimpleNamespace(TYPE="iterate")
@@ -284,7 +299,9 @@ class TestScratchCLI:
         assert "--scratch" not in captured["cli_args"]
 
 
-def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
+def _write_server_yaml(
+    path, *, gaussian_scratch, orca_scratch, xtb_scratch=None
+):
     """Write a minimal server YAML with optional program SCRATCH keys."""
     gaussian_line = (
         f"    SCRATCH: {gaussian_scratch}\n"
@@ -293,6 +310,9 @@ def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
     )
     orca_line = (
         f"    SCRATCH: {orca_scratch}\n" if orca_scratch is not None else ""
+    )
+    xtb_line = (
+        f"    SCRATCH: {xtb_scratch}\n" if xtb_scratch is not None else ""
     )
     path.write_text(
         "SERVER:\n"
@@ -315,6 +335,12 @@ def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
         f"{orca_line}"
         "    ENVARS: |\n"
         "        export SCRATCH=~/scratch\n"
+        "XTB:\n"
+        "    EXEFOLDER: null\n"
+        "    LOCAL_RUN: True\n"
+        f"{xtb_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
     )
     return path
 
@@ -326,12 +352,14 @@ class TestScratchYamlOverride:
         from chemsmart.settings.executable import (
             GaussianExecutable,
             ORCAExecutable,
+            XTBExecutable,
         )
 
         yaml_path = _write_server_yaml(
             tmp_path / "mixed.yaml",
             gaussian_scratch=True,
             orca_scratch=False,
+            xtb_scratch=True,
         )
         assert (
             GaussianExecutable.program_scratch_from_servername(str(yaml_path))
@@ -340,6 +368,10 @@ class TestScratchYamlOverride:
         assert (
             ORCAExecutable.program_scratch_from_servername(str(yaml_path))
             is False
+        )
+        assert (
+            XTBExecutable.program_scratch_from_servername(str(yaml_path))
+            is True
         )
 
     def test_program_scratch_from_servername_missing_key_is_none(

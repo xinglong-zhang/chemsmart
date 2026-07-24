@@ -7,11 +7,13 @@ from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
 from chemsmart.cli.pka import pka
 from chemsmart.cli.thermochemistry import thermochemistry
+from chemsmart.cli.xtb import xtb
 
 subcommands = [
     gaussian,
     grouper,
     orca,
+    xtb,
     pka,
     mol,
     nciplot,

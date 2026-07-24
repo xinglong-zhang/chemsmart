@@ -142,7 +142,7 @@ class TestXTBMainOut:
         assert co2_main_out.net_charge == 0
         assert co2_main_out.unpaired_electrons == 0
         # Geometry Optimization Setup
-        assert co2_main_out.optimization_level == "verytight"
+        assert co2_main_out.optimization_level == "vtight"
         assert co2_main_out.max_optcycles == 200
         assert co2_main_out.anc_microcycles == 20
         assert co2_main_out.degrees_of_freedom == 4
