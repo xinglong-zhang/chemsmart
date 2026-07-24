@@ -196,7 +196,9 @@ fmt:              ## Format code using black and isort.
 
 .PHONY: lint
 lint:             ## Run linters (ruff).
+	$(ENV_PREFIX)ruff --version
 	$(ENV_PREFIX)ruff check . --fix
+
 
 # === Testing ===
 .PHONY: coverage-clean
