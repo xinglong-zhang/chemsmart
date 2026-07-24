@@ -1,10 +1,10 @@
 .. _chemdraw-organometallic:
 
-#######################################
- ChemDraw Organometallic Complex Files
-#######################################
+###############
+ ChemDraw Files
+###############
 
-CHEMSMART can read organometallic complexes drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures
+CHEMSMART can read molecules drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures directly
 suitable for quantum chemistry calculations with Gaussian or ORCA.
 
 .. note::
@@ -95,6 +95,11 @@ Example usage:
 
 If ``obabel`` is not installed and a ``.cdx`` file is provided, CHEMSMART raises a ``ValueError`` with instructions to
 install Open Babel or re-save the file as ``.cdxml``.
+
+.. note::
+
+   We recommand that users save structures in ChemDraw in .cdxml format, as the conversion of structures in .cdxml to
+   molecular structures in quantum chemical input is more reliable.
 
 **************
  How It Works
