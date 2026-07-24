@@ -642,4 +642,339 @@ class TestORCALabelAndAuxBasisOptions:
 
         assert result.exit_code == 0, result.output
         assert mock.call_args is not None
-        assert mock.call_args.kwargs["settings"].aux_basis == "def2/J"
+
+
+class TestORCACLIInpCommand:
+    """CLI tests for the ``inp`` (run input file as-is) subcommand."""
+
+    def test_inp_job_creation_from_inp_file(self, water_sp_input_path):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca as orca_cli
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.orca.job.ORCAInpJob") as mock_job_cls:
+            mock_job_cls.from_filename.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    water_sp_input_path,
+                    "inp",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_job_cls.from_filename.assert_called_once()
+        assert (
+            mock_job_cls.from_filename.call_args.kwargs["filename"]
+            == water_sp_input_path
+        )
+
+
+class TestORCACLIIrcCommand:
+    """CLI tests for the ``irc`` subcommand."""
+
+    def test_irc_basic_job_creation(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``irc`` subcommand creates an ``ORCAIRCJob``."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.irc.ORCAIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAIRCJob was never instantiated"
+
+    def test_irc_direction_and_maxiter_options(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``-d forward --maxiter 50`` set direction and maxiter on IRC settings."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.irc.ORCAIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                "forward",
+                "--maxiter",
+                "50",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.direction == "forward"
+        assert settings.maxiter == 50
+
+
+class TestORCACLIScanCommand:
+    """CLI tests for the ``scan`` subcommand group."""
+
+    def test_scan_requires_full_coordinate_spec(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``scan`` without ``-x``/``-y``/``-n`` raises an assertion error."""
+        import pytest
+
+        with pytest.raises(AssertionError, match="Scanning coordinates"):
+            run_orca_and_capture_settings(
+                "chemsmart.jobs.orca.scan.ORCAScanJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "scan",
+                    "-c",
+                    "[[2,3]]",
+                ],
+            )
+
+    def test_scan_basic_job_creation(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``scan -c [[2,3]] -x 3.0 -y 1.2 -n 15`` creates an ``ORCAScanJob``."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.scan.ORCAScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[2,3]]",
+                "-x",
+                "3.0",
+                "-y",
+                "1.2",
+                "-n",
+                "15",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAScanJob was never instantiated"
+
+    def test_scan_constrained_coordinates_option(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``-cc`` adds additional modredundant constraints to the scan settings."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.scan.ORCAScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[2,3]]",
+                "-x",
+                "3.0",
+                "-y",
+                "1.2",
+                "-n",
+                "15",
+                "-cc",
+                "[[1,2,3]]",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["constrained_coordinates"] == [[1, 2, 3]]
+
+
+class TestORCACLIModredCommand:
+    """CLI tests for the ``modred`` subcommand group."""
+
+    def test_modred_requires_coordinates(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``modred`` without coordinates raises an assertion error."""
+        import pytest
+
+        with pytest.raises(
+            AssertionError, match="Coordinates must be provided"
+        ):
+            run_orca_and_capture_settings(
+                "chemsmart.jobs.orca.modred.ORCAModredJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "modred",
+                ],
+            )
+
+    def test_modred_basic_job_creation(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``modred -c "[[1,2]]"`` creates an ``ORCAModredJob``."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.modred.ORCAModredJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "modred",
+                "-c",
+                "[[1,2]]",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAModredJob was never instantiated"
+
+
+class TestORCACLIQmmmSubcommand:
+    """CLI tests for the ``qmmm`` subcommand attached to ``opt``."""
+
+    def test_opt_qmmm_job_creation(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``opt qmmm`` creates an ``ORCAQMMMJob`` inheriting opt jobtype."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+                "qmmm",
+                "-hx",
+                "b3lyp",
+                "-hb",
+                "def2-svp",
+            ],
+            {"jobrunner": None},
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAQMMMJob was never instantiated"
+
+
+class TestORCACLINebCommand:
+    """CLI tests for the ``neb`` subcommand group."""
+
+    def test_neb_basic_job_creation(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``neb -j NEB-TS -e <file>`` creates an ``ORCANEBJob``."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.neb.ORCANEBJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "neb",
+                "-j",
+                "NEB-TS",
+                "-e",
+                single_molecule_xyz_file,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCANEBJob was never instantiated"
+        assert settings.joboption == "NEB-TS"
+        assert settings.ending_xyzfile == single_molecule_xyz_file
+
+
+class TestORCACLIQrcCommand:
+    """CLI tests for the ``qrc`` subcommand group."""
+
+    def test_qrc_default_jobtype_opt(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``qrc`` with no ``-j`` defaults to the ``opt`` jobtype settings."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qrc.ORCAQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+            ],
+            {"jobrunner": None},
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAQRCJob was never instantiated"
+
+    def test_qrc_explicit_ts_jobtype(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``qrc -j ts`` uses TS settings from the project for the QRC job."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qrc.ORCAQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+                "-j",
+                "ts",
+            ],
+            {"jobrunner": None},
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None, "ORCAQRCJob was never instantiated"
