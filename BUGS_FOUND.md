@@ -749,3 +749,59 @@ very unlikely to work correctly for actual job submission.
 
 **Suggested direction:** pass through the `jobrunner` parameter like
 every other Gaussian job class does: `jobrunner=jobrunner`.
+
+---
+
+## 17. `EnergyGrouper._merge_groups_to_target`'s "no connections" fallback is unreachable dead code
+
+**File:** `chemsmart/jobs/grouper/energy.py:428-458`
+**Test:** `tests/test_energy_grouper_unit.py::TestMergeGroupsToTargetDirect::test_merges_into_the_most_connected_group`
+(see the docstring note; the fallback itself has no reachable test because it cannot execute)
+
+```python
+best_merge_idx = -1
+best_connection_count = -1
+
+for i, target_indices in enumerate(index_groups):
+    if i == min_idx:
+        continue
+    connection_count = 0
+    for src_idx in index_groups[min_idx]:
+        for tgt_idx in target_indices:
+            if adj_matrix[src_idx, tgt_idx]:
+                connection_count += 1
+    if connection_count > best_connection_count:
+        best_connection_count = connection_count
+        best_merge_idx = i
+
+if best_merge_idx >= 0:
+    ...
+else:
+    # No connections found, merge into the largest group
+    ...
+```
+
+`best_connection_count` starts at `-1`, but `connection_count` starts at
+`0` for every candidate group. Since `0 > -1` is always true, the very
+first candidate considered always sets `best_merge_idx` to a real index
+(`>= 0`). The `while len(groups) > self.num_groups` loop guarantees at
+least 2 groups exist whenever this code runs, so there is always at
+least one candidate group to consider — meaning `best_merge_idx` can
+never remain `-1`. The `else` branch ("no connections found, merge into
+the largest group") is therefore unreachable in practice, even when the
+adjacency matrix is fully disconnected (verified directly: with an
+all-`False` matrix, `best_merge_idx` still ends up `0`, not `-1`).
+
+**Impact:** Purely a latent dead-code / defensive-code bug — behavior
+is unaffected today because the "most connected" branch already merges
+into *some* group (arbitrarily the first one iterated, when all
+connection counts are tied at 0), which happens to coincide with
+reasonable behavior. But the fallback was clearly intended to have a
+distinct effect ("merge into the *largest* group" instead of the first
+tied one) and never fires.
+
+**Suggested direction:** initialize `best_connection_count = -1` is fine,
+but change the comparison to only prefer strictly-positive connection
+counts (e.g. track `best_merge_idx` separately for `connection_count >
+0` cases), so ties-at-zero genuinely fall through to the "merge into
+largest" branch.
