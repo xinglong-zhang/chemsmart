@@ -901,7 +901,11 @@ class TestConverterTwoWay:
 
     def test_convert_file_multi_model_pdb_splits(self, multi_model_pdb_file):
         output_path = multi_model_pdb_file.replace(".pdb", ".xyz")
-        FileConverter.convert_file(multi_model_pdb_file, output_path)
+        FileConverter.convert_file(
+            multi_model_pdb_file,
+            output_path,
+            include_intermediate_structures=True,
+        )
 
         assert not os.path.exists(output_path)
         output_dir = os.path.dirname(output_path)
@@ -916,6 +920,56 @@ class TestConverterTwoWay:
         assert mol1.num_atoms == 2
         assert mol2.num_atoms == 2
         assert not np.allclose(mol1.positions, mol2.positions)
+
+    def test_convert_file_single_structure_without_splitting(
+        self, multi_model_pdb_file
+    ):
+        """Default mode writes a single output for multi-model inputs."""
+        output_path = multi_model_pdb_file.replace(".pdb", ".xyz")
+        FileConverter.convert_file(
+            multi_model_pdb_file,
+            output_path,
+            include_intermediate_structures=False,
+        )
+
+        assert os.path.exists(output_path)
+        output_dir = os.path.dirname(output_path)
+        output_basename = os.path.splitext(os.path.basename(output_path))[0]
+        assert not os.path.exists(
+            os.path.join(output_dir, f"{output_basename}_1.xyz")
+        )
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 2
+
+    def test_convert_files_routes_to_convert_file_with_output_filepath(
+        self, tmpdir, single_model_pdb_file
+    ):
+        output_path = os.path.join(tmpdir, "water.xyz")
+        fc = FileConverter(
+            filename=single_model_pdb_file, output_filepath=output_path
+        )
+        fc.convert_files()
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 3
+
+    def test_convert_files_routes_with_include_intermediate(
+        self, multi_model_pdb_file, tmpdir
+    ):
+        output_path = os.path.join(tmpdir, "multi.xyz")
+        fc = FileConverter(
+            filename=multi_model_pdb_file,
+            output_filepath=output_path,
+            include_intermediate_structures=True,
+        )
+        fc.convert_files()
+
+        assert not os.path.exists(output_path)
+        assert os.path.exists(os.path.join(tmpdir, "multi_1.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, "multi_2.xyz"))
 
     def test_convert_file_missing_input_raises(self, tmpdir):
         missing_input = os.path.join(tmpdir, "missing.xyz")
@@ -954,6 +1008,21 @@ class TestConverterTwoWay:
             with pytest.raises(ValueError, match="No molecule could be read"):
                 FileConverter.convert_file(single_model_pdb_file, output_path)
 
+    def test_convert_file_none_molecules_with_intermediates_raises(
+        self, single_model_pdb_file, tmpdir
+    ):
+        output_path = os.path.join(tmpdir, "out.xyz")
+        with patch(
+            "chemsmart.io.converter.Molecule.from_filepath",
+            return_value=None,
+        ):
+            with pytest.raises(ValueError, match="No molecule could be read"):
+                FileConverter.convert_file(
+                    single_model_pdb_file,
+                    output_path,
+                    include_intermediate_structures=True,
+                )
+
     def test_convert_file_empty_list_raises(
         self, single_model_pdb_file, tmpdir
     ):
@@ -963,7 +1032,11 @@ class TestConverterTwoWay:
             return_value=[],
         ):
             with pytest.raises(ValueError, match="No molecules found"):
-                FileConverter.convert_file(single_model_pdb_file, output_path)
+                FileConverter.convert_file(
+                    single_model_pdb_file,
+                    output_path,
+                    include_intermediate_structures=True,
+                )
 
     def test_convert_file_non_list_molecule_wrapped(
         self, single_model_pdb_file, tmpdir
@@ -975,10 +1048,30 @@ class TestConverterTwoWay:
             "chemsmart.io.converter.Molecule.from_filepath",
             return_value=mol,
         ):
-            FileConverter.convert_file(single_model_pdb_file, output_path)
+            FileConverter.convert_file(
+                single_model_pdb_file,
+                output_path,
+                include_intermediate_structures=True,
+            )
         assert os.path.exists(output_path)
         written = Molecule.from_filepath(output_path)
         assert written.num_atoms == 3
+
+    def test_convert_file_single_molecule_with_intermediates(
+        self, single_model_pdb_file, tmpdir
+    ):
+        """include_intermediate_structures=True with one molecule writes
+        directly to the output path (no _1 suffix)."""
+        output_path = os.path.join(tmpdir, "water.xyz")
+        FileConverter.convert_file(
+            single_model_pdb_file,
+            output_path,
+            include_intermediate_structures=True,
+        )
+        assert os.path.exists(output_path)
+        assert not os.path.exists(os.path.join(tmpdir, "water_1.xyz"))
+        mol = Molecule.from_filepath(output_path)
+        assert mol.num_atoms == 3
 
 
 class TestConvertCLI:
@@ -1060,3 +1153,102 @@ class TestConvertCLI:
         )
         assert result.exit_code == 0, result.output
         assert os.path.exists(output_path)
+
+    def test_cli_convert_batch_directory(
+        self, tmpdir, gaussian_inputs_test_directory
+    ):
+        tmp_com_folder = os.path.join(tmpdir, "gaussian_inputs_test_directory")
+        copytree(gaussian_inputs_test_directory, tmp_com_folder)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--directory",
+                tmp_com_folder,
+                "--filetype",
+                "com",
+                "--output-filetype",
+                "xyz",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+
+        g16_folder = GaussianInputFolder(folder=tmp_com_folder)
+        for file in g16_folder.all_com_files:
+            assert os.path.exists(file.replace(".com", ".xyz"))
+
+    def test_cli_convert_include_intermediate_structures(
+        self, multi_model_pdb_file, tmpdir
+    ):
+        output_path = os.path.join(tmpdir, "multi.xyz")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                multi_model_pdb_file,
+                "--output",
+                output_path,
+                "--include-intermediate-structures",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert not os.path.exists(output_path)
+        assert os.path.exists(os.path.join(tmpdir, "multi_1.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, "multi_2.xyz"))
+
+    def test_cli_convert_mutually_exclusive_input_and_directory(
+        self, single_model_pdb_file, tmpdir
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                os.path.join(tmpdir, "out.xyz"),
+                "--directory",
+                str(tmpdir),
+                "--filetype",
+                "pdb",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "either --input/--output" in result.output.lower() or (
+            "not both" in result.output.lower()
+        )
+
+    def test_cli_convert_input_requires_output(self, single_model_pdb_file):
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            ["run", "convert", "--input", single_model_pdb_file],
+        )
+        assert result.exit_code != 0
+        assert "--output" in result.output
+
+    def test_cli_convert_directory_requires_filetype(self, tmpdir):
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            ["run", "convert", "--directory", str(tmpdir)],
+        )
+        assert result.exit_code != 0
+        assert "--filetype" in result.output
+
+    def test_cli_convert_requires_mode(self):
+        runner = CliRunner()
+        result = runner.invoke(entry_point, ["run", "convert"])
+        assert result.exit_code != 0
+        assert "either --input/--output" in result.output.lower() or (
+            "--directory/--filetype" in result.output.lower()
+        )
