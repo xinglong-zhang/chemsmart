@@ -805,3 +805,12 @@ but change the comparison to only prefer strictly-positive connection
 counts (e.g. track `best_merge_idx` separately for `connection_count >
 0` cases), so ties-at-zero genuinely fall through to the "merge into
 largest" branch.
+
+**Also affects:** `chemsmart/jobs/grouper/rmsd.py`'s
+`RMSDGrouper._merge_groups_to_target` (around line 382-442) has the
+exact same `best_connection_count = -1` / `connection_count = 0` pattern
+and is subject to the identical dead-code fallback. See
+`tests/test_rmsd_grouper_base_unit.py::TestMergeGroupsToTarget::test_merge_reduces_group_count_and_prefers_connected_group`.
+`TorsionFingerprintGrouper._merge_groups_to_target` in
+`chemsmart/jobs/grouper/tfd.py` is unaffected — it merges purely by
+group size and has no connection-counting fallback.
