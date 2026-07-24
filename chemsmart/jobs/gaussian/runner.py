@@ -86,6 +86,7 @@ class GaussianJobRunner(JobRunner):
         "g16",
         "g16com",
         "g16link",
+        "g16mecp",
         "g16qmmm",
         "g16pka",
         "g16pka_analyze",
