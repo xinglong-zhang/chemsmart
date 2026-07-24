@@ -29,13 +29,13 @@ Basic Usage
 .. code:: bash
 
    # Submit all conformers without grouping
-   chemsmart sub -s server gaussian -f crest_conformers.xyz -c 0 -m 1 crest
+   chemsmart sub -s server gaussian -p project1 -f crest_conformers.xyz -c 0 -m 1 crest
 
    # Group conformers first, then submit unique ones
-   chemsmart sub -s server gaussian -f crest_conformers.xyz -c 0 -m 1 crest -g irmsd -N 10
+   chemsmart sub -s server gaussian -p project1 -f crest_conformers.xyz -c 0 -m 1 crest -g irmsd -N 10
 
    # Use threshold-based grouping
-   chemsmart sub -s server gaussian -f crest_conformers.xyz -c 1 -m 3 crest -g irmsd -T 0.3
+   chemsmart sub -s server gaussian -p project2 -f crest_conformers.xyz -c 1 -m 3 crest -g irmsd -T 0.3
 
 Grouping Options
 ================
@@ -45,13 +45,13 @@ Use ``-g`` to specify grouping strategy before submission:
 .. code:: bash
 
    # iRMSD grouping (recommended for symmetric molecules)
-   chemsmart sub -s server gaussian -f conformers.xyz -c 0 -m 1 crest -g irmsd -N 15
+   chemsmart sub -s server gaussian -p project1 -f conformers.xyz -c 0 -m 1 crest -g irmsd -N 15
 
    # TFD grouping (good for flexible molecules)
-   chemsmart sub -s server gaussian -f conformers.xyz -c 0 -m 1 crest -g torsion -T 0.1
+   chemsmart sub -s server gaussian -p project1 -f conformers.xyz -c 0 -m 1 crest -g torsion -T 0.1
 
    # Tanimoto similarity
-   chemsmart sub -s server gaussian -f conformers.xyz -c 0 -m 1 crest -g tanimoto -T 0.9
+   chemsmart sub -s server gaussian -p project1 -f conformers.xyz -c 0 -m 1 crest -g tanimoto -T 0.9
 
 Available strategies: ``rmsd``, ``hrmsd``, ``spyrmsd``, ``irmsd``, ``pymolrmsd``, ``tanimoto``, ``torsion``,
 ``isomorphism``, ``formula``, ``connectivity``, ``energy``
@@ -87,13 +87,13 @@ Basic Usage
 .. code:: bash
 
    # Use last 10% of trajectory (default)
-   chemsmart sub -s server gaussian -f trajectory.xyz -c 0 -m 1 traj
+   chemsmart sub -s server gaussian -p project1 -f trajectory.xyz -c 0 -m 1 traj
 
    # Use last 50% of trajectory
-   chemsmart sub -s server gaussian -f trajectory.xyz -c 0 -m 1 traj -x 0.5
+   chemsmart sub -s server gaussian -p project1 -f trajectory.xyz -c 0 -m 1 traj -x 0.5
 
    # Group selected structures before submission
-   chemsmart sub -s server gaussian -f trajectory.xyz -c 0 -m 1 traj -x 0.3 -g spyrmsd -N 5
+   chemsmart sub -s server gaussian -p project1 -f trajectory.xyz -c 0 -m 1 traj -x 0.3 -g spyrmsd -N 5
 
 Trajectory Options
 ==================
@@ -126,7 +126,7 @@ Process CREST output, group to 15 conformers, and submit for DFT optimization:
 
 .. code:: bash
 
-   chemsmart sub -s server gaussian -f crest_conformers.xyz -c 0 -m 1 crest -g irmsd -N 15 -np 4
+   chemsmart sub -s server gaussian -p project1 -f crest_conformers.xyz -c 0 -m 1 crest -g irmsd -N 15 -np 4
 
 Example 2: Trajectory Analysis
 ==============================
@@ -135,4 +135,4 @@ Select last 30% of MD trajectory, group, and submit for single-point calculation
 
 .. code:: bash
 
-   chemsmart sub -s server gaussian -f md_trajectory.xyz -c 0 -m 1 traj -x 0.3 -g tfd -T 0.5 --no-use-weights
+   chemsmart sub -s server gaussian -p project1 -f md_trajectory.xyz -c 0 -m 1 traj -x 0.3 -g tfd -T 0.5 --no-use-weights
