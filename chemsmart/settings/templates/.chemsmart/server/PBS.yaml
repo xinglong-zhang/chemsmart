@@ -15,6 +15,19 @@ SERVER:
       #PBS -m abe
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
+CHEMSMART:
+    EXEFOLDER: ~/miniconda3/envs/chemsmart/bin
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+    ENVARS: |
+        export OMP_NUM_THREADS=1
+        export MKL_NUM_THREADS=1
+        export OPENBLAS_NUM_THREADS=1
+        export NUMEXPR_NUM_THREADS=1
+        export BLIS_NUM_THREADS=1
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True  # local run True to use serial_command

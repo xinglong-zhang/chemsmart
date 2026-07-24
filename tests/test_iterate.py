@@ -8,6 +8,7 @@ before optimization so traversal rules can be checked exactly and quickly.
 
 from __future__ import annotations
 
+import ast
 from collections import Counter
 from itertools import product
 from pathlib import Path
@@ -17,8 +18,9 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from chemsmart.cli.iterate.yaml_cmd import yaml_cmd
-from chemsmart.jobs.iterate.job import IterateJob
+from chemsmart.cli.main import entry_point
+from chemsmart.cli.run import run
+from chemsmart.jobs.iterate.job import IterateExecutionError, IterateJob
 from chemsmart.jobs.iterate.report import ERROR_CODE_INPUT, ERROR_CODE_TIMEOUT
 from chemsmart.jobs.iterate.settings import (
     IterateJobSettings,
@@ -138,6 +140,62 @@ def _build_job(
     )
 
 
+def test_iterate_job_names_follow_config_stem(tmp_path: Path):
+    """Job, report, and default merged output share one config-based stem."""
+    settings = IterateJobSettings(config_file=str(tmp_path / "my config.yaml"))
+    job = IterateJob(settings=settings)
+    job.folder = str(tmp_path)
+
+    assert job.label == "my_config_iterate"
+    assert job.outputfile == "my_config_iterate.xyz"
+    assert job.reportfile == str(tmp_path / "my_config_iterate.out")
+
+    custom_output = tmp_path / "custom"
+    custom_job = IterateJob(settings=settings, outputfile=str(custom_output))
+    assert custom_job.label == "my_config_iterate"
+    assert custom_job.outputfile == str(custom_output.with_suffix(".xyz"))
+    assert custom_job.reportfile == str(tmp_path / "my_config_iterate.out")
+
+
+def test_iterate_job_skips_complete_output_unless_rerun_requested(
+    tmp_path: Path,
+):
+    """A normal report and its declared output activate skip-completed."""
+    settings = IterateJobSettings(config_file=str(tmp_path / "complete.yaml"))
+    job = IterateJob(settings=settings)
+    job.folder = str(tmp_path)
+    (tmp_path / job.outputfile).write_text("1\ncomplete\nH 0 0 0\n")
+    Path(job.reportfile).write_text(
+        "Structures written: 1\n"
+        "Normal termination of CHEMSMART Iterate at 2026-01-01 00:00:00.\n"
+    )
+
+    class RecordingRunner:
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, iterate_job, progress_callback=None):
+            self.calls += 1
+
+            class Summary:
+                exit_code = 0
+
+            return Summary()
+
+    runner = RecordingRunner()
+    job.jobrunner = runner
+
+    assert job.is_complete()
+    assert job.skip_completed
+    assert job.run() is None
+    assert runner.calls == 0
+
+    job.skip_completed = False
+    summary = job.run()
+    assert summary.exit_code == 0
+    assert runner.calls == 1
+
+
 @pytest.mark.parametrize(
     ("config_name", "expected_name", "algorithm_args"),
     [
@@ -164,14 +222,16 @@ def test_iterate_cli_generation_matches_golden(
     """Both algorithms reproduce their manually generated eight structures."""
     output_base = tmp_path / Path(config_name).stem
     result = CliRunner().invoke(
-        yaml_cmd,
+        run,
         [
+            "--num-cores",
+            "1",
+            "iterate",
+            "yaml",
             "-f",
             str(CONFIG_DIR / config_name),
             "-cm",
             "global",
-            "-np",
-            "1",
             "-o",
             str(output_base),
             *algorithm_args,
@@ -180,9 +240,6 @@ def test_iterate_cli_generation_matches_golden(
     )
 
     assert result.exit_code == 0, result.output
-    assert "Total combinations:        8" in result.output
-    assert "Successful combinations:   8" in result.output
-    assert "Failed combinations:       0" in result.output
 
     output_path = output_base.with_suffix(".xyz")
     actual = _read_xyz(output_path)
@@ -195,7 +252,9 @@ def test_iterate_cli_generation_matches_golden(
     assert "CHEMSMART ITERATE JOB REPORT" in report_text
     assert "Total combinations:      8" in report_text
     assert "Generated successfully:      8" in report_text
+    assert "Number of processes:     1" in report_text
     assert "Normal termination of CHEMSMART Iterate" in report_text
+    assert "Configuration SHA256" not in report_text
 
 
 def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
@@ -207,7 +266,9 @@ def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
         timeout=1e-9,
     )
 
-    summary = job.run()
+    with pytest.raises(IterateExecutionError) as exc_info:
+        job.run()
+    summary = exc_info.value.summary
 
     assert summary.total == 1
     assert summary.succeeded == 0
@@ -233,10 +294,122 @@ def test_iterate_template_matches_golden(tmp_path: Path):
     assert len(parsed["substituents"]) == 1
 
 
+def test_iterate_template_generation_is_rejected_under_sub(tmp_path: Path):
+    """The real CLI hierarchy must not run template utilities under ``sub``."""
+    output_path = tmp_path / "should_not_be_written.yaml"
+
+    result = CliRunner().invoke(
+        entry_point,
+        [
+            "sub",
+            "iterate",
+            "yaml",
+            "--generate-template",
+            str(output_path),
+        ],
+        obj={},
+    )
+
+    assert result.exit_code == 2
+    assert "local utility" in result.output
+    assert not output_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("server_name", "resource_directive"),
+    [
+        (
+            "PBS",
+            "#PBS -l select=1:ncpus=4:mpiprocs=1:mem=375G",
+        ),
+        (
+            "SLURM",
+            "#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=375G",
+        ),
+    ],
+)
+def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
+    tmp_path: Path,
+    monkeypatch,
+    server_name: str,
+    resource_directive: str,
+):
+    """``sub --test`` reconstructs Iterate and writes native CPU scripts."""
+    monkeypatch.chdir(tmp_path)
+    config_path = CONFIG_DIR / "etkdg_generation.yaml"
+
+    result = CliRunner().invoke(
+        entry_point,
+        [
+            "sub",
+            "--server",
+            server_name,
+            "--num-cores",
+            "4",
+            "--test",
+            "iterate",
+            "yaml",
+            "-f",
+            str(config_path),
+            "etkdg",
+            "--num-conformers",
+            "3",
+        ],
+        obj={},
+    )
+
+    assert result.exit_code == 0, result.output
+
+    label = "etkdg_generation_iterate"
+    run_script = tmp_path / f"chemsmart_run_{label}.py"
+    submit_script = tmp_path / f"chemsmart_sub_{label}.sh"
+    assert run_script.exists()
+    assert submit_script.exists()
+
+    run_tree = ast.parse(run_script.read_text())
+    cli_assignment = next(
+        node
+        for node in ast.walk(run_tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "cli_args"
+            for target in node.targets
+        )
+    )
+    reconstructed_args = ast.literal_eval(cli_assignment.value)
+    assert reconstructed_args[reconstructed_args.index("--server") + 1] == (
+        server_name
+    )
+    assert (
+        reconstructed_args[reconstructed_args.index("--num-cores") + 1] == "4"
+    )
+    assert "--skip-completed" in reconstructed_args
+    assert reconstructed_args[
+        reconstructed_args.index("--num-conformers") + 1
+    ] == "3"
+    assert "sub" not in reconstructed_args
+    assert (
+        reconstructed_args.index("iterate")
+        < reconstructed_args.index("yaml")
+        < reconstructed_args.index("etkdg")
+    )
+    assert (
+        "sys.argv = ['chemsmart', 'run', *cli_args]" in run_script.read_text()
+    )
+
+    submit_contents = submit_script.read_text()
+    assert resource_directive in submit_contents
+    assert "conda activate ~/miniconda3/envs/chemsmart" in submit_contents
+    assert "export OMP_NUM_THREADS=1" in submit_contents
+    assert "export MKL_NUM_THREADS=1" in submit_contents
+    assert f"./{run_script.name} &" in submit_contents
+
+
 def test_iterate_cli_rejects_link_outside_skeleton_indices(tmp_path: Path):
     """A declared link atom must belong to the retained skeleton atoms."""
     config_path = tmp_path / "invalid_link.yaml"
-    config_path.write_text("""\
+    config_path.write_text(
+        """\
 skeletons:
   - file_path: skeleton.xyz
     label: skeleton
@@ -247,9 +420,12 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-""")
+"""
+    )
 
-    result = CliRunner().invoke(yaml_cmd, ["-f", str(config_path)], obj={})
+    result = CliRunner().invoke(
+        run, ["iterate", "yaml", "-f", str(config_path)], obj={}
+    )
 
     assert result.exit_code == 2
     assert "Invalid value" in result.output
@@ -326,7 +502,9 @@ def test_iterate_cli_rejects_invalid_config(
     config_path = tmp_path / "invalid.yaml"
     config_path.write_text(content)
 
-    result = CliRunner().invoke(yaml_cmd, ["-f", str(config_path)], obj={})
+    result = CliRunner().invoke(
+        run, ["iterate", "yaml", "-f", str(config_path)], obj={}
+    )
 
     assert result.exit_code == 2
     assert "Invalid value" in result.output
@@ -364,22 +542,26 @@ def test_iterate_cli_rejects_missing_config_file(tmp_path: Path):
     """A missing YAML file is a CLI usage/configuration error."""
     missing_path = tmp_path / "missing.yaml"
 
-    result = CliRunner().invoke(yaml_cmd, ["-f", str(missing_path)], obj={})
+    result = CliRunner().invoke(
+        run, ["iterate", "yaml", "-f", str(missing_path)], obj={}
+    )
 
     assert result.exit_code == 2
     assert "does not exist" in result.output
 
 
 def test_iterate_cli_missing_molecule_file_is_input_error(tmp_path: Path):
-    """Absent molecule files fail as an input error (exit 1, ITR-INPUT-001).
+    """Absent molecule files are recorded as an input error.
 
     The config is structurally valid, so validation passes, but every declared
     molecule file is missing.  No structure can be produced, so the run is an
-    error termination that honours the input-error contract: a non-zero exit
-    and the ``ITR-INPUT-001`` code in both the terminal and the run report.
+    error termination recorded with ``ITR-INPUT-001`` in the run report.
+    Iterate propagates its internal completion status to the CLI process so a
+    scheduler can distinguish this failure from a successful calculation.
     """
     config_path = tmp_path / "missing_molecule.yaml"
-    config_path.write_text("""\
+    config_path.write_text(
+        """\
 skeletons:
   - file_path: does_not_exist.xyz
     label: skeleton
@@ -389,17 +571,27 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-""")
+"""
+    )
     output_base = tmp_path / "missing_out"
 
     result = CliRunner().invoke(
-        yaml_cmd,
-        ["-f", str(config_path), "-np", "1", "-o", str(output_base)],
+        run,
+        [
+            "--num-cores",
+            "1",
+            "iterate",
+            "yaml",
+            "-f",
+            str(config_path),
+            "-o",
+            str(output_base),
+        ],
         obj={},
     )
 
-    assert result.exit_code == 1, result.output
-    assert ERROR_CODE_INPUT in result.output
+    assert result.exit_code == 1
+    assert isinstance(result.exception, IterateExecutionError)
     # Nothing was generated, so the merged output file is never created.
     assert not output_base.with_suffix(".xyz").exists()
     # The best-effort report records the input error and error termination.
@@ -411,11 +603,11 @@ substituents:
 
 
 def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
-    """A partial input failure exits 1 yet keeps the successful structure.
+    """A partial input failure keeps the successful structure and report.
 
     One substituent loads and is placed while a second substituent's file is
-    missing.  The run is an error termination (exit 1, ITR-INPUT-001), but the
-    structure that did generate is still written to the merged output file.
+    missing. The report records an error termination with ``ITR-INPUT-001``,
+    while the structure that did generate is retained in the merged output.
     """
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
@@ -442,18 +634,29 @@ def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
     output_base = tmp_path / "partial_out"
 
     result = CliRunner().invoke(
-        yaml_cmd,
-        ["-f", str(config_path), "-np", "1", "-o", str(output_base)],
+        run,
+        [
+            "--num-cores",
+            "1",
+            "iterate",
+            "yaml",
+            "-f",
+            str(config_path),
+            "-o",
+            str(output_base),
+        ],
         obj={},
     )
 
-    assert result.exit_code == 1, result.output
-    assert ERROR_CODE_INPUT in result.output
-    assert "Successful combinations:" in result.output
+    assert result.exit_code == 1
+    assert isinstance(result.exception, IterateExecutionError)
     # The single loadable substituent still produced and retained its output.
     output_path = output_base.with_suffix(".xyz")
     assert output_path.exists()
     assert set(_read_xyz(output_path)) == {"benzene_1Me"}
+    report_text = (tmp_path / "partial_failure_iterate.out").read_text()
+    assert ERROR_CODE_INPUT in report_text
+    assert "Error termination of CHEMSMART Iterate" in report_text
 
 
 def test_iterate_three_site_combination_traversal(
@@ -529,14 +732,16 @@ def test_iterate_cli_separate_outputs(tmp_path: Path):
     """Separate-output mode writes one correctly named XYZ per combination."""
     output_directory = tmp_path / "separate"
     result = CliRunner().invoke(
-        yaml_cmd,
+        run,
         [
+            "--num-cores",
+            "1",
+            "iterate",
+            "yaml",
             "-f",
             str(CONFIG_DIR / "etkdg_generation.yaml"),
             "-cm",
             "global",
-            "-np",
-            "1",
             "--separate-outputs",
             "-d",
             str(output_directory),

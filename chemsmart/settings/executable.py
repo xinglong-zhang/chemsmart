@@ -272,3 +272,15 @@ class NCIPLOTExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "nciplot")
             return executable_path
+
+
+class CHEMSMARTExecutable(Executable):
+    """Shared environment configuration for Python-native CHEMSMART jobs."""
+
+    # Python-native jobs run in the shared CHEMSMART environment configured in
+    # server YAML; this key identifies that environment, not one specific job.
+    PROGRAM = "CHEMSMART"
+
+    def get_executable(self):
+        """Python-native jobs have no separate third-party executable."""
+        return None

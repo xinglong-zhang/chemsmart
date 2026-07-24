@@ -4,6 +4,7 @@ from abc import abstractmethod
 from typing import Optional
 
 from chemsmart.settings.executable import (
+    CHEMSMARTExecutable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
@@ -15,6 +16,23 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+# Python-native programs share the CHEMSMART environment and run as one Python
+# process with scheduler CPUs assigned to in-process/multiprocessing workers.
+# Adding another native program here is sufficient to reuse both behaviours.
+PYTHON_NATIVE_PROGRAMS = frozenset({"iterate"})
+
+EXTERNAL_PROGRAM_EXECUTABLES = {
+    "gaussian": GaussianExecutable,
+    "orca": ORCAExecutable,
+    "nciplot": NCIPLOTExecutable,
+}
+
+
+def _is_python_native_program(program) -> bool:
+    """Return whether *program* uses the shared CHEMSMART Python runtime."""
+    return isinstance(program, str) and program.lower() in PYTHON_NATIVE_PROGRAMS
 
 
 class RunScript:
@@ -67,12 +85,15 @@ class RunScript:
         contents = f"""\
         #!/usr/bin/env python
         import os
+        import sys
         os.environ['OMP_NUM_THREADS'] = '1'
-        
+
         from chemsmart.cli.run import run
 
         def run_job():
-            run({self.cli_args!r})
+            cli_args = {self.cli_args!r}
+            sys.argv = ['chemsmart', 'run', *cli_args]
+            run(cli_args)
 
         if __name__ == '__main__':
             run_job()
@@ -247,25 +268,24 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            Executable: Instance of the environment/executable handler selected
+            from `job.PROGRAM`. Python-native programs share
+            `CHEMSMARTExecutable`.
 
         Raises:
             ValueError: If the job's program is not supported.
         """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
-
+        program = self.job.PROGRAM
+        if _is_python_native_program(program):
+            executable_class = CHEMSMARTExecutable
+        elif isinstance(program, str):
+            executable_class = EXTERNAL_PROGRAM_EXECUTABLES.get(program.lower())
         else:
-            # Need to add programs here to be
-            # supported for other types of programs
+            executable_class = None
+
+        if executable_class is None:
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        return executable_class.from_servername(self.server.name)
 
     def write(self, cli_args):
         """
@@ -684,9 +704,14 @@ class PBSSubmitter(Submitter):
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
         if self.server.num_gpus > 0:
             f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
+        mpiprocs = (
+            1
+            if _is_python_native_program(getattr(self.job, "PROGRAM", None))
+            else self.server.num_cores
+        )
         f.write(
             f"#PBS -l select=1:ncpus={self.server.num_cores}:"
-            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
+            f"mpiprocs={mpiprocs}:mem={self.server.mem_gb}G\n"
         )
         # using only one node here
         if self.server.queue_name:
@@ -763,9 +788,18 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --error={self.job.label}.slurmerr\n")
         if self.server.num_gpus:
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
-        f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
-        )
+        if _is_python_native_program(getattr(self.job, "PROGRAM", None)):
+            f.write(
+                "#SBATCH --nodes=1 --ntasks=1 "
+                f"--cpus-per-task={self.server.num_cores} "
+                f"--mem={self.server.mem_gb}G\n"
+            )
+        else:
+            f.write(
+                "#SBATCH --nodes=1 "
+                f"--ntasks-per-node={self.server.num_cores} "
+                f"--mem={self.server.mem_gb}G\n"
+            )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
         if self.server.num_hours:

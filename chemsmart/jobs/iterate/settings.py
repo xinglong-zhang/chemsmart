@@ -508,8 +508,8 @@ class IterateJobSettings:
                 f"Expected one of {list(_VALID_COMBINATION_MODES)}."
             )
 
-        # Path to the source configuration file; kept for diagnostics /
-        # provenance only. It does not affect the algorithm or the output.
+        # Path to the source configuration file. Besides diagnostics and
+        # provenance, its stem supplies the default Iterate job/output name.
         self.config_file = config_file
         self.skeleton_list: list[dict] = []
         self.substituent_list: list[dict] = []

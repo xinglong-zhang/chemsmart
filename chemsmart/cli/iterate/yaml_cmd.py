@@ -23,71 +23,19 @@ import sys
 import click
 import yaml
 
-from chemsmart.cli.job import click_filename_options
+from chemsmart.cli.job import click_filename_options, click_job_options
 from chemsmart.jobs.iterate.job import IterateJob
-from chemsmart.jobs.iterate.report import ERROR_CODE_DESCRIPTIONS
-from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import (
     IterateJobSettings,
     resolve_algorithm_config,
 )
+from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.iterate import (
     generate_yaml_template,
     validate_yaml_config,
 )
 
 logger = logging.getLogger(__name__)
-
-
-class _ProgressReporter:
-    """CLI-owned, display-only progress reporter for iterate runs.
-
-    Instances are callable with ``(completed, total)`` and are passed to
-    :meth:`IterateJob.run` as ``progress_callback``. This keeps all terminal
-    presentation in the CLI layer; the runner never depends on Click.
-
-    On the first call a one-line header is printed. On an interactive
-    terminal an in-place ASCII progress bar is drawn and refreshed; on a
-    non-interactive stream (e.g. output redirected to a file) the dynamic bar
-    is suppressed to avoid carriage-return spam while the header is still
-    shown.
-    """
-
-    _BAR_WIDTH = 30
-
-    def __init__(self, nprocs: int, enabled: bool):
-        self._nprocs = nprocs
-        self._enabled = enabled
-        self._started = False
-        self._bar_active = False
-
-    def __call__(self, completed: int, total: int) -> None:
-        if not self._started:
-            self._started = True
-            word = "process" if self._nprocs == 1 else "processes"
-            click.echo(
-                f"Running {total} combinations with {self._nprocs} {word}"
-            )
-            if self._enabled:
-                click.echo("")
-
-        if not self._enabled:
-            return
-
-        span = max(total, 1)
-        filled = min(self._BAR_WIDTH, int(self._BAR_WIDTH * completed / span))
-        bar = "█" * filled + " " * (self._BAR_WIDTH - filled)
-        click.echo(f"\rIterate  [{bar}]  {completed}/{total}", nl=False)
-        self._bar_active = True
-        if completed >= total:
-            click.echo("")
-            self._bar_active = False
-
-    def close(self) -> None:
-        """Terminate an in-progress bar line (e.g. on early exit)."""
-        if self._bar_active:
-            click.echo("")
-            self._bar_active = False
 
 
 def click_yaml_common_options(f):
@@ -101,7 +49,6 @@ def click_yaml_common_options(f):
     @click.option(
         "-g",
         "--generate-template",
-        "generate_template_path",
         is_flag=False,
         flag_value="iterate_template.yaml",
         default=None,
@@ -116,14 +63,6 @@ def click_yaml_common_options(f):
         help="Save each structure as a separate XYZ file.",
     )
     @click.option(
-        "-np",
-        "--nprocs",
-        default=1,
-        type=click.IntRange(min=1),
-        show_default=True,
-        help="Number of processes for parallel execution.",
-    )
-    @click.option(
         "-t",
         "--timeout",
         default=120,
@@ -134,7 +73,6 @@ def click_yaml_common_options(f):
     @click.option(
         "-cm",
         "--combination-mode",
-        "combination_mode",
         default="independent",
         type=click.Choice(
             ["independent", "global"],
@@ -163,10 +101,10 @@ def click_yaml_common_options(f):
     @click.option(
         "-o",
         "--outputfile",
-        default="iterate_out",
+        default=None,
         type=str,
-        show_default=True,
         help="Output filename (without .xyz extension) for generated structures. "
+        "Defaults to <configuration_stem>_iterate.xyz. "
         "Use only with --no-separate-outputs.",
     )
     @functools.wraps(f)
@@ -176,30 +114,28 @@ def click_yaml_common_options(f):
     return wrapper_common_options
 
 
-def _collect_explicit_options(ctx, options: dict) -> dict:
-    """
-    Return only the options the user explicitly passed on the command line.
-
-    Options left at their Click default (i.e. not typed by the user) are
-    excluded so that they never override values coming from the YAML
-    ``algorithm`` block. This relies on ``ctx.get_parameter_source``.
-    """
-    explicit = {}
-    for name, value in options.items():
-        source = ctx.get_parameter_source(name)
-        if source == click.core.ParameterSource.COMMANDLINE:
-            explicit[name] = value
-    return explicit
+def _collect_cli_options(options: dict) -> dict:
+    """Drop unset CLI options before merging them over YAML settings."""
+    return {name: value for name, value in options.items() if value is not None}
 
 
-def _execute_iterate_job(
+def _is_sub_invocation(ctx: click.Context) -> bool:
+    """Return whether the current command is nested below ``sub``."""
+    current = ctx
+    while current is not None:
+        if current.info_name == "sub":
+            return True
+        current = current.parent
+    return False
+
+
+def _build_iterate_job(
     ctx, cli_algorithm_name=None, cli_options=None
-) -> None:
+) -> IterateJob:
     """
-    Shared execution path for the ``yaml`` group and its algorithm subcommands.
+    Shared Job builder for the ``yaml`` group and its algorithm subcommands.
 
-    Resolves the effective algorithm configuration (default < YAML < CLI),
-    builds the job settings, and runs the iterate job.
+    Resolve the effective algorithm configuration and return an Iterate job.
 
     Parameters
     ----------
@@ -215,7 +151,12 @@ def _execute_iterate_job(
     """
     data = ctx.obj["iterate"]
     filename = data["filename"]
-    nprocs = data["nprocs"]
+    nprocs = ctx.obj["jobrunner"].num_cores
+    if nprocs < 1:
+        raise click.BadParameter(
+            "must be at least 1",
+            param_hint="'-n' / '--num-cores'",
+        )
     timeout = data["timeout"]
     outputfile = data["outputfile"]
     directory = data["directory"]
@@ -296,130 +237,38 @@ def _execute_iterate_job(
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]
 
-    # The existing ``chemsmart run --debug`` logging option also selects the
-    # verbose Iterate display: no progress bar and no worker/RDKit suppression.
-    debug_mode = logger.isEnabledFor(logging.DEBUG)
-
-    # Create job runner
-    jobrunner = IterateJobRunner(show_worker_logs=debug_mode)
-
-    # Create job
     job = IterateJob(
         settings=job_settings,
-        jobrunner=jobrunner,
+        jobrunner=ctx.obj.get("jobrunner"),
         nprocs=nprocs,
         timeout=timeout,
         outputfile=outputfile,
         separate_outputs=separate_outputs,
         output_directory=directory,
         command_line=" ".join(sys.argv),
+        show_worker_logs=logger.isEnabledFor(logging.DEBUG),
+        skip_completed=data["skip_completed"],
     )
 
     logger.debug(f"Created IterateJob with {nprocs} process(es)")
-
-    # Run the job
-    logger.debug("Running iterate job to generate molecular structures.")
-
-    progress = _ProgressReporter(
-        nprocs=nprocs,
-        enabled=bool(
-            getattr(sys.stdout, "isatty", None) and sys.stdout.isatty()
-        ),
-    )
-    try:
-        summary = job.run(progress_callback=None if debug_mode else progress)
-    except KeyboardInterrupt:
-        # User interrupt (SIGINT): outputs are written only after all
-        # combinations finish, so in-memory results may not have reached disk.
-        progress.close()
-        click.echo(
-            "Interrupted by user. Existing output files were not deleted.\n"
-            "Partial in-memory results may not have been written.",
-            err=True,
-        )
-        ctx.exit(130)
-    except Exception as e:
-        progress.close()
-        logger.error(f"Error running iterate job: {e}")
-        raise click.ClickException(str(e))
-
-    progress.close()
-
-    # Combination-level statistics (shown only when combinations were run).
-    if summary.total > 0:
-        successful = summary.structures_written
-        failed = summary.failed + summary.timed_out + summary.write_failed
-        num_width = max(4, len(str(summary.total)))
-        click.echo("")
-        click.echo(f"{'Total combinations:':<24}{summary.total:>{num_width}}")
-        click.echo(
-            f"{'Successful combinations:':<24}{successful:>{num_width}}"
-        )
-        click.echo(f"{'Failed combinations:':<24}{failed:>{num_width}}")
-        click.echo("")
-
-    # Surface the run report location, or a clear write error.
-    if summary.summary_path:
-        click.echo(f"Report: {summary.summary_path}")
-    elif summary.summary_write_error:
-        click.echo(
-            f"Error: run report could not be written: "
-            f"{summary.summary_write_error}",
-            err=True,
-        )
-
-    # Output location: a single line for the merged file, or the directory and
-    # file count for separate per-structure files.
-    if summary.structures_written > 0:
-        if separate_outputs:
-            out_dir = directory or os.getcwd()
-            click.echo(
-                f"Output directory: {out_dir} "
-                f"({summary.structures_written} XYZ files)"
-            )
-        elif summary.output_paths:
-            click.echo(f"Output: {summary.output_paths[0]}")
-
-    # The runner decides the exit code from the full contract. Exit 0 only for
-    # a completely clean run whose report is on disk; any error means exit 1.
-    if summary.exit_code == 0:
-        return
-
-    # Non-zero: surface the Gaussian-style error codes (or the report-write
-    # failure) without depending on any top-level status string.
-    if summary.summary_write_error:
-        message = (
-            f"The run report could not be written: "
-            f"{summary.summary_write_error}"
-        )
-    elif summary.error_codes:
-        details = "; ".join(
-            f"{code} ({ERROR_CODE_DESCRIPTIONS.get(code, 'error')})"
-            for code in summary.error_codes
-        )
-        message = (
-            f"Iterate error termination [{details}]. "
-            f"See the run report for details."
-        )
-    else:
-        message = "Iterate error termination. See the run report for details."
-    raise click.ClickException(message)
+    return job
 
 
-@click.group(name="yaml", invoke_without_command=True)
+@click.group(name="yaml", cls=MyGroup, invoke_without_command=True)
 @click_yaml_common_options
+@click_job_options
 @click_filename_options
 @click.pass_context
 def yaml_cmd(
     ctx,
     filename,
-    nprocs,
     timeout,
     outputfile,
-    generate_template_path,
+    generate_template,
     directory,
     separate_outputs,
     combination_mode,
+    skip_completed,
     **kwargs,
 ):
     """
@@ -451,9 +300,14 @@ def yaml_cmd(
     ctx.ensure_object(dict)
 
     # Handle -g option: generate template and exit
-    if generate_template_path is not None:
+    if generate_template is not None:
+        if _is_sub_invocation(ctx):
+            raise click.UsageError(
+                "--generate-template is a local utility and cannot be "
+                "submitted to a scheduler."
+            )
         template_path = generate_yaml_template(
-            generate_template_path, overwrite=False
+            generate_template, overwrite=False
         )
         click.echo(f"Generated template: {template_path}")
         ctx.exit(0)
@@ -482,104 +336,93 @@ def yaml_cmd(
     # that 'yaml <algorithm> --help' works without requiring '-f'.
     ctx.obj["iterate"] = {
         "filename": filename,
-        "nprocs": nprocs,
         "timeout": timeout,
         "outputfile": outputfile,
         "directory": directory,
         "separate_outputs": separate_outputs,
         "combination_mode": combination_mode,
+        "skip_completed": skip_completed,
     }
 
     # No algorithm subcommand: run with the YAML/default algorithm.
     if ctx.invoked_subcommand is None:
-        _execute_iterate_job(ctx)
+        return _build_iterate_job(ctx)
 
 
-@yaml_cmd.command(name="jlgo")
+@yaml_cmd.command(name="jlgo", cls=MyCommand)
 @click.option(
     "--adaptive-sampling/--no-adaptive-sampling",
-    "use_adaptive_sampling",
-    default=True,
-    show_default=True,
+    default=None,
     help="Run a fixed coarse sampling stage first; the six full-stage "
     "sampling/pruning options (--link-sphere-samples, "
     "--orientation-sphere-samples, --axial-samples, --candidate-pool-size, "
     "--preselect, --beam-width) only take effect when the coarse stage does "
-    "not produce an acceptable optimized structure. --max-starts and "
+    "not produce an acceptable optimized structure. Enabled by default. "
+    "--max-starts and "
     "--slsqp-maxiter always apply. Use --no-adaptive-sampling to always "
     "apply the full sampling parameters.",
 )
 @click.option(
     "--link-sphere-samples",
-    "n_link_sphere",
-    default=48,
+    default=None,
     type=int,
-    show_default=True,
-    help="Full-stage number of linking-atom bond-sphere position samples.",
+    help="Full-stage number of linking-atom bond-sphere position samples "
+    "(default: 48).",
 )
 @click.option(
     "--orientation-sphere-samples",
-    "n_orientation_sphere",
-    default=24,
+    default=None,
     type=int,
-    show_default=True,
-    help="Full-stage number of substituent principal-axis direction samples.",
+    help="Full-stage number of substituent principal-axis direction samples "
+    "(default: 24).",
 )
 @click.option(
     "--axial-samples",
-    "n_axial",
-    default=4,
+    default=None,
     type=int,
-    show_default=True,
-    help="Number of axial rotations per orientation direction.",
+    help="Number of axial rotations per orientation direction (default: 4).",
 )
 @click.option(
     "--candidate-pool-size",
-    "candidate_pool_size",
-    default=20,
+    default=None,
     type=int,
-    show_default=True,
-    help="Per-substituent candidate pool size kept after region exclusion.",
+    help="Per-substituent candidate pool size kept after region exclusion "
+    "(default: 20).",
 )
 @click.option(
     "--preselect",
-    "preselect",
-    default=48,
+    default=None,
     type=int,
-    show_default=True,
-    help="Top joint combinations fed into greedy start selection.",
+    help="Top joint combinations fed into greedy start selection "
+    "(default: 48).",
 )
 @click.option(
     "--beam-width",
-    "beam_width",
-    default=4096,
+    default=None,
     type=int,
-    show_default=True,
-    help="Beam width retained per layer during feasible-domain pruning.",
+    help="Beam width retained per layer during feasible-domain pruning "
+    "(default: 4096).",
 )
 @click.option(
     "--max-starts",
-    "max_starts",
-    default=8,
+    default=None,
     type=int,
-    show_default=True,
-    help="Maximum number of 6K-dimensional joint starts handed to SLSQP.",
+    help="Maximum number of 6K-dimensional joint starts handed to SLSQP "
+    "(default: 8).",
 )
 @click.option(
     "--slsqp-maxiter",
-    "slsqp_maxiter",
-    default=200,
+    default=None,
     type=int,
-    show_default=True,
-    help="Maximum SLSQP iterations per start.",
+    help="Maximum SLSQP iterations per start (default: 200).",
 )
 @click.pass_context
 def jlgo(
     ctx,
-    use_adaptive_sampling,
-    n_link_sphere,
-    n_orientation_sphere,
-    n_axial,
+    adaptive_sampling,
+    link_sphere_samples,
+    orientation_sphere_samples,
+    axial_samples,
     candidate_pool_size,
     preselect,
     beam_width,
@@ -611,13 +454,12 @@ def jlgo(
         --max-starts 16 \\
         --slsqp-maxiter 300
     """
-    cli_options = _collect_explicit_options(
-        ctx,
+    cli_options = _collect_cli_options(
         {
-            "use_adaptive_sampling": use_adaptive_sampling,
-            "n_link_sphere": n_link_sphere,
-            "n_orientation_sphere": n_orientation_sphere,
-            "n_axial": n_axial,
+            "use_adaptive_sampling": adaptive_sampling,
+            "n_link_sphere": link_sphere_samples,
+            "n_orientation_sphere": orientation_sphere_samples,
+            "n_axial": axial_samples,
             "candidate_pool_size": candidate_pool_size,
             "preselect": preselect,
             "beam_width": beam_width,
@@ -625,82 +467,72 @@ def jlgo(
             "slsqp_maxiter": slsqp_maxiter,
         },
     )
-    _execute_iterate_job(
+    return _build_iterate_job(
         ctx,
         cli_algorithm_name="jlgo",
         cli_options=cli_options,
     )
 
 
-@yaml_cmd.command(name="etkdg")
+@yaml_cmd.command(name="etkdg", cls=MyCommand)
 @click.option(
     "--global/--local",
-    "use_global_optimization",
-    default=False,
-    show_default=True,
+    default=None,
     help="Embedding mode. 'local' (default) keeps the skeleton fixed and "
     "only re-embeds the substituent; 'global' re-embeds every atom.",
 )
 @click.option(
     "--num-conformers",
-    "num_conformers",
-    default=10,
+    default=None,
     type=click.IntRange(min=1),
-    show_default=True,
     help="Number of ETKDG conformers to try per attachment; the "
-    "lowest-energy one is kept.",
+    "lowest-energy one is kept (default: 10).",
 )
 @click.option(
     "--random-seed",
-    "random_seed",
-    default=42,
+    default=None,
     type=int,
-    show_default=True,
-    help="Base RDKit random seed (-1 for a non-reproducible random seed).",
+    help="Base RDKit random seed (-1 for a non-reproducible random seed; "
+    "default: 42).",
 )
 @click.option(
     "--max-iterations",
-    "max_iterations",
-    default=2000,
+    default=None,
     type=click.IntRange(min=0),
-    show_default=True,
-    help="Maximum ETKDG embedding iterations (0 uses the RDKit default).",
+    help="Maximum ETKDG embedding iterations (0 uses the RDKit default; "
+    "default: 2000).",
 )
 @click.option(
     "--random-coords/--no-random-coords",
-    "use_random_coordinates",
-    default=True,
-    show_default=True,
-    help="Start embedding from random coordinates (usually more robust).",
+    default=None,
+    help="Start embedding from random coordinates (usually more robust; "
+    "enabled by default).",
 )
 @click.option(
     "--enforce-chirality/--no-enforce-chirality",
-    "enforce_chirality",
-    default=False,
-    show_default=True,
-    help="Enforce the input chirality during embedding.",
+    default=None,
+    help="Enforce the input chirality during embedding (disabled by default).",
 )
 @click.option(
     "--force-field",
-    "force_field",
-    default="none",
+    default=None,
     type=click.Choice(
         ["none", "uff", "mmff94", "mmff94s"],
         case_sensitive=False,
     ),
-    show_default=True,
-    help="Optional force-field post-optimization after embedding.",
+    help="Optional force-field post-optimization after embedding "
+    "(default: none).",
 )
 @click.pass_context
 def etkdg(
     ctx,
-    use_global_optimization,
     num_conformers,
     random_seed,
     max_iterations,
-    use_random_coordinates,
+    random_coords,
     enforce_chirality,
     force_field,
+    **cli_values,
 ):
     """
     Optimize substituent positions with the RDKit ETKDGv3 algorithm.
@@ -719,19 +551,21 @@ def etkdg(
     chemsmart run iterate yaml -f config.yaml etkdg \\
         --num-conformers 50 --random-seed 1
     """
-    cli_options = _collect_explicit_options(
-        ctx,
+    # Click derives the parameter name ``global`` directly from ``--global``.
+    # Because ``global`` is a Python keyword, it must be received through
+    # **cli_values instead of appearing as a formal function parameter.
+    cli_options = _collect_cli_options(
         {
-            "use_global_optimization": use_global_optimization,
+            "use_global_optimization": cli_values["global"],
             "num_conformers": num_conformers,
             "random_seed": random_seed,
             "max_iterations": max_iterations,
-            "use_random_coordinates": use_random_coordinates,
+            "use_random_coordinates": random_coords,
             "enforce_chirality": enforce_chirality,
             "force_field": force_field,
         },
     )
-    _execute_iterate_job(
+    return _build_iterate_job(
         ctx,
         cli_algorithm_name="etkdg",
         cli_options=cli_options,

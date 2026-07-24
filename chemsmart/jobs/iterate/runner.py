@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import multiprocessing
 import os
@@ -11,7 +10,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import product
 from multiprocessing.connection import Connection, wait
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from chemsmart.io.molecules.structure import Molecule
@@ -1514,20 +1512,6 @@ class IterateJobRunner(JobRunner):
                 exit_code=1,
             )
 
-    @staticmethod
-    def _sha256_of_file(path: Optional[str]) -> str:
-        """Return the SHA256 hex digest of a file, or ``N/A`` if unavailable."""
-        if not path or not os.path.isfile(path):
-            return "N/A"
-        try:
-            digest = hashlib.sha256()
-            with open(path, "rb") as handle:
-                for chunk in iter(lambda: handle.read(65536), b""):
-                    digest.update(chunk)
-            return digest.hexdigest()
-        except OSError:
-            return "N/A"
-
     def _build_report(
         self,
         job: "IterateJob",
@@ -1577,7 +1561,6 @@ class IterateJobRunner(JobRunner):
             working_directory=os.getcwd(),
             command_line=command_line,
             config_file=config_file,
-            config_sha256=self._sha256_of_file(config_file),
             skeleton_entries=list(settings.skeleton_list or []),
             substituent_entries=list(settings.substituent_list or []),
             input_errors=input_errors,
@@ -1631,7 +1614,6 @@ class IterateJobRunner(JobRunner):
             working_directory=os.getcwd(),
             command_line=command_line,
             config_file=config_file,
-            config_sha256=self._sha256_of_file(config_file),
             skeleton_entries=list(settings.skeleton_list or []),
             substituent_entries=list(settings.substituent_list or []),
             algorithm_name=settings.algorithm_config.name,
@@ -1654,21 +1636,12 @@ class IterateJobRunner(JobRunner):
     ) -> tuple[Optional[str], Optional[str]]:
         """Render and atomically write the run report.
 
-        The filename is derived from the YAML config stem
-        (``<stem>_iterate.out``) and placed next to the output (merged file's
-        directory, the separate-outputs directory, or the current working
-        directory). Returns ``(summary_path, error_message)``; on failure the
-        path is ``None`` and a clear error is logged to the terminal.
+        The filename is ``<job.label>.out`` and is placed next to the output
+        (merged file's directory, the separate-outputs directory, or the
+        current working directory). Returns ``(summary_path, error_message)``;
+        on failure the path is ``None`` and a clear error is logged.
         """
-        config_file = job.settings.config_file
-        stem = Path(config_file).stem if config_file else "iterate"
-        filename = f"{stem}_iterate.out"
-        if job.separate_outputs:
-            summary_dir = job.output_directory or os.getcwd()
-        else:
-            out_dir = os.path.dirname(job.outputfile)
-            summary_dir = out_dir if out_dir else os.getcwd()
-        summary_path = os.path.join(summary_dir, filename)
+        summary_path = job.reportfile
 
         try:
             write_report_atomically(summary_path, report.render())

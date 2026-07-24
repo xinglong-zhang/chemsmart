@@ -17,11 +17,22 @@ The ``iterate`` command is organized into two independent layers:
 
 .. code:: bash
 
-   chemsmart run iterate yaml -f <CONFIG_FILE> [YAML_OPTIONS] \
+   chemsmart run [--num-cores N] iterate yaml -f <CONFIG_FILE> [YAML_OPTIONS] \
        [ALGORITHM [ALGORITHM_OPTIONS]]
 
 If no algorithm subcommand is given, the algorithm declared in the YAML ``algorithm`` block is used, falling back to the
 built-in default (``etkdg``).
+
+Worker parallelism is controlled by the top-level ``-n/--num-cores`` option.
+The same value determines the number of scheduler cores and Iterate worker
+processes:
+
+.. code:: bash
+
+   chemsmart run --num-cores 4 iterate yaml -f config.yaml
+   chemsmart sub --num-cores 4 iterate yaml -f config.yaml
+
+When omitted, the selected server's configured core count is used.
 
 ********************************
  Role of the Configuration File
@@ -59,13 +70,15 @@ These options belong to the ``yaml`` command and are **algorithm-agnostic**.
       -  string
       -  Path to the YAML configuration file (required unless generating a template with ``-g``)
 
-   -  -  ``-np, --nprocs``
-      -  int
-      -  Number of parallel processes to use (default: 1)
-
    -  -  ``-t, --timeout``
       -  int
       -  Timeout in seconds for each combination (default: 120)
+
+   -  -  ``-S, --skip-completed`` / ``-R, --no-skip-completed``
+      -  flag
+      -  Skip an Iterate job when its report has a normal termination marker
+         and all declared XYZ outputs exist (default: ``--skip-completed``).
+         Use ``-R`` to force a rerun.
 
    -  -  ``-cm, --combination-mode``
       -  choice
@@ -95,7 +108,8 @@ Output Options
 
    -  -  ``-o, --outputfile``
       -  string
-      -  Output filename for merged output (default: ``iterate_out``). Only valid with ``--no-separate-outputs``.
+      -  Output filename for merged output (default: ``<configuration_stem>_iterate.xyz``). Only valid with
+         ``--no-separate-outputs``.
 
    -  -  ``-d, --directory``
       -  string

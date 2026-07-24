@@ -23,8 +23,8 @@ Generate an annotated YAML template, edit its molecule paths and attachment site
    chemsmart run iterate yaml -f iterate_template.yaml -o results
 
    # Write one XYZ file per structure, using four worker processes
-   chemsmart run iterate yaml -f iterate_template.yaml \
-       --separate-outputs -d ./library -np 4
+   chemsmart run --num-cores 4 iterate yaml -f iterate_template.yaml \
+       --separate-outputs -d ./library
 
 The command has an input-format layer (currently ``yaml``) and an optional algorithm subcommand (``etkdg`` or ``jlgo``):
 
@@ -270,12 +270,14 @@ JLGO can also be selected in the YAML file:
  Execution and Debugging
 *************************
 
-``-np/--nprocs`` sets the maximum number of worker processes. ``-t/--timeout`` sets the timeout in seconds for each
-combination, not for the entire run.
+The top-level ``-n/--num-cores`` option sets both the available core count and
+the maximum number of Iterate worker processes. When omitted, the selected
+server's configured core count is used. ``-t/--timeout`` sets the timeout in
+seconds for each combination, not for the entire run.
 
-In normal interactive use, the terminal shows a progress bar followed by the total, successful and failed combination
-counts and the report/output paths. When stdout is redirected, ``iterate`` prints the run header but suppresses the
-dynamic bar to avoid carriage-return output.
+Like other CHEMSMART Jobs, Iterate runs through the generic ``Job.run()`` pathway. Detailed progress and final
+combination statistics are written to the run report rather than presented by an Iterate-specific terminal progress
+interface.
 
 For development diagnostics, enable the existing top-level debug flag:
 
@@ -283,8 +285,8 @@ For development diagnostics, enable the existing top-level debug flag:
 
    chemsmart run --debug iterate yaml -f config.yaml
 
-Debug mode disables the progress bar and exposes detailed Iterate worker logs and RDKit warnings. Failure details are
-also recorded in the run report in normal mode.
+Debug mode exposes detailed Iterate worker logs and RDKit warnings. Failure details are recorded in the run report in
+normal mode.
 
 ********************
  Outputs and Report
@@ -293,8 +295,9 @@ also recorded in the run report in normal mode.
 Structure output
 ================
 
-By default, successful structures are written to one multi-structure XYZ file named by ``-o/--outputfile``
-(``iterate_out.xyz`` by default). Each structure's XYZ comment line contains its combination label, for example
+By default, successful structures are written to one multi-structure XYZ file named
+``<configuration_stem>_iterate.xyz``. The name can be overridden with ``-o/--outputfile``. Each structure's XYZ
+comment line contains its combination label, for example
 ``benzene_1Me_3OH``.
 
 With ``--separate-outputs``, each successful combination is written as ``<combination_label>.xyz`` in the directory
@@ -304,7 +307,7 @@ The generated atom ordering consists of the processed skeleton followed by the a
 elements, coordinates and the combination label; it does not encode molecular charge or multiplicity.
 
 If all combinations fail, ``iterate`` does not create an empty merged XYZ file. In a partially successful completed run,
-successful structures are kept and written even though the process exits with an error code.
+successful structures are kept and the report records an error termination.
 
 Run report
 ==========
@@ -325,33 +328,17 @@ input/execution/timeout/write failures, output paths and final statistics. It en
 Configuration and usage errors (exit code 2) occur before the runner starts and do not produce a run report. Reports for
 an unexpected internal error or SIGINT are best effort, and report writing can itself fail.
 
-****************************
- Exit Codes and Error Codes
-****************************
+******************************
+ Report Status and Error Codes
+******************************
 
 A run terminates normally only when every requested combination and output write succeeds. A partially successful run is
 an error termination, but its successfully delivered structures are retained.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 15 85
-
-   -  -  Exit code
-      -  Meaning
-
-   -  -  ``0``
-      -  Normal termination with no errors.
-
-   -  -  ``1``
-      -  Runtime error termination, including input load/preprocessing, execution, timeout, structure write, internal,
-         or report-write failure. Partial structure output may exist.
-
-   -  -  ``2``
-      -  CLI usage or YAML configuration error before molecule generation. No Iterate run report is created.
-
-   -  -  ``130``
-      -  Interrupted by the user (SIGINT). The interrupt report is best effort; partial in-memory results may not have
-         been written.
+The report records an internal status of ``0`` for normal termination, ``1`` for runtime error termination, or ``130``
+for an interrupted run. The generic CHEMSMART CLI launcher does not reinterpret this internal status as its own process
+exit code. CLI usage or YAML configuration errors still fail before molecule generation with Click exit code ``2`` and
+do not create an Iterate run report.
 
 The report can list several error codes when several failure types occur:
 
@@ -384,8 +371,8 @@ The report can list several error codes when several failure types occur:
    chemsmart run iterate yaml -f config.yaml -o results
 
    # Cross-combine explicit slots and write one file per structure
-   chemsmart run iterate yaml -f config.yaml -cm global \
-       --separate-outputs -d ./library -np 4
+   chemsmart run --num-cores 4 iterate yaml -f config.yaml -cm global \
+       --separate-outputs -d ./library
 
    # ETKDG local embedding with a fixed random seed
    chemsmart run iterate yaml -f config.yaml etkdg --random-seed 42

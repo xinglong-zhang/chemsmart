@@ -173,7 +173,6 @@ class IterateReport:
     working_directory: str
     command_line: str
     config_file: Optional[str]
-    config_sha256: str
 
     skeleton_entries: list = field(default_factory=list)
     substituent_entries: list = field(default_factory=list)
@@ -262,7 +261,6 @@ class IterateReport:
             f" Command:                 {self.command_line}",
             "",
             f" Configuration file:      {self.config_file or 'N/A'}",
-            f" Configuration SHA256:    {self.config_sha256}",
         ]
         return lines
 
