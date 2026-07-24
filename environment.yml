@@ -8,6 +8,7 @@ dependencies:
   - ffmpeg=7.1.1  # movie support for pymol
   - openbabel          # includes Python bindings on conda-forge
   - xtb                # provides the xtb command-line executable via conda-forge
+  - crest              # provides the crest command-line executable via conda-forge
   - pip
   - pip:
       - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
