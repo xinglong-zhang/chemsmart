@@ -9,6 +9,8 @@ before optimization so traversal rules can be checked exactly and quickly.
 from __future__ import annotations
 
 import ast
+import shlex
+import sys
 from collections import Counter
 from itertools import product
 from pathlib import Path
@@ -399,10 +401,13 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
 
     submit_contents = submit_script.read_text()
     assert resource_directive in submit_contents
-    assert "conda activate ~/miniconda3/envs/chemsmart" in submit_contents
+    assert "conda activate" not in submit_contents
     assert "export OMP_NUM_THREADS=1" in submit_contents
     assert "export MKL_NUM_THREADS=1" in submit_contents
-    assert f"./{run_script.name} &" in submit_contents
+    assert (
+        f"{shlex.quote(sys.executable)} ./{run_script.name} &"
+        in submit_contents
+    )
 
 
 def test_iterate_cli_rejects_link_outside_skeleton_indices(tmp_path: Path):

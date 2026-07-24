@@ -1,10 +1,11 @@
 import inspect
 import logging
+import shlex
+import sys
 from abc import abstractmethod
 from typing import Optional
 
 from chemsmart.settings.executable import (
-    CHEMSMARTExecutable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
@@ -18,10 +19,18 @@ user_settings = CHEMSMARTUserSettings()
 logger = logging.getLogger(__name__)
 
 
-# Python-native programs share the CHEMSMART environment and run as one Python
-# process with scheduler CPUs assigned to in-process/multiprocessing workers.
-# Adding another native program here is sufficient to reuse both behaviours.
+# Python-native programs run as one Python process with scheduler CPUs assigned
+# to in-process/multiprocessing workers. Adding another native program here is
+# sufficient to reuse both the resource mapping and execution environment.
 PYTHON_NATIVE_PROGRAMS = frozenset({"iterate"})
+
+PYTHON_NATIVE_THREAD_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+)
 
 EXTERNAL_PROGRAM_EXECUTABLES = {
     "gaussian": GaussianExecutable,
@@ -31,8 +40,10 @@ EXTERNAL_PROGRAM_EXECUTABLES = {
 
 
 def _is_python_native_program(program) -> bool:
-    """Return whether *program* uses the shared CHEMSMART Python runtime."""
-    return isinstance(program, str) and program.lower() in PYTHON_NATIVE_PROGRAMS
+    """Return whether *program* runs in CHEMSMART's Python interpreter."""
+    return (
+        isinstance(program, str) and program.lower() in PYTHON_NATIVE_PROGRAMS
+    )
 
 
 class RunScript:
@@ -268,18 +279,17 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the environment/executable handler selected
-            from `job.PROGRAM`. Python-native programs share
-            `CHEMSMARTExecutable`.
+            Executable: External-program environment/executable handler selected
+            from `job.PROGRAM`.
 
         Raises:
             ValueError: If the job's program is not supported.
         """
         program = self.job.PROGRAM
-        if _is_python_native_program(program):
-            executable_class = CHEMSMARTExecutable
-        elif isinstance(program, str):
-            executable_class = EXTERNAL_PROGRAM_EXECUTABLES.get(program.lower())
+        if isinstance(program, str):
+            executable_class = EXTERNAL_PROGRAM_EXECUTABLES.get(
+                program.lower()
+            )
         else:
             executable_class = None
 
@@ -415,7 +425,10 @@ class Submitter(RegistryMixin):
         )
         f.write("  exit 1\n")
         f.write("fi\n\n")
-        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
+        python = "python"
+        if _is_python_native_program(getattr(self.job, "PROGRAM", None)):
+            python = shlex.quote(sys.executable)
+        f.write(f"{python} chemsmart_run_array_${{TASK_ID}}.py\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -477,17 +490,29 @@ class Submitter(RegistryMixin):
         """
         Write program-specific environment setup to the script.
 
-        Includes conda environment activation, module loading, script
-        sourcing, and environment variable configuration specific to
-        the computational program being used.
+        Python-native jobs use the Python interpreter that created the
+        submission script and need only thread limits here. External programs
+        retain their server-YAML conda, module, script, and environment setup.
 
         Args:
             f: File handle for writing program-specific setup.
         """
+        if _is_python_native_program(getattr(self.job, "PROGRAM", None)):
+            self._write_python_native_environment_variables(f)
+            return
+
         self._write_program_specific_conda_env(f)
         self._write_load_program_specific_modules(f)
         self._write_source_program_specific_script(f)
         self._write_program_specific_environment_variables(f)
+
+    @staticmethod
+    def _write_python_native_environment_variables(f):
+        """Limit native numerical libraries to one thread per worker."""
+        f.write("# Python-native worker thread limits\n")
+        for variable in PYTHON_NATIVE_THREAD_ENV_VARS:
+            f.write(f"export {variable}=1\n")
+        f.write("\n")
 
     def _write_program_specific_conda_env(self, f):
         """
@@ -617,14 +642,19 @@ class Submitter(RegistryMixin):
         """
         Write the final job execution commands.
 
-        Makes the run script executable and executes it in the background,
-        then waits for completion.
+        Python-native jobs are run with the exact interpreter used to invoke
+        ``chemsmart sub``. External-program jobs retain the executable run
+        script pathway and their server-YAML environment setup.
 
         Args:
             f: File handle for writing job execution commands.
         """
-        f.write(f"chmod +x ./{self.run_script}\n")
-        f.write(f"./{self.run_script} &\n")
+        if _is_python_native_program(getattr(self.job, "PROGRAM", None)):
+            python = shlex.quote(sys.executable)
+            f.write(f"{python} ./{self.run_script} &\n")
+        else:
+            f.write(f"chmod +x ./{self.run_script}\n")
+            f.write(f"./{self.run_script} &\n")
         f.write("wait\n")
 
     @classmethod
