@@ -854,3 +854,35 @@ in the same `try/except ValueError: raise click.ClickException(...)`
 used around `exporter.export()`, or validate `ext` against
 `chemsmart.database.export.SUPPORTED_FORMATS` up front alongside the
 existing `if`/`elif` chain.
+
+---
+
+## 19. `FileConverter._convert_all_files`'s per-file "unsupported type" branch is unreachable dead code
+
+**File:** `chemsmart/io/converter.py:100-190`
+**Test:** `tests/test_converter_unit.py` (see `TestConvertAllFilesDirectoryDispatch`; no test targets the dead branch itself since it cannot execute)
+
+`_convert_all_files` validates `type` twice against the exact same set
+of eight values (`log`, `com`, `gjf`, `out`, `inp`, `xyz`, `sdf`, `pdb`,
+plus `cdxml`/`cdx`):
+
+1. Once at the top (lines 100-146) to decide which folder-listing
+   helper to call, with an `else: raise ValueError(...)` for anything
+   else.
+2. Again per-file inside the loop (lines 152-190) to decide which file
+   class to instantiate, with an identical `else: raise
+   ValueError(f"File type {type} is not supported.")` at line 190.
+
+Since `type` is a local parameter that isn't reassigned between the two
+checks, and both `elif` chains list precisely the same values, reaching
+the loop at all already proves `type` matched one of the first chain's
+branches — so the second `else` at line 190 can never execute.
+
+**Impact:** None today — purely redundant defensive code with no
+behavioral effect, since the outer validation always catches an
+unsupported type before the loop is ever entered.
+
+**Suggested direction:** harmless to leave, but could be simplified by
+dropping the second validation (or converting it to an `assert` /
+`AssertionError` documenting the invariant instead of a duplicated
+user-facing `ValueError`).
