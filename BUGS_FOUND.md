@@ -886,3 +886,66 @@ unsupported type before the loop is ever entered.
 dropping the second validation (or converting it to an `assert` /
 `AssertionError` documenting the invariant instead of a duplicated
 user-facing `ValueError`).
+
+---
+
+## 20. `GaussianpKaJobSettings.build_gaussian_pka_settings` crashes when `opt_settings` carries solvent info not overridden by `shared`
+
+**File:** `chemsmart/jobs/gaussian/settings.py:1187-1252`
+**Test:** `tests/test_gaussian_settings_route_strings_unit.py::TestBuildGaussianPkaSettings::test_solvent_settings_from_opt_settings_crashes`
+
+```python
+opt_kwargs = {
+    key: value
+    for key, value in vars(opt_settings).items()
+    if key in gs_params and value is not None and key not in pka_kwargs
+}
+...
+solvent_model = _first_non_none(
+    pka_kwargs.get("solvent_model"),
+    getattr(opt_settings, "solvent_model", None),
+    ...,
+    "SMD",
+)
+...
+pka_kwargs["solvent_model"] = solvent_model
+pka_kwargs["solvent_id"] = solvent_id
+
+return cls(proton_index=proton_index, **pka_kwargs, **opt_kwargs)
+```
+
+`opt_kwargs` is built by copying every non-`None` attribute off
+`opt_settings` that isn't already a key in `pka_kwargs` **at that
+point** — but `solvent_model`/`solvent_id` aren't added to `pka_kwargs`
+until several lines later. So when `opt_settings.solvent_model` (or
+`.solvent_id`) is set and `shared` doesn't specify its own value, the
+resolved fallback ends up in `pka_kwargs["solvent_model"]` *and* the
+verbatim `opt_settings` value ends up in `opt_kwargs["solvent_model"]`
+— both dicts carrying the same key when unpacked into the same `cls(...)`
+call.
+
+**Reproduce:**
+```python
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings, GaussianpKaJobSettings,
+)
+opt_settings = GaussianJobSettings(
+    functional="b3lyp", basis="sto-3g",
+    solvent_model="PCM", solvent_id="dmso",
+)
+GaussianpKaJobSettings.build_gaussian_pka_settings(
+    proton_index=2, shared={}, opt_settings=opt_settings,
+)
+# TypeError: ...got multiple values for keyword argument 'solvent_model'
+```
+
+**Impact:** Any pKa CLI invocation where the optimization step's
+settings already specify a solvent (the common case — pKa calculations
+are almost always run in solution) and the pKa-specific CLI flags don't
+redundantly repeat `--solvent-model`/`--solvent-id` will crash instead
+of inheriting the optimization step's solvent.
+
+**Suggested direction:** move the `pka_kwargs["solvent_model"] = ...` /
+`pka_kwargs["solvent_id"] = ...` assignments to *before* `opt_kwargs` is
+computed, so the `key not in pka_kwargs` filter correctly excludes them
+from `opt_kwargs` once resolved.
