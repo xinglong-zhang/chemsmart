@@ -411,6 +411,32 @@ class TestExportCommandValidation:
         assert result.exit_code != 0
         assert "-x/--method-basis can only be used" in result.output
 
+    def test_unsupported_output_extension_skips_cli_validation(
+        self, mocker, tmp_path
+    ):
+        # An extension outside {.json, .csv, .xyz, .extxyz} matches
+        # neither the `if`/`elif` branch in the CLI command, so none of
+        # its selector/keys/method-basis validation runs; only
+        # DatabaseExporter's own _infer_format() rejects it -- and that
+        # constructor call isn't wrapped in the try/except ValueError
+        # block (only exporter.export() is), so it surfaces as a raw
+        # ValueError rather than a clean click.UsageError.
+        db_file = self._mock_db_checks(mocker, tmp_path)
+        result = invoke_allow_exceptions(
+            [
+                "export",
+                "-f",
+                db_file,
+                "--rid",
+                "abc",
+                "-o",
+                str(tmp_path / "out.txt"),
+            ]
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Unsupported output format" in str(result.exception)
+
 
 class TestExportParseMethodBasis:
     def test_no_slash_raises(self, mocker, tmp_path):

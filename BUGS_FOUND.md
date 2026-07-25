@@ -814,3 +814,43 @@ and is subject to the identical dead-code fallback. See
 `TorsionFingerprintGrouper._merge_groups_to_target` in
 `chemsmart/jobs/grouper/tfd.py` is unaffected — it merges purely by
 group size and has no connection-counting fallback.
+
+---
+
+## 18. `chemsmart database export` CLI: unsupported output extension raises a raw `ValueError` instead of a clean CLI error
+
+**File:** `chemsmart/cli/database/export.py:141-216`
+**Test:** `tests/test_database_cli.py::TestExportCommandValidation::test_unsupported_output_extension_skips_cli_validation`
+
+The `export` command validates `-o/--output`'s extension against
+`{.json, .csv, .xyz, .extxyz}` implicitly, via an `if ext in
+(".json",".csv"): ... elif ext in (".xyz",".extxyz"): ...` chain (lines
+141-190) that raises friendly `click.UsageError`s for bad option
+combinations. But if `ext` matches *neither* branch (e.g. `-o
+out.txt`), both branches are skipped entirely — no error is raised
+there. The only place that actually rejects an unsupported extension is
+`DatabaseExporter.__init__` → `_infer_format()`, which raises a plain
+`ValueError`. That constructor call (`DatabaseExporter(...)` at line
+197) is *not* wrapped in a try/except — only the later
+`exporter.export()` call is (lines 210-213). So an unsupported output
+extension surfaces as an uncaught `ValueError` with a Python traceback,
+rather than the clean `click.UsageError`/`ClickException` messages used
+everywhere else in this command.
+
+**Reproduce:**
+```
+chemsmart run database export -f my.db --rid abc123 -o out.txt
+# Traceback (most recent call last):
+#   ...
+# ValueError: Unsupported output format '.txt'. Supported extensions: ...
+```
+
+**Impact:** Minor UX inconsistency — a mistyped output extension gives
+a stack trace instead of a one-line usage error like every other
+invalid-input case in this command.
+
+**Suggested direction:** wrap the `DatabaseExporter(...)` construction
+in the same `try/except ValueError: raise click.ClickException(...)`
+used around `exporter.export()`, or validate `ext` against
+`chemsmart.database.export.SUPPORTED_FORMATS` up front alongside the
+existing `if`/`elif` chain.
