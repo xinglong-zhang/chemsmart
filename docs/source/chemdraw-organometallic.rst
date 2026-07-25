@@ -1,11 +1,11 @@
 .. _chemdraw-organometallic:
 
-###############
+################
  ChemDraw Files
-###############
+################
 
-CHEMSMART can read molecules drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures directly
-suitable for quantum chemistry calculations with Gaussian or ORCA.
+CHEMSMART can read molecules drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures directly suitable
+for quantum chemistry calculations with Gaussian or ORCA.
 
 .. note::
 
