@@ -1,7 +1,7 @@
 # tests/test_gromacs_job.py
 
 
-from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsMDJob
 from chemsmart.settings.gromacs import GromacsProjectSettings
 
 
@@ -114,3 +114,28 @@ def test_gromacs_job_is_incomplete_when_log_missing_success_markers(tmp_path):
     (tmp_path / "em.log").write_text("Starting mdrun\n", encoding="utf-8")
 
     assert job.is_complete() is False
+def test_gromacs_md_job_defaults():
+    job = GromacsMDJob(
+        molecule=None,
+        jobrunner=None,
+    )
+
+    assert job.TYPE == "gmxmd"
+    assert job.label == "gromacs_md"
+    assert job.workflow == "prepared"
+
+
+def test_gromacs_md_job_accepts_simulation_parameters():
+    job = GromacsMDJob(
+        molecule=None,
+        jobrunner=None,
+        temperature=310,
+        pressure=1.0,
+        timestep=0.002,
+        nsteps=500000,
+    )
+
+    assert job.temperature == 310
+    assert job.pressure == 1.0
+    assert job.timestep == 0.002
+    assert job.nsteps == 500000

@@ -6,7 +6,7 @@ This module provides the main CLI group for GROMACS workflows.
 The group-level responsibility is intentionally small:
 1. collect project / input options;
 2. load GromacsProjectSettings when a project YAML is provided;
-3. store shared values in ctx.obj for leaf commands such as em.
+3. store shared values in ctx.obj for leaf commands such as em, nvt, npt, and md.
 """
 
 import functools
@@ -63,7 +63,7 @@ def _load_project_settings(project=None, project_yaml=None):
     """
     Load GROMACS project settings from CLI project options.
 
-    project_yaml has priority because click already validates that it exists.
+    project_YAML has priority because click already validates that it exists.
     project is kept for compatibility with ChemSmart-style -p/--project usage.
     """
     if project_yaml is not None:
@@ -123,3 +123,18 @@ def gromacs_process_pipeline(ctx, *args, **kwargs):
     )
 
     return args[0] if args else None
+
+
+def _register_subcommands():
+    """
+    Import GROMACS leaf-command modules so Click registers their commands.
+    """
+    import importlib
+
+    for module_name in ("em", "nvt", "npt", "md"):
+        importlib.import_module(
+            f"chemsmart.cli.gromacs.{module_name}"
+        )
+
+
+_register_subcommands()

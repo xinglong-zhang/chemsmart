@@ -3,9 +3,11 @@ GROMACS input writer.
 
 This module writes GROMACS .mdp files from ChemSmart GROMACS job settings.
 
-The first implementation supports automatic MDP generation for:
+Automatic MDP generation is supported for:
 - EM  / gmxem
 - NVT / gmxnvt
+- NPT / gmxnpt
+- MD  / gmxmd
 
 Topology preparation and structure conversion are intentionally not handled
 here. Those belong to the GROMACS workflow setup layer.
@@ -73,6 +75,9 @@ class GromacsInputWriter:
         elif job_type == "gmxnpt":
             mdp_path = folder / "npt.mdp"
             content = self._build_npt_mdp()
+        elif job_type == "gmxmd":
+            mdp_path = folder / "md.mdp"
+            content = self._build_md_mdp()
         else:
             raise ValueError(
                 f"Unsupported GROMACS job type for MDP writing: {job_type}"
@@ -200,7 +205,70 @@ class GromacsInputWriter:
                 "gen_vel": "no",
             }
         )
+    def _build_md_mdp(self):
+        """
+        Build a default production MD .mdp file.
+        """
+        temperature = self._value_or_default(self.job.temperature, 300)
+        pressure = self._value_or_default(self.job.pressure, 1.0)
+        timestep = self._value_or_default(self.job.timestep, 0.002)
+        nsteps = self._value_or_default(self.job.nsteps, 500000)
+        constraints = self._value_or_default(
+            self.job.constraints,
+            "h-bonds",
+        )
+        constraint_algorithm = self._value_or_default(
+            self.job.constraint_algorithm,
+            "lincs",
+        )
+        thermostat = self._value_or_default(
+            self.job.thermostat,
+            "V-rescale",
+        )
+        barostat = self._value_or_default(
+            self.job.barostat,
+            "Parrinello-Rahman",
+        )
+        tau_t = self._value_or_default(self.job.tau_t, 0.1)
+        tc_grps = self._value_or_default(self.job.tc_grps, "System")
+        tau_p = self._value_or_default(self.job.tau_p, 2.0)
+        compressibility = self._value_or_default(
+            self.job.compressibility,
+            "4.5e-5",
+        )
 
+        return self._format_mdp(
+            {
+                "integrator": "md",
+                "nsteps": nsteps,
+                "dt": timestep,
+                "continuation": "yes",
+                "constraint_algorithm": constraint_algorithm,
+                "constraints": constraints,
+                "cutoff-scheme": "Verlet",
+                "nstlist": 10,
+                "rcoulomb": 1.0,
+                "rvdw": 1.0,
+                "coulombtype": "PME",
+                "pbc": "xyz",
+                "tcoupl": thermostat,
+                "tc-grps": tc_grps,
+                "tau_t": tau_t,
+                "ref_t": temperature,
+                "pcoupl": barostat,
+                "pcoupltype": "isotropic",
+                "tau_p": tau_p,
+                "ref_p": pressure,
+                "compressibility": compressibility,
+                "gen_vel": "no",
+                "nstxout": 0,
+                "nstvout": 0,
+                "nstfout": 0,
+                "nstlog": 1000,
+                "nstenergy": 1000,
+                "nstxout-compressed": 5000,
+            }
+        )
     @staticmethod
     def _value_or_default(value, default=None):
         """

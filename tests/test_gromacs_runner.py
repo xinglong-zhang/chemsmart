@@ -3,7 +3,9 @@ import subprocess
 
 import pytest
 
-from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsNVTJob
+from chemsmart.jobs.gromacs.job import (
+    GromacsEMJob, GromacsNVTJob, GromacsNPTJob,GromacsMDJob,
+)
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
 from chemsmart.settings.executable import GromacsExecutable
 
@@ -26,6 +28,8 @@ def _make_runner(gmx_executable="gmx"):
 def test_gromacs_em_job_type_matches_runner_jobtypes():
     assert GromacsEMJob.TYPE in GromacsJobRunner.JOBTYPES
     assert GromacsNVTJob.TYPE in GromacsJobRunner.JOBTYPES
+    assert GromacsNPTJob.TYPE in GromacsJobRunner.JOBTYPES
+    assert GromacsMDJob.TYPE in GromacsJobRunner.JOBTYPES
 
 
 def test_gromacs_em_job_stores_file_attributes(tmp_path):
@@ -746,6 +750,89 @@ def test_gromacs_writer_generates_nvt_mdp_when_missing(tmp_path):
     assert "dt" in content
     assert "0.001" in content
 
+def test_gromacs_writer_generates_npt_mdp_when_missing(tmp_path):
+    job = GromacsNPTJob(
+        molecule=None,
+        label="npt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=tmp_path / "nvt.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+        temperature=310,
+        pressure=1.5,
+        timestep=0.002,
+        nsteps=250000,
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == tmp_path / "npt.mdp"
+    assert job.mdp_file.exists()
+
+    content = job.mdp_file.read_text(encoding="utf-8")
+
+    assert "integrator" in content
+    assert "md" in content
+    assert "nsteps" in content
+    assert "250000" in content
+    assert "dt" in content
+    assert "0.002" in content
+    assert "ref_t" in content
+    assert "310" in content
+    assert "ref_p" in content
+    assert "1.5" in content
+    assert "continuation" in content
+    assert "yes" in content
+    assert "pcoupl" in content
+    assert "Parrinello-Rahman" in content
+    assert "gen_vel" in content
+    assert "no" in content
+
+def test_gromacs_writer_generates_md_mdp_when_missing(tmp_path):
+    job = GromacsMDJob(
+        molecule=None,
+        label="md",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=tmp_path / "npt.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+        temperature=310,
+        pressure=1.0,
+        timestep=0.002,
+        nsteps=1000000,
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == tmp_path / "md.mdp"
+    assert job.mdp_file.exists()
+
+    content = job.mdp_file.read_text(encoding="utf-8")
+
+    assert "integrator" in content
+    assert "md" in content
+    assert "nsteps" in content
+    assert "1000000" in content
+    assert "dt" in content
+    assert "0.002" in content
+    assert "ref_t" in content
+    assert "310" in content
+    assert "ref_p" in content
+    assert "1.0" in content
+    assert "continuation" in content
+    assert "yes" in content
+    assert "gen_vel" in content
+    assert "no" in content
+    assert "nstxout-compressed" in content
+    assert "5000" in content
 
 def test_gromacs_writer_does_not_overwrite_user_mdp(tmp_path):
     mdp_file = tmp_path / "custom.mdp"
