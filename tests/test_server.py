@@ -369,6 +369,7 @@ class TestArraySubmitInfrastructure:
             NUM_GPUS=0,
             NUM_HOURS=12,
             QUEUE_NAME="normal",
+            EXTRA_SCHEDULER_DIRECTIVES="#PBS -m abe\n",
         )
         children = self._array_children(tmp_path)
         submitter = PBSSubmitter(job=children[0], server=server)
@@ -393,6 +394,47 @@ class TestArraySubmitInfrastructure:
         assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
         assert "flock 9 || exit 1" in submit_text
         assert (tmp_path / "chemsmart_run_array.py").exists()
+        assert "#PBS -m n\n" in submit_text
+        assert submit_text.count("#PBS -m abe\n") == 0
+
+    def test_slurm_array_submit_script_mails_once_for_whole_array(
+        self, tmp_path, monkeypatch, mocker
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        mock_settings = mocker.Mock()
+        mock_settings.data = {"EMAIL": "user@example.com"}
+        mocker.patch(
+            "chemsmart.settings.submitters.user_settings",
+            mock_settings,
+        )
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=16,
+            MEM_GB=32,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+            EXTRA_SCHEDULER_DIRECTIVES=(
+                "#SBATCH --mail-type=END,FAIL,ARRAY_TASKS\n"
+            ),
+        )
+        children = self._array_children(tmp_path, count=3)
+        submitter = SLURMSubmitter(job=children[0], server=server)
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=1,
+            cli_args=["gaussian", "opt"],
+            batch_label="mols_batch",
+        )
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_mols_batch.sh"
+        ).read_text()
+        assert "#SBATCH --mail-user=user@example.com\n" in submit_text
+        assert "#SBATCH --mail-type=END,FAIL\n" in submit_text
+        assert "ARRAY_TASKS" not in submit_text
 
     def test_lsf_write_array_job_creates_array_directives(
         self, tmp_path, monkeypatch

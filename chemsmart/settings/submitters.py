@@ -16,6 +16,38 @@ user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 
+# Mail directives that would notify per array task; strip them from array
+# scripts so arrays use the submitter's array-level mail policy instead.
+_MAIL_DIRECTIVE_PREFIXES = (
+    "#PBS -m ",
+    "#PBS -M ",
+    "#SBATCH --mail-type=",
+    "#SBATCH --mail-user=",
+)
+
+
+def _without_mail_directives(directives):
+    """Return *directives* with mail-related scheduler lines removed."""
+    if directives is None:
+        return None
+    lines = (
+        directives.splitlines()
+        if isinstance(directives, str)
+        else list(directives)
+    )
+    kept = [
+        line
+        for line in lines
+        if line.strip()
+        and not any(
+            line.strip().startswith(prefix)
+            for prefix in _MAIL_DIRECTIVE_PREFIXES
+        )
+    ]
+    if not kept:
+        return None
+    return "\n".join(kept) + "\n"
+
 
 class RunScript:
     """
@@ -674,14 +706,18 @@ class Submitter(RegistryMixin):
                 f.write(line)
             f.write("\n")
 
-    def _write_extra_scheduler_directives(self, f):
+    def _write_extra_scheduler_directives(self, f, *, omit_mail=False):
         """
         Write additional scheduler directives from server settings.
 
         Args:
             f: File handle for writing scheduler directives.
+            omit_mail: If True, skip mail-related lines so array scripts can
+                apply their own array-level mail policy.
         """
         directives = self.server.extra_scheduler_directives
+        if omit_mail:
+            directives = _without_mail_directives(directives)
         if directives is None:
             return
         if isinstance(directives, str):
@@ -910,10 +946,9 @@ class PBSSubmitter(Submitter):
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
-            if user_settings.data.get("EMAIL"):
-                f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
-                f.write("#PBS -m abe\n")
-        self._write_extra_scheduler_directives(f)
+        # PBS mails per subjob; suppress that noise for arrays.
+        f.write("#PBS -m n\n")
+        self._write_extra_scheduler_directives(f, omit_mail=True)
         f.write("\n")
         f.write("\n")
 
@@ -1030,9 +1065,10 @@ class SLURMSubmitter(Submitter):
             if user_settings.data.get("PROJECT"):
                 f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
             if user_settings.data.get("EMAIL"):
+                # Without ARRAY_TASKS, END/FAIL notify once for the whole array.
                 f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
                 f.write("#SBATCH --mail-type=END,FAIL\n")
-        self._write_extra_scheduler_directives(f)
+        self._write_extra_scheduler_directives(f, omit_mail=True)
         f.write("\n")
         f.write("\n")
 
