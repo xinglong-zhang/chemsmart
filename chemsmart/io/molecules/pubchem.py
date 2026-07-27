@@ -66,7 +66,9 @@ def _retryable_pubchem(exc: BaseException) -> bool:
     return isinstance(exc, RequestException)
 
 
-def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
+def search_pubchem_raw(
+    search, field, suffix: str = "display", timeout: int = 10
+):
     """Search PubChem for structure.
 
     Changelog:
@@ -91,7 +93,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
         HTTP-related errors (e.g., 404, 400).
         requests.exceptions.RequestException: For other network issues.
     """
-    suffix = "sdf?record_type=" + suffix
+    suffix = "sdf?response_type=" + suffix
 
     if field == "conformers":
         # Conformer searches don't use the "compound" endpoint
