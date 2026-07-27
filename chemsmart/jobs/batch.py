@@ -536,11 +536,11 @@ _ENGINE_JOB_TOKENS = frozenset(
     }
 )
 
-# Known ``batch_entry`` keys mapped to CLI flags. Add new shared fields here.
-_BATCH_ENTRY_OPTION_FIELDS = (
-    ("label", "--label", None),
-    ("child_index", "--child-index", None),
-)
+# Known ``batch_entry`` keys mapped to CLI flags.
+# Engine-group options insert under ``gaussian``/``orca`` (before the job
+# token). Nestable-command options insert after that token (``dias``/``qrc``/…).
+_BATCH_ENTRY_ENGINE_OPTION_FIELDS = (("label", "--label", None),)
+_BATCH_ENTRY_NESTABLE_OPTION_FIELDS = (("child_index", "--child-index", None),)
 
 
 def get_job_batch_entry(job: Any) -> Optional[dict[str, Any]]:
@@ -711,7 +711,7 @@ def _apply_batch_entry_to_cli(
             prefer_short=prefer_short,
         )
 
-    for entry_key, long_opt, short_opt in _BATCH_ENTRY_OPTION_FIELDS:
+    for entry_key, long_opt, short_opt in _BATCH_ENTRY_ENGINE_OPTION_FIELDS:
         if entry_key not in batch_entry or batch_entry[entry_key] is None:
             continue
         _patch_cli_option(
@@ -720,6 +720,19 @@ def _apply_batch_entry_to_cli(
             short_opt=short_opt,
             value=str(batch_entry[entry_key]),
             insert_before=insert_before,
+        )
+
+    # Nestable flags belong on the job command (after ``dias``/``qrc``/…),
+    # not on the engine group where Click would reject them.
+    for entry_key, long_opt, short_opt in _BATCH_ENTRY_NESTABLE_OPTION_FIELDS:
+        if entry_key not in batch_entry or batch_entry[entry_key] is None:
+            continue
+        _patch_cli_option(
+            args,
+            long_opt=long_opt,
+            short_opt=short_opt,
+            value=str(batch_entry[entry_key]),
+            insert_after=insert_before,
         )
 
 

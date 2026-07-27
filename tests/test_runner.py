@@ -489,6 +489,34 @@ class TestBatchCliRewrite:
         shared = ["gaussian", "-f", "ts.log", "qrc"]
         rewritten = rewrite_batch_cli_args(shared, {"child_index": 2})
         assert rewritten[rewritten.index("--child-index") + 1] == "2"
+        # Must land on the nestable command, not under gaussian options.
+        assert rewritten.index("qrc") < rewritten.index("--child-index")
+
+    def test_rewrite_batch_cli_args_child_index_after_dias(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "parent_dias",
+            "dias",
+            "-i",
+            "1-10",
+            "--mode",
+            "ts",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {"child_index": 3, "label": "parent_dias_child3"},
+        )
+        assert (
+            rewritten[rewritten.index("--label") + 1] == "parent_dias_child3"
+        )
+        assert rewritten.index("--label") < rewritten.index("dias")
+        assert rewritten.index("dias") < rewritten.index("--child-index")
+        assert rewritten[rewritten.index("--child-index") + 1] == "3"
 
     def test_rewrite_batch_cli_args_injects_label(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
@@ -580,6 +608,10 @@ class TestBatchCliRewrite:
         assert cli_lists[0][cli_lists[0].index("--child-index") + 1] == "1"
         assert cli_lists[1][cli_lists[1].index("--child-index") + 1] == "2"
         assert all("qrc" in args for args in cli_lists)
+        assert all(
+            args.index("qrc") < args.index("--child-index")
+            for args in cli_lists
+        )
 
 
 class TestGaussianBatchDelegation:

@@ -1210,6 +1210,10 @@ class TestGaussianRunSubNoParallelIntegration:
         assert cli_args[0][cli_args[0].index("--child-index") + 1] == "1"
         assert cli_args[1][cli_args[1].index("--child-index") + 1] == "2"
         assert all("qrc" in args for args in cli_args)
+        assert all(
+            args.index("qrc") < args.index("--child-index")
+            for args in cli_args
+        )
 
     def test_sub_no_run_in_parallel_submits_qrc_as_single_parent(
         self,
