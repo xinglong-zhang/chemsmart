@@ -389,6 +389,36 @@ CHEMSMART automatically detects file formats based on extensions:
 
 For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 
+*******************************
+ Output Formats and Conversion
+*******************************
+
+Native writers (``Molecule.write``) support ``xyz``, ``extxyz``, ``com``, and ``pdb``.
+
+For any other output format, CHEMSMART falls back to `Open Babel <https://openbabel.org/>`_
+(via a temporary XYZ intermediate). This is used automatically by the convert CLI when the
+output extension is not a native writer format:
+
+.. code:: bash
+
+   chemsmart run convert -i water.xyz -o water.mol2
+   chemsmart run convert -i water.pdb -o water.cml
+
+Open Babel is included in the CHEMSMART conda environment. If you install CHEMSMART via pip
+and request a non-native output format, install Open Babel separately:
+
+.. code:: bash
+
+   conda install -c conda-forge openbabel
+
+If Open Babel is not installed, CHEMSMART raises an ``ImportError`` with installation
+instructions. Formats that Open Babel itself cannot write raise a ``ValueError``.
+
+.. note::
+
+   **Read vs write fallbacks differ:** unsupported *input* extensions fall back to ASE
+   (see above). Unsupported *output* formats fall back to Open Babel.
+
 **********
  See Also
 **********

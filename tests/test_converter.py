@@ -1252,3 +1252,573 @@ class TestConvertCLI:
         assert "either --input/--output" in result.output.lower() or (
             "--directory/--filetype" in result.output.lower()
         )
+
+
+class TestOpenBabelWriteFallback:
+    """Tests for Open Babel fallback in ``Molecule.write``."""
+
+    def test_write_mol2_via_openbabel(self, single_model_pdb_file, tmpdir):
+        pytest.importorskip("openbabel")
+        from openbabel import pybel
+
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+        mol.write(output_path, format="mol2")
+
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+        ob_mol = next(pybel.readfile("mol2", output_path), None)
+        assert ob_mol is not None
+        assert len(ob_mol.atoms) == mol.num_atoms
+
+    def test_write_cml_via_openbabel(self, single_model_pdb_file, tmpdir):
+        """Second non-native format: proves no OB format hardcoding."""
+        pytest.importorskip("openbabel")
+        from openbabel import pybel
+
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.cml")
+        mol.write(output_path, format="cml")
+
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+        ob_mol = next(pybel.readfile("cml", output_path), None)
+        assert ob_mol is not None
+        assert len(ob_mol.atoms) == mol.num_atoms
+
+    def test_convert_file_to_mol2(self, single_model_pdb_file, tmpdir):
+        pytest.importorskip("openbabel")
+        from openbabel import pybel
+
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+        FileConverter.convert_file(single_model_pdb_file, output_path)
+
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+        ob_mol = next(pybel.readfile("mol2", output_path), None)
+        assert ob_mol is not None
+        assert len(ob_mol.atoms) == 3
+
+    def test_cli_convert_to_mol2(self, single_model_pdb_file, tmpdir):
+        pytest.importorskip("openbabel")
+
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                output_path,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+
+    def test_native_formats_still_work(self, single_model_pdb_file, tmpdir):
+        mol = Molecule.from_filepath(single_model_pdb_file)
+
+        xyz_path = os.path.join(str(tmpdir), "water.xyz")
+        mol.write(xyz_path, format="xyz")
+        assert os.path.exists(xyz_path)
+        assert Molecule.from_filepath(xyz_path).num_atoms == 3
+
+        pdb_path = os.path.join(str(tmpdir), "water_out.pdb")
+        mol.write(pdb_path, format="pdb")
+        assert os.path.exists(pdb_path)
+        assert Molecule.from_filepath(pdb_path).num_atoms == 3
+
+        com_path = os.path.join(str(tmpdir), "water.com")
+        mol.write(com_path, format="com")
+        assert os.path.exists(com_path)
+        assert Molecule.from_filepath(com_path).num_atoms == 3
+
+    def test_missing_openbabel_raises_import_error(
+        self, single_model_pdb_file, tmpdir
+    ):
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "openbabel" or name.startswith("openbabel."):
+                raise ImportError("No module named 'openbabel'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_fake_import):
+            with pytest.raises(ImportError, match="openbabel"):
+                mol.write(output_path, format="mol2")
+
+    def test_nonsense_format_raises_value_error(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.notarealformat")
+
+        with pytest.raises(ValueError, match="notarealformat"):
+            mol.write(output_path, format="notarealformat")
+
+    def test_temp_xyz_removed_after_success(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        created_temps = []
+        real_ntf = __import__("tempfile").NamedTemporaryFile
+
+        def _tracking_ntf(*args, **kwargs):
+            tmp = real_ntf(*args, **kwargs)
+            created_temps.append(tmp.name)
+            return tmp
+
+        with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
+            mol.write(output_path, format="mol2")
+
+        assert created_temps
+        for path in created_temps:
+            assert not os.path.exists(path)
+
+    def test_temp_xyz_removed_after_write_failure(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        created_temps = []
+        real_ntf = __import__("tempfile").NamedTemporaryFile
+
+        def _tracking_ntf(*args, **kwargs):
+            tmp = real_ntf(*args, **kwargs)
+            created_temps.append(tmp.name)
+            return tmp
+
+        with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
+            with patch(
+                "openbabel.pybel.Molecule.write",
+                side_effect=RuntimeError("write boom"),
+            ):
+                with pytest.raises(ValueError, match="mol2"):
+                    mol.write(output_path, format="mol2")
+
+        assert created_temps
+        for path in created_temps:
+            assert not os.path.exists(path)
+
+    def test_empty_openbabel_read_raises_and_cleans_up(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        created_temps = []
+        real_ntf = __import__("tempfile").NamedTemporaryFile
+
+        def _tracking_ntf(*args, **kwargs):
+            tmp = real_ntf(*args, **kwargs)
+            created_temps.append(tmp.name)
+            return tmp
+
+        with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
+            with patch(
+                "openbabel.pybel.readfile",
+                return_value=iter([]),
+            ):
+                with pytest.raises(ValueError, match="Unable to read"):
+                    mol.write(output_path, format="mol2")
+
+        assert created_temps
+        for path in created_temps:
+            assert not os.path.exists(path)
+
+    def test_write_pdb_pybabel_delegates(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water_ob.pdb")
+        mol.write_pdb_pybabel(output_path)
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+
+    def test_cleanup_false_keeps_temp_xyz(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        created_temps = []
+        real_ntf = __import__("tempfile").NamedTemporaryFile
+
+        def _tracking_ntf(*args, **kwargs):
+            tmp = real_ntf(*args, **kwargs)
+            created_temps.append(tmp.name)
+            return tmp
+
+        with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
+            mol._write_via_openbabel(
+                output_path, "mol2", cleanup=False
+            )
+
+        assert created_temps
+        assert os.path.exists(created_temps[0])
+        os.remove(created_temps[0])
+
+    def test_native_extxyz_via_write(self, single_model_pdb_file, tmpdir):
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.extxyz")
+        mol.write(output_path, format="extxyz")
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+
+    def test_missing_openbabel_cleanup_false_keeps_temp(
+        self, single_model_pdb_file, tmpdir
+    ):
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        created_temps = []
+        real_ntf = __import__("tempfile").NamedTemporaryFile
+
+        def _tracking_ntf(*args, **kwargs):
+            tmp = real_ntf(*args, **kwargs)
+            created_temps.append(tmp.name)
+            return tmp
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "openbabel" or name.startswith("openbabel."):
+                raise ImportError("No module named 'openbabel'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
+            with patch("builtins.__import__", side_effect=_fake_import):
+                with pytest.raises(ImportError, match="openbabel"):
+                    mol._write_via_openbabel(
+                        output_path, "mol2", cleanup=False
+                    )
+
+        assert created_temps
+        assert os.path.exists(created_temps[0])
+        os.remove(created_temps[0])
+
+    def test_cleanup_oserror_on_success_is_warned(
+        self, single_model_pdb_file, tmpdir, caplog
+    ):
+        pytest.importorskip("openbabel")
+        import logging
+
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        real_remove = os.remove
+
+        def _remove_then_fail(path):
+            # Allow the first remove attempts from other code; fail on temp xyz
+            if path.endswith(".xyz"):
+                raise OSError("permission denied")
+            return real_remove(path)
+
+        with patch("os.remove", side_effect=_remove_then_fail):
+            with caplog.at_level(logging.WARNING):
+                mol.write(output_path, format="mol2")
+
+        assert os.path.exists(output_path)
+        assert any(
+            "Failed to remove temporary file" in r.message
+            for r in caplog.records
+        )
+
+    def test_cleanup_oserror_on_import_error(
+        self, single_model_pdb_file, tmpdir
+    ):
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "water.mol2")
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "openbabel" or name.startswith("openbabel."):
+                raise ImportError("No module named 'openbabel'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_fake_import):
+            with patch("os.remove", side_effect=OSError("busy")):
+                with pytest.raises(ImportError, match="openbabel"):
+                    mol.write(output_path, format="mol2")
+
+    def test_write_cosmorsxyz_is_native(self, single_model_pdb_file, tmpdir):
+        """cosmorsxyz uses the native writer (no Open Babel required)."""
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        output_path = os.path.join(str(tmpdir), "water.cosmorsxyz")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule._write_via_openbabel"
+        ) as mock_ob:
+            mol.write(output_path, format="cosmorsxyz")
+            mock_ob.assert_not_called()
+
+        assert os.path.exists(output_path)
+        with open(output_path, "r") as f:
+            lines = f.read().strip().splitlines()
+        assert lines[0] == "3"
+        assert lines[1] == "0 1"
+        assert len(lines) == 5
+
+    def test_xyz_to_pdb_none_delegates_to_write_pdb_pybabel(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        output_path = os.path.join(str(tmpdir), "from_xyz_to_pdb.pdb")
+
+        with patch.object(
+            mol, "write_pdb_pybabel", wraps=mol.write_pdb_pybabel
+        ) as mock_delegate:
+            FileConverter.xyz_to_pdb(mol, output_path, xyz_filename=None)
+            mock_delegate.assert_called_once()
+
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+
+    def test_xyz_to_pdb_existing_file_branch(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        xyz_path = os.path.join(str(tmpdir), "water.xyz")
+        mol.write_xyz(xyz_path, mode="w")
+        pdb_path = os.path.join(str(tmpdir), "from_existing.pdb")
+
+        FileConverter.xyz_to_pdb(
+            mol, pdb_path, xyz_filename=xyz_path
+        )
+
+        assert os.path.exists(pdb_path)
+        assert os.path.exists(xyz_path)  # caller-supplied path kept
+
+
+class TestConverterCoverageGaps:
+    """Hit remaining FileConverter branches for ≥90% file coverage."""
+
+    def test_convert_files_neither_directory_nor_filename_raises(self):
+        with pytest.raises(ValueError, match="Either directory or filename"):
+            FileConverter().convert_files()
+
+    def test_convert_out_without_program_raises(self, tmpdir):
+        with pytest.raises(ValueError, match="--program"):
+            FileConverter(
+                directory=str(tmpdir), type="out", program=None
+            ).convert_files()
+
+    def test_convert_unsupported_batch_type_raises(self, tmpdir):
+        with pytest.raises(ValueError, match="not supported"):
+            FileConverter(
+                directory=str(tmpdir), type="xyzzy"
+            ).convert_files()
+
+    def test_convert_unsupported_single_type_raises(self, tmpdir):
+        path = os.path.join(str(tmpdir), "x.xyzzy")
+        with open(path, "w") as f:
+            f.write("dummy\n")
+        fc = FileConverter(filename=path, output_filetype="xyz")
+        with pytest.raises(ValueError, match="not supported"):
+            fc.convert_files()
+
+    def test_batch_gjf_to_xyz(self, tmpdir, gaussian_opt_inputfile):
+        from shutil import copy
+
+        gjf = os.path.join(str(tmpdir), "opt.gjf")
+        copy(gaussian_opt_inputfile, gjf)
+        FileConverter(
+            directory=str(tmpdir), type="gjf", output_filetype="xyz"
+        ).convert_files()
+        assert os.path.exists(gjf.replace(".gjf", ".xyz"))
+
+    def test_batch_pdb_to_xyz(self, single_model_pdb_file):
+        FileConverter(
+            directory=os.path.dirname(single_model_pdb_file),
+            type="pdb",
+            output_filetype="xyz",
+        ).convert_files()
+        assert os.path.exists(single_model_pdb_file.replace(".pdb", ".xyz"))
+
+    def test_batch_sdf_to_xyz(self, tmpdir):
+        # Minimal one-molecule SDF
+        sdf_path = os.path.join(str(tmpdir), "methane.sdf")
+        with open(sdf_path, "w") as f:
+            f.write(
+                "methane\n"
+                "  ChemSmart\n"
+                "\n"
+                "  1  0  0  0  0  0  0  0  0  0999 V2000\n"
+                "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+                "M  END\n"
+                "$$$$\n"
+            )
+        FileConverter(
+            directory=str(tmpdir), type="sdf", output_filetype="xyz"
+        ).convert_files()
+        assert os.path.exists(os.path.join(str(tmpdir), "methane.xyz"))
+
+    def test_batch_orca_out_to_xyz(self, tmpdir, orca_co2_output):
+        from shutil import copy
+
+        copy(orca_co2_output, os.path.join(str(tmpdir), "CO2.out"))
+        FileConverter(
+            directory=str(tmpdir),
+            type="out",
+            program="orca",
+            output_filetype="xyz",
+        ).convert_files()
+        assert os.path.exists(os.path.join(str(tmpdir), "CO2.xyz"))
+
+    def test_batch_gaussian_out_to_xyz(
+        self, tmpdir, gaussian_ozone_opt_outfile
+    ):
+        from shutil import copy
+
+        # Gaussian outputs are usually .log; exercise type=out + program=gaussian
+        dest = os.path.join(str(tmpdir), "ozone.out")
+        copy(gaussian_ozone_opt_outfile, dest)
+        FileConverter(
+            directory=str(tmpdir),
+            type="out",
+            program="gaussian",
+            output_filetype="xyz",
+        ).convert_files()
+        assert os.path.exists(os.path.join(str(tmpdir), "ozone.xyz"))
+
+    def test_batch_orca_inp_to_xyz(self, tmpdir, water_opt_input_path):
+        from shutil import copy
+
+        copy(water_opt_input_path, os.path.join(str(tmpdir), "water_opt.inp"))
+        FileConverter(
+            directory=str(tmpdir), type="inp", output_filetype="xyz"
+        ).convert_files()
+        assert os.path.exists(os.path.join(str(tmpdir), "water_opt.xyz"))
+
+    def test_batch_include_intermediate_list_write(
+        self, tmpdir, gaussian_ozone_opt_outfile
+    ):
+        from shutil import copy
+
+        copy(gaussian_ozone_opt_outfile, os.path.join(str(tmpdir), "ozone.log"))
+        FileConverter(
+            directory=str(tmpdir),
+            type="log",
+            output_filetype="xyz",
+            include_intermediate_structures=True,
+        ).convert_files()
+        assert os.path.exists(os.path.join(str(tmpdir), "ozone.xyz"))
+
+    def test_single_orca_out_to_xyz(self, tmpdir, orca_co2_output):
+        from shutil import copy
+
+        path = os.path.join(str(tmpdir), "CO2.out")
+        copy(orca_co2_output, path)
+        FileConverter(filename=path, output_filetype="xyz").convert_files()
+        assert os.path.exists(path.replace(".out", ".xyz"))
+
+    def test_single_inp_to_xyz(self, tmpdir, water_opt_input_path):
+        from shutil import copy
+
+        path = os.path.join(str(tmpdir), "water_opt.inp")
+        copy(water_opt_input_path, path)
+        FileConverter(filename=path, output_filetype="xyz").convert_files()
+        assert os.path.exists(path.replace(".inp", ".xyz"))
+
+    def test_single_sdf_to_xyz(self, tmpdir):
+        path = os.path.join(str(tmpdir), "c.sdf")
+        with open(path, "w") as f:
+            f.write(
+                "c\n\n\n"
+                "  1  0  0  0  0  0  0  0  0  0999 V2000\n"
+                "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+                "M  END\n$$$$\n"
+            )
+        FileConverter(filename=path, output_filetype="xyz").convert_files()
+        assert os.path.exists(path.replace(".sdf", ".xyz"))
+
+    def test_single_pdb_to_xyz(self, single_model_pdb_file):
+        FileConverter(
+            filename=single_model_pdb_file, output_filetype="xyz"
+        ).convert_files()
+        assert os.path.exists(single_model_pdb_file.replace(".pdb", ".xyz"))
+
+    def test_single_gjf_to_xyz(self, tmpdir, gaussian_opt_inputfile):
+        from shutil import copy
+
+        path = os.path.join(str(tmpdir), "opt.gjf")
+        copy(gaussian_opt_inputfile, path)
+        FileConverter(filename=path, output_filetype="xyz").convert_files()
+        assert os.path.exists(path.replace(".gjf", ".xyz"))
+
+    def test_single_unknown_program_out_raises(self, tmpdir):
+        path = os.path.join(str(tmpdir), "mystery.out")
+        with open(path, "w") as f:
+            f.write("not a real quantum chemistry output\n")
+        fc = FileConverter(filename=path, output_filetype="xyz")
+        with pytest.raises(ValueError, match="Could not detect program"):
+            fc.convert_files()
+
+    def test_single_include_intermediate_list(
+        self, tmpdir, gaussian_ozone_opt_outfile
+    ):
+        from shutil import copy
+
+        path = os.path.join(str(tmpdir), "ozone.log")
+        copy(gaussian_ozone_opt_outfile, path)
+        FileConverter(
+            filename=path,
+            output_filetype="xyz",
+            include_intermediate_structures=True,
+        ).convert_files()
+        assert os.path.exists(path.replace(".log", ".xyz"))
+
+    def test_xyz_to_pdb_missing_path_writes_then_converts(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        xyz_path = os.path.join(str(tmpdir), "missing.xyz")
+        pdb_path = os.path.join(str(tmpdir), "out.pdb")
+        assert not os.path.exists(xyz_path)
+        FileConverter.xyz_to_pdb(mol, pdb_path, xyz_filename=xyz_path)
+        assert os.path.exists(xyz_path)
+        assert os.path.exists(pdb_path)
+
+    def test_xyz_to_pdb_empty_read_raises(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_model_pdb_file)
+        xyz_path = os.path.join(str(tmpdir), "emptyish.xyz")
+        mol.write_xyz(xyz_path, mode="w")
+        pdb_path = os.path.join(str(tmpdir), "fail.pdb")
+        with patch(
+            "openbabel.pybel.readfile", return_value=iter([])
+        ):
+            with pytest.raises(ValueError, match="Unable to read"):
+                FileConverter.xyz_to_pdb(
+                    mol, pdb_path, xyz_filename=xyz_path
+                )

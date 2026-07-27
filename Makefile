@@ -226,6 +226,16 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		--maxfail=1 \
 		tests/
 
+.PHONY: test-cov-io
+test-cov-io: coverage-clean ## Branch coverage for converter.py + structure.py (target ≥90% each).
+	$(ENV_PREFIX)pytest tests/ \
+		--cov=chemsmart.io.converter \
+		--cov=chemsmart.io.molecules.structure \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage-io-target.xml \
+		-q
+
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
 
