@@ -80,6 +80,16 @@ Execution Control Options
       -  Force scratch on (``--scratch``) or off (``--no-scratch``). Omit both (``None``) to use program YAML
          ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
+   -  -  ``--run-in-parallel/--no-run-in-parallel``
+      -  bool
+      -  With ``chemsmart sub``: allow concurrent scheduler array tasks and expand nestable jobs (QRC/DIAS/CREST/traj)
+         into array tasks (default: serial, ``%1``). Local ``run`` keeps children serial.
+
+   -  -  ``-M, --max-tasks``
+      -  int
+      -  Max concurrent array tasks (``%M`` in SLURM/PBS/LSF). Ignored under serial mode. Deprecated aliases: ``-N``,
+         ``--num-nodes``
+
 .. note::
 
    Use ``-R`` at the end of the command to rerun a completed job.

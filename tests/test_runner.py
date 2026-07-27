@@ -492,6 +492,64 @@ class TestBatchCliRewrite:
         # Must land on the nestable command, not under gaussian options.
         assert rewritten.index("qrc") < rewritten.index("--child-index")
 
+    def test_rewrite_batch_cli_args_ignores_label_matching_job_token(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        # Basename labels like ts/opt must not be treated as the job token.
+        qrc_shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "ts",
+            "qrc",
+        ]
+        qrc_rewritten = rewrite_batch_cli_args(qrc_shared, {"child_index": 1})
+        assert qrc_rewritten.index("qrc") < qrc_rewritten.index(
+            "--child-index"
+        )
+        assert qrc_rewritten[qrc_rewritten.index("--label") + 1] == "ts"
+
+        opt_shared = [
+            "gaussian",
+            "-f",
+            "opt.log",
+            "--label",
+            "opt",
+            "-i",
+            "1,2,3",
+            "sp",
+        ]
+        opt_rewritten = rewrite_batch_cli_args(
+            opt_shared,
+            {"molecule_index": 2, "label": "opt_idx2"},
+        )
+        assert opt_rewritten[opt_rewritten.index("-i") + 1] == "2"
+        assert "1,2,3" not in opt_rewritten
+        assert opt_rewritten[-1] == "sp"
+        assert opt_rewritten[opt_rewritten.index("--label") + 1] == "opt_idx2"
+
+    def test_rewrite_batch_cli_args_updates_short_label(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = [
+            "gaussian",
+            "-f",
+            "mols.xyz",
+            "-l",
+            "mols",
+            "-i",
+            "1,2",
+            "opt",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {"molecule_index": 2, "label": "mols_idx2"},
+        )
+        assert "-l" in rewritten
+        assert rewritten[rewritten.index("-l") + 1] == "mols_idx2"
+        assert "--label" not in rewritten
+
     def test_rewrite_batch_cli_args_child_index_preserves_parent_label(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 

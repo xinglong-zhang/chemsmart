@@ -329,6 +329,15 @@ class GaussianTrajJob(NestableJobMixin, GaussianJob):
             skip_completed=self.skip_completed,
         )
 
+    @property
+    def incomplete_structure_run_jobs(self):
+        """Incomplete structure calculation jobs for selective local reruns."""
+        return [
+            job
+            for job in self.all_structures_run_jobs
+            if not job.is_complete()
+        ]
+
     def _run_all_jobs(self):
         """
         Execute structure calculation jobs based on configuration.

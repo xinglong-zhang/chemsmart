@@ -523,7 +523,7 @@ _ENGINE_JOB_TOKENS = frozenset(
 # Known ``batch_entry`` keys mapped to CLI flags.
 # Engine-group options insert under ``gaussian``/``orca`` (before the job
 # token). Nestable-command options insert after that token (``dias``/``qrc``/…).
-_BATCH_ENTRY_ENGINE_OPTION_FIELDS = (("label", "--label", None),)
+_BATCH_ENTRY_ENGINE_OPTION_FIELDS = (("label", "--label", "-l"),)
 _BATCH_ENTRY_NESTABLE_OPTION_FIELDS = (("child_index", "--child-index", None),)
 
 
@@ -585,9 +585,7 @@ def prepare_batch_jobs(
         entry: dict[str, Any] = {"molecule_index": int(index)}
         if filepath is not None:
             entry["filepath"] = str(filepath)
-        job_label = getattr(job, "label", None)
-        if job_label is not None:
-            entry["label"] = job_label
+        entry["label"] = job.label
         paired_jobs.append(job)
         entries.append(entry)
     attach_batch_entries(paired_jobs, entries)
@@ -644,16 +642,29 @@ def _patch_cli_option(
 
 
 def _find_job_subcommand_token(tokens: Sequence[str]) -> Optional[str]:
-    """Return the engine job-group token (e.g. ``opt``/``pka``).
-
-    Matches known gaussian/orca job groups so nested actions
-    (``batch``/``submit``) and option values (e.g. ``direct``) are not
-    treated as insertion anchors. Shared engine options then insert under
-    ``gaussian``/``orca``.
-    """
-    for token in tokens:
+    """Return the engine job-group token (e.g. ``opt``/``qrc``)."""
+    i = 0
+    n = len(tokens)
+    for j, token in enumerate(tokens):
+        if token in ("gaussian", "orca"):
+            i = j + 1
+            break
+    while i < n:
+        token = tokens[i]
+        if token.startswith("-"):
+            # Skip option values so labels like ``ts``/``opt`` are not anchors.
+            if (
+                "=" not in token
+                and i + 1 < n
+                and not tokens[i + 1].startswith("-")
+            ):
+                i += 2
+            else:
+                i += 1
+            continue
         if token in _ENGINE_JOB_TOKENS:
             return token
+        i += 1
     return None
 
 

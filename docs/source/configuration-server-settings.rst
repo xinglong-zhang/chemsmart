@@ -56,6 +56,9 @@ SCHEDULER
 Batch array submission (``chemsmart sub`` on a ``BatchJob``, for example multi-molecule pKa batches) requires **SLURM**,
 **PBS/Torque**, or **LSF** (``SLF``). Other schedulers must submit child jobs individually.
 
+Array email: SLURM notifies once when the whole array ends or fails. PBS array scripts disable mail (``#PBS -m n``) to
+avoid per-task spam.
+
 **Examples:**
 
 .. code:: yaml
