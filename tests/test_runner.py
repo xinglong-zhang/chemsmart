@@ -426,8 +426,8 @@ class TestBatchCliRewrite:
         self,
     ):
         from chemsmart.jobs.batch import (
+            make_batch_cli_rewriter,
             resolve_array_cli_args,
-            rewrite_batch_cli_args,
             set_job_batch_entry,
         )
 
@@ -443,7 +443,7 @@ class TestBatchCliRewrite:
         cli_lists = resolve_array_cli_args(
             [job1, job2],
             shared,
-            rewrite_cli=rewrite_batch_cli_args,
+            rewrite_cli=make_batch_cli_rewriter("opt"),
         )
         assert cli_lists[0][cli_lists[0].index("-i") + 1] == "1"
         assert cli_lists[1][cli_lists[1].index("-i") + 1] == "2"
@@ -479,23 +479,27 @@ class TestBatchCliRewrite:
         rewritten = rewrite_batch_cli_args(
             shared,
             {"filepath": "mols.xyz", "molecule_index": 2},
+            job_token="opt",
         )
         assert rewritten[rewritten.index("-i") + 1] == "2"
         assert "1,2,3" not in rewritten
+        assert rewritten.index("-i") < rewritten.index("opt")
 
     def test_rewrite_batch_cli_args_injects_child_index(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 
         shared = ["gaussian", "-f", "ts.log", "qrc"]
-        rewritten = rewrite_batch_cli_args(shared, {"child_index": 2})
+        rewritten = rewrite_batch_cli_args(
+            shared, {"child_index": 2}, job_token="qrc"
+        )
         assert rewritten[rewritten.index("--child-index") + 1] == "2"
         # Must land on the nestable command, not under gaussian options.
         assert rewritten.index("qrc") < rewritten.index("--child-index")
 
-    def test_rewrite_batch_cli_args_ignores_label_matching_job_token(self):
+    def test_rewrite_batch_cli_args_keeps_label_matching_job_token(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 
-        # Basename labels like ts/opt must not be treated as the job token.
+        # Basename labels like ts/opt must not shift option placement.
         qrc_shared = [
             "gaussian",
             "-f",
@@ -504,7 +508,9 @@ class TestBatchCliRewrite:
             "ts",
             "qrc",
         ]
-        qrc_rewritten = rewrite_batch_cli_args(qrc_shared, {"child_index": 1})
+        qrc_rewritten = rewrite_batch_cli_args(
+            qrc_shared, {"child_index": 1}, job_token="qrc"
+        )
         assert qrc_rewritten.index("qrc") < qrc_rewritten.index(
             "--child-index"
         )
@@ -523,10 +529,12 @@ class TestBatchCliRewrite:
         opt_rewritten = rewrite_batch_cli_args(
             opt_shared,
             {"molecule_index": 2, "label": "opt_idx2"},
+            job_token="sp",
         )
         assert opt_rewritten[opt_rewritten.index("-i") + 1] == "2"
         assert "1,2,3" not in opt_rewritten
-        assert opt_rewritten[-1] == "sp"
+        assert opt_rewritten.index("-i") < opt_rewritten.index("sp")
+        assert opt_rewritten.index("--label") < opt_rewritten.index("sp")
         assert opt_rewritten[opt_rewritten.index("--label") + 1] == "opt_idx2"
 
     def test_rewrite_batch_cli_args_updates_short_label(self):
@@ -545,10 +553,13 @@ class TestBatchCliRewrite:
         rewritten = rewrite_batch_cli_args(
             shared,
             {"molecule_index": 2, "label": "mols_idx2"},
+            job_token="opt",
         )
         assert "-l" in rewritten
         assert rewritten[rewritten.index("-l") + 1] == "mols_idx2"
         assert "--label" not in rewritten
+        assert rewritten.index("-l") < rewritten.index("opt")
+        assert rewritten.index("-i") < rewritten.index("opt")
 
     def test_rewrite_batch_cli_args_child_index_preserves_parent_label(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
@@ -565,7 +576,9 @@ class TestBatchCliRewrite:
             "--mode",
             "ts",
         ]
-        rewritten = rewrite_batch_cli_args(shared, {"child_index": 3})
+        rewritten = rewrite_batch_cli_args(
+            shared, {"child_index": 3}, job_token="dias"
+        )
         assert rewritten[rewritten.index("--label") + 1] == "parent_dias"
         assert rewritten.index("dias") < rewritten.index("--child-index")
         assert rewritten[rewritten.index("--child-index") + 1] == "3"
@@ -577,14 +590,65 @@ class TestBatchCliRewrite:
         rewritten = rewrite_batch_cli_args(
             shared,
             {"molecule_index": 2, "label": "mols_opt_idx2"},
+            job_token="opt",
         )
         assert rewritten[rewritten.index("--label") + 1] == "mols_opt_idx2"
+        assert rewritten.index("--label") < rewritten.index("opt")
+        assert rewritten.index("-i") < rewritten.index("opt")
+
+    def test_rewrite_batch_cli_args_places_options_before_opt_after_flags(
+        self,
+    ):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        # Mirrors CtxObjArguments output: boolean flags precede the job token.
+        shared = [
+            "gaussian",
+            "--project",
+            "test",
+            "--filename",
+            "two.xyz",
+            "--charge",
+            "0",
+            "--multiplicity",
+            "1",
+            "--no-forces",
+            "--no-remove-solvent",
+            "opt",
+            "--skip-completed",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {
+                "filepath": "two.xyz",
+                "molecule_index": 1,
+                "label": "two_opt_idx1",
+            },
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("--index") + 1] == "1"
+        assert rewritten[rewritten.index("--label") + 1] == "two_opt_idx1"
+        assert rewritten.index("--index") < rewritten.index("opt")
+        assert rewritten.index("--label") < rewritten.index("opt")
+        assert rewritten.index("--no-forces") < rewritten.index("opt")
+        assert rewritten.index("--no-remove-solvent") < rewritten.index("opt")
 
     def test_rewrite_batch_cli_args_without_entry_keeps_shared(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 
         shared = ["gaussian", "-f", "ts.log", "qrc"]
-        assert rewrite_batch_cli_args(shared, None) == shared
+        assert rewrite_batch_cli_args(shared, None, job_token="qrc") == shared
+
+    def test_rewrite_batch_cli_args_requires_job_token_in_args(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+        with pytest.raises(ValueError, match="job token 'sp' is not present"):
+            rewrite_batch_cli_args(
+                shared,
+                {"molecule_index": 1, "label": "mols_idx1"},
+                job_token="sp",
+            )
 
     def test_prepare_batch_jobs_attaches_entries(self):
         from chemsmart.jobs.batch import (
@@ -597,8 +661,11 @@ class TestBatchCliRewrite:
             SimpleNamespace(label="mols_opt_idx1"),
             SimpleNamespace(label="mols_opt_idx2"),
         ]
-        rewrite_cli = prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
-        assert rewrite_cli is rewrite_batch_cli_args
+        rewrite_cli = prepare_batch_jobs(
+            jobs, [1, 2], job_token="opt", filepath="mols.xyz"
+        )
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": "opt"}
         assert get_job_batch_entry(jobs[0]) == {
             "filepath": "mols.xyz",
             "molecule_index": 1,
@@ -617,7 +684,10 @@ class TestBatchCliRewrite:
         )
 
         jobs = [SimpleNamespace(label="a")]
-        assert prepare_batch_jobs(jobs, [1], filepath="mols.xyz") is None
+        assert (
+            prepare_batch_jobs(jobs, [1], job_token="opt", filepath="mols.xyz")
+            is None
+        )
         assert get_job_batch_entry(jobs[0]) is None
 
     def test_prepare_batch_jobs_rejects_length_mismatch(self):
@@ -634,10 +704,46 @@ class TestBatchCliRewrite:
         with pytest.raises(
             ValueError, match="3 job\\(s\\) vs 2 molecule index"
         ):
-            prepare_batch_jobs(jobs, [1, 2], filepath="mols.xyz")
+            prepare_batch_jobs(
+                jobs, [1, 2], job_token="opt", filepath="mols.xyz"
+            )
         assert get_job_batch_entry(jobs[0]) is None
         assert get_job_batch_entry(jobs[1]) is None
         assert get_job_batch_entry(jobs[2]) is None
+
+    def test_prepare_batch_jobs_uses_explicit_replay_labels(self):
+        """Derived child labels are replayed via their pre-derivation label."""
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [
+            SimpleNamespace(label="mols_sp_idx1_smd_water"),
+            SimpleNamespace(label="mols_sp_idx2_smd_water"),
+        ]
+        prepare_batch_jobs(
+            jobs,
+            [1, 2],
+            job_token="sp",
+            filepath="mols.xyz",
+            labels=["mols_sp_idx1", "mols_sp_idx2"],
+        )
+        assert get_job_batch_entry(jobs[0])["label"] == "mols_sp_idx1"
+        assert get_job_batch_entry(jobs[1])["label"] == "mols_sp_idx2"
+
+    def test_prepare_batch_jobs_rejects_label_length_mismatch(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
+        with pytest.raises(ValueError, match="2 job\\(s\\) vs 1 label"):
+            prepare_batch_jobs(
+                jobs, [1, 2], job_token="opt", labels=["only_one"]
+            )
+        assert get_job_batch_entry(jobs[0]) is None
 
     def test_prepare_nestable_batch_jobs_injects_child_index(self):
         from chemsmart.jobs.batch import (
@@ -648,8 +754,9 @@ class TestBatchCliRewrite:
         )
 
         jobs = [SimpleNamespace(label="qf"), SimpleNamespace(label="qr")]
-        rewrite_cli = prepare_nestable_batch_jobs(jobs)
-        assert rewrite_cli is rewrite_batch_cli_args
+        rewrite_cli = prepare_nestable_batch_jobs(jobs, job_token="qrc")
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": "qrc"}
         assert get_job_batch_entry(jobs[0]) == {"child_index": 1}
         assert get_job_batch_entry(jobs[1]) == {"child_index": 2}
 
@@ -661,9 +768,7 @@ class TestBatchCliRewrite:
             "ts_qrc",
             "qrc",
         ]
-        cli_lists = resolve_array_cli_args(
-            jobs, shared, rewrite_cli=rewrite_batch_cli_args
-        )
+        cli_lists = resolve_array_cli_args(jobs, shared, rewrite_cli)
         assert cli_lists[0][cli_lists[0].index("--child-index") + 1] == "1"
         assert cli_lists[1][cli_lists[1].index("--child-index") + 1] == "2"
         assert all("qrc" in args for args in cli_lists)

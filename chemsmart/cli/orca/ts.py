@@ -156,6 +156,9 @@ def ts(
 
     # get label for the job output files
     label = ctx.obj["label"]
+    # label before the TS-search-type rename below; array tasks replay this
+    # one and re-derive the same child label
+    base_label = label
 
     # update ts_settings if any attribute is specified in cli options
     # note: only update value if user explicitly specifies a value for
@@ -277,8 +280,10 @@ def ts(
     if batch_requested:
         logger.info(f"Creating {len(job_targets)} ORCA TS jobs")
         jobs = []
+        replay_labels = []
         for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
+            replay_labels.append(f"{base_label}_idx{idx}")
             logger.info(
                 f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
             )
@@ -293,7 +298,11 @@ def ts(
             )
 
         rewrite_cli = prepare_batch_jobs(
-            jobs, molecule_indices, filepath=ctx.obj.get("filename")
+            jobs,
+            molecule_indices,
+            job_token=ctx.info_name,
+            filepath=ctx.obj.get("filename"),
+            labels=replay_labels,
         )
         return ORCABatchJob(
             jobs=jobs,

@@ -25,9 +25,9 @@ PARALLEL_HELP_SUB = (
 
 MAX_TASKS_HELP_SUB = (
     "With chemsmart sub --run-in-parallel: max concurrent scheduler array "
-    "tasks (-M for the %%M cap in SLURM ``--array=1-N%%M``; also PBS "
-    "``-J 1-N%%M``, LSF ``-J name[1-N%%M]``). Ignored under the serial "
-    "default. Each array task still uses one node (--nodes=1 on SLURM); "
+    "tasks (the %M cap in SLURM --array=1-N%M; also PBS -J 1-N%M, "
+    "LSF -J name[1-N%M]). Ignored under the serial default. Each array "
+    "task still uses one node (--nodes=1 on SLURM); "
     "-n sets cores per task."
 )
 

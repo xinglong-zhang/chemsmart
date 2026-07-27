@@ -16,6 +16,7 @@ import logging
 import os
 from contextlib import contextmanager
 from enum import Enum
+from functools import partial
 from typing import (
     Any,
     Callable,
@@ -470,12 +471,17 @@ def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
     return children
 
 
-def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
+def prepare_nestable_batch_jobs(
+    jobs: Sequence[Any],
+    *,
+    job_token: str,
+) -> RewriteCliFn:
     """Attach 1-based ``child_index`` entries for nestable array submit.
 
     Each array task rebuilds the nestable parent and selects one child via
-    ``--child-index``. Returns ``rewrite_batch_cli_args`` for
-    ``BatchJob.rewrite_cli``.
+    ``--child-index``. *job_token* is the engine job-group token of the
+    nestable command (e.g. ``qrc``/``dias``), used to place the rewritten
+    options. Returns the rewriter for ``BatchJob.rewrite_cli``.
     """
     if not jobs:
         raise ValueError("Cannot prepare nestable batch jobs: empty job list.")
@@ -483,7 +489,7 @@ def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
         {"child_index": task_id} for task_id, _ in enumerate(jobs, start=1)
     ]
     attach_batch_entries(jobs, entries)
-    return rewrite_batch_cli_args
+    return make_batch_cli_rewriter(job_token)
 
 
 # ---------------------------------------------------------------------------
@@ -492,33 +498,6 @@ def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
 
 _FILENAME_OPTIONS = frozenset({"-f", "--filename"})
 _INDEX_OPTIONS = frozenset({"-i", "--index", "--si", "--structure-index"})
-# Engine job-group tokens (gaussian/orca subcommands). Nested actions such as
-# ``batch``/``submit`` are intentionally excluded so shared options insert
-# under the engine group, not under the nested command.
-_ENGINE_JOB_TOKENS = frozenset(
-    {
-        "com",
-        "crest",
-        "dias",
-        "inp",
-        "irc",
-        "link",
-        "modred",
-        "nci",
-        "neb",
-        "opt",
-        "pka",
-        "qrc",
-        "resp",
-        "scan",
-        "sp",
-        "td",
-        "traj",
-        "ts",
-        "userjob",
-        "wbi",
-    }
-)
 
 # Known ``batch_entry`` keys mapped to CLI flags.
 # Engine-group options insert under ``gaussian``/``orca`` (before the job
@@ -561,16 +540,31 @@ def prepare_batch_jobs(
     jobs: Sequence[Any],
     molecule_indices: Optional[Sequence[int]],
     *,
+    job_token: str,
     filepath: Optional[str] = None,
+    labels: Optional[Sequence[str]] = None,
 ) -> Optional[RewriteCliFn]:
     """Attach per-task entries that narrow shared multi-molecule CLI args.
 
     Used by homogeneous fan-out (opt/sp/ts/…). Each entry keeps the shared
     ``filepath``, a single ``molecule_index`` for ``-i`` narrowing, and the
-    child ``label`` for per-task array run scripts.
+    ``--label`` value to replay in the per-task array run script.
 
-    Returns ``rewrite_batch_cli_args`` when entries were attached, else
-    ``None``. Callers should pass the return value as ``BatchJob.rewrite_cli``.
+    Args:
+        jobs: Child jobs of the batch, one per molecule index.
+        molecule_indices: 1-based molecule indices of the children.
+        job_token: Engine job-group token of the invoked command (e.g.
+            ``opt``/``sp``), used to place the rewritten options.
+        filepath: Shared input file replayed as ``-f``/``--filename``.
+        labels: ``--label`` value to replay per task. Required when the
+            command derives the child label from settings (e.g. single-point
+            solvent suffixes); it must be the label *before* that derivation
+            so replaying the task CLI reproduces the child label exactly.
+            Defaults to ``job.label``.
+
+    Returns:
+        The bound per-task CLI rewriter when entries were attached, else
+        ``None``. Callers pass the return value as ``BatchJob.rewrite_cli``.
     """
     if molecule_indices is None or len(jobs) <= 1:
         return None
@@ -579,20 +573,26 @@ def prepare_batch_jobs(
             f"Cannot prepare batch jobs: {len(jobs)} job(s) vs "
             f"{len(molecule_indices)} molecule index(es)."
         )
+    if labels is not None and len(jobs) != len(labels):
+        raise ValueError(
+            f"Cannot prepare batch jobs: {len(jobs)} job(s) vs "
+            f"{len(labels)} label(s)."
+        )
+    replay_labels = [job.label for job in jobs] if labels is None else labels
     paired_jobs: list[Any] = []
     entries: list[dict[str, Any]] = []
-    for job, index in zip(jobs, molecule_indices):
+    for job, index, replay_label in zip(jobs, molecule_indices, replay_labels):
         entry: dict[str, Any] = {"molecule_index": int(index)}
         if filepath is not None:
             entry["filepath"] = str(filepath)
-        entry["label"] = job.label
+        entry["label"] = str(replay_label)
         paired_jobs.append(job)
         entries.append(entry)
     attach_batch_entries(paired_jobs, entries)
-    return rewrite_batch_cli_args
+    return make_batch_cli_rewriter(job_token)
 
 
-def _patch_cli_option(
+def patch_cli_option(
     tokens: list[str],
     *,
     long_opt: Optional[str] = None,
@@ -641,33 +641,6 @@ def _patch_cli_option(
     tokens[insert_idx:insert_idx] = [opt, value]
 
 
-def _find_job_subcommand_token(tokens: Sequence[str]) -> Optional[str]:
-    """Return the engine job-group token (e.g. ``opt``/``qrc``)."""
-    i = 0
-    n = len(tokens)
-    for j, token in enumerate(tokens):
-        if token in ("gaussian", "orca"):
-            i = j + 1
-            break
-    while i < n:
-        token = tokens[i]
-        if token.startswith("-"):
-            # Skip option values so labels like ``ts``/``opt`` are not anchors.
-            if (
-                "=" not in token
-                and i + 1 < n
-                and not tokens[i + 1].startswith("-")
-            ):
-                i += 2
-            else:
-                i += 1
-            continue
-        if token in _ENGINE_JOB_TOKENS:
-            return token
-        i += 1
-    return None
-
-
 def _resolve_index_value(batch_entry: Mapping[str, Any]) -> Optional[str]:
     for key in ("index", "molecule_index", "fragment_index"):
         if key in batch_entry and batch_entry[key] is not None:
@@ -679,12 +652,12 @@ def _apply_batch_entry_to_cli(
     args: list[str],
     batch_entry: Mapping[str, Any],
     *,
-    insert_before: Optional[str] = None,
+    insert_before: str,
 ) -> None:
     """Map known ``batch_entry`` fields onto shared submit CLI tokens."""
     filepath = batch_entry.get("filepath")
     if filepath is not None:
-        _patch_cli_option(
+        patch_cli_option(
             args,
             long_opt="--filename",
             short_opt="-f",
@@ -696,7 +669,7 @@ def _apply_batch_entry_to_cli(
     index_value = _resolve_index_value(batch_entry)
     if index_value is not None:
         prefer_short = any(token in {"-i", "--si"} for token in args)
-        _patch_cli_option(
+        patch_cli_option(
             args,
             long_opt="--index",
             short_opt="-i",
@@ -709,7 +682,7 @@ def _apply_batch_entry_to_cli(
     for entry_key, long_opt, short_opt in _BATCH_ENTRY_ENGINE_OPTION_FIELDS:
         if entry_key not in batch_entry or batch_entry[entry_key] is None:
             continue
-        _patch_cli_option(
+        patch_cli_option(
             args,
             long_opt=long_opt,
             short_opt=short_opt,
@@ -721,7 +694,7 @@ def _apply_batch_entry_to_cli(
     for entry_key, long_opt, short_opt in _BATCH_ENTRY_NESTABLE_OPTION_FIELDS:
         if entry_key not in batch_entry or batch_entry[entry_key] is None:
             continue
-        _patch_cli_option(
+        patch_cli_option(
             args,
             long_opt=long_opt,
             short_opt=short_opt,
@@ -733,24 +706,38 @@ def _apply_batch_entry_to_cli(
 def rewrite_batch_cli_args(
     cli_args: Sequence[str],
     batch_entry: Optional[Mapping[str, Any]],
+    *,
+    job_token: str,
 ) -> list[str]:
     """Rewrite shared submit CLI args from a child ``batch_entry``.
 
     Applies shared ``batch_entry`` fields (filepath, index, label,
-    child_index). Domain-specific overlays (e.g. pKa charge/multiplicity
-    and ``batch`` → ``submit``) belong in their own rewriter that calls
-    this first.
+    child_index). Engine-group options are placed before *job_token*, the
+    engine job-group token of the invoked command (e.g. ``opt``/``qrc``), and
+    nestable options right after it. Domain-specific overlays (e.g. pKa
+    charge/multiplicity and ``batch`` → ``submit``) belong in their own
+    rewriter that calls this first.
+
+    Raises:
+        ValueError: If *job_token* is absent from *cli_args*, which would
+            place the rewritten options under the wrong command.
     """
     if not batch_entry:
         return list(cli_args)
 
     args = list(cli_args)
-    _apply_batch_entry_to_cli(
-        args,
-        batch_entry,
-        insert_before=_find_job_subcommand_token(args),
-    )
+    if job_token not in args:
+        raise ValueError(
+            f"Cannot rewrite batch CLI args: job token {job_token!r} is "
+            f"not present in {args!r}."
+        )
+    _apply_batch_entry_to_cli(args, batch_entry, insert_before=job_token)
     return args
+
+
+def make_batch_cli_rewriter(job_token: str) -> RewriteCliFn:
+    """Return ``rewrite_batch_cli_args`` bound to *job_token*."""
+    return partial(rewrite_batch_cli_args, job_token=job_token)
 
 
 def resolve_array_cli_args(

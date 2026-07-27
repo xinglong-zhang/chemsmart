@@ -191,6 +191,24 @@ def process_pipeline(ctx, *args, **kwargs):
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
+    def _invoked_job_token(ctx):
+        """Return the engine job-group token of the invoked command."""
+        names = [s["name"] for s in ctx.obj["subcommand"]]
+        job_token = next(
+            (
+                names[i + 1]
+                for i, name in enumerate(names)
+                if name in ("gaussian", "orca") and i + 1 < len(names)
+            ),
+            None,
+        )
+        if job_token is None:
+            raise ValueError(
+                "Could not determine the engine job-group token from the "
+                f"invoked commands {names!r}."
+            )
+        return job_token
+
     def _process_nestable_array_job(parent_job):
         """Expand nestable children and submit as a scheduler array.
 
@@ -209,7 +227,9 @@ def process_pipeline(ctx, *args, **kwargs):
         program = (parent_job.PROGRAM or "").lower()
         batch_cls = ORCABatchJob if program == "orca" else GaussianBatchJob
 
-        rewrite_cli = prepare_nestable_batch_jobs(children)
+        rewrite_cli = prepare_nestable_batch_jobs(
+            children, job_token=_invoked_job_token(ctx)
+        )
         batch_job = batch_cls(
             jobs=children,
             label=f"{parent_job.label}_array",

@@ -848,7 +848,7 @@ class Server(RegistryMixin):
         throttle = policy.array_throttle(len(batch_job.jobs))
         logger.info(
             "Submitting BatchJob %r as array with %s task(s), "
-            "concurrency throttle %%s=%s",
+            "concurrency throttle %s",
             batch_job.label,
             len(batch_job.jobs),
             throttle,

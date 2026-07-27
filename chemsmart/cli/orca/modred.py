@@ -119,7 +119,10 @@ def modred(
         logger.debug(f"Created {len(jobs)} ORCA modred jobs")
 
         rewrite_cli = prepare_batch_jobs(
-            jobs, molecule_indices, filepath=ctx.obj.get("filename")
+            jobs,
+            molecule_indices,
+            job_token=ctx.info_name,
+            filepath=ctx.obj.get("filename"),
         )
         return ORCABatchJob(
             jobs=jobs,

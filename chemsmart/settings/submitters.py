@@ -120,19 +120,18 @@ class RunScript:
 class ArrayRunScript:
     """Shared array run script that selects CLI args by scheduler task id.
 
-    Writes ``chemsmart_run_array.py`` with a 1-based ``TASK_CLI`` map. Each
-    array task resolves ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` /
-    ``LSB_JOBINDEX`` and runs the matching CLI list.
+    Writes a per-array ``TASK_CLI`` map. Each array task resolves
+    ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX`` and runs
+    the matching CLI list.
     """
 
-    FILENAME = "chemsmart_run_array.py"
-
-    def __init__(self, task_cli):
+    def __init__(self, task_cli, filename):
         """
         Args:
             task_cli: Mapping of 1-based task id (int) to CLI arg lists.
+            filename: Path for this array's run script.
         """
-        self.filename = self.FILENAME
+        self.filename = filename
         self.task_cli = {int(k): list(v) for k, v in task_cli.items()}
 
     def write(self):
@@ -362,6 +361,11 @@ class Submitter(RegistryMixin):
         return f"{label}_array"
 
     @property
+    def array_run_script(self):
+        """Per-array run script filename (avoids clobbering concurrent arrays)."""
+        return f"chemsmart_run_array_{self.array_log_stem}.py"
+
+    @property
     def array_stdout_file(self):
         """Shared scheduler stdout log for all array tasks."""
         return f"{self.array_log_stem}.out"
@@ -434,8 +438,9 @@ class Submitter(RegistryMixin):
     ):
         """Write scripts for a scheduler array job over *jobs*.
 
-        Creates one shared run script (``chemsmart_run_array.py``) with a
-        1-based task-id → CLI map, and one array submit script
+        Creates one shared run script
+        (``chemsmart_run_array_<array_log_stem>.py``) with a 1-based
+        task-id → CLI map, and one array submit script
         (``chemsmart_sub_array_<label>.sh``). Each array task runs the shared
         script, which selects the matching CLI list from ``TASK_CLI`` using
         the scheduler array task id.
@@ -489,9 +494,9 @@ class Submitter(RegistryMixin):
         return {task_id: list(shared) for task_id in range(1, num_jobs + 1)}
 
     def _write_array_runscripts(self, jobs, cli_args):
-        """Write shared ``chemsmart_run_array.py`` with a TASK_CLI map."""
+        """Write the per-array run script with a TASK_CLI map."""
         task_cli = self._normalize_array_task_cli(jobs, cli_args)
-        runscript = ArrayRunScript(task_cli)
+        runscript = ArrayRunScript(task_cli, self.array_run_script)
         logger.debug(
             "Writing shared array run script %s for %s task(s)",
             runscript.filename,
@@ -530,7 +535,7 @@ class Submitter(RegistryMixin):
 
         Exports the native 1-based scheduler task id
         (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``) as
-        ``TASK_ID`` for log headers; ``chemsmart_run_array.py`` reads the
+        ``TASK_ID`` for log headers; the per-array run script reads the
         same environment variables to select the per-task CLI.
 
         Each task buffers its stdout/stderr, then emits a headed block to
@@ -538,6 +543,7 @@ class Submitter(RegistryMixin):
         tasks do not interleave their output.
         """
         lock = self.array_log_lock_file
+        run_script = self.array_run_script
 
         f.write("# Array job execution\n")
         f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
@@ -557,9 +563,7 @@ class Submitter(RegistryMixin):
         f.write("TMP_ERR=$(mktemp)\n")
         f.write('trap \'rm -f "$TMP_OUT" "$TMP_ERR"\' EXIT\n\n')
         f.write("set +e\n")
-        f.write(
-            f"python {ArrayRunScript.FILENAME} " '>"$TMP_OUT" 2>"$TMP_ERR"\n'
-        )
+        f.write(f'python {run_script} >"$TMP_OUT" 2>"$TMP_ERR"\n')
         f.write("status=$?\n")
         f.write("set -e\n\n")
         f.write(
@@ -1147,6 +1151,7 @@ class SLFSubmitter(Submitter):
         f.write(f"#BSUB -J {self.job.label}\n")
         f.write(f"#BSUB -o {self.job.label}.bsubout\n")
         f.write(f"#BSUB -e {self.job.label}.bsuberr\n")
+        project_number = None
         if user_settings is not None:
             project_number = user_settings.data.get("PROJECT")
         if project_number is not None:
@@ -1189,6 +1194,7 @@ class SLFSubmitter(Submitter):
         # serialized with flock headers in ``_write_array_job_command``.
         f.write(f"#BSUB -o {self.array_stdout_file}\n")
         f.write(f"#BSUB -e {self.array_stderr_file}\n")
+        project_number = None
         if user_settings is not None:
             project_number = user_settings.data.get("PROJECT")
         if project_number is not None:

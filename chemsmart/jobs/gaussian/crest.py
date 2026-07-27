@@ -34,12 +34,8 @@ class GaussianCrestJob(NestableJobMixin, GaussianJob):
 
     Properties:
         num_conformers (int): Total number of conformers in the ensemble.
-        last_run_job_index (int): Index of the first incomplete job; equals
-            total number if all jobs are complete.
         all_conformers_jobs (list[GaussianGeneralJob]): Prepared jobs for
             all conformers.
-        incomplete_conformers_jobs (list[GaussianGeneralJob]): Prepared
-            jobs that are not yet complete.
     """
 
     TYPE = "g16crest"
