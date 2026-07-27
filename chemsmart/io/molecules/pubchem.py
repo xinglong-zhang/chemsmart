@@ -184,7 +184,7 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
 
         try:
             raw_pubchem = search_pubchem_raw(
-                search, field, suffix="3d", timeout=10
+                search, field, suffix="display", timeout=10
             )
         except RequestsHTTPError as e:
             code = getattr(getattr(e, "response", None), "status_code", None)
