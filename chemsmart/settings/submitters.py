@@ -351,8 +351,14 @@ class Submitter(RegistryMixin):
 
     @property
     def array_log_stem(self):
-        """Basename (no suffix) for the shared array stdout/stderr logs."""
+        """Basename for array job-name and shared stdout/stderr logs.
+
+        Appends ``_array`` once. If ``array_label`` already ends with
+        ``_array`` (e.g. nestable ``{parent}_array``), it is used as-is.
+        """
         label = self.array_label if self.array_label is not None else "array"
+        if label.endswith("_array"):
+            return label
         return f"{label}_array"
 
     @property
@@ -435,7 +441,7 @@ class Submitter(RegistryMixin):
         ``BatchJob.run()`` can enter ``array_task`` mode.
 
         Scheduler stdout/stderr are shared across all tasks
-        (``<label>_array.slurmout`` / ``.slurmerr``, or PBS/LSF equivalents).
+        (``<array_log_stem>.slurmout`` / ``.slurmerr``, or PBS/LSF equivalents).
         Each task buffers its output and appends a headed block under flock
         so concurrent tasks do not interleave.
 
@@ -922,9 +928,8 @@ class PBSSubmitter(Submitter):
         ``#PBS -J 1-N%M`` (maximum concurrent tasks).
         """
         num_jobs = len(self.jobs) if self.jobs is not None else 1
-        label = self.array_label if self.array_label is not None else "array"
 
-        f.write(f"#PBS -N {label}_array\n")
+        f.write(f"#PBS -N {self.array_log_stem}\n")
         # One shared stdout/stderr for all array tasks; task blocks are
         # serialized with flock headers in ``_write_array_job_command``.
         f.write(f"#PBS -o {self.array_stdout_file}\n")
@@ -1037,9 +1042,8 @@ class SLURMSubmitter(Submitter):
         ``--array=1-N%M`` (maximum concurrent tasks), not nodes per task.
         """
         num_jobs = len(self.jobs) if self.jobs is not None else 1
-        label = self.array_label if self.array_label is not None else "array"
 
-        f.write(f"#SBATCH --job-name={label}_array\n")
+        f.write(f"#SBATCH --job-name={self.array_log_stem}\n")
         # One shared stdout/stderr for all array tasks; task blocks are
         # serialized with flock headers in ``_write_array_job_command``.
         f.write(f"#SBATCH --output={self.array_stdout_file}\n")
@@ -1175,14 +1179,12 @@ class SLFSubmitter(Submitter):
         ``#BSUB -J name[1-N%M]`` (maximum concurrent tasks).
         """
         num_jobs = len(self.jobs) if self.jobs is not None else 1
-        label = self.array_label if self.array_label is not None else "array"
+        stem = self.array_log_stem
 
         if array_concurrency is not None:
-            f.write(
-                f"#BSUB -J {label}_array[1-{num_jobs}%{array_concurrency}]\n"
-            )
+            f.write(f"#BSUB -J {stem}[1-{num_jobs}%{array_concurrency}]\n")
         else:
-            f.write(f"#BSUB -J {label}_array[1-{num_jobs}]\n")
+            f.write(f"#BSUB -J {stem}[1-{num_jobs}]\n")
         # One shared stdout/stderr for all array tasks; task blocks are
         # serialized with flock headers in ``_write_array_job_command``.
         f.write(f"#BSUB -o {self.array_stdout_file}\n")

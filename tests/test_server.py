@@ -201,6 +201,7 @@ class TestArraySubmitInfrastructure:
         ).read_text()
         assert "#SBATCH --array=1-4%2\n" in submit_text
         assert "--nodes=1 --ntasks-per-node=16 --mem=32G" in submit_text
+        assert "#SBATCH --job-name=mols_batch_array\n" in submit_text
         assert "#SBATCH --output=mols_batch_array.slurmout\n" in submit_text
         assert "#SBATCH --error=mols_batch_array.slurmerr\n" in submit_text
         assert "#SBATCH --open-mode=append\n" in submit_text
