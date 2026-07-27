@@ -353,8 +353,8 @@ class Submitter(RegistryMixin):
     def array_log_stem(self):
         """Basename for array job-name and shared stdout/stderr logs.
 
-        Appends ``_array`` once. If ``array_label`` already ends with
-        ``_array`` (e.g. nestable ``{parent}_array``), it is used as-is.
+        Uses ``array_label`` when it already ends with ``_array``; otherwise
+        appends ``_array``.
         """
         label = self.array_label if self.array_label is not None else "array"
         if label.endswith("_array"):
@@ -437,8 +437,8 @@ class Submitter(RegistryMixin):
         Creates one shared run script (``chemsmart_run_array.py``) with a
         1-based task-id → CLI map, and one array submit script
         (``chemsmart_sub_array_<label>.sh``). Each array task runs the shared
-        script under the scheduler's array task id environment so
-        ``BatchJob.run()`` can enter ``array_task`` mode.
+        script, which selects the matching CLI list from ``TASK_CLI`` using
+        the scheduler array task id.
 
         Scheduler stdout/stderr are shared across all tasks
         (``<array_log_stem>.slurmout`` / ``.slurmerr``, or PBS/LSF equivalents).

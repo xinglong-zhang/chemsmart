@@ -10,9 +10,6 @@ of engine-specific jobs, plus submit-time helpers for scheduler arrays:
 - ``batch_entry`` attach and per-task CLI rewrite for array runscripts
 - nestable single-child invoke via ``--child-index`` / lazy child factories
 - ``NestableJobMixin`` shared ``get_array_child_job`` / ``get_array_child_jobs`` API
-
-Cluster concurrency is via ``chemsmart sub`` scheduler arrays, not
-in-process multi-node fan-out.
 """
 
 import logging
@@ -225,11 +222,9 @@ class BatchJob(Job):
         """Run the single child selected by the scheduler array task id.
 
         ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX`` are
-        treated as 1-based indexes into ``self.jobs``.
-
-        Array-task env vars are cleared around ``child.run()`` so nested
-        serial batches and legacy nestable env fallback do not reuse the
-        outer task id.
+        treated as 1-based indexes into ``self.jobs``. Array-task environment
+        variables are cleared around ``child.run()`` so nested serial
+        ``BatchJob.run()`` stays in ``local_batch`` mode.
         """
         task_id = resolve_array_task_id()
         if task_id is None:
@@ -259,7 +254,6 @@ class BatchJob(Job):
             *self._runner_resources(),
             child.label,
         )
-        # Keep nested BatchJob.run() / legacy nestable fallback off this task id.
         with cleared_array_task_env():
             outcome = self._submit_job(child, **kwargs)
         self._finish_batch_run([outcome])
@@ -339,11 +333,7 @@ class BatchJob(Job):
             }
 
     def _build_jobrunner(self, job: Job) -> Any:
-        """Copy the batch runner onto *job* with full resource allocation.
-
-        Serial local batches do not split ``num_cores`` or ``mem_gb`` across
-        children.
-        """
+        """Propagate the batch runner onto *job* with full resources."""
         return Job._propagate_runner(self.jobrunner, job)
 
     def _write_outcome_logs(self, outcomes: Sequence[dict[str, Any]]) -> None:
@@ -399,16 +389,9 @@ def run_child_jobs_as_batch(
     parent: Job,
     label_suffix: str = "_batch",
 ) -> BatchJobT:
-    """Run sibling jobs through an engine ``BatchJob``.
+    """Run sibling jobs serially through an engine ``BatchJob``.
 
-    Nested children always run serially, each with the parent jobrunner's
-    full ``num_cores`` and ``mem_gb``. Concurrent nested children are not
-    used. Independent parent jobs may still run concurrently when submitted
-    as a top-level batch via ``chemsmart sub``.
-
-    Scheduler array / ``--child-index`` selection is handled at the nestable
-    parent ``_run`` boundary via ``run_nestable_job``, not in this helper.
-
+    Each child uses the parent jobrunner's full ``num_cores`` and ``mem_gb``.
     Returns the completed ``BatchJob`` instance.
     """
     runner = parent.jobrunner
@@ -490,13 +473,14 @@ def get_nestable_array_children(job: Any) -> Optional[list[Job]]:
 def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
     """Attach 1-based ``child_index`` entries for nestable array submit.
 
-    Returns ``rewrite_batch_cli_args`` for ``BatchJob.rewrite_cli``.
+    Each array task rebuilds the nestable parent and selects one child via
+    ``--child-index``. Returns ``rewrite_batch_cli_args`` for
+    ``BatchJob.rewrite_cli``.
     """
     if not jobs:
         raise ValueError("Cannot prepare nestable batch jobs: empty job list.")
     entries = [
-        {"child_index": task_id, "label": job.label}
-        for task_id, job in enumerate(jobs, start=1)
+        {"child_index": task_id} for task_id, _ in enumerate(jobs, start=1)
     ]
     attach_batch_entries(jobs, entries)
     return rewrite_batch_cli_args
@@ -722,8 +706,7 @@ def _apply_batch_entry_to_cli(
             insert_before=insert_before,
         )
 
-    # Nestable flags belong on the job command (after ``dias``/``qrc``/…),
-    # not on the engine group where Click would reject them.
+    # Nestable options insert after the job-group token (``dias``/``qrc``/…).
     for entry_key, long_opt, short_opt in _BATCH_ENTRY_NESTABLE_OPTION_FIELDS:
         if entry_key not in batch_entry or batch_entry[entry_key] is None:
             continue

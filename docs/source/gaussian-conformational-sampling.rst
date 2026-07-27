@@ -66,8 +66,8 @@ Run modred optimization with constraints:
 .. note::
 
    Nested conformer jobs inside one CREST parent run **serially**, each with the parent job's full ``-n`` / memory
-   allocation. Concurrent nested conformers are not used. Independent CREST parents (separate molecules) may still run
-   concurrently when submitted as separate scheduler jobs via ``chemsmart sub``.
+   allocation. Independent CREST parents (separate molecules) may still run concurrently when submitted as separate
+   scheduler jobs via ``chemsmart sub``.
 
 Examples
 ========

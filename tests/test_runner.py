@@ -492,7 +492,7 @@ class TestBatchCliRewrite:
         # Must land on the nestable command, not under gaussian options.
         assert rewritten.index("qrc") < rewritten.index("--child-index")
 
-    def test_rewrite_batch_cli_args_child_index_after_dias(self):
+    def test_rewrite_batch_cli_args_child_index_preserves_parent_label(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 
         shared = [
@@ -507,14 +507,8 @@ class TestBatchCliRewrite:
             "--mode",
             "ts",
         ]
-        rewritten = rewrite_batch_cli_args(
-            shared,
-            {"child_index": 3, "label": "parent_dias_child3"},
-        )
-        assert (
-            rewritten[rewritten.index("--label") + 1] == "parent_dias_child3"
-        )
-        assert rewritten.index("--label") < rewritten.index("dias")
+        rewritten = rewrite_batch_cli_args(shared, {"child_index": 3})
+        assert rewritten[rewritten.index("--label") + 1] == "parent_dias"
         assert rewritten.index("dias") < rewritten.index("--child-index")
         assert rewritten[rewritten.index("--child-index") + 1] == "3"
 
@@ -598,10 +592,17 @@ class TestBatchCliRewrite:
         jobs = [SimpleNamespace(label="qf"), SimpleNamespace(label="qr")]
         rewrite_cli = prepare_nestable_batch_jobs(jobs)
         assert rewrite_cli is rewrite_batch_cli_args
-        assert get_job_batch_entry(jobs[0])["child_index"] == 1
-        assert get_job_batch_entry(jobs[1])["child_index"] == 2
+        assert get_job_batch_entry(jobs[0]) == {"child_index": 1}
+        assert get_job_batch_entry(jobs[1]) == {"child_index": 2}
 
-        shared = ["gaussian", "-f", "ts.log", "qrc"]
+        shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "ts_qrc",
+            "qrc",
+        ]
         cli_lists = resolve_array_cli_args(
             jobs, shared, rewrite_cli=rewrite_batch_cli_args
         )
@@ -611,6 +612,9 @@ class TestBatchCliRewrite:
         assert all(
             args.index("qrc") < args.index("--child-index")
             for args in cli_lists
+        )
+        assert all(
+            args[args.index("--label") + 1] == "ts_qrc" for args in cli_lists
         )
 
 

@@ -8,8 +8,7 @@ logger = logging.getLogger(__name__)
 _DEPRECATED_MAX_TASKS_WARNINGS = {
     "n": "-N is deprecated; use -M/--max-tasks.",
     "num_nodes": (
-        "--num-nodes and --number-of-nodes are deprecated; use -M/--max-tasks. "
-        "They do not set server.num_nodes."
+        "--num-nodes and --number-of-nodes are deprecated; use -M/--max-tasks."
     ),
 }
 _deprecated_max_tasks_warnings_emitted: set[str] = set()
@@ -34,7 +33,7 @@ MAX_TASKS_HELP_SUB = (
 
 MAX_TASKS_N_ALIAS_HELP = "Deprecated; use -M/--max-tasks."
 
-NUM_NODES_MAX_TASKS_ALIAS_HELP = "Deprecated; use -M/--max-tasks (does not request multiple nodes per task)."
+NUM_NODES_MAX_TASKS_ALIAS_HELP = "Deprecated; use -M/--max-tasks."
 
 MAX_TASKS_HELP_RUN = (
     "Unused for chemsmart run array throttling (run is serial). "

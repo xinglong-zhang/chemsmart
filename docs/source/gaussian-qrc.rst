@@ -23,10 +23,10 @@ CHEMSMART automates this process, taking a TS frequency calculation output and d
 .. note::
 
    Forward and reverse QRC children inside one parent job run **serially**, each with the parent job's full
-   ``--num-cores`` / memory allocation. Concurrent nested QRC children are not used. With ``chemsmart sub
-   --run-in-parallel``, the forward and reverse legs are submitted as separate scheduler array tasks and may run
-   concurrently on the cluster, each still receiving the full core and memory allocation. Independent QRC parents may
-   still run concurrently when submitted as separate scheduler jobs via ``chemsmart sub``.
+   ``--num-cores`` / memory allocation. With ``chemsmart sub --run-in-parallel``, the forward and reverse legs are
+   submitted as separate scheduler array tasks and may run concurrently on the cluster, each still receiving the full
+   core and memory allocation. Independent QRC parents may still run concurrently when submitted as separate scheduler
+   jobs via ``chemsmart sub``.
 
 .. code:: bash
 
