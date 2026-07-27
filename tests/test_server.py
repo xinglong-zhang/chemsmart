@@ -199,9 +199,19 @@ class TestArraySubmitInfrastructure:
         ).read_text()
         assert "#SBATCH --array=1-4%2\n" in submit_text
         assert "--nodes=1 --ntasks-per-node=16 --mem=32G" in submit_text
+        assert "#SBATCH --output=mols_batch_array.slurmout\n" in submit_text
+        assert "#SBATCH --error=mols_batch_array.slurmerr\n" in submit_text
+        assert "#SBATCH --open-mode=append\n" in submit_text
+        assert "%a.slurmout" not in submit_text
         assert "TASK_ID=$SLURM_ARRAY_TASK_ID" in submit_text
         assert "SLURM_ARRAY_TASK_ID + 1" not in submit_text
         assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+        assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
+        assert "===== END array task ${TASK_ID} (exit=${status}) =====" in (
+            submit_text
+        )
+        assert "flock 9 || exit 1" in submit_text
+        assert ".mols_batch_array.loglock" in submit_text
 
         run_text = (tmp_path / "chemsmart_run_array_2.py").read_text()
         assert "gaussian" in run_text
@@ -323,11 +333,13 @@ class TestArraySubmitInfrastructure:
             tmp_path / "chemsmart_sub_array_mols_batch.sh"
         ).read_text()
         assert "#PBS -J 1-4%2\n" in submit_text
-        assert (
-            "#PBS -o mols_batch_array_${PBS_ARRAYID}.pbsout\n" in submit_text
-        )
+        assert "#PBS -o mols_batch_array.pbsout\n" in submit_text
+        assert "#PBS -e mols_batch_array.pbserr\n" in submit_text
+        assert "${PBS_ARRAYID}.pbsout" not in submit_text
         assert "TASK_ID=$PBS_ARRAYID" in submit_text
         assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+        assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
+        assert "flock 9 || exit 1" in submit_text
 
     def test_lsf_write_array_job_creates_array_directives(
         self, tmp_path, monkeypatch
@@ -366,8 +378,12 @@ class TestArraySubmitInfrastructure:
             tmp_path / "chemsmart_sub_array_pka_batch.sh"
         ).read_text()
         assert "#BSUB -J pka_batch_array[1-3%1]\n" in submit_text
-        assert "#BSUB -o pka_batch_array_%I.bsubout\n" in submit_text
+        assert "#BSUB -o pka_batch_array.bsubout\n" in submit_text
+        assert "#BSUB -e pka_batch_array.bsuberr\n" in submit_text
+        assert "%I.bsubout" not in submit_text
         assert "TASK_ID=$LSB_JOBINDEX" in submit_text
+        assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
+        assert "flock 9 || exit 1" in submit_text
 
 
 class TestSchedulerArrayPolicy:

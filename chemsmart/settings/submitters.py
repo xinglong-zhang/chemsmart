@@ -243,6 +243,27 @@ class Submitter(RegistryMixin):
         return "chemsmart_sub_array.sh"
 
     @property
+    def array_log_stem(self):
+        """Basename (no suffix) for the shared array stdout/stderr logs."""
+        label = self.array_label if self.array_label is not None else "array"
+        return f"{label}_array"
+
+    @property
+    def array_stdout_file(self):
+        """Shared scheduler stdout log for all array tasks."""
+        return f"{self.array_log_stem}.out"
+
+    @property
+    def array_stderr_file(self):
+        """Shared scheduler stderr log for all array tasks."""
+        return f"{self.array_log_stem}.err"
+
+    @property
+    def array_log_lock_file(self):
+        """Lock file used to serialize concurrent array log appends."""
+        return f".{self.array_log_stem}.loglock"
+
+    @property
     def run_script(self):
         """
         Get the run script filename.
@@ -305,6 +326,11 @@ class Submitter(RegistryMixin):
         (``chemsmart_sub_array_<label>.sh``). Each array task runs its script
         under the scheduler's array task id environment so
         ``BatchJob.run()`` can enter ``array_task`` mode.
+
+        Scheduler stdout/stderr are shared across all tasks
+        (``<label>_array.slurmout`` / ``.slurmerr``, or PBS/LSF equivalents).
+        Each task buffers its output and appends a headed block under flock
+        so concurrent tasks do not interleave.
 
         Args:
             jobs: Child jobs in array order (task id 1 → ``jobs[0]``).
@@ -388,7 +414,13 @@ class Submitter(RegistryMixin):
         Uses the native 1-based scheduler task id
         (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``)
         to select ``chemsmart_run_array_<TASK_ID>.py``.
+
+        Each task buffers its stdout/stderr, then emits a headed block to
+        the shared scheduler logs under an exclusive flock so concurrent
+        tasks do not interleave their output.
         """
+        lock = self.array_log_lock_file
+
         f.write("# Array job execution\n")
         f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
         f.write("  TASK_ID=$SLURM_ARRAY_TASK_ID\n")
@@ -403,7 +435,39 @@ class Submitter(RegistryMixin):
         )
         f.write("  exit 1\n")
         f.write("fi\n\n")
-        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
+        f.write("TMP_OUT=$(mktemp)\n")
+        f.write("TMP_ERR=$(mktemp)\n")
+        f.write('trap \'rm -f "$TMP_OUT" "$TMP_ERR"\' EXIT\n\n')
+        f.write("set +e\n")
+        f.write(
+            "python chemsmart_run_array_${TASK_ID}.py "
+            '>"$TMP_OUT" 2>"$TMP_ERR"\n'
+        )
+        f.write("status=$?\n")
+        f.write("set -e\n\n")
+        f.write(
+            "# Serialize headed task blocks into shared array logs "
+            f"(lock: {lock})\n"
+        )
+        f.write("(\n")
+        f.write("  flock 9 || exit 1\n")
+        f.write('  echo "===== BEGIN array task ${TASK_ID} ====="\n')
+        f.write('  cat "$TMP_OUT"\n')
+        f.write(
+            '  echo "===== END array task ${TASK_ID} '
+            '(exit=${status}) ====="\n'
+        )
+        f.write(f') 9>>"{lock}"\n\n')
+        f.write("(\n")
+        f.write("  flock 9 || exit 1\n")
+        f.write('  echo "===== BEGIN array task ${TASK_ID} =====" >&2\n')
+        f.write('  cat "$TMP_ERR" >&2\n')
+        f.write(
+            '  echo "===== END array task ${TASK_ID} '
+            '(exit=${status}) =====" >&2\n'
+        )
+        f.write(f') 9>>"{lock}"\n\n')
+        f.write("exit ${status}\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -680,6 +744,16 @@ class PBSSubmitter(Submitter):
         """
         super().__init__(name=name, job=job, server=server, **kwargs)
 
+    @property
+    def array_stdout_file(self):
+        """Shared PBS stdout log for all array tasks."""
+        return f"{self.array_log_stem}.pbsout"
+
+    @property
+    def array_stderr_file(self):
+        """Shared PBS stderr log for all array tasks."""
+        return f"{self.array_log_stem}.pbserr"
+
     def _write_scheduler_options(self, f):
         """
         Write PBS-specific scheduler directives.
@@ -736,8 +810,10 @@ class PBSSubmitter(Submitter):
         label = self.array_label if self.array_label is not None else "array"
 
         f.write(f"#PBS -N {label}_array\n")
-        f.write(f"#PBS -o {label}_array_${{PBS_ARRAYID}}.pbsout\n")
-        f.write(f"#PBS -e {label}_array_${{PBS_ARRAYID}}.pbserr\n")
+        # One shared stdout/stderr for all array tasks; task blocks are
+        # serialized with flock headers in ``_write_array_job_command``.
+        f.write(f"#PBS -o {self.array_stdout_file}\n")
+        f.write(f"#PBS -e {self.array_stderr_file}\n")
         if array_concurrency is not None:
             f.write(f"#PBS -J 1-{num_jobs}%{array_concurrency}\n")
         else:
@@ -796,6 +872,16 @@ class SLURMSubmitter(Submitter):
         """
         super().__init__(name=name, job=job, server=server, **kwargs)
 
+    @property
+    def array_stdout_file(self):
+        """Shared SLURM stdout log for all array tasks."""
+        return f"{self.array_log_stem}.slurmout"
+
+    @property
+    def array_stderr_file(self):
+        """Shared SLURM stderr log for all array tasks."""
+        return f"{self.array_log_stem}.slurmerr"
+
     def _write_scheduler_options(self, f):
         """
         Write SLURM-specific scheduler directives.
@@ -840,8 +926,11 @@ class SLURMSubmitter(Submitter):
         label = self.array_label if self.array_label is not None else "array"
 
         f.write(f"#SBATCH --job-name={label}_array\n")
-        f.write(f"#SBATCH --output={label}_array_%a.slurmout\n")
-        f.write(f"#SBATCH --error={label}_array_%a.slurmerr\n")
+        # One shared stdout/stderr for all array tasks; task blocks are
+        # serialized with flock headers in ``_write_array_job_command``.
+        f.write(f"#SBATCH --output={self.array_stdout_file}\n")
+        f.write(f"#SBATCH --error={self.array_stderr_file}\n")
+        f.write("#SBATCH --open-mode=append\n")
 
         if array_concurrency is not None:
             f.write(f"#SBATCH --array=1-{num_jobs}%{array_concurrency}\n")
@@ -916,6 +1005,16 @@ class SLFSubmitter(Submitter):
         """
         super().__init__(name=name, job=job, server=server, **kwargs)
 
+    @property
+    def array_stdout_file(self):
+        """Shared LSF stdout log for all array tasks."""
+        return f"{self.array_log_stem}.bsubout"
+
+    @property
+    def array_stderr_file(self):
+        """Shared LSF stderr log for all array tasks."""
+        return f"{self.array_log_stem}.bsuberr"
+
     def _write_scheduler_options(self, f):
         """
         Write LSF-specific scheduler directives.
@@ -969,8 +1068,10 @@ class SLFSubmitter(Submitter):
             )
         else:
             f.write(f"#BSUB -J {label}_array[1-{num_jobs}]\n")
-        f.write(f"#BSUB -o {label}_array_%I.bsubout\n")
-        f.write(f"#BSUB -e {label}_array_%I.bsuberr\n")
+        # One shared stdout/stderr for all array tasks; task blocks are
+        # serialized with flock headers in ``_write_array_job_command``.
+        f.write(f"#BSUB -o {self.array_stdout_file}\n")
+        f.write(f"#BSUB -e {self.array_stderr_file}\n")
         if user_settings is not None:
             project_number = user_settings.data.get("PROJECT")
         if project_number is not None:
