@@ -190,9 +190,11 @@ class TestArraySubmitInfrastructure:
         )
 
         assert (tmp_path / "chemsmart_sub_array_mols_batch.sh").exists()
+        assert (tmp_path / "chemsmart_run_array.py").exists()
         for task_id in range(1, 5):
-            assert (tmp_path / f"chemsmart_run_array_{task_id}.py").exists()
-        assert not (tmp_path / "chemsmart_run_array_0.py").exists()
+            assert not (
+                tmp_path / f"chemsmart_run_array_{task_id}.py"
+            ).exists()
 
         submit_text = (
             tmp_path / "chemsmart_sub_array_mols_batch.sh"
@@ -205,7 +207,8 @@ class TestArraySubmitInfrastructure:
         assert "%a.slurmout" not in submit_text
         assert "TASK_ID=$SLURM_ARRAY_TASK_ID" in submit_text
         assert "SLURM_ARRAY_TASK_ID + 1" not in submit_text
-        assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+        assert "python chemsmart_run_array.py" in submit_text
+        assert "python chemsmart_run_array_${TASK_ID}.py" not in submit_text
         assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
         assert "===== END array task ${TASK_ID} (exit=${status}) =====" in (
             submit_text
@@ -213,9 +216,49 @@ class TestArraySubmitInfrastructure:
         assert "flock 9 || exit 1" in submit_text
         assert ".mols_batch_array.loglock" in submit_text
 
-        run_text = (tmp_path / "chemsmart_run_array_2.py").read_text()
+        run_text = (tmp_path / "chemsmart_run_array.py").read_text()
+        assert "TASK_CLI" in run_text
         assert "gaussian" in run_text
         assert "mols.xyz" in run_text
+        assert "SLURM_ARRAY_TASK_ID" in run_text
+        assert "1:" in run_text and "4:" in run_text
+
+    def test_slurm_write_array_job_embeds_per_job_cli_args(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=16,
+            MEM_GB=32,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+        )
+        children = self._array_children(tmp_path, count=2)
+        submitter = SLURMSubmitter(job=children[0], server=server)
+        per_job_cli = [
+            ["gaussian", "-f", "1a.xyz", "-l", "1a", "pka", "submit"],
+            ["gaussian", "-f", "2a.xyz", "-l", "2a", "pka", "submit"],
+        ]
+
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=2,
+            cli_args=per_job_cli,
+            batch_label="pka_batch",
+        )
+
+        run_text = (tmp_path / "chemsmart_run_array.py").read_text()
+        assert "1a.xyz" in run_text
+        assert "2a.xyz" in run_text
+        assert "TASK_CLI" in run_text
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_pka_batch.sh"
+        ).read_text()
+        assert "python chemsmart_run_array.py" in submit_text
 
     def test_submit_array_job_test_mode_writes_without_queueing(
         self, tmp_path, monkeypatch
@@ -271,14 +314,22 @@ class TestArraySubmitInfrastructure:
         )
 
         assert (tmp_path / "chemsmart_sub_array_pka_batch.sh").exists()
-        assert (tmp_path / "chemsmart_run_array_1.py").exists()
-        assert (tmp_path / "chemsmart_run_array_2.py").exists()
+        assert (tmp_path / "chemsmart_run_array.py").exists()
+        assert not (tmp_path / "chemsmart_run_array_1.py").exists()
+        assert not (tmp_path / "chemsmart_run_array_2.py").exists()
         assert submitted == []
 
         submit_text = (
             tmp_path / "chemsmart_sub_array_pka_batch.sh"
         ).read_text()
         assert "#SBATCH --array=1-2%1\n" in submit_text
+        assert "python chemsmart_run_array.py" in submit_text
+
+        run_text = (tmp_path / "chemsmart_run_array.py").read_text()
+        assert "TASK_CLI" in run_text
+        assert "1:" in run_text and "2:" in run_text
+        assert "gaussian" in run_text
+        assert "opt" in run_text
 
     @staticmethod
     def _array_children(tmp_path, count=4):
@@ -337,9 +388,11 @@ class TestArraySubmitInfrastructure:
         assert "#PBS -e mols_batch_array.pbserr\n" in submit_text
         assert "${PBS_ARRAYID}.pbsout" not in submit_text
         assert "TASK_ID=$PBS_ARRAYID" in submit_text
-        assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+        assert "python chemsmart_run_array.py" in submit_text
+        assert "python chemsmart_run_array_${TASK_ID}.py" not in submit_text
         assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
         assert "flock 9 || exit 1" in submit_text
+        assert (tmp_path / "chemsmart_run_array.py").exists()
 
     def test_lsf_write_array_job_creates_array_directives(
         self, tmp_path, monkeypatch
@@ -384,6 +437,8 @@ class TestArraySubmitInfrastructure:
         assert "TASK_ID=$LSB_JOBINDEX" in submit_text
         assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
         assert "flock 9 || exit 1" in submit_text
+        assert "python chemsmart_run_array.py" in submit_text
+        assert (tmp_path / "chemsmart_run_array.py").exists()
 
 
 class TestSchedulerArrayPolicy:

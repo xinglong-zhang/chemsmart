@@ -85,6 +85,81 @@ class RunScript:
         f.write(contents)
 
 
+class ArrayRunScript:
+    """Shared array run script that selects CLI args by scheduler task id.
+
+    Writes ``chemsmart_run_array.py`` with a 1-based ``TASK_CLI`` map. Each
+    array task resolves ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` /
+    ``LSB_JOBINDEX`` and runs the matching CLI list.
+    """
+
+    FILENAME = "chemsmart_run_array.py"
+
+    def __init__(self, task_cli):
+        """
+        Args:
+            task_cli: Mapping of 1-based task id (int) to CLI arg lists.
+        """
+        self.filename = self.FILENAME
+        self.task_cli = {int(k): list(v) for k, v in task_cli.items()}
+
+    def write(self):
+        """Write the shared array run script."""
+        with open(self.filename, "w") as f:
+            self._write(f)
+
+    def _write(self, f):
+        contents = f"""\
+        #!/usr/bin/env python
+        import os
+
+        os.environ['OMP_NUM_THREADS'] = '1'
+
+        from chemsmart.cli.run import run
+
+        TASK_CLI = {self.task_cli!r}
+
+
+        def resolve_array_task_id():
+            for key in (
+                'SLURM_ARRAY_TASK_ID',
+                'PBS_ARRAYID',
+                'LSB_JOBINDEX',
+            ):
+                value = os.environ.get(key)
+                if value is None or value == '':
+                    continue
+                try:
+                    return int(value)
+                except ValueError as exc:
+                    raise SystemExit(
+                        f'Invalid {{key}}={{value!r}}; expected an integer '
+                        f'task id.'
+                    ) from exc
+            raise SystemExit(
+                'No supported array task environment variable found '
+                '(SLURM_ARRAY_TASK_ID / PBS_ARRAYID / LSB_JOBINDEX).'
+            )
+
+
+        def run_job():
+            task_id = resolve_array_task_id()
+            if task_id not in TASK_CLI:
+                raise SystemExit(
+                    f'Array task id {{task_id}} is not in TASK_CLI '
+                    f'(keys={{sorted(TASK_CLI)}}).'
+                )
+            run(TASK_CLI[task_id])
+
+
+        if __name__ == '__main__':
+            run_job()
+        """
+        contents = inspect.cleandoc(contents)
+        logger.debug("Array TASK_CLI keys: %s", sorted(self.task_cli))
+        f.write(contents)
+
+
 class Submitter(RegistryMixin):
     """
     Abstract base class for job submission systems.
@@ -321,10 +396,10 @@ class Submitter(RegistryMixin):
     ):
         """Write scripts for a scheduler array job over *jobs*.
 
-        Creates one 1-based run script per child
-        (``chemsmart_run_array_<task_id>.py``) and one array submit script
-        (``chemsmart_sub_array_<label>.sh``). Each array task runs its script
-        under the scheduler's array task id environment so
+        Creates one shared run script (``chemsmart_run_array.py``) with a
+        1-based task-id → CLI map, and one array submit script
+        (``chemsmart_sub_array_<label>.sh``). Each array task runs the shared
+        script under the scheduler's array task id environment so
         ``BatchJob.run()`` can enter ``array_task`` mode.
 
         Scheduler stdout/stderr are shared across all tasks
@@ -362,25 +437,29 @@ class Submitter(RegistryMixin):
         self._write_array_runscripts(self.jobs, cli_args)
         self._write_array_submitscript(array_concurrency)
 
-    def _write_array_runscripts(self, jobs, cli_args):
-        """Write 1-based ``chemsmart_run_array_<task_id>.py`` scripts."""
-        for task_id, job in enumerate(jobs, start=1):
-            job_cli_args = cli_args
-            if isinstance(cli_args, (list, tuple)):
-                if len(cli_args) == len(jobs) and isinstance(
-                    cli_args[task_id - 1], (list, tuple)
-                ):
-                    job_cli_args = cli_args[task_id - 1]
+    @staticmethod
+    def _normalize_array_task_cli(jobs, cli_args):
+        """Return a 1-based task-id → CLI-args mapping for *jobs*."""
+        num_jobs = len(jobs)
+        if isinstance(cli_args, (list, tuple)) and len(cli_args) == num_jobs:
+            if all(isinstance(item, (list, tuple)) for item in cli_args):
+                return {
+                    task_id: list(cli_args[task_id - 1])
+                    for task_id in range(1, num_jobs + 1)
+                }
+        shared = list(cli_args) if cli_args is not None else []
+        return {task_id: list(shared) for task_id in range(1, num_jobs + 1)}
 
-            runscript_name = f"chemsmart_run_array_{task_id}.py"
-            runscript = RunScript(runscript_name, job_cli_args)
-            logger.debug(
-                "Writing array run script %s: %s (job=%s)",
-                task_id,
-                runscript_name,
-                job.label,
-            )
-            runscript.write()
+    def _write_array_runscripts(self, jobs, cli_args):
+        """Write shared ``chemsmart_run_array.py`` with a TASK_CLI map."""
+        task_cli = self._normalize_array_task_cli(jobs, cli_args)
+        runscript = ArrayRunScript(task_cli)
+        logger.debug(
+            "Writing shared array run script %s for %s task(s)",
+            runscript.filename,
+            len(task_cli),
+        )
+        runscript.write()
 
     def _write_array_submitscript(self, array_concurrency):
         """Write the array job submission script."""
@@ -409,11 +488,12 @@ class Submitter(RegistryMixin):
         )
 
     def _write_array_job_command(self, f):
-        """Write the command that runs the per-task array run script.
+        """Write the command that runs the shared array run script.
 
-        Uses the native 1-based scheduler task id
-        (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``)
-        to select ``chemsmart_run_array_<TASK_ID>.py``.
+        Exports the native 1-based scheduler task id
+        (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``) as
+        ``TASK_ID`` for log headers; ``chemsmart_run_array.py`` reads the
+        same environment variables to select the per-task CLI.
 
         Each task buffers its stdout/stderr, then emits a headed block to
         the shared scheduler logs under an exclusive flock so concurrent
@@ -440,8 +520,7 @@ class Submitter(RegistryMixin):
         f.write('trap \'rm -f "$TMP_OUT" "$TMP_ERR"\' EXIT\n\n')
         f.write("set +e\n")
         f.write(
-            "python chemsmart_run_array_${TASK_ID}.py "
-            '>"$TMP_OUT" 2>"$TMP_ERR"\n'
+            f"python {ArrayRunScript.FILENAME} " '>"$TMP_OUT" 2>"$TMP_ERR"\n'
         )
         f.write("status=$?\n")
         f.write("set -e\n\n")
