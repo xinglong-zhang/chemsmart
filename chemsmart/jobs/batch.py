@@ -508,7 +508,33 @@ def prepare_nestable_batch_jobs(jobs: Sequence[Any]) -> RewriteCliFn:
 
 _FILENAME_OPTIONS = frozenset({"-f", "--filename"})
 _INDEX_OPTIONS = frozenset({"-i", "--index", "--si", "--structure-index"})
-_PROGRAM_TOKENS = frozenset({"gaussian", "orca", "run", "sub"})
+# Engine job-group tokens (gaussian/orca subcommands). Nested actions such as
+# ``batch``/``submit`` are intentionally excluded so shared options insert
+# under the engine group, not under the nested command.
+_ENGINE_JOB_TOKENS = frozenset(
+    {
+        "com",
+        "crest",
+        "dias",
+        "inp",
+        "irc",
+        "link",
+        "modred",
+        "nci",
+        "neb",
+        "opt",
+        "pka",
+        "qrc",
+        "resp",
+        "scan",
+        "sp",
+        "td",
+        "traj",
+        "ts",
+        "userjob",
+        "wbi",
+    }
+)
 
 # Known ``batch_entry`` keys mapped to CLI flags. Add new shared fields here.
 _BATCH_ENTRY_OPTION_FIELDS = (
@@ -634,13 +660,16 @@ def _patch_cli_option(
 
 
 def _find_job_subcommand_token(tokens: Sequence[str]) -> Optional[str]:
-    """Return the job subcommand token (e.g. ``opt``/``pka``), not a path."""
-    for token in reversed(tokens):
-        if token.startswith("-"):
-            continue
-        if token in _PROGRAM_TOKENS:
-            continue
-        return token
+    """Return the engine job-group token (e.g. ``opt``/``pka``).
+
+    Matches known gaussian/orca job groups so nested actions
+    (``batch``/``submit``) and option values (e.g. ``direct``) are not
+    treated as insertion anchors. Shared engine options then insert under
+    ``gaussian``/``orca``.
+    """
+    for token in tokens:
+        if token in _ENGINE_JOB_TOKENS:
+            return token
     return None
 
 

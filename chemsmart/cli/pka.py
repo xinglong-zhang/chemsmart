@@ -806,7 +806,11 @@ def rewrite_pka_batch_cli_args(cli_args, batch_entry):
     charge/multiplicity, ``--proton-index``, scheme, and drop reference
     options for the direct scheme.
     """
-    from chemsmart.jobs.batch import _patch_cli_option, rewrite_batch_cli_args
+    from chemsmart.jobs.batch import (
+        _find_job_subcommand_token,
+        _patch_cli_option,
+        rewrite_batch_cli_args,
+    )
 
     if not batch_entry:
         return list(cli_args)
@@ -816,14 +820,17 @@ def rewrite_pka_batch_cli_args(cli_args, batch_entry):
     if "batch" in args:
         args[args.index("batch")] = "submit"
 
-    insert_before = "submit" if "submit" in args else None
+    # Engine-level options belong under gaussian/orca (before ``pka``).
+    engine_insert_before = _find_job_subcommand_token(args)
+    # pKa-group options belong under ``pka`` (before ``submit``).
+    pka_insert_before = "submit" if "submit" in args else None
 
     if "charge" in batch_entry and batch_entry["charge"] is not None:
         _patch_cli_option(
             args,
             long_opt="--charge",
             value=str(batch_entry["charge"]),
-            insert_before=insert_before,
+            insert_before=engine_insert_before,
         )
 
     if (
@@ -834,7 +841,7 @@ def rewrite_pka_batch_cli_args(cli_args, batch_entry):
             args,
             long_opt="--multiplicity",
             value=str(batch_entry["multiplicity"]),
-            insert_before=insert_before,
+            insert_before=engine_insert_before,
         )
 
     proton_index = batch_entry.get("proton_index")
@@ -855,7 +862,7 @@ def rewrite_pka_batch_cli_args(cli_args, batch_entry):
             long_opt="--scheme",
             short_opt="-s",
             value=str(batch_scheme),
-            insert_before=insert_before,
+            insert_before=pka_insert_before,
         )
         if batch_scheme == "direct":
             _patch_cli_option(

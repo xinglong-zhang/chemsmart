@@ -317,6 +317,11 @@ def test_rewrite_pka_batch_cli_args_replaces_table_with_submit_row():
     assert rewritten[rewritten.index("--charge") + 1] == "1"
     assert rewritten[rewritten.index("--scheme") + 1] == "direct"
     assert "--reference" not in rewritten
+    # Engine options must sit under gaussian/orca, before the pka group.
+    assert rewritten.index("--label") < rewritten.index("pka")
+    assert rewritten.index("--charge") < rewritten.index("pka")
+    assert rewritten.index("--multiplicity") < rewritten.index("pka")
+    assert rewritten[rewritten.index("--label") + 1] == "acid2"
 
 
 def test_resolve_array_cli_args_pka_entries_use_rewrite_callback():
