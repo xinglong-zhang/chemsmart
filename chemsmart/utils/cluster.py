@@ -20,6 +20,21 @@ import subprocess
 import requests
 
 
+def normalize_scheduler_job_label(name: str) -> str:
+    """Map scheduler-visible names to chemsmart container labels.
+
+    Array batches appear under several scheduler names: submit scripts use
+    ``array_<label>``, SLURM ``--job-name`` uses ``<label>_array``, and
+    ``BatchJob.label`` is the bare ``<label>``. Duplicate-submit checks
+    compare against the bare label.
+    """
+    if name.startswith("array_"):
+        name = name[len("array_") :]
+    if name.endswith("_array"):
+        name = name[: -len("_array")]
+    return name
+
+
 class ClusterHelper:
     """
     Helper for querying running jobs on HPC schedulers.
@@ -138,7 +153,9 @@ class ClusterHelper:
                     job_name = job_name_submitscript_no_ext.split(
                         "chemsmart_sub_"
                     )[-1]
-                    running_job_names.append(job_name)
+                    running_job_names.append(
+                        normalize_scheduler_job_label(job_name)
+                    )
         return running_job_names
 
     def _get_gaussian_running_jobs_on_torque(self):
@@ -176,7 +193,9 @@ class ClusterHelper:
                 job_name = job_name_submitscript_no_ext.split(
                     "chemsmart_sub_"
                 )[-1]
-                running_job_names.append(job_name)
+                running_job_names.append(
+                    normalize_scheduler_job_label(job_name)
+                )
         return running_job_ids, running_job_names
 
 

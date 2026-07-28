@@ -659,15 +659,21 @@ class Server(RegistryMixin):
         if not labels:
             return
 
-        from chemsmart.utils.cluster import ClusterHelper
+        from chemsmart.utils.cluster import (
+            ClusterHelper,
+            normalize_scheduler_job_label,
+        )
 
         cluster_helper = ClusterHelper()
         running_job_ids, running_job_names = (
             cluster_helper.get_gaussian_running_jobs()
         )
+        running_labels = {
+            normalize_scheduler_job_label(name) for name in running_job_names
+        }
 
         for label in labels:
-            if label in running_job_names:
+            if label in running_labels:
                 logger.info(
                     f"Warning: submitting job with duplicate name: {label}"
                 )
@@ -848,7 +854,7 @@ class Server(RegistryMixin):
         throttle = policy.array_throttle(len(batch_job.jobs))
         logger.info(
             "Submitting BatchJob %r as array with %s task(s), "
-            "concurrency throttle %s",
+            "concurrency throttle %s=%s",
             batch_job.label,
             len(batch_job.jobs),
             throttle,

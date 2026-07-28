@@ -948,6 +948,32 @@ class TestCheckRunningJobs:
         batch = GaussianBatchJob(jobs=[], label="pka_batch")
         Server._check_running_jobs(batch)
 
+    def test_rejects_duplicate_when_array_suffix_running(self, monkeypatch):
+        self._MockClusterHelper.running_job_names = ["pka_batch_array"]
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        batch = GaussianBatchJob(jobs=[], label="pka_batch")
+        with pytest.raises(
+            SystemExit, match="Duplicate job NOT submitted: pka_batch"
+        ):
+            Server._check_running_jobs(batch)
+
+    def test_rejects_duplicate_when_array_prefix_running(self, monkeypatch):
+        self._MockClusterHelper.running_job_names = ["array_pka_batch"]
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        batch = GaussianBatchJob(jobs=[], label="pka_batch")
+        with pytest.raises(
+            SystemExit, match="Duplicate job NOT submitted: pka_batch"
+        ):
+            Server._check_running_jobs(batch)
+
     def test_batch_job_checks_container_label_not_children(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["acid1_pka"]
         monkeypatch.setattr(
