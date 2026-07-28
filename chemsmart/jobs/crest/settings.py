@@ -25,7 +25,7 @@ class CRESTJobSettings:
         jobtype=None,
         solvent_model=None,
         solvent_id=None,
-        energy_window=6.0,
+        energy_window=None,
         rmsd_threshold=None,
         energy_threshold=None,
         bconst_threshold=None,

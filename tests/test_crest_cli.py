@@ -94,7 +94,6 @@ class TestCRESTCLISettings:
         assert result.exit_code == 0, result.output
         assert settings.jobtype == "conformers"
         assert settings.gfn_version == "gfn2"
-        assert settings.energy_window == 6.0
         assert settings.constraints is None
 
     def test_constrained_settings(self, single_molecule_xyz_file):
