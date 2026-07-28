@@ -1,6 +1,6 @@
 conformers:
   gfn_version: gfn2
-  ewin: 6.0
+  energy_window: 6.0
   optimization_level: vtight
   solvent_model: gbsa
   solvent_id: water

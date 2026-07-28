@@ -271,7 +271,7 @@ class CRESTRoute:
         return "--cinp" in self.route_inputs or "-cinp" in self.route_inputs
 
     @property
-    def noreftopo(self):
+    def no_reference_topology_check(self):
         """
         Check if reference topology check is disabled.
 
@@ -324,7 +324,7 @@ class CRESTRoute:
         return None
 
     @property
-    def rthr(self):
+    def rmsd_threshold(self):
         """
         Extract RMSD threshold in Angstrom from the route.
 
@@ -345,7 +345,7 @@ class CRESTRoute:
         return None
 
     @property
-    def ethr(self):
+    def energy_threshold(self):
         """
         Extract energy threshold in kcal/mol from the route.
 
@@ -366,7 +366,7 @@ class CRESTRoute:
         return None
 
     @property
-    def bthr(self):
+    def bconst_threshold(self):
         """
         Extract rotational constant threshold from the route.
 
@@ -387,7 +387,7 @@ class CRESTRoute:
         return None
 
     @property
-    def pthr(self):
+    def population_threshold(self):
         """
         Extract Boltzmann population threshold from the route.
 
@@ -408,7 +408,7 @@ class CRESTRoute:
         return None
 
     @property
-    def temp(self):
+    def temperature(self):
         """
         Extract CREGEN temperature in Kelvin from the route.
 
@@ -429,7 +429,7 @@ class CRESTRoute:
         return None
 
     @property
-    def notopo(self):
+    def no_topology_check(self):
         """
         Check if topology checks in CREGEN are disabled.
 
@@ -464,7 +464,7 @@ class CRESTRoute:
         return None
 
     @property
-    def tstep(self):
+    def md_timestep(self):
         """
         Extract MD time step in fs from the route.
 
@@ -485,7 +485,7 @@ class CRESTRoute:
         return None
 
     @property
-    def mdlen(self):
+    def md_length(self):
         """
         Extract MD length from the route.
 
@@ -512,7 +512,7 @@ class CRESTRoute:
         return None
 
     @property
-    def mddump(self):
+    def md_dump_step(self):
         """
         Extract xyz dump step to trajectory in fs from the route.
 
@@ -533,7 +533,7 @@ class CRESTRoute:
         return None
 
     @property
-    def vbdump(self):
+    def vbias_dump_interval(self):
         """
         Extract Vbias dump frequency in ps from the route.
 
@@ -554,7 +554,7 @@ class CRESTRoute:
         return None
 
     @property
-    def tnmd(self):
+    def additional_md_temperature(self):
         """
         Extract temperature for additional normal MDs from the route.
 

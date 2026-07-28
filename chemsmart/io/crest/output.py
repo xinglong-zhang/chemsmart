@@ -172,7 +172,7 @@ class CRESTOutput:
         return []
 
     @cached_property
-    def n_conformers(self):
+    def num_conformers(self):
         """Number of unique conformers found.
 
         Returns:
@@ -180,20 +180,23 @@ class CRESTOutput:
         """
         if (
             self.main_out is not None
-            and self.main_out.n_conformers is not None
+            and self.main_out.num_conformers is not None
         ):
-            return self.main_out.n_conformers
+            return self.main_out.num_conformers
         if self.energies_file is not None:
-            return self.energies_file.n_conformers
+            return self.energies_file.num_conformers
         return len(self.conformers)
 
     @cached_property
-    def n_rotamers(self):
+    def num_rotamers(self):
         """Number of unique rotamers sampled before CREGEN filtering.
 
         Returns:
             int: Number of rotamers.
         """
-        if self.main_out is not None and self.main_out.n_rotamers is not None:
-            return self.main_out.n_rotamers
+        if (
+            self.main_out is not None
+            and self.main_out.num_rotamers is not None
+        ):
+            return self.main_out.num_rotamers
         return len(self.rotamers)

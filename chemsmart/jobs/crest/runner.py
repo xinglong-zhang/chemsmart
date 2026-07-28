@@ -126,14 +126,32 @@ class CRESTJobRunner(JobRunner):
         ):
             args.extend([f"--{settings.solvent_model}", settings.solvent_id])
 
-        if settings.ewin is not None:
-            args.extend(["--ewin", str(settings.ewin)])
-        if settings.rthr is not None:
-            args.extend(["--rthr", str(settings.rthr)])
-        if settings.ethr is not None:
-            args.extend(["--ethr", str(settings.ethr)])
-        if settings.mdlen is not None:
-            args.extend(["--mdlen", str(settings.mdlen)])
+        if settings.energy_window is not None:
+            args.extend(["--ewin", str(settings.energy_window)])
+        if settings.rmsd_threshold is not None:
+            args.extend(["--rthr", str(settings.rmsd_threshold)])
+        if settings.energy_threshold is not None:
+            args.extend(["--ethr", str(settings.energy_threshold)])
+        if settings.bconst_threshold is not None:
+            args.extend(["--bthr", str(settings.bconst_threshold)])
+        if settings.population_threshold is not None:
+            args.extend(["--pthr", str(settings.population_threshold)])
+        if settings.temperature is not None:
+            args.extend(["--temp", str(settings.temperature)])
+        if settings.md_timestep is not None:
+            args.extend(["--tstep", str(settings.md_timestep)])
+        if settings.md_length is not None:
+            args.extend(["--mdlen", str(settings.md_length)])
+        if settings.md_dump_step is not None:
+            args.extend(["--mddump", str(settings.md_dump_step)])
+        if settings.vbias_dump_interval is not None:
+            args.extend(["--vbdump", str(settings.vbias_dump_interval)])
+        if settings.additional_md_temperature is not None:
+            args.extend(["--tnmd", str(settings.additional_md_temperature)])
+        if settings.no_topology_check:
+            args.append("--notopo")
+        if settings.no_reference_topology_check:
+            args.append("--noreftopo")
 
         if settings.optimization_level is not None:
             args.extend(["--optlev", settings.optimization_level])

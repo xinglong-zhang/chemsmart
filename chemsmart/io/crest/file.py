@@ -57,7 +57,7 @@ class CRESTMainOut(CRESTFileMixin):
         return False
 
     @cached_property
-    def n_conformers(self):
+    def num_conformers(self):
         """Number of unique conformers found."""
         for line in reversed(self.contents):
             if "number of unique conformers for further calc" in line:
@@ -71,10 +71,10 @@ class CRESTMainOut(CRESTFileMixin):
     @property
     def single_conformer(self):
         """Whether only one unique conformer was found."""
-        return self.normal_termination and self.n_conformers == 1
+        return self.normal_termination and self.num_conformers == 1
 
     @cached_property
-    def n_rotamers(self):
+    def num_rotamers(self):
         """Total number of unique rotamers (pre-CREGEN unique points)."""
         for line in reversed(self.contents):
             if "total number unique points considered further" in line:
@@ -86,7 +86,7 @@ class CRESTMainOut(CRESTFileMixin):
         return None
 
     @cached_property
-    def n_atoms(self):
+    def num_atoms(self):
         """Number of atoms."""
         for line in reversed(self.contents):
             if "number of atoms" in line and ":" in line:
@@ -308,7 +308,7 @@ class CRESTEnergiesFile(FileMixin):
         return energies
 
     @property
-    def n_conformers(self):
+    def num_conformers(self):
         """Number of conformers in the energies file."""
         if self.relative_energies:
             return len(self.relative_energies)

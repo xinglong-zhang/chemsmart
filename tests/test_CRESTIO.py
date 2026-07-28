@@ -62,10 +62,10 @@ class TestCRESTRoute:
             "--pthr 0.10"
         )
         r4 = CRESTRoute(route_string=s4)
-        assert r4.rthr == 0.15
-        assert r4.ethr == 0.10
-        assert r4.bthr == 0.02
-        assert r4.pthr == 0.10
+        assert r4.rmsd_threshold == 0.15
+        assert r4.energy_threshold == 0.10
+        assert r4.bconst_threshold == 0.02
+        assert r4.population_threshold == 0.10
 
         # MD options
         s5 = (
@@ -80,18 +80,18 @@ class TestCRESTRoute:
             "--tnmd 500"
         )
         r5 = CRESTRoute(route_string=s5)
-        assert r5.temp == 300.0
+        assert r5.temperature == 300.0
         assert r5.shake == 1
-        assert r5.tstep == 2
-        assert r5.mdlen == 50.0
-        assert r5.mddump == 200
-        assert r5.vbdump == 0.5
-        assert r5.tnmd == 500.0
+        assert r5.md_timestep == 2
+        assert r5.md_length == 50.0
+        assert r5.md_dump_step == 200
+        assert r5.vbias_dump_interval == 0.5
+        assert r5.additional_md_temperature == 500.0
 
         # Scaled MD length
         s6 = "crest mol.xyz --gfn2 -len x2.0"
         r6 = CRESTRoute(route_string=s6)
-        assert r6.mdlen == "x2.0"
+        assert r6.md_length == "x2.0"
 
         # Boolean flags
         s7 = (
@@ -105,8 +105,8 @@ class TestCRESTRoute:
         r7 = CRESTRoute(route_string=s7)
         assert r7.nci is True
         assert r7.constrained is True
-        assert r7.noreftopo is True
-        assert r7.notopo is True
+        assert r7.no_reference_topology_check is True
+        assert r7.no_topology_check is True
 
 
 class TestCRESTMainOut:
@@ -127,10 +127,10 @@ class TestCRESTMainOut:
         )
         assert not octane_main_out.constrained
         assert not octane_main_out.topology_mismatch
-        assert octane_main_out.n_conformers == 104
+        assert octane_main_out.num_conformers == 104
         assert not octane_main_out.single_conformer
-        assert octane_main_out.n_rotamers == 1342
-        assert octane_main_out.n_atoms == 26
+        assert octane_main_out.num_rotamers == 1342
+        assert octane_main_out.num_atoms == 26
         assert octane_main_out.rmsd_threshold == 0.125
         assert octane_main_out.bconst_threshold == 0.01
         assert octane_main_out.population_threshold == 0.05
@@ -196,9 +196,9 @@ class TestCRESTMainOut:
             == "crest TS1A.xyz --cinp constraints.inp --gfn2 --chrg 0 --uhf 0 --optlev tight -T 64"
         )
         assert ts1a_main_out.constrained
-        assert ts1a_main_out.n_conformers == 22
-        assert ts1a_main_out.n_rotamers == 63
-        assert ts1a_main_out.n_atoms == 40
+        assert ts1a_main_out.num_conformers == 22
+        assert ts1a_main_out.num_rotamers == 63
+        assert ts1a_main_out.num_atoms == 40
 
 
 class TestCRESTEnergiesFile:
@@ -210,7 +210,7 @@ class TestCRESTEnergiesFile:
             crest_octane_outfolder, "crest.energies"
         )
         octane_energies = CRESTEnergiesFile(octane_energies_file)
-        assert octane_energies.n_conformers == 104
+        assert octane_energies.num_conformers == 104
         assert np.isclose(octane_energies.relative_energies[0], 0.000)
         assert np.isclose(octane_energies.relative_energies[1], 0.544)
         assert np.isclose(octane_energies.relative_energies[-1], 5.404)
@@ -222,7 +222,7 @@ class TestCRESTEnergiesFile:
             crest_ts1a_constrained_outfolder, "crest.energies"
         )
         ts1a_energies = CRESTEnergiesFile(ts1a_energies_file)
-        assert ts1a_energies.n_conformers == 22
+        assert ts1a_energies.num_conformers == 22
         assert np.isclose(ts1a_energies.relative_energies[0], 0.000)
         assert np.isclose(ts1a_energies.relative_energies[1], 2.901)
         assert np.isclose(ts1a_energies.relative_energies[-2], 4.041)
@@ -235,7 +235,7 @@ class TestCRESTEnergiesFile:
             crest_styrene_outfolder, "crest.energies"
         )
         styrene_energies = CRESTEnergiesFile(styrene_energies_file)
-        assert styrene_energies.n_conformers == 1
+        assert styrene_energies.num_conformers == 1
         assert np.isclose(styrene_energies.relative_energies[0], 0.000)
         assert np.isclose(styrene_energies.energy_range, 0.000)
 
@@ -334,9 +334,9 @@ class TestCRESTOutput:
         octane_output = CRESTOutput(folder=crest_octane_outfolder)
         assert octane_output.normal_termination
         assert len(octane_output.conformers) == 104
-        assert octane_output.n_conformers == 104
+        assert octane_output.num_conformers == 104
         assert len(octane_output.rotamers) == 1342
-        assert octane_output.n_rotamers == 1342
+        assert octane_output.num_rotamers == 1342
 
         assert octane_output.conformers[0].charge == 0
         assert octane_output.conformers[0].multiplicity == 1
@@ -347,7 +347,7 @@ class TestCRESTOutput:
         assert octane_output.conformers[0].num_atoms == 26
         assert octane_output.charge == 0
         assert octane_output.multiplicity == 1
-        assert octane_output.n_atoms == 26
+        assert octane_output.num_atoms == 26
 
         assert np.isclose(octane_output.conformers[0].energy, -26.32263)
         assert np.isclose(octane_output.best_conformer.energy, -26.32263)
