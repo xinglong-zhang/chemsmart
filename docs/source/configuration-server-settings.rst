@@ -37,7 +37,7 @@ Configuration Structure
 Each server configuration file contains:
 
 #. **SERVER** section - Defines scheduler and resource allocation settings
-#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, NCIPLOT, etc.)
+#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, XTB, NCIPLOT, etc.)
 
 SERVER Section
 ==============
@@ -731,6 +731,16 @@ Complete example for a SLURM-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -795,6 +805,16 @@ Complete example for a PBS/Torque-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -855,6 +875,16 @@ Complete example for a local workstation without a job scheduler:
            module purge
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
