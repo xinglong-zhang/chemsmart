@@ -46,6 +46,27 @@ class TestFolderOutputFileDiscovery:
         for file in xtb_output_files:
             assert file.endswith(".out")
 
+    def test_find_crest_outputs_in_parent_folder(
+        self, crest_outputs_directory
+    ):
+        """Test that non-recursive search finds no CREST files in parent directory."""
+        crest_output_files = BaseFolder(
+            folder=crest_outputs_directory
+        ).get_all_output_files_in_current_folder_by_program(program="crest")
+        assert not crest_output_files  # No files in the top-level folder
+
+    def test_find_crest_outputs_in_subfolders(self, crest_outputs_directory):
+        """Test finding CREST output files with recursive search."""
+        crest_output_files = BaseFolder(
+            folder=crest_outputs_directory
+        ).get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program="crest"
+        )
+        # Recursive should find files in subdirectories
+        assert len(crest_output_files) > 0
+        for file in crest_output_files:
+            assert file.endswith(".out")
+
 
 class TestFolderIsProgramCalculationDirectory:
     """Tests for the is_program_calculation_directory method."""
@@ -56,11 +77,25 @@ class TestFolderIsProgramCalculationDirectory:
             folder=xtb_outputs_directory
         ).is_program_calculation_directory("xtb")
 
+    def test_crest_output_directory(self, crest_outputs_directory):
+        """Test that parent directory is not detected as CREST calculation directory."""
+        assert not BaseFolder(
+            folder=crest_outputs_directory
+        ).is_program_calculation_directory("crest")
+
     def test_xtb_co2_calculation_directory(self, xtb_co2_outfolder):
         """Test detection of xTB calculation directory for CO2."""
         assert BaseFolder(
             folder=xtb_co2_outfolder
         ).is_program_calculation_directory("xtb")
+
+    def test_crest_styrene_calculation_directory(
+        self, crest_styrene_outfolder
+    ):
+        """Test detection of CREST calculation directory for styrene."""
+        assert BaseFolder(
+            folder=crest_styrene_outfolder
+        ).is_program_calculation_directory("crest")
 
     def test_not_xtb_directory(self, gaussian_outputs_test_directory):
         """Test that Gaussian directory is not detected as xTB."""
@@ -78,6 +113,13 @@ class TestFolderGetProgramType:
             folder=xtb_water_outfolder
         ).get_program_type_from_folder()
         assert result == "xtb"
+
+    def test_crest_output_detection(self, crest_octane_outfolder):
+        """Test detection of CREST calculation folder."""
+        result = BaseFolder(
+            folder=crest_octane_outfolder
+        ).get_program_type_from_folder()
+        assert result == "crest"
 
     def test_unknown_folder(self):
         """Test unknown folder type."""
