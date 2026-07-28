@@ -59,17 +59,10 @@ class CRESTInputWriter(InputWriter):
         """Write the $constrain block to an open file handle.
 
         Raises:
-            ValueError: If atom_pairs contains invalid indices,
-                or if force_constant is not set.
+            ValueError: If atom_pairs contains invalid indices.
         """
         atom_pairs = self.settings.constraints
         force_constant = self.settings.force_constant
-
-        if force_constant is None:
-            raise ValueError(
-                "force_constant must be set when writing constraints. "
-                "Ensure it is specified in settings, CLI, or project YAML."
-            )
 
         n_atoms = len(self.job.molecule)
         for pair in atom_pairs:
@@ -85,7 +78,8 @@ class CRESTInputWriter(InputWriter):
                     )
 
         f.write("$constrain\n")
-        f.write(f"  force constant={force_constant}\n")
+        if force_constant is not None:
+            f.write(f"  force constant={force_constant}\n")
 
         for pair in atom_pairs:
             i, j = pair[0], pair[1]

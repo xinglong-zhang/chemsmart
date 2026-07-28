@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
     "-f",
     "--force-constant",
     type=float,
-    default=0.25,
-    show_default=True,
+    default=None,
     help="Force constant for distance constraints.",
 )
 @click.pass_context
@@ -36,9 +35,10 @@ def conformers(ctx, skip_completed, constraints, force_constant, **kwargs):
     keywords = list(ctx.obj["keywords"])
     if constraints is not None:
         job_settings.constraints = ast.literal_eval(constraints)
-        job_settings.force_constant = force_constant
         keywords.append("constraints")
-        keywords.append("force_constant")
+        if force_constant is not None:
+            job_settings.force_constant = force_constant
+            keywords.append("force_constant")
 
     conformers_settings = ctx.obj["project_settings"].conformer_settings()
     conformers_settings = conformers_settings.merge(
