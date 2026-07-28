@@ -7,9 +7,11 @@ from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import (
+    FUGAKUSubmitter,
     PBSSubmitter,
     SLFSubmitter,
     SLURMSubmitter,
+    _without_mail_directives,
 )
 
 
@@ -225,6 +227,142 @@ class TestArraySubmitInfrastructure:
         assert "mols.xyz" in run_text
         assert "SLURM_ARRAY_TASK_ID" in run_text
         assert "1:" in run_text and "4:" in run_text
+
+    def test_slurm_write_array_job_omits_throttle_when_concurrency_none(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+        )
+        children = self._array_children(tmp_path, count=3)
+        submitter = SLURMSubmitter(job=children[0], server=server)
+
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=None,
+            cli_args=["gaussian", "opt"],
+            batch_label="no_throttle",
+        )
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_no_throttle.sh"
+        ).read_text()
+        assert "#SBATCH --array=1-3\n" in submit_text
+        assert "%3" not in submit_text
+        assert "#SBATCH --array=1-3%" not in submit_text
+
+    def test_pbs_write_array_job_omits_throttle_when_concurrency_none(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.setattr(
+            PBSSubmitter,
+            "_write_program_specifics",
+            lambda self, f: None,
+        )
+        monkeypatch.setattr(
+            PBSSubmitter,
+            "_write_extra_commands",
+            lambda self, f: None,
+        )
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-pbs",
+            SCHEDULER="PBS",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+        )
+        children = self._array_children(tmp_path, count=2)
+        submitter = PBSSubmitter(job=children[0], server=server)
+
+        submitter.write_array_job(
+            jobs=children,
+            array_concurrency=None,
+            cli_args=["gaussian", "opt"],
+            batch_label="pbs_no_throttle",
+        )
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_pbs_no_throttle.sh"
+        ).read_text()
+        assert "#PBS -J 1-2\n" in submit_text
+        assert "%2" not in submit_text
+
+    def test_write_array_job_empty_jobs_warns_without_scripts(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        import logging
+
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+        )
+        submitter = SLURMSubmitter(
+            job=type("Child", (), {"label": "x", "PROGRAM": "gaussian"})(),
+            server=server,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            submitter.write_array_job(jobs=[], batch_label="empty_batch")
+
+        assert "No jobs provided for array job" in caplog.text
+        assert not (tmp_path / "chemsmart_sub_array_empty_batch.sh").exists()
+
+    def test_write_array_job_rejects_unsupported_scheduler(self):
+        server = Server(
+            "fugaku",
+            SCHEDULER="FUGAKU",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+        )
+        submitter = FUGAKUSubmitter(
+            job=type("Child", (), {"label": "x", "PROGRAM": "gaussian"})(),
+            server=server,
+        )
+        with pytest.raises(
+            ValueError, match="Batch array submission is not supported"
+        ):
+            submitter.write_array_job(
+                jobs=[submitter.job],
+                batch_label="unsupported",
+            )
+
+    def test_without_mail_directives_strips_scheduler_mail_lines(self):
+        assert (
+            _without_mail_directives(
+                "#PBS -m abe\n#PBS -N job\n#PBS -M user@ex.com\n"
+            )
+            == "#PBS -N job\n"
+        )
+        assert (
+            _without_mail_directives(
+                [
+                    "#SBATCH --mail-type=ALL",
+                    "#SBATCH --job-name=x",
+                    "#SBATCH --mail-user=a@b.c",
+                ]
+            )
+            == "#SBATCH --job-name=x\n"
+        )
+        assert _without_mail_directives("#PBS -m abe\n") is None
+        assert _without_mail_directives(None) is None
 
     def test_slurm_write_array_job_embeds_per_job_cli_args(
         self, tmp_path, monkeypatch
@@ -655,6 +793,129 @@ class TestSubmitBatch:
             ["gaussian", "-f", "mols.xyz", "-i", "1", "opt"],
             ["gaussian", "-f", "mols.xyz", "-i", "2", "opt"],
         ]
+
+    def test_submit_batch_rejects_non_batch_job(self):
+        from chemsmart.settings.server import Server
+
+        server = Server(
+            "batch-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+        )
+        with pytest.raises(TypeError, match="expects a BatchJob"):
+            server.submit_batch(type("NotBatch", (), {"label": "x"})())
+
+    def test_submit_batch_rejects_empty_batch(self):
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+        from chemsmart.settings.server import Server
+
+        server = Server(
+            "batch-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+        )
+        with pytest.raises(ValueError, match="no child jobs"):
+            server.submit_batch(GaussianBatchJob(jobs=[], label="empty"))
+
+    def test_submit_batch_requires_rewrite_cli_when_batch_entries_present(
+        self,
+    ):
+        from chemsmart.jobs.batch import set_job_batch_entry
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+        from chemsmart.settings.server import Server
+
+        server = Server(
+            "batch-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+        )
+        child = type(
+            "Child",
+            (),
+            {"label": "a", "PROGRAM": "gaussian", "folder": "."},
+        )()
+        set_job_batch_entry(
+            child, {"filepath": "mols.xyz", "molecule_index": 1}
+        )
+        batch = GaussianBatchJob(jobs=[child], label="needs_rewrite")
+        with pytest.raises(ValueError, match="rewrite_cli"):
+            server.submit_batch(batch, test=True, cli_args=["gaussian", "opt"])
+
+    def test_submit_array_job_checks_orca_batch_container_label(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.jobs.orca.batch import ORCABatchJob
+        from chemsmart.settings.server import Server
+
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "batch-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            SUBMIT_COMMAND="sbatch",
+        )
+        checked = []
+
+        def _capture(job):
+            checked.append(job)
+
+        monkeypatch.setattr(
+            Server, "_check_running_jobs", staticmethod(_capture)
+        )
+        monkeypatch.setattr(
+            Server,
+            "get_submitter",
+            lambda self, job, **kwargs: type(
+                "Stub",
+                (),
+                {
+                    "write_array_job": staticmethod(
+                        lambda **kw: checked.append(("wrote", kw))
+                    ),
+                    "array_submit_script": "unused.sh",
+                },
+            )(),
+        )
+
+        children = [
+            type(
+                "Child",
+                (),
+                {
+                    "label": "o1",
+                    "PROGRAM": "orca",
+                    "folder": str(tmp_path),
+                },
+            )(),
+            type(
+                "Child",
+                (),
+                {
+                    "label": "o2",
+                    "PROGRAM": "orca",
+                    "folder": str(tmp_path),
+                },
+            )(),
+        ]
+        server.submit_array_job(
+            jobs=children,
+            array_concurrency=1,
+            test=True,
+            cli_args=["orca", "opt"],
+            batch_label="orca_batch",
+        )
+
+        assert isinstance(checked[0], ORCABatchJob)
+        assert checked[0].label == "orca_batch"
+        assert checked[0].jobs == children
 
 
 class TestCheckRunningJobs:

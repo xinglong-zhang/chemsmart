@@ -19,6 +19,8 @@ class MockMolecule(Molecule):
         self.charge = 0
         self.multiplicity = 1
         self.num_atoms = len(self.symbols)
+        self._energy = None
+        self._empirical_formula = "C"
 
     @property
     def has_vibrations(self):
@@ -408,6 +410,52 @@ class TestBatchJobRefactor:
             job.get_array_child_job(i).label
             for i in range(job.num_array_children)
         ]
+
+    def test_dias_irc_array_child_api_indexes_sampled_phases(
+        self, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """IRC mode flattens sampled molecule + fragment phases."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = GaussianDIASJob(
+            molecules=[molecule, molecule, molecule],
+            settings=settings,
+            label="dias_irc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=2,
+            mode="irc",
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+        n = job._num_sampled_points_per_phase
+
+        assert n == 3
+        assert job.num_array_children == 9
+        bulk_spy.assert_not_called()
+
+        assert job.get_array_child_job(0).label == "dias_irc_p0"
+        assert job.get_array_child_job(n).label == "dias_irc_p0_f1"
+        assert job.get_array_child_job(2 * n).label == "dias_irc_p0_f2"
+        bulk_spy.assert_not_called()
+
+        with pytest.raises(ValueError, match="Invalid mode"):
+            GaussianDIASJob(
+                molecules=[molecule],
+                settings=GaussianJobSettings(),
+                label="dias_bad",
+                jobrunner=gaussian_jobrunner_no_scratch,
+                fragment_indices="1",
+                every_n_points=1,
+                mode="bogus",
+            ).num_array_children
 
 
 class TestBatchCliRewrite:
@@ -1152,6 +1200,65 @@ class TestGaussianBatchDelegation:
 
         child_f.run.assert_called_once()
         child_r.run.assert_not_called()
+
+    def test_orca_qrc_array_child_api_is_lazy(
+        self, orca_jobrunner_no_scratch, mocker
+    ):
+        """ORCA QRC builds one direction without bulk ``get_array_child_jobs``."""
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        settings = ORCAJobSettings(jobtype="opt")
+        job = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="orca_qrc",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+
+        assert job.num_array_children == 2
+        forward = job.get_array_child_job(0)
+        reverse = job.get_array_child_job(1)
+        bulk_spy.assert_not_called()
+        assert forward.label == "orca_qrcf_opt"
+        assert reverse.label == "orca_qrcr_opt"
+
+    def test_orca_qrc_child_index_runs_selected_child_only(
+        self, orca_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``child_index`` selects one ORCA QRC direction without bulk build."""
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        job = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=ORCAJobSettings(),
+            label="orca_qrc_array",
+            jobrunner=orca_jobrunner_no_scratch,
+            child_index=1,
+        )
+        child_f = Mock(label="orca_qrc_arrayf")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="orca_qrc_arrayr")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+        mock_batch_cls = mocker.patch("chemsmart.jobs.orca.qrc.ORCABatchJob")
+
+        job._run()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
+        bulk_spy.assert_not_called()
+        mock_batch_cls.return_value.run.assert_not_called()
 
     def test_multi_molecule_orca_qrc_outer_array_runs_both_directions(
         self, pbs_server, orca_jobrunner_no_scratch, mocker, monkeypatch
