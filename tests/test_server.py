@@ -13,6 +13,7 @@ from chemsmart.settings.submitters import (
     SLURMSubmitter,
     _without_mail_directives,
 )
+from chemsmart.utils.cluster import normalize_scheduler_job_label
 
 
 class TestServer:
@@ -916,6 +917,20 @@ class TestSubmitBatch:
         assert isinstance(checked[0], ORCABatchJob)
         assert checked[0].label == "orca_batch"
         assert checked[0].jobs == children
+
+
+class TestNormalizeSchedulerJobLabel:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("pka_scale_pka_batch", "pka_scale_pka_batch"),
+            ("array_pka_scale_pka_batch", "pka_scale_pka_batch"),
+            ("pka_scale_pka_batch_array", "pka_scale_pka_batch"),
+            ("water_sp", "water_sp"),
+        ],
+    )
+    def test_normalize_scheduler_job_label(self, raw, expected):
+        assert normalize_scheduler_job_label(raw) == expected
 
 
 class TestCheckRunningJobs:
