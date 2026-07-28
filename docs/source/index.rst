@@ -69,6 +69,13 @@ computational chemistry software.
    xtb-cli-options
    xtb-structure-optimization
 
+.. toctree::
+   :maxdepth: 2
+   :caption: CREST Jobs
+
+   crest-cli-options
+   crest-conformational-search
+
 ..
    .. toctree::
 
