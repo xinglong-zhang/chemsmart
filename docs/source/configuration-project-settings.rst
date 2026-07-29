@@ -477,7 +477,7 @@ Common keys:
 -  ``optimization_level``: used by ``opt`` (``crude`` … ``extreme``; packaged default is ``vtight``)
 -  ``grad``: whether to pass ``--grad``
 -  ``solvent_model`` / ``solvent_id``: implicit solvent; **both** must be set for solvent flags to be rendered
--  ``additional_route_parameters``: optional extra CLI tokens appended to the xTB command
+-  ``additional_flags``: optional extra CLI tokens appended to the xTB command
 
 Solvent example:
 
