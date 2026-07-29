@@ -17,6 +17,8 @@ from chemsmart.agent.tools import (
     run_local,
 )
 from chemsmart.agent.tools_fs import save_geometry
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import Server
 
 _XTB_FIXTURES = Path(__file__).parents[1] / "data" / "XTBTests" / "outputs"
 
@@ -95,6 +97,62 @@ class TestSummarizeXtbLocalOutput:
 
 
 class TestXtbPrepChain:
+    def test_natural_preview_then_run_selects_xtb_runner(
+        self,
+        monkeypatch,
+        tmp_path,
+        single_molecule_xyz_file,
+        xtb_jobrunner_no_scratch,
+    ) -> None:
+        """The agent can preview and then run without injecting a runner."""
+
+        molecule = build_molecule(single_molecule_xyz_file)
+        job = build_job(
+            "xtb.opt",
+            molecule=molecule,
+            settings=build_xtb_settings(charge=0, multiplicity=1),
+            label="natural_xtb",
+        )
+        job.set_folder(str(tmp_path / "natural_xtb"))
+
+        preview = dry_run_input(job)
+
+        assert preview["cli_grounded"] is True
+        assert job.jobrunner is None
+
+        selected = {}
+
+        def select_runner(cls, *, job, server, scratch, fake=False, **kwargs):
+            selected.update(
+                job=job,
+                server=server,
+                scratch=scratch,
+                fake=fake,
+            )
+            return xtb_jobrunner_no_scratch
+
+        monkeypatch.setattr(
+            Server,
+            "current",
+            classmethod(lambda cls: xtb_jobrunner_no_scratch.server),
+        )
+        monkeypatch.setattr(
+            JobRunner,
+            "from_job",
+            classmethod(select_runner),
+        )
+
+        result = run_local(job)
+
+        assert result["ok"] is True
+        assert job.jobrunner is xtb_jobrunner_no_scratch
+        assert selected == {
+            "job": job,
+            "server": xtb_jobrunner_no_scratch.server,
+            "scratch": False,
+            "fake": False,
+        }
+
     def test_fake_xtb_preopt_feeds_a_grounded_gaussian_job(
         self,
         monkeypatch,

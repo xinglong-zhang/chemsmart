@@ -188,6 +188,7 @@ def run_local(job: Job) -> dict[str, Any]:
     folder = os.path.abspath(job.folder)
     os.makedirs(folder, exist_ok=True)
     job.set_folder(folder)
+    _ensure_local_jobrunner(job)
     stdout_path = os.path.join(folder, f"{job.label}.stdout")
     stderr_path = os.path.join(folder, f"{job.label}.stderr")
     job.local = True
@@ -200,6 +201,19 @@ def run_local(job: Job) -> dict[str, Any]:
         "stderr_path": stderr_path,
         "output_summary": summary,
     }
+
+
+def _ensure_local_jobrunner(job: Job) -> None:
+    """Attach the same concrete runner selected by ``chemsmart run``."""
+
+    if isinstance(getattr(job, "jobrunner", None), JobRunner):
+        return
+    job.jobrunner = JobRunner.from_job(
+        job=job,
+        server=Server.current(),
+        scratch=False,
+        fake=False,
+    )
 
 
 def _execute_job(job: Job, stdout_path: str, stderr_path: str) -> int:
