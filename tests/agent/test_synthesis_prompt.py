@@ -72,6 +72,33 @@ def test_nci_pack_distinguishes_raw_and_gaussian(schema) -> None:
     assert "Gaussian workflow" in prompt
 
 
+def test_xtb_pack_teaches_no_project_and_option_placement(schema) -> None:
+    xtb = _prompt(schema, "GFN2-xTB optimization of water.xyz")
+    assert "needs no project YAML" in xtb
+    assert "hess" in xtb
+    assert "BOTH `-sm` and `-si`" in xtb
+    assert "before the leaf" in xtb
+    # Explicit Gaussian prunes xtb away, and the pack must vanish with it.
+    gaussian_only = _prompt(schema, "Gaussian optimization of h2o.xyz")
+    assert "needs no project YAML" not in gaussian_only
+
+
+def test_base_policy_orders_program_options_before_subcommand(
+    schema,
+) -> None:
+    prompt = _prompt(schema, "Gaussian optimization of h2o.xyz")
+    assert "between the program name and its job subcommand" in prompt
+
+
+def test_xtb_prompts_fit_hard_budget(schema) -> None:
+    for query in (
+        "GFN-FF pre-optimization of ligand.xyz before a DFT TS search",
+        "xTB hessian of water.xyz with ALPB water",
+        "semiempirical single point of cluster.xyz",
+    ):
+        assert len(_prompt(schema, query)) <= SYNTHESIS_PROMPT_MAX_CHARS
+
+
 def test_compact_signature_drops_verbose_schema_fields(schema) -> None:
     prompt = _prompt(schema, "Gaussian optimization of h2o.xyz")
     assert '"commands"' in prompt

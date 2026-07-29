@@ -13,6 +13,7 @@ from chemsmart.agent.runtime.calculations import (
     CalculationRun,
     CalculationStatus,
     CalculationStore,
+    _xtb_progress,
     cancel_calculation,
     execute_observed_process,
     inspect_calculation,
@@ -267,6 +268,29 @@ def test_inspect_xtb_output_reports_normal_termination(tmp_path):
     assert summary["optimization_converged"] is True
 
 
+def test_inspect_xtb_output_parses_eigval_frequency_lines(tmp_path):
+    # Regression: an earlier regex expected one frequency per numbered line
+    # (the Gaussian/ORCA shape) and silently matched nothing against xTB's
+    # actual "eigval :" rows, so frequency_count/frequencies were always
+    # None even on a normally-terminated job.
+    output = tmp_path / "water_hess.out"
+    output.write_text(
+        " projected vibrational frequencies (cm⁻¹)\n"
+        "eigval :       -0.00    -0.00    -0.00    -0.00     0.00     0.00\n"
+        "eigval :     1562.16  3669.42  3677.48\n"
+        " reduced masses (amu)\n"
+        "          | TOTAL ENERGY               -5.070325081194 Eh   |\n"
+        "* finished run on 2024/01/01 at 00:00:00.000\n",
+        encoding="utf-8",
+    )
+
+    summary = inspect_output(output, program="xtb", kind="xtb.hess")
+
+    assert summary["frequency_count"] == 3
+    assert summary["imaginary_frequency_count"] == 0
+    assert summary["frequencies"] == pytest.approx([1562.16, 3669.42, 3677.48])
+
+
 def test_inspect_xtb_real_hessian_fixture():
     output = (
         REPO_ROOT
@@ -281,6 +305,13 @@ def test_inspect_xtb_real_hessian_fixture():
 
     assert summary["normal_termination"] is True
     assert summary["energy"] == pytest.approx(-5.070544443465)
+    # xTB prints all 3N Hessian eigenvalues on "eigval :" lines (near-zero
+    # translational/rotational modes, then the real vibrations) rather than
+    # one frequency per numbered line as Gaussian/ORCA do; water has 3
+    # vibrational modes (3N-6) and none should be imaginary at a minimum.
+    assert summary["frequency_count"] == 3
+    assert summary["imaginary_frequency_count"] == 0
+    assert summary["frequencies"] == pytest.approx([1539.30, 3643.51, 3651.71])
 
 
 def test_fake_xtb_output_is_normal_termination(tmp_path):
@@ -295,6 +326,31 @@ def test_fake_xtb_output_is_normal_termination(tmp_path):
     summary = inspect_output(output, program="xtb", kind="xtb.sp")
 
     assert summary["normal_termination"] is True
+
+
+def test_xtb_progress_matches_real_ancopt_cycle_header():
+    # ANCOPT's own header is dot-padded ("...... CYCLE    1 ......"), not
+    # hash-padded; captured verbatim from a real xtb 6.7.1 --opt run.
+    text = (
+        "........................................................................\n"
+        ".............................. CYCLE    3 ..............................\n"
+        "........................................................................\n"
+    )
+
+    assert _xtb_progress(text) == "xTB optimization cycle 3"
+
+
+def test_xtb_progress_reports_finished_converged_and_frequency_states():
+    assert _xtb_progress("* finished run (fake xtb)") == "xTB finished"
+    assert (
+        _xtb_progress("GEOMETRY OPTIMIZATION CONVERGED AFTER 4 ITERATIONS")
+        == "xTB optimization converged"
+    )
+    assert (
+        _xtb_progress("projected vibrational frequencies (cm-1)")
+        == "xTB frequency analysis"
+    )
+    assert _xtb_progress("") == ""
 
 
 def test_job_specific_orca_receipts_use_real_outputs():

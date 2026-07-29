@@ -41,7 +41,7 @@ def test_missing_agent_extras_emits_install_hint(monkeypatch):
     )
 
     assert result.exit_code == 1
-    assert 'pip install -e ".[agent-tui]"' in result.stderr
+    assert 'python -m pip install -e ".[agent,agent-tui]"' in result.stderr
 
 
 @pytest.mark.slow

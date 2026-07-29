@@ -280,3 +280,42 @@ def test_qrc_synonyms_keep_qrc_jobkind(request_text):
     pruned = prune_schema_for_request(_schema_with_qrc(), request_text)
     gaussian = pruned["subcommands"]["run"]["subcommands"]["gaussian"]
     assert "qrc" in gaussian["subcommands"]
+
+
+def _schema_with_xtb():
+    schema = make_schema()
+    for entry in ("run", "sub"):
+        schema["subcommands"][entry]["subcommands"]["xtb"] = _node(
+            "xtb",
+            opt=_kind("opt", with_qmmm=False),
+            sp=_kind("sp", with_qmmm=False),
+            hess=_kind("hess", with_qmmm=False),
+        )
+    return schema
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "pre-optimize ligand.xyz cheaply before the DFT TS search",
+        "preoptimization of the docked pose in complex.xyz",
+        "semiempirical single point of aggregate.xyz",
+        "tight-binding optimization of polymer.xyz",
+        "water.xyz 사전최적화 해줘",
+        "반경험 방법으로 에너지만 계산",
+    ],
+)
+def test_preoptimization_phrasings_keep_xtb_program(request_text):
+    # Missing a cue here prunes the xtb program out of the schema entirely,
+    # leaving the model unable to emit the pre-optimization step at all.
+    pruned = prune_schema_for_request(_schema_with_xtb(), request_text)
+    programs = pruned["subcommands"]["run"]["subcommands"]
+    assert "xtb" in programs
+
+
+def test_frequency_wording_keeps_xtb_hess_leaf():
+    pruned = prune_schema_for_request(
+        _schema_with_xtb(), "xtb vibrational frequencies of water.xyz"
+    )
+    xtb = pruned["subcommands"]["run"]["subcommands"]["xtb"]
+    assert "hess" in xtb["subcommands"]

@@ -116,7 +116,7 @@ class SynthesisWorkflowMixin:
                 "command": "",
                 "explanation": (
                     "No workspace project YAML is loaded for this chemsmart "
-                    "workspace. Build one with /init, then write it with "
+                    "workspace. Build one with /project, then write it with "
                     "/write-project, or specify a workspace project YAML "
                     "with -p/--project."
                 ),

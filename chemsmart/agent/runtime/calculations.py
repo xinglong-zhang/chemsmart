@@ -583,7 +583,9 @@ def _xtb_progress(text: str) -> str:
         return "xTB finished"
     if "GEOMETRY OPTIMIZATION CONVERGED" in text:
         return "xTB optimization converged"
-    cycles = re.findall(r"##\s*CYCLE\s+(\d+)", text)
+    # ANCOPT's header is dot-padded, e.g. "...... CYCLE    3 ......", not
+    # hash-padded.
+    cycles = re.findall(r"\bCYCLE\s+(\d+)\b", text)
     if cycles:
         return f"xTB optimization cycle {cycles[-1]}"
     if "projected vibrational frequencies" in text:

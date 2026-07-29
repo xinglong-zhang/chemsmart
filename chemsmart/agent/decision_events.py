@@ -244,6 +244,11 @@ def _parse_tool_lifecycle_event(
             args={},
             description=str(payload.get("description") or ""),
             provider_call_id=str(payload.get("provider_call_id") or ""),
+            reason=(
+                str(payload.get("source"))
+                if payload.get("source") is not None
+                else None
+            ),
             scope=(
                 str(payload.get("scope"))
                 if payload.get("scope") is not None
@@ -380,7 +385,20 @@ def _parse_terminal_event(
             verdict=CriticVerdict.model_validate(payload),
         )
 
-    if kind in {"tool_error", "llm_error"}:
+    if kind in {
+        "tool_error",
+        "llm_error",
+        "provider_turn_error",
+        "loop_limit_exceeded",
+    }:
+        if kind == "loop_limit_exceeded":
+            limit_reason = str(payload.get("limit_reason") or "unknown")
+            return ErrorEvent(
+                kind=kind,
+                title="Agent loop limit exceeded",
+                message=f"Agent loop stopped: {limit_reason}",
+                details=payload,
+            )
         return ErrorEvent(
             kind=kind,
             title=str(payload.get("error_type") or kind),

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from chemsmart.agent.behavior_rules import load_behavior_rules
 from chemsmart.agent.handles import HandleStore
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.session_gates import (
@@ -43,7 +44,7 @@ from chemsmart.agent.prompts.identity import (
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.providers import get_provider
 from chemsmart.agent.registry import ToolRegistry
-from chemsmart.agent.runtime.contracts import RuntimeV2Mode
+from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
 from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.services.plan_support import (
@@ -255,6 +256,7 @@ class AgentSession:
         self,
         request: str,
         *,
+        phase_hint: TaskPhase | None = None,
         budgets: ToolLoopBudgets | None = None,
         messages: list[dict[str, Any]] | None = None,
         log_raw_provider_turns: bool = False,
@@ -263,6 +265,7 @@ class AgentSession:
     ) -> dict[str, Any]:
         return UnifiedSessionRunner(self).run(
             request,
+            phase_hint=phase_hint,
             budgets=budgets,
             messages=messages,
             log_raw_provider_turns=log_raw_provider_turns,
@@ -493,6 +496,7 @@ class AgentSession:
                 current_turn_index=current_turn_index
             ),
             request=request,
+            behavior_rules=load_behavior_rules().text,
             max_chars=4096,
         )
 

@@ -20,6 +20,7 @@ from chemsmart.agent.project_yaml_values import (
     string_list,
     string_or_none,
 )
+from chemsmart.utils.periodictable import PeriodicTable
 
 _D3BJ_ALIASES = (
     "d3bj",
@@ -30,6 +31,7 @@ _D3BJ_ALIASES = (
 )
 _CREST_MARKERS = ("crest", "mtd", "metadynamics", "gfn2", "xtb")
 ProjectProgram = Literal["gaussian", "orca"]
+_ELEMENT_SYMBOLS = frozenset(PeriodicTable.PERIODIC_TABLE)
 
 
 def extract_project_protocol(
@@ -45,16 +47,51 @@ def extract_project_protocol(
     lowered = source.lower()
     functional = _extract_functional(lowered)
     dispersion = _extract_dispersion(lowered)
+    explicit_heavy_basis = _extract_named_basis(source, "heavy_elements_basis")
+    explicit_light_basis = _extract_named_basis(source, "light_elements_basis")
+    explicit_heavy_elements = _extract_named_elements(source)
     heavy_basis = _extract_heavy_basis(source)
-    light_basis = _extract_light_basis(source)
+    if explicit_heavy_basis:
+        heavy_elements = (
+            explicit_heavy_elements
+            or _extract_contextual_heavy_elements(source)
+        )
+        heavy_basis.update(
+            {element: explicit_heavy_basis for element in heavy_elements}
+        )
+    light_basis = explicit_light_basis or _extract_light_basis(source)
+    explicit_basis = _extract_named_basis(source, "basis")
+    fallback_basis = explicit_basis
+    if fallback_basis is None and not (
+        explicit_heavy_basis or explicit_light_basis
+    ):
+        fallback_basis = _extract_first_basis(source)
     basis = _canonical_basis_for_yaml(
         heavy_basis,
         light_basis,
-        _extract_first_basis(source),
+        fallback_basis,
     )
     solvent = _extract_solvent(lowered)
+    mixed_basis_intent = bool(
+        explicit_heavy_basis
+        or explicit_light_basis
+        or explicit_heavy_elements
+        or (heavy_basis and light_basis)
+    )
+    missing_fields = _missing_extracted_fields(
+        functional=functional,
+        basis=basis,
+        mixed_basis_intent=mixed_basis_intent,
+        heavy_elements=sorted(heavy_basis),
+        heavy_basis=first_or_none(heavy_basis.values()),
+        light_basis=light_basis,
+        fallback_basis=fallback_basis,
+    )
     result = {
         "ok": True,
+        "complete": not missing_fields,
+        "missing_fields": missing_fields,
+        "requires_clarification": bool(missing_fields),
         "project_name": name,
         "program": normalized_program,
         "source_excerpt": source[:1200],
@@ -257,6 +294,7 @@ def normalize_functional_and_dispersion(
 def _extract_functional(lowered: str) -> str | None:
     matches: list[tuple[int, str]] = []
     for pattern, canonical in (
+        (r"\bmn15\b", "mn15"),
         (r"cam[- ]?b3lyp", "camb3lyp"),
         (r"m06[- ]?2x|m062x", "m062x"),
         (r"\bpbe0\b", "pbe0"),
@@ -307,14 +345,30 @@ def _extract_heavy_basis(text: str) -> dict[str, str]:
     result: dict[str, str] = {}
     pattern = (
         rf"(?i)({DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?\s+"
-        rf"[^.;,]{{0,120}}?\bfor\s+"
-        rf"([A-Z][a-z]?(?:\s*(?:,|and)\s*[A-Z][a-z]?)*)\s*"
+        rf"(?:(?!{DEF2_BASIS_PATTERN})[^.;,]){{0,120}}?\bfor\s+"
+        rf"([A-Z][a-z]?\b"
+        rf"(?:\s*(?:,|and)\s*[A-Z][a-z]?\b)*)\s*"
         rf"(?:atom|atoms|element|elements)?"
     )
     for basis, element_blob in re.findall(pattern, text):
         basis_norm = normalize_basis_name(basis)
-        for symbol in re.findall(r"\b[A-Z][a-z]?\b", element_blob):
-            if symbol not in {"DFT", "PES", "MTD", "GC", "BS"}:
+        for raw_symbol in re.findall(r"(?i)\b[a-z]{1,2}\b", element_blob):
+            symbol = _canonical_element_symbol(raw_symbol)
+            if symbol is not None:
+                result[symbol] = basis_norm
+    reverse_pattern = (
+        rf"(?i)\bheavy\s+(?:atom|atoms|element|elements)"
+        rf"(?:\s+such\s+as)?\s+"
+        rf"([a-z]{{1,2}}\b"
+        rf"(?:\s*(?:,|and)\s*[a-z]{{1,2}}\b)*)"
+        rf"[^.;]{{0,80}}?\b(?:use|uses|using|with)\b[^.;]{{0,32}}?"
+        rf"({DEF2_BASIS_PATTERN})\b"
+    )
+    for element_blob, basis in re.findall(reverse_pattern, text):
+        basis_norm = normalize_basis_name(basis)
+        for raw_symbol in re.findall(r"(?i)\b[a-z]{1,2}\b", element_blob):
+            symbol = _canonical_element_symbol(raw_symbol)
+            if symbol is not None:
                 result[symbol] = basis_norm
     return result
 
@@ -336,6 +390,68 @@ def _extract_light_basis(text: str) -> str | None:
 def _extract_first_basis(text: str) -> str | None:
     match = re.search(rf"(?i)\b({DEF2_BASIS_PATTERN})\b", text)
     return normalize_basis_name(match.group(1)) if match else None
+
+
+def _extract_named_basis(text: str, field: str) -> str | None:
+    aliases = {field, field.replace("_", " ")}
+    for alias in aliases:
+        match = re.search(
+            rf"(?i)(?<![a-z0-9_]){re.escape(alias)}\s*[:=]\s*"
+            rf"({DEF2_BASIS_PATTERN})\b",
+            text,
+        )
+        if match:
+            return normalize_basis_name(match.group(1))
+    return None
+
+
+def _extract_named_elements(text: str) -> list[str]:
+    match = re.search(
+        r"(?i)(?<![a-z0-9_])heavy(?:_elements|\s+elements)" r"\s*[:=]\s*",
+        text,
+    )
+    if match is None:
+        return []
+    remainder = text[match.end() :]
+    boundary = re.search(
+        r"(?i)(?:[;\n]|,\s*(?:heavy_elements_basis|"
+        r"light_elements_basis|functional|basis)\s*[:=])",
+        remainder,
+    )
+    value = remainder[: boundary.start()] if boundary else remainder
+    return _canonical_elements(value)
+
+
+def _extract_contextual_heavy_elements(text: str) -> list[str]:
+    patterns = (
+        r"(?i)\bheavy\s+(?:atom|atoms|element|elements)"
+        r"(?:\s+such\s+as)?\s+"
+        r"([a-z]{1,2}\b(?:\s*(?:,|and)\s*[a-z]{1,2}\b)*)",
+        r"(?i)\bfor\s+"
+        r"([a-z]{1,2}\b(?:\s*(?:,|and)\s*[a-z]{1,2}\b)*)"
+        r"\s*(?:atom|atoms|element|elements)?(?:\s|[.;,]|$)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            elements = _canonical_elements(match.group(1))
+            if elements:
+                return elements
+    return []
+
+
+def _canonical_elements(value: str) -> list[str]:
+    result: list[str] = []
+    for raw_symbol in re.findall(r"(?i)\b[a-z]{1,2}\b", value):
+        symbol = _canonical_element_symbol(raw_symbol)
+        if symbol is not None and symbol not in result:
+            result.append(symbol)
+    return result
+
+
+def _canonical_element_symbol(value: str) -> str | None:
+    symbol = value[:1].upper() + value[1:].lower()
+    return symbol if symbol in _ELEMENT_SYMBOLS else None
 
 
 def _extract_solvent(lowered: str) -> dict[str, str | None]:
@@ -409,7 +525,37 @@ def _unsupported_protocol_features(lowered: str) -> list[str]:
 
 
 def _mentions_frequency_confirmation(lowered: str) -> bool:
-    return "frequency" in lowered or "imaginary" in lowered
+    return bool(
+        "frequency" in lowered
+        or "imaginary" in lowered
+        or re.search(r"\btransition[- ]?state\b", lowered)
+        or re.search(r"\bts\b", lowered)
+    )
+
+
+def _missing_extracted_fields(
+    *,
+    functional: str | None,
+    basis: str | None,
+    mixed_basis_intent: bool,
+    heavy_elements: list[str],
+    heavy_basis: str | None,
+    light_basis: str | None,
+    fallback_basis: str | None,
+) -> list[str]:
+    missing: list[str] = []
+    if functional is None:
+        missing.append("functional")
+    if mixed_basis_intent:
+        if not heavy_elements:
+            missing.append("heavy_elements")
+        if heavy_basis is None:
+            missing.append("heavy_elements_basis")
+        if light_basis is None and fallback_basis is None:
+            missing.append("light_elements_basis")
+    elif basis is None:
+        missing.append("basis")
+    return missing
 
 
 __all__ = [

@@ -103,9 +103,12 @@ def _load_group(module_path: str, attr_name: str) -> click.Group:
 def _missing_agent_group(import_error: str) -> click.Group:
     @click.group(name="agent", invoke_without_command=True)
     def agent():
-        """AI-scientist agent commands (install with `pip install -e .[agent-tui]`)."""
+        """AI-scientist agent commands (requires the agent extras)."""
         click.echo("agent support is not installed. Run:", err=True)
-        click.echo('  pip install -e ".[agent-tui]"', err=True)
+        click.echo(
+            '  python -m pip install -e ".[agent,agent-tui]"',
+            err=True,
+        )
         click.echo(f"(import error: {import_error})", err=True)
         raise click.exceptions.Exit(1)
 
@@ -235,7 +238,8 @@ entry_point.add_command(
             ),
         ],
         help_only_subcommands={
-            "doctor": "Validate api.env, AI_PROVIDER, and provider connectivity.",
+            "debug-bundle": "Create one explicit redacted session bundle.",
+            "doctor": "Validate provider, tool calls, and xTB availability.",
             "run": "Plan and execute an agent workflow.",
             "ask": "Run a one-shot dry-run request and stream Rich output.",
             "resume": "Resume an agent session.",

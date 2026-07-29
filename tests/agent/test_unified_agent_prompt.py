@@ -24,6 +24,30 @@ def test_explicit_submit_policy_requires_execute_not_test_mode() -> None:
     assert "explicit run or submission" in docstring
 
 
+def _prompt_text(name: str) -> str:
+    return (
+        Path(__file__).parents[2] / "chemsmart" / "agent" / "prompts" / name
+    ).read_text(encoding="utf-8")
+
+
+def test_unified_agent_stage_covers_xtb_without_project() -> None:
+    stage = _prompt_text("unified_agent.md")
+    assert "Gaussian/ORCA/xTB job" in stage
+    assert "xTB needs no project YAML" in stage
+
+
+def test_planner_prompt_declares_xtb_differences_and_prep_chain() -> None:
+    planner = _prompt_text("planner.md")
+    assert "xtb.opt | xtb.sp | xtb.hess" in planner
+    assert "NEVER call `recommend_method` for an xTB job" in planner
+    assert "xTB needs no project YAML" in planner
+    assert "xTB pre-optimization -> heavy DFT job" in planner
+    assert "save_geometry" in planner
+    assert "list_workspace" in planner
+    # The chain must keep the approval gate visible to the planner.
+    assert "run_local approval" in planner
+
+
 def test_unified_outer_prompt_fits_4096_character_budget() -> None:
     stage = (
         Path(__file__).parents[2]

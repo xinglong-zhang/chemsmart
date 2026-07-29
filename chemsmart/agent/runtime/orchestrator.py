@@ -148,10 +148,21 @@ class RuntimeController:
         provider_name: str,
         cwd: str,
         workflow_state: WorkflowState | None = None,
+        phase_hint: TaskPhase | None = None,
     ) -> TaskEnvelope:
         self.ensure_session(cwd=cwd)
         role = provider_role(provider_name)
-        phase = route_initial_phase(request, role=role)
+        if phase_hint is not None and not isinstance(phase_hint, TaskPhase):
+            raise TypeError("phase_hint must be a TaskPhase")
+        if (
+            phase_hint is not None
+            and role is ProviderRole.SYNTHESIS_SPECIALIST
+            and phase_hint is not TaskPhase.SYNTHESIS
+        ):
+            raise ValueError(
+                "synthesis-specialist providers cannot override task phase"
+            )
+        phase = phase_hint or route_initial_phase(request, role=role)
         self.turn_id = f"turn_{turn_index:04d}"
         self.emit(
             EventKind.TURN_STARTED,
@@ -385,6 +396,12 @@ def route_initial_phase(
         )
     ):
         return TaskPhase.DIAGNOSTICS
+    if _matches(
+        text,
+        r"(?:set\s*up|setup|create|build|prepare).{0,48}"
+        r"(?:gaussian|orca).{0,32}\bproject\b",
+    ):
+        return TaskPhase.PROJECT
     if any(
         marker in text
         for marker in (

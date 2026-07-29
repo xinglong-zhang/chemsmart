@@ -42,7 +42,8 @@ def _load_legacy_env(path: Path) -> None:
     except ImportError as exc:
         raise AgentProviderConfigError(
             "Legacy api.env loading requires the agent extra. Install with "
-            "`pip install 'chemsmart[agent]'`, or move the provider settings "
+            '`python -m pip install -e ".[agent,agent-tui]"`, or move the '
+            "provider settings "
             "to ~/.chemsmart/agent/agent.yaml."
         ) from exc
     load_dotenv(path, override=False)

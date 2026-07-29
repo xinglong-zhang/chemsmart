@@ -8,7 +8,7 @@ from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
-from .._agent_session_helpers import FakeProvider, planner_plan
+from .._agent_session_helpers import FakeProvider
 from .._loop_helpers import (
     openai_final_response,
     openai_tool_call_response,
@@ -22,12 +22,32 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
     tmp_path: Path,
 ):
     monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
-    import chemsmart.agent.tools as agent_tools
+    import chemsmart.agent.tools_command as command_tools
 
-    plan = planner_plan(single_molecule_xyz_file, "tui_case")
+    request = f"optimize {single_molecule_xyz_file}"
+    synthesis_payload = {
+        "ok": True,
+        "status": "ready",
+        "command": (
+            "chemsmart run gaussian -p test "
+            f"-f {single_molecule_xyz_file} -c 0 -m 1 opt"
+        ),
+        "explanation": "Prepared by the deterministic synthesis tool.",
+        "confidence": "high",
+        "project": "test",
+        "semantic": {"verdict": "ok", "failed_rule_ids": []},
+        "decision_trace": {
+            "action": "synthesize_command",
+            "confidence": "high",
+            "evidence": ["The request asks for a Gaussian optimization."],
+        },
+    }
     tool_calls = [
-        tool_call(f"call_{index}", step["tool"], step["args"])
-        for index, step in enumerate(plan["steps"], start=1)
+        tool_call(
+            "call_1",
+            "synthesize_command",
+            {"request": request},
+        )
     ]
 
     provider = FakeProvider(
@@ -40,26 +60,22 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
     def fake_get_provider():
         return provider
 
-    def fake_validate_runtime(job, server=None):
-        return {
-            "ok": "ok",
-            "local_ok": True,
-            "local_issues": [],
-            "remote_unknown": [],
-        }
-
     monkeypatch.setattr(
         "chemsmart.agent.providers.get_provider", fake_get_provider
     )
     monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
-    monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
+    monkeypatch.setattr(
+        command_tools,
+        "synthesize_command",
+        lambda request: synthesis_payload,
+    )
 
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)
-            composer.load_text(f"optimize {single_molecule_xyz_file}")
+            composer.load_text(request)
             await pilot.press("enter")
             for _ in range(20):
                 await pilot.pause(0.1)

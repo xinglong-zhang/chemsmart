@@ -94,3 +94,166 @@ def test_openai_provider_ping_uses_max_tokens_for_legacy_models(monkeypatch):
         max_tokens=5,
         timeout=30,
     )
+
+
+def test_openai_provider_tool_probe_forces_and_validates_call(monkeypatch):
+    response = MagicMock()
+    response.model = "deepseek-v4-pro"
+    response.model_dump.return_value = {
+        "model": "deepseek-v4-pro",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "probe-1",
+                            "type": "function",
+                            "function": {
+                                "name": "chemsmart_doctor_probe",
+                                "arguments": ('{"nonce": "chemsmart-doctor"}'),
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+    }
+    completions = MagicMock()
+    completions.create.return_value = response
+    client = MagicMock()
+    client.chat.completions = completions
+    openai_module = MagicMock()
+    openai_module.OpenAI.return_value = client
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+
+    result = OpenAIProvider(
+        "test-key",
+        model="deepseek-v4-pro",
+    ).tool_probe()
+
+    assert result["ok"] is True
+    assert result["resolved_model"] == "deepseek-v4-pro"
+    assert result["tool"] == "chemsmart_doctor_probe"
+    kwargs = completions.create.call_args.kwargs
+    assert kwargs["tool_choice"]["function"]["name"] == (
+        "chemsmart_doctor_probe"
+    )
+    assert (
+        kwargs["tools"][0]["function"]["parameters"]["additionalProperties"]
+        is False
+    )
+    assert kwargs["timeout"] == 30
+
+
+def test_official_deepseek_chat_disables_thinking_for_tools(monkeypatch):
+    messages = [{"role": "user", "content": "Use a tool"}]
+    tools = [{"type": "function", "function": {"name": "demo"}}]
+    response = MagicMock()
+    response.model_dump.return_value = {"id": "chatcmpl_test"}
+    completions = MagicMock()
+    completions.create.return_value = response
+    client = MagicMock()
+    client.chat.completions = completions
+    openai_module = MagicMock()
+    openai_module.OpenAI.return_value = client
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+
+    provider = OpenAIProvider(
+        "test-key",
+        model="deepseek-v4-pro",
+        base_url="https://api.deepseek.com",
+    )
+    provider.chat(messages, tools=tools)
+
+    kwargs = completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+
+
+def test_official_deepseek_tool_probe_disables_thinking(monkeypatch):
+    response = MagicMock()
+    response.model = "deepseek-v4-pro"
+    response.model_dump.return_value = {
+        "model": "deepseek-v4-pro",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "probe-1",
+                            "type": "function",
+                            "function": {
+                                "name": "chemsmart_doctor_probe",
+                                "arguments": (
+                                    '{"nonce": "chemsmart-doctor"}'
+                                ),
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+    }
+    completions = MagicMock()
+    completions.create.return_value = response
+    client = MagicMock()
+    client.chat.completions = completions
+    openai_module = MagicMock()
+    openai_module.OpenAI.return_value = client
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+
+    result = OpenAIProvider(
+        "test-key",
+        model="deepseek-v4-pro",
+        base_url="https://api.deepseek.com/v1",
+    ).tool_probe()
+
+    assert result["ok"] is True
+    kwargs = completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+
+
+def test_anthropic_provider_tool_probe_forces_and_validates_call(monkeypatch):
+    from chemsmart.agent.providers import AnthropicProvider
+
+    response = MagicMock()
+    response.model = "claude-sonnet-4-6"
+    response.model_dump.return_value = {
+        "model": "claude-sonnet-4-6",
+        "content": [
+            {
+                "type": "tool_use",
+                "id": "probe-1",
+                "name": "chemsmart_doctor_probe",
+                "input": {"nonce": "chemsmart-doctor"},
+            }
+        ],
+        "stop_reason": "tool_use",
+    }
+    client = MagicMock()
+    client.messages.create.return_value = response
+    anthropic_module = MagicMock()
+    anthropic_module.Anthropic.return_value = client
+    monkeypatch.setitem(sys.modules, "anthropic", anthropic_module)
+
+    result = AnthropicProvider("test-key").tool_probe()
+
+    assert result["ok"] is True
+    assert result["resolved_model"] == "claude-sonnet-4-6"
+    assert result["tool"] == "chemsmart_doctor_probe"
+    kwargs = client.messages.create.call_args.kwargs
+    assert kwargs["tool_choice"] == {
+        "type": "tool",
+        "name": "chemsmart_doctor_probe",
+    }
+    assert kwargs["tools"][0]["input_schema"]["additionalProperties"] is False
+    assert kwargs["timeout"] == 30

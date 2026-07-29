@@ -14,11 +14,16 @@ import time
 import warnings
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from chemsmart.agent.provider_config import (
     AgentProviderConfigError,
     _load_legacy_env,
     load_active_provider_config,
+)
+from chemsmart.agent.provider_adapter import (
+    normalize_response,
+    response_payload,
 )
 
 _GATEWAY_URL_OPENAI = "https://factchat-cloud.mindlogic.ai/v1/gateway"
@@ -29,11 +34,33 @@ _SUPPORTED = frozenset({"openai", "anthropic"})
 _PING_MESSAGES: Any = [{"role": "user", "content": "ping"}]
 DEFAULT_TIMEOUT_S = 30
 _OPENAI_USES_MCT = re.compile(r"^(gpt-5|o1|o3|o4)")
+_TOOL_PROBE_NAME = "chemsmart_doctor_probe"
+_TOOL_PROBE_NONCE = "chemsmart-doctor"
+_TOOL_PROBE_MESSAGES: Any = [
+    {
+        "role": "user",
+        "content": (
+            "Call chemsmart_doctor_probe exactly once with nonce "
+            "'chemsmart-doctor'. Do not answer in prose."
+        ),
+    }
+]
+_TOOL_PROBE_SCHEMA = {
+    "type": "object",
+    "properties": {"nonce": {"type": "string"}},
+    "required": ["nonce"],
+    "additionalProperties": False,
+}
 
 
 def _openai_uses_max_completion_tokens(model: str | None) -> bool:
     """Return whether an OpenAI-family model requires max_completion_tokens."""
     return bool(_OPENAI_USES_MCT.match((model or "").strip().lower()))
+
+
+def _is_official_deepseek_url(base_url: str) -> bool:
+    """Return whether *base_url* targets DeepSeek's official API."""
+    return (urlsplit(base_url).hostname or "").lower() == "api.deepseek.com"
 
 
 class ProviderError(Exception):
@@ -99,6 +126,36 @@ class AnthropicProvider:
             "latency_ms": _latency_ms(started),
         }
 
+    def tool_probe(self) -> dict[str, Any]:
+        """Force one inert tool call without executing the requested tool."""
+
+        started = time.perf_counter()
+        try:
+            response = self._client.messages.create(
+                model=self.default_model,
+                max_tokens=64,
+                messages=_TOOL_PROBE_MESSAGES,
+                tools=[
+                    {
+                        "name": _TOOL_PROBE_NAME,
+                        "description": "No-op provider tool-call probe.",
+                        "input_schema": _TOOL_PROBE_SCHEMA,
+                    }
+                ],
+                tool_choice={"type": "tool", "name": _TOOL_PROBE_NAME},
+                timeout=DEFAULT_TIMEOUT_S,
+            )
+            return _validate_tool_probe(
+                response,
+                protocol="anthropic",
+                fallback_model=self.default_model,
+                started=started,
+            )
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"tool probe failed: {exc}") from exc
+
 
 class OpenAIProvider:
     name = "openai"
@@ -118,9 +175,10 @@ class OpenAIProvider:
 
         self.name = (provider_name or type(self).name).strip()
         self.default_model = model or type(self).default_model
+        self.base_url = base_url or self.gateway_url
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
-            "base_url": base_url or self.gateway_url,
+            "base_url": self.base_url,
         }
         if extra_headers:
             client_kwargs["default_headers"] = extra_headers
@@ -139,6 +197,14 @@ class OpenAIProvider:
         }
         if tools:
             kwargs["tools"] = tools
+            if _is_official_deepseek_url(self.base_url):
+                # DeepSeek V4 defaults to thinking mode. ChemSmart does not
+                # replay provider reasoning_content between tool turns, and
+                # the forced doctor probe's tool_choice is rejected in that
+                # mode. Keep tool-bearing requests in non-thinking mode.
+                kwargs["extra_body"] = {
+                    "thinking": {"type": "disabled"}
+                }
         response = self._client.chat.completions.create(**kwargs)
         return response.model_dump()
 
@@ -163,6 +229,46 @@ class OpenAIProvider:
             "resolved_model": _resolve_model(response, self.default_model),
             "latency_ms": _latency_ms(started),
         }
+
+    def tool_probe(self) -> dict[str, Any]:
+        """Force one inert tool call without executing the requested tool."""
+
+        started = time.perf_counter()
+        try:
+            kwargs: dict[str, Any] = {
+                "model": self.default_model,
+                "messages": _TOOL_PROBE_MESSAGES,
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": _TOOL_PROBE_NAME,
+                            "description": "No-op provider tool-call probe.",
+                            "parameters": _TOOL_PROBE_SCHEMA,
+                        },
+                    }
+                ],
+                "tool_choice": {
+                    "type": "function",
+                    "function": {"name": _TOOL_PROBE_NAME},
+                },
+                "timeout": DEFAULT_TIMEOUT_S,
+            }
+            if _is_official_deepseek_url(self.base_url):
+                kwargs["extra_body"] = {
+                    "thinking": {"type": "disabled"}
+                }
+            response = self._client.chat.completions.create(**kwargs)
+            return _validate_tool_probe(
+                response,
+                protocol="openai",
+                fallback_model=self.default_model,
+                started=started,
+            )
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"tool probe failed: {exc}") from exc
 
 
 class LocalProvider:
@@ -321,6 +427,11 @@ class LocalProvider:
             "latency_ms": _latency_ms(started),
         }
 
+    def tool_probe(self) -> dict[str, Any]:
+        raise ProviderError(
+            "tool probe requires an OpenAI-compatible or Anthropic provider"
+        )
+
     def _ping_mlx(self, started: float) -> dict[str, Any]:
         try:
             from huggingface_hub import HfApi
@@ -460,6 +571,38 @@ def _resolve_model(response: Any, fallback: str) -> str:
 
 def _latency_ms(started: float) -> int:
     return max(0, int((time.perf_counter() - started) * 1000))
+
+
+def _validate_tool_probe(
+    response: Any,
+    *,
+    protocol: str,
+    fallback_model: str,
+    started: float,
+) -> dict[str, Any]:
+    payload = response_payload(response)
+    _text, requests, _stop_reason = normalize_response(protocol, payload)
+    if len(requests) != 1:
+        raise ProviderError(
+            "tool probe failed: provider returned "
+            f"{len(requests)} tool calls instead of one"
+        )
+    request = requests[0]
+    if request.name != _TOOL_PROBE_NAME:
+        raise ProviderError(
+            "tool probe failed: provider selected "
+            f"{request.name!r} instead of {_TOOL_PROBE_NAME!r}"
+        )
+    if request.arguments != {"nonce": _TOOL_PROBE_NONCE}:
+        raise ProviderError(
+            "tool probe failed: provider returned invalid probe arguments"
+        )
+    return {
+        "ok": True,
+        "resolved_model": _resolve_model(response, fallback_model),
+        "latency_ms": _latency_ms(started),
+        "tool": request.name,
+    }
 
 
 def extract_response_usage(response: Any) -> dict[str, int | None]:

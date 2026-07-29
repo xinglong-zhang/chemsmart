@@ -21,4 +21,4 @@ def test_bare_agent_prints_install_hint_when_textual_is_missing(monkeypatch):
     result = runner.invoke(agent, [], catch_exceptions=False)
 
     assert result.exit_code == 1
-    assert 'pip install -e ".[agent-tui]"' in result.output
+    assert 'python -m pip install -e ".[agent,agent-tui]"' in result.output

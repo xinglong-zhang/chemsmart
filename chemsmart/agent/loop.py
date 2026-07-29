@@ -16,7 +16,9 @@ from chemsmart.agent.permissions import (
     PermissionMode,
     PermissionPolicy,
     ResolvedDecision,
+    ResolvedPermission,
     RuntimePermissionMode,
+    resolve_xtb_run_local,
 )
 from chemsmart.agent.provider_adapter import (
     ToolOutcome,
@@ -104,6 +106,13 @@ class ToolLoop:
         request: ToolRequest,
     ) -> tuple[ToolOutcome, bool]:
         resolved = self.policy.resolve(request)
+        if (
+            request.name == "run_local"
+            and resolved.reason == "always_require_approval"
+        ):
+            override = self._xtb_run_policy_override(request)
+            if override is not None:
+                resolved = override
         if resolved.decision == ResolvedDecision.AUTO_DENY:
             self._runtime_permission(
                 request,
@@ -280,6 +289,35 @@ class ToolLoop:
                 result=result,
             )
         return outcome
+
+    def _xtb_run_policy_override(
+        self,
+        request: ToolRequest,
+    ) -> ResolvedPermission | None:
+        """Apply the rule-based xtb_real_runs policy to a run_local request.
+
+        Permission resolution happens before handle resolution, so the loop
+        (which owns the handle store) is the earliest point that can tell
+        whether the requested job is an xTB job and how large it is. Returns
+        None for ask mode, non-xTB jobs, unknown handles, or failed guards —
+        all of which fall back to the normal approval flow.
+        """
+
+        policy_value = getattr(self.policy, "xtb_real_runs", "ask")
+        handle_id = (request.arguments or {}).get("job")
+        if not isinstance(handle_id, str) or self.handle_store is None:
+            return None
+        try:
+            job = self.handle_store.get(handle_id)
+        except KeyError:
+            return None
+        molecule = getattr(job, "molecule", None)
+        symbols = getattr(molecule, "symbols", None)
+        return resolve_xtb_run_local(
+            policy_value,
+            job_program=getattr(job, "PROGRAM", None),
+            atom_count=len(symbols) if symbols is not None else None,
+        )
 
     def _deny_request(
         self,

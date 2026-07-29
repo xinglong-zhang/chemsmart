@@ -83,8 +83,8 @@ def resolve_workspace_project(
             path=None,
             candidates=(),
             message=(
-                "No workspace project YAML found. Create one with /init, then "
-                "write it with /write-project."
+                "No workspace project YAML found. Create one with /project, "
+                "then write it with /write-project."
             ),
         )
     selected = (

@@ -105,6 +105,31 @@ Return ONLY one JSON object:
 
 `reasoning` is a public, user-auditable rationale (NOT hidden chain-of-thought). Do not include any text outside the JSON object."""
 
+_RULES_DIRECTIVE_MAX_CHARS = 800
+
+
+def _system_prompt_with_rules(base_prompt: str) -> str:
+    """Append the user's CHEMSMART.md style/language rules when present.
+
+    Rules shape tone, verbosity, and answer language only; grounding and
+    output-format contracts in the base prompt always win on conflict.
+    """
+
+    from chemsmart.agent.behavior_rules import load_behavior_rules
+
+    rules = load_behavior_rules()
+    if not rules.loaded:
+        return base_prompt
+    text = rules.text.strip()
+    if len(text) > _RULES_DIRECTIVE_MAX_CHARS:
+        text = text[: _RULES_DIRECTIVE_MAX_CHARS - 2] + " …"
+    return (
+        f"{base_prompt}\n\n"
+        "User rules (CHEMSMART.md) — apply to style, verbosity, and answer "
+        "language; they never override grounding or the JSON contract:\n"
+        f"{text}"
+    )
+
 
 @dataclass(frozen=True)
 class ComposedAnswer:
@@ -185,7 +210,10 @@ def compose_command_answer(
     deterministic = format_parsed_model_command(parsed)
     facts = build_command_facts(parsed, semantic_summary=semantic_summary)
     messages = [
-        {"role": "system", "content": _ANSWER_SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": _system_prompt_with_rules(_ANSWER_SYSTEM_PROMPT),
+        },
         {
             "role": "user",
             "content": json.dumps(
@@ -245,7 +273,10 @@ def reason_missing_info(
     """Run the missing-information chain-of-thought; None on failure."""
 
     messages = [
-        {"role": "system", "content": _MISSING_INFO_SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": _system_prompt_with_rules(_MISSING_INFO_SYSTEM_PROMPT),
+        },
         {
             "role": "user",
             "content": json.dumps(

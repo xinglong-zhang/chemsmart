@@ -10,11 +10,11 @@ dependencies:
   # currently broken upstream; environment-windows.yml omits it for CI.
   - ffmpeg=7.1.1  # movie support for pymol
   - openbabel          # includes Python bindings on conda-forge
-  - xtb                # xTB semiempirical engine (provides the `xtb` binary)
+  - xtb=6.7.1          # validated xTB agent runtime contract
   - anthropic>=0.40
   - openai>=1
   - pydantic>=2
   - python-dotenv>=1
   - pip
   - pip:
-      - -e .[dev,test,docs,agent-tui]   # pulls all Python deps from pyproject.toml
+      - -e .[dev,test,docs,agent,agent-tui]  # project + agent runtime

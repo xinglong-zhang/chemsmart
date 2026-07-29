@@ -184,17 +184,27 @@ def _parse_xtb(result: dict[str, Any], text: str) -> list[str]:
         scan_points_total=None,
         normal_termination="* finished run" in text,
     )
-    frequencies = [
-        float(value)
-        for value in re.findall(
-            r"^\s*\d+\s+-?\d+\s+(-?\d+\.\d+)\s+",
-            _last_section(text, "projected vibrational frequencies"),
-            re.MULTILINE,
-        )
-        if abs(float(value)) > 1e-6
-    ]
-    _add_frequency_summary(result, frequencies)
+    _add_frequency_summary(result, _xtb_frequencies(text))
     return energy_matches
+
+
+def _xtb_frequencies(text: str) -> list[float]:
+    # xTB prints all 3N mass-weighted-Hessian eigenvalues on "eigval :" lines
+    # (near-zero translational/rotational modes first, then the real
+    # vibrations), not one frequency per numbered line as Gaussian/ORCA do.
+    section = _last_section(text, "projected vibrational frequencies")
+    values: list[float] = []
+    started = False
+    for line in section.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("eigval"):
+            started = True
+            values.extend(
+                float(match) for match in re.findall(r"-?\d+\.\d+", stripped)
+            )
+        elif started:
+            break
+    return [value for value in values if abs(value) > 1e-6]
 
 
 def _last_section(text: str, marker: str) -> str:

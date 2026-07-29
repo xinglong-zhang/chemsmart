@@ -194,9 +194,17 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
-The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. The `xtb` executable performs the calculation; it is installed from conda-forge (added to `environment.yml`) and resolved from the active environment's `PATH`.
+xTB support covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. The `xtb` executable performs the calculation; it is installed from conda-forge (added to `environment.yml`) and resolved from the active environment's `PATH`.
 
-For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
+**xTB does not require a project YAML.** Unlike Gaussian and ORCA — whose project files encode a functional/basis/solvent choice — xTB's method is just the GFN Hamiltonian (`gfn0`/`gfn1`/`gfn2`/`gfnff`) with a strong `gfn2` default. A bare command runs from those defaults, and any parameter can be overridden on the command line:
+
+```bash
+chemsmart run xtb -f water.xyz opt                     # GFN2, default convergence
+chemsmart run xtb -f water.xyz -g gfn1 sp              # override the Hamiltonian
+chemsmart run xtb -f water.xyz -sm alpb -si water opt  # add ALPB water solvation
+```
+
+A project YAML is optional, and only useful to pin a reusable non-default configuration. When you want one, `~/.chemsmart/xtb/*.yaml` (or a workspace-local `.chemsmart/xtb/*.yaml`) is loaded with `-p <name>`. For example, `~/.chemsmart/xtb/test.yaml`:
 
 ```text
 sp:
@@ -288,10 +296,14 @@ available commands.
 ### Setup
 
 ```bash
-pip install -e ".[agent,agent-tui]"      # providers + interactive TUI
+python -m pip install -e ".[agent,agent-tui]"  # providers + TUI
 # Configure ~/.chemsmart/agent/agent.yaml
-chemsmart agent doctor                   # verify provider, SSH, permissions
+chemsmart agent doctor --no-ping         # inspect configuration only
+chemsmart agent doctor --tool-probe      # verify one real provider tool call
 ```
+
+For a pinned, non-destructive cluster installation, follow
+[`docs/agent-hpc-install.md`](docs/agent-hpc-install.md).
 
 Provider configuration is read from `~/.chemsmart/agent/agent.yaml`. A legacy
 `api.env` credential is accepted with a deprecation warning for one release,
@@ -312,17 +324,19 @@ workspace YAML.
 | `chemsmart agent run --dry-submit "..."` | Full agent loop with dry-run previews and no remote submit |
 | `chemsmart agent resume <session-id>` | Continue a paused/audited session |
 | `chemsmart agent sessions` | List recent sessions |
+| `chemsmart agent debug-bundle <id> --output <path>` | Export one redacted session |
 | `chemsmart agent tools` | Show registered runtime tools |
-| `chemsmart agent doctor` | Provider/SSH/permission health check |
+| `chemsmart agent doctor` | Provider/tool-call/xTB health check |
 
 The TUI has one provider-aware interface: local providers synthesize commands,
 while API providers use the unified tool loop automatically. After semantic,
 intent, generated-input, and workspace-project checks pass, use `/run` for a
 validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
-command. Use `/init` to build a project YAML
-from a reported computational method, then `/write-project` to approve writing
-it into the current workspace. `Shift+Tab` previews the active YAML and cycles
-between multiple workspace projects.
+command. Use `/project` to build a project YAML; `/init` creates or updates
+CHEMSMART.md agent rules. After `/project`, provide the reported computational
+method, then use `/write-project` to approve writing it into the current
+workspace. `Shift+Tab` previews the active YAML and cycles between multiple
+workspace projects.
 
 ### Current agent behavior
 
@@ -598,21 +612,21 @@ chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob
 
 ### xTB job submission
 
-xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`, and the input structure is typically an `.xyz` file:
+xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`, and the input structure is typically an `.xyz` file. No project is required — GFN2 defaults apply:
 
 ```bash
-chemsmart run xtb -p <project> -f <input.xyz> opt
-chemsmart run xtb -p <project> -f <input.xyz> sp
-chemsmart run xtb -p <project> -f <input.xyz> hess
+chemsmart run xtb -f <input.xyz> opt
+chemsmart run xtb -f <input.xyz> sp
+chemsmart run xtb -f <input.xyz> hess
 ```
 
 To submit to a scheduler, use `sub` with a server name:
 
 ```bash
-chemsmart sub -s <server_name> xtb -p <project> -f <input.xyz> opt
+chemsmart sub -s <server_name> xtb -f <input.xyz> opt
 ```
 
-The GFN Hamiltonian (`-g/--gfn-version`), implicit solvation (`-sm/--solvent-model` together with `-si/--solvent-id`), and the optimization convergence level (`--optimization-level`, `opt` only) can be overridden on the command line; anything not overridden is taken from the project YAML. Example xTB structures are in `examples/xtb/`.
+The GFN Hamiltonian (`-g/--gfn-version`), implicit solvation (`-sm/--solvent-model` together with `-si/--solvent-id`), and the optimization convergence level (`--optimization-level`, `opt` only) are overridden on the command line. A `-p <project>` YAML is optional and only pins reusable non-default settings; anything not set there or on the command line falls back to the GFN2 defaults. Example xTB structures are in `examples/xtb/`.
 
 ### General options available to all jobs:
 

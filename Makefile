@@ -123,7 +123,7 @@ install:          ## Install the project in user mode. Normal users (runtime onl
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[dev,test,docs,agent-tui]
+	$(ENV_PREFIX)python -m pip install -e ".[dev,test,docs,agent,agent-tui]"
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit
@@ -368,4 +368,3 @@ endif
 	@echo "Remember to push commits and tags:"
 	@echo "  git push"
 	@echo "  git push origin v$(VERSION)"
-

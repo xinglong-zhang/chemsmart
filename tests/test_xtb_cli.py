@@ -117,6 +117,38 @@ class TestXTBJobClasses:
         assert XTBHessJob.TYPE == "xtbhess"
 
 
+class TestXTBProjectOptional:
+    """xTB needs no project YAML: defaults come from XTBJobSettings."""
+
+    def test_from_project_none_returns_gfn2_defaults(self):
+        from chemsmart.settings.xtb import XTBProjectSettings
+
+        settings = XTBProjectSettings.from_project(None).opt_settings()
+
+        assert settings.gfn_version == "gfn2"
+        assert settings.jobtype == "opt"
+
+    def test_from_project_missing_name_still_raises(self):
+        import pytest
+
+        from chemsmart.settings.xtb import XTBProjectSettings
+
+        with pytest.raises(FileNotFoundError):
+            XTBProjectSettings.from_project("does-not-exist")
+
+    def test_run_without_project_uses_defaults(self, single_molecule_xyz_file):
+        # No -p on the command line: the opt leaf must still build a job from
+        # GFN2 defaults rather than failing to resolve a project.
+        result, settings, _cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.opt.XTBOptJob",
+            ["-f", str(single_molecule_xyz_file), "opt"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.gfn_version == "gfn2"
+        assert settings.jobtype == "opt"
+
+
 class TestXTBSubmission:
     def test_sub_test_writes_xtb_scripts(
         self, tmp_path, server_yaml_file, monkeypatch

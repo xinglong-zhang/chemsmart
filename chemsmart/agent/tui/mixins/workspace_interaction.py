@@ -46,7 +46,7 @@ class WorkspaceInteractionMixin:
         if not status.candidates:
             if self.app.plain:
                 self.post_agent_message(
-                    "YAML MISSING\n\nBuild one with /init, then save it with "
+                    "YAML MISSING\n\nBuild one with /project, then save it with "
                     "/write-project.",
                     title="Workspace YAML",
                 )

@@ -23,8 +23,9 @@ Rules:
 - Signature args use `flags[:type][:{choices}][! required][[] repeatable]`; omitted type means a string value.
 - `ready` requires one complete command starting with `chemsmart`; ask only for a truly missing required slot; use `infeasible` when the CLI cannot express the request.
 - Remote server, submit, queue, scheduler, walltime, or HPC intent -> `chemsmart sub`; explicit local intent -> `chemsmart run`. Resource flags belong before the program.
-- Explicit ORCA -> `orca`; explicit Gaussian/G16 or otherwise workspace Gaussian -> `gaussian`. Preserve the user's program, kind, path, project, server, charge, multiplicity, atom indices, and numeric settings.
-- `-p/--project` selects project YAML; `-P/--pubchem` is only for an explicit PubChem fetch. Never combine `-f` and `-P`.
+- Explicit ORCA -> `orca`; explicit Gaussian/G16 or otherwise workspace Gaussian -> `gaussian`; explicit xTB/GFN or a cheap pre-optimization -> `xtb`. Preserve the user's program, kind, path, project, server, charge, multiplicity, atom indices, and numeric settings.
+- Program options (`-p`, `-f`, `-c`, `-m`, and program flags) go between the program name and its job subcommand; after the subcommand use only that subcommand's own flags.
+- `-p/--project` selects project YAML; `-P/--pubchem` is only for an explicit PubChem fetch. Never combine `-f` and `-P`. xTB alone needs no project: omit `-p` for xtb unless the user names one.
 - `-f/--filename` is the input path. Program-level `-m` is multiplicity; run/sub-level `-m` is memory. Use long `--num-steps` and `--nstates` to avoid `-n` ambiguity.
 - Runtime project YAML owns method/basis/solvent unless the user explicitly overrides them. Do not invent scientific values.
 - Prefer validation/fake/test flags only when the user requested preview or testing; do not silently change requested execution semantics.
@@ -47,6 +48,8 @@ Example: `chemsmart run orca -p demo -f complex.xyz -c 0 -m 1 opt qmmm --high-le
 Example: `chemsmart run orca -p demo neb -r reactant.xyz -p product.xyz --nimages 8`.""",
     "dias_wbi": """DIAS requires fragment definitions and fragment states; WBI is bond-index analysis. Do not substitute one for the other. Preserve flat fragment-1 indices and let runtime derive the complement when that is the CLI contract.""",
     "crest": """CREST/conformer requests must preserve the requested conformer count or selection strategy and job type. External CREST protocol context is not a Gaussian method override.""",
+    "xtb": """xTB is semiempirical tight-binding: it has no functional, basis set, or route line, and needs no project YAML (`-p` is optional; GFN2 defaults apply). The GFN Hamiltonian is the method: program-level `-g {gfn0|gfn1|gfn2|gfnff}`. Leaves are opt, sp, and hess (hess = vibrational frequencies). Solvation takes BOTH `-sm` and `-si` or neither. Program options (`-f`, `-c`, `-m`, `-g`, `-sm`, `-si`) go before the leaf; only `--optimization-level` follows `opt`. A fast xTB opt or hess is the right preparation step before an expensive Gaussian/ORCA job.
+Example: `chemsmart run xtb -f mol.xyz -c 0 -m 1 -g gfn2 opt --optimization-level tight`.""",
 }
 
 
@@ -102,4 +105,6 @@ def _context_packs(paths: set[str]) -> list[str]:
         selected.append(_PACKS["dias_wbi"])
     if {"crest", "traj"}.intersection(tokens):
         selected.append(_PACKS["crest"])
+    if "xtb" in tokens:
+        selected.append(_PACKS["xtb"])
     return selected

@@ -14,6 +14,7 @@ Pipeline (call these tools, in order):
 1. `extract_project_protocol` — parse the reported method into structured facts.
    Pass the user's method text, the project name (default to a short name the
    user gave, else infer one), and the program (gaussian or orca).
+   If it returns `missing_fields`, call `ask_user` for those exact fields.
 2. `render_project_yaml` — render a YAML candidate from the extracted facts.
 3. `validate_project_yaml` — load the candidate through the chemsmart project
    settings loader. Pass the `yaml_text` field from the `render_project_yaml`
@@ -26,10 +27,11 @@ Pipeline (call these tools, in order):
    single side-effecting step and requires approval.
 
 STOP CONDITION (do not loop):
-- As soon as `validate_project_yaml` returns verdict `ok` or `warn`, STOP calling
+- After `validate_project_yaml` returns verdict `ok` or `warn`, call
+  `critic_project_yaml` once for that unchanged candidate. Then STOP calling
   tools. In one final assistant message, present the candidate YAML (the
-  `yaml_text`) and the validation verdict/issues to the user, and ask them to
-  approve writing.
+  `yaml_text`), validation verdict/issues, and critic verdict/issues to the
+  user, and ask them to approve writing.
 - Do NOT re-render or re-validate a candidate that already validated `ok`/`warn`.
   Run each of `render_project_yaml`/`validate_project_yaml`/`critic_project_yaml`
   at most once per unchanged candidate; only call them again after the inputs or

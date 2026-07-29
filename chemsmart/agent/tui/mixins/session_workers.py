@@ -11,6 +11,7 @@ from chemsmart.agent.permissions import (
     PermissionPolicy,
 )
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.runtime.contracts import TaskPhase
 from chemsmart.agent.synthesis import SynthesisSession
 from chemsmart.agent.tui.chat_helpers import (
     _ExecuteOverrideRegistry,
@@ -31,7 +32,12 @@ class SessionWorkersMixin:
         group="agent-session",
         name="agent-unified",
     )
-    def run_unified_session(self, request: str) -> dict[str, object]:
+    def run_unified_session(
+        self,
+        request: str,
+        *,
+        phase_hint: TaskPhase | None = None,
+    ) -> dict[str, object]:
         self.active_resume_id = None
         if (
             self.active_agent_session is None
@@ -45,6 +51,7 @@ class SessionWorkersMixin:
         policy = self._permission_policy(prompt_risky=True)
         result = self.active_agent_session.run_loop(
             request,
+            phase_hint=phase_hint,
             policy=policy,
             approver=lambda req: self._await_approval(req),
         )

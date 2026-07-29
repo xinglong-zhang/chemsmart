@@ -7,6 +7,7 @@ from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
 )
+from chemsmart.agent.runtime.contracts import TaskPhase
 from chemsmart.agent.tui.screens.chat import ChatScreen
 
 
@@ -49,6 +50,7 @@ def test_run_unified_session_calls_run_loop_with_screen_policy(
         captured["request"] = request
         captured["policy"] = kwargs["policy"]
         captured["approver"] = kwargs["approver"]
+        captured["phase_hint"] = kwargs["phase_hint"]
         captured["stage_prompt"] = self.stage_prompt
         kwargs["policy"].record(
             "build_molecule", ApprovalDecision.ALLOW_SESSION
@@ -67,6 +69,7 @@ def test_run_unified_session_calls_run_loop_with_screen_policy(
     policy = captured["policy"]
     assert captured["request"] == "load water"
     assert captured["stage_prompt"] == "unified_agent.md"
+    assert captured["phase_hint"] is None
     assert policy.mode == PermissionMode.PERMISSION
     assert policy.yolo is True
     # The unified loop prompts for risky tools instead of auto-denying them.
@@ -80,6 +83,27 @@ def test_run_unified_session_calls_run_loop_with_screen_policy(
         "build_molecule",
         "dry_run_input",
     ]
+
+
+def test_run_unified_session_forwards_typed_project_phase(
+    monkeypatch, tmp_path
+):
+    captured: dict[str, object] = {}
+
+    def fake_run_loop(self, request, **kwargs):
+        captured["phase_hint"] = kwargs["phase_hint"]
+        return _loop_result()
+
+    monkeypatch.setattr(AgentSession, "run_loop", fake_run_loop)
+    screen = ChatScreen(session_root=tmp_path)
+
+    ChatScreen.run_unified_session.__wrapped__(
+        screen,
+        "functional MN15",
+        phase_hint=TaskPhase.PROJECT,
+    )
+
+    assert captured["phase_hint"] is TaskPhase.PROJECT
 
 
 def test_resume_agent_session_calls_run_loop_with_loaded_request(

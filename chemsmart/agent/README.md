@@ -27,7 +27,8 @@ Common TUI commands:
 
 | Command | Purpose |
 |---|---|
-| `/init` | Build a project YAML from a reported method |
+| `/init [global]` | Create or update the CHEMSMART.md agent rules file |
+| `/project` | Build a project YAML from a reported method |
 | `/write-project [name]` | Approve writing or replacing the latest validated workspace YAML |
 | `/tools` | List registered tools |
 | `/doctor` | Check provider/runtime health |
@@ -169,8 +170,10 @@ Recent TUI updates add:
 - collapsible public decision trace for API-routed turns;
 - active provider/model/project display in the footer;
 - slash-command palette with prefix filtering;
-- workspace project-YAML build/write mode through `/init` and
+- workspace project-YAML build/write mode through `/project` and
   `/write-project`, including overwrite confirmation and multi-YAML selection;
+- CHEMSMART.md agent-rules setup through `/init` (workspace) and
+  `/init global` (user scope), applied to every session's system prompt;
 - background calculation lifecycle events and a persistent status strip;
 - a `Ctrl+B` calculation monitor with receipt, bounded log, search, extraction,
   and cancellation actions;

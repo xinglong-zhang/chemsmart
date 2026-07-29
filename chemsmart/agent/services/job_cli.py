@@ -49,23 +49,33 @@ def dry_run_input(job: Job) -> dict[str, Any]:
     command = reconstruct_run_cli_command(job)
     target_directory = os.path.abspath(job.folder)
     job.set_folder(target_directory)
-    if job.jobrunner is None:
+    injected_preview_runner = job.jobrunner is None
+    if injected_preview_runner:
         job.jobrunner = SimpleNamespace(num_cores=12, mem_gb=16)
-    if isinstance(job, GaussianJob):
-        GaussianInputWriter(job=job).write(target_directory=target_directory)
-    elif isinstance(job, ORCAJob):
-        ORCAInputWriter(job=job).write(target_directory=target_directory)
-    elif isinstance(job, XTBJob):
-        # xTB takes a bare geometry and its whole method on the command line,
-        # so the geometry is the only file to render; the grounded command
-        # below carries the rest of the calculation.
-        os.makedirs(target_directory, exist_ok=True)
-        job.molecule.write_xyz(os.path.abspath(job.xyzfile), mode="w")
-    else:
-        raise ValueError(
-            "dry_run_input only supports GaussianJob, ORCAJob, and XTBJob "
-            "instances"
-        )
+    try:
+        if isinstance(job, GaussianJob):
+            GaussianInputWriter(job=job).write(
+                target_directory=target_directory
+            )
+        elif isinstance(job, ORCAJob):
+            ORCAInputWriter(job=job).write(target_directory=target_directory)
+        elif isinstance(job, XTBJob):
+            # xTB takes a bare geometry and its whole method on the command
+            # line, so the geometry is the only file to render; the grounded
+            # command below carries the rest of the calculation.
+            os.makedirs(target_directory, exist_ok=True)
+            job.molecule.write_xyz(os.path.abspath(job.xyzfile), mode="w")
+        else:
+            raise ValueError(
+                "dry_run_input only supports GaussianJob, ORCAJob, and "
+                "XTBJob instances"
+            )
+    finally:
+        # The preview stand-in supplies writer resources only. Leaving it on
+        # the job makes a later run_local() call try to execute through a
+        # SimpleNamespace instead of selecting a real program runner.
+        if injected_preview_runner:
+            job.jobrunner = None
     inputfile = os.path.abspath(job.inputfile)
     with open(inputfile) as file:
         content = file.read()

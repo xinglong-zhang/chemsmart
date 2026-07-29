@@ -34,6 +34,8 @@ def _tool_lifecycle_note(event: ToolUseEvent) -> str | None:
     if event.status == "approved":
         if event.scope == "session":
             return "approved for the rest of this session"
+        if event.reason == "xtb_real_runs_auto":
+            return "auto-approved by the xtb_real_runs policy"
         return "approved"
     if event.status == "denied":
         return (

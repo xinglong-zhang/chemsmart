@@ -8,13 +8,13 @@ before execution, and deterministic gates remain the source of truth.
 
 ```bash
 conda activate chemsmart
-pip install -e ".[agent,agent-tui]"
+python -m pip install -e ".[agent,agent-tui]"
 chemsmart agent doctor
 ```
 
 The active provider is configured in `~/.chemsmart/agent/agent.yaml`. API and
 OpenAI-compatible providers can use the full tool loop. A local provider is a
-command-synthesis specialist; project authoring with `/init` requires a
+command-synthesis specialist; project authoring with `/project` requires a
 tool-calling API provider.
 
 ## Start From A Research Workspace
@@ -41,7 +41,7 @@ The footer displays `YAML OK <program>:<project>` when one is active and
 
 ## Build A Project From A Method
 
-Enter `/init`, then send a concise method description such as:
+Enter `/project`, then send a concise method description such as:
 
 ```text
 Create an ORCA project named water_sp. Use gas-phase PBE0/def2-SVP for
@@ -177,7 +177,7 @@ Use `/sessions` and `/resume <session-id>` in the TUI, or the matching
 
 ## Common Failures
 
-- `YAML MISSING`: build one with `/init` and `/write-project`, or select among
+- `YAML MISSING`: build one with `/project` and `/write-project`, or select among
   existing workspace candidates with `Shift+Tab`.
 - `/run` blocked after editing YAML: regenerate the command so its stored YAML
   hash matches the current file.
@@ -185,5 +185,5 @@ Use `/sessions` and `/resume <session-id>` in the TUI, or the matching
   and verify the footer reads `YAML OK` before sending the calculation request.
 - Missing input file in `@`: confirm the TUI was launched from the intended
   workspace and the file is below that directory.
-- Local provider rejects `/init`: switch to a configured tool-calling API
+- Local provider rejects `/project`: switch to a configured tool-calling API
   provider for project authoring, then return to local synthesis if desired.
