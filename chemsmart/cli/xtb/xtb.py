@@ -292,7 +292,10 @@ def xtb(
             "Only give xTB input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
         if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
@@ -302,7 +305,10 @@ def xtb(
                 label = f"{label}_RI-{record_index}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
         if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
@@ -310,7 +316,8 @@ def xtb(
                 label = f"{label}_RID-{record_id}"
             elif record_index is not None:
                 label = f"{label}_RI-{record_index}"
-        label = f"{label}_{ctx.invoked_subcommand}"
+        if ctx.invoked_subcommand:
+            label = f"{label}_{ctx.invoked_subcommand}"
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
