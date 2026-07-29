@@ -3,8 +3,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def build_xtb_jobs(ctx, job_cls, settings, skip_completed, kwargs):
-    """Build one or more xTB jobs shared across the opt/sp/hess subcommands."""
+def build_jobs(ctx, job_cls, settings, skip_completed, kwargs):
+    """Build one or more jobs from molecules stored on the Click context."""
     jobrunner = ctx.obj["jobrunner"]
     molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj["molecule_indices"]
@@ -15,7 +15,7 @@ def build_xtb_jobs(ctx, job_cls, settings, skip_completed, kwargs):
         for molecule, idx in zip(molecules, molecule_indices):
             # Preserve one output directory per selected structure.
             molecule_label = f"{label}_idx{idx}"
-            logger.info(f"Creating xTB job {molecule_label}")
+            logger.info(f"Creating job {molecule_label}")
             jobs.append(
                 job_cls(
                     molecule=molecule,
@@ -29,7 +29,7 @@ def build_xtb_jobs(ctx, job_cls, settings, skip_completed, kwargs):
         return jobs
 
     molecule = molecules[-1]
-    logger.info(f"Creating xTB job {label}")
+    logger.info(f"Creating job {label}")
     return job_cls(
         molecule=molecule,
         settings=settings,

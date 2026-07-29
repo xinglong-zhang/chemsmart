@@ -184,7 +184,7 @@ Route and Calculation Options
       -  Type
       -  Description
 
-   -  -  ``-r, --additional-route-parameters``
+   -  -  ``-r, --additional-flags``
       -  string
       -  Extra xTB CLI flags appended to the generated command
 

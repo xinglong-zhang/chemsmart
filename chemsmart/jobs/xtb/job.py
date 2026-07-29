@@ -39,7 +39,6 @@ class XTBJob(Job):
 
         self.molecule = molecule.copy()
         self.settings = settings.copy()
-        self.label = label
 
     @classmethod
     def settings_class(cls) -> Type[XTBJobSettings]:
@@ -61,6 +60,10 @@ class XTBJob(Job):
     def errfile(self):
         return os.path.join(self.folder, f"{self.label}.err")
 
+    @property
+    def restartfile(self):
+        return os.path.join(self.folder, "xtbrestart")
+
     def _determine_folder(self):
         folder = os.path.abspath(os.getcwd())
         if self.label:
@@ -75,6 +78,7 @@ class XTBJob(Job):
         folder = self._create_backup_folder_name()
         self.backup_file(self.xyzfile, folder=folder, **kwargs)
         self.backup_file(self.outputfile, folder=folder, **kwargs)
+        self.backup_file(self.restartfile, folder=folder, **kwargs)
 
     def _output(self):
         if not os.path.exists(self.outputfile):

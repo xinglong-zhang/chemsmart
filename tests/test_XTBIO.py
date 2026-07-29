@@ -16,7 +16,144 @@ from chemsmart.io.xtb.file import (
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
+from chemsmart.io.xtb.route import XTBRoute
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
+
+
+class TestXTBRoute:
+    """Tests for XTBRoute class."""
+
+    def test_read_route(self):
+        s1 = "xtb mol.xyz --gfn 2"
+        r1 = XTBRoute(route_string=s1)
+        assert r1.method == "gfn2"
+        assert r1.gfn_version == "gfn2"
+        assert r1.basis == "default"
+        assert r1.charge is None
+        assert r1.uhf is None
+        assert r1.jobtype == "sp"
+        assert r1.optimization_level is None
+        assert r1.solvent_model is None
+        assert r1.solvent_id is None
+        assert r1.freq is False
+        assert r1.grad is False
+
+        s2 = (
+            "xtb mol.xyz "
+            "--gfn2 "
+            "--chrg -1 "
+            "--uhf 2 "
+            "--alpb water "
+            "--opt tight "
+            "--grad "
+            "--acc 0.1 "
+            "--etemp 400"
+        )
+        r2 = XTBRoute(route_string=s2)
+        assert r2.method == "gfn2"
+        assert r2.gfn_version == "gfn2"
+        assert r2.charge == -1
+        assert r2.uhf == 2
+        assert r2.jobtype == "opt"
+        assert r2.solvent_model == "alpb"
+        assert r2.solvent_id == "water"
+        assert r2.optimization_level == "tight"
+        assert r2.grad is True
+        assert r2.freq is False
+        assert r2.accuracy == 0.1
+        assert r2.electronic_temperature == 400.0
+
+        # GBSA solvent and Hessian job
+        s3 = "xtb mol.xyz --gfn 1 --gbsa toluene --hess"
+        r3 = XTBRoute(route_string=s3)
+        assert r3.method == "gfn1"
+        assert r3.solvent_model == "gbsa"
+        assert r3.solvent_id == "toluene"
+        assert r3.jobtype == "hess"
+        assert r3.freq is True
+
+        # Short charge/uhf flags, COSMO, and property printouts
+        s4 = (
+            "xtb mol.xyz "
+            "--gfn 0 "
+            "-c 1 "
+            "-u 1 "
+            "--cosmo thf "
+            "--pop "
+            "--wbo "
+            "--dipole"
+        )
+        r4 = XTBRoute(route_string=s4)
+        assert r4.method == "gfn0"
+        assert r4.charge == 1
+        assert r4.uhf == 1
+        assert r4.solvent_model == "cosmo"
+        assert r4.solvent_id == "thf"
+        assert r4.jobtype == "sp"
+        assert r4.mulliken_population is True
+        assert r4.wbo is True
+        assert r4.dipole is True
+
+        # verytight normalized to vtight; CPCMX solvent
+        s5 = "xtb mol.xyz --gfn 2 --opt verytight --cpcmx water"
+        r5 = XTBRoute(route_string=s5)
+        assert r5.optimization_level == "vtight"
+        assert r5.jobtype == "opt"
+        assert r5.solvent_model == "cpcmx"
+        assert r5.solvent_id == "water"
+
+        # GFN-FF and combined optimize+Hessian flags
+        s6 = "xtb mol.xyz --gfnff --ohess"
+        r6 = XTBRoute(route_string=s6)
+        assert r6.method == "gfnff"
+        assert r6.gfn_version == "gfnff"
+        assert r6.jobtype == "opt"
+        assert r6.freq is True
+
+        # --gff alias and MD job type
+        s7 = "xtb mol.xyz --gff --md"
+        r7 = XTBRoute(route_string=s7)
+        assert r7.gfn_version == "gfnff"
+        assert r7.method == "gfnff"
+        assert r7.jobtype == "md"
+
+        # Boolean property flags
+        s8 = (
+            "xtb mol.xyz "
+            "--gfn 2 "
+            "--ptb "
+            "--spinpol "
+            "--ceh "
+            "--molden "
+            "--lmo "
+            "--fod "
+            "--esp "
+            "--stm "
+            "--vip "
+            "--vea "
+            "--vipea "
+            "--vfukui "
+            "--vomega "
+            "--alpha "
+            "--cma"
+        )
+        r8 = XTBRoute(route_string=s8)
+        assert r8.jobtype == "sp"
+        assert r8.ptb is True
+        assert r8.spin_polarization is True
+        assert r8.charge_extended_hueckel is True
+        assert r8.molden_file is True
+        assert r8.localized_molecular_orbitals is True
+        assert r8.fractional_occupation_density is True
+        assert r8.electrostatic_potential is True
+        assert r8.stm_image is True
+        assert r8.vertical_ionization_potential is True
+        assert r8.vertical_electron_affinity is True
+        assert r8.vertical_ionization_and_affinity is True
+        assert r8.fukui_indices is True
+        assert r8.electrophilicity_index is True
+        assert r8.polarizability is True
+        assert r8.center_of_mass_transform is True
 
 
 class TestXTBInput:

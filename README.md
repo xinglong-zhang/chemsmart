@@ -601,7 +601,7 @@ chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 
 chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
 ```
 
-Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-route-parameters`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `--optimization-level` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
+Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-flags`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `-O/--optimization-level` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
 
 ---
 ### CREST job submission

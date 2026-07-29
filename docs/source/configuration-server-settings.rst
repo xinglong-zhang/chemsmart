@@ -581,8 +581,7 @@ Full example:
            conda activate ~/miniconda3/envs/chemsmart
        MODULES: null
        SCRIPTS: null
-       ENVARS: |
-           export SCRATCH=~/scratch
+       ENVARS: null
 
 CREST Section
 -------------

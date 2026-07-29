@@ -56,8 +56,7 @@ XTB:
         conda activate ~/miniconda3/envs/chemsmart
     MODULES: null
     SCRIPTS: null
-    ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
+    ENVARS: null
 
 CREST:
     EXEFOLDER: null  # use crest from activated conda environment/PATH

@@ -26,7 +26,7 @@ Optimization Options
       -  Type
       -  Description
 
-   -  -  ``--optimization-level``
+   -  -  ``-O, --optimization-level``
       -  choice
       -  Convergence level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``
 
@@ -43,7 +43,7 @@ Override the project optimization level:
 
 .. code:: bash
 
-   chemsmart run xtb -p project -f molecule.xyz opt --optimization-level loose
+   chemsmart run xtb -p project -f molecule.xyz opt -O loose
 
 HPC job submission:
 
