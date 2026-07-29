@@ -3,7 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.xtb.common import build_xtb_jobs
+from chemsmart.cli.utils import build_jobs
 from chemsmart.cli.xtb.xtb import xtb
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -25,6 +25,6 @@ def sp(ctx, skip_completed, **kwargs):
 
     from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 
-    return build_xtb_jobs(
+    return build_jobs(
         ctx, XTBSinglePointJob, sp_settings, skip_completed, kwargs
     )
