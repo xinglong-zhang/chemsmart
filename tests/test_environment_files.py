@@ -80,3 +80,10 @@ def test_the_exclusion_is_actually_present_upstream() -> None:
         "environment.yml no longer pins ffmpeg; drop environment-windows.yml "
         "and point the Windows CI job back at environment.yml"
     )
+
+
+def test_agent_runtime_and_xtb_contract_are_pinned() -> None:
+    canonical_conda, canonical_pip = _requirements(_load(_CANONICAL))
+
+    assert "xtb=6.7.1" in canonical_conda
+    assert "-e .[dev,test,docs,agent,agent-tui]" in canonical_pip

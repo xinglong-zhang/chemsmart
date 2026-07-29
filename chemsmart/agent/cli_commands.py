@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
 import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -47,6 +52,11 @@ from chemsmart.agent.services.command_logging import (
     _flush_logging_handlers,
     _silence_console_logging,
 )
+from chemsmart.agent.services.debug_bundle import (
+    DebugBundleError,
+    create_debug_bundle,
+)
+from chemsmart.agent.services.runtime_metrics import git_sha
 from chemsmart.agent.services.session_listing import (
     format_session_age,
     load_session_snapshots,
@@ -122,7 +132,7 @@ def agent(ctx, plain: bool, verbose: bool, debug: bool):
     if _tui_launcher is None:
         click.echo(
             "The agent TUI requires optional dependencies. "
-            'Install them with: pip install -e ".[agent-tui]"'
+            'Install them with: python -m pip install -e ".[agent,agent-tui]"'
         )
         raise click.exceptions.Exit(1)
     try:
@@ -130,7 +140,7 @@ def agent(ctx, plain: bool, verbose: bool, debug: bool):
     except ImportError as exc:
         click.echo(
             "The agent TUI requires optional dependencies. "
-            'Install them with: pip install -e ".[agent-tui]"'
+            'Install them with: python -m pip install -e ".[agent,agent-tui]"'
         )
         raise click.exceptions.Exit(1) from exc
 
@@ -166,14 +176,31 @@ def dump_cli_schema(out_path: Path | None) -> None:
     default=False,
     help="Skip the provider connectivity ping.",
 )
-def doctor(no_ping: bool):
+@click.option(
+    "--tool-probe",
+    is_flag=True,
+    default=False,
+    help="Force one inert provider tool call without executing a tool.",
+)
+@click.option(
+    "--require-xtb",
+    is_flag=True,
+    default=False,
+    help="Exit non-zero when xTB is unavailable in the active environment.",
+)
+def doctor(no_ping: bool, tool_probe: bool, require_xtb: bool):
     """Validate agent.yaml, provider connectivity, and registered tools."""
     with _agent_command_logging():
+        import chemsmart
         import chemsmart.agent.providers as providers
         from chemsmart.agent.provider_config import (
             AgentProviderConfigError,
             load_active_provider_config,
         )
+
+        _print_runtime_identity(chemsmart)
+        xtb = _probe_xtb()
+        _print_xtb_identity(xtb)
 
         try:
             provider_config = load_active_provider_config()
@@ -225,11 +252,36 @@ def doctor(no_ping: bool):
                 f"latency={ping['latency_ms']}ms)"
             )
 
+        probe_failed = False
+        if tool_probe:
+            try:
+                probe = provider.tool_probe()
+            except ProviderError as exc:
+                probe_failed = True
+                click.echo(f"tool probe: FAILED {exc}")
+                click.echo(
+                    "tool probe classification: "
+                    f"{_classify_provider_failure(exc)}"
+                )
+            else:
+                click.echo(
+                    "tool probe: ok "
+                    f"(model={probe['resolved_model']}, "
+                    f"tool={probe['tool']}, "
+                    f"latency={probe['latency_ms']}ms)"
+                )
+
         click.echo(f"tools registered: {len(registry.list_tools())}")
         if provider_name == "anthropic":
             click.echo(
                 "WARN: this gateway tenant may not have Anthropic access"
             )
+        if require_xtb and not xtb["ok"]:
+            raise click.ClickException(
+                "xTB is required but is unavailable in the active environment"
+            )
+        if probe_failed:
+            raise click.exceptions.Exit(1)
 
 
 @agent.command(name="run")
@@ -460,6 +512,31 @@ def sessions(show_all: bool):
         Console().print(table)
 
 
+@agent.command(name="debug-bundle")
+@click.argument("session_id")
+@click.option(
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the redacted .tar.gz bundle to this path.",
+)
+def debug_bundle(session_id: str, output_path: Path) -> None:
+    """Package one explicit session's redacted diagnostic evidence."""
+    try:
+        receipt = create_debug_bundle(
+            Path(_default_session_root()),
+            session_id,
+            output_path,
+            workspace_path=Path.cwd(),
+        )
+    except DebugBundleError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"debug bundle: {receipt['output']}")
+    click.echo(f"session: {receipt['session_id']}")
+    click.echo(f"files: {', '.join(receipt['included_files'])}")
+
+
 @agent.command(name="migrate-session")
 @click.argument("source")
 @click.option(
@@ -644,6 +721,77 @@ def _agent_debug_enabled() -> bool:
 
 def _agent_log_root() -> Path:
     return Path(_default_session_root()).parent
+
+
+def _print_runtime_identity(chemsmart_module) -> None:
+    package_path = Path(chemsmart_module.__file__).resolve()
+    click.echo(f"chemsmart version: {chemsmart_module.__version__}")
+    click.echo(f"chemsmart package: {package_path}")
+    click.echo(f"python: {sys.executable}")
+    click.echo(f"python version: {platform.python_version()}")
+    click.echo(
+        f"chemsmart executable: {shutil.which('chemsmart') or '(not found)'}"
+    )
+    click.echo(f"git SHA: {git_sha(Path(__file__)) or '(not a git checkout)'}")
+
+
+def _probe_xtb() -> dict[str, object]:
+    executable = shutil.which("xtb")
+    if executable is None:
+        return {"ok": False, "path": None, "version": None, "error": "missing"}
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "ok": False,
+            "path": executable,
+            "version": None,
+            "error": str(exc),
+        }
+    output = "\n".join((completed.stdout, completed.stderr)).strip()
+    version_match = re.search(
+        r"(?:version\s+)?(\d+\.\d+(?:\.\d+)?)",
+        output,
+        flags=re.IGNORECASE,
+    )
+    return {
+        "ok": completed.returncode == 0,
+        "path": executable,
+        "version": version_match.group(1) if version_match else "unknown",
+        "error": output if completed.returncode else None,
+    }
+
+
+def _print_xtb_identity(probe: dict[str, object]) -> None:
+    click.echo(f"xtb path: {probe['path'] or '(not found)'}")
+    click.echo(f"xtb version: {probe['version'] or '(unavailable)'}")
+    if probe["ok"] and probe["version"] != "6.7.1":
+        click.echo("WARN: validated HPC xTB contract is version 6.7.1")
+    elif not probe["ok"]:
+        click.echo(f"xtb status: unavailable ({probe['error']})")
+
+
+def _classify_provider_failure(error: Exception) -> str:
+    message = str(error).lower()
+    if "401" in message or "403" in message:
+        return "account or authorization"
+    if "404" in message:
+        return "model configuration"
+    if "400" in message or "schema" in message:
+        return "gateway adapter or tool schema"
+    if (
+        "timeout" in message
+        or "timed out" in message
+        or re.search(r"\b5\d\d\b", message)
+    ):
+        return "provider operational failure after retries"
+    return "provider failure"
 
 
 def _resume_session_or_fail(session_id: str, **kwargs):

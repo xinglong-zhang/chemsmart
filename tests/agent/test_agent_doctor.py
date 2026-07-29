@@ -42,14 +42,28 @@ def _config(provider_type, *, name="main", model="chemsmart-test"):
 
 
 class _FakeProvider:
-    def __init__(self, *, ping_result=None, ping_exc=None):
+    def __init__(
+        self,
+        *,
+        ping_result=None,
+        ping_exc=None,
+        tool_probe_result=None,
+        tool_probe_exc=None,
+    ):
         self._ping_result = ping_result
         self._ping_exc = ping_exc
+        self._tool_probe_result = tool_probe_result
+        self._tool_probe_exc = tool_probe_exc
 
     def ping(self):
         if self._ping_exc is not None:
             raise self._ping_exc
         return self._ping_result
+
+    def tool_probe(self):
+        if self._tool_probe_exc is not None:
+            raise self._tool_probe_exc
+        return self._tool_probe_result
 
 
 def _install(
@@ -274,3 +288,75 @@ def test_doctor_no_config_and_no_env_exits_nonzero(monkeypatch):
 
     assert result.exit_code != 0
     assert "provider" in result.output.lower()
+
+
+def test_doctor_tool_probe_reports_success(monkeypatch):
+    provider = _FakeProvider(
+        tool_probe_result={
+            "ok": True,
+            "resolved_model": "deepseek-v4-pro",
+            "tool": "chemsmart_doctor_probe",
+            "latency_ms": 73,
+        }
+    )
+    _install(monkeypatch, config=_config("openai"), provider=provider)
+    monkeypatch.setattr(
+        "chemsmart.agent.cli_commands._probe_xtb",
+        lambda: {
+            "ok": True,
+            "path": "/env/bin/xtb",
+            "version": "6.7.1",
+            "error": None,
+        },
+    )
+
+    result = CliRunner().invoke(
+        agent,
+        ["doctor", "--no-ping", "--tool-probe", "--require-xtb"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "chemsmart package:" in result.output
+    assert "git SHA:" in result.output
+    assert "xtb path: /env/bin/xtb" in result.output
+    assert "xtb version: 6.7.1" in result.output
+    assert "tool probe: ok (model=deepseek-v4-pro" in result.output
+
+
+def test_doctor_tool_probe_classifies_gateway_schema_failure(monkeypatch):
+    provider = _FakeProvider(
+        tool_probe_exc=ProviderError("HTTP 400 invalid tools schema")
+    )
+    _install(monkeypatch, config=_config("openai"), provider=provider)
+
+    result = CliRunner().invoke(
+        agent,
+        ["doctor", "--no-ping", "--tool-probe"],
+    )
+
+    assert result.exit_code != 0
+    assert "tool probe: FAILED" in result.output
+    assert "gateway adapter or tool schema" in result.output
+
+
+def test_doctor_require_xtb_fails_when_binary_is_missing(monkeypatch):
+    provider = _FakeProvider()
+    _install(monkeypatch, config=_config("openai"), provider=provider)
+    monkeypatch.setattr(
+        "chemsmart.agent.cli_commands._probe_xtb",
+        lambda: {
+            "ok": False,
+            "path": None,
+            "version": None,
+            "error": "missing",
+        },
+    )
+
+    result = CliRunner().invoke(
+        agent,
+        ["doctor", "--no-ping", "--require-xtb"],
+    )
+
+    assert result.exit_code != 0
+    assert "xtb path: (not found)" in result.output
+    assert "xTB is required" in result.output

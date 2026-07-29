@@ -296,10 +296,14 @@ available commands.
 ### Setup
 
 ```bash
-pip install -e ".[agent,agent-tui]"      # providers + interactive TUI
+python -m pip install -e ".[agent,agent-tui]"  # providers + TUI
 # Configure ~/.chemsmart/agent/agent.yaml
-chemsmart agent doctor                   # verify provider, SSH, permissions
+chemsmart agent doctor --no-ping         # inspect configuration only
+chemsmart agent doctor --tool-probe      # verify one real provider tool call
 ```
+
+For a pinned, non-destructive cluster installation, follow
+[`docs/agent-hpc-install.md`](docs/agent-hpc-install.md).
 
 Provider configuration is read from `~/.chemsmart/agent/agent.yaml`. A legacy
 `api.env` credential is accepted with a deprecation warning for one release,
@@ -320,17 +324,19 @@ workspace YAML.
 | `chemsmart agent run --dry-submit "..."` | Full agent loop with dry-run previews and no remote submit |
 | `chemsmart agent resume <session-id>` | Continue a paused/audited session |
 | `chemsmart agent sessions` | List recent sessions |
+| `chemsmart agent debug-bundle <id> --output <path>` | Export one redacted session |
 | `chemsmart agent tools` | Show registered runtime tools |
-| `chemsmart agent doctor` | Provider/SSH/permission health check |
+| `chemsmart agent doctor` | Provider/tool-call/xTB health check |
 
 The TUI has one provider-aware interface: local providers synthesize commands,
 while API providers use the unified tool loop automatically. After semantic,
 intent, generated-input, and workspace-project checks pass, use `/run` for a
 validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
-command. Use `/init` to build a project YAML
-from a reported computational method, then `/write-project` to approve writing
-it into the current workspace. `Shift+Tab` previews the active YAML and cycles
-between multiple workspace projects.
+command. Use `/project` to build a project YAML; `/init` creates or updates
+CHEMSMART.md agent rules. After `/project`, provide the reported computational
+method, then use `/write-project` to approve writing it into the current
+workspace. `Shift+Tab` previews the active YAML and cycles between multiple
+workspace projects.
 
 ### Current agent behavior
 
