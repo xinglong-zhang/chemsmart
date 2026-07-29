@@ -150,7 +150,12 @@ class WorkerLifecycleMixin:
         self, result: dict[str, object], is_execute: bool
     ) -> None:
         if result.get("blocked"):
-            self.query_one(FooterWidget).set_hint("Execution blocked")
+            footer = self.query_one(FooterWidget)
+            footer.set_phase(Phase.ERROR)
+            reason = str(result.get("limit_reason") or "blocked").replace(
+                "_", " "
+            )
+            footer.set_hint(f"Session blocked: {reason}")
         elif (
             isinstance(result.get("plan"), Plan)
             and result["plan"].is_chitchat()

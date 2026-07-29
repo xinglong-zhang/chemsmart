@@ -6,6 +6,7 @@ from pydantic import Field, create_model
 
 from chemsmart.agent.core import AgentSession
 from chemsmart.agent.registry import ToolInputModel, ToolRegistry, ToolSpec
+from chemsmart.agent.services.session_listing import load_session_snapshots
 from chemsmart.agent.tool_protocol import RuntimeToolMetadata
 
 from .._agent_session_helpers import FakeProvider
@@ -266,6 +267,62 @@ def test_runtime_off_keeps_legacy_session_artifacts(tmp_path):
     assert result["runtime_v2"] == {"mode": "off"}
     assert session.session_dir is not None
     assert not (session.session_dir / "runtime_events.jsonl").exists()
+
+
+def test_provider_error_budget_is_blocked_across_all_session_projections(
+    tmp_path,
+):
+    class FailingProvider(FakeProvider):
+        def chat(self, messages, tools=None, timeout_s=30):
+            self.calls.append(
+                {
+                    "messages": messages,
+                    "tools": tools,
+                    "timeout_s": timeout_s,
+                }
+            )
+            raise TimeoutError("provider timeout")
+
+    session_root = tmp_path / "sessions"
+    session = AgentSession(
+        provider=FailingProvider([]),
+        registry=_registry(),
+        session_root=session_root,
+        runtime_v2="active",
+    )
+
+    result = session.run_loop("Prepare a Gaussian optimization for water.")
+
+    assert result["provider_errors"] == 2
+    assert result["limit_reason"] == "provider_errors"
+    assert result["blocked"] is True
+    assert result["runtime_v2"]["phase"] == "blocked"
+    assert session._llm_stats[-1]["success"] is False
+    assert session.session_dir is not None
+
+    metadata_path = session.session_dir / "session_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["blocked"] is True
+    assert metadata["block_reason"] == "provider_errors"
+    assert metadata["exit_status"] == "blocked"
+
+    entries = [
+        json.loads(line)
+        for line in (session.session_dir / "decision_log.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert (
+        sum(entry["kind"] == "provider_turn_error" for entry in entries) == 2
+    )
+    assert any(entry["kind"] == "loop_limit_exceeded" for entry in entries)
+
+    # Legacy bad metadata must not override the durable blocked runtime state.
+    metadata["blocked"] = False
+    metadata["exit_status"] = "ok"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    snapshots = load_session_snapshots(session_root)
+    assert snapshots[0]["status"] == "blocked"
 
 
 def _registry(*tools):

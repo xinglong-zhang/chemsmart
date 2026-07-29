@@ -54,6 +54,7 @@ def truncate_session_request(request: object, limit: int = 60) -> str:
 def _session_snapshot(session_dir: Path) -> dict[str, object]:
     metadata = _load_json(session_dir / "session_metadata.json")
     state = _load_json(session_dir / "session.json")
+    runtime_state = _load_json(session_dir / "runtime_state.json")
     entries = _load_decision_entries(session_dir / "decision_log.jsonl")
 
     request = ""
@@ -79,7 +80,7 @@ def _session_snapshot(session_dir: Path) -> dict[str, object]:
     return {
         "session_id": session_dir.name,
         "request": request,
-        "status": _session_status(metadata, state, entries),
+        "status": _session_status(metadata, state, runtime_state, entries),
         "timestamp": timestamp,
     }
 
@@ -87,8 +88,16 @@ def _session_snapshot(session_dir: Path) -> dict[str, object]:
 def _session_status(
     metadata: dict | None,
     state: dict | None,
+    runtime_state: dict | None,
     entries: list[dict[str, object]],
 ) -> str:
+    if (
+        isinstance(runtime_state, dict)
+        and runtime_state.get("phase") == "blocked"
+    ):
+        return "blocked"
+    if any(entry.get("kind") == "loop_limit_exceeded" for entry in entries):
+        return "blocked"
     if isinstance(metadata, dict):
         if metadata.get("blocked"):
             return "blocked"
@@ -108,7 +117,11 @@ def _session_status(
             return "blocked"
         return "ok"
 
-    if any(entry.get("kind") in {"error", "tool_error"} for entry in entries):
+    if any(
+        entry.get("kind")
+        in {"error", "tool_error", "llm_error", "provider_turn_error"}
+        for entry in entries
+    ):
         return "error"
 
     if isinstance(state, dict):

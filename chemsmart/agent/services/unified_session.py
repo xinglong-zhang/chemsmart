@@ -451,7 +451,7 @@ class UnifiedSessionRunner:
                 "input_tokens": loop_result["total_input_tokens"],
                 "output_tokens": loop_result["total_output_tokens"],
                 "latency_ms": elapsed_ms(session._run_start_time),
-                "success": True,
+                "success": loop_result.get("limit_reason") is None,
             }
         ]
 
@@ -471,10 +471,11 @@ class UnifiedSessionRunner:
         session.state.pending_messages = None
         session.state.pending_ask_user = None
         session._save_state()
+        limit_reason = loop_result.get("limit_reason")
         session._finalize_session(
             verdict=None,
-            blocked=False,
-            block_reason=loop_result["limit_reason"],
+            blocked=limit_reason is not None,
+            block_reason=limit_reason,
             dry_run_results=projection.dry_run_results,
             advisory_only=not projection.tool_requests,
             is_chitchat=projection.is_chitchat,
@@ -492,6 +493,7 @@ class UnifiedSessionRunner:
         assert session.state is not None
         assert session.session_dir is not None
         ask_user = loop_result.get("ask_user")
+        blocked = loop_result.get("limit_reason") is not None
         return {
             "session_id": session.state.session_id,
             "session_dir": str(session.session_dir),
@@ -499,7 +501,7 @@ class UnifiedSessionRunner:
             "plan_text": render_plan(projection.plan),
             "critic_verdict": None,
             "completed_steps": session.state.current_step_index,
-            "blocked": False,
+            "blocked": blocked,
             "dry_run_result": _primary_dry_run_result(
                 projection.dry_run_results
             ),

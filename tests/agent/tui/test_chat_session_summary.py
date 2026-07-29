@@ -7,6 +7,7 @@ from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
+    ErrorCell,
     FinalAnswerCell,
     ToolCallCell,
     ToolChainToggleCell,
@@ -142,5 +143,59 @@ def test_blocked_summary_hides_stale_command_and_remains_visible(
             assert isinstance(visible[1], AgentMessageCell)
             assert "semantic_reject" in visible[1].source_text
             assert not stale.display
+
+    asyncio.run(scenario())
+
+
+def test_provider_and_loop_failures_render_error_cells_and_blocked_footer(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen._apply_log_entry(
+                {
+                    "kind": "provider_turn_error",
+                    "payload": {
+                        "error_type": "TimeoutError",
+                        "message": "provider timeout",
+                        "attempt": 2,
+                    },
+                }
+            )
+            app.chat_screen._apply_log_entry(
+                {
+                    "kind": "loop_limit_exceeded",
+                    "payload": {
+                        "limit_reason": "provider_errors",
+                        "model_steps": 2,
+                        "tool_calls": 0,
+                    },
+                }
+            )
+            await pilot.pause()
+
+            transcript = app.query_one(Transcript).query_one("#cells")
+            errors = [
+                cell
+                for cell in transcript.children
+                if isinstance(cell, ErrorCell)
+            ]
+            assert [error.message for error in errors] == [
+                "provider timeout",
+                "Agent loop stopped: provider_errors",
+            ]
+
+            app.chat_screen._set_session_completion_footer(
+                {
+                    "blocked": True,
+                    "limit_reason": "provider_errors",
+                },
+                False,
+            )
+            footer = app.query_one(FooterWidget)
+            assert footer.phase is Phase.ERROR
+            assert footer.hint == "Session blocked: provider errors"
 
     asyncio.run(scenario())

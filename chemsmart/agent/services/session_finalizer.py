@@ -267,7 +267,9 @@ def _effective_failure(
     block_reason: str | None,
     run_error: Exception | None,
 ) -> tuple[bool, str]:
-    effective_blocked = blocked or run_error is not None
+    effective_blocked = (
+        blocked or block_reason is not None or run_error is not None
+    )
     if run_error is not None and block_reason is None:
         block_reason = f"exception:{run_error.__class__.__name__}"
     return effective_blocked, block_reason or "unknown"
