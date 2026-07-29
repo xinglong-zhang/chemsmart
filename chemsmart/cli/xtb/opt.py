@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @xtb.command("opt", cls=MyCommand)
 @click_job_options
 @click.option(
-    "-l",
+    "-O",
     "--optimization-level",
     type=click.Choice(
         [
