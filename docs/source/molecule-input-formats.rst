@@ -427,6 +427,7 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`

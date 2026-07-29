@@ -2,7 +2,8 @@
  Structure Optimization (xTB)
 ##############################
 
-This page covers geometry optimization, single point, and Hessian/frequency workflows using xTB.
+This page covers geometry optimization, single point, and Hessian/frequency workflows using `xTB
+<https://xtb-docs.readthedocs.io/en/latest/>`_ (Extended Tight Binding).
 
 ***********************
  Geometry Optimization
