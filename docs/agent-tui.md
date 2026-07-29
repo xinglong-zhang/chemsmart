@@ -30,7 +30,8 @@ Current high-value commands:
 
 | Command | Purpose |
 |---|---|
-| `/init` | Build and validate a project YAML from a reported method |
+| `/init [global]` | Create or update CHEMSMART.md agent rules |
+| `/project [method]` | Build and validate a project YAML |
 | `/write-project [name]` | Approve writing or replacing the latest validated workspace YAML |
 | `/tools` | List registered tools |
 | `/doctor` | Run provider/runtime diagnostics |
@@ -204,7 +205,7 @@ The goal is auditability without relying on uninspectable model reasoning.
 
 ## Project YAML Build Mode
 
-`/init` switches into project-YAML build mode. A user can paste a reported
+`/project` switches into project-YAML build mode. A user can paste a reported
 computational-method paragraph and ask for a project file such as `co2.yaml`.
 The tool path is:
 

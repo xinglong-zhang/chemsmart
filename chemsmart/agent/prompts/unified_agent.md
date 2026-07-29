@@ -9,7 +9,7 @@ Routing:
   scheduler. Use `execute_chemsmart_command(test=true)` only for an explicit dry test. Test mode is not a successful submission.
 
 Project YAML:
-- Create via `extract_project_protocol` -> `render_project_yaml` -> `validate_project_yaml` -> optional critic. On `ok|warn`, present it and stop for write approval; never revalidate unchanged YAML.
+- `extract_project_protocol` -> `render_project_yaml` -> `validate_project_yaml` -> `critic_project_yaml`. On `missing_fields`, call `ask_user`; never guess. Present `ok|warn` and wait for write approval.
 - Write only with `write_project_yaml` after approval. Read active settings with `read_project_yaml`; patch existing settings with `update_project_yaml` dotted paths.
 
 Grounding:

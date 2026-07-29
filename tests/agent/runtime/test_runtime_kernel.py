@@ -225,10 +225,14 @@ def test_phase_catalog_limits_controller_and_local_tool_surfaces():
         provider_role=ProviderRole.SYNTHESIS_SPECIALIST,
     )
 
-    assert len(controller.direct) == 5
+    assert controller.direct == (
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+    )
     assert "write_project_yaml" not in controller.direct
-    assert "read_project_yaml" in controller.direct
-    assert "critic_project_yaml" in controller.deferred
+    assert "read_project_yaml" in controller.deferred
     assert specialist.direct == ("synthesize_command", "repair_command")
     assert "build_job" in controller.hidden
 
@@ -258,6 +262,13 @@ def test_router_preserves_local_specialist_and_write_boundary():
     )
     assert (
         route_initial_phase(
+            "setup a gaussian project with functional MN15",
+            role=ProviderRole.CONTROLLER,
+        )
+        is TaskPhase.PROJECT
+    )
+    assert (
+        route_initial_phase(
             "Read project YAML co2 and explain the settings.",
             role=ProviderRole.CONTROLLER,
         )
@@ -276,6 +287,32 @@ def test_router_preserves_local_specialist_and_write_boundary():
             role=ProviderRole.SYNTHESIS_SPECIALIST,
         )
         is TaskPhase.SYNTHESIS
+    )
+
+
+def test_typed_phase_hint_overrides_ambiguous_request_routing(tmp_path):
+    controller = RuntimeController(
+        session_dir=tmp_path,
+        session_id="s1",
+        registry=_Registry(),
+        mode=RuntimeV2Mode.ACTIVE,
+    )
+
+    envelope = controller.start_turn(
+        request="functional MN15 with two basis sets",
+        turn_index=1,
+        provider_name="openai",
+        cwd=str(tmp_path),
+        phase_hint=TaskPhase.PROJECT,
+    )
+
+    assert envelope.phase is TaskPhase.PROJECT
+    assert controller.selection is not None
+    assert controller.selection.direct == (
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
     )
 
 

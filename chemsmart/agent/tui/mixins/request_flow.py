@@ -14,6 +14,7 @@ from chemsmart.agent.permissions import (
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.runtime.calculations import inspect_calculation
+from chemsmart.agent.runtime.contracts import TaskPhase
 from chemsmart.agent.tui.chat_helpers import (
     _calculation_diagnostic_summary,
     _is_calculation_diagnostic_request,
@@ -34,6 +35,8 @@ class RequestFlowMixin:
                 "The current request is still running. Press Tab to queue one follow-up.",
             )
             return
+        phase_hint = TaskPhase.PROJECT if self._build_mode else None
+        self._build_mode = False
         if (
             self._active_provider_config is not None
             and self._active_provider_config.type == "local"
@@ -46,7 +49,7 @@ class RequestFlowMixin:
         ):
             self._start_synthesis_request(text)
             return
-        self._start_unified_request(text)
+        self._start_unified_request(text, phase_hint=phase_hint)
 
     def _worker_is_busy(self) -> bool:
         return bool(
@@ -70,7 +73,12 @@ class RequestFlowMixin:
         self._history_cursor = len(self._request_history)
         self.call_after_refresh(self.start_request, prompt)
 
-    def _start_unified_request(self, text: str) -> None:
+    def _start_unified_request(
+        self,
+        text: str,
+        *,
+        phase_hint: TaskPhase | None = None,
+    ) -> None:
         keep_conversational = self.active_agent_session is not None
         if not keep_conversational:
             self._stop_tailer()
@@ -84,7 +92,10 @@ class RequestFlowMixin:
         self.query_one(FooterWidget).set_hint("Unified agent is reasoning…")
         self.query_one(Transcript).add_cell(UserMessageCell(text))
         self._user_requests.add(text)
-        self._current_worker = self.run_unified_session(text)
+        self._current_worker = self.run_unified_session(
+            text,
+            phase_hint=phase_hint,
+        )
         if self._session_poll_timer is not None:
             self._session_poll_timer.stop()
         self._session_poll_timer = self.set_interval(

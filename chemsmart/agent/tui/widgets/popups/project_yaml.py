@@ -158,6 +158,6 @@ class ProjectYamlOverlay(ModalScreen[Path | None]):
         if self.path is None:
             return (
                 "# YAML MISSING\n"
-                "# Build one with /init, then save it with /write-project.\n"
+                "# Build one with /project, then save it with /write-project.\n"
             )
         return self.yaml_text.rstrip()

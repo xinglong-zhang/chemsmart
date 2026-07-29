@@ -95,6 +95,7 @@ class SlashCommandsMixin:
     def _slash_clear(self, _argument: str) -> None:
         if not self._guard_phase("/clear", {Phase.IDLE, Phase.FINISHED}):
             return
+        self._build_mode = False
         self._stop_tailer()
         self._reset_request_state(clear_transcript=True, clear_session=True)
         self.notify("Transcript cleared.", timeout=3)
@@ -298,14 +299,10 @@ class SlashCommandsMixin:
         if not self._guard_agent_request_command("Project YAML build mode"):
             return
         argument = argument.strip()
-        self._build_mode = False
+        self._build_mode = True
         self._sync_footer_provider()
         if argument:
-            self.start_request(
-                "Build a workspace project YAML from this reported method. "
-                "Validate and critique it before writing; ask for approval "
-                f"before write_project_yaml.\n\n{argument}"
-            )
+            self.start_request(argument)
             return
         self.post_agent_message(
             (
@@ -322,7 +319,9 @@ class SlashCommandsMixin:
             ),
             title="Project YAML",
         )
-        self.query_one(FooterWidget).set_hint("Paste a project-YAML request")
+        self.query_one(FooterWidget).set_hint(
+            "Project mode: paste the reported method"
+        )
         self.focus_composer()
 
     def _handle_rules_init_command(self, argument: str) -> None:

@@ -103,6 +103,7 @@ class UnifiedSessionRunner:
         self,
         request: str,
         *,
+        phase_hint: TaskPhase | None = None,
         budgets: ToolLoopBudgets | None = None,
         messages: list[dict[str, Any]] | None = None,
         log_raw_provider_turns: bool = False,
@@ -113,6 +114,7 @@ class UnifiedSessionRunner:
         setup = self._prepare_setup(
             request=request,
             continuing_ask=continuing_ask,
+            phase_hint=phase_hint,
             budgets=budgets,
             messages=messages,
             log_raw_provider_turns=log_raw_provider_turns,
@@ -172,6 +174,7 @@ class UnifiedSessionRunner:
         *,
         request: str,
         continuing_ask: bool,
+        phase_hint: TaskPhase | None,
         budgets: ToolLoopBudgets | None,
         messages: list[dict[str, Any]] | None,
         log_raw_provider_turns: bool,
@@ -194,7 +197,11 @@ class UnifiedSessionRunner:
             else session._tool_defs_for_provider(provider_name)
         )
         controller, lifecycle, allowed_tools, tool_defs = self._start_runtime(
-            request, provider_name, tool_defs
+            request,
+            provider_name,
+            tool_defs,
+            phase_hint=phase_hint,
+            continuing_ask=continuing_ask,
         )
         session._log_loop_mode(resolved_policy)
         prepared_messages = self._prepare_messages(
@@ -221,6 +228,9 @@ class UnifiedSessionRunner:
         request: str,
         provider_name: str,
         tool_defs: list[dict[str, Any]] | None,
+        *,
+        phase_hint: TaskPhase | None,
+        continuing_ask: bool,
     ) -> tuple[
         RuntimeController | None,
         Any | None,
@@ -231,6 +241,12 @@ class UnifiedSessionRunner:
         controller = session._ensure_runtime_controller()
         if controller is None:
             return None, None, None, tool_defs
+        if (
+            phase_hint is None
+            and continuing_ask
+            and controller.selection is not None
+        ):
+            phase_hint = controller.selection.phase
         assert session.state is not None
         with workflow_state_scope(session.state.session_id):
             durable = controller.state
@@ -245,6 +261,7 @@ class UnifiedSessionRunner:
                 provider_name=provider_name,
                 cwd=session.state.cwd,
                 workflow_state=hydrated,
+                phase_hint=phase_hint,
             )
         lifecycle = controller.lifecycle()
         if session.runtime_v2_mode is not RuntimeV2Mode.ACTIVE:

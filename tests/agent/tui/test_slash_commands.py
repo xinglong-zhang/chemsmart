@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
+from chemsmart.agent.runtime.contracts import TaskPhase
 from chemsmart.agent.tui.screens.chat import (
     _find_project_yaml_candidate_for_write,
     _latest_project_yaml_candidate,
@@ -95,17 +96,22 @@ def test_project_and_init_slash_commands_route_requests(monkeypatch, tmp_path):
             await pilot.pause()
             screen = app.chat_screen
             captured: list[str] = []
+            phase_hints: list[TaskPhase | None] = []
             monkeypatch.setattr(
                 screen,
                 "run_unified_session",
-                lambda text: captured.append(text) or _FakeWorker(),
+                lambda text, **kwargs: (
+                    captured.append(text),
+                    phase_hints.append(kwargs.get("phase_hint")),
+                    _FakeWorker(),
+                )[-1],
             )
 
-            # Bare /project is a helper, not a persistent mode.
+            # Bare /project arms project mode for exactly one normal message.
             _set_composer_text(app, "/project")
             await pilot.press("enter")
             await pilot.pause()
-            assert screen._build_mode is False
+            assert screen._build_mode is True
             assert captured == []
 
             # A subsequent natural message routes through the unified session.
@@ -117,18 +123,19 @@ def test_project_and_init_slash_commands_route_requests(monkeypatch, tmp_path):
             assert captured == [
                 "Optimize in water with B3LYP-D3BJ/def2-SVP, call it h2o."
             ]
+            assert phase_hints == [TaskPhase.PROJECT]
             assert screen._build_mode is False
 
-            # /project with an argument injects project-YAML intent.
+            # /project with an argument passes a typed phase without rewriting.
             _set_composer_text(
                 app, "/project Use Gaussian B3LYP/def2-SVP, call it co2."
             )
             await pilot.press("enter")
             await pilot.pause()
-            assert captured[-1].startswith(
-                "Build a workspace project YAML from this reported method."
+            assert captured[-1] == (
+                "Use Gaussian B3LYP/def2-SVP, call it co2."
             )
-            assert "call it co2" in captured[-1]
+            assert phase_hints[-1] is TaskPhase.PROJECT
 
             # /init now seeds the CHEMSMART.md rules interview (workspace).
             _set_composer_text(app, "/init")

@@ -98,6 +98,81 @@ def test_professor_co2_prompt_renders_valid_gaussian_project_yaml():
     )
 
 
+def test_intern_mn15_mixed_basis_ts_request_is_complete_and_valid():
+    request = (
+        "setup a gaussian project with functional mn15 "
+        "heavy_elements_basis: def2tzvppd and "
+        "light_elements_basis: def2svp for Ag and Pd; optimise the TS"
+    )
+
+    protocol = extract_project_protocol(
+        request,
+        project_name="mn15_ts",
+        program="gaussian",
+    )
+    rendered = render_project_yaml(protocol)
+    parsed = yaml.safe_load(rendered["yaml_text"])
+    critic = critic_project_yaml(
+        rendered,
+        protocol=protocol,
+        project_name="mn15_ts",
+        program="gaussian",
+    )
+
+    assert protocol["complete"] is True
+    assert protocol["missing_fields"] == []
+    assert protocol["method"] == {
+        "functional": "mn15",
+        "dispersion": None,
+        "functional_route": "mn15",
+        "basis": "gen",
+        "heavy_elements": ["Ag", "Pd"],
+        "heavy_elements_basis": "def2tzvppd",
+        "light_elements_basis": "def2svp",
+        "solvent_model": None,
+        "solvent_id": None,
+        "freq": True,
+    }
+    assert parsed["gas"]["basis"] == "gen"
+    assert parsed["gas"]["freq"] is True
+    assert rendered["validation"]["verdict"] == "ok"
+    assert critic["verdict"] == "ok"
+
+
+def test_mixed_basis_request_does_not_guess_missing_light_basis():
+    protocol = extract_project_protocol(
+        "Use Gaussian with functional: MN15, "
+        "heavy_elements_basis: def2tzvppd for Ag and Pd.",
+        project_name="incomplete",
+        program="gaussian",
+    )
+
+    rendered = render_project_yaml(protocol)
+
+    assert protocol["complete"] is False
+    assert protocol["missing_fields"] == ["light_elements_basis"]
+    assert rendered["ok"] is False
+    assert rendered["missing_fields"] == ["light_elements_basis"]
+    assert rendered["error"]["type"] == "IncompleteProjectProtocol"
+    assert "yaml_text" not in rendered
+
+
+def test_spoken_mn15_heavy_atom_phrase_preserves_full_basis_name():
+    protocol = extract_project_protocol(
+        "Gaussian TS calculation using the MN15 functional; heavy atoms "
+        "such as Ag and pd use def2tzvppd, while "
+        "light_elements_basis: def2svp.",
+        project_name="spoken",
+        program="gaussian",
+    )
+
+    assert protocol["method"]["functional"] == "mn15"
+    assert protocol["method"]["heavy_elements"] == ["Ag", "Pd"]
+    assert protocol["method"]["heavy_elements_basis"] == "def2tzvppd"
+    assert protocol["method"]["light_elements_basis"] == "def2svp"
+    assert protocol["method"]["freq"] is True
+
+
 def test_project_yaml_handles_cited_basis_and_method_only_render_input():
     protocol = extract_project_protocol(
         "Gaussian16 gas phase B3LYP-D3BJ with def2-SVPD[12,13] "

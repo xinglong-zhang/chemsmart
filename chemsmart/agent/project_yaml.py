@@ -50,6 +50,28 @@ def render_project_yaml(
 ) -> dict[str, Any]:
     """Render a chemsmart project YAML candidate from extracted protocol facts."""
 
+    missing_fields = protocol.get("missing_fields", [])
+    if isinstance(missing_fields, list) and missing_fields:
+        normalized_missing = [
+            str(field) for field in missing_fields if str(field).strip()
+        ]
+        return {
+            "ok": False,
+            "project_name": _normalize_project_name(
+                project_name or str(protocol.get("project_name") or "project")
+            ),
+            "program": _normalize_program(
+                str(protocol.get("program") or program)
+            ),
+            "missing_fields": normalized_missing,
+            "error": {
+                "type": "IncompleteProjectProtocol",
+                "message": (
+                    "Project method is incomplete; ask the user for: "
+                    + ", ".join(normalized_missing)
+                ),
+            },
+        }
     candidate = render_project_document(protocol, project_name, program)
     normalized_program = str(candidate["program"])
     name = str(candidate["project_name"])
