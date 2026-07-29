@@ -1,11 +1,11 @@
 .. _chemdraw-organometallic:
 
-#######################################
- ChemDraw Organometallic Complex Files
-#######################################
+################
+ ChemDraw Files
+################
 
-CHEMSMART can read organometallic complexes drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures
-suitable for quantum chemistry calculations with Gaussian or ORCA.
+CHEMSMART can read molecules drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures directly suitable
+for quantum chemistry calculations with Gaussian or ORCA.
 
 .. note::
 
@@ -96,6 +96,11 @@ Example usage:
 If ``obabel`` is not installed and a ``.cdx`` file is provided, CHEMSMART raises a ``ValueError`` with instructions to
 install Open Babel or re-save the file as ``.cdxml``.
 
+.. note::
+
+   We recommand that users save structures in ChemDraw in .cdxml format, as the conversion of structures in .cdxml to
+   molecular structures in quantum chemical input is more reliable.
+
 **************
  How It Works
 **************
@@ -177,7 +182,7 @@ A ChemDraw file containing TiCp₂Me₂ (two Cp rings and two methyl groups on T
 .. code:: bash
 
    # Extract the first molecule and submit a Gaussian optimization
-   chemsmart sub -s server gaussian -p project -f ti_complexes.cdxml -i 1 -c 0 -m 1 opt B3LYP/def2-SVP
+   chemsmart sub -s server gaussian -p project -f ti_complexes.cdxml -i 1 -c 0 -m 1 opt
 
 CHEMSMART will:
 
@@ -194,7 +199,7 @@ For sandwich complexes with two Cp rings and no other ligands:
 
 .. code:: bash
 
-   chemsmart sub -s server gaussian -p project -f ferrocene.cdxml -c 0 -m 1 opt B3LYP/def2-SVP
+   chemsmart sub -s server gaussian -p project -f ferrocene.cdxml -c 0 -m 1 opt
 
 The two Cp rings are placed above and below the metal with D5h-like symmetry (eclipsed, as a starting point).
 
@@ -205,7 +210,7 @@ For η6-arene complexes (two benzene ligands above and below the metal):
 
 .. code:: bash
 
-   chemsmart sub -s server gaussian -p project -f bis_benz_ir.cdxml -c 0 -m 1 opt B3LYP/def2-SVP
+   chemsmart sub -s server gaussian -p project -f bis_benz_ir.cdxml -c 0 -m 1 opt
 
 CHEMSMART combines the benzene ring fragments with the metal stub, sets alternating bond orders so that every ring
 carbon retains one hydrogen, and repositions the rings at 1.75 Å from the metal centroid.
@@ -217,7 +222,7 @@ For ansa complexes where two indenyl ligands are connected by a bridging atom:
 
 .. code:: bash
 
-   chemsmart sub -s server gaussian -p project -f ansa_fe.cdxml -c 0 -m 1 opt B3LYP/def2-SVP
+   chemsmart sub -s server gaussian -p project -f ansa_fe.cdxml -c 0 -m 1 opt
 
 The BFS-based fused-ring collection moves each entire indenyl (9 carbons: Cp ring + fused benzene ring) as a single
 rigid body, and the O bridge atom is placed at the midpoint of its two ring-neighbour carbons' new positions.
