@@ -129,12 +129,11 @@ ORCA:
 XTB:
     EXEFOLDER: null
     LOCAL_RUN: True
-    SCRATCH: True
+    SCRATCH: False
     CONDA_ENV: |
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate chemsmart
-    ENVARS: |
-        export OMP_NUM_THREADS=$NUM_THREADS
+    ENVARS: null
 ```
 This file can be customized by user for different submission systems. This file contains the server configuration information that is needed for chemsmart to automatically write the submission script for each job.
 
@@ -203,26 +202,28 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
-The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. The `xtb` executable is still used for execution; `xtb-python` is included in the conda environment because the official installation route is conda-forge.
+The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. Calculations are executed using the `xtb` executable, which must be available either in the configured conda environment or on the system `PATH` specified in the server YAML `XTB` section.
 
 For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
 
 ```text
 sp:
   gfn_version: gfn2
-  charge: 0
-  multiplicity: 1
+  solvent_model: null
+  solvent_id: null
   grad: false
+
 opt:
   gfn_version: gfn2
   optimization_level: vtight
-  charge: 0
-  multiplicity: 1
+  solvent_model: null
+  solvent_id: null
   grad: false
+
 hess:
   gfn_version: gfn2
-  charge: 0
-  multiplicity: 1
+  solvent_model: null
+  solvent_id: null
   grad: false
 ```
 
@@ -561,23 +562,23 @@ to find out more.
 ---
 ### xTB job submission
 
-xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`, and the input structure is typically an `.xyz` file.
+xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`. Inputs can be `.xyz` files, Gaussian/ORCA outputs, an existing xTB main `.out`, a chemsmart database, or a PubChem query.
 
 ```bash
-chemsmart run xtb -p <project> -f <input.xyz> opt
-chemsmart run xtb -p <project> -f <input.xyz> sp
-chemsmart run xtb -p <project> -f <input.xyz> hess
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
 ```
 
 To generate scheduler scripts without submitting them, use `sub --test`:
 
 ```bash
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> opt
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> sp
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> hess
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
 ```
 
-The shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `--optimization-level`, `-sm/--solvent-model`, `-si/--solvent-id`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
+Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-route-parameters`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `--optimization-level` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
 
 ## Development
 
