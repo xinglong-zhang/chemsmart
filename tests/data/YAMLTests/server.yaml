@@ -46,8 +46,8 @@ ORCA:
 XTB:
     EXEFOLDER: null
     LOCAL_RUN: True
+    SCRATCH: False
     CONDA_ENV: |
         source ~/anaconda3/etc/profile.d/conda.sh
         conda activate ~/anaconda3/envs/chemsmart
-    ENVARS: |
-        export SCRATCH=~/scratch
+    ENVARS: null

@@ -96,7 +96,7 @@ conda activate ~/anaconda3/envs/chemsmart
         assert xtb_executable.conda_env == xtb_conda_env
         assert xtb_executable.modules is None
         assert xtb_executable.scripts is None
-        assert xtb_executable.envars == "export SCRATCH=~/scratch\n"
+        assert xtb_executable.envars is None
 
     def test_slurm_submitter_writes_extra_scheduler_directives(self):
         server = Server(
