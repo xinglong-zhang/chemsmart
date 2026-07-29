@@ -592,6 +592,47 @@ def prepare_batch_jobs(
     return make_batch_cli_rewriter(job_token)
 
 
+# Boolean long flags in reconstructed CLI appear alone (no following value).
+# Needed so ``--forces opt`` still treats ``opt`` as the job-group token, while
+# ``--label opt`` / ``-l opt`` / ``-a opt`` / ``-r opt`` treat ``opt`` as a value.
+_BOOLEAN_LONG_OPTIONS = frozenset(
+    {
+        "--run-in-parallel",
+        "--fake",
+        "--debug",
+        "--stream",
+        "--test",
+        "--forces",
+        "--remove-solvent",
+        "--skip-completed",
+        "--scratch",
+        "--delete-scratch",
+    }
+)
+
+
+def _find_job_token_index(tokens: Sequence[str], job_token: str) -> int:
+    """Return the job-group command index, skipping option-value collisions.
+
+    The first bare ``job_token`` wins. A match is skipped when it is the value
+    of the preceding option (``-l/-a/-r/--label opt … opt``).
+    """
+    for idx, token in enumerate(tokens):
+        if token != job_token:
+            continue
+        prev = tokens[idx - 1] if idx else ""
+        if prev.startswith("-") and not prev.startswith("--no-"):
+            if prev.startswith("--"):
+                if prev not in _BOOLEAN_LONG_OPTIONS:
+                    continue
+            elif prev not in {"-R", "-S"}:
+                continue
+        return idx
+    raise ValueError(
+        f"Cannot locate job token {job_token!r} in CLI args {list(tokens)!r}."
+    )
+
+
 def patch_cli_option(
     tokens: list[str],
     *,
@@ -632,10 +673,10 @@ def patch_cli_option(
         return
 
     insert_idx = len(tokens)
-    if insert_after is not None and insert_after in tokens:
-        insert_idx = tokens.index(insert_after) + 1
-    elif insert_before is not None and insert_before in tokens:
-        insert_idx = tokens.index(insert_before)
+    if insert_after is not None:
+        insert_idx = _find_job_token_index(tokens, insert_after) + 1
+    elif insert_before is not None:
+        insert_idx = _find_job_token_index(tokens, insert_before)
 
     opt = short_opt if prefer_short and short_opt is not None else long_opt
     tokens[insert_idx:insert_idx] = [opt, value]
@@ -652,7 +693,7 @@ def _apply_batch_entry_to_cli(
     args: list[str],
     batch_entry: Mapping[str, Any],
     *,
-    insert_before: str,
+    job_token: str,
 ) -> None:
     """Map known ``batch_entry`` fields onto shared submit CLI tokens."""
     filepath = batch_entry.get("filepath")
@@ -662,7 +703,7 @@ def _apply_batch_entry_to_cli(
             long_opt="--filename",
             short_opt="-f",
             value=str(filepath),
-            insert_before=insert_before,
+            insert_before=job_token,
             prefer_short=any(token in _FILENAME_OPTIONS for token in args),
         )
 
@@ -675,7 +716,7 @@ def _apply_batch_entry_to_cli(
             short_opt="-i",
             value=index_value,
             drop=_INDEX_OPTIONS,
-            insert_before=insert_before,
+            insert_before=job_token,
             prefer_short=prefer_short,
         )
 
@@ -687,7 +728,7 @@ def _apply_batch_entry_to_cli(
             long_opt=long_opt,
             short_opt=short_opt,
             value=str(batch_entry[entry_key]),
-            insert_before=insert_before,
+            insert_before=job_token,
         )
 
     # Nestable options insert after the job-group token (``dias``/``qrc``/…).
@@ -699,7 +740,7 @@ def _apply_batch_entry_to_cli(
             long_opt=long_opt,
             short_opt=short_opt,
             value=str(batch_entry[entry_key]),
-            insert_after=insert_before,
+            insert_after=job_token,
         )
 
 
@@ -731,7 +772,7 @@ def rewrite_batch_cli_args(
             f"Cannot rewrite batch CLI args: job token {job_token!r} is "
             f"not present in {args!r}."
         )
-    _apply_batch_entry_to_cli(args, batch_entry, insert_before=job_token)
+    _apply_batch_entry_to_cli(args, batch_entry, job_token=job_token)
     return args
 
 

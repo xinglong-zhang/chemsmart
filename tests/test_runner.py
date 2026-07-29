@@ -585,6 +585,95 @@ class TestBatchCliRewrite:
         assert opt_rewritten.index("--label") < opt_rewritten.index("sp")
         assert opt_rewritten[opt_rewritten.index("--label") + 1] == "opt_idx2"
 
+    def test_rewrite_batch_cli_args_label_collides_with_opt_job_token(self):
+        from chemsmart.jobs.batch import (
+            _find_job_token_index,
+            rewrite_batch_cli_args,
+        )
+
+        shared = [
+            "gaussian",
+            "--project",
+            "test",
+            "--filename",
+            "five_mols.xyz",
+            "--charge",
+            "0",
+            "--multiplicity",
+            "1",
+            "--label",
+            "opt",
+            "-i",
+            "1,2,3,4,5",
+            "opt",
+            "--no-forces",
+            "--no-remove-solvent",
+            "--no-skip-completed",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {
+                "filepath": "five_mols.xyz",
+                "molecule_index": 3,
+                "label": "opt_idx3",
+            },
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("--label") + 1] == "opt_idx3"
+        assert rewritten[rewritten.index("-i") + 1] == "3"
+        assert "1,2,3,4,5" not in rewritten
+        job_idx = _find_job_token_index(rewritten, "opt")
+        assert rewritten.index("-i") < job_idx
+        assert rewritten.index("--label") < job_idx
+
+        short_label = [
+            "gaussian",
+            "-f",
+            "five_mols.xyz",
+            "-l",
+            "opt",
+            "-i",
+            "1,2,3,4,5",
+            "opt",
+        ]
+        short_rewritten = rewrite_batch_cli_args(
+            short_label,
+            {
+                "filepath": "five_mols.xyz",
+                "molecule_index": 3,
+                "label": "opt_idx3",
+            },
+            job_token="opt",
+        )
+        assert short_rewritten[short_rewritten.index("-l") + 1] == "opt_idx3"
+        assert short_rewritten[short_rewritten.index("-i") + 1] == "3"
+        job_idx = _find_job_token_index(short_rewritten, "opt")
+        assert short_rewritten.index("-i") < job_idx
+
+        for flag in ("-a", "-r"):
+            via_option = [
+                "gaussian",
+                "-f",
+                "five_mols.xyz",
+                flag,
+                "opt",
+                "-i",
+                "1,2,3,4,5",
+                "opt",
+            ]
+            rewritten = rewrite_batch_cli_args(
+                via_option,
+                {
+                    "filepath": "five_mols.xyz",
+                    "molecule_index": 3,
+                    "label": "opt_idx3",
+                },
+                job_token="opt",
+            )
+            assert rewritten[rewritten.index("-i") + 1] == "3"
+            job_idx = _find_job_token_index(rewritten, "opt")
+            assert rewritten.index("-i") < job_idx
+
     def test_rewrite_batch_cli_args_updates_short_label(self):
         from chemsmart.jobs.batch import rewrite_batch_cli_args
 
