@@ -14,6 +14,7 @@ import time
 import warnings
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from chemsmart.agent.provider_config import (
     AgentProviderConfigError,
@@ -55,6 +56,11 @@ _TOOL_PROBE_SCHEMA = {
 def _openai_uses_max_completion_tokens(model: str | None) -> bool:
     """Return whether an OpenAI-family model requires max_completion_tokens."""
     return bool(_OPENAI_USES_MCT.match((model or "").strip().lower()))
+
+
+def _is_official_deepseek_url(base_url: str) -> bool:
+    """Return whether *base_url* targets DeepSeek's official API."""
+    return (urlsplit(base_url).hostname or "").lower() == "api.deepseek.com"
 
 
 class ProviderError(Exception):
@@ -169,9 +175,10 @@ class OpenAIProvider:
 
         self.name = (provider_name or type(self).name).strip()
         self.default_model = model or type(self).default_model
+        self.base_url = base_url or self.gateway_url
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
-            "base_url": base_url or self.gateway_url,
+            "base_url": self.base_url,
         }
         if extra_headers:
             client_kwargs["default_headers"] = extra_headers
@@ -190,6 +197,14 @@ class OpenAIProvider:
         }
         if tools:
             kwargs["tools"] = tools
+            if _is_official_deepseek_url(self.base_url):
+                # DeepSeek V4 defaults to thinking mode. ChemSmart does not
+                # replay provider reasoning_content between tool turns, and
+                # the forced doctor probe's tool_choice is rejected in that
+                # mode. Keep tool-bearing requests in non-thinking mode.
+                kwargs["extra_body"] = {
+                    "thinking": {"type": "disabled"}
+                }
         response = self._client.chat.completions.create(**kwargs)
         return response.model_dump()
 
@@ -220,10 +235,10 @@ class OpenAIProvider:
 
         started = time.perf_counter()
         try:
-            response = self._client.chat.completions.create(
-                model=self.default_model,
-                messages=_TOOL_PROBE_MESSAGES,
-                tools=[
+            kwargs: dict[str, Any] = {
+                "model": self.default_model,
+                "messages": _TOOL_PROBE_MESSAGES,
+                "tools": [
                     {
                         "type": "function",
                         "function": {
@@ -233,12 +248,17 @@ class OpenAIProvider:
                         },
                     }
                 ],
-                tool_choice={
+                "tool_choice": {
                     "type": "function",
                     "function": {"name": _TOOL_PROBE_NAME},
                 },
-                timeout=DEFAULT_TIMEOUT_S,
-            )
+                "timeout": DEFAULT_TIMEOUT_S,
+            }
+            if _is_official_deepseek_url(self.base_url):
+                kwargs["extra_body"] = {
+                    "thinking": {"type": "disabled"}
+                }
+            response = self._client.chat.completions.create(**kwargs)
             return _validate_tool_probe(
                 response,
                 protocol="openai",
