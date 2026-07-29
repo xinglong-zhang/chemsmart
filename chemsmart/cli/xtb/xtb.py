@@ -56,10 +56,10 @@ def click_xtb_settings_options(f):
     )
     @click.option(
         "-r",
-        "--additional-route-parameters",
+        "--additional-flags",
         type=str,
         default=None,
-        help="additional route parameters",
+        help="Additional xTB CLI flags.",
     )
     @click.option(
         "--grad/--no-grad",
@@ -124,7 +124,7 @@ def xtb(
     structure_id,
     structure_index,
     molecule_id,
-    additional_route_parameters,
+    additional_flags,
     charge,
     multiplicity,
     gfn_version,
@@ -214,9 +214,9 @@ def xtb(
     if gfn_version is not None:
         job_settings.gfn_version = gfn_version.lower()
         keywords += ("gfn_version",)
-    if additional_route_parameters is not None:
-        job_settings.additional_route_parameters = additional_route_parameters
-        keywords += ("additional_route_parameters",)
+    if additional_flags is not None:
+        job_settings.additional_flags = additional_flags
+        keywords += ("additional_flags",)
     if grad is not None:
         job_settings.grad = grad
         keywords += ("grad",)

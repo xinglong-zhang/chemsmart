@@ -39,7 +39,6 @@ class XTBJob(Job):
 
         self.molecule = molecule.copy()
         self.settings = settings.copy()
-        self.label = label
 
     @classmethod
     def settings_class(cls) -> Type[XTBJobSettings]:
