@@ -19,9 +19,9 @@ class XTBJobSettings:
     def __init__(
         self,
         gfn_version="gfn2",
-        optimization_level="vtight",
-        charge=0,
-        multiplicity=1,
+        optimization_level=None,
+        charge=None,
+        multiplicity=None,
         jobtype=None,
         title=None,
         grad=False,

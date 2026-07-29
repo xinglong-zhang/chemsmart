@@ -86,6 +86,10 @@ class TestXTBCLISettings:
                 "test",
                 "-f",
                 single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
                 "opt",
                 "-O",
                 "loose",
@@ -98,7 +102,17 @@ class TestXTBCLISettings:
     def test_hess_instantiates_xtb_hess_job(self, single_molecule_xyz_file):
         result, settings, _ = _invoke_xtb_and_capture_settings(
             "chemsmart.jobs.xtb.hess.XTBHessJob",
-            ["-p", "test", "-f", single_molecule_xyz_file, "hess"],
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "hess",
+            ],
         )
         assert result.exit_code == 0, result.output
         assert settings.jobtype == "hess"
@@ -111,6 +125,10 @@ class TestXTBCLISettings:
                 "test",
                 "-f",
                 single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
                 "-r",
                 "--copy --json",
                 "sp",
@@ -197,6 +215,10 @@ class TestXTBSubmission:
                 "test",
                 "-f",
                 str(xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
                 "sp",
             ],
             catch_exceptions=False,
