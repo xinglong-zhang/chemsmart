@@ -134,6 +134,14 @@ XTB:
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate chemsmart
     ENVARS: null
+CREST:
+    EXEFOLDER: null
+    LOCAL_RUN: True
+    SCRATCH: False
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate chemsmart
+    ENVARS: null
 ```
 This file can be customized by user for different submission systems. This file contains the server configuration information that is needed for chemsmart to automatically write the submission script for each job.
 
@@ -228,6 +236,21 @@ hess:
 ```
 
 Solvent can be added to any xTB job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: alpb` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
+
+---
+The `~/.chemsmart/crest/` directory contains files related to CREST project settings. CREST support currently covers command-line job submission for conformational search (`conformers`). Calculations are executed using the `crest` executable, which must be available (along with `xtb`, typically) either in the configured conda environment or on the system `PATH` specified in the server YAML `CREST` section.
+
+For example, one can specify `~/.chemsmart/crest/test.yaml` with:
+
+```text
+conformers:
+  gfn_version: gfn2
+  energy_window: 6.0
+  optimization_level: vtight
+  nci: false
+```
+
+Solvent can be added to any CREST job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: gbsa` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
 
 ---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
@@ -579,6 +602,30 @@ chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 
 ```
 
 Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-route-parameters`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `--optimization-level` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
+
+---
+### CREST job submission
+
+CREST jobs use the same `run` and `sub` entry points as Gaussian, ORCA, and xTB jobs. The supported CREST job type is `conformers` (free or constrained conformational search). Inputs can be `.xyz` files, Gaussian/ORCA outputs, a chemsmart database, or a PubChem query.
+
+```bash
+chemsmart run crest -p <project> -f <input.xyz> -c 0 -m 1 conformers
+```
+
+To generate scheduler scripts without submitting them, use `sub --test`:
+
+```bash
+chemsmart sub -s <server_name> --test crest -p <project> -f <input.xyz> -c 0 -m 1 conformers
+```
+
+Constrained conformational search (e.g. for transition-state ensembles):
+
+```bash
+chemsmart sub -s <server_name> crest -p <project> -f <input.log> conformers \
+  --constraints '[[1,2],[2,3],[3,5]]' --force-constant 0.25
+```
+
+Shared CREST options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-O/--optimization-level`, `-r/--additional-flags`, `--ewin`, `--nci/--no-nci`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `-l/--label`, `-a/--append-label`, and `-i/--index`. The `conformers` subcommand also accepts `--constraints` and `--force-constant`. The rendered command is based on the CREST executable, for example `crest <label>.xyz --gfn2 --chrg 0 --uhf 0`; solvent flags are included only when both solvent model and solvent id are set, and constrained searches also write a `constraints.inp` passed via `--cinp`.
 
 ## Development
 
