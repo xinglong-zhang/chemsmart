@@ -5,6 +5,7 @@ import click
 
 from chemsmart.cli.crest.crest import crest
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.utils import build_jobs
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -45,45 +46,17 @@ def conformers(ctx, skip_completed, constraints, force_constant, **kwargs):
         job_settings, keywords=tuple(keywords)
     )
     check_charge_and_multiplicity(conformers_settings)
-
-    jobrunner = ctx.obj["jobrunner"]
-    molecules = ctx.obj["molecules"]
-    molecule_indices = ctx.obj["molecule_indices"]
-    label = ctx.obj["label"]
-
     logger.info(
-        f"Conformational sampling job settings from project: {conformers_settings.__dict__}"
+        f"Conformational sampling job settings from project: "
+        f"{conformers_settings.__dict__}"
     )
 
     from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 
-    if len(molecules) > 1 and molecule_indices is not None:
-        jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
-            molecule_label = f"{label}_idx{idx}"
-            logger.info(
-                f"Running conformational sampling for molecule {idx}: {molecule} "
-                f"with label {molecule_label}."
-            )
-            jobs.append(
-                CRESTConformerSearchJob(
-                    molecule=molecule,
-                    settings=conformers_settings,
-                    label=molecule_label,
-                    jobrunner=jobrunner,
-                    skip_completed=skip_completed,
-                    **kwargs,
-                )
-            )
-        return jobs
-
-    molecule = molecules[-1]
-    logger.info(f"Running conformational sampling for molecule: {molecule}.")
-    return CRESTConformerSearchJob(
-        molecule=molecule,
-        settings=conformers_settings,
-        label=label,
-        jobrunner=jobrunner,
-        skip_completed=skip_completed,
-        **kwargs,
+    return build_jobs(
+        ctx,
+        CRESTConformerSearchJob,
+        conformers_settings,
+        skip_completed,
+        kwargs,
     )
