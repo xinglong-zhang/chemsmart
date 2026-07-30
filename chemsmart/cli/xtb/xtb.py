@@ -73,6 +73,35 @@ def click_xtb_settings_options(f):
     return wrapper_common_options
 
 
+def click_xtb_optimization_level_option(f):
+    """Reusable CLI option for xTB ANCOPT optimization level."""
+
+    @click.option(
+        "-O",
+        "--optimization-level",
+        type=click.Choice(
+            [
+                "crude",
+                "sloppy",
+                "loose",
+                "lax",
+                "normal",
+                "tight",
+                "vtight",
+                "extreme",
+            ],
+            case_sensitive=False,
+        ),
+        default=None,
+        help="xTB optimization convergence level.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_xtb_solvent_options(f):
     """Common click options for xTB solvent settings."""
 

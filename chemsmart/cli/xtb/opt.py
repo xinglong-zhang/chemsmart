@@ -4,7 +4,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.utils import build_jobs
-from chemsmart.cli.xtb.xtb import xtb
+from chemsmart.cli.xtb.xtb import click_xtb_optimization_level_option, xtb
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -13,25 +13,7 @@ logger = logging.getLogger(__name__)
 
 @xtb.command("opt", cls=MyCommand)
 @click_job_options
-@click.option(
-    "-O",
-    "--optimization-level",
-    type=click.Choice(
-        [
-            "crude",
-            "sloppy",
-            "loose",
-            "lax",
-            "normal",
-            "tight",
-            "vtight",
-            "extreme",
-        ],
-        case_sensitive=False,
-    ),
-    default=None,
-    help="xTB optimization convergence level.",
-)
+@click_xtb_optimization_level_option
 @click.pass_context
 def opt(ctx, skip_completed, optimization_level, **kwargs):
     """Run xTB geometry optimization calculations."""
