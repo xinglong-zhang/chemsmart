@@ -55,7 +55,7 @@ Example with the ``run`` command:
 
 **Key Options:**
 
--  ``--no-scratch``: Don't use scratch directory
+-  ``--no-scratch``: Disable scratch for this run (overrides YAML / class defaults; see :ref:`scratch-behavior`)
 -  ``--fake``: Dry run mode (don't actually submit)
 -  ``-p qmmm``: Load settings from ``~/.chemsmart/orca/qmmm.yaml``
 -  ``-f``: Input structure file

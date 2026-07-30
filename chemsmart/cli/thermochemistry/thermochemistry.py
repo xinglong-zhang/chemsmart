@@ -1,4 +1,5 @@
 import logging
+import os
 
 import click
 
@@ -9,6 +10,7 @@ from chemsmart.cli.job import (
     click_job_options,
 )
 from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
@@ -205,8 +207,8 @@ def thermochemistry(
     CLI subcommand for running thermochemistry
     jobs using the chemsmart framework.
 
-    This command allows you to compute thermochemistry for Gaussian or ORCA
-    output files.
+    This command allows you to compute thermochemistry for Gaussian, ORCA,
+    or xTB output files.
 
     Examples:
     `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log
@@ -218,6 +220,22 @@ def thermochemistry(
     -o thermochemistry_results.dat`
     will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
+
+    `chemsmart run thermochemistry -f water_opt/water_opt.out -T 298.15`
+    will compute thermochemistry for one xTB output file.
+
+    `chemsmart run thermochemistry -d xtb_calculations/ -p xtb -T 298.15
+    -o thermo.dat`
+    will compute thermochemistry for valid xTB calculation directories located
+    directly below `xtb_calculations/` and save the combined results to
+    `thermo.dat`.
+
+    Directory discovery is non-recursive. For Gaussian and ORCA,
+    only matching output files directly inside the specified directory are
+    processed. For xTB, each immediate child directory is treated as one
+    candidate calculation because an xTB calculation consists of one main
+    output plus associated auxiliary files. The parent directory itself and
+    nested calculation directories at greater depths are not searched.
     """
     # validate input
     if directory and filenames:
@@ -256,7 +274,39 @@ def thermochemistry(
     files = []
 
     if directory:
-        if program and not filetype:
+        if program and program.lower() == "xtb":
+            directory = os.path.abspath(directory)
+            # Each immediate subdirectory represents one xTB calculation.
+            # Do not recurse, matching Gaussian and ORCA directory handling.
+            for entry in os.listdir(directory):
+                subdir = os.path.join(directory, entry)
+                if os.path.isdir(subdir):
+                    output_files = BaseFolder(
+                        folder=subdir
+                    ).get_all_output_files_in_current_folder_by_program(
+                        program="xtb"
+                    )
+                    if not output_files:
+                        continue
+                    try:
+                        is_calculation_directory = XTBFolder(
+                            folder=subdir
+                        ).is_xtb_calculation_directory
+                    except ValueError as e:
+                        logger.error(
+                            f"Skipping invalid xTB calculation directory "
+                            f"'{subdir}': {e}"
+                        )
+                        continue
+                    if is_calculation_directory:
+                        files.extend(output_files)
+            if not files:
+                raise ValueError(
+                    f"No xTB output files found in calculation subdirectories "
+                    f"of '{directory}'. Use --filenames (-f) for a single xTB "
+                    f"output file."
+                )
+        elif program and not filetype:
             # obtain all output files belonging to a program
             files = BaseFolder(
                 folder=directory
@@ -280,12 +330,28 @@ def thermochemistry(
             )
 
         files = sorted(files)
-        for file in files:
-            job = ThermochemistryJob.from_filename(
-                filename=file,
-                settings=job_settings,
-                skip_completed=skip_completed,
+        if not files:
+            selector = (
+                f"program '{program}'"
+                if program is not None
+                else f"file type '{filetype}'"
             )
+            raise ValueError(
+                f"No output files matching {selector} found in '{directory}'."
+            )
+        for file in files:
+            try:
+                job = ThermochemistryJob.from_filename(
+                    filename=file,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Skipping invalid thermochemistry output file "
+                    f"'{file}': {e}"
+                )
+                continue
             if outputfile is not None:
                 job_settings.overwrite = False
                 job_settings.write_header = False
@@ -295,10 +361,14 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if get_program_type_from_file(file) not in {"gaussian", "orca"}:
+            if get_program_type_from_file(file) not in {
+                "gaussian",
+                "orca",
+                "xtb",
+            }:
                 raise ValueError(
-                    f"Unsupported output file type for '{file}'. Use Gaussian or "
-                    f"ORCA output files."
+                    f"Unsupported output file type for '{file}'. Use Gaussian, "
+                    f"ORCA, or xTB output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,

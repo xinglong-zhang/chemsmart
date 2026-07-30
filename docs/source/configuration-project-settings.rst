@@ -444,7 +444,8 @@ This produces:
  Scratch Directory
 *******************
 
-Set up scratch directories for Gaussian and ORCA jobs:
+Set up a scratch directory path for Gaussian, ORCA, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved by
+``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. code:: bash
 

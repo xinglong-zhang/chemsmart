@@ -22,7 +22,7 @@ from chemsmart.cli.job import (
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
+from chemsmart.utils.io import clean_label, get_program_type_from_file
 from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
@@ -529,8 +529,27 @@ def orca(
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and
         # do not use any defaults!
-        job_settings = ORCAJobSettings.from_filepath(filename)
-        logger.info(f"Loaded ORCA settings from file: {filename}")
+        if filename.endswith(".out") and (
+            get_program_type_from_file(filename) == "xtb"
+        ):
+            # xTB output is only a geometry source; its route/method do not
+            # map onto ORCA settings. Start from defaults (like .xyz) but
+            # inherit charge/multiplicity from the xTB calculation so the new
+            # ORCA job is fully specified. CLI -c/-m still override below.
+            job_settings = ORCAJobSettings.default()
+            xtb_molecule = Molecule.from_filepath(filename)
+            if xtb_molecule.charge is not None:
+                job_settings.charge = xtb_molecule.charge
+            if xtb_molecule.multiplicity is not None:
+                job_settings.multiplicity = xtb_molecule.multiplicity
+            logger.info(
+                f"Detected xTB output {filename}; using default ORCA "
+                f"settings with geometry and charge/multiplicity from the "
+                f"xTB calculation."
+            )
+        else:
+            job_settings = ORCAJobSettings.from_filepath(filename)
+            logger.info(f"Loaded ORCA settings from file: {filename}")
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")

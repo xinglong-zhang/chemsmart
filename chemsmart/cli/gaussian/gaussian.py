@@ -13,7 +13,7 @@ from chemsmart.cli.job import (
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
+from chemsmart.utils.io import clean_label, get_program_type_from_file
 from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
@@ -593,7 +593,26 @@ def gaussian(
     elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
-        job_settings = GaussianJobSettings.from_filepath(filename)
+        if filename.endswith(".out") and (
+            get_program_type_from_file(filename) == "xtb"
+        ):
+            # xTB output is only a geometry source; its route/method do not
+            # map onto Gaussian settings. Start from defaults (like .xyz) but
+            # inherit charge/multiplicity from the xTB calculation so the new
+            # Gaussian job is fully specified. CLI -c/-m still override below.
+            logger.info(
+                f"Detected xTB output {filename}; using default Gaussian "
+                f"settings with geometry and charge/multiplicity from the "
+                f"xTB calculation."
+            )
+            job_settings = GaussianJobSettings.default()
+            xtb_molecule = Molecule.from_filepath(filename)
+            if xtb_molecule.charge is not None:
+                job_settings.charge = xtb_molecule.charge
+            if xtb_molecule.multiplicity is not None:
+                job_settings.multiplicity = xtb_molecule.multiplicity
+        else:
+            job_settings = GaussianJobSettings.from_filepath(filename)
     elif filename.endswith(".db"):
         if is_chemsmart_db:
             job_settings = GaussianJobSettings.from_database(

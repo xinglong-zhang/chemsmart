@@ -76,12 +76,33 @@ Execution Control Options
       -  Enable simulation mode with fake job runners (default: disabled)
 
    -  -  ``--scratch/--no-scratch``
-      -  bool
-      -  Run in scratch space or working directory (default: scratch)
+      -  bool or None
+      -  Force scratch on (``--scratch``) or off (``--no-scratch``). Omit both (``None``) to use program YAML
+         ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
 .. note::
 
    Use ``-R`` at the end of the command to rerun a completed job.
+
+.. note::
+
+   **CLI (``chemsmart run`` / ``chemsmart sub``)**
+
+   When both ``--scratch`` and ``--no-scratch`` are omitted, scratch mode is decided in ``JobRunner.from_job`` before
+   the typed runner is built:
+
+   #. Explicit ``--scratch`` or ``--no-scratch`` wins.
+   #. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
+   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for PyMOL, thermochemistry,
+      etc.).
+
+   **Programmatic API (direct constructor)**
+
+   If you construct a runner yourself with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
+   default only. That can differ from the CLI path when YAML would override the class default.
+
+   Scratch **path** (when mode is on) is resolved separately from program ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then
+   user settings. See :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. note::
 

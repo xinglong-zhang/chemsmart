@@ -118,6 +118,55 @@ class Executable(RegistryMixin):
             envars=envars,
         )
 
+    @classmethod
+    def program_scratch_from_servername(cls, servername):
+        """Return program-block ``SCRATCH`` from server YAML, or None if unset.
+
+        Reads the boolean ``SCRATCH`` key under this executable's program
+        block (for example ``GAUSSIAN`` or ``ORCA``). Used by
+        ``JobRunner.from_job`` when the CLI omits ``--scratch`` /
+        ``--no-scratch``: an explicit YAML ``True``/``False`` overrides the
+        job-runner class default; a missing key or ``null`` value leaves the
+        class default in place.
+
+        Args:
+            servername (str): Server config name, or path to a ``.yaml`` file.
+
+        Returns:
+            bool or None: YAML ``SCRATCH`` value, or None if missing, null,
+            or unreadable.
+        """
+        if cls.PROGRAM is None or not servername:
+            return None
+
+        servername = str(servername)
+        if os.path.isfile(servername):
+            server_yaml_file = servername
+        else:
+            server_yaml = (
+                servername
+                if servername.endswith(".yaml")
+                else f"{servername}.yaml"
+            )
+            server_yaml_file = os.path.join(
+                user_settings.user_server_dir, server_yaml
+            )
+        try:
+            contents = YAMLFile(filename=server_yaml_file).yaml_contents_dict
+            program_cfg = contents.get(cls.PROGRAM)
+            if not program_cfg or "SCRATCH" not in program_cfg:
+                return None
+            value = program_cfg["SCRATCH"]
+            if value is None:
+                return None
+            return bool(value)
+        except (FileNotFoundError, OSError, TypeError, ValueError) as e:
+            logger.debug(
+                f"Could not read {cls.PROGRAM} SCRATCH from "
+                f"{server_yaml_file}: {e}"
+            )
+            return None
+
     @property
     def available_servers(self):
         """

@@ -2329,6 +2329,19 @@ class TestCDXFile:
         assert mol.num_atoms == 21
         assert mol.is_aromatic
 
+    def test_molecule_from_filepath_cdx(
+        self, single_molecule_cdx_file_imidazole
+    ):
+        """Test Molecule.from_filepath with a binary ChemDraw .cdx file."""
+        mol = Molecule.from_filepath(single_molecule_cdx_file_imidazole)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C8H10N2O"
+        assert mol.num_atoms == 21
+        assert mol.is_aromatic
+        assert mol.positions is not None
+        assert mol.positions.shape == (21, 3)
+
     def test_read_complex_molecule_cdxml_file_(
         self, complex_molecule_cdxml_file
     ):
