@@ -282,7 +282,8 @@ For a typical GFN2-xTB single point, CHEMSMART writes ``{label}.xyz`` and runs a
 
 Job-type flags:
 
--  ``opt`` adds ``--opt <optimization_level>``
+-  ``opt`` adds ``--ohess <optimization_level>`` when ``freq`` is enabled
+-  ``opt`` adds ``--opt <optimization_level>`` when ``freq: false`` is configured in the project YAML
 -  ``hess`` adds ``--hess``
 -  ``sp`` adds no additional job-type flags
 

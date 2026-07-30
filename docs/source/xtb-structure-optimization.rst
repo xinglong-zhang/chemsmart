@@ -126,13 +126,6 @@ Basic Usage
 
    chemsmart run xtb -p project -f molecule.xyz hess
 
-Typical workflow: optimize first, then run frequencies on the optimized xTB output:
-
-.. code:: bash
-
-   chemsmart run xtb -p project -f molecule.xyz -l mol_opt opt
-   chemsmart run xtb -p project -f mol_opt/mol_opt.out -l mol_hess hess
-
 ***************
  Output Layout
 ***************
