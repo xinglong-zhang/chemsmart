@@ -107,11 +107,11 @@ class CRESTJobRunner(JobRunner):
     def _get_command(self, job):
         executable = self.executable.get_executable()
         command = [executable, self.job_xyzfile]
-        command.extend(self._settings_args(job.settings))
+        command.extend(self.get_settings_args(job.settings))
         logger.debug(f"Generated CREST command: {command}")
         return command
 
-    def _settings_args(self, settings):
+    def get_settings_args(self, settings):
         args = []
         args.extend(self._gfn_args(settings.gfn_version))
 
