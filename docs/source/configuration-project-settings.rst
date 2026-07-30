@@ -445,8 +445,10 @@ This produces:
 **********************
 
 The ``~/.chemsmart/xtb/`` directory contains xTB project settings files. Supported job types are ``sp``, ``opt``, and
-``hess``. The ``xtb`` executable is used for execution; install xTB so that it is available from the conda environment
-or ``PATH`` configured in the server YAML ``XTB`` section.
+``hess``. For xTB optimization jobs, CHEMSMART follows the same convention as Gaussian: ``opt`` defaults to ``freq:
+true``, which renders an xTB ``--ohess`` job unless ``freq: false`` is set explicitly. The ``xtb`` executable is used
+for execution; install xTB so that it is available from the conda environment or ``PATH`` configured in the server YAML
+``XTB`` section.
 
 Example project file (``~/.chemsmart/xtb/test.yaml``):
 
@@ -461,6 +463,7 @@ Example project file (``~/.chemsmart/xtb/test.yaml``):
    opt:
      gfn_version: gfn2
      optimization_level: vtight
+     freq: true
      solvent_model: null
      solvent_id: null
      grad: false
@@ -475,6 +478,7 @@ Common keys:
 
 -  ``gfn_version``: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``
 -  ``optimization_level``: used by ``opt`` (``crude`` … ``extreme``; packaged default is ``vtight``)
+-  ``freq``: for ``opt`` jobs, ``true`` renders ``--ohess`` and ``false`` renders plain ``--opt``; default is ``true``
 -  ``grad``: whether to pass ``--grad``
 -  ``solvent_model`` / ``solvent_id``: implicit solvent; **both** must be set for solvent flags to be rendered
 -  ``additional_flags``: optional extra CLI tokens appended to the xTB command
@@ -486,6 +490,7 @@ Solvent example:
    opt:
      gfn_version: gfn2
      optimization_level: vtight
+     freq: true
      solvent_model: alpb
      solvent_id: water
      grad: false

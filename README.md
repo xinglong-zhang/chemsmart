@@ -210,7 +210,7 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
-The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. Calculations are executed using the `xtb` executable, which must be available either in the configured conda environment or on the system `PATH` specified in the server YAML `XTB` section.
+The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. For xTB optimization jobs, CHEMSMART follows the same convention as Gaussian: `opt` defaults to `freq: true`, which generates an xTB `--ohess` command unless `freq: false` is set explicitly. Calculations are executed using the `xtb` executable, which must be available either in the configured conda environment or on the system `PATH` specified in the server YAML `XTB` section.
 
 For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
 
@@ -224,6 +224,7 @@ sp:
 opt:
   gfn_version: gfn2
   optimization_level: vtight
+  freq: true
   solvent_model: null
   solvent_id: null
   grad: false

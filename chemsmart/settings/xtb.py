@@ -25,16 +25,19 @@ class XTBProjectSettings(RegistryMixin):
     def sp_settings(self):
         settings = self.main_settings().copy()
         settings.jobtype = "sp"
+        settings.freq = False
         return settings
 
     def opt_settings(self):
         settings = self.main_settings().copy()
         settings.jobtype = "opt"
+        settings.freq = True
         return settings
 
     def hess_settings(self):
         settings = self.main_settings().copy()
         settings.jobtype = "hess"
+        settings.freq = True
         return settings
 
     @classmethod
@@ -136,15 +139,15 @@ class YamlXTBProjectSettingsBuilder:
             return yaml.safe_load(handle) or {}
 
     def _settings_for_job(self, jobtype):
-        config = self._read_config().get(jobtype, {})
-        if not config:
-            logger.warning(
-                f"No xTB configuration found for {jobtype} in "
-                f"{self.filename}. Using defaults."
-            )
-        config = dict(config)
-        config.setdefault("jobtype", jobtype)
-        return XTBJobSettings.from_dict(config)
+        defaults = {
+            "sp": XTBProjectSettings().sp_settings(),
+            "opt": XTBProjectSettings().opt_settings(),
+            "hess": XTBProjectSettings().hess_settings(),
+        }
+        if jobtype not in defaults:
+            raise ValueError(f"Unsupported xTB job type: {jobtype}")
+        config = dict(self._read_config().get(jobtype) or {})
+        return defaults[jobtype].merge(config, merge_all=True)
 
     def _parse_project_name(self):
         return os.path.basename(self.filename).removesuffix(".yaml")
