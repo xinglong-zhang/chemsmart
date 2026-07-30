@@ -44,7 +44,13 @@ def click_jobrunner_options(f):
         "--scratch/--no-scratch",
         default=None,
         type=bool,
-        help="Run in scratch mode or without a scratch folder.",
+        help=(
+            "Run in scratch mode or without a scratch folder. "
+            "Omit both flags to use program SCRATCH from the server YAML "
+            "(Gaussian, ORCA, NCIPLOT only) when set, otherwise the job "
+            "runner's SCRATCH class default; use --scratch or --no-scratch "
+            "to override explicitly."
+        ),
     )
     @click.option(
         "--delete-scratch/--no-delete-scratch",

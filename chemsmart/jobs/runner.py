@@ -10,6 +10,7 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -18,6 +19,46 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program or program is NotImplemented:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML for executable-backed runners."""
+    exe_cls = _executable_class_for_program(runner_cls.PROGRAM)
+    if exe_cls is None or server is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
+
+
+def _resolve_scratch(scratch, runner_cls, server):
+    """Resolve scratch: CLI wins; else YAML program SCRATCH; else class default.
+
+    Priority when constructing a typed runner:
+
+    1. Explicit CLI/API ``scratch`` (``True``/``False``) wins.
+    2. If omitted (``None``), use program-block ``SCRATCH`` from server YAML
+       when that key is set and the runner maps to an ``Executable`` subclass
+       (Gaussian, ORCA, or NCIPLOT).
+    3. If the YAML key is absent or the program has no executable config,
+       use the runner class ``SCRATCH`` default.
+    """
+    if scratch is not None:
+        return scratch
+    yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
+    if yaml_scratch is not None:
+        return yaml_scratch
+    return runner_cls.SCRATCH
 
 
 @dataclass(frozen=True)
@@ -152,8 +193,14 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool): Whether to use scratch directory.
-        scratch_dir (str): Path to scratch directory.
+        scratch (bool or None): Whether to use a scratch directory.
+            None means unset: ``from_job`` uses program ``SCRATCH`` from
+            server YAML when that key is set, otherwise the typed runner's
+            ``SCRATCH`` class default. Explicit False or True forces
+            scratch off or on regardless of YAML or class defaults.
+        scratch_dir (str or None): Path to scratch directory, or None to
+            resolve from executable ENVARS, ``SERVER.SCRATCH_DIR``, then user
+            settings.
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
@@ -167,8 +214,8 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,
-        scratch_dir=None,  # Explicit scratch directory
+        scratch=None,  # CLI placeholder: None = flag omitted; see from_job
+        scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
         delete_scratch=False,
         fake=False,
         num_cores=None,
@@ -192,7 +239,7 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
 
-        if self.scratch:
+        if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
         self.fake = fake
@@ -234,7 +281,18 @@ class JobRunner(RegistryMixin):
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
-        """Determine the scratch directory, considering multiple sources."""
+        """Determine the scratch directory from executable, server, or user settings.
+
+        Resolution order for the scratch **path** (when scratch mode is on):
+
+        1. Explicit ``scratch_dir`` already set on the runner
+        2. Executable ENVARS (for example ``SCRATCH`` export)
+        3. ``server.scratch_dir`` (``SERVER.SCRATCH_DIR``)
+        4. User settings ``SCRATCH``
+
+        If no path can be resolved, scratch mode is disabled with a warning.
+        If a path is resolved but does not exist, raises ``FileNotFoundError``.
+        """
         if self._scratch_dir is not None:
             return self._scratch_dir  # Use explicitly set directory
 
@@ -383,6 +441,38 @@ class JobRunner(RegistryMixin):
 
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+        """Select and construct a typed job runner for ``job``.
+
+        **When the CLI omits ``--scratch``/``--no-scratch``**
+
+        ``scratch`` arrives as ``None``. It is resolved here, in order:
+
+        1. Explicit ``True``/``False`` from ``--scratch`` or ``--no-scratch``
+        2. Program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only)
+        3. The selected runner's class ``SCRATCH`` default
+
+        The typed runner is then constructed with that resolved ``bool``.
+
+        **When calling a typed runner constructor directly**
+
+        ``scratch=None`` does not pass through ``from_job``. It means "use the
+        class ``SCRATCH`` default" and YAML is not read. That can differ from
+        step 2 above when YAML would override the class default.
+
+        Args:
+            job: Job instance whose ``TYPE`` selects the runner.
+            server: Server name or ``Server`` instance.
+            scratch (bool or None): ``True``/``False`` from CLI flags, or
+                ``None`` when both flags were omitted.
+            fake (bool): Prefer a fake runner when one is registered.
+            **kwargs: Forwarded to the typed runner constructor.
+
+        Returns:
+            JobRunner: Typed runner instance for ``job``.
+
+        Raises:
+            ValueError: If no registered runner supports ``job.TYPE``.
+        """
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -411,11 +501,9 @@ class JobRunner(RegistryMixin):
 
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
-            # If scratch is None, use the runner's default scratch value
-            if scratch is not None:
-                scratch = scratch
-            else:
-                scratch = selected_runner.SCRATCH
+            # CLI True/False wins; omit → YAML program SCRATCH if set;
+            # otherwise runner class SCRATCH.
+            scratch = _resolve_scratch(scratch, selected_runner, server)
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )

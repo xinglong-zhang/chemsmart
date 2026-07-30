@@ -125,10 +125,10 @@ class Database:
                     entropy_times_temperature REAL,
                     gibbs_free_energy REAL,
                     -- Provenance fields
-                    source_file TEXT,
+                    source TEXT,
                     source_file_hash TEXT,
-                    source_file_size INTEGER,
-                    source_file_date TEXT,
+                    source_size INTEGER,
+                    source_date TEXT,
                     program_version TEXT,
                     parser TEXT,
                     chemsmart_version TEXT,
@@ -289,7 +289,7 @@ class Database:
                 electronic_entropy, vibrational_entropy, rotational_entropy,
                 translational_entropy, entropy, entropy_times_temperature,
                 gibbs_free_energy,
-                source_file, source_file_hash, source_file_size, source_file_date,
+                source, source_file_hash, source_size, source_date,
                 program_version, parser, chemsmart_version, assembled_at,
                 normal_termination
             ) VALUES (
@@ -352,10 +352,10 @@ class Database:
                 results.get("entropy_times_temperature"),
                 results.get("gibbs_free_energy"),
                 # Provenance
-                provenance.get("source_file"),
+                provenance.get("source"),
                 provenance.get("source_file_hash"),
-                provenance.get("source_file_size"),
-                provenance.get("source_file_date"),
+                provenance.get("source_size"),
+                provenance.get("source_date"),
                 provenance.get("program_version"),
                 provenance.get("parser"),
                 provenance.get("chemsmart_version"),
@@ -689,10 +689,10 @@ class Database:
     def _extract_provenance(row):
         """Extract provenance fields from record row."""
         provenance = {
-            "source_file": row.get("source_file"),
+            "source": row.get("source"),
             "source_file_hash": row.get("source_file_hash"),
-            "source_file_size": row.get("source_file_size"),
-            "source_file_date": row.get("source_file_date"),
+            "source_size": row.get("source_size"),
+            "source_date": row.get("source_date"),
             "program": row.get("program"),
             "program_version": row.get("program_version"),
             "parser": row.get("parser"),
@@ -821,7 +821,7 @@ class Database:
                 cursor = conn.execute(
                     """SELECT record_index, record_id, program, method, basis, 
                        jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
-                       source_file
+                       source
                        FROM records WHERE record_index = ?""",
                     (record_index,),
                 )
@@ -829,7 +829,7 @@ class Database:
                 cursor = conn.execute(
                     """SELECT record_index, record_id, program, method, basis,
                        jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
-                       source_file
+                       source
                        FROM records WHERE record_id = ?""",
                     (record_id,),
                 )
@@ -867,7 +867,7 @@ class Database:
             cursor = conn.execute(
                 """SELECT record_index, record_id, program, method, basis,
                    jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
-                   source_file
+                   source
                    FROM records ORDER BY record_index"""
             )
             rows = cursor.fetchall()
@@ -1227,7 +1227,7 @@ class Database:
                 """
                 SELECT DISTINCT r.record_index, r.record_id, r.program,
                        r.method, r.basis, r.jobtype, r.total_energy,
-                       r.source_file
+                       r.source
                 FROM records r
                 JOIN record_structures rs ON r.record_id = rs.record_id
                 JOIN structures s ON rs.structure_id = s.structure_id
@@ -1252,7 +1252,7 @@ class Database:
                 """
                 SELECT DISTINCT r.record_index, r.record_id, r.program,
                        r.method, r.basis, r.jobtype, r.total_energy,
-                       r.source_file
+                       r.source
                 FROM records r
                 JOIN record_structures rs ON r.record_id = rs.record_id
                 WHERE rs.structure_id = ?

@@ -25,12 +25,12 @@ class ThermochemistryJob(Job):
 
     This class handles the calculation of thermodynamic properties such as
     enthalpy, entropy, and Gibbs free energy from frequency calculations
-    in Gaussian or ORCA output files.
+    in Gaussian, ORCA, or xTB output files.
 
     Attributes:
         PROGRAM (str): Program identifier ('Thermochemistry').
         TYPE (str): Job type identifier ('thermochemistry').
-        filename (str | None): Path to the QC output file (.log/.out).
+        filename (str): Path to the QC output file (.log/.out).
         molecule (Molecule | None): Molecular structure used for context.
         settings (ThermochemistryJobSettings): Thermochemistry configuration.
         label (str): Job identifier used for file naming.
@@ -68,6 +68,9 @@ class ThermochemistryJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
+
+        if filename is None:
+            raise ValueError("'filename' must be provided.")
 
         # Validate file extension
         if not filename.endswith((".log", ".out")):
@@ -279,11 +282,6 @@ class ThermochemistryJob(Job):
             ValueError: If no input file is provided
             Exception: If calculation fails during processing
         """
-        if not self.filename:
-            raise ValueError(
-                "No input file provided for thermochemistry calculation."
-            )
-
         # Set default output file if not specified
         if self.settings.outputfile is None:
             self.settings.outputfile = self.outputfile

@@ -888,9 +888,11 @@ class TestPKa:
         assert "--reference-multiplicity" not in second_args
 
     def test_run_gaussian_pka_help_is_submission_only(
-        self, single_molecule_xyz_file
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         _require_backend_pka_subcommand(run, "gaussian")
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
         runner = CliRunner()
         result = runner.invoke(
             run,
@@ -915,9 +917,11 @@ class TestPKa:
         assert "\n  batch-analyze" not in result.output
 
     def test_run_orca_pka_help_is_submission_only(
-        self, single_molecule_xyz_file
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
         _require_backend_pka_subcommand(run, "orca")
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
         runner = CliRunner()
         result = runner.invoke(
             run,
@@ -1845,10 +1849,10 @@ class TestPKa:
             assert set(captured["runs"]) == {"acid1_pka", "acid2_pka"}
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
-    def test_run_pka_batch_defaults_to_no_scratch(
+    def test_run_pka_batch_with_no_scratch(
         self, tmp_path, monkeypatch, backend
     ):
-        """run should not require a scratch directory when --scratch is omitted."""
+        """Explicit --no-scratch should not require a scratch directory."""
         _require_backend_pka_subcommand(run, backend)
         table = _build_pka_batch_table(tmp_path)
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1875,6 +1879,7 @@ class TestPKa:
             run,
             [
                 "--fake",
+                "--no-scratch",
                 backend,
                 "-p",
                 "test",

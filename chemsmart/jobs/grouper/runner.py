@@ -31,6 +31,17 @@ class GrouperJobRunner(JobRunner):
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
+        """Initialize the grouper job runner.
+
+        Args:
+            server: Server configuration for job execution.
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
+            fake (bool): Whether to run in fake mode for testing.
+            scratch_dir (str, optional): Path to scratch directory.
+            **kwargs: Additional keyword arguments for the parent class.
+        """
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(

@@ -266,9 +266,7 @@ class DatabaseInspector:
         lines.append(format_kv("Record Index", record.get("record_index")))
         lines.append(format_kv("Record ID", record.get("record_id")))
         lines.append(
-            format_kv(
-                "Filename", os.path.basename(provenance.get("source_file"))
-            )
+            format_kv("Source", os.path.basename(provenance.get("source")))
         )
 
         # Meta
@@ -481,19 +479,17 @@ class DatabaseInspector:
         lines.append(
             format_kv("CHEMSMART Version", provenance.get("chemsmart_version"))
         )
-        lines.append(format_kv("Source File", provenance.get("source_file")))
+        lines.append(format_kv("Source", provenance.get("source")))
         lines.append(
-            format_kv("Source File Hash", provenance.get("source_file_hash"))
+            format_kv("Source Hash", provenance.get("source_file_hash"))
         )
         lines.append(
             format_kv(
-                "Source File Size",
-                human_size(provenance.get("source_file_size")),
+                "Source Size",
+                human_size(provenance.get("source_size")),
             )
         )
-        lines.append(
-            format_kv("Source File Date", provenance.get("source_file_date"))
-        )
+        lines.append(format_kv("Source Date", provenance.get("source_date")))
         lines.append(format_kv("Assembled At", provenance.get("assembled_at")))
         if provenance.get("normal_termination") is not None:
             lines.append(
@@ -598,9 +594,7 @@ class DatabaseInspector:
         lines.append(format_kv("Record Index", record.get("record_index")))
         lines.append(format_kv("Record ID", record.get("record_id")))
         lines.append(
-            format_kv(
-                "Filename", os.path.basename(provenance.get("source_file"))
-            )
+            format_kv("Source", os.path.basename(provenance.get("source")))
         )
         lines.append(
             format_kv(
