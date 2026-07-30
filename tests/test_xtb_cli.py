@@ -77,6 +77,7 @@ class TestXTBCLISettings:
         assert settings.solvent_model == "alpb"
         assert settings.solvent_id == "water"
         assert settings.grad is True
+        assert settings.freq is False
 
     def test_opt_instantiates_xtb_opt_job(self, single_molecule_xyz_file):
         result, settings, _ = _invoke_xtb_and_capture_settings(
@@ -98,6 +99,7 @@ class TestXTBCLISettings:
         assert result.exit_code == 0, result.output
         assert settings.jobtype == "opt"
         assert settings.optimization_level == "loose"
+        assert settings.freq is True
 
     def test_hess_instantiates_xtb_hess_job(self, single_molecule_xyz_file):
         result, settings, _ = _invoke_xtb_and_capture_settings(
@@ -148,6 +150,7 @@ class TestXTBCLISettings:
         assert settings.charge == 0
         assert settings.multiplicity == 3
         assert settings.jobtype == "opt"
+        assert settings.freq is False
         assert settings.grad is True
         assert settings.solvent_model == "alpb"
         assert settings.solvent_id == "toluene"
@@ -163,6 +166,7 @@ class TestXTBCLISettings:
         assert settings.charge == 0
         assert settings.multiplicity == 3
         assert settings.jobtype == "sp"
+        assert settings.freq is False
         assert settings.grad is False
         assert settings.solvent_model == "alpb"
         assert settings.solvent_id == "toluene"
@@ -176,6 +180,7 @@ class TestXTBCLISettings:
 
         assert result.exit_code == 0, result.output
         assert settings.jobtype == "hess"
+        assert settings.freq is True
         assert settings.charge == 0
         assert settings.multiplicity == 1
         assert (

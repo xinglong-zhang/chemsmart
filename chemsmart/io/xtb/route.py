@@ -111,12 +111,13 @@ class XTBRoute:
         - 'vtight'    : Very tight convergence criteria (verytight in CLI)
         - 'extreme'   : Extremely tight convergence, highest accuracy
 
-        Command line flags: --opt [LEVEL], -o [LEVEL], --optlevel [LEVEL], --metaopt [LEVEL]
+        Command line flags: --opt [LEVEL], -o [LEVEL], --optlevel [LEVEL], --metaopt [LEVEL],
+        --ohess [LEVEL]
 
         Returns:
             str: Optimization level identifier or None if not specified
         """
-        for flag in ("--opt", "-o", "--optlevel", "--metaopt"):
+        for flag in ("--opt", "-o", "--optlevel", "--metaopt", "--ohess"):
             if flag in self.route_inputs:
                 opt_index = self.route_inputs.index(flag)
                 if opt_index + 1 < len(self.route_inputs):
@@ -180,8 +181,8 @@ class XTBRoute:
 
         xTB job types:
         - 'sp'    : Single point calculation (--scc, --sp, or default)
-        - 'opt'   : Geometry optimization (--opt, --omd)
-        - 'hess'  : Hessian/frequency calculation (--hess, --ohess, --bhess)
+        - 'opt'   : Geometry optimization (--opt, --ohess)
+        - 'hess'  : Hessian/frequency calculation (--hess)
         - 'md'    : Molecular dynamics (--md, --metadyn)
         - 'path'  : Reaction path calculation (--path)
         - 'modef' : Mode following (--modef)
@@ -193,7 +194,7 @@ class XTBRoute:
         Extract job type from route specification.
 
         Checks for various job type keywords in order of precedence:
-        1. Optimization: --opt, --omd, --metaopt, --ohess, --bhess
+        1. Optimization: --opt, --metaopt, --ohess
         2. Hessian: --hess
         3. MD: --md, --metadyn
         4. Path: --path
@@ -203,16 +204,14 @@ class XTBRoute:
         Returns:
             str: Job type ('opt', 'hess', 'md', 'path', 'modef', or 'sp')
         """
-        # Check for optimization keywords (including ohess and bhess which do opt first)
+        # Check for optimization keywords (including ohess which do opt first then hess)
         if any(
             flag in self.route_inputs
             for flag in (
                 "--opt",
                 "-o",
-                "--omd",
                 "--metaopt",
                 "--ohess",
-                "--bhess",
             )
         ):
             return "opt"
@@ -236,19 +235,15 @@ class XTBRoute:
         """
         Check if frequency/Hessian calculation is requested.
 
-        xTB frequency keywords: --hess, --ohess, --bhess
+        xTB frequency keywords: --hess, --ohess
 
         - --hess  : Numerical Hessian on input geometry
         - --ohess : Numerical Hessian on optimized geometry
-        - --bhess : Biased numerical Hessian on optimized geometry
 
         Returns:
             bool: True if frequency calculation is requested
         """
-        return any(
-            flag in self.route_inputs
-            for flag in ("--hess", "--ohess", "--bhess")
-        )
+        return any(flag in self.route_inputs for flag in ("--hess", "--ohess"))
 
     @property
     def grad(self):

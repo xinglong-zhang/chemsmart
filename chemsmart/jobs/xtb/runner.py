@@ -111,7 +111,10 @@ class XTBJobRunner(JobRunner):
         args.extend(self._gfn_args(settings.gfn_version))
 
         if settings.jobtype == "opt":
-            args.extend(["--opt", settings.optimization_level])
+            opt_flag = "--ohess" if settings.freq else "--opt"
+            args.append(opt_flag)
+            if settings.optimization_level is not None:
+                args.append(settings.optimization_level)
         elif settings.jobtype == "hess":
             args.append("--hess")
         elif settings.jobtype != "sp":

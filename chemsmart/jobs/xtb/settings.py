@@ -24,6 +24,7 @@ class XTBJobSettings:
         multiplicity=None,
         jobtype=None,
         title=None,
+        freq=False,
         grad=False,
         solvent_model=None,
         solvent_id=None,
@@ -58,6 +59,7 @@ class XTBJobSettings:
         self.multiplicity = multiplicity
         self.jobtype = jobtype
         self.title = title
+        self.freq = freq
         self.grad = grad
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
@@ -249,6 +251,7 @@ class XTBJobSettings:
             title=(
                 f"Job prepared from xTB file " f"{os.path.basename(filepath)}"
             ),
+            freq=output.route_object.freq,
             grad=output.route_object.grad,
             solvent_model=output.solvent_model,
             solvent_id=output.solvent_id,

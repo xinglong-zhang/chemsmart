@@ -9,6 +9,7 @@ opt:
   optimization_level: vtight
   solvent_model: null
   solvent_id: null
+  freq: true
   grad: false
 
 hess:
