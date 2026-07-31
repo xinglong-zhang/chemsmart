@@ -1,6 +1,10 @@
+import io
 import os
 from filecmp import cmp
 from shutil import copy
+from types import SimpleNamespace
+
+import pytest
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
@@ -722,3 +726,324 @@ class TestGaussianInputWriter:
             gaussian_written_opt_from_graphite_2d_pbc_log,
             shallow=False,
         )
+
+
+def _make_writer(settings, molecule=None, label="testjob"):
+    """Build a GaussianInputWriter around a lightweight fake job,
+    bypassing full Job construction for direct private-method tests."""
+    job = SimpleNamespace(
+        settings=settings,
+        jobrunner=SimpleNamespace(num_cores=4, mem_gb=8),
+        label=label,
+        molecule=molecule,
+    )
+    return GaussianInputWriter(job=job)
+
+
+class TestGaussianInputWriterJobSpecificInfo:
+    """Direct tests for _append_job_specific_info's per-jobtype
+    branches (nci/wbi/resp/other), bypassing the full write()
+    pipeline since only settings.jobtype and job.label are used."""
+
+    def test_nci_jobtype_writes_wfn_file(self):
+        settings = GaussianJobSettings.default()
+        settings.jobtype = "nci"
+        writer = _make_writer(settings, label="mymol")
+        buf = io.StringIO()
+        writer._append_job_specific_info(buf)
+        assert buf.getvalue() == "mymol.wfn\n\n"
+
+    def test_wbi_jobtype_writes_nbo_directive(self):
+        settings = GaussianJobSettings.default()
+        settings.jobtype = "wbi"
+        writer = _make_writer(settings, label="mymol")
+        buf = io.StringIO()
+        writer._append_job_specific_info(buf)
+        assert buf.getvalue() == "$nbo bndidx $end\n\n"
+
+    def test_resp_jobtype_writes_gesp_file(self):
+        settings = GaussianJobSettings.default()
+        settings.jobtype = "resp"
+        writer = _make_writer(settings, label="mymol")
+        buf = io.StringIO()
+        writer._append_job_specific_info(buf)
+        assert buf.getvalue() == "mymol.gesp\n\n"
+
+    def test_other_jobtype_writes_nothing(self):
+        settings = GaussianJobSettings.default()
+        settings.jobtype = "opt"
+        writer = _make_writer(settings, label="mymol")
+        buf = io.StringIO()
+        writer._append_job_specific_info(buf)
+        assert buf.getvalue() == ""
+
+
+class TestGaussianInputWriterModredundantValidation:
+    """Direct tests for _append_modredundant's format validation."""
+
+    def test_invalid_modredundant_format_raises(self):
+        settings = GaussianJobSettings.default()
+        settings.modred = "not-a-list-or-dict"
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        with pytest.raises(ValueError, match="modredundant must be"):
+            writer._append_modredundant(buf)
+
+    def test_none_modredundant_writes_nothing(self):
+        settings = GaussianJobSettings.default()
+        settings.modred = None
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        writer._append_modredundant(buf)
+        assert buf.getvalue() == ""
+
+
+class TestGaussianInputWriterGenecpNoHeavyElements:
+    """Direct test for _append_gen_genecp_basis's "no heavy elements
+    and no user-specified gen_genecp_file" no-op branch."""
+
+    def test_no_heavy_elements_and_no_gen_genecp_file_writes_nothing(
+        self, single_molecule_xyz_file
+    ):
+        molecule = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = GaussianJobSettings.default()
+        settings.heavy_elements = ["Pd"]
+        settings.heavy_elements_basis = "def2-tzvp"
+        settings.light_elements_basis = "def2-svp"
+        settings.gen_genecp_file = None
+        # settings.genecp is a derived property that is truthy when a
+        # basis-related gen/genecp keyword is used; force it directly
+        # via the underlying flag if exposed, otherwise skip.
+        settings.basis = "gen"
+        writer = _make_writer(settings, molecule=molecule)
+        buf = io.StringIO()
+        writer._append_gen_genecp_basis(buf)
+        assert buf.getvalue() == ""
+
+
+class TestGaussianInputWriterWriteDispatch:
+    """Direct tests for _write's target_directory/input_string
+    branches."""
+
+    def test_uses_job_folder_when_no_target_directory(self, tmp_path):
+        settings = GaussianJobSettings.default()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.chk = False
+        settings.functional = "b3lyp"
+        settings.basis = "sto-3g"
+        molecule = Molecule(
+            symbols=["Ar"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = SimpleNamespace(
+            settings=settings,
+            jobrunner=SimpleNamespace(num_cores=4, mem_gb=8),
+            label="nodir",
+            molecule=molecule,
+            folder=str(tmp_path),
+        )
+        writer = GaussianInputWriter(job=job)
+        writer._write(target_directory=None)
+        written = tmp_path / "nodir.com"
+        assert written.is_file()
+        content = written.read_text()
+        assert "%chk=" not in content
+
+    def test_write_self_used_when_input_string_set(self, tmp_path):
+        settings = GaussianJobSettings.default()
+        settings.input_string = "raw gaussian input content\n"
+        job = SimpleNamespace(
+            settings=settings,
+            jobrunner=SimpleNamespace(num_cores=4, mem_gb=8),
+            label="rawjob",
+            molecule=None,
+        )
+        writer = GaussianInputWriter(job=job)
+        writer._write(target_directory=str(tmp_path))
+        written = tmp_path / "rawjob.com"
+        assert written.read_text() == "raw gaussian input content\n"
+
+    def test_creates_target_directory_if_missing(self, tmp_path):
+        settings = GaussianJobSettings.default()
+        settings.input_string = "content\n"
+        job = SimpleNamespace(
+            settings=settings,
+            jobrunner=SimpleNamespace(num_cores=4, mem_gb=8),
+            label="newdir",
+            molecule=None,
+        )
+        writer = GaussianInputWriter(job=job)
+        new_dir = tmp_path / "does_not_exist_yet"
+        writer._write(target_directory=str(new_dir))
+        assert (new_dir / "newdir.com").is_file()
+
+
+class TestGaussianInputWriterModredundantScanConstrainedCoordinates:
+    """Direct test for _append_modredundant's scan-job
+    'constrained_coordinates' branch, in addition to the plain
+    num_steps/step_size coords already covered elsewhere."""
+
+    def test_scan_with_constrained_coordinates_writes_both_sections(self):
+        settings = GaussianJobSettings.default()
+        settings.modred = {
+            "coords": [[1, 2]],
+            "num_steps": [10],
+            "step_size": [0.05],
+            "constrained_coordinates": [[3, 4]],
+        }
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        writer._append_modredundant(buf)
+        content = buf.getvalue()
+        assert "B 1 2 S 10 0.05\n" in content
+        assert "B 3 4 F\n" in content
+
+
+class TestGaussianInputWriterGenecpAlwaysAppendsNewline:
+    """Regression test for BUGS_FOUND.md #33: the
+    `genecp_section.string_list[-1] != "\\n"` guard in
+    _append_gen_genecp_basis is always true (str.split("\\n") never
+    yields a literal "\\n" element), so a trailing blank line is
+    always written after the genecp section regardless of whether
+    the source content already ends with one."""
+
+    def test_extra_blank_line_always_appended(self, tmp_path):
+        genecp_file = tmp_path / "genecp.txt"
+        genecp_file.write_text("C 0\nsto-3g\n****\n")
+        settings = GaussianJobSettings.default()
+        settings.basis = "genecp"
+        settings.gen_genecp_file = str(genecp_file)
+        settings.heavy_elements = None
+        molecule = Molecule(
+            symbols=["C"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        writer = _make_writer(settings, molecule=molecule)
+        buf = io.StringIO()
+        writer._append_gen_genecp_basis(buf)
+        assert buf.getvalue().endswith("\n\n")
+
+
+class TestGaussianInputWriterOtherAdditionalInfo:
+    """Direct tests for _append_other_additional_info's file-path vs.
+    free-string branches."""
+
+    def test_reads_from_existing_file_path(self, tmp_path):
+        info_file = tmp_path / "extra_info.txt"
+        info_file.write_text("extra line one\nextra line two\n")
+        settings = GaussianJobSettings.default()
+        settings.append_additional_info = str(info_file)
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        writer._append_other_additional_info(buf)
+        assert buf.getvalue() == "extra line one\nextra line two\n"
+
+    def test_writes_free_string_when_not_a_file_path(self):
+        settings = GaussianJobSettings.default()
+        settings.append_additional_info = "some free\nform text"
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        writer._append_other_additional_info(buf)
+        assert buf.getvalue() == "some free\nform text\n"
+
+
+class TestGaussianInputWriterLinkSection:
+    """Direct test for the full link-job write path: _write_all
+    skipping modredundant for link jobs (line 112->115), the link
+    section dispatch (line 124), and _write_link_section /
+    _write_link_route (lines 585-600, 613-615)."""
+
+    def test_write_all_writes_link_section_for_link_job(self):
+        from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+
+        settings = GaussianLinkJobSettings.default()
+        settings.functional = "b3lyp"
+        settings.basis = "sto-3g"
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.chk = False
+        settings.jobtype = "opt"
+        molecule = Molecule(
+            symbols=["Ar"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        writer = _make_writer(settings, molecule=molecule, label="linkjob")
+        buf = io.StringIO()
+        writer._write_all(buf)
+        content = buf.getvalue()
+        assert "--Link1--" in content
+        # link route line combines the link jobtype's route with
+        # geom=check/guess=read continuation directives
+        assert "geom=check" in content
+        assert "guess=read" in content
+
+    def test_write_link_section_no_op_when_link_is_false(self):
+        from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+
+        settings = GaussianLinkJobSettings.default()
+        settings.functional = "b3lyp"
+        settings.basis = "sto-3g"
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.link = False
+        writer = _make_writer(settings)
+        buf = io.StringIO()
+        writer._write_link_section(buf)
+        assert buf.getvalue() == ""
+
+
+class TestGaussianInputWriterRouteSectionHeavyElementsBranches:
+    """Direct tests for _write_route_section's heavy-elements basis
+    replacement branches: light-basis substitution when the molecule
+    has no heavy elements present, and gen/genecp keyword replacement
+    when the determined basis differs from the configured one."""
+
+    def test_no_heavy_elements_in_structure_uses_light_basis(self):
+        settings = GaussianJobSettings.default()
+        settings.functional = "b3lyp"
+        settings.basis = "genecp"
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.heavy_elements = ["Pd"]
+        settings.heavy_elements_basis = "def2-tzvp"
+        settings.light_elements_basis = "def2-svp"
+        molecule = Molecule(
+            symbols=["Ar"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        writer = _make_writer(settings, molecule=molecule)
+        buf = io.StringIO()
+        writer._write_route_section(buf)
+        assert "def2svp" in buf.getvalue()
+        assert "genecp" not in buf.getvalue()
+
+    def test_heavy_elements_present_replaces_with_determined_basis(self):
+        settings = GaussianJobSettings.default()
+        settings.functional = "b3lyp"
+        settings.basis = "genecp"
+        settings.charge = 0
+        settings.multiplicity = 2
+        settings.heavy_elements = ["Ca"]
+        settings.heavy_elements_basis = "def2-tzvp"
+        settings.light_elements_basis = "def2-svp"
+        molecule = Molecule(
+            symbols=["Ca"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=2,
+        )
+        writer = _make_writer(settings, molecule=molecule)
+        buf = io.StringIO()
+        writer._write_route_section(buf)
+        content = buf.getvalue()
+        assert "gen " in content or content.strip().endswith("gen")
+        assert "genecp" not in content

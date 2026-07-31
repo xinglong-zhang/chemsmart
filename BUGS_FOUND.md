@@ -1595,3 +1595,89 @@ practice.
 FixAtoms):` branch, since `atoms.constraints` is always either `[]` or
 a `list` for any `Atoms` object constructed or mutated through ASE's
 public API.
+
+## 33. `GaussianInputWriter._append_gen_genecp_basis`'s trailing-newline check is always true
+
+**Location:** `chemsmart/jobs/gaussian/writer.py`, `_append_gen_genecp_basis`
+(lines 487-491).
+
+```python
+f.write(genecp_section.string)
+# Check that the last line of genecp_section.string is empty,
+# if not, add an empty line
+if genecp_section.string_list[-1] != "\n":
+    f.write("\n")
+```
+
+`genecp_section.string_list` is `genecp_section.string.split("\n")`
+(see `chemsmart/io/gaussian/gengenecp.py`, `GenGenECPSection.string_list`).
+`str.split("\n")` never returns an element that is literally `"\n"` —
+a trailing newline in the source string produces an empty string `""`
+as the last element, not `"\n"`, and a string with no trailing newline
+produces its last real line (never `"\n"` either, since the line
+content itself never contains the delimiter). So
+`string_list[-1] != "\n"` is true unconditionally, regardless of
+whether `genecp_section.string` actually ends with a blank line, and
+`f.write("\n")` always executes.
+
+**Reproduce (informal):**
+```python
+s1 = "C 0\nsto-3g\n****\n"
+print(s1.split("\n")[-1] != "\n")   # True (last element is "")
+s2 = "C 0\nsto-3g\n****"
+print(s2.split("\n")[-1] != "\n")   # True (last element is "****")
+```
+Neither case can make the comparison false.
+
+**Impact:** Low — an extra blank line is always appended after the
+genecp section, whether or not one was already present. Since Gaussian
+input files generally tolerate extra blank lines between sections,
+this has not manifested as a job-breaking bug, but the guard does not
+do what its comment says.
+
+**Suggested direction:** the intended check was likely
+`genecp_section.string_list[-1] != ""` (i.e., whether the string ends
+with a newline) rather than comparing against the literal `"\n"`.
+
+## 34. `GaussianInputWriter._write_route_section`'s QMMM branch is unreachable through the normal write pipeline
+
+**Location:** `chemsmart/jobs/gaussian/writer.py`, `_write_route_section`
+(lines 176-179), dispatched from `_write_all` (lines 100-108).
+
+```python
+# _write_all:
+if isinstance(self.settings, GaussianQMMMJobSettings):
+    self._write_route_section_qmmm(f)
+    ...
+else:
+    self._write_route_section(f)
+    ...
+
+# _write_route_section:
+route_string = self.settings.route_string
+if isinstance(self.settings, GaussianQMMMJobSettings):
+    route_string = self.settings._route_string
+```
+
+`_write_all` only calls `_write_route_section` from the `else` branch,
+i.e. only when `self.settings` is *not* a `GaussianQMMMJobSettings`
+instance (QMMM jobs are routed to the dedicated
+`_write_route_section_qmmm` instead). So by the time
+`_write_route_section` runs, `isinstance(self.settings,
+GaussianQMMMJobSettings)` is guaranteed `False` — the check at line
+178 can never be `True` through the real write pipeline.
+
+**Reproduce (informal):**
+`tests/test_GaussianWriter.py::TestGaussianInputWriter::test_write_qmmm_job`
+(and `test_write_qmmm_input_from_logfile`) already exercise a full
+QMMM job write end-to-end and only ever go through
+`_write_route_section_qmmm`, never `_write_route_section` — confirming
+the two code paths are mutually exclusive by construction.
+
+**Impact:** None — purely dead code, presumably left over from before
+`_write_route_section_qmmm` was split out into its own method.
+
+**Suggested direction:** remove the `isinstance(self.settings,
+GaussianQMMMJobSettings)` check and the `self.settings._route_string`
+fallback from `_write_route_section`, since that method is now only
+ever called for non-QMMM settings.
