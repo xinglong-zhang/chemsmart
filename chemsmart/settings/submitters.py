@@ -1159,7 +1159,8 @@ class SLFSubmitter(Submitter):
         f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
         if self.server.num_gpus:
             f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
-        f.write(f"#BSUB -W {self.server.num_hours}\n")
+        # LSF -W is [hour:]minute; bare integers are minutes.
+        f.write(f"#BSUB -W {self.server.num_hours}:00\n")
         f.write("#BSUB -alloc_flags gpumps\n")
         f.write("\n")
         f.write("\n")
@@ -1202,7 +1203,8 @@ class SLFSubmitter(Submitter):
         f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
         if self.server.num_gpus:
             f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
-        f.write(f"#BSUB -W {self.server.num_hours}\n")
+        # LSF -W is [hour:]minute; bare integers are minutes.
+        f.write(f"#BSUB -W {self.server.num_hours}:00\n")
         f.write("#BSUB -alloc_flags gpumps\n")
         f.write("\n")
         f.write("\n")

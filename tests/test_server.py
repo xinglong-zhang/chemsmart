@@ -621,12 +621,34 @@ class TestArraySubmitInfrastructure:
         assert "#BSUB -J pka_batch_array[1-3%1]\n" in submit_text
         assert "#BSUB -o pka_batch_array.bsubout\n" in submit_text
         assert "#BSUB -e pka_batch_array.bsuberr\n" in submit_text
+        # LSF -W is [hour:]minute; bare integers would be minutes.
+        assert "#BSUB -W 12:00\n" in submit_text
         assert "%I.bsubout" not in submit_text
         assert "TASK_ID=$LSB_JOBINDEX" in submit_text
         assert "===== BEGIN array task ${TASK_ID} =====" in submit_text
         assert "flock 9 || exit 1" in submit_text
         assert "python chemsmart_run_array_pka_batch_array.py" in submit_text
         assert (tmp_path / "chemsmart_run_array_pka_batch_array.py").exists()
+
+    def test_lsf_single_job_walltime_uses_hours_minutes(self):
+        """Single-job LSF scripts also format -W as hours:minutes."""
+        server = Server(
+            "single-lsf",
+            SCHEDULER="SLF",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            NUM_HOURS=2,
+            NUM_NODES=1,
+        )
+        job = type("DummyJob", (), {"label": "job1"})()
+        submitter = SLFSubmitter(job=job, server=server)
+
+        buffer = StringIO()
+        submitter._write_scheduler_options(buffer)
+        text = buffer.getvalue()
+        assert "#BSUB -W 2:00\n" in text
+        assert "#BSUB -W 2\n" not in text
 
 
 class TestSchedulerArrayPolicy:
