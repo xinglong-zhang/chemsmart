@@ -294,8 +294,8 @@ For a typical CREST conformational search, CHEMSMART builds a command like:
 Solvent (when both model and id are set) adds ``--<model> <id>``, for example ``--alpb water``. Additional command-line
 arguments provided via ``-r`` are appended at the end.
 
-For constrained searches, CHEMSMART additionally generates a ``constraints.inp`` file containing the specified distance
-constraints and, if specified, the requested force constant.
+For constrained searches, CHEMSMART additionally generates a ``constraints.inp`` file containing the specified distance,
+angle, and/or dihedral constraints and, if specified, the requested force constant.
 
 ************
  Next Steps

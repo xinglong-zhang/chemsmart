@@ -30,8 +30,8 @@ Standard conformational search:
  Constrained Conformational Search
 ***********************************
 
-Sample conformations while maintaining fixed distance constraints. This is useful for transition state conformer
-searches or other applications where certain geometric parameters must be held constant.
+Sample conformations while maintaining fixed geometric constraints (distance, angle, or dihedral). This is useful for
+transition state conformer searches or other applications where certain geometric parameters must be held constant.
 
 .. code:: bash
 
@@ -48,23 +48,24 @@ Constrained Search Options
       -  Type
       -  Description
 
-   -  -  ``--constraints``
+   -  -  ``-c, --constraints``
       -  string
-      -  Coordinate indices to constrain (1-based indexing).
+      -  Coordinates to constrain (1-indexed). Distance ``[i,j]``, angle ``[i,j,k]``, dihedral ``[i,j,k,l]``. Example:
+         ``[[1,2],[5,7,8],[3,4,1,7]]``
 
-   -  -  ``--force-constant``
+   -  -  ``-f, --force-constant``
       -  float
       -  Harmonic restraint force constant in Hartree/Bohr².
 
 Basic Usage
 ===========
 
-Constrained search with distance constraints:
+Constrained search:
 
 .. code:: bash
 
    chemsmart sub -s server crest -p project -f molecule.log conformers \
-      --constraints [[1,2],[2,3],[3,5]]
+      --constraints [[1,2],[5,7,8],[3,4,1,7]]
 
 With explicit force constant:
 
@@ -77,10 +78,11 @@ With explicit force constant:
 How Constraints Work
 ====================
 
-When you specify ``--constraints [[1,2],[2,3],[3,5]]``, CHEMSMART:
+When you specify ``--constraints``, CHEMSMART:
 
-#. Reads the input geometry and measures the distances for the specified atom pairs
-#. Generates a ``constraints.inp`` file with those distances and force constant if available
+#. Reads the input geometry and measures the requested distances, angles, and/or dihedrals
+#. Generates a ``constraints.inp`` file (xTB xcontrol ``$constrain`` syntax) with those values and an optional force
+   constant
 #. Passes this to CREST via ``--cinp constraints.inp``
 
 Example generated ``constraints.inp``:
@@ -88,10 +90,10 @@ Example generated ``constraints.inp``:
 .. code:: text
 
    $constrain
-   force constant=0.25
-     distance: 1, 2, 1.4923
-     distance: 2, 3, 1.9267
-     distance: 3, 5, 1.6804
+      force constant=0.25
+      distance: 1, 2, 1.4923
+      angle: 5, 7, 8, 109.4712
+      dihedral: 3, 4, 1, 7, 180.0000
    $end
 
 ***************
