@@ -18,6 +18,7 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
@@ -2016,6 +2017,18 @@ def xtb_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def xtb_jobrunner_scratch(tmpdir, pbs_server):
     return FakeXTBJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def crest_jobrunner_no_scratch(pbs_server):
+    return FakeCRESTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def crest_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeCRESTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 

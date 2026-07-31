@@ -9,6 +9,7 @@ import logging
 import os
 
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.jobs.xtb.writer import XTBInputWriter
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,8 @@ class CRESTInputWriter(InputWriter):
     """
     Writer class for generating CREST input files from job settings.
 
-    Currently supports writing the xTB-syntax constraints file.
+    Currently supports writing the xTB-syntax constraints file via
+    XTBInputWriter.write_constraints (distance, angle, dihedral).
     Future versions will add TOML input file generation for CREST 3.0.
     """
 
@@ -48,45 +50,16 @@ class CRESTInputWriter(InputWriter):
         logger.info(f"Writing CREST constraints file to: {job_inputfile}")
 
         with open(job_inputfile, "w") as f:
-            self._write_constraints(f)
+            self.write_constraints(f)
 
         logger.info(
             f"Wrote CREST constraints file with "
-            f"{len(self.settings.constraints)} distance constraints"
+            f"{len(self.settings.constraints)} constraint(s)"
         )
 
-    def _write_constraints(self, f):
-        """Write the $constrain block to an open file handle.
-
-        Raises:
-            ValueError: If atom_pairs contains invalid indices.
-        """
-        atom_pairs = self.settings.constraints
-        force_constant = self.settings.force_constant
-
-        n_atoms = len(self.job.molecule)
-        for pair in atom_pairs:
-            if len(pair) != 2:
-                raise ValueError(
-                    f"Each constraint must be a pair of atom indices, "
-                    f"got {pair}."
-                )
-            for idx in pair:
-                if idx < 1 or idx > n_atoms:
-                    raise ValueError(
-                        f"Atom index {idx} out of range [1, {n_atoms}]."
-                    )
-
-        f.write("$constrain\n")
-        if force_constant is not None:
-            f.write(f"  force constant={force_constant}\n")
-
-        for pair in atom_pairs:
-            i, j = pair[0], pair[1]
-            distance = self.job.molecule.get_distance(i - 1, j - 1)
-            f.write(f"  distance: {i}, {j}, {distance:.4f}\n")
-
-        f.write("$end\n")
+    def write_constraints(self, f):
+        """Write the $constrain block using XTBInputWriter."""
+        XTBInputWriter(job=self.job).write_constraints(f)
 
     def _write_toml(self, folder):
         """Write CREST 3.0 TOML input file for --input.

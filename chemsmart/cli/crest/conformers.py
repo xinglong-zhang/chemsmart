@@ -3,7 +3,7 @@ import logging
 
 import click
 
-from chemsmart.cli.crest.crest import crest
+from chemsmart.cli.crest.crest import click_crest_constrain_options, crest
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.utils import build_jobs
 from chemsmart.utils.cli import MyCommand
@@ -14,21 +14,7 @@ logger = logging.getLogger(__name__)
 
 @crest.command("conformers", cls=MyCommand)
 @click_job_options
-@click.option(
-    "-c",
-    "--constraints",
-    type=str,
-    default=None,
-    help="List of coordinates to be fixed for constrained conformational search. "
-    "1-indexed. Example: [[1,2],[2,3],[3,5]].",
-)
-@click.option(
-    "-f",
-    "--force-constant",
-    type=float,
-    default=None,
-    help="Force constant for distance constraints.",
-)
+@click_crest_constrain_options
 @click.pass_context
 def conformers(ctx, skip_completed, constraints, force_constant, **kwargs):
     """Run CREST conformational search."""

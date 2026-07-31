@@ -128,6 +128,32 @@ def click_crest_solvent_options(f):
     return wrapper_common_options
 
 
+def click_crest_constrain_options(f):
+    """Reusable CLI options for CREST geometry constraints."""
+
+    @click.option(
+        "-c",
+        "--constraints",
+        type=str,
+        default=None,
+        help="List of coordinates to constrain during conformational search. "
+        "1-indexed. Distance: [i,j]; angle: [i,j,k]; dihedral: [i,j,k,l]. "
+        "Example: [[1,2],[5,7,8],[3,4,1,7]].",
+    )
+    @click.option(
+        "-f",
+        "--force-constant",
+        type=float,
+        default=None,
+        help="Force constant for constraints.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_crest_options
 @click_filename_options
