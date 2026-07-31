@@ -2022,3 +2022,51 @@ file via CLI; the default `{label}.dat` naming is always used instead.
 `boltzmann()` and pass that through, or drop the dead `outputfile`
 parameter from the function signature entirely if this was never
 intended to be configurable per-command.
+
+## 40. `add_lines_in_yaml_files`'s `except yaml.YAMLError` clause is unreachable
+
+**Location:** `chemsmart/cli/config.py`, `add_lines_in_yaml_files`
+(lines 411-456).
+
+```python
+for yaml_file in target_directory.glob("*.yaml"):
+    try:
+        with open(yaml_file, "r") as f:
+            yaml_content = f.readlines()  # Read file line by line
+        ...
+        with open(yaml_file, "w") as f:
+            for line in updated_content:
+                f.write(line)
+    except yaml.YAMLError as e:
+        logger.info(f"Error reading {yaml_file}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error while processing {yaml_file}: {e}")
+```
+
+Despite the `.yaml` extension and the `import yaml` at the top of the
+module, this function never actually parses YAML — it reads the file
+as a plain list of lines (`f.readlines()`) and writes lines back
+verbatim (`f.write(line)`), treating the file as arbitrary text so it
+can insert lines after a matching marker. No `yaml.safe_load`,
+`yaml.load`, or any other YAML-parsing call exists anywhere in this
+function's body, so `yaml.YAMLError` can never actually be raised here
+— the specific `except yaml.YAMLError` branch is dead code, and any
+real failure (a missing file disappearing mid-scan, a permissions
+error, etc.) falls through to the generic `except Exception` clause
+instead.
+
+**Reproduce:** `tests/test_config.py::TestAddLinesInYamlFilesFunction::test_malformed_yaml_is_logged_not_raised`
+demonstrates that a simulated I/O failure (`OSError` from a patched
+`open`) is caught by the generic `except Exception` clause; there is
+no way to make the `except yaml.YAMLError` clause fire since nothing
+in the `try` block can raise that exception type.
+
+**Impact:** None — purely dead exception-handling code, presumably
+left over from an earlier version of this function that used a real
+YAML parser, or added defensively by analogy with the `.yaml` file
+extension without checking whether it was actually reachable.
+
+**Suggested direction:** remove the `except yaml.YAMLError` branch
+(and the now-unused `import yaml` if nothing else in the module needs
+it) since the function never parses YAML — it only rewrites lines of
+text within `.yaml`-named files.
