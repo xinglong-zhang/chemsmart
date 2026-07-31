@@ -325,6 +325,579 @@ class TestGaussianSolventCLITdCommand:
         assert settings.solvent_id == "toluene"
 
 
+class TestGaussianCLIGroupValidation:
+    """Validation and settings-merge branches on the ``gaussian`` group
+    callback itself (not delegated to any subcommand)."""
+
+    def test_molecule_id_not_supported_raises(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "--mid",
+                "abc",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+        )
+        assert result.exit_code != 0
+        assert "not supported for Gaussian job submission" in result.output
+
+    def test_index_and_structure_index_mutually_exclusive(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-i",
+                "1",
+                "--si",
+                "1",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_structure_index_used_as_index(
+        self,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--si`` is treated as an alias for ``-i`` when given alone."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                multiple_molecules_xyz_file,
+                "--si",
+                "1",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_requires_exactly_one_selector(
+        self, database_chemsmart_file, gaussian_jobrunner_no_scratch
+    ):
+        """No selector and no --sid given for a chemsmart db input."""
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            ["-f", database_chemsmart_file, "opt"],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_rejects_multiple_selectors(
+        self, database_chemsmart_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "--sid",
+                "abc",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_index_requires_record_selector(
+        self, database_chemsmart_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "abc",
+                "-i",
+                "1",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+        )
+        assert result.exit_code != 0
+        assert "can only be used together with" in result.output
+
+    def test_xtb_output_inherits_charge_and_multiplicity(
+        self,
+        xtb_water_outfolder,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """A ``.out`` file detected as xTB should fall back to default
+        Gaussian settings but inherit charge/multiplicity from xTB."""
+        import os
+
+        xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            ["-p", "gas_solv", "-f", xtb_out, "opt"],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+
+    def test_xtb_output_with_unset_charge_and_multiplicity(
+        self,
+        xtb_water_outfolder,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """If the xTB-derived molecule has no charge/multiplicity, the
+        default Gaussian settings' own (unset) values are kept."""
+        import os
+        from unittest.mock import MagicMock, patch
+
+        xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
+        mock_molecule = MagicMock(charge=None, multiplicity=None)
+
+        def _fake_from_filepath(filepath, **kwargs):
+            if kwargs.get("return_list"):
+                return [mock_molecule]
+            return mock_molecule
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            side_effect=_fake_from_filepath,
+        ):
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                ["-p", "gas_solv", "-f", xtb_out, "-c", "0", "-m", "1", "opt"],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_non_chemsmart_db_falls_back_to_defaults(
+        self,
+        database_ase_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """A .db file that isn't a chemsmart database (e.g. a plain ASE
+        db) falls back to default Gaussian settings entirely."""
+        from unittest.mock import MagicMock, patch
+
+        mock_molecule = MagicMock(name="ase_db_molecule")
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=[mock_molecule],
+        ):
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    database_ase_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_filename_and_pubchem_both_missing_raises(
+        self, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            ["-p", "gas_solv", "opt"],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "has not been specified" in str(result.exception)
+
+    def test_filename_and_pubchem_both_given_raises(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "--pubchem",
+                "222",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "have been specified" in str(result.exception)
+
+    def test_label_and_append_label_mutually_exclusive_raises(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            gaussian,
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-l",
+                "custom",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+            obj={"jobrunner": gaussian_jobrunner_no_scratch},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "not both" in str(result.exception)
+
+    def test_append_label_suffixes_filename_derived_label(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-a",
+                "suffix",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_pubchem_only_without_label_crashes(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """BUG (see BUGS_FOUND.md #25): the intended "output" label
+        fallback for a filename-less (PubChem-only) job with no -l/-a
+        is unreachable -- `os.path.basename(filename)` at gaussian.py's
+        default-label branch is called unconditionally on `filename`
+        (None here) before the `if filename:` guard that would skip it,
+        so this currently crashes with a TypeError instead of falling
+        back to "output"."""
+        from unittest.mock import MagicMock, patch
+
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ):
+            with pytest.raises(TypeError):
+                run_gaussian_and_capture_settings(
+                    "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                    [
+                        "-p",
+                        "gas_solv",
+                        "--pubchem",
+                        "222",
+                        "-c",
+                        "0",
+                        "-m",
+                        "1",
+                        "opt",
+                    ],
+                    make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                )
+
+    def test_default_label_with_filename_ignores_db_id_suffix(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Without -f/--pubchem-derived filename, the label falls back
+        to the input file's basename, suffixed with the invoked
+        subcommand name."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_loads_molecule_by_record_index(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_loads_molecule_by_structure_id(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_append_label_includes_structure_id_suffix(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """-a/--append-label combined with --sid takes the first
+        (structure_id) branch of the append-label suffix chain."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_append_label_includes_record_index_suffix(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """-a/--append-label combined with a chemsmart db selector should
+        suffix the label with the resolved record/structure identifier."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_append_label_includes_record_id_suffix(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """--rid (record_id, no structure_id) takes the elif branch for
+        the append-label suffix."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--rid",
+                "6de213a0",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_default_label_record_id_suffix_branch(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """--rid alone (no -a/-l) takes the default-label elif branch
+        for the record_id suffix (later overwritten by the basename
+        recompute -- see BUGS_FOUND.md #25 -- but the branch itself
+        must still execute)."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--rid",
+                "6de213a0",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_group_level_functional_and_basis_keywords_applied(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-x",
+                "m062x",
+                "-b",
+                "def2svp",
+                "-s",
+                "am1",
+                "-o",
+                "maxstep=5",
+                "-r",
+                "empiricaldispersion=gd3",
+                "-A",
+                "extra info",
+                "-C",
+                "custom solvent block",
+                "-t",
+                "my title",
+                "-d",
+                "n",
+                "--forces",
+                "sp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.functional == "m062x"
+        assert settings.basis == "def2svp"
+        assert settings.semiempirical == "am1"
+        assert settings.additional_opt_options_in_route == "maxstep=5"
+        assert (
+            settings.additional_route_parameters == "empiricaldispersion=gd3"
+        )
+        assert settings.append_additional_info == "extra info"
+        assert settings.custom_solvent.strip() == "custom solvent block"
+        assert settings.title == "my title"
+        assert settings.dieze_tag == "n"
+        assert settings.forces is True
+
+
 class TestGaussianCLISinglePointCommand:
     """CLI tests for the ``sp`` (single point) subcommand."""
 

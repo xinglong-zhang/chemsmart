@@ -1148,3 +1148,137 @@ redundant/dead defensive code inside the nested helper.
 **Suggested direction:** drop the `if filepath is None: return None`
 guard from `get_species_thermo`, since every caller already ensures
 `filepath` is not `None` before invoking it.
+
+## 25. `gaussian` CLI group crashes computing the default label for a filename-less (PubChem-only) job with no `-l`/`-a`
+
+**Location:** `chemsmart/cli/gaussian/gaussian.py`, the `gaussian()`
+group callback's label-resolution block (lines ~782-794).
+
+```python
+if label is None and append_label is None:
+    label = os.path.splitext(os.path.basename(filename))[0]
+    if is_chemsmart_db:
+        if structure_id is not None:
+            label = f"{label}_SID-{structure_id}"
+        elif record_id is not None:
+            label = f"{label}_RID-{record_id}"
+        elif record_index is not None:
+            label = f"{label}_RI-{record_index}"
+    if filename:
+        label = os.path.splitext(os.path.basename(filename))[0]
+    else:
+        label = "output"
+    if ctx.invoked_subcommand:
+        label = f"{label}_{ctx.invoked_subcommand}"
+```
+
+Two problems in this one block:
+
+1. **Crash when `filename` is `None`.** The very first line
+   unconditionally calls `os.path.basename(filename)` — even though the
+   `if filename: ... else: label = "output"` guard a few lines down
+   exists specifically to handle `filename is None` (e.g. a
+   `--pubchem`-only job with no `-f`). Since `os.path.basename(None)`
+   raises `TypeError` immediately, the `else: label = "output"`
+   fallback (and the `ctx.invoked_subcommand` suffixing after it) is
+   never reached in that case — the whole command crashes instead.
+2. **Dead SID/RID/RI suffixing for chemsmart-db default labels.** Even
+   when `filename` *is* given, the `is_chemsmart_db` suffix computed on
+   lines 2-8 (`label = f"{label}_SID-..."` etc.) is immediately
+   discarded: the very next line unconditionally recomputes
+   `label = os.path.splitext(os.path.basename(filename))[0]` from
+   scratch when `filename` is truthy, wiping out whatever suffix was
+   just added. The analogous `append_label is not None` branch just
+   above this block does **not** have this problem (it appends
+   `_{append_label}` after the suffix, so the suffix survives) — this
+   block is clearly meant to mirror it but recomputes the base label a
+   second time by mistake.
+
+**Reproduce:**
+```
+chemsmart run gaussian --pubchem 222 -c 0 -m 1 opt
+# TypeError: expected str, bytes or os.PathLike object, not NoneType
+```
+(also reproduced directly via `tests/test_gaussian_cli.py::TestGaussianCLIGroupValidation::test_pubchem_only_without_label_crashes`)
+
+**Impact:** Any PubChem-only Gaussian job submission (no `-f`) that
+doesn't also pass `-l`/`--label` or `-a`/`--append-label` crashes
+outright instead of falling back to the documented `"output"` label.
+Additionally, for chemsmart-database inputs selected by `--sid`/`--rid`/
+`--ri` with no explicit `-l`/`-a`, the resulting default label never
+actually contains the `_SID-`/`_RID-`/`_RI-` suffix it appears to
+compute, silently losing the disambiguating suffix between multiple
+structures/records pulled from the same database file.
+
+**Suggested direction:** guard the whole block with `if filename:`
+before computing `label`, mirroring the `append_label` branch above
+it, e.g.:
+```python
+if label is None and append_label is None:
+    if filename:
+        label = os.path.splitext(os.path.basename(filename))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
+    else:
+        label = "output"
+    if ctx.invoked_subcommand:
+        label = f"{label}_{ctx.invoked_subcommand}"
+```
+
+## 26. `gaussian` CLI: `click_gaussian_qmmm_options` and the group-level `qmmm` conversion block are both unreachable dead code
+
+**Location:** `chemsmart/cli/gaussian/gaussian.py`,
+`click_gaussian_qmmm_options` (lines 361-490) and the
+`ctx.invoked_subcommand == "qmmm"` block inside the `gaussian()` group
+callback (lines ~822-859).
+
+`click_gaussian_qmmm_options` is a click-options decorator function
+defining `-hx/-hb/-hf/-mx/...` QMMM-layer options, but it is never
+applied as a decorator anywhere in the codebase (confirmed via
+project-wide grep for `click_gaussian_qmmm_options`) — the actual
+`qmmm` subcommand's options are defined independently in
+`chemsmart/cli/gaussian/qmmm.py`. This helper is simply orphaned,
+presumably superseded when `qmmm` was refactored into a subcommand
+nested under each jobtype (`opt`, `ts`, `sp`, `scan`, `qrc`, `modred`
+all call `create_qmmm_subcommand(<jobtype>)` in their own modules)
+rather than being a sibling top-level command under `gaussian` itself.
+
+Relatedly, the `gaussian()` group callback contains:
+```python
+try:
+    if ctx.invoked_subcommand == "qmmm":
+        ...  # convert molecules to QMMMMolecule
+except Exception as exc:
+    ...
+```
+But since `qmmm` is *always* registered as a child of a jobtype
+subcommand (e.g. `opt qmmm`, `ts qmmm`) rather than a direct child of
+`gaussian`, `ctx.invoked_subcommand` at the `gaussian` group's own
+callback is always one of `opt`/`ts`/`sp`/`scan`/`qrc`/`modred`/etc. —
+**never** `"qmmm"` itself (Click's `ctx.invoked_subcommand` only
+reflects the immediate child command). So this condition can never be
+`True`, and the whole `QMMMMolecule` conversion body is unreachable
+group-level code; QMMM molecule conversion, if it happens at all, must
+be (and is) handled independently within `qmmm.py`'s own subcommand
+callback.
+
+**Reproduce (informal):** grepped the entire codebase for
+`create_qmmm_subcommand(gaussian)` (the top-level group) — zero
+matches; `qmmm` is only ever attached via `create_qmmm_subcommand` to
+`opt`, `ts`, `sp`, `scan`, `qrc`, and `modred`, confirming
+`ctx.invoked_subcommand` at the `gaussian` group level can never equal
+`"qmmm"`.
+
+**Impact:** None — dead code only; `chemsmart/cli/gaussian/qmmm.py`
+already fully owns QMMM option definitions and any necessary molecule
+conversion for its own subcommand scope.
+
+**Suggested direction:** remove `click_gaussian_qmmm_options` (lines
+361-490) entirely, and remove the `ctx.invoked_subcommand == "qmmm"`
+try/except block from the `gaussian()` group callback, since it can
+never execute.
