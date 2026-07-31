@@ -33,7 +33,8 @@ CHEMSMART provides pKa workflows in two separate stages:
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
 -  Use ``chemsmart run`` locally; use ``chemsmart sub`` on an HPC cluster (see :ref:`pka-hpc-batch-submission`).
--  One structure → one pKa job. A CSV table or multi-molecule CDXML → one job per row or fragment.
+-  A single structure yields one job (``pka submit``). ``pka batch`` requires a CSV table or multi-molecule CDXML with
+   **at least two** rows or fragments; use ``submit`` for a single molecule.
 -  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
    runs.
 
@@ -170,7 +171,8 @@ The default scheme is **proton exchange**, which requires a reference acid (``-r
 
 **Submission input table** (``pka batch``)
 
-Comma- or whitespace-delimited table with columns ``filepath``, ``proton_index``, ``charge``, ``multiplicity``.
+Comma- or whitespace-delimited table with columns ``filepath``, ``proton_index``, ``charge``, ``multiplicity``. ``pka
+batch`` requires **at least two rows**; use ``pka submit`` for a single molecule.
 
 ***************************************
  ChemDraw CDXML / CDX Input (pKa Jobs)
@@ -200,7 +202,7 @@ proton is uniquely coloured (or use ``-rcc`` / ``--reference-color-code``).
 A single ``.cdxml`` / ``.cdx`` file may contain **multiple molecules** (multiple ChemDraw fragments). CHEMSMART performs
 **per-fragment** coloured-proton detection and creates **one pKa job per fragment**.
 
-Pass the file with ``pka batch`` (or ``pka submit`` for a single-fragment file):
+Pass the file with ``pka batch`` (use ``pka submit`` for a single-fragment file):
 
 .. code:: bash
 
@@ -253,8 +255,9 @@ above) to create one job per ChemDraw fragment.
 
 .. note::
 
-   If ``-f`` is a CDXML file (not a CSV table), CHEMSMART routes to coloured-proton batch expansion automatically. For
-   general CDXML structure handling outside pKa, see :doc:`chemdraw-organometallic`.
+   If ``-f`` is a multi-molecule CDXML file (not a CSV table), pass ``pka batch`` to expand one job per ChemDraw
+   fragment. Single-fragment CDXML files use ``pka submit``. For general CDXML structure handling outside pKa, see
+   :doc:`chemdraw-organometallic`.
 
 **Proton and reference options for CDXML**
 

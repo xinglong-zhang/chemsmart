@@ -4,7 +4,7 @@ CLI for ORCA pKa input generation (job submission).
 Subcommands
 -----------
 submit         Submit single-molecule (or multi-fragment CDXML) pKa jobs.
-batch          Table-driven batch job submission.
+batch          Table-driven batch job submission (≥2 rows or fragments).
 
 When ``pka`` is invoked without an explicit subcommand the ``submit``
 path is executed automatically for backward compatibility.
@@ -28,12 +28,13 @@ from chemsmart.cli.pka import (
     click_pka_proton_options,
     click_pka_shared_options,
     is_pka_cdxml_input,
+    require_pka_batch_size,
     require_pka_charge_multiplicity,
     resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
     resolve_proton_index,
+    rewrite_pka_batch_cli_args,
     validate_reference_options,
-    wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
 from chemsmart.jobs.batch import set_job_batch_entry
@@ -229,11 +230,11 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
-        return wrap_pka_jobs_in_batch(
-            jobs,
-            ORCABatchJob,
-            jobrunner,
+        return ORCABatchJob(
+            jobs=jobs,
             label=f"{base_label}_batch",
+            jobrunner=jobrunner,
+            rewrite_cli=rewrite_pka_batch_cli_args,
         )
 
     return ORCApKaJob(
@@ -257,6 +258,9 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 @click.pass_context
 def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
     """Batch ORCA pKa job submission from a CSV table or multi-molecule CDXML.
+
+    Requires at least two table rows or CDXML fragments; use ``pka submit`` for
+    a single molecule.
 
     \b
     CSV table format (4 columns, whitespace or comma-delimited):
@@ -284,7 +288,6 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             ctx,
             skip_completed,
             _create_orca_pka_jobs_from_molecules,
-            lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
             **kwargs,
         )
 
@@ -301,6 +304,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
         raise click.UsageError(str(e))
 
     logger.info(f"Found {len(entries)} entries in table")
+    require_pka_batch_size(len(entries), unit="table rows")
 
     if shared["scheme"] == "proton exchange":
 
@@ -408,11 +412,11 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
     table_label = Path(input_table_path).stem or "pka_batch"
-    return wrap_pka_jobs_in_batch(
-        jobs,
-        ORCABatchJob,
-        jobrunner,
+    return ORCABatchJob(
+        jobs=jobs,
         label=f"{table_label}_pka_batch",
+        jobrunner=jobrunner,
+        rewrite_cli=rewrite_pka_batch_cli_args,
     )
 
 
@@ -476,9 +480,9 @@ def _create_orca_pka_jobs_from_molecules(
         jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from multi-fragment CDXML")
-    return wrap_pka_jobs_in_batch(
-        jobs,
-        ORCABatchJob,
-        jobrunner,
+    return ORCABatchJob(
+        jobs=jobs,
         label=f"{base_name}_pka_batch",
+        jobrunner=jobrunner,
+        rewrite_cli=rewrite_pka_batch_cli_args,
     )

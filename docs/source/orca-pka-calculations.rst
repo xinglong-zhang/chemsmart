@@ -91,6 +91,9 @@ These names align with the ``batch-analyze`` autodiscovery convention ``<basenam
  Batch Processing with Input Tables
 ************************************
 
+``pka batch`` requires at least two table rows (or a multi-molecule CDXML file); use ``pka submit`` for a single
+molecule.
+
 Proton exchange (default — reference acid required):
 
 .. code:: bash

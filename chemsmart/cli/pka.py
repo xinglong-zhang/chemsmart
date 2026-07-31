@@ -778,23 +778,18 @@ def resolve_pka_batch_row(filepath, proton_index=None, color_code=None):
     return pka_mol.proton_index, pka_mol
 
 
-def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
-    """Return a single job or wrap multiple pKa jobs in a backend BatchJob.
+def require_pka_batch_size(count, *, unit="entries"):
+    """Require at least two items for ``pka batch`` mode.
 
-    When more than one pKa child job is created, the returned batch container
-    is submitted and executed as one orchestration unit (matching Gaussian/ORCA
-    multi-target fan-out). Multi-job batches carry ``rewrite_cli`` for
-    per-task array runscript rewriting.
+    Args:
+        count: Number of table rows or CDXML fragments.
+        unit: Noun used in the error message (e.g. ``"table rows"``).
     """
-    if not jobs:
-        raise ValueError("No pKa jobs to submit.")
-    if len(jobs) == 1:
-        return jobs[0]
-    return batch_cls(
-        jobs=jobs,
-        label=label,
-        jobrunner=jobrunner,
-        rewrite_cli=rewrite_pka_batch_cli_args,
+    if count >= 2:
+        return
+    raise click.UsageError(
+        f"pka batch requires at least 2 {unit}; got {count}. "
+        "Use 'pka submit' for a single molecule."
     )
 
 
@@ -889,10 +884,12 @@ def batch_pka_jobs_from_cdxml(
     ctx,
     skip_completed,
     create_jobs_fn,
-    invoke_submit_fn,
     **kwargs,
 ):
-    """Create pKa jobs from a CDXML batch input via coloured-proton detection."""
+    """Create pKa jobs from a multi-molecule CDXML batch input.
+
+    Single-fragment CDXML files are rejected; use ``pka submit`` instead.
+    """
     filename = ctx.obj.get("filename")
     shared = ctx.obj["pka_shared"]
     proton_index, color_code = resolve_pka_submit_proton_options(ctx)
@@ -903,18 +900,13 @@ def batch_pka_jobs_from_cdxml(
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
 
-    if pka_molecules is not None:
-        return create_jobs_fn(
-            ctx, pka_molecules, shared, skip_completed, **kwargs
+    if pka_molecules is None:
+        raise click.UsageError(
+            "pka batch requires a multi-molecule CDXML file; "
+            "got a single fragment. Use 'pka submit' for a single molecule."
         )
 
-    return invoke_submit_fn(
-        ctx,
-        skip_completed=skip_completed,
-        proton_index=proton_index,
-        color_code=color_code,
-        **kwargs,
-    )
+    return create_jobs_fn(ctx, pka_molecules, shared, skip_completed, **kwargs)
 
 
 def resolve_pka_submit_proton_options(ctx, proton_index=None, color_code=None):

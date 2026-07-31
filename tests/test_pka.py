@@ -324,6 +324,17 @@ def test_rewrite_pka_batch_cli_args_replaces_table_with_submit_row():
     assert rewritten[rewritten.index("--label") + 1] == "acid2"
 
 
+def test_require_pka_batch_size_rejects_fewer_than_two():
+    import click
+
+    from chemsmart.cli.pka import require_pka_batch_size
+
+    with pytest.raises(click.UsageError, match="at least 2 table rows"):
+        require_pka_batch_size(1, unit="table rows")
+
+    require_pka_batch_size(2, unit="table rows")
+
+
 def test_resolve_array_cli_args_pka_entries_use_rewrite_callback():
     from types import SimpleNamespace
 
@@ -1538,10 +1549,13 @@ class TestPKa:
         """CDXML rows with blank proton_index auto-detect the coloured proton."""
         _require_backend_pka_subcommand(sub, backend)
 
+        acid2 = tmp_path / "acid2.xyz"
+        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
         table = tmp_path / "pka_cdxml.csv"
         table.write_text(
             "filepath,proton_index,charge,multiplicity\n"
             f"{colored_proton_cdxml_file},,0,1\n"
+            f"{acid2},2,0,1\n"
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1573,7 +1587,7 @@ class TestPKa:
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
         children = _submitted_pka_child_jobs(captured)
-        assert len(children) == 1
+        assert len(children) == 2
         assert children[0].settings.proton_index == 8
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
@@ -1583,10 +1597,13 @@ class TestPKa:
         """Explicit table proton_index overrides CDXML coloured-proton detection."""
         _require_backend_pka_subcommand(sub, backend)
 
+        acid2 = tmp_path / "acid2.xyz"
+        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
         table = tmp_path / "pka_cdxml.csv"
         table.write_text(
             "filepath,proton_index,charge,multiplicity\n"
             f"{colored_proton_cdxml_file},8,0,1\n"
+            f"{acid2},2,0,1\n"
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1618,8 +1635,104 @@ class TestPKa:
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 1
         children = _submitted_pka_child_jobs(captured)
-        assert len(children) == 1
+        assert len(children) == 2
         assert children[0].settings.proton_index == 8
+
+    @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+    def test_sub_pka_batch_rejects_single_row_csv(
+        self, tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+    ):
+        """pka batch rejects single-row tables; use submit for one molecule."""
+        _require_backend_pka_subcommand(sub, backend)
+
+        table = tmp_path / "pka_cdxml.csv"
+        table.write_text(
+            "filepath,proton_index,charge,multiplicity\n"
+            f"{colored_proton_cdxml_file},,0,1\n"
+        )
+
+        config_root = _write_test_backend_project(tmp_path, backend)
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.server import Server
+
+        fake_server = Server(name="dummy")
+        fake_server.submit = lambda job, test=False, cli_args=None, **kw: None
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--no-scratch",
+                backend,
+                "-p",
+                "test",
+                "-f",
+                str(table),
+                "pka",
+                "-s",
+                "direct",
+                "batch",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "at least 2 table rows" in result.output
+        assert "pka submit" in result.output
+
+    @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+    def test_sub_pka_batch_rejects_single_fragment_cdxml(
+        self, tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+    ):
+        """pka batch rejects single-fragment CDXML; use submit instead."""
+        _require_backend_pka_subcommand(sub, backend)
+
+        config_root = _write_test_backend_project(tmp_path, backend)
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.server import Server
+
+        fake_server = Server(name="dummy")
+        fake_server.submit = lambda job, test=False, cli_args=None, **kw: None
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--no-scratch",
+                backend,
+                "-p",
+                "test",
+                "-f",
+                colored_proton_cdxml_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "pka",
+                "-s",
+                "direct",
+                "batch",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "single fragment" in result.output
+        assert "pka submit" in result.output
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_rejects_multi_molecule_cdxml_row(
@@ -1632,10 +1745,13 @@ class TestPKa:
         """Multi-molecule CDXML paths in a table row must fail clearly."""
         _require_backend_pka_subcommand(sub, backend)
 
+        acid2 = tmp_path / "acid2.xyz"
+        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
         table = tmp_path / "pka_cdxml.csv"
         table.write_text(
             "filepath,proton_index,charge,multiplicity\n"
             f"{colored_proton_two_molecule_cdxml_file},,0,1\n"
+            f"{acid2},2,0,1\n"
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
