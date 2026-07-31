@@ -751,8 +751,8 @@ def update_irc_label(label, direction, flat_irc):
             raise ValueError(
                 "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
             )
-        if flat_irc:
-            label += "_flat"
+    if flat_irc and not label.endswith("_flat"):
+        label += "_flat"
     return label
 
 
