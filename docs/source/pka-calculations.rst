@@ -344,7 +344,7 @@ How many tasks run at once
 
 By default, one array task runs at a time. Pass ``--run-in-parallel`` and set ``-M`` / ``--max-tasks`` to cap how many
 array tasks run concurrently (``%M`` in SLURM ``--array=1-N%M``, PBS ``#PBS -J 1-N%M``, or LSF ``#BSUB -J
-name[1-N%M]``). Each array task still uses one node; this is **not** a node count. Without ``-M``, all batch tasks may
+"name[1-N%M]"``). Each array task still uses one node; this is **not** a node count. Without ``-M``, all batch tasks may
 run at once unless ``CHEMSMART_MAX_SUBMITTERS`` limits concurrency.
 
 .. code:: bash

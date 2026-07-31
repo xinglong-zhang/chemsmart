@@ -618,7 +618,7 @@ class TestArraySubmitInfrastructure:
         submit_text = (
             tmp_path / "chemsmart_sub_array_pka_batch.sh"
         ).read_text()
-        assert "#BSUB -J pka_batch_array[1-3%1]\n" in submit_text
+        assert '#BSUB -J "pka_batch_array[1-3%1]"\n' in submit_text
         assert "#BSUB -o pka_batch_array.bsubout\n" in submit_text
         assert "#BSUB -e pka_batch_array.bsuberr\n" in submit_text
         # LSF -W is [hour:]minute; bare integers would be minutes.

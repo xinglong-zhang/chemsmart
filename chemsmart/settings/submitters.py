@@ -454,7 +454,7 @@ class Submitter(RegistryMixin):
             jobs: Child jobs in array order (task id 1 → ``jobs[0]``).
             array_concurrency: Optional concurrency throttle for scheduler
                 array directives (SLURM ``--array=1-N%M``, PBS ``-J 1-N%M``,
-                LSF ``-J name[1-N%M]``). When ``None``, no throttle is applied.
+                LSF ``-J "name[1-N%M]"``). When ``None``, no throttle is applied.
             cli_args: Shared CLI args for every task, or a sequence of
                 per-job CLI arg lists with the same length as *jobs*.
             batch_label: Optional label for array script naming
@@ -1182,15 +1182,16 @@ class SLFSubmitter(Submitter):
 
         Each array task uses the server's node/GPU allocation.
         ``array_concurrency`` is the optional throttle ``%M`` in
-        ``#BSUB -J name[1-N%M]`` (maximum concurrent tasks).
+        ``#BSUB -J "name[1-N%M]"`` (maximum concurrent tasks).
         """
         num_jobs = len(self.jobs) if self.jobs is not None else 1
         stem = self.array_log_stem
 
+        # IBM LSF requires quotes around arrayName[indexList] (%slot limit optional).
         if array_concurrency is not None:
-            f.write(f"#BSUB -J {stem}[1-{num_jobs}%{array_concurrency}]\n")
+            f.write(f'#BSUB -J "{stem}[1-{num_jobs}%{array_concurrency}]"\n')
         else:
-            f.write(f"#BSUB -J {stem}[1-{num_jobs}]\n")
+            f.write(f'#BSUB -J "{stem}[1-{num_jobs}]"\n')
         # One shared stdout/stderr for all array tasks; task blocks are
         # serialized with flock headers in ``_write_array_job_command``.
         f.write(f"#BSUB -o {self.array_stdout_file}\n")
