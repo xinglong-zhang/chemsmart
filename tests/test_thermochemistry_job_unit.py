@@ -119,11 +119,13 @@ class TestThermochemistryJobRun:
 
 class TestThermochemistryJobComputeAndShow:
     def test_compute_thermochemistry_requires_filename(self):
-        job = ThermochemistryJob.__new__(ThermochemistryJob)
-        job.filename = None
-        job.settings = ThermochemistryJobSettings()
-        with pytest.raises(ValueError, match="No input file provided"):
-            job.compute_thermochemistry()
+        """See BUGS_FOUND.md #36: compute_thermochemistry's docstring
+        claims it raises ValueError for a missing filename, but that
+        check now lives entirely in __init__ (filename is guaranteed
+        non-None by the time compute_thermochemistry runs), so this
+        exercises the real, reachable guard instead."""
+        with pytest.raises(ValueError, match="'filename' must be provided"):
+            ThermochemistryJob(filename=None)
 
     def test_compute_thermochemistry_calls_analysis_and_logs_results(
         self, gaussian_co2_opt_outfile, tmp_path

@@ -9,25 +9,32 @@ listed test file. Not fixed here — tracked for a separate branch.
 ## 1. `thermochemistry boltzmann` CLI command always crashes
 
 **Files:** `chemsmart/cli/thermochemistry/boltzmann.py:40-46`,
-`chemsmart/jobs/thermochemistry/job.py:73`
+`chemsmart/jobs/thermochemistry/job.py:72-73`
 **Test:** `tests/test_boltzmann_job_unit.py::TestBoltzmannJobFromFiles::test_from_files_requires_filename_workaround`
 
-`BoltzmannAverageThermochemistryJob.__init__` forwards `**kwargs` to
-`ThermochemistryJob.__init__`, whose parent unconditionally does:
+**Update:** `ThermochemistryJob.__init__` now explicitly guards against
+`filename is None` (upstream `main` change, merged into this branch after
+this entry was first written):
 
 ```python
-# chemsmart/jobs/thermochemistry/job.py:73
-if not filename.endswith((".log", ".out")):
+# chemsmart/jobs/thermochemistry/job.py:72-73
+if filename is None:
+    raise ValueError("'filename' must be provided.")
 ```
 
-`filename` defaults to `None`, so this raises
-`AttributeError: 'NoneType' object has no attribute 'endswith'` unless a
-`filename` kwarg is explicitly supplied.
+This is exactly the fix suggested below, so the confusing
+`AttributeError: 'NoneType' object has no attribute 'endswith'` no longer
+occurs — the failure is now a clear `ValueError: 'filename' must be
+provided.` raised earlier, directly from `__init__`.
 
-The CLI command that constructs this job never supplies one:
+However, the underlying CLI bug is **not** fixed: `boltzmann()` in
+`chemsmart/cli/thermochemistry/boltzmann.py:40-46` still never passes a
+`filename` kwarg to `BoltzmannAverageThermochemistryJob`, so
+`chemsmart sub thermochemistry boltzmann ...` still crashes on every real
+invocation — just with a better error message now.
 
 ```python
-# chemsmart/cli/thermochemistry/boltzmann.py:40-46
+# chemsmart/cli/thermochemistry/boltzmann.py:40-46 (unchanged)
 boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
     files=files,
     energy_type=energy_type_for_weighting,
@@ -44,13 +51,13 @@ any real invocation today.
 ```python
 from chemsmart.jobs.thermochemistry.boltzmann import BoltzmannAverageThermochemistryJob
 BoltzmannAverageThermochemistryJob(files=["a.log", "b.log"])
-# AttributeError: 'NoneType' object has no attribute 'endswith'
+# ValueError: 'filename' must be provided.
 ```
 
-**Suggested direction:** either guard the extension check in
-`ThermochemistryJob.__init__` for `filename is None`, or have the CLI/
-`BoltzmannAverageThermochemistryJob` pass a real `filename` (e.g. the first
-file in `files`).
+**Suggested direction:** have the CLI's `boltzmann()` command pass a real
+`filename` to `BoltzmannAverageThermochemistryJob` (e.g. the first file in
+`files`), since the constructor-level guard now correctly rejects a
+missing one.
 
 **Related dead code:** even when a `filename` workaround is supplied,
 `BoltzmannAverageThermochemistryJob.__init__`'s own label-generation block
@@ -1681,3 +1688,142 @@ the two code paths are mutually exclusive by construction.
 GaussianQMMMJobSettings)` check and the `self.settings._route_string`
 fallback from `_write_route_section`, since that method is now only
 ever called for non-QMMM settings.
+
+## 35. `update_irc_label` always appends `_flat` even when `direction is None`, contradicting its own docstring and causing a double `_flat` suffix downstream
+
+**Location:** `chemsmart/utils/cli.py`, `update_irc_label` (lines 725-756).
+
+```python
+def update_irc_label(label, direction, flat_irc):
+    """
+    ...
+    Appends 'f' for forward direction, 'r' for reverse direction,
+    and '_flat' if flat_irc is True and a direction is specified.
+
+    When direction is None (both forward and reverse IRC sub-jobs will be
+    created), the '_flat' suffix is not added here because the sub-jobs
+    created by ``_ircf_job()`` / ``_ircr_job()`` append the direction and
+    '_flat' suffix themselves, avoiding double-application.
+    ...
+    """
+    if direction is not None:
+        if direction.lower() == "forward":
+            label += "f"
+        elif direction.lower() == "reverse":
+            label += "r"
+        else:
+            raise ValueError(...)
+    if flat_irc and not label.endswith("_flat"):
+        label += "_flat"
+    return label
+```
+
+The docstring explicitly promises that when `direction is None`, the
+`_flat` suffix is deferred to `_ircf_job()`/`_ircr_job()` to avoid
+double-application. But the `if flat_irc and not label.endswith(...)`
+check at the end is unconditional — it is not nested inside `if
+direction is not None:` — so it runs regardless of `direction`,
+directly contradicting the docstring.
+
+This was introduced by commit `ba929ad9` ("update irc flat labels
+(#649)", merged into this branch from `main`), which unindented what
+had previously been a `direction is not None`-guarded block (added by
+the earlier commit `ac67b1b2`, "Fix IRC flat job label: don't add
+_flat when direction is None") back out to always run, while leaving
+the docstring's claim about `direction is None` unchanged.
+
+The real downstream consequence (from `chemsmart/jobs/gaussian/irc.py`,
+`_ircf_job`/`_ircr_job`, lines 96-123 and 125-155+): when
+`self.settings.direction is None`, these methods derive the sub-job
+label from `self.label` (which was already built by
+`update_irc_label` at the CLI layer) by checking
+`if label.endswith("_irc"): label += "f"/"r" else: label += "_ircf"/"_ircr"`,
+then unconditionally append `"_flat"` again if `self.settings.flat_irc`
+is true — with no "already ends with _flat" guard the way
+`update_irc_label` has. So for a `direction=None`, `flat_irc=True` job:
+1. `update_irc_label` now produces e.g. `"mol_flat"` (bug: should be `"mol"`).
+2. `_ircf_job` sees `"mol_flat"` doesn't end with `"_irc"`, so appends
+   `"_ircf"` → `"mol_flat_ircf"`.
+3. Since `settings.flat_irc` is true, appends `"_flat"` again →
+   `"mol_flat_ircf_flat"` — a doubled, out-of-order `_flat` suffix.
+
+**Reproduce (informal):**
+```python
+from chemsmart.utils.cli import update_irc_label
+update_irc_label("mol", None, True)  # returns "mol_flat", not "mol"
+```
+`tests/test_utils_cli.py::TestUpdateIrcLabel::test_none_direction_unchanged`
+now fails against this behavior and has been updated to assert the
+actual (buggy) output while referencing this entry.
+
+**Impact:** Medium — any IRC job run without an explicit `--direction`
+(i.e. both forward and reverse sub-jobs auto-created) combined with
+`--flat-irc`/`flat_irc=True` gets a malformed, doubled `_flat` suffix
+in both sub-job labels, e.g. `mol_flat_ircf_flat` /
+`mol_flat_ircr_flat` instead of the intended `mol_ircf_flat` /
+`mol_ircr_flat`.
+
+**Suggested direction:** re-nest the `if flat_irc and not
+label.endswith("_flat"): label += "_flat"` check inside the `if
+direction is not None:` block in `update_irc_label`, restoring the
+behavior described in its own docstring (and originally introduced by
+`ac67b1b2`).
+
+## 36. `ThermochemistryJob.compute_thermochemistry`'s docstring claims a `ValueError` that can no longer be raised
+
+**Location:** `chemsmart/jobs/thermochemistry/job.py`,
+`compute_thermochemistry` (lines 273-288).
+
+```python
+def compute_thermochemistry(self):
+    """
+    ...
+    Raises:
+        ValueError: If no input file is provided
+        Exception: If calculation fails during processing
+    """
+    # Set default output file if not specified
+    if self.settings.outputfile is None:
+        self.settings.outputfile = self.outputfile
+    ...
+```
+
+The docstring claims `compute_thermochemistry` raises `ValueError` when
+no input file is provided, but there is no such check anywhere in the
+method body — it goes straight to `self.outputfile`, which requires
+`self.label`/`self.folder` to be set. `ThermochemistryJob.__init__` now
+unconditionally validates `filename is not None` (see the update to
+entry #1 above), so under any legitimate construction path,
+`self.filename` can never be `None` by the time
+`compute_thermochemistry` runs — the check the docstring describes
+would be genuinely unreachable/redundant if it still existed, and
+apparently was removed for that reason without updating the docstring.
+
+The only way to observe a missing-filename-like failure here is to
+bypass `__init__` entirely (e.g. `ThermochemistryJob.__new__(...)`),
+which then fails with an unrelated `AttributeError` (`'NoneType'
+object has no attribute 'label'`/similar) from the `self.outputfile`
+property, not the documented `ValueError`.
+
+**Reproduce (informal):**
+```python
+job = ThermochemistryJob.__new__(ThermochemistryJob)
+job.filename = None
+job.settings = ThermochemistryJobSettings()
+job.compute_thermochemistry()
+# AttributeError: 'ThermochemistryJob' object has no attribute 'label'
+# (not the docstring's claimed ValueError)
+```
+`tests/test_thermochemistry_job_unit.py::TestThermochemistryJobComputeAndShow::test_compute_thermochemistry_requires_filename`
+was rewritten to instead test the real, reachable guard — that
+`ThermochemistryJob(filename=None)` raises `ValueError` from
+`__init__` — since that is the only place this validation can actually
+occur through legitimate construction.
+
+**Impact:** None — purely a stale docstring describing behavior that
+either was removed as redundant (now handled at `__init__` time) or
+never existed after a refactor.
+
+**Suggested direction:** drop the `Raises: ValueError: If no input
+file is provided` line from `compute_thermochemistry`'s docstring,
+since that validation now lives entirely in `__init__`.

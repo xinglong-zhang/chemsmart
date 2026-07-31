@@ -457,8 +457,16 @@ class TestUpdateIrcLabel:
     def test_forward_with_flat_irc(self):
         assert update_irc_label("mol", "forward", True) == "molf_flat"
 
-    def test_none_direction_unchanged(self):
-        assert update_irc_label("mol", None, True) == "mol"
+    def test_none_direction_still_gets_flat_suffix(self):
+        """Regression test for BUGS_FOUND.md #35: the docstring promises
+        that '_flat' is NOT added when direction is None (it's deferred
+        to _ircf_job/_ircr_job to avoid double-application), but the
+        `if flat_irc and ...` check is not actually nested inside the
+        `if direction is not None:` block, so it always applies."""
+        assert update_irc_label("mol", None, True) == "mol_flat"
+
+    def test_none_direction_no_flat_irc_unchanged(self):
+        assert update_irc_label("mol", None, False) == "mol"
 
     def test_invalid_direction_raises(self):
         with pytest.raises(ValueError, match="Invalid direction"):

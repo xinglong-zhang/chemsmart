@@ -100,9 +100,13 @@ class TestBoltzmannJobPaths:
 
 class TestBoltzmannJobFromFiles:
     def test_from_files_requires_filename_workaround(self):
-        """Demonstrates the underlying bug: ``from_files`` alone (as used
-        by the CLI) crashes because no ``filename`` is ever supplied."""
-        with pytest.raises(AttributeError):
+        """Demonstrates the underlying bug (see BUGS_FOUND.md #1):
+        ``from_files`` alone (as used by the CLI) crashes because no
+        ``filename`` is ever supplied. ``ThermochemistryJob.__init__``
+        now guards against this explicitly, so the crash is a clear
+        ``ValueError`` rather than the previous confusing
+        ``AttributeError``, but the CLI still never passes ``filename``."""
+        with pytest.raises(ValueError, match="'filename' must be provided"):
             BoltzmannAverageThermochemistryJob.from_files(
                 files=["a.log", "b.log"]
             )
