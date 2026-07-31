@@ -353,6 +353,29 @@ class TestHirshfeldScript:
         assert result.exit_code == 0, result.output
         mock_cls.assert_called_once_with(filename="some.out")
 
+    def test_numbers_option_prints_specific_atom_charges_and_spins(self):
+        from chemsmart.scripts.hirshfeld import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.hirshfeld.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.hirshfeld.Gaussian16Output") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.hirshfeld_charges = {"1C": 0.1, "2O": -0.2}
+            mock_output.hirshfeld_spin_densities = {"1C": 0.0, "2O": 0.05}
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.log", "-n", "1", "-n", "2"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
     def test_unknown_program_raises(self):
         from chemsmart.scripts.hirshfeld import entry_point
 
