@@ -1005,6 +1005,514 @@ class TestORCACpcmBlockOptions:
         assert settings.solventfilename == str(sf)
 
 
+class TestORCACLIGroupValidation:
+    """Validation and settings-merge branches on the ``orca`` group
+    callback itself (not delegated to any subcommand)."""
+
+    def test_molecule_id_not_supported_raises(self, single_molecule_xyz_file):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca,
+            ["-f", single_molecule_xyz_file, "--mid", "abc", "sp"],
+        )
+        assert result.exit_code != 0
+        assert "not supported for ORCA job submission" in result.output
+
+    def test_index_and_structure_index_mutually_exclusive(
+        self, single_molecule_xyz_file
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-i",
+                "1",
+                "--si",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_chemsmart_db_requires_exactly_one_selector(
+        self, database_chemsmart_file
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca, ["-f", database_chemsmart_file, "sp"]
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_xtb_output_inherits_charge_and_multiplicity(
+        self, xtb_water_outfolder, run_orca_and_capture_settings
+    ):
+        import os
+
+        xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            ["-p", "gas_solv", "-f", xtb_out, "opt"],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+
+    def test_non_chemsmart_db_falls_back_to_defaults(
+        self, database_ase_file, run_orca_and_capture_settings
+    ):
+        from unittest.mock import MagicMock, patch
+
+        mock_molecule = MagicMock(name="ase_db_molecule")
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=[mock_molecule],
+        ):
+            result, settings = run_orca_and_capture_settings(
+                "chemsmart.jobs.orca.opt.ORCAOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    database_ase_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_filename_and_pubchem_both_missing_raises(self):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca, ["-p", "gas_solv", "sp"], catch_exceptions=True
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "has not been specified" in str(result.exception)
+
+    def test_filename_and_pubchem_both_given_raises(
+        self, single_molecule_xyz_file
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca,
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "--pubchem",
+                "222",
+                "sp",
+            ],
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "have been specified" in str(result.exception)
+
+    def test_label_and_append_label_mutually_exclusive_raises(
+        self, single_molecule_xyz_file
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca,
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-l",
+                "custom",
+                "-a",
+                "suffix",
+                "sp",
+            ],
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "not both" in str(result.exception)
+
+    def test_pubchem_only_without_label_crashes(self):
+        """BUG (see BUGS_FOUND.md #30): the "output" label fallback for
+        a filename-less (PubChem-only) job with no -l/-a is
+        unreachable -- os.path.basename(filename) is called
+        unconditionally on filename (None here) before the
+        `if filename:` guard that would skip it, so this currently
+        crashes with a TypeError instead of falling back to "output"."""
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ):
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "sp",
+                ],
+                catch_exceptions=True,
+            )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, TypeError)
+
+    def test_default_label_doubles_subcommand_suffix(
+        self, single_molecule_xyz_file
+    ):
+        """BUG (see BUGS_FOUND.md #30): the default label ends up with
+        the subcommand name appended twice (e.g. "mol_opt_opt")
+        because an unconditional final append duplicates the
+        conditional one just above it."""
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_opt_opt")
+
+    def test_group_level_keywords_applied(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-x",
+                "m062x",
+                "-b",
+                "def2svp",
+                "-t",
+                "my title",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.functional == "m062x"
+        assert settings.basis == "def2svp"
+        assert settings.title == "my title"
+
+    def test_structure_index_used_as_index(
+        self, multiple_molecules_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                multiple_molecules_xyz_file,
+                "--si",
+                "1",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_index_requires_record_selector(
+        self, database_chemsmart_file
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        result = CliRunner().invoke(
+            orca,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "abc",
+                "-i",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "can only be used together with" in result.output
+
+    def test_xtb_output_with_unset_charge_and_multiplicity(
+        self, xtb_water_outfolder, run_orca_and_capture_settings
+    ):
+        import os
+        from unittest.mock import MagicMock, patch
+
+        xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
+        mock_molecule = MagicMock(charge=None, multiplicity=None)
+
+        def _fake_from_filepath(filepath, **kwargs):
+            if kwargs.get("return_list"):
+                return [mock_molecule]
+            return mock_molecule
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            side_effect=_fake_from_filepath,
+        ):
+            result, settings = run_orca_and_capture_settings(
+                "chemsmart.jobs.orca.opt.ORCAOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    xtb_out,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_unrecognized_filetype_raises(self, tmp_path):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        bad_file = tmp_path / "structure.weird"
+        bad_file.write_text("nonsense")
+        result = CliRunner().invoke(
+            orca,
+            ["-p", "gas_solv", "-f", str(bad_file), "sp"],
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Unrecognised filetype" in str(result.exception)
+
+    def test_chemsmart_db_loads_molecule_by_record_index(
+        self, database_chemsmart_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_loads_molecule_by_structure_id(
+        self, database_chemsmart_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_remove_solvent_clears_solvent(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+        assert settings.custom_solvent is None
+
+    def test_remaining_group_level_keywords_applied(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-A",
+                "mp2",
+                "-D",
+                "d3bj",
+                "-B",
+                "def2/J",
+                "-e",
+                "def2/QZVPP",
+                "-d",
+                "defgrid3",
+                "--scf-tol",
+                "TightSCF",
+                "--scf-algorithm",
+                "AutoTRAH",
+                "--scf-maxiter",
+                "200",
+                "--scf-convergence",
+                "1e-8",
+                "--dipole",
+                "--quadrupole",
+                "--mdci-cutoff",
+                "tight",
+                "--mdci-density",
+                "relaxed",
+                "-r",
+                "def2/J",
+                "--forces",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.ab_initio == "mp2"
+        assert settings.dispersion == "d3bj"
+        assert settings.aux_basis == "def2/J"
+        assert settings.extrapolation_basis == "def2/QZVPP"
+        assert settings.defgrid == "defgrid3"
+        assert settings.scf_tol == "TightSCF"
+        assert settings.scf_algorithm == "AutoTRAH"
+        assert settings.scf_maxiter == 200
+        assert settings.scf_convergence == 1e-8
+        assert settings.dipole is True
+        assert settings.quadrupole is True
+        assert settings.mdci_cutoff == "tight"
+        assert settings.mdci_density == "relaxed"
+        assert settings.additional_route_parameters == "def2/J"
+        assert settings.forces is True
+
+    def test_chemsmart_db_append_label_includes_record_id_suffix(
+        self, database_chemsmart_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--rid",
+                "6de213a0",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_append_label_includes_record_index_suffix(
+        self, database_chemsmart_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "-a",
+                "suffix",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+
 class TestORCALabelAndAuxBasisOptions:
     def test_short_a_sets_append_label(self, single_molecule_xyz_file):
         from os.path import basename, splitext

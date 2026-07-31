@@ -1418,3 +1418,78 @@ own suggestion.
 every other option in this same function) and apply the "optts"
 fallback separately, so `-j scants` isn't unconditionally overridden
 when the user hasn't explicitly set `-ts`.
+
+## 30. `orca` CLI group: default job label always doubles the subcommand-name suffix (and crashes for filename-less jobs)
+
+**Location:** `chemsmart/cli/orca/orca.py`, the `orca()` group callback's
+label-resolution block (lines ~753-768).
+
+```python
+if label is None and append_label is None:
+    label = os.path.splitext(os.path.basename(filename))[0]
+    if filename:
+        label = os.path.splitext(os.path.basename(filename))[0]
+    else:
+        label = "output"
+    if ctx.invoked_subcommand:
+        label = f"{label}_{ctx.invoked_subcommand}"
+    if is_chemsmart_db:
+        if structure_id is not None:
+            label = f"{label}_SID-{structure_id}"
+        elif record_id is not None:
+            label = f"{label}_RID-{record_id}"
+        elif record_index is not None:
+            label = f"{label}_RI-{record_index}"
+    label = f"{label}_{ctx.invoked_subcommand}"
+```
+
+Two problems, mirroring bug #25 in the Gaussian CLI's equivalent block
+but slightly worse here:
+
+1. **Crash when `filename` is `None`.** Exactly like #25: the first
+   line unconditionally calls `os.path.basename(filename)` before the
+   `if filename: ... else: label = "output"` guard a few lines down,
+   so a `--pubchem`-only job with no `-f`/`-l`/`-a` crashes with
+   `TypeError` instead of falling back to `"output"`.
+2. **The subcommand-name suffix is *always* appended twice.** Line
+   `if ctx.invoked_subcommand: label = f"{label}_{ctx.invoked_subcommand}"`
+   conditionally appends the subcommand name — but the very last line
+   of the block unconditionally does the exact same append again,
+   regardless of whether the conditional branch above it ran. For any
+   normal invocation (a subcommand is always given), this means every
+   default-labeled ORCA job's label ends up as
+   `<basename>_<subcommand>_<subcommand>` instead of
+   `<basename>_<subcommand>`.
+
+**Reproduce:**
+```python
+from unittest.mock import MagicMock, patch
+from click.testing import CliRunner
+from chemsmart.cli.orca.orca import orca
+
+with patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls:
+    mock_job_cls.return_value = MagicMock()
+    CliRunner().invoke(
+        orca,
+        ["-p", "gas_solv", "-f", "mol.xyz", "-c", "0", "-m", "1", "opt"],
+    )
+    print(mock_job_cls.call_args[1]["label"])
+    # "mol_opt_opt" -- "_opt" appears twice
+```
+(also reproduced via
+`tests/test_orca_cli.py::TestORCACLIGroupValidation::test_default_label_doubles_subcommand_suffix`
+and `...::test_pubchem_only_without_label_crashes`)
+
+**Impact:** Every ORCA job submitted without an explicit `-l`/`-a`
+label gets a doubled subcommand suffix in its output filenames/labels
+(e.g. `mol_opt_opt.inp` instead of `mol_opt.inp`), which is cosmetically
+wrong and could cause confusion or collide unexpectedly with
+differently-named files. Separately, any PubChem-only ORCA job
+submission with no explicit label crashes outright instead of using
+`"output"` as documented.
+
+**Suggested direction:** remove the unconditional final
+`label = f"{label}_{ctx.invoked_subcommand}"` line (the conditional
+`if ctx.invoked_subcommand:` block above it already handles this
+correctly), and guard the whole block with `if filename:` before
+computing the basename, mirroring the fix suggested for bug #25.
