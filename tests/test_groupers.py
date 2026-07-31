@@ -2260,3 +2260,92 @@ class Test_energy_extraction_function:
         )
         extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
         assert np.isclose(extracted, -1568.186619, rtol=1e-7)
+
+
+class TestStructureGrouperFactoryValidation:
+    """Direct tests for StructureGrouperFactory.create's validation
+    branches (unknown strategy, mutually-exclusive/unsupported
+    parameter combinations, and strategy-mismatch warnings)."""
+
+    def test_unknown_strategy_raises(self, methanol_molecules):
+        with pytest.raises(ValueError, match="Unknown grouping strategy"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="not_a_real_strategy"
+            )
+
+    def test_threshold_and_num_groups_mutually_exclusive(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="rmsd",
+                threshold=0.5,
+                num_groups=3,
+            )
+
+    def test_threshold_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="does not support threshold"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="formula", threshold=0.5
+            )
+
+    def test_num_groups_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="does not support num_groups"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="formula", num_groups=3
+            )
+
+    def test_ignore_hydrogens_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(
+            ValueError, match="does not support ignore_hydrogens"
+        ):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="energy",
+                ignore_hydrogens=True,
+            )
+
+    def test_inversion_kwarg_warns_for_non_irmsd_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", inversion="always"
+            )
+        assert "is only effective for 'irmsd'" in caplog.text
+
+    def test_fingerprint_type_kwarg_warns_for_non_tanimoto_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="rmsd",
+                fingerprint_type="morgan",
+            )
+        assert "is only effective for 'tanimoto'" in caplog.text
+
+    def test_use_weights_kwarg_warns_for_non_torsion_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", use_weights=False
+            )
+        assert "is only effective for 'torsion'" in caplog.text
+
+    def test_max_dev_kwarg_warns_for_non_torsion_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", max_dev="custom"
+            )
+        assert "is only effective for 'torsion'" in caplog.text
