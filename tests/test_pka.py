@@ -1690,6 +1690,120 @@ class TestPKa:
         assert "\n  thermo" not in result.output
         assert "\n  batch-analyze" not in result.output
 
+    def test_run_gaussian_pka_no_subcommand_auto_dispatches_to_submit(
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
+    ):
+        """``pka`` with no explicit submit/batch subcommand (and a
+        non-table input file) should auto-dispatch to submit()."""
+        _require_backend_pka_subcommand(run, "gaussian")
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.jobs.job import Job
+
+        monkeypatch.setattr(Job, "run", lambda self: None)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "--no-scratch",
+                "--fake",
+                "gaussian",
+                "-p",
+                "test",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-f",
+                single_molecule_xyz_file,
+                "pka",
+                "-s",
+                "direct",
+                "-dG",
+                "-265.9",
+                "-pi",
+                "19",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_gaussian_pka_batch_requires_filename(self, tmp_path, monkeypatch):
+        """``pka batch`` without a parent -f/--filename (e.g. a
+        --pubchem-only invocation) raises a clear UsageError."""
+        from unittest.mock import MagicMock, patch
+
+        _require_backend_pka_subcommand(run, "gaussian")
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[MagicMock()],
+        ):
+            runner = CliRunner()
+            result = runner.invoke(
+                run,
+                [
+                    "--no-scratch",
+                    "--fake",
+                    "gaussian",
+                    "-p",
+                    "test",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-l",
+                    "ammonia",
+                    "--pubchem",
+                    "222",
+                    "pka",
+                    "-s",
+                    "direct",
+                    "-dG",
+                    "-265.9",
+                    "batch",
+                ],
+            )
+        assert result.exit_code != 0
+        assert "Batch mode requires" in result.output
+
+    def test_gaussian_pka_batch_malformed_table_becomes_usage_error(
+        self, tmp_path, monkeypatch
+    ):
+        _require_backend_pka_subcommand(run, "gaussian")
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        table = tmp_path / "bad_table.csv"
+        table.write_text(
+            "filepath,proton_index,charge,multiplicity\n"
+            "does_not_exist.xyz,2,0,1\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "--no-scratch",
+                "--fake",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                str(table),
+                "pka",
+                "-s",
+                "direct",
+                "-dG",
+                "-265.9",
+                "batch",
+            ],
+        )
+        assert result.exit_code != 0
+
     def test_run_orca_pka_help_is_submission_only(
         self, tmp_path, monkeypatch, single_molecule_xyz_file
     ):
