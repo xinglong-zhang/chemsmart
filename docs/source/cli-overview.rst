@@ -81,9 +81,12 @@ Execution Control Options
          ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
    -  -  ``--run-in-parallel/--no-run-in-parallel``
+
       -  bool
+
       -  With ``chemsmart sub``: allow concurrent scheduler array tasks and expand nestable jobs (QRC/DIAS/CREST/traj)
-         into array tasks (default: serial, ``%1``). Local ``run`` keeps children serial.
+         into array tasks. Default is serial: top-level batches use one array task at a time (``%1``); nestable jobs
+         submit as a single parent with nested serial children. Local ``run`` keeps children serial.
 
    -  -  ``-M, --max-tasks``
       -  int

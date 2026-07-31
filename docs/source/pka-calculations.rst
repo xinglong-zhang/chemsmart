@@ -330,7 +330,8 @@ scheduler scripts for you.
 **Batch table or multi-fragment CDXML**
 
 Submit the whole table or ChemDraw file once. CHEMSMART creates **one** scheduler array job with **one task per table
-row or ChemDraw fragment**, so different acids can run at the same time on the cluster (subject to your queue limits).
+row or ChemDraw fragment**. By default those tasks run one at a time (``%1``); pass ``--run-in-parallel`` to allow
+concurrent acids (see below).
 
 .. code:: bash
 
