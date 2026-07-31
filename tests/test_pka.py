@@ -397,6 +397,57 @@ class TestPKa:
         assert "ref_HA_sp.log" in constructed
         assert "pKa" in result.output
 
+    def test_compute_pka_direct_requires_delta_g_proton(self):
+        from chemsmart.cli.pka import compute_pka
+
+        with pytest.raises(ValueError, match="delta_G_proton is required"):
+            compute_pka(
+                ha_gas_file="ha.log",
+                a_gas_file="a.log",
+                ha_solv_file="has.log",
+                a_solv_file="as.log",
+                scheme="direct",
+                delta_G_proton=None,
+            )
+
+    def test_compute_pka_proton_exchange_requires_pka_reference(self):
+        from chemsmart.cli.pka import compute_pka
+
+        with pytest.raises(ValueError, match="pka_reference is required"):
+            compute_pka(
+                ha_gas_file="ha.log",
+                a_gas_file="a.log",
+                scheme="proton exchange",
+                pka_reference=None,
+            )
+
+    def test_compute_pka_proton_exchange_requires_all_files(self):
+        from chemsmart.cli.pka import compute_pka
+
+        with pytest.raises(ValueError, match="Missing required files"):
+            compute_pka(
+                ha_gas_file="ha.log",
+                a_gas_file="a.log",
+                scheme="proton exchange",
+                pka_reference=6.75,
+                # href_gas_file, ref_gas_file, ha_solv_file, a_solv_file,
+                # href_solv_file, ref_solv_file all left as None
+            )
+
+    def test_compute_pka_direct_requires_solvent_files(self):
+        from chemsmart.cli.pka import compute_pka
+
+        with pytest.raises(
+            ValueError, match="ha_solv_file and a_solv_file are required"
+        ):
+            compute_pka(
+                ha_gas_file="ha.log",
+                a_gas_file="a.log",
+                scheme="direct",
+                delta_G_proton=-265.9,
+                # ha_solv_file/a_solv_file omitted
+            )
+
     def test_pka_thermochemistry_missing_scf_energy(
         self, tmp_path, monkeypatch
     ):
@@ -437,6 +488,729 @@ class TestPKa:
             match="Could not extract quasi-harmonic Gibbs free energy",
         ):
             pka_gas_phase_data(str(tmp_path / "gas.out"))
+
+    def test_print_pka_summary_direct_scheme(
+        self,
+        capsys,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+    ):
+        """The 'direct' scheme branch of print_pka_summary is otherwise
+        only reached via print_pka_summary mocked out in CLI tests, so
+        exercise the real formatted-output body directly here."""
+        from chemsmart.cli.pka import print_pka_summary
+
+        print_pka_summary(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            scheme="direct",
+            delta_G_proton=-265.9,
+            temperature=373.15,
+        )
+        output = capsys.readouterr().out
+        assert "Direct Dissociation Scheme" in output
+        assert "Computed pKa(HA)" in output
+
+    def test_compute_pka_thermochemistry_includes_href_and_ref(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+    ):
+        """HRef/Ref branches (only reached with a 4-file proton-exchange
+        scheme) are not exercised by the HA/A-only tests elsewhere."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
+
+        results = compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            href_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_file=gaussian_pKa_B_optimization_outputfile,
+        )
+        assert results["HA"]["name"] == "HA"
+        assert results["A"]["name"] == "A-"
+        assert results["HRef"]["name"] == "HRef"
+        assert results["Ref"]["name"] == "Ref-"
+
+    def test_require_pka_charge_multiplicity_reports_missing_charge(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import require_pka_charge_multiplicity
+
+        opt_settings = SimpleNamespace(charge=None, multiplicity=1)
+        with pytest.raises(click.UsageError, match="-c/--charge"):
+            require_pka_charge_multiplicity(opt_settings)
+
+    def test_require_pka_charge_multiplicity_reports_missing_multiplicity(
+        self,
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import require_pka_charge_multiplicity
+
+        opt_settings = SimpleNamespace(charge=0, multiplicity=None)
+        with pytest.raises(click.UsageError, match="-m/--multiplicity"):
+            require_pka_charge_multiplicity(opt_settings)
+
+    def test_require_pka_charge_multiplicity_includes_source_hint(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import require_pka_charge_multiplicity
+
+        opt_settings = SimpleNamespace(charge=None, multiplicity=None)
+        with pytest.raises(click.UsageError, match=r"\(from row 2\)"):
+            require_pka_charge_multiplicity(
+                opt_settings, source_hint="from row 2"
+            )
+
+    def test_require_pka_charge_multiplicity_passes_when_both_set(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import require_pka_charge_multiplicity
+
+        opt_settings = SimpleNamespace(charge=0, multiplicity=1)
+        assert require_pka_charge_multiplicity(opt_settings) is None
+
+    def test_is_pka_batch_invocation_false_for_non_pka_subcommand(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import is_pka_batch_invocation
+
+        ctx = SimpleNamespace(invoked_subcommand="other", parent=None)
+        assert is_pka_batch_invocation(ctx) is False
+
+    def test_is_pka_batch_invocation_false_when_submit_present(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import is_pka_batch_invocation
+
+        ctx = SimpleNamespace(
+            invoked_subcommand="pka",
+            args=["batch", "submit"],
+            parent=None,
+        )
+        assert is_pka_batch_invocation(ctx) is False
+
+    def test_is_pka_batch_invocation_true_when_batch_present(self):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import is_pka_batch_invocation
+
+        ctx = SimpleNamespace(
+            invoked_subcommand="pka",
+            args=["batch"],
+            parent=None,
+        )
+        assert is_pka_batch_invocation(ctx) is True
+
+    def test_compute_pka_thermochemistry_href_ref_only(
+        self,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+    ):
+        """ha_file/a_file may be omitted when only reference species are
+        needed, exercising the "not provided" branches for each."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
+
+        results = compute_pka_thermochemistry(
+            href_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_file=gaussian_pKa_B_optimization_outputfile,
+        )
+        assert "HA" not in results
+        assert "A" not in results
+        assert results["HRef"]["name"] == "HRef"
+        assert results["Ref"]["name"] == "Ref-"
+
+    def test_resolve_pka_analysis_scheme_direct_requires_delta_g(self):
+        from chemsmart.cli.pka import _resolve_pka_analysis_scheme
+
+        with pytest.raises(
+            click.UsageError, match="delta-g-proton is required"
+        ):
+            _resolve_pka_analysis_scheme(scheme="direct", delta_g_proton=None)
+
+    def test_resolve_pka_analysis_scheme_ignores_delta_g_for_exchange(
+        self, caplog
+    ):
+        from chemsmart.cli.pka import _resolve_pka_analysis_scheme
+
+        with caplog.at_level("INFO"):
+            scheme = _resolve_pka_analysis_scheme(
+                scheme="proton exchange", delta_g_proton=-265.9
+            )
+        assert scheme == "proton exchange"
+        assert "Ignoring -dG/--delta-g-proton" in caplog.text
+
+    def test_resolve_pka_analysis_scheme_defaults_to_proton_exchange(self):
+        from chemsmart.cli.pka import _resolve_pka_analysis_scheme
+
+        assert (
+            _resolve_pka_analysis_scheme(scheme=None, delta_g_proton=None)
+            == "proton exchange"
+        )
+
+    def test_validate_direct_analyze_files_reports_missing(self, tmp_path):
+        from chemsmart.cli.pka import validate_direct_analyze_files
+
+        with pytest.raises(click.UsageError, match="all four output files"):
+            validate_direct_analyze_files(
+                ha=str(tmp_path / "ha.log"), a=None, ha_solv=None, a_solv=None
+            )
+
+    def test_validate_direct_analyze_files_reports_not_found(self, tmp_path):
+        from chemsmart.cli.pka import validate_direct_analyze_files
+
+        ha = tmp_path / "ha.log"
+        ha.write_text("Gaussian, Inc.\n")
+        missing_a = tmp_path / "missing_a.log"
+        with pytest.raises(click.UsageError, match="File not found"):
+            validate_direct_analyze_files(
+                ha=str(ha),
+                a=str(missing_a),
+                ha_solv=str(ha),
+                a_solv=str(ha),
+            )
+
+    def test_validate_direct_analyze_files_passes_when_all_present(
+        self, tmp_path
+    ):
+        from chemsmart.cli.pka import validate_direct_analyze_files
+
+        ha = tmp_path / "ha.log"
+        ha.write_text("Gaussian, Inc.\n")
+        assert (
+            validate_direct_analyze_files(
+                ha=str(ha), a=str(ha), ha_solv=str(ha), a_solv=str(ha)
+            )
+            is None
+        )
+
+    def test_auto_discover_direct_pka_files_reports_missing_companions(
+        self, tmp_path
+    ):
+        from chemsmart.cli.pka import _auto_discover_direct_pka_files
+
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        with pytest.raises(click.UsageError, match="Auto-discovery"):
+            _auto_discover_direct_pka_files(str(ha_gas))
+
+    def test_auto_discover_direct_pka_files_finds_all_companions(
+        self, tmp_path
+    ):
+        """Success path (program auto-detected from the HA gas file's
+        signature) when every companion output already exists on disk."""
+        from chemsmart.cli.pka import _auto_discover_direct_pka_files
+
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        results = _auto_discover_direct_pka_files(str(ha_gas))
+        assert all(key in results for key in ("a", "ha_solv", "a_solv"))
+
+    def test_validate_reference_options_noop_when_no_reference(self):
+        from chemsmart.cli.pka import validate_reference_options
+
+        shared = {"reference": None, "scheme": "direct"}
+        assert validate_reference_options(shared) is None
+
+    def test_validate_reference_options_requires_proton_exchange_scheme(self):
+        from chemsmart.cli.pka import validate_reference_options
+
+        shared = {"reference": "ref.xyz", "scheme": "direct"}
+        with pytest.raises(click.UsageError, match="proton exchange"):
+            validate_reference_options(shared)
+
+    def test_validate_reference_options_reports_missing_fields(self):
+        from chemsmart.cli.pka import validate_reference_options
+
+        shared = {
+            "reference": "ref.xyz",
+            "scheme": "proton exchange",
+            "reference_proton_index": None,
+            "reference_color_code": None,
+            "reference_charge": None,
+            "reference_multiplicity": None,
+        }
+        with pytest.raises(click.UsageError, match="reference-proton-index"):
+            validate_reference_options(shared)
+
+    def test_validate_reference_options_passes_when_all_set(self):
+        from chemsmart.cli.pka import validate_reference_options
+
+        shared = {
+            "reference": "ref.xyz",
+            "scheme": "proton exchange",
+            "reference_proton_index": 8,
+            "reference_color_code": None,
+            "reference_charge": 0,
+            "reference_multiplicity": 1,
+        }
+        assert validate_reference_options(shared) is None
+
+    def test_is_existing_output_path_variants(self, tmp_path):
+        from chemsmart.cli.pka import _is_existing_output_path
+
+        assert _is_existing_output_path(None) is False
+        assert _is_existing_output_path("") is False
+        real_file = tmp_path / "a.log"
+        real_file.write_text("x")
+        assert _is_existing_output_path(str(real_file)) is True
+        assert _is_existing_output_path(str(tmp_path / "missing.log")) is False
+
+    def test_validate_pka_table_program_flags_mismatch(self, tmp_path):
+        from chemsmart.cli.pka import _validate_pka_table_program
+
+        orca_file = tmp_path / "a.out"
+        orca_file.write_text("* O   R   C   A *\n")
+
+        class _FakeTable:
+            entries = [{"ha_gas": str(orca_file)}]
+
+        with pytest.raises(click.UsageError, match="was detected as"):
+            _validate_pka_table_program(_FakeTable(), "gaussian")
+
+    def test_validate_pka_table_program_passes_when_matching(self, tmp_path):
+        from chemsmart.cli.pka import _validate_pka_table_program
+
+        orca_file = tmp_path / "a.out"
+        orca_file.write_text("* O   R   C   A *\n")
+
+        class _FakeTable:
+            entries = [{"ha_gas": str(orca_file)}]
+
+        assert _validate_pka_table_program(_FakeTable(), "orca") is None
+
+    def test_validate_analyze_files_reports_missing_gas_and_solv(self):
+        from chemsmart.cli.pka import validate_analyze_files
+
+        with pytest.raises(click.UsageError, match="all 8 output files"):
+            validate_analyze_files(
+                ha=None,
+                a=None,
+                href=None,
+                ref=None,
+                ha_solv=None,
+                a_solv=None,
+                href_solv=None,
+                ref_solv=None,
+                reference_pka=6.75,
+            )
+
+    def test_validate_analyze_files_requires_reference_pka(self, tmp_path):
+        from chemsmart.cli.pka import validate_analyze_files
+
+        f = tmp_path / "x.log"
+        f.write_text("Gaussian, Inc.\n")
+        with pytest.raises(click.UsageError, match="reference-pka"):
+            validate_analyze_files(
+                ha=str(f),
+                a=str(f),
+                href=str(f),
+                ref=str(f),
+                ha_solv=str(f),
+                a_solv=str(f),
+                href_solv=str(f),
+                ref_solv=str(f),
+                reference_pka=None,
+            )
+
+    def test_validate_analyze_files_reports_nonexistent_paths(self, tmp_path):
+        from chemsmart.cli.pka import validate_analyze_files
+
+        f = tmp_path / "x.log"
+        f.write_text("Gaussian, Inc.\n")
+        missing = str(tmp_path / "missing.log")
+        with pytest.raises(click.UsageError, match="do not exist"):
+            validate_analyze_files(
+                ha=missing,
+                a=str(f),
+                href=str(f),
+                ref=str(f),
+                ha_solv=str(f),
+                a_solv=str(f),
+                href_solv=str(f),
+                ref_solv=str(f),
+                reference_pka=6.75,
+            )
+
+    def test_validate_analyze_files_reports_nonexistent_solv_path(
+        self, tmp_path
+    ):
+        from chemsmart.cli.pka import validate_analyze_files
+
+        f = tmp_path / "x.log"
+        f.write_text("Gaussian, Inc.\n")
+        missing_solv = str(tmp_path / "missing_solv.log")
+        with pytest.raises(click.UsageError, match="do not exist"):
+            validate_analyze_files(
+                ha=str(f),
+                a=str(f),
+                href=str(f),
+                ref=str(f),
+                ha_solv=missing_solv,
+                a_solv=str(f),
+                href_solv=str(f),
+                ref_solv=str(f),
+                reference_pka=6.75,
+            )
+
+    def test_validate_analyze_files_passes_when_all_present(self, tmp_path):
+        from chemsmart.cli.pka import validate_analyze_files
+
+        f = tmp_path / "x.log"
+        f.write_text("Gaussian, Inc.\n")
+        assert (
+            validate_analyze_files(
+                ha=str(f),
+                a=str(f),
+                href=str(f),
+                ref=str(f),
+                ha_solv=str(f),
+                a_solv=str(f),
+                href_solv=str(f),
+                ref_solv=str(f),
+                reference_pka=6.75,
+            )
+            is None
+        )
+
+    def test_auto_discover_pka_files_reports_missing_companions(
+        self, tmp_path
+    ):
+        from chemsmart.cli.pka import _auto_discover_pka_files
+
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        href_gas = tmp_path / "ref_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+        with pytest.raises(click.UsageError, match="Auto-discovery"):
+            _auto_discover_pka_files(
+                str(ha_gas), str(href_gas), program="gaussian"
+            )
+
+    def test_auto_discover_pka_files_finds_all_companions_auto_program(
+        self, tmp_path
+    ):
+        """Success path with program=None (auto-detected via
+        get_program_type_from_file from the HA gas file's signature)."""
+        from chemsmart.cli.pka import _auto_discover_pka_files
+
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        href_gas = tmp_path / "ref_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_Ref_opt", "_HRef_sp", "_Ref_sp"):
+            (tmp_path / f"ref{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        results = _auto_discover_pka_files(str(ha_gas), str(href_gas))
+        assert all(
+            key in results
+            for key in (
+                "a",
+                "ha_solv",
+                "a_solv",
+                "ref",
+                "href_solv",
+                "ref_solv",
+            )
+        )
+
+    def test_run_pka_analyze_direct_auto_discovers_companion_files(
+        self, tmp_path, monkeypatch
+    ):
+        """`-s direct analyze -ha ...` alone should auto-discover
+        a/ha-solv/a-solv from the standard suffix convention."""
+        monkeypatch.chdir(tmp_path)
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        called = {}
+
+        def _fake_print(*args, **kwargs):
+            called["kwargs"] = kwargs
+
+        import chemsmart.cli.pka as pka_cli
+
+        monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "pka",
+                "-s",
+                "direct",
+                "-dG",
+                "-265.9",
+                "analyze",
+                "-ha",
+                str(ha_gas),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert called["kwargs"]["ha_gas_file"] == str(ha_gas)
+        assert called["kwargs"]["a_gas_file"] == str(
+            tmp_path / "target_pka_A_opt.log"
+        )
+        assert called["kwargs"]["ha_solv_file"] == str(
+            tmp_path / "target_pka_HA_sp.log"
+        )
+
+    def test_run_pka_analyze_proton_exchange_auto_discovers_companion_files(
+        self, tmp_path, monkeypatch
+    ):
+        """`analyze -ha ... -hr ...` (default scheme) should auto-discover
+        the remaining six companion output files."""
+        monkeypatch.chdir(tmp_path)
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        href_gas = tmp_path / "ref_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_Ref_opt", "_HRef_sp", "_Ref_sp"):
+            (tmp_path / f"ref{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        called = {}
+
+        def _fake_print(*args, **kwargs):
+            called["kwargs"] = kwargs
+
+        import chemsmart.cli.pka as pka_cli
+
+        monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "pka",
+                "analyze",
+                "-ha",
+                str(ha_gas),
+                "-hr",
+                str(href_gas),
+                "-rp",
+                "6.75",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert called["kwargs"]["ha_gas_file"] == str(ha_gas)
+        assert called["kwargs"]["href_gas_file"] == str(href_gas)
+        assert called["kwargs"]["a_gas_file"] == str(
+            tmp_path / "target_pka_A_opt.log"
+        )
+        assert called["kwargs"]["ref_gas_file"] == str(
+            tmp_path / "ref_Ref_opt.log"
+        )
+
+    def test_run_pka_batch_analyze_bad_table_becomes_usage_error(
+        self, tmp_path
+    ):
+        """A table whose referenced companion files don't exist on disk
+        should surface prepare()'s ValueError as a clean click.UsageError,
+        not an uncaught exception."""
+        table = tmp_path / "table.csv"
+        table.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+            "target,,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,10.6\n"
+        )
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            ["pka", "batch-analyze", "-o", str(table)],
+        )
+        assert result.exit_code != 0
+        assert "File not found" in result.output
+
+    def test_run_pka_batch_analyze_explicit_program_validates_table(
+        self, tmp_path, monkeypatch
+    ):
+        """Explicit -p should be checked against every table file's
+        detected program (not just left to 'auto')."""
+        monkeypatch.chdir(tmp_path)
+        basename = "target"
+        for suffix in ("_pka_HA_opt", "_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"{basename}{suffix}.log").write_text(
+                "Gaussian, Inc.\n"
+            )
+        for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
+            (tmp_path / f"{name}.log").write_text("Gaussian, Inc.\n")
+
+        table = tmp_path / "pka_output.csv"
+        table.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+            f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,6.75\n"
+        )
+
+        _install_fake_thermochemistry(monkeypatch)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "pka",
+                "batch-analyze",
+                "-o",
+                str(table),
+                "-p",
+                "gaussian",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "pKa" in result.output
+
+    def test_run_pka_analyze_direct_requires_ha(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            ["pka", "-s", "direct", "-dG", "-265.9", "analyze"],
+        )
+        assert result.exit_code != 0
+        assert "-ha/--ha is required" in result.output
+
+    def test_run_pka_analyze_proton_exchange_skips_discovery_without_ha_and_href(
+        self,
+    ):
+        """Without both -ha and -hr, auto-discovery can't run at all, so
+        this should fall straight through to the missing-files error."""
+        runner = CliRunner()
+        result = runner.invoke(run, ["pka", "analyze", "-rp", "6.75"])
+        assert result.exit_code != 0
+        assert "all 8 output files are required" in result.output
+
+    def test_run_pka_analyze_direct_partial_auto_discovery(
+        self, tmp_path, monkeypatch
+    ):
+        """Explicitly providing one optional file (-a) alongside -ha
+        should still auto-discover only the remaining missing ones."""
+        monkeypatch.chdir(tmp_path)
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        explicit_a = tmp_path / "custom_a.log"
+        explicit_a.write_text("Gaussian, Inc.\n")
+        # _auto_discover_direct_pka_files unconditionally discovers and
+        # checks all three companions (even ones already explicitly
+        # provided), so the naming-convention "a" file must exist too.
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        called = {}
+
+        def _fake_print(*args, **kwargs):
+            called["kwargs"] = kwargs
+
+        import chemsmart.cli.pka as pka_cli
+
+        monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "pka",
+                "-s",
+                "direct",
+                "-dG",
+                "-265.9",
+                "analyze",
+                "-ha",
+                str(ha_gas),
+                "-a",
+                str(explicit_a),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert called["kwargs"]["a_gas_file"] == str(explicit_a)
+        assert called["kwargs"]["ha_solv_file"] == str(
+            tmp_path / "target_pka_HA_sp.log"
+        )
+
+    def test_run_pka_analyze_proton_exchange_partial_auto_discovery(
+        self, tmp_path, monkeypatch
+    ):
+        """Explicitly providing one optional file (-a) alongside -ha/-hr
+        should still auto-discover only the remaining missing ones."""
+        monkeypatch.chdir(tmp_path)
+        ha_gas = tmp_path / "target_pka_HA_opt.log"
+        ha_gas.write_text("Gaussian, Inc.\n")
+        explicit_a = tmp_path / "custom_a.log"
+        explicit_a.write_text("Gaussian, Inc.\n")
+        # _auto_discover_pka_files unconditionally discovers and checks
+        # all six companions (even ones already explicitly provided), so
+        # the naming-convention "a" file must exist too.
+        for suffix in ("_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+            (tmp_path / f"target{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        href_gas = tmp_path / "ref_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+        for suffix in ("_Ref_opt", "_HRef_sp", "_Ref_sp"):
+            (tmp_path / f"ref{suffix}.log").write_text("Gaussian, Inc.\n")
+
+        called = {}
+
+        def _fake_print(*args, **kwargs):
+            called["kwargs"] = kwargs
+
+        import chemsmart.cli.pka as pka_cli
+
+        monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "pka",
+                "analyze",
+                "-ha",
+                str(ha_gas),
+                "-hr",
+                str(href_gas),
+                "-a",
+                str(explicit_a),
+                "-rp",
+                "6.75",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert called["kwargs"]["a_gas_file"] == str(explicit_a)
+        assert called["kwargs"]["ref_gas_file"] == str(
+            tmp_path / "ref_Ref_opt.log"
+        )
+
+    def test_resolve_pka_submit_proton_options_color_code_from_parent(self):
+        """When the parent group already resolved -cc, it must be used
+        directly without falling back to ctx.obj."""
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import resolve_pka_submit_proton_options
+
+        parent = SimpleNamespace(
+            params={"proton_index": None, "color_code": 4}
+        )
+        ctx = SimpleNamespace(
+            parent=parent,
+            obj={"pka_proton_index": None, "pka_color_code": None},
+        )
+        proton_index, color_code = resolve_pka_submit_proton_options(ctx)
+        assert color_code == 4
+        assert ctx.obj["pka_color_code"] == 4
 
     def test_run_pka_unparseable_output_raises(self, tmp_path):
         """analyze no longer pre-detects program type; parsing fails on bad files."""
@@ -1386,6 +2160,31 @@ class TestPKa:
         assert proton_index == 8
         assert molecules is None
 
+    def test_resolve_proton_index_color_code_requires_cdxml(
+        self, single_molecule_xyz_file
+    ):
+        from chemsmart.cli.pka import resolve_proton_index
+
+        with pytest.raises(ValueError, match="color-code can only be used"):
+            resolve_proton_index(
+                single_molecule_xyz_file, proton_index=None, color_code=2
+            )
+
+    def test_resolve_proton_index_detects_submission_table(self, tmp_path):
+        from chemsmart.cli.pka import resolve_proton_index
+
+        table = _build_pka_batch_table(tmp_path)
+        with pytest.raises(ValueError, match="Use the 'batch' subcommand"):
+            resolve_proton_index(str(table), proton_index=None)
+
+    def test_resolve_proton_index_requires_index_for_plain_file(
+        self, single_molecule_xyz_file
+    ):
+        from chemsmart.cli.pka import resolve_proton_index
+
+        with pytest.raises(ValueError, match="-pi/--proton-index is required"):
+            resolve_proton_index(single_molecule_xyz_file, proton_index=None)
+
     def test_resolve_pka_batch_row_auto_detects_coloured_proton(
         self, colored_proton_cdxml_file
     ):
@@ -1428,6 +2227,81 @@ class TestPKa:
 
         with pytest.raises(ValueError, match="Missing proton_index"):
             resolve_pka_batch_row(single_molecule_xyz_file, proton_index=None)
+
+    def test_resolve_pka_batch_row_wraps_color_detection_failure(
+        self, colored_proton_cdxml_file
+    ):
+        """An unmatched -cc/--color-code should surface a clear,
+        re-wrapped ValueError rather than the raw lookup failure."""
+        from chemsmart.cli.pka import resolve_pka_batch_row
+
+        with pytest.raises(
+            ValueError, match="Could not auto-detect proton from CDXML colour"
+        ):
+            resolve_pka_batch_row(
+                colored_proton_cdxml_file, proton_index=None, color_code=999
+            )
+
+    def test_batch_pka_jobs_from_cdxml_wraps_resolve_error_as_usage_error(
+        self, single_molecule_xyz_file
+    ):
+        """resolve_proton_index's ValueError (e.g. -cc on a non-CDXML
+        file) must surface as a click.UsageError, not an uncaught one."""
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import batch_pka_jobs_from_cdxml
+
+        ctx = SimpleNamespace(
+            obj={
+                "filename": single_molecule_xyz_file,
+                "pka_shared": {},
+                "pka_proton_index": None,
+                "pka_color_code": 2,
+            },
+            parent=None,
+        )
+        with pytest.raises(click.UsageError, match="color-code can only"):
+            batch_pka_jobs_from_cdxml(
+                ctx,
+                skip_completed=False,
+                create_jobs_fn=lambda *a, **kw: None,
+                invoke_submit_fn=lambda *a, **kw: None,
+            )
+
+    def test_batch_pka_jobs_from_cdxml_calls_invoke_submit_for_single_molecule(
+        self, single_molecule_xyz_file
+    ):
+        """When resolve_proton_index resolves a single molecule (no
+        per-fragment list), the submit path is invoked, not create_jobs."""
+        from types import SimpleNamespace
+
+        from chemsmart.cli.pka import batch_pka_jobs_from_cdxml
+
+        ctx = SimpleNamespace(
+            obj={
+                "filename": single_molecule_xyz_file,
+                "pka_shared": {},
+                "pka_proton_index": 2,
+                "pka_color_code": None,
+            },
+            parent=None,
+        )
+        captured = {}
+
+        def _fake_invoke_submit(ctx, skip_completed, proton_index, color_code):
+            captured["proton_index"] = proton_index
+            return "submitted"
+
+        result = batch_pka_jobs_from_cdxml(
+            ctx,
+            skip_completed=False,
+            create_jobs_fn=lambda *a, **kw: pytest.fail(
+                "create_jobs_fn should not be called for a single molecule"
+            ),
+            invoke_submit_fn=_fake_invoke_submit,
+        )
+        assert result == "submitted"
+        assert captured["proton_index"] == 2
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_cdxml_blank_proton_index_auto_detects(

@@ -1106,3 +1106,45 @@ correctness; this is purely redundant/dead defensive code.
 line 370 (and, if desired, the `excluded` parameter entirely, since
 nothing pushes it onto the stack) since the neighbor-expansion filter
 already fully excludes it.
+
+## 24. `compute_pka_thermochemistry`'s nested `get_species_thermo`'s `filepath is None` guard is unreachable dead code
+
+**Location:** `chemsmart/cli/pka.py`, `compute_pka_thermochemistry`
+(lines 273-360), nested helper `get_species_thermo` (lines 306-350).
+
+```python
+def get_species_thermo(filepath, name):
+    if filepath is None:
+        return None
+    thermo = Thermochemistry(filename=filepath, **thermo_kwargs)
+    ...
+
+if ha_file is not None:
+    results["HA"] = get_species_thermo(ha_file, "HA")
+if a_file is not None:
+    results["A"] = get_species_thermo(a_file, "A-")
+if href_file is not None:
+    results["HRef"] = get_species_thermo(href_file, "HRef")
+if ref_file is not None:
+    results["Ref"] = get_species_thermo(ref_file, "Ref-")
+```
+
+`get_species_thermo` is a purely local nested function with exactly
+four call sites, and every one of them is already guarded by an
+`if X_file is not None:` check before the call. So `filepath` can never
+be `None` inside `get_species_thermo` — the function's own
+`if filepath is None: return None` guard (line 307-308) can never be
+taken.
+
+**Reproduce (informal):** grepped all call sites of
+`get_species_thermo` within `compute_pka_thermochemistry`; each of the
+four calls passes `ha_file`/`a_file`/`href_file`/`ref_file` directly
+from inside a block that already tested that same value `is not None`.
+
+**Impact:** None — the outer guards already produce the correct
+"omit this species from the results dict" behavior; this is purely
+redundant/dead defensive code inside the nested helper.
+
+**Suggested direction:** drop the `if filepath is None: return None`
+guard from `get_species_thermo`, since every caller already ensures
+`filepath` is not `None` before invoking it.
