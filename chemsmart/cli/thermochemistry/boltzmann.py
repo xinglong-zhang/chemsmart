@@ -40,6 +40,7 @@ def boltzmann(
     boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
         files=files,
         energy_type=energy_type_for_weighting,
+        filename=files[0] if files else None,
         outputfile=outputfile,
         settings=job_settings.copy(),
         skip_completed=skip_completed,

@@ -27,37 +27,22 @@ This is exactly the fix suggested below, so the confusing
 occurs — the failure is now a clear `ValueError: 'filename' must be
 provided.` raised earlier, directly from `__init__`.
 
-However, the underlying CLI bug is **not** fixed: `boltzmann()` in
-`chemsmart/cli/thermochemistry/boltzmann.py:40-46` still never passes a
-`filename` kwarg to `BoltzmannAverageThermochemistryJob`, so
-`chemsmart sub thermochemistry boltzmann ...` still crashes on every real
-invocation — just with a better error message now.
+**Fixed:** the CLI's `boltzmann()` command now passes
+`filename=files[0] if files else None` to
+`BoltzmannAverageThermochemistryJob`, so
+`chemsmart sub thermochemistry boltzmann -f a.log -f b.log ...` no longer
+crashes. See `tests/test_thermochemistry_cli.py::TestThermochemistryBoltzmannCommand`
+for CLI-level regression tests covering this fix.
 
-```python
-# chemsmart/cli/thermochemistry/boltzmann.py:40-46 (unchanged)
-boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
-    files=files,
-    energy_type=energy_type_for_weighting,
-    outputfile=outputfile,
-    settings=job_settings.copy(),
-    skip_completed=skip_completed,
-)
-```
+**Impact (historical):** `chemsmart sub thermochemistry boltzmann ...`
+could not succeed on any real invocation prior to this fix.
 
-**Impact:** `chemsmart sub thermochemistry boltzmann ...` cannot succeed on
-any real invocation today.
-
-**Reproduce:**
+**Reproduce (historical, prior to fix):**
 ```python
 from chemsmart.jobs.thermochemistry.boltzmann import BoltzmannAverageThermochemistryJob
 BoltzmannAverageThermochemistryJob(files=["a.log", "b.log"])
 # ValueError: 'filename' must be provided.
 ```
-
-**Suggested direction:** have the CLI's `boltzmann()` command pass a real
-`filename` to `BoltzmannAverageThermochemistryJob` (e.g. the first file in
-`files`), since the constructor-level guard now correctly rejects a
-missing one.
 
 **Related dead code:** even when a `filename` workaround is supplied,
 `BoltzmannAverageThermochemistryJob.__init__`'s own label-generation block
@@ -1982,3 +1967,58 @@ remove it entirely if QMMM-aware molecule loading for `mol` subcommands
 is meant to happen some other way (e.g. via the `--qmmm`
 flag/`ctx.obj["qmmm"]` mechanism already used elsewhere in the
 codebase).
+
+## 39. `boltzmann` CLI command's `outputfile` parameter is vestigial — always `None`
+
+**Location:** `chemsmart/cli/thermochemistry/boltzmann.py`, `boltzmann()`
+(function signature and body).
+
+```python
+def boltzmann(
+    ctx,
+    skip_completed,
+    energy_type_for_weighting="gibbs",
+    outputfile=None,
+):
+    ...
+    boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
+        files=files,
+        energy_type=energy_type_for_weighting,
+        filename=files[0] if files else None,
+        outputfile=outputfile,
+        ...
+    )
+```
+
+`boltzmann()` has an `outputfile=None` parameter, but there is no
+`@click.option` anywhere in this file (or inherited via
+`click_job_options`) that supplies a value for it — `-o`/`--outputfile`
+is only defined on the parent `thermochemistry` group itself (and
+consumed there to build each per-file job's `job_settings.outputfile`
+and to set `ctx.obj["outputfile"]`). Consequently `outputfile` in
+`boltzmann()` is **always** `None` regardless of what the user passes;
+attempting `chemsmart run thermochemistry -f a.log -o out.dat
+boltzmann` even fails outright, since `-o` is not a recognized option
+at the `boltzmann` subcommand scope:
+
+```
+$ chemsmart run thermochemistry -f a.log -T 298.15 boltzmann -o out.dat
+Error: No such option: -o
+```
+
+There is currently no way to specify a custom output path for the
+Boltzmann-averaged result specifically — the job falls back entirely
+to its own `outputfile` property (`{label}.dat`).
+
+**Reproduce:** `tests/test_thermochemistry_cli.py::TestThermochemistryBoltzmannCommand::test_outputfile_parameter_is_always_none`
+confirms `outputfile` in the constructed job's kwargs is `None` even
+when the group-level `-o` is supplied before the `boltzmann` subcommand
+token (since it's consumed by the group, not forwarded).
+
+**Impact:** Low — users cannot redirect the Boltzmann-averaged output
+file via CLI; the default `{label}.dat` naming is always used instead.
+
+**Suggested direction:** either read `ctx.obj.get("outputfile")` inside
+`boltzmann()` and pass that through, or drop the dead `outputfile`
+parameter from the function signature entirely if this was never
+intended to be configurable per-command.
