@@ -2391,6 +2391,70 @@ class TestGaussianCLIModredCommand:
         assert result.exit_code == 0, result.output
         assert settings is not None, "GaussianModredJob was never instantiated"
 
+    def test_explicit_jobtype_used(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.modred.GaussianModredJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "modred",
+                "-j",
+                "modred",
+                "-c",
+                "[[1,2]]",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        with patch(
+            "chemsmart.jobs.gaussian.modred.GaussianModredJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "modred",
+                    "-c",
+                    "[[1,2]]",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+
     def test_modred_qmmm_subcommand_creates_qmmm_job(
         self,
         single_molecule_xyz_file,
