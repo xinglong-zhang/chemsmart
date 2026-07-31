@@ -1530,3 +1530,68 @@ tightened) to make `jobtype` mandatory.
 **Suggested direction:** remove the `if jobtype is None: label = label`
 branch and keep only the `else` body's logic unconditionally, since
 `jobtype` is guaranteed non-`None` at this point.
+
+## 32. `AtomsChargeMultiplicity.from_atoms`'s bare-`FixAtoms` branch is unreachable through any public ASE API
+
+**Location:** `chemsmart/io/molecules/atoms.py`, `from_atoms`
+(lines 131-148).
+
+```python
+if atoms.constraints:
+    if isinstance(atoms.constraints, list):
+        for i, constraint in enumerate(atoms.constraints):
+            if isinstance(constraint, FixAtoms):
+                ...
+    elif isinstance(atoms.constraints, FixAtoms):
+        indices = FixAtoms.todict(atoms.constraints)["kwargs"]["indices"]
+        ...
+```
+
+The `elif isinstance(atoms.constraints, FixAtoms):` branch assumes
+`atoms.constraints` can sometimes be a bare (non-list) constraint
+object. But ASE's own `Atoms.constraints` property setter (which is
+`set_constraint`) always normalizes to a list:
+
+```python
+# ase/atoms.py, Atoms.set_constraint
+if constraint is None:
+    self._constraints = []
+elif isinstance(constraint, list):
+    self._constraints = constraint
+elif isinstance(constraint, tuple):
+    self._constraints = list(constraint)
+else:
+    self._constraints = [constraint]   # <-- always wraps a single constraint
+```
+
+So `atoms.constraints = FixAtoms(...)` (or `atoms.set_constraint(...)`)
+always ends up as `[FixAtoms(...)]`, never a bare `FixAtoms`. There is
+no supported way to make `atoms.constraints` a bare `FixAtoms` instance
+through ASE's public API — only by writing the private
+`atoms._constraints` attribute directly, bypassing the property
+entirely.
+
+**Reproduce (informal):**
+```python
+from ase import Atoms
+from ase.constraints import FixAtoms
+a = Atoms("Ar2", positions=[(0, 0, 0), (3.5, 0, 0)])
+a.constraints = FixAtoms(indices=[0])
+print(type(a.constraints))  # <class 'list'>, not FixAtoms
+```
+`tests/test_atoms_charge_multiplicity_unit.py::TestFromAtomsSingleFixAtomsConstraint::test_single_fixatoms_constraint_not_wrapped_in_list`
+only reaches this branch by assigning the private `_constraints`
+attribute directly (`simple_ase_atoms._constraints = FixAtoms(...)`),
+confirming the public-API path can't.
+
+**Impact:** None — the `isinstance(atoms.constraints, list)` branch
+above it already handles every constraint (including a lone `FixAtoms`
+wrapped in a single-element list) that any real ASE `Atoms` object can
+carry, so no real input is mishandled. This is purely defensive dead
+code for an ASE internal representation that doesn't occur in
+practice.
+
+**Suggested direction:** remove the `elif isinstance(atoms.constraints,
+FixAtoms):` branch, since `atoms.constraints` is always either `[]` or
+a `list` for any `Atoms` object constructed or mutated through ASE's
+public API.
