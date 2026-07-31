@@ -299,6 +299,8 @@ class TestSubResourceOverrides:
             NUM_CORES=2,
             NUM_GPUS=0,
             MEM_GB=8,
+            NUM_HOURS=1,
+            QUEUE_NAME="normal",
         )
         captured = {}
 
@@ -308,6 +310,8 @@ class TestSubResourceOverrides:
                 num_cores=self.num_cores,
                 num_gpus=self.num_gpus,
                 mem_gb=self.mem_gb,
+                num_hours=self.num_hours,
+                queue_name=self.queue_name,
             )
 
         monkeypatch.setattr(
@@ -336,6 +340,10 @@ class TestSubResourceOverrides:
                 "2",
                 "--mem-gb",
                 "23",
+                "--time-hours",
+                "12.5",
+                "--queue",
+                "debug",
                 "gaussian",
                 "-p",
                 "test",
@@ -354,6 +362,8 @@ class TestSubResourceOverrides:
         assert captured["num_cores"] == 7
         assert captured["num_gpus"] == 2
         assert captured["mem_gb"] == 23
+        assert captured["num_hours"] == 12.5
+        assert captured["queue_name"] == "debug"
 
 
 def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
