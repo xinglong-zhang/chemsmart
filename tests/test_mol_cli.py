@@ -6,6 +6,8 @@ group and :mod:`unittest.mock` to intercept the job constructor so that
 the merged settings can be inspected without running an actual PyMOL job.
 """
 
+import os
+import shutil
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -205,6 +207,170 @@ class TestMolCLIAlignCommand:
         assert result.exit_code == 0, result.output
         assert kwargs is not None, "PyMOLAlignJob was never instantiated"
         assert len(kwargs["molecule"]) >= 2
+
+    def test_align_directory_without_filetype_raises(
+        self, structure_test_directory
+    ):
+        """Directory given via the -p/--program group path (so
+        ctx.obj["directory"] is set but ctx.obj["filetype"] is not)
+        reaches align's own "directory without filetype" guard."""
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            [
+                "-d",
+                os.path.join(structure_test_directory, "xyz"),
+                "-p",
+                "gaussian",
+                "align",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "no filetype provided" in result.output
+
+    def test_align_directory_with_filetype(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        two_rotated_molecules_xyz_file,
+    ):
+        """Directory + filetype: align loads and aligns one structure
+        from each matched file in the directory."""
+        shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
+        shutil.copy(two_rotated_molecules_xyz_file, tmp_path / "b.xyz")
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            ["-d", str(tmp_path), "-t", "xyz", "align"],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(kwargs["molecule"]) == 2
+
+    def test_align_multiple_files_two_structures_label(
+        self, single_molecule_xyz_file, two_rotated_molecules_xyz_file
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-f",
+                two_rotated_molecules_xyz_file,
+                "align",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(kwargs["molecule"]) == 2
+        assert kwargs["label"].endswith("_and_1_structure_align")
+
+    def test_align_multiple_files_more_than_two_structures_label(
+        self,
+        single_molecule_xyz_file,
+        two_rotated_molecules_xyz_file,
+        visualized_1_mer_xyz_file,
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-f",
+                two_rotated_molecules_xyz_file,
+                "-f",
+                visualized_1_mer_xyz_file,
+                "align",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(kwargs["molecule"]) == 3
+        assert kwargs["label"].endswith("_and_2_structures_align")
+
+    def test_align_explicit_label_used_directly(
+        self, single_molecule_xyz_file, two_rotated_molecules_xyz_file
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-f",
+                two_rotated_molecules_xyz_file,
+                "-l",
+                "mycustom",
+                "align",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "mycustom"
+
+    def test_align_not_enough_molecules_raises(self, single_molecule_xyz_file):
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            ["-f", single_molecule_xyz_file, "-i", "1", "align"],
+        )
+        assert result.exit_code != 0
+        assert "at least 2 molecules" in result.output
+        assert "may not select enough structures" in result.output
+
+    def test_align_directory_no_files_found_for_filetype(
+        self, tmp_path, single_molecule_xyz_file
+    ):
+        shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            ["-d", str(tmp_path), "-t", "nonexistentext", "align"],
+        )
+        assert result.exit_code != 0
+        assert "No files found with extension" in result.output
+
+    def test_align_directory_out_of_range_index_raises_bad_parameter(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        two_rotated_molecules_xyz_file,
+    ):
+        """Covers the per-file ValueError -> click.BadParameter wrapping
+        shared by both the directory and multi-filenames branches."""
+        shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
+        shutil.copy(two_rotated_molecules_xyz_file, tmp_path / "b.xyz")
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            ["-d", str(tmp_path), "-t", "xyz", "-i", "5", "align"],
+        )
+        assert result.exit_code != 0
+        assert "Error processing file" in result.output
+        assert "out of range" in result.output
+
+    def test_align_single_file_out_of_range_index_raises_bad_parameter(
+        self, single_molecule_xyz_file
+    ):
+        """Covers the single-file branch's own ValueError ->
+        click.BadParameter wrapping (distinct from the per-file helper
+        used by the directory/multi-filenames branches)."""
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            ["-f", single_molecule_xyz_file, "-i", "100", "align"],
+        )
+        assert result.exit_code != 0
+        assert "out of range" in result.output
+        assert "Error processing file" not in result.output
+
+    def test_align_multiple_files_out_of_range_index_raises_bad_parameter(
+        self, single_molecule_xyz_file, two_rotated_molecules_xyz_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.align.PyMOLAlignJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-f",
+                two_rotated_molecules_xyz_file,
+                "-i",
+                "5",
+                "align",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Error processing file" in result.output
+        assert "out of range" in result.output
 
 
 class TestMolCLIVisualizeCommand:

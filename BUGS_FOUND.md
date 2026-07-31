@@ -1827,3 +1827,100 @@ never existed after a refactor.
 **Suggested direction:** drop the `Raises: ValueError: If no input
 file is provided` line from `compute_thermochemistry`'s docstring,
 since that validation now lives entirely in `__init__`.
+
+## 37. `chemsmart/cli/mol/align.py`'s `align()` command has several defensive checks that are unreachable safeguards
+
+**Location:** `chemsmart/cli/mol/align.py`, `align()` (lines 49-238).
+
+Several checks in this function are dead code — each is guaranteed to
+never trigger given the validation performed earlier in the same
+function (or, in one case, by the CLI's option semantics):
+
+1. **Lines 136-141** (inner `else` inside `if directory:` / `if
+   filetype:`):
+   ```python
+   if directory:
+       ...
+       if filetype:
+           ...
+       else:
+           # This should not happen due to
+           # validation above, but keep as safeguard
+           raise click.BadParameter(
+               "Directory specified but no filetype provided. ..."
+           )
+   ```
+   The outer guard at line 61 (`if directory and not filetype: raise
+   click.BadParameter(...)`) already ensures that whenever `directory`
+   is truthy inside this block, `filetype` is also truthy — the inner
+   `else` can never execute. The comment ("should not happen ... keep
+   as safeguard") already acknowledges this.
+
+2. **Lines 181-185** (final `else` of the `if directory: ... elif
+   filenames: ... else:` chain):
+   ```python
+   else:
+       # This should not happen due to validation above, but keep as
+       # safeguard
+       raise click.BadParameter(
+           "No input files specified. This should have been caught
+           earlier."
+       )
+   ```
+   The very first check in the function (line 56) already raises
+   whenever both `filenames` and `directory` are falsy, so reaching
+   this branch would require `directory` falsy and `filenames` falsy
+   simultaneously — already excluded.
+
+3. **Lines 68-78**, the final implicit `else` (no branch taken, i.e.
+   `index` stays `None`): reaching `if index is None:` with none of
+   the three `if`/`elif` conditions true requires `filenames` falsy
+   *and* `not (directory and filetype)`. Combined with line 56's
+   guard (which requires `directory` truthy whenever `filenames` is
+   falsy) and line 61's guard (which requires `filetype` truthy
+   whenever `directory` is truthy), this combination is impossible.
+
+4. **Lines 187-189**:
+   ```python
+   if not isinstance(molecules, list):
+       molecules = list(molecules) if molecules else []
+   ```
+   `molecules` is initialized as `[]` (line 79) and only ever mutated
+   via `.extend(...)`, so it is always a `list` by construction —
+   this coercion never fires.
+
+5. **Line 208** (`base_label = "molecules"` fallback): by the point
+   label generation runs, either the `directory` branch has set
+   `base_file_for_label = matched_files[0]` (line 135, only reached
+   when `matched_files` is non-empty, since empty is caught at line
+   122) or the `filenames` branch has set `base_file_for_label =
+   filenames[0]` (line 179, unconditional whenever `filenames` is
+   truthy) — the final `else` chain guarantees one of these two
+   branches always runs before label generation, so
+   `base_file_for_label` is always truthy here.
+
+6. **Line 148** (`if isinstance(filenames, str): filenames =
+   [filenames]`): every code path in `chemsmart/cli/mol/mol.py` that
+   sets `ctx.obj["filenames"]` for the `align` subcommand assigns
+   either the tuple produced by click's `multiple=True` `-f` option
+   or a `list` from `glob.glob(...)` — never a bare string. This
+   coercion is unreachable through the real CLI.
+
+**Reproduce (informal):** `tests/test_mol_cli.py::TestMolCLIAlignCommand`
+now covers every legitimately reachable branch in `align()` (directory
+without filetype via the `-p`/program group path, directory with
+filetype, single- and multi-file label generation for both the
+`<=2` and `>2` structure cases, explicit `-l` label, not-enough-
+molecules, no-files-found-for-filetype, and out-of-range index errors
+from both the single-file and per-file-helper code paths); coverage
+tops out at 91% with only the branches listed above remaining
+uncovered, confirming they are unreachable.
+
+**Impact:** None — all are defensive checks whose own comments (in
+cases 1 and 2) already flag them as belt-and-suspenders code that
+"should not happen."
+
+**Suggested direction:** remove the six dead branches above; if
+desired, replace the multi-condition duplication (case 3) with a
+single unconditional fallback, and drop the `isinstance(..., str)`
+coercion (case 6) since it does not correspond to any real call path.
