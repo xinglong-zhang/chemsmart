@@ -197,6 +197,404 @@ class TestFukuiScript:
                     catch_exceptions=False,
                 )
 
+    @staticmethod
+    def _make_output(shift):
+        output = MagicMock()
+        output.energies = [-100.0 + shift]
+        output.mulliken_atomic_charges = {"1C": 0.1 + shift}
+        output.natural_charges = {"1C": 0.2 + shift}
+        output.hirshfeld_charges = {"1C": 0.3 + shift}
+        output.hirshfeld_cm5_charges = {"1C": 0.4 + shift}
+        return output
+
+    def test_cation_only_skips_anion_and_global_indices(self):
+        """With no radical anion file, the global electrophilicity
+        block is skipped entirely (only 2 outputs constructed) and the
+        fukui_plus/fukui_zero/fukui_dual default-0.0 branches run."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_anion_only_skips_cation_and_global_indices(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_dispatch_with_cation_and_anion(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.out",
+                    "-c",
+                    "cation.out",
+                    "-a",
+                    "anion.out",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_cation_only(self):
+        """Covers the orca branch's own radical_anion_filename-is-None
+        skip arm (the cation-only/anion-only gaussian equivalents are
+        already covered above, but not for the orca branch)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.out", "-c", "cation.out"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_anion_only(self):
+        """Covers the orca branch's own radical_cation_filename-is-None
+        skip arm."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.out", "-a", "anion.out"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_nbo_mode_cation_only(self):
+        """Covers the nbo mode block's own cation/anion-present skip
+        arms (test_each_charge_mode_with_gaussian always supplies
+        both)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "nbo"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_hirshfeld_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "hirshfeld"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_nbo_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "nbo"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_hirshfeld_mode_cation_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "hirshfeld"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_cation_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "cm5"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "cm5"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_unknown_mode_direct_call_raises_value_error(self):
+        """The CLI's -m/--mode option is restricted to a fixed Choice
+        set, making the `else: raise ValueError` branch for an unknown
+        mode unreachable through the real CLI. Call the underlying
+        callback directly (bypassing Click's option validation) to
+        exercise it as a defensive-programming safeguard."""
+        from chemsmart.scripts.fukui import entry_point
+
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            with pytest.raises(ValueError, match="Unknown mode"):
+                entry_point.callback(
+                    neutral_filename="neutral.log",
+                    radical_cation_filename="cation.log",
+                    mode="bogus",
+                )
+
+    @pytest.mark.parametrize("mode", ["nbo", "hirshfeld", "cm5"])
+    def test_each_charge_mode_with_gaussian(self, mode):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.log",
+                    "-c",
+                    "cation.log",
+                    "-a",
+                    "anion.log",
+                    "-m",
+                    mode,
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_requires_gaussian(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            with pytest.raises(
+                AssertionError, match="only available for Gaussian"
+            ):
+                runner.invoke(
+                    entry_point,
+                    [
+                        "-n",
+                        "neutral.out",
+                        "-c",
+                        "cation.out",
+                        "-a",
+                        "anion.out",
+                        "-m",
+                        "cm5",
+                    ],
+                    catch_exceptions=False,
+                )
+
+    def test_asymmetric_energies_computes_nonzero_electrophilicity(self):
+        """Covers the non-zero chemical_hardness branch (the warning
+        branch is exercised by test_mulliken_mode_with_cation_and_anion,
+        whose symmetric +/-0.1 shifts happen to give exactly zero
+        hardness)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.3),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.log",
+                    "-c",
+                    "cation.log",
+                    "-a",
+                    "anion.log",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
 
 class TestPlotDiasScript:
     def test_gaussian_dispatch(self):
