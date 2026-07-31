@@ -355,6 +355,219 @@ class TestORCASolventCLITsCommand:
         assert settings.solvent_id is None
 
 
+class TestORCACLITsSubcommand:
+    """CLI tests for the ``ts`` subcommand's Hessian/OptTS/ScanTS
+    option-merging branches (not covered by the solvent-only tests)."""
+
+    def test_solvent_options_and_solventfilename_applied(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+        tmp_path,
+    ):
+        solvent_file = tmp_path / "custom.cosmors"
+        solvent_file.write_text(
+            "solventname=1,1,1,3,3,3-hexafluoropropan-2-ol\n"
+        )
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "-so",
+                "iterative",
+                "-sf",
+                str(solvent_file),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.additional_solvent_options == "iterative"
+        assert settings.solventfilename == str(solvent_file)
+
+    def test_hessian_and_trust_radius_options_applied(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "--inhess",
+                "-f",
+                "hess.hess",
+                "--hybrid-hess",
+                "-a",
+                "[0, 1, 2]",
+                "--numhess",
+                "-s",
+                "10",
+                "-t",
+                "0.3",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.inhess is True
+        assert settings.inhess_filename == "hess.hess"
+        assert settings.hybrid_hess is True
+        assert settings.hybrid_hess_atoms == "[0, 1, 2]"
+        assert settings.numhess is True
+        assert settings.recalc_hess == 10
+        assert settings.trust_radius == 0.3
+
+    def test_jobtype_scants_alone_is_overridden_by_tssearch_type_default(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """BUG (see BUGS_FOUND.md #29): -j scants alone is silently
+        overridden right back to "optts" because -ts/--tssearch-type
+        always has a non-None default ("optts"), so the
+        jobtype-inference branch's effect is immediately undone."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "-j",
+                "scants",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.tssearch_type == "optts"
+
+    def test_explicit_tssearch_type_scants_works(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "-ts",
+                "scants",
+                "-c",
+                "[[1,2]]",
+                "-x",
+                "3.0",
+                "-y",
+                "1.2",
+                "-n",
+                "15",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.tssearch_type == "scants"
+
+    def test_scants_requires_all_scan_parameters(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "-ts",
+                "scants",
+                "-c",
+                "[[1,2]]",
+                "-x",
+                "3.0",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "requires" in result.output
+
+    def test_scants_without_coordinates_falls_back_to_project(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """Without CLI --coordinates, ScanTS falls back to the project's
+        scants_modred settings; if the project has none, raises."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "-ts",
+                "scants",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "requires scan coordinates" in result.output
+
+    def test_full_scan_option_applied(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.ts.ORCATSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+                "--full-scan",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.full_scan is True
+
+
 class TestORCACpcmBlockOptions:
     """Tests for the ORCA-specific ``%cpcm`` block options via CLI ``-so``."""
 

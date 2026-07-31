@@ -1370,3 +1370,51 @@ if the value ever reached them).
 elsewhere in this same file, both of which are later parsed with
 `ast.literal_eval`/similar) so the raw string reaches the existing
 `ast.literal_eval` call intact.
+
+## 29. ORCA `ts` subcommand: `-j scants` (job type) is silently overridden back to "optts"
+
+**Location:** `chemsmart/cli/orca/ts.py`, lines 184-193.
+
+```python
+jobtype_normalized = (jobtype or "").lower()
+cli_tssearch_type = tssearch_type.lower() if tssearch_type else None
+effective_tssearch_type = ts_settings.tssearch_type or "optts"
+
+if jobtype_normalized == "scants":
+    effective_tssearch_type = "scants"
+if cli_tssearch_type is not None:
+    effective_tssearch_type = cli_tssearch_type
+
+ts_settings.tssearch_type = effective_tssearch_type
+```
+
+The `-ts`/`--tssearch-type` click option is declared with
+`default="optts"` (never `None` unless something very unusual
+happens), so `cli_tssearch_type` is **never** `None` for any real CLI
+invocation. That means the second `if` (line 190) always fires and
+always overwrites whatever the first `if` (line 188-189, the
+`-j scants` jobtype-inference branch) just set — `-j scants` alone
+(without also explicitly passing `-ts scants`) has no effect at all;
+`tssearch_type` silently stays `"optts"`.
+
+**Reproduce:**
+```
+chemsmart run orca -p <project> -f mol.xyz ts -j scants
+# tssearch_type ends up "optts", not "scants" -- the "-j scants" is ignored.
+```
+(also reproduced via
+`tests/test_orca_cli.py::TestORCACLITsSubcommand::test_jobtype_scants_alone_is_overridden_by_tssearch_type_default`)
+
+**Impact:** The documented convenience of triggering ScanTS mode via
+`-j scants` (mentioned in the `ScanTS (--tssearch-type scants or
+-j scants) requires ...` error message elsewhere in this same file)
+doesn't actually work — users must always use the explicit
+`-ts/--tssearch-type scants` flag; `-j scants` on its own silently
+does nothing, which will confuse anyone following the error message's
+own suggestion.
+
+**Suggested direction:** give `-ts/--tssearch-type` a `default=None`
+(matching the "only override if explicitly given" pattern used for
+every other option in this same function) and apply the "optts"
+fallback separately, so `-j scants` isn't unconditionally overridden
+when the user hasn't explicitly set `-ts`.
