@@ -943,14 +943,11 @@ class Molecule:
 
         # Compute Sterimol
         x, y, z = positions.T
-        pt = rdchem.GetPeriodicTable()
         # VDW radii
         pt = rdchem.GetPeriodicTable()
         radii_list = []
 
-        radii_list = [
-            1.09 if symb == "H" else pt.GetRvdw(symb) for symb in self.symbols
-        ]
+        radii_list = [pt.GetRvdw(symb) for symb in self.symbols]
         radii = np.array(radii_list)
 
         # Mask the atom1
@@ -961,7 +958,7 @@ class Molecule:
         positions = np.delete(positions, obj=atom1, axis=0)
 
         # Compute L
-        l = np.max(np.abs(z) + radii)
+        length = np.max(z + radii)
 
         # Compute B5
         radial_dist = np.hypot(x, y)
@@ -979,11 +976,13 @@ class Molecule:
         b1 = np.min(b_vals)
 
         self._sterimol = {
-            "L": l,
+            "L": length,
             "B1": b1,
             "B5": b5,
             "pos": old_pos,
         }
+
+        return self._sterimol
 
     @cached_property
     def twod_descriptors(self):

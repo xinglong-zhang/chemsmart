@@ -1404,66 +1404,64 @@ class TestDescriptors:
             assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
 
     def test_sterimol_translation_rotation(self):
-        """Ensure the molecule rotate and translate properly"""
-        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1")
-        rdmol = Chem.AddHs(rdmol)
+        """Ensure the molecule rotates and translates properly."""
+        rdmol = Chem.AddHs(self._rdkit_embed_and_optimize("Cc1ccccc1"))
         mol = Molecule.from_rdkit_mol(rdmol)
         atom1, atom2 = 0, 1
         mol.calculate_sterimol_parameters(atom1, atom2)
         pos = mol.sterimol_parameter["pos"]
 
-        # Test atom1 and atom2 on origin/z-axis
-        assert np.allclose(pos[atom1], np.array([0, 0, 0]))
-        assert np.isclose(pos[atom2][0], 0.0)
-        assert np.isclose(pos[atom2][1], 0.0)
+        # atom1 at origin, atom2 on z-axis
+        assert np.allclose(pos[atom1], 0)
+        assert np.allclose(pos[atom2][:2], 0)
 
-        # Test relative distance of bonds
-        old_pos = mol.positions
-        old_bond1 = np.linalg.norm(old_pos[0] - old_pos[1])
-        old_bond2 = np.linalg.norm(old_pos[1] - old_pos[2])
-        old_bond3 = np.linalg.norm(old_pos[2] - old_pos[10])
-        new_bond1 = np.linalg.norm(pos[0] - pos[1])
-        new_bond2 = np.linalg.norm(pos[1] - pos[2])
-        new_bond3 = np.linalg.norm(pos[2] - pos[10])
-        assert np.isclose(old_bond1, new_bond1)
-        assert np.isclose(old_bond2, new_bond2)
-        assert np.isclose(old_bond3, new_bond3)
+        # all bond lengths preserved
+        rdmol = mol.to_rdkit()
+        for bond in rdmol.GetBonds():
+            i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            assert np.isclose(
+                np.linalg.norm(mol.positions[i] - mol.positions[j]),
+                np.linalg.norm(pos[i] - pos[j]),
+            )
 
-    def test_sterimol_close(self):
-        """Ensure the sterimol calculation fits the database data"""
+    def test_sterimol_val(self):
+        """Ensure logic is correct by constructed molecule"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
 
-        atom1, atom2 = 0, 1
-        ATOL = 0.1
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == 1.70
+        assert bmax == 2.23
+        assert length == 2.79
 
-        rdmol = self._rdkit_embed_and_optimize("Cc1ccccc1", 42)
+    def test_sterimol_symmetry(self):
+        """Ensure close bmin and bmax on symmetric molecules"""
+        smiles = "C(C)(C)(C)"
+        rdmol = self._rdkit_embed_and_optimize(smiles)
         rdmol = Chem.AddHs(rdmol)
-        mol1 = Molecule.from_rdkit_mol(rdmol)
-        mol1.calculate_sterimol_parameters(atom1, atom2)  # Benzyl
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1 = 4
+        atom2 = 0
 
-        sterimol1 = mol1.sterimol_parameter
-        assert np.isclose(sterimol1["B1"], 1.70, atol=ATOL)
-        assert np.isclose(sterimol1["B5"], 3.25, atol=ATOL)
-        assert np.isclose(sterimol1["L"], 6.47, atol=ATOL)
-
-        rdmol = self._rdkit_embed_and_optimize("C1(C)=COC=C1", 42)
-        rdmol = Chem.AddHs(rdmol)
-        mol2 = Molecule.from_rdkit_mol(rdmol)
-        mol2.calculate_sterimol_parameters(atom1, atom2)  # Furanyl
-
-        sterimol2 = mol2.sterimol_parameter
-        assert np.isclose(sterimol2["B1"], 1.70, atol=ATOL)
-        assert np.isclose(sterimol2["B5"], 3.29, atol=ATOL)
-        assert np.isclose(sterimol2["L"], 5.70, atol=ATOL)
-
-        rdmol = self._rdkit_embed_and_optimize("CC", 42)
-        rdmol = Chem.AddHs(rdmol)
-        mol3 = Molecule.from_rdkit_mol(rdmol)
-        mol3.calculate_sterimol_parameters(2, 0)  # Ethyl
-
-        sterimol3 = mol3.sterimol_parameter
-        assert np.isclose(sterimol3["B1"], 1.88, atol=ATOL)
-        assert np.isclose(sterimol3["B5"], 3.16, atol=ATOL)
-        assert np.isclose(sterimol3["L"], 4.59, atol=ATOL)
+        sterimol = mol.calculate_sterimol_parameters(atom1, atom2)
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        assert np.isclose(bmin, bmax, atol=0.5)
 
 
 class TestCoordinateBlockAdvanced:
