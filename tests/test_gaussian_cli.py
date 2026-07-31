@@ -1398,6 +1398,36 @@ class TestGaussianCLIIrcCommand:
         )
         assert settings.basis == "def2svp"
 
+    def test_irc_predictor_and_recorrect_options(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-pt",
+                "HPC",
+                "-rc",
+                "Always",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.predictor == "HPC"
+        assert settings.recorrect == "Always"
+
     def test_irc_direction_forward_option(
         self,
         single_molecule_xyz_file,
