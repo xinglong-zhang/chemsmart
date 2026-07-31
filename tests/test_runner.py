@@ -117,6 +117,54 @@ class TestSerialExecution:
         for mock_job in mock_jobs:
             mock_job.run.assert_called_once()
 
+    def test_crest_job_resumes_incomplete_conformers(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """Resubmit skips completed conformers and reruns incomplete ones."""
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.job import Job
+
+        class _RecordingConformerJob(Job):
+            TYPE = "test"
+            PROGRAM = "test"
+
+            def __init__(self, label, *, complete):
+                super().__init__(
+                    molecule=MockMolecule(),
+                    label=label,
+                    jobrunner=gaussian_jobrunner_no_scratch,
+                    skip_completed=True,
+                )
+                self._complete = complete
+                self.run_count = 0
+
+            def is_complete(self):
+                return self._complete
+
+            def _run(self, **kwargs):
+                self.run_count += 1
+
+        settings = GaussianJobSettings()
+        crest = GaussianCrestJob(
+            molecules=[MockMolecule() for _ in range(4)],
+            settings=settings,
+            label="crest_resume",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        # Conformers 1-2 complete; 3 timed out / incomplete; 4 not started.
+        children = [
+            _RecordingConformerJob("crest_resume_c1", complete=True),
+            _RecordingConformerJob("crest_resume_c2", complete=True),
+            _RecordingConformerJob("crest_resume_c3", complete=False),
+            _RecordingConformerJob("crest_resume_c4", complete=False),
+        ]
+        mocker.patch.object(crest, "_prepare_all_jobs", return_value=children)
+
+        crest._run_all_jobs()
+
+        assert [child.run_count for child in children] == [0, 0, 1, 1]
+
 
 class TestBatchJobRefactor:
     """Tests for shared BatchJob orchestration."""
