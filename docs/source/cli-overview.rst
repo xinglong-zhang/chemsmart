@@ -215,8 +215,8 @@ server / jobrunner max-submitters setting) limits concurrency.
 This writes submit and run scripts without queueing. Add ``--print-command`` to print the reconstructed ``chemsmart
 run`` arguments.
 
-Batch array submission requires **SLURM**, **PBS/Torque**, or **LSF** (``SLF`` in server YAML). See
-:doc:`configuration-server-settings` for ``SCHEDULER`` and related server options.
+Batch array submission requires **SLURM**, **PBS/Torque**, or **LSF**. See :doc:`configuration-server-settings` for
+``SCHEDULER`` and related server options.
 
 ********************
  Available Commands

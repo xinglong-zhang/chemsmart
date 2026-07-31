@@ -49,13 +49,13 @@ SCHEDULER
 
 **Type:** String
 
-**Options:** ``SLURM``, ``PBS``, ``SLF`` (LSF), ``Null``
+**Options:** ``SLURM``, ``PBS``, ``LSF``, ``Null``
 
 **Description:** The job scheduler system used by your cluster. Set to ``Null`` for local execution without a scheduler.
 
 Batch array submission (``chemsmart sub`` on a ``BatchJob``, for example multi-molecule pKa batches) requires **SLURM**,
-**PBS/Torque**, or **LSF** (``SLF``). Other schedulers must submit child jobs individually. For CLI flags
-(``--run-in-parallel``, ``-M`` / ``--max-tasks``, ``--test``), see :ref:`cli-batch-array-submission`.
+**PBS/Torque**, or **LSF**. Other schedulers must submit child jobs individually. For CLI flags (``--run-in-parallel``,
+``-M`` / ``--max-tasks``, ``--test``), see :ref:`cli-batch-array-submission`.
 
 Array email: SLURM notifies once when the whole array ends or fails. PBS array scripts disable mail (``#PBS -m n``) to
 avoid per-task spam.

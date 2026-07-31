@@ -8,8 +8,8 @@ from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import (
     FUGAKUSubmitter,
+    LSFSubmitter,
     PBSSubmitter,
-    SLFSubmitter,
     SLURMSubmitter,
     _without_mail_directives,
 )
@@ -586,19 +586,19 @@ class TestArraySubmitInfrastructure:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.setattr(
-            SLFSubmitter,
+            LSFSubmitter,
             "_write_program_specifics",
             lambda self, f: None,
         )
         monkeypatch.setattr(
-            SLFSubmitter,
+            LSFSubmitter,
             "_write_extra_commands",
             lambda self, f: None,
         )
         monkeypatch.chdir(tmp_path)
         server = Server(
             "array-lsf",
-            SCHEDULER="SLF",
+            SCHEDULER="LSF",
             NUM_CORES=8,
             MEM_GB=16,
             NUM_GPUS=0,
@@ -606,7 +606,7 @@ class TestArraySubmitInfrastructure:
             NUM_NODES=1,
         )
         children = self._array_children(tmp_path, count=3)
-        submitter = SLFSubmitter(job=children[0], server=server)
+        submitter = LSFSubmitter(job=children[0], server=server)
 
         submitter.write_array_job(
             jobs=children,
@@ -634,7 +634,7 @@ class TestArraySubmitInfrastructure:
         """Single-job LSF scripts also format -W as hours:minutes."""
         server = Server(
             "single-lsf",
-            SCHEDULER="SLF",
+            SCHEDULER="LSF",
             NUM_CORES=8,
             MEM_GB=16,
             NUM_GPUS=0,
@@ -642,7 +642,7 @@ class TestArraySubmitInfrastructure:
             NUM_NODES=1,
         )
         job = type("DummyJob", (), {"label": "job1"})()
-        submitter = SLFSubmitter(job=job, server=server)
+        submitter = LSFSubmitter(job=job, server=server)
 
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)

@@ -468,7 +468,7 @@ class Submitter(RegistryMixin):
             scheduler = self.NAME or self.name
             raise ValueError(
                 f"Batch array submission is not supported for scheduler "
-                f"{scheduler!r}. Use SLURM, PBS, or LSF (SLF), or submit "
+                f"{scheduler!r}. Use SLURM, PBS, or LSF, or submit "
                 f"child jobs individually."
             )
 
@@ -526,7 +526,7 @@ class Submitter(RegistryMixin):
         scheduler = self.NAME or self.name
         raise ValueError(
             f"Batch array submission is not supported for scheduler "
-            f"{scheduler!r}. Use SLURM, PBS, or LSF (SLF), or submit "
+            f"{scheduler!r}. Use SLURM, PBS, or LSF, or submit "
             f"child jobs individually."
         )
 
@@ -814,12 +814,12 @@ class Submitter(RegistryMixin):
 
         Args:
             scheduler_type (str): Name of the scheduler system
-                (e.g., "PBS", "SLURM", "SLF", "FUGAKU").
+                (e.g., "PBS", "SLURM", "LSF", "FUGAKU").
             **kwargs: Additional arguments passed to the submitter constructor.
 
         Returns:
             Submitter: Instance of the appropriate submitter subclass
-            (one of PBSSubmitter, SLURMSubmitter, SLFSubmitter, or
+            (one of PBSSubmitter, SLURMSubmitter, LSFSubmitter, or
             FUGAKUSubmitter) configured with the provided kwargs
             (e.g., job and server).
 
@@ -1093,7 +1093,7 @@ class SLURMSubmitter(Submitter):
         f.write("cd $SLURM_SUBMIT_DIR\n\n")
 
 
-class SLFSubmitter(Submitter):
+class LSFSubmitter(Submitter):
     """
     LSF (Load Sharing Facility) job submitter.
 
@@ -1101,27 +1101,24 @@ class SLFSubmitter(Submitter):
     Creates LSF-specific submission scripts with appropriate resource
     requests and scheduler directives.
 
-    Note: The class name 'SLFSubmitter' appears to be a typo for 'LSFSubmitter'
-    but is maintained for compatibility.
-
     Attributes:
-        NAME (str): Identifier for LSF scheduler type ('SLF').
-        name (str): Inherited; instance identifier (often 'SLF').
+        NAME (str): Identifier for LSF scheduler type ('LSF').
+        name (str): Inherited; instance identifier (often 'LSF').
         job (Job): Job instance to be submitted.
         server (Server): Server configuration used for submission.
         kwargs (dict): Additional submission
         parameters passed to the base class.
     """
 
-    NAME = "SLF"
+    NAME = "LSF"
     SUPPORTS_ARRAY_JOBS = True
 
-    def __init__(self, name="SLF", job=None, server=None, **kwargs):
+    def __init__(self, name="LSF", job=None, server=None, **kwargs):
         """
         Initialize LSF submitter.
 
         Args:
-            name (str): Name identifier for this submitter. Defaults to "SLF".
+            name (str): Name identifier for this submitter. Defaults to "LSF".
             job: Job instance to be submitted.
             server: Server configuration for LSF submission.
             **kwargs: Additional submission parameters.
