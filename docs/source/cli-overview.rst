@@ -180,6 +180,44 @@ These options are only available with ``chemsmart sub``:
       -  bool
       -  Print the generated command (default: disabled)
 
+.. _cli-batch-array-submission:
+
+*********************************
+ Batch jobs and scheduler arrays
+*********************************
+
+A top-level ``BatchJob`` (for example a multi-molecule pKa table, or other multi-target CLI batches) is submitted as
+**one** scheduler array with **one task per child**. Nestable jobs (QRC, DIAS, CREST, traj) are different: see
+``--run-in-parallel`` above.
+
+**Default (serial array)**
+
+Without ``--run-in-parallel``, batch arrays use one concurrent task (``%1`` on SLURM/PBS/LSF). Children still share a
+single array job, but only one runs at a time.
+
+**Concurrent tasks**
+
+Pass ``--run-in-parallel`` and optionally ``-M`` / ``--max-tasks`` to cap concurrency (``%M`` in SLURM
+``--array=1-N%M``, PBS ``#PBS -J 1-N%M``, or LSF ``#BSUB -J "name[1-N%M]"``). Each array task still uses one node;
+``-M`` is **not** a node count. Without ``-M``, all tasks may run at once unless ``CHEMSMART_MAX_SUBMITTERS`` (or the
+server / jobrunner max-submitters setting) limits concurrency.
+
+.. code:: bash
+
+   chemsmart sub --run-in-parallel -M 4 gaussian -p my_project -f batch_input.csv ...
+
+**Dry-run scripts**
+
+.. code:: bash
+
+   chemsmart sub --test gaussian -p my_project -f batch_input.csv ...
+
+This writes submit and run scripts without queueing. Add ``--print-command`` to print the reconstructed ``chemsmart
+run`` arguments.
+
+Batch array submission requires **SLURM**, **PBS/Torque**, or **LSF** (``SLF`` in server YAML). See
+:doc:`configuration-server-settings` for ``SCHEDULER`` and related server options.
+
 ********************
  Available Commands
 ********************

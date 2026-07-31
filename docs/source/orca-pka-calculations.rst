@@ -117,7 +117,7 @@ Direct cycle:
    the direct cycle (same behaviour as Gaussian batch).
 
    Locally (``chemsmart run``), batch rows run one after another. On a cluster, use ``chemsmart sub`` so each row or
-   fragment can run as its own array task. See :ref:`pka-hpc-batch-submission`.
+   fragment can run as its own array task. See :ref:`cli-batch-array-submission` and :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -140,7 +140,8 @@ per-fragment coloured-proton detection. Labels are ``<basename>_frag<N>_pka`` (o
 
    chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-For cluster submission of multi-fragment CDXML, see :ref:`pka-hpc-batch-submission`.
+For cluster submission of multi-fragment CDXML, see :ref:`cli-batch-array-submission` and
+:ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files

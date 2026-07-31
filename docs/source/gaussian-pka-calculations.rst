@@ -129,7 +129,8 @@ Direct cycle (``-s direct`` must be set explicitly):
 .. note::
 
    In batch mode, each table row is an independent pKa job. Locally (``chemsmart run``), rows run one after another. On
-   a cluster, use ``chemsmart sub`` so each row can run as its own array task. See :ref:`pka-hpc-batch-submission`.
+   a cluster, use ``chemsmart sub`` so each row can run as its own array task. See :ref:`cli-batch-array-submission` and
+   :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -187,7 +188,7 @@ coloured-proton auto-detection for that row. ``charge`` and ``multiplicity`` sti
 rows; for multi-fragment CDXML passed directly as ``-f``, see :ref:`pka-calculations` (Charge and multiplicity).
 
 On clusters, submit the CDXML batch with ``chemsmart sub ... pka batch`` (one array task per fragment). See
-:ref:`pka-hpc-batch-submission`.
+:ref:`cli-batch-array-submission` and :ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files

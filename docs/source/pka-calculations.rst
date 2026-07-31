@@ -32,7 +32,8 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
--  Use ``chemsmart run`` locally; use ``chemsmart sub`` on an HPC cluster (see :ref:`pka-hpc-batch-submission`).
+-  Use ``chemsmart run`` locally; use ``chemsmart sub`` on an HPC cluster (see :ref:`cli-batch-array-submission` and
+   :ref:`pka-hpc-batch-submission`).
 -  A single structure yields one job (``pka submit``). ``pka batch`` requires a CSV table or multi-molecule CDXML with
    **at least two** rows or fragments; use ``submit`` for a single molecule.
 -  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
@@ -136,8 +137,8 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
 
    Within one pKa calculation (one molecule), the HA / A⁻ optimizations, solvent single-points, and any reference legs
    always run one after another. Parallelism across different molecules or table rows belongs on the cluster: use
-   ``chemsmart sub`` so each target can run as its own scheduler task (see :ref:`pka-hpc-batch-submission`). Locally,
-   ``chemsmart run`` with a batch table or CDXML still processes targets one after another.
+   ``chemsmart sub`` so each target is an array task (see :ref:`cli-batch-array-submission`). Locally, ``chemsmart run``
+   with a batch table or CDXML still processes targets one after another.
 
 Job submission is backend-specific. Use the dedicated pages for full examples and parameter tables:
 
@@ -318,8 +319,9 @@ the stem (e.g. ``acid1_pka_HA_opt.out``). The output-analysis autodiscovery conv
  HPC Cluster Submission (``chemsmart sub``)
 ********************************************
 
-On a cluster, use ``chemsmart sub`` instead of ``chemsmart run``. The chemistry is the same; ``sub`` writes and queues
-scheduler scripts for you.
+On a cluster, use ``chemsmart sub`` instead of ``chemsmart run``. Array concurrency, ``-M`` / ``--max-tasks``,
+``--test``, and scheduler support are documented in :ref:`cli-batch-array-submission` and
+:doc:`configuration-server-settings`.
 
 **Single molecule**
 
@@ -329,9 +331,7 @@ scheduler scripts for you.
 
 **Batch table or multi-fragment CDXML**
 
-Submit the whole table or ChemDraw file once. CHEMSMART creates **one** scheduler array job with **one task per table
-row or ChemDraw fragment**. By default those tasks run one at a time (``%1``); pass ``--run-in-parallel`` to allow
-concurrent acids (see below).
+One array task per table row or ChemDraw fragment:
 
 .. code:: bash
 
@@ -339,33 +339,10 @@ concurrent acids (see below).
 
    chemsmart sub gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-How many tasks run at once
-==========================
-
-By default, one array task runs at a time. Pass ``--run-in-parallel`` and set ``-M`` / ``--max-tasks`` to cap how many
-array tasks run concurrently (``%M`` in SLURM ``--array=1-N%M``, PBS ``#PBS -J 1-N%M``, or LSF ``#BSUB -J
-"name[1-N%M]"``). Each array task still uses one node; this is **not** a node count. Without ``-M``, all batch tasks may
-run at once unless ``CHEMSMART_MAX_SUBMITTERS`` limits concurrency.
-
-.. code:: bash
-
    chemsmart sub --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-Checking scripts before queueing
-================================
-
-.. code:: bash
-
-   chemsmart sub --test gaussian -p my_project -f pka_input.csv pka -s direct batch
-
-This writes the submit and run scripts without submitting them. Add ``--print-command`` if you want to see the
-reconstructed ``chemsmart run`` arguments.
-
-Output file names are unchanged from local runs (for example ``acid1_HA_opt.log`` for Gaussian, or
-``acid1_pka_HA_opt.out`` for ORCA).
-
-For general ``chemsmart sub`` usage and server configuration, see :doc:`cli-overview` and
-:doc:`configuration-server-settings`.
+Output file names match local runs (for example ``acid1_HA_opt.log`` for Gaussian, or ``acid1_pka_HA_opt.out`` for
+ORCA).
 
 *****************************************
  Output Analysis (``chemsmart run pka``)
