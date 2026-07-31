@@ -1315,3 +1315,58 @@ missing in practice; this is simply 29 lines of dead code.
 Gaussian `qmmm()` callback to also use it instead of duplicating the
 same fallback logic inline — wire it in and remove the redundant
 inline assignments.
+
+## 28. ORCA `qmmm` subcommand's `-h`/`--high-level-h-bond-length` option is unusable for any real value
+
+**Location:** `chemsmart/cli/orca/qmmm.py`, the `-h` option
+declaration (`type=dict`, lines ~152-157) and its later use
+(`ast.literal_eval(high_level_h_bond_length)` at lines 439-442).
+
+```python
+@click.option(
+    "-h",
+    "--high-level-h-bond-length",
+    type=dict,
+    help="Custom high-level-H bond lengths",
+)
+...
+if high_level_h_bond_length is not None:
+    high_level_h_bond_length_dict = ast.literal_eval(
+        high_level_h_bond_length
+    )
+    molecule.scale_factors = high_level_h_bond_length_dict
+```
+
+`type=dict` in Click just wraps the builtin `dict` callable as the
+option's converter — it calls `dict(<raw CLI string>)` on whatever the
+user typed. Python's `dict()` constructor only accepts a mapping or an
+iterable of key-value pairs; calling it on an arbitrary string (e.g.
+`"{1: 1.1}"`, the exact kind of value the later
+`ast.literal_eval(...)` call is clearly meant to parse) always raises,
+so Click rejects the option with `Invalid value for '-h': ...` before
+the callback body ever runs. The only string that doesn't immediately
+error is `""` (`dict("")` → `{}`), but that's an empty dict — not a
+string — so the subsequent `ast.literal_eval({})` would itself raise
+`TypeError: literal_eval() ... expected string`.
+
+**Reproduce:**
+```
+chemsmart run orca -p <project> -f mol.xyz opt qmmm -h "{1: 1.1}"
+# Error: Invalid value for '-h' / '--high-level-h-bond-length': {1: 1.1}
+```
+(also reproduced via
+`tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_option_is_unusable`)
+
+**Impact:** The `-h/--high-level-h-bond-length` CLI option can never
+be used to actually set custom high-level-H bond lengths — every
+attempt to pass a real value fails at argument parsing, making this
+documented feature completely inaccessible from the CLI (the
+underlying `ORCAQMMMJobSettings.high_level_h_bond_length` attribute and
+`molecule.scale_factors` plumbing are otherwise intact and would work
+if the value ever reached them).
+
+**Suggested direction:** change the option to `type=str` (matching how
+`-sf`/`--scale-factors` and `-ba`/`--bonded-atoms` are declared
+elsewhere in this same file, both of which are later parsed with
+`ast.literal_eval`/similar) so the raw string reaches the existing
+`ast.literal_eval` call intact.
