@@ -420,7 +420,7 @@ class TestArraySubmitInfrastructure:
         monkeypatch.setattr(
             Server,
             "_check_running_jobs",
-            staticmethod(lambda job: None),
+            lambda self, job: None,
         )
         submitted = []
 
@@ -723,7 +723,7 @@ class TestSubmitBatch:
         monkeypatch.setattr(
             Server,
             "_check_running_jobs",
-            staticmethod(lambda job: None),
+            lambda self, job: None,
         )
         captured = {}
 
@@ -865,12 +865,10 @@ class TestSubmitBatch:
         )
         checked = []
 
-        def _capture(job):
+        def _capture(self, job):
             checked.append(job)
 
-        monkeypatch.setattr(
-            Server, "_check_running_jobs", staticmethod(_capture)
-        )
+        monkeypatch.setattr(Server, "_check_running_jobs", _capture)
         monkeypatch.setattr(
             Server,
             "get_submitter",
@@ -940,6 +938,17 @@ class TestCheckRunningJobs:
         def get_gaussian_running_jobs(self):
             return [], self.running_job_names
 
+    @staticmethod
+    def _server():
+        return Server(
+            "check-running",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            SUBMIT_COMMAND="sbatch",
+        )
+
     def test_rejects_duplicate_batch_job_label(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["pka_batch"]
         monkeypatch.setattr(
@@ -951,7 +960,7 @@ class TestCheckRunningJobs:
         with pytest.raises(
             SystemExit, match="Duplicate job NOT submitted: pka_batch"
         ):
-            Server._check_running_jobs(batch)
+            self._server()._check_running_jobs(batch)
 
     def test_allows_unique_batch_job_label(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["other_batch"]
@@ -961,7 +970,7 @@ class TestCheckRunningJobs:
         )
 
         batch = GaussianBatchJob(jobs=[], label="pka_batch")
-        Server._check_running_jobs(batch)
+        self._server()._check_running_jobs(batch)
 
     def test_rejects_duplicate_when_array_suffix_running(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["pka_batch_array"]
@@ -974,7 +983,7 @@ class TestCheckRunningJobs:
         with pytest.raises(
             SystemExit, match="Duplicate job NOT submitted: pka_batch"
         ):
-            Server._check_running_jobs(batch)
+            self._server()._check_running_jobs(batch)
 
     def test_rejects_duplicate_when_array_prefix_running(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["array_pka_batch"]
@@ -987,7 +996,7 @@ class TestCheckRunningJobs:
         with pytest.raises(
             SystemExit, match="Duplicate job NOT submitted: pka_batch"
         ):
-            Server._check_running_jobs(batch)
+            self._server()._check_running_jobs(batch)
 
     def test_batch_job_checks_container_label_not_children(self, monkeypatch):
         self._MockClusterHelper.running_job_names = ["acid1_pka"]
@@ -998,7 +1007,7 @@ class TestCheckRunningJobs:
 
         child = type("ChildJob", (), {"label": "acid1_pka"})()
         batch = GaussianBatchJob(jobs=[child], label="acids_pka_batch")
-        Server._check_running_jobs(batch)
+        self._server()._check_running_jobs(batch)
 
     def test_skips_jobs_without_scheduler_label(self, monkeypatch):
         def _fail_if_called(self):
@@ -1015,4 +1024,4 @@ class TestCheckRunningJobs:
         )
 
         batch = GaussianBatchJob(jobs=[], label=None)
-        Server._check_running_jobs(batch)
+        self._server()._check_running_jobs(batch)

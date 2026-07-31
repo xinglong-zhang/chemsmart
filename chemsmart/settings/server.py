@@ -644,8 +644,7 @@ class Server(RegistryMixin):
 
         return []
 
-    @staticmethod
-    def _check_running_jobs(job):
+    def _check_running_jobs(self, job):
         """
         Check if the job is already running or queued.
 
@@ -655,7 +654,7 @@ class Server(RegistryMixin):
         Args:
             job: Job instance to check.
         """
-        labels = Server._scheduler_labels_for_duplicate_check(job)
+        labels = self._scheduler_labels_for_duplicate_check(job)
         if not labels:
             return
 
