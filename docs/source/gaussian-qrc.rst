@@ -32,6 +32,9 @@ CHEMSMART automates this process, taking a TS frequency calculation output and d
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] qrc [SUBCMD_OPTIONS]
 
+   # Forward and reverse as two concurrent array tasks
+   chemsmart sub -s SLURM --run-in-parallel gaussian -p my_project -f ts.log qrc
+
 *************
  QRC Options
 *************

@@ -339,7 +339,9 @@ One array task per table row or ChemDraw fragment:
 
    chemsmart sub gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-   chemsmart sub --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
+
+   chemsmart sub --test --print-command gaussian -p my_project -f pka_input.csv pka -s direct batch
 
 Output file names match local runs (for example ``acid1_HA_opt.log`` for Gaussian, or ``acid1_pka_HA_opt.out`` for
 ORCA).

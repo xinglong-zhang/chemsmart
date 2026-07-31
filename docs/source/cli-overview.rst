@@ -204,16 +204,26 @@ server / jobrunner max-submitters setting) limits concurrency.
 
 .. code:: bash
 
-   chemsmart sub --run-in-parallel -M 4 gaussian -p my_project -f batch_input.csv ...
+   # Up to 4 concurrent tasks, 32 cores each (scheduler may pack them onto fewer nodes)
+   chemsmart sub -s SLURM --run-in-parallel -M 4 -n 32 gaussian -p my_project -f mols.xyz -i 1,2,3,4 -c 0 -m 1 opt
+
+   # Up to 4 concurrent tasks (cores from ``-n`` or server defaults)
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f mols.xyz -i 1,2,3,4 -c 0 -m 1 opt
+
+   # QRC forward/reverse as two array tasks
+   chemsmart sub -s SLURM --run-in-parallel gaussian -p my_project -f ts.log qrc
+
+   # pKa table: one task per row, at most 4 concurrent
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
 
 **Dry-run scripts**
 
 .. code:: bash
 
-   chemsmart sub --test gaussian -p my_project -f batch_input.csv ...
+   chemsmart sub --test --print-command gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-This writes submit and run scripts without queueing. Add ``--print-command`` to print the reconstructed ``chemsmart
-run`` arguments.
+This writes submit and run scripts without queueing. ``--print-command`` prints the reconstructed ``chemsmart run``
+arguments.
 
 Batch array submission requires **SLURM**, **PBS/Torque**, or **LSF**. See :doc:`configuration-server-settings` for
 ``SCHEDULER`` and related server options.
