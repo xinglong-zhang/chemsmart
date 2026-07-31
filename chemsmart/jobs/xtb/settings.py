@@ -28,6 +28,8 @@ class XTBJobSettings:
         grad=False,
         solvent_model=None,
         solvent_id=None,
+        constraints=None,
+        force_constant=None,
         input_string=None,
         additional_flags=None,
         **kwargs,
@@ -63,6 +65,8 @@ class XTBJobSettings:
         self.grad = grad
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
+        self.constraints = constraints
+        self.force_constant = force_constant
         self.input_string = input_string
         self.additional_flags = additional_flags
 

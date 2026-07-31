@@ -102,6 +102,30 @@ def click_xtb_optimization_level_option(f):
     return wrapper_common_options
 
 
+def click_xtb_constrain_options(f):
+    """Reusable CLI options for xTB geometry constraints."""
+
+    @click.option(
+        "--constrain",
+        type=str,
+        default=None,
+        help="List of coordinates to constrain during optimization. "
+        "1-indexed. Distance: [i,j]; angle: [i,j,k]; dihedral: [i,j,k,l]. "
+        "Example: [[1,2],[5,7,8],[3,4,1,7]].",
+    )
+    @click.option(
+        "--force-constant",
+        type=float,
+        default=None,
+        help="Force constant for constraints.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_xtb_solvent_options(f):
     """Common click options for xTB solvent settings."""
 
