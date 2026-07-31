@@ -772,6 +772,27 @@ class TestGenerateIsotopeData:
             97.9072124, rel=1e-6
         )
 
+    def test_parse_isotope_file_skips_irrelevant_lines(self, tmp_path):
+        """Lines matching none of the four recognized prefixes (e.g. a
+        blank line or file header) are simply skipped."""
+        from chemsmart.scripts.generate_isotope_data import (
+            parse_isotope_file,
+        )
+
+        isotope_txt = tmp_path / "isotopes.txt"
+        isotope_txt.write_text(textwrap.dedent("""\
+                Some irrelevant header line
+
+                Atomic Number = 1
+                Mass Number = 1
+                Relative Atomic Mass = 1.00782503(1)
+                Isotopic Composition = 0.999885(70)
+                """))
+
+        isotopes = parse_isotope_file(str(isotope_txt))
+
+        assert 1 in isotopes
+
 
 class TestGetThermochemistryScript:
     def _make_thermo_mock(self):
