@@ -1493,3 +1493,40 @@ submission with no explicit label crashes outright instead of using
 `if ctx.invoked_subcommand:` block above it already handles this
 correctly), and guard the whole block with `if filename:` before
 computing the basename, mirroring the fix suggested for bug #25.
+
+## 31. `chemsmart/cli/gaussian/link.py`'s `jobtype is None` label branch is unreachable dead code
+
+**Location:** `chemsmart/cli/gaussian/link.py`, lines 136-139.
+
+```python
+if jobtype is None:
+    label = label
+else:
+    label += f"_{jobtype}"
+    ...
+```
+
+`link()` calls `get_setting_from_jobtype_for_gaussian(project_settings,
+jobtype, ...)` near the top of the function (line 79), and that helper
+(`chemsmart/utils/cli.py:393-394`) does:
+```python
+if jobtype is None:
+    raise ValueError("Jobtype must be provided for Crest and Link job.")
+```
+So by the time execution reaches line 136, `jobtype` can never be
+`None` — the function would already have raised `ValueError` before
+this point. The `if jobtype is None: label = label` branch (a no-op
+assignment even if it were reachable) can never execute.
+
+**Reproduce (informal):** `tests/test_gaussian_cli.py::TestGaussianCLILinkCommand::test_link_requires_jobtype`
+already demonstrates that `link` with no `-j` raises `ValueError`
+before any label logic runs, confirming `jobtype` is always non-`None`
+by line 136.
+
+**Impact:** None — purely dead code left over, presumably, from before
+the `get_setting_from_jobtype_for_gaussian` validation was added (or
+tightened) to make `jobtype` mandatory.
+
+**Suggested direction:** remove the `if jobtype is None: label = label`
+branch and keep only the `else` body's logic unconditionally, since
+`jobtype` is guaranteed non-`None` at this point.

@@ -2365,6 +2365,70 @@ class TestGaussianCLILinkCommand:
         assert result.exit_code == 0, result.output
         assert settings.link_route == "opt=(calcfc)"
 
+    def test_link_subcommand_level_solvent_options_applied(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "opt",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+        assert settings.additional_solvent_options == "iterative"
+
+    def test_link_functional_already_unrestricted_not_double_prefixed(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-x",
+                "ub3lyp",
+                "link",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.functional == "ub3lyp"
+
 
 class TestGaussianCLIModredCommand:
     """CLI tests for the ``modred`` subcommand group."""
