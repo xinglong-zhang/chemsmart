@@ -74,6 +74,81 @@ class TestGaussianCLIPubChemOptCommand:
         assert settings is not None, "GaussianOptJob was never instantiated"
 
 
+class TestGaussianCLIOptCommand:
+    """CLI tests for the ``opt`` subcommand's freeze-atoms and
+    multi-molecule (index-selected) job-creation branches."""
+
+    def test_single_molecule_freeze_atoms(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        with patch(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "--freeze-atoms",
+                    "1-2",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_job_cls.assert_called_once()
+        molecule = mock_job_cls.call_args[1]["molecule"]
+        assert molecule.frozen_atoms is not None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        with patch(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "--freeze-atoms",
+                    "1",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+        for c in mock_job_cls.call_args_list:
+            assert c.kwargs["molecule"].frozen_atoms is not None
+
+
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
 
@@ -1045,6 +1120,72 @@ class TestGaussianCLITsCommand:
         # gas_solv project ts settings use ``gas`` config: def2svp, no solvent
         assert settings.basis == "def2svp"
         assert settings.solvent_model is None
+
+    def test_single_molecule_freeze_atoms(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        with patch("chemsmart.jobs.gaussian.ts.GaussianTSJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "ts",
+                    "--freeze-atoms",
+                    "1-2",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_job_cls.assert_called_once()
+        molecule = mock_job_cls.call_args[1]["molecule"]
+        assert molecule.frozen_atoms is not None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        with patch("chemsmart.jobs.gaussian.ts.GaussianTSJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "ts",
+                    "--freeze-atoms",
+                    "1",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+        for c in mock_job_cls.call_args_list:
+            assert c.kwargs["molecule"].frozen_atoms is not None
 
     def test_ts_settings_from_solv_project(
         self,
