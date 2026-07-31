@@ -295,6 +295,118 @@ class TestORCASolventCLIOptCommand:
         assert settings.solvent_id == "water"
 
 
+class TestORCACLIOptSubcommand:
+    """CLI tests for the ``opt`` subcommand's own solvent-options/
+    solventfilename branches, freeze-atoms, and the multi-molecule
+    (index-selected) job-creation loop."""
+
+    def test_subcommand_level_solvent_options_and_solventfilename(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+        tmp_path,
+    ):
+        solvent_file = tmp_path / "custom.cosmors"
+        solvent_file.write_text(
+            "solventname=1,1,1,3,3,3-hexafluoropropan-2-ol\n"
+        )
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+                "-so",
+                "iterative",
+                "-sf",
+                str(solvent_file),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.additional_solvent_options == "iterative"
+        assert settings.solventfilename == str(solvent_file)
+
+    def test_single_molecule_freeze_atoms(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "--freeze-atoms",
+                    "1-2",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_job_cls.assert_called_once()
+        molecule = mock_job_cls.call_args[1]["molecule"]
+        assert molecule.frozen_atoms is not None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self,
+        multiple_molecules_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "--freeze-atoms",
+                    "1",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+        for c in mock_job_cls.call_args_list:
+            assert c.kwargs["molecule"].frozen_atoms is not None
+
+
 class TestORCASolventCLITsCommand:
     """CLI solvent options propagated to the ``ts`` subcommand."""
 
