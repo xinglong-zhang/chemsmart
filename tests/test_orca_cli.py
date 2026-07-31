@@ -1163,6 +1163,107 @@ class TestORCACLIIrcCommand:
         assert settings.direction == "forward"
         assert settings.maxiter == 50
 
+    def test_irc_solvent_options_and_solventfilename(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+        tmp_path,
+    ):
+        solvent_file = tmp_path / "custom.cosmors"
+        solvent_file.write_text(
+            "solventname=1,1,1,3,3,3-hexafluoropropan-2-ol\n"
+        )
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.irc.ORCAIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-so",
+                "iterative",
+                "-sf",
+                str(solvent_file),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.additional_solvent_options == "iterative"
+        assert settings.solventfilename == str(solvent_file)
+
+    def test_irc_all_remaining_options_applied(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.irc.ORCAIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-p",
+                "3",
+                "-i",
+                "read",
+                "-f",
+                "hessian.hess",
+                "-m",
+                "2",
+                "-M",
+                "--init-displ",
+                "DE",
+                "--scale-init-displ",
+                "0.2",
+                "--de-init-displ",
+                "0.003",
+                "--follow-coordtype",
+                "cartesian",
+                "--scale-displ-sd",
+                "0.1",
+                "--adapt-scale-displ",
+                "--sd-parabolicfit",
+                "--interpolate-only",
+                "--do-sd-corr",
+                "--scale-displ-sd-corr",
+                "0.5",
+                "--sd-corr-parabolicfit",
+                "--tolrmsg",
+                "0.0005",
+                "--tolmaxg",
+                "0.002",
+                "-I",
+                "[[1,2,3]]",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.printlevel == 3
+        assert settings.inithess == "read"
+        assert settings.hess_filename == "hessian.hess"
+        assert settings.hessmode == 2
+        assert settings.init_displ == "DE"
+        assert settings.scale_init_displ == 0.2
+        assert settings.de_init_displ == 0.003
+        assert settings.follow_coordtype == "cartesian"
+        assert settings.scale_displ_sd == 0.1
+        assert settings.adapt_scale_displ is True
+        assert settings.sd_parabolicfit is True
+        assert settings.interpolate_only is True
+        assert settings.do_sd_corr is True
+        assert settings.scale_displ_sd_corr == 0.5
+        assert settings.sd_corr_parabolicfit is True
+        assert settings.tolrmsg == 0.0005
+        assert settings.tolmaxg == 0.002
+        assert settings.internal_modred == [[1, 2, 3]]
+
 
 class TestORCACLIScanCommand:
     """CLI tests for the ``scan`` subcommand group."""
