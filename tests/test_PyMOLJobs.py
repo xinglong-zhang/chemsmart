@@ -997,6 +997,245 @@ class TestPyMOLStyleCommands:
         )
         assert job_pymol.label == "mol"
 
+
+class TestPyMOLAlignJobRunnerBatchProcessing:
+    """Direct tests for PyMOLAlignJobRunner._run_batch_processing and
+    _execute_batch, exercised via a bare instance with the subprocess-
+    launching methods (_create_process/_run) mocked out, since these
+    build pure command strings and never touch pymol.cmd directly."""
+
+    def _make_runner(self):
+        from unittest.mock import PropertyMock, patch
+
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        runner.running_directory = "/tmp"
+        self._executable_patcher = patch.object(
+            PyMOLAlignJobRunner,
+            "executable",
+            new_callable=PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        self._executable_patcher.start()
+        return runner
+
+    def _make_job(self, n_molecules=3, style=None, total_batches=1):
+        return SimpleNamespace(
+            folder="/tmp/testjob",
+            label="testalign",
+            total_batches=total_batches,
+            xyz_absolute_paths=[f"/tmp/m{i}.xyz" for i in range(n_molecules)],
+            mol_names=[f"mol{i}" for i in range(n_molecules)],
+            style=style,
+            quiet_mode=False,
+            command_line_only=False,
+            pymol_script="/tmp/style.py",
+        )
+
+    def test_run_batch_processing_executes_one_batch_per_chunk(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=250, total_batches=3)
+        runner.MAX_MOLECULES_PER_BATCH = 100
+
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+        mock_postrun = mocker.patch.object(PyMOLAlignJobRunner, "_postrun")
+        mock_cleanup = mocker.patch.object(
+            PyMOLAlignJobRunner, "_postrun_cleanup"
+        )
+
+        result = runner._run_batch_processing(job)
+
+        assert result is job
+        assert mock_create.call_count == 3
+        mock_postrun.assert_called_once_with(job)
+        mock_cleanup.assert_called_once_with(job)
+        # First batch loads molecules directly (no append mode); later
+        # batches append to the same log/err files.
+        append_modes = [
+            c.kwargs.get("append_mode") for c in mock_create.call_args_list
+        ]
+        assert append_modes == [False, True, True]
+
+    def test_execute_batch_first_batch_loads_molecules_directly(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=2)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        runner._execute_batch(job, 0, job.xyz_absolute_paths, job.mol_names)
+
+        command = mock_create.call_args.args[1]
+        assert command.startswith("/usr/bin/pymol /tmp/m0.xyz /tmp/m1.xyz")
+        assert "pymol_style mol0" in command
+        assert "pymol_style mol1" in command
+        assert "align mol1, mol0" in command
+        assert f"save {job.folder}/testalign.pse".replace(
+            "/tmp/testjob", job.folder
+        )
+        assert mock_create.call_args.kwargs["append_mode"] is False
+
+    def test_execute_batch_subsequent_batch_opens_existing_pse(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=3)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        runner._execute_batch(
+            job, 1, job.xyz_absolute_paths[1:], ["mol1", "mol2"]
+        )
+
+        command = mock_create.call_args.args[1]
+        assert command.startswith("/usr/bin/pymol /tmp/testjob/testalign.pse")
+        assert "load /tmp/m1.xyz" in command
+        assert "load /tmp/m2.xyz" in command
+        # subsequent batches align every molecule to the global first
+        # molecule, without excluding it by name (unlike batch 0)
+        assert "align mol1, mol0" in command
+        assert "align mol2, mol0" in command
+        assert mock_create.call_args.kwargs["append_mode"] is True
+
+    @pytest.mark.parametrize(
+        "style,expected_cmd",
+        [
+            (None, "pymol_style"),
+            ("pymol", "pymol_style"),
+            ("cylview", "cylview_style"),
+            ("cylview-flat", "cylview_flat_style"),
+        ],
+    )
+    def test_execute_batch_style_variants(self, mocker, style, expected_cmd):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=2, style=style)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        runner._execute_batch(job, 0, job.xyz_absolute_paths, job.mol_names)
+
+        command = mock_create.call_args.args[1]
+        assert f"{expected_cmd} mol0" in command
+        assert f"{expected_cmd} mol1" in command
+
+    def test_execute_batch_invalid_style_raises(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=2, style="bogus_style")
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+
+        with pytest.raises(ValueError, match="not available"):
+            runner._execute_batch(
+                job, 0, job.xyz_absolute_paths, job.mol_names
+            )
+
+    def test_execute_batch_nonzero_returncode_raises_runtime_error(
+        self, mocker
+    ):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=2)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=1),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        with pytest.raises(RuntimeError, match="execution failed"):
+            runner._execute_batch(
+                job, 0, job.xyz_absolute_paths, job.mol_names
+            )
+
+    def test_execute_batch_propagates_and_logs_unexpected_exception(
+        self, mocker
+    ):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=2)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            side_effect=OSError("simulated launch failure"),
+        )
+
+        with pytest.raises(OSError, match="simulated launch failure"):
+            runner._execute_batch(
+                job, 0, job.xyz_absolute_paths, job.mol_names
+            )
+
+    def test_quiet_mode_and_command_line_only_flags_appended(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=1)
+        job.quiet_mode = True
+        job.command_line_only = True
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        runner._execute_batch(job, 0, job.xyz_absolute_paths, job.mol_names)
+
+        command = mock_create.call_args.args[1]
+        assert " -q" in command
+        assert " -c" in command
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
+class TestPyMOLStyleCommandsContinued:
+    label_1_mer = "1-mer"
+
     def test_scientific_style_registry_matches_classes(self):
         template_commands = (
             zhang_group_scientific_styles.PYMOL_SCIENTIFIC_STYLE_COMMANDS
