@@ -1,6 +1,8 @@
 import os.path
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import numpy as np
+import pytest
 
 from chemsmart.io.xtb.file import (
     XTBChargesFile,
@@ -1048,3 +1050,455 @@ class TestXTBOutput:
         ]
         assert len(xtb_co2_output.all_structures) == 5
         assert optimized_flags == [False] * 4 + [True]
+
+
+class TestXTBOutputGetattrDelegation:
+    """Direct tests for XTBOutput.__getattr__'s parser-search loop."""
+
+    def test_delegates_to_a_later_parser_after_skipping_none_and_no_attr(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        """p_benzyne_sp lacks energy/g98/gradient/hessian/vibspectrum
+        files (all None, skipped), main_out doesn't have `bond_orders`
+        (AttributeError, skipped), so delegation must reach wbo_file."""
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.energy_file is None
+        assert output.g98_file is None
+        assert output.gradient_file is None
+        assert output.hessian_file is None
+        assert output.vibspectrum_file is None
+        assert output.bond_orders is not None
+
+    def test_unknown_attribute_raises_attribute_error(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        with pytest.raises(AttributeError, match="no attribute"):
+            output.totally_made_up_attribute_xyz
+
+    def test_non_attribute_error_from_a_parser_is_logged_and_skipped(
+        self, xtb_co2_outfolder
+    ):
+        """A parser that raises something other than AttributeError
+        (e.g. a bug in a third-party file parser) must not abort the
+        whole delegation search -- it's logged and the next parser in
+        the priority list is tried instead."""
+
+        class _BrokenParser:
+            def __getattr__(self, name):
+                raise RuntimeError("simulated parser bug")
+
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = _BrokenParser()
+        assert output.bond_orders is not None
+
+
+class TestXTBOutputFallbackProperties:
+    """Direct tests for XTBOutput's properties that fall back across
+    multiple underlying parsers, using __dict__ overrides on cached
+    properties (functools.cached_property stores its value directly in
+    the instance __dict__, so assigning there bypasses recomputation)
+    to force otherwise-unreachable-via-real-fixtures branches."""
+
+    def test_normal_termination_and_convergence_false_without_main_out(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert output.normal_termination is False
+        assert output.geometry_optimization_converged is False
+
+    def test_charge_falls_back_to_charges_file_then_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert output.charge == 0.0
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["main_out"] = None
+        output2.__dict__["charges_file"] = None
+        assert output2.charge is None
+
+    def test_multiplicity_none_without_main_out(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert output.multiplicity is None
+
+    def test_mass_falls_back_to_molecule_then_none(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert output.mass == pytest.approx(44.009, abs=0.01)
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["main_out"] = None
+        output2.__dict__["all_structures"] = []
+        assert output2.mass is None
+
+    def test_num_atoms_falls_back_to_molecule_then_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["engrad_file"] = None
+        assert output.num_atoms == 3
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["engrad_file"] = None
+        output2.__dict__["all_structures"] = []
+        assert output2.num_atoms is None
+
+    def test_final_energy_falls_back_through_energy_then_engrad_then_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert output.final_energy == pytest.approx(-10.30845228917)
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["main_out"] = None
+        output2.__dict__["energy_file"] = None
+        assert output2.final_energy == pytest.approx(
+            output2.engrad_file.total_energy
+        )
+
+        output3 = XTBOutput(folder=xtb_co2_outfolder)
+        output3.__dict__["main_out"] = None
+        output3.__dict__["energy_file"] = None
+        output3.__dict__["engrad_file"] = None
+        assert output3.final_energy is None
+
+    def test_final_forces_none_without_engrad_file(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.engrad_file is None
+        assert output.final_forces is None
+
+    def test_symbols_falls_back_to_all_structures_then_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["xtbopt_geometry"] = None
+        assert output.symbols == ["O", "O", "C"]
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["xtbopt_geometry"] = None
+        output2.__dict__["all_structures"] = []
+        assert output2.symbols is None
+
+    def test_partial_charges_none_without_charges_file_or_symbols(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["charges_file"] = None
+        assert output.partial_charges is None
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["symbols"] = None
+        assert output2.partial_charges is None
+
+    def test_vibrational_frequencies_monoatomic_is_empty(
+        self, xtb_he_outfolder
+    ):
+        output = XTBOutput(folder=xtb_he_outfolder)
+        assert output.molecule.is_monoatomic
+        assert output.vibrational_frequencies == []
+
+    def test_vibrational_frequencies_falls_back_to_g98_then_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["main_out"] = None
+        assert (
+            output.vibrational_frequencies
+            == output.g98_file.vibrational_frequencies
+        )
+
+        output2 = XTBOutput(folder=xtb_co2_outfolder)
+        output2.__dict__["main_out"] = None
+        output2.__dict__["g98_file"] = None
+        assert output2.vibrational_frequencies is None
+
+    def test_optimized_structure_falls_back_to_last_structure(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["xtbopt_geometry"] = None
+        assert output.optimized_structure is output.all_structures[-1]
+
+    def test_xtbopt_geometry_enrichment_skipped_when_all_none(
+        self, xtb_co2_outfolder
+    ):
+        """Covers the "if X is not None" guards' False arms in
+        xtbopt_geometry's enrichment block (charge/multiplicity/
+        final_energy/final_forces), which every real fixture always
+        supplies (via main_out), making the skip-arms otherwise
+        unreachable."""
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        with (
+            patch.object(
+                XTBOutput,
+                "charge",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(
+                XTBOutput,
+                "multiplicity",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(
+                XTBOutput,
+                "final_energy",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(
+                XTBOutput,
+                "final_forces",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+        ):
+            mol = output.xtbopt_geometry
+        assert mol is not None
+
+    def test_input_geometry_enrichment_skipped_when_all_none(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        with (
+            patch.object(
+                XTBOutput,
+                "charge",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(
+                XTBOutput,
+                "multiplicity",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+        ):
+            mol = output.input_geometry
+        assert mol is not None
+
+
+class TestXTBOutputUnsupportedGeometryFormats:
+    """cyclopentadienyl_anion_opt only has xtbopt.coord/*.coord
+    geometry files, an unsupported format for both the optimized and
+    input geometry files -- these still get located at the folder
+    level (with a warning) but XTBOutput's cached properties must
+    return None for them since only .xyz/.sdf/.pdb are dispatched."""
+
+    def test_xtbopt_geometry_file_none_for_unsupported_format(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
+        assert output.folder._xtbopt_geometry() is not None
+        assert output.xtbopt_geometry_file is None
+
+    def test_input_geometry_file_none_for_unsupported_format(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
+        assert output.folder._input_geometry() is not None
+        assert output.input_geometry_file is None
+
+    def test_xtbopt_geometry_file_none_when_no_xtbopt_file_at_all(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.folder._xtbopt_geometry() is None
+        assert output.xtbopt_geometry_file is None
+
+    def test_input_geometry_file_none_when_no_geometry_file_at_all(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        with patch.object(
+            type(output.folder), "_input_geometry", return_value=None
+        ):
+            assert output.input_geometry_file is None
+
+
+class TestXTBOutputReadGeometryFile:
+    def test_missing_file_returns_none_and_logs_error(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output._read_geometry_file("/no/such/path/geometry.xyz") is None
+
+    def test_none_path_returns_none(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output._read_geometry_file(None) is None
+
+    def test_unsupported_extension_returns_none(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
+        path = output.folder._input_geometry()
+        assert path.endswith(".coord")
+        assert output._read_geometry_file(path) is None
+
+    def test_input_geometry_none_for_unsupported_format(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        """Covers input_geometry's "if molecule:" False arm, reached
+        when _read_geometry_file returns None for an unsupported
+        format."""
+        output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
+        assert output.input_geometry is None
+
+
+class TestXTBOutputChooseOrientationsTiers:
+    """Covers _choose_orientations' fallback tiers: xtbopt.log
+    (tier 1, already covered via the ohess fixtures elsewhere),
+    g98 standard orientation (tier 3), input geometry for a completed
+    single-point job (tier 4), and the final empty-tuple fallback."""
+
+    def test_tier2_xtbopt_geometry_used_when_log_unavailable(
+        self, xtb_co2_outfolder
+    ):
+        """co2_ohess has both xtbopt.log (tier 1) and xtbopt.xyz; force
+        tier 1 to be skipped so tier 2's own branch body runs."""
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output.xtbopt_geometry is not None
+        output.__dict__["xtbopt_log_file"] = None
+        orientations, symbols, energies = output._choose_orientations()
+        assert len(orientations) == 1
+        assert symbols == list(output.xtbopt_geometry.symbols)
+
+    def test_tier1_skipped_when_log_has_no_molecules(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        real_xtbopt_geometry = output.xtbopt_geometry
+        fake_log_file = MagicMock()
+        fake_log_file.get_molecules.return_value = []
+        output.__dict__["xtbopt_log_file"] = fake_log_file
+        orientations, symbols, energies = output._choose_orientations()
+        # falls through to tier 2 (xtbopt_geometry) instead
+        assert len(orientations) == 1
+        assert symbols == list(real_xtbopt_geometry.symbols)
+
+    def test_tier3_g98_standard_orientation_used_for_hess_job(
+        self, xtb_acetaldehyde_outfolder
+    ):
+        output = XTBOutput(folder=xtb_acetaldehyde_outfolder)
+        assert output.xtbopt_log_file is None
+        assert output.xtbopt_geometry is None
+        assert output.g98_file is not None
+        orientations, symbols, energies = output._choose_orientations()
+        assert len(orientations) == 1
+        assert symbols == list(output.g98_file.symbols)
+
+    def test_tier4_input_geometry_used_for_completed_sp_job(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.xtbopt_log_file is None
+        assert output.xtbopt_geometry is None
+        assert output.g98_file is None
+        assert output.normal_termination is True
+        orientations, symbols, energies = output._choose_orientations()
+        assert len(orientations) == 1
+
+    def test_no_tier_available_returns_empty(self, xtb_p_benzyne_sp_outfolder):
+        """Forcing normal_termination False removes the only tier
+        available to this fixture (tier 4), leaving nothing."""
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        with patch.object(
+            XTBOutput,
+            "normal_termination",
+            new_callable=PropertyMock,
+            return_value=False,
+        ):
+            orientations, symbols, energies = output._choose_orientations()
+            assert output.all_structures == []
+        assert orientations == []
+        assert symbols is None
+        assert energies is None
+
+
+class TestXTBOutputIsOptimizedStructureList:
+    """Covers _compute_is_optimized_structure_list's hess-job branch
+    (opt-job branch already covered by the ohess fixtures elsewhere)."""
+
+    def test_hess_job_marks_last_structure_optimized(
+        self, xtb_acetaldehyde_outfolder
+    ):
+        output = XTBOutput(folder=xtb_acetaldehyde_outfolder)
+        assert output.jobtype == "hess"
+        flags = [m.is_optimized_structure for m in output.all_structures]
+        assert flags == [True]
+
+    def test_neither_opt_nor_hess_job_marks_nothing_optimized(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.jobtype == "sp"
+        flags = [m.is_optimized_structure for m in output.all_structures]
+        assert flags == [False]
+
+
+class TestXTBOutputNumAtomsAndVibrationalFrequenciesNaturalPaths:
+    """Covers the "primary source available" branches for num_atoms
+    (engrad_file present) and vibrational_frequencies (main_out
+    present), which the fallback-focused tests above always bypassed
+    via __dict__ overrides."""
+
+    def test_num_atoms_from_engrad_file(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output.engrad_file is not None
+        assert output.num_atoms == 3
+
+    def test_vibrational_frequencies_from_main_out(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output.main_out is not None
+        assert (
+            output.vibrational_frequencies
+            == output.main_out.vibrational_frequencies
+        )
+
+
+class TestXTBOutputOptimizedStructureNaturalAndEdgeCases:
+    def test_returns_none_when_not_converged(self, xtb_p_benzyne_sp_outfolder):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        assert output.geometry_optimization_converged is False
+        assert output.optimized_structure is None
+
+    def test_returns_xtbopt_geometry_when_available(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output.xtbopt_geometry is not None
+        assert output.optimized_structure is output.xtbopt_geometry
+
+    def test_returns_none_when_converged_but_no_structures_available(
+        self, xtb_co2_outfolder
+    ):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        output.__dict__["xtbopt_geometry"] = None
+        output.__dict__["all_structures"] = []
+        with patch.object(
+            XTBOutput,
+            "geometry_optimization_converged",
+            new_callable=PropertyMock,
+            return_value=True,
+        ):
+            assert output.optimized_structure is None
+
+
+class TestXTBOutputGetMolecule:
+    def test_returns_molecule_at_given_index(self, xtb_co2_outfolder):
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        assert output.get_molecule("-1") == output.all_structures[-1]
+        assert output.get_molecule("1") == output.all_structures[0]
+
+    def test_raises_when_no_structures_available(
+        self, xtb_p_benzyne_sp_outfolder
+    ):
+        output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
+        with patch.object(
+            XTBOutput,
+            "normal_termination",
+            new_callable=PropertyMock,
+            return_value=False,
+        ):
+            with pytest.raises(ValueError, match="No molecule could be found"):
+                output.get_molecule()
