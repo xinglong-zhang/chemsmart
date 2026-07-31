@@ -1860,6 +1860,161 @@ class TestORCACLIScanCommand:
         assert result.exit_code == 0, result.output
         assert settings.modred["constrained_coordinates"] == [[1, 2, 3]]
 
+    def test_explicit_jobtype_used(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.scan.ORCAScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-j",
+                "scan",
+                "-c",
+                "[[2,3]]",
+                "-x",
+                "3.0",
+                "-y",
+                "1.2",
+                "-n",
+                "15",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_subcommand_level_solvent_options_and_solventfilename(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+        tmp_path,
+    ):
+        solvent_file = tmp_path / "custom.cosmors"
+        solvent_file.write_text(
+            "solventname=1,1,1,3,3,3-hexafluoropropan-2-ol\n"
+        )
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.scan.ORCAScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[2,3]]",
+                "-x",
+                "3.0",
+                "-y",
+                "1.2",
+                "-n",
+                "15",
+                "-so",
+                "iterative",
+                "-sf",
+                str(solvent_file),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.additional_solvent_options == "iterative"
+        assert settings.solventfilename == str(solvent_file)
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self, multiple_molecules_xyz_file
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.scan.ORCAScanJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "scan",
+                    "-c",
+                    "[[2,3]]",
+                    "-x",
+                    "3.0",
+                    "-y",
+                    "1.2",
+                    "-n",
+                    "15",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+
+    def test_qmmm_child_subcommand_skips_direct_scan_job_creation(
+        self, single_molecule_xyz_file
+    ):
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch(
+            "chemsmart.jobs.orca.scan.ORCAScanJob"
+        ) as mock_scan_job_cls:
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "scan",
+                    "-c",
+                    "[[2,3]]",
+                    "-x",
+                    "3.0",
+                    "-y",
+                    "1.2",
+                    "-n",
+                    "15",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "def2-svp",
+                ],
+                obj={"jobrunner": None},
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_scan_job_cls.assert_not_called()
+
 
 class TestORCACLIModredCommand:
     """CLI tests for the ``modred`` subcommand group."""
