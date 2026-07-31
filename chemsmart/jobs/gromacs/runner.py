@@ -172,6 +172,15 @@ class GromacsJobRunner(JobRunner):
         if job.index_file is not None:
             command.extend(["-n", str(job.index_file)])
 
+        if job.checkpoint_file is not None:
+            command.extend(["-t", str(job.checkpoint_file)])
+
+        if job.restraint_reference_file is not None:
+            command.extend([
+                "-r",
+                str(job.restraint_reference_file),
+            ])
+
         if job.grompp_maxwarn is not None:
             command.extend(["-maxwarn", str(job.grompp_maxwarn)])
 
@@ -639,6 +648,14 @@ class GromacsJobRunner(JobRunner):
             "structure_file": job.structure_file,
             "top_file": job.top_file,
         }
+
+        if job.checkpoint_file is not None:
+            required_files["checkpoint_file"] = job.checkpoint_file
+
+        if job.restraint_reference_file is not None:
+            required_files["restraint_reference_file"] = (
+                job.restraint_reference_file
+            )
 
         missing = [
             name
