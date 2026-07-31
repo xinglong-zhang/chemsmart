@@ -81,7 +81,9 @@ def sub(
     logger.info("Entering main program")
 
     # Resolve one shared Server instance for both JobRunner and Submitter.
-    server = Server.current() if server is None else Server.from_servername(server)
+    server = (
+        Server.current() if server is None else Server.from_servername(server)
+    )
     if time_hours is not None:
         server.num_hours = time_hours
     if queue is not None:
