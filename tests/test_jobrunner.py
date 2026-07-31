@@ -284,6 +284,88 @@ class TestScratchCLI:
         assert "--scratch" not in captured["cli_args"]
 
 
+class TestSubResourceOverrides:
+    def test_cli_resources_reach_submission_server(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        fake_server = Server(
+            name="dummy",
+            NUM_CORES=2,
+            NUM_GPUS=0,
+            MEM_GB=8,
+            NUM_HOURS=1,
+            QUEUE_NAME="normal",
+        )
+        captured = {}
+
+        def _capture_script(self, job, cli_args, **kwargs):
+            captured.update(
+                server=self,
+                num_cores=self.num_cores,
+                num_gpus=self.num_gpus,
+                mem_gb=self.mem_gb,
+                num_hours=self.num_hours,
+                queue_name=self.queue_name,
+            )
+
+        monkeypatch.setattr(
+            Server,
+            "_check_running_jobs",
+            lambda self, job: None,
+        )
+        monkeypatch.setattr(
+            Server,
+            "_write_submission_script",
+            _capture_script,
+        )
+        monkeypatch.setattr(
+            Server,
+            "current",
+            classmethod(lambda cls: fake_server),
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--num-cores",
+                "7",
+                "--num-gpus",
+                "2",
+                "--mem-gb",
+                "23",
+                "--time-hours",
+                "12.5",
+                "--queue",
+                "debug",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert captured["server"] is fake_server
+        assert captured["num_cores"] == 7
+        assert captured["num_gpus"] == 2
+        assert captured["mem_gb"] == 23
+        assert captured["num_hours"] == 12.5
+        assert captured["queue_name"] == "debug"
+
+
 def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
     """Write a minimal server YAML with optional program SCRATCH keys."""
     gaussian_line = (
