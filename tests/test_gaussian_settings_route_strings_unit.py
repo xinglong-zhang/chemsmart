@@ -19,6 +19,19 @@ from chemsmart.jobs.gaussian.settings import (
 
 
 class TestIRCRouteString:
+    def test_jobtype_neither_ircf_nor_ircr_leaves_direction_unset(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="irc",
+            predictor="LQA",
+            recorrect="never",
+            direction="forward",
+        )
+        settings._get_route_string_from_jobtype()
+        # direction is untouched by the ircf/ircr-specific branches
+        assert settings.direction == "forward"
+
     def test_predictor_and_recorrect_both_specified(self):
         settings = GaussianIRCJobSettings(
             functional="b3lyp",
@@ -332,3 +345,41 @@ class TestBuildGaussianPkaSettings:
             proton_index=1, shared=shared, opt_settings=opt_settings
         )
         assert settings.charge == 0
+
+
+class TestTDDFTRouteString:
+    def test_eqsolv_none_omits_eqsolv_option(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv=None,
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "TD(singlets,nstates=3,root=1)" in route
+
+    def test_valid_eqsolv_option_included(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv="noneqsolv",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "TD(singlets,nstates=3,root=1,noneqsolv)" in route
+
+    def test_invalid_eqsolv_option_raises_assertion(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv="bogus",
+        )
+        with pytest.raises(AssertionError, match="equilibrium solvation"):
+            settings._get_route_string_from_jobtype()

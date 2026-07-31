@@ -949,3 +949,81 @@ of inheriting the optimization step's solvent.
 `pka_kwargs["solvent_id"] = ...` assignments to *before* `opt_kwargs` is
 computed, so the `key not in pka_kwargs` filter correctly excludes them
 from `opt_kwargs` once resolved.
+
+---
+
+## 21. `GaussianQMMMJobSettings._get_charge_and_multiplicity`'s per-sub-level fill branches are dead code
+
+**File:** `chemsmart/jobs/gaussian/settings.py:2791-2944`
+**Test:** `tests/test_gaussian_qmmm_settings_unit.py::TestChargeAndMultiplicityErrors`
+(see the docstring notes on `test_three_layer_fills_from_intermediate_when_only_real_and_int_set`;
+the unreachable branches themselves have no test since they cannot execute)
+
+`_get_charge_and_multiplicity` builds a flat list of
+charge/multiplicity pairs for each ONIOM sub-level, then picks one of
+several "fill in the blanks" branches depending on which suffix of the
+list is entirely `None`:
+
+```python
+# 3-layer case
+charge_and_multiplicity_list = [
+    real_low_charge, real_low_multiplicity,      # [0:2]
+    int_med_charge, int_med_multiplicity,        # [2:4]
+    int_low_charge, int_low_multiplicity,        # [4:6]  <- always == [2:4]
+    model_high_charge, model_high_multiplicity,  # [6:8]
+    model_med_charge, model_med_multiplicity,    # [8:10] <- always == [6:8]
+    model_low_charge, model_low_multiplicity,    # [10:12] <- always == [6:8]
+]
+if all(v is None for v in list[2:]): ...      # reachable
+elif all(v is None for v in list[4:]): ...    # DEAD
+elif all(v is None for v in list[6:]): ...    # reachable
+elif all(v is None for v in list[8:]): ...    # DEAD
+elif all(v is None for v in list[10:]): ...   # DEAD
+elif all(v is not None for v in list): pass   # reachable
+else: raise ValueError(...)                   # reachable
+```
+
+Just above this method, `int_low_charge`/`int_low_multiplicity` are
+assigned the *exact same* `self.charge_intermediate`/`self.mult_intermediate`
+values as `int_med_charge`/`int_med_multiplicity` — there is no
+independent "intermediate, low level-of-theory" constructor parameter,
+only one `charge_intermediate`/`mult_intermediate` (aliased from legacy
+`int_charge`/`int_multiplicity`) pair. Likewise `model_high_charge` ==
+`model_med_charge` == `model_low_charge` (and the multiplicity
+equivalents), all sourced from the single `charge_high`/`mult_high`
+pair (aliased from legacy `model_charge`/`model_multiplicity`).
+
+Because of this, list positions `[2:4]` and `[4:6]` are always
+identical, and positions `[6:8]`, `[8:10]`, `[10:12]` are always
+identical. That makes it impossible for `list[4:]` to be "all None"
+without `list[2:]` *also* being all None (in which case the first,
+higher-priority branch already fired) — and likewise for `list[8:]`
+and `list[10:]` relative to `list[6:]`. The exact same redundancy
+exists in the 2-layer variant (`model_high_charge` == `model_low_charge`
+always, making its `list[4:]`-all-None branch at line 2862 equally
+unreachable).
+
+**Reproduce (informal):** no input can make `list[4:]`, `list[8:]`, or
+`list[10:]` all-`None` while the branch immediately above it was
+`False`, because the values being checked are literally aliases of
+values already checked by that branch. Verified directly: constructing
+`GaussianQMMMJobSettings` with only `model_charge`/`model_multiplicity`
+set (no `int_charge`/`int_multiplicity`) hits the `list[6:]`-all-None
+branch first, not `list[8:]`, since positions 8-11 being None forces
+positions 6-7 (the identical `model_high` values) to also be None.
+
+**Impact:** None today — these branches were presumably intended to
+support independently specifying charge/multiplicity for each of the
+three model-system sub-levels (high/medium/low), matching the detailed
+docstring on `_get_charge_and_multiplicity`, but the constructor never
+actually exposes separate parameters for `int_low_*` vs `int_med_*` or
+for `model_med_*`/`model_low_*` vs `model_high_*`, so those branches
+can never be exercised as designed.
+
+**Suggested direction:** either add the missing independent
+constructor parameters (e.g. `charge_intermediate_low`,
+`charge_model_medium`, `charge_model_low`, etc.) so each sub-level can
+truly be set independently, or — if the simplification is intentional
+— remove the dead branches and update the docstring to reflect that
+only "real", "intermediate", and "model" (not six independent
+sub-levels) can be specified.

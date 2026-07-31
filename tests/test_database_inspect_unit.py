@@ -128,14 +128,14 @@ class TestFormatRecordDetail:
                 "fmo_gap": 6.0,
             },
             "provenance": {
-                "source_file": "/tmp/job.log",
+                "source": "/tmp/job.log",
                 "program": "gaussian",
                 "program_version": "16",
                 "parser": "cclib",
                 "chemsmart_version": "1.0",
                 "source_file_hash": "abc",
-                "source_file_size": 1024,
-                "source_file_date": "2024-01-01",
+                "source_size": 1024,
+                "source_date": "2024-01-01",
                 "assembled_at": "2024-01-01T00:00:00",
             },
             "molecules": [],
@@ -421,7 +421,7 @@ class TestFormatStructureDetail:
         record = {
             "record_index": 1,
             "record_id": "rid123",
-            "provenance": {"source_file": "/tmp/job.log"},
+            "provenance": {"source": "/tmp/job.log"},
         }
         return record, struct
 

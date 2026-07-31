@@ -108,7 +108,7 @@ class TestAssembleCommand:
         assert result.exit_code == 0, result.output
         assert (
             mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.call_count
-            == 2
+            == 3
         )
 
     def test_no_files_found_returns_none(self, mocker, tmp_path):
