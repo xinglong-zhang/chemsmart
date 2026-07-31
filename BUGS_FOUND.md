@@ -1924,3 +1924,61 @@ cases 1 and 2) already flag them as belt-and-suspenders code that
 desired, replace the multi-condition duplication (case 3) with a
 single unconditional fallback, and drop the `isinstance(..., str)`
 coercion (case 6) since it does not correspond to any real call path.
+
+## 38. `mol_qmmm` CLI group is entirely orphaned — defined but never reachable
+
+**Location:** `chemsmart/cli/mol/mol.py`, `mol_qmmm` (lines 646-805) and
+`mol_qmmm_process_pipeline` (lines 798-805).
+
+`mol_qmmm` is a fully-implemented `@click.group(cls=MyGroup)` that
+mirrors the regular `mol` group's molecule-loading logic but converts
+everything to `QMMMMolecule`. However:
+
+1. **No subcommand is ever registered on it.** Every subcommand file in
+   `chemsmart/cli/mol/` (`align.py`, `nci.py`, `mo.py`, `movie.py`,
+   `spin.py`, `irc.py`, `visualize.py`) decorates its command with
+   `@mol.command(...)` — none use `@mol_qmmm.command(...)`. A `grep`
+   across the whole `chemsmart/` tree confirms zero occurrences of
+   `@mol_qmmm.command`, `mol_qmmm.add_command`, or
+   `add_command(mol_qmmm)`.
+2. **It is never attached to any parent CLI group** — nothing imports
+   `mol_qmmm` anywhere else in the codebase (only `mol.py` itself
+   defines it), so it is not reachable as `chemsmart run mol-qmmm ...`
+   or under any other entry point.
+3. Even if it *were* invoked directly (e.g. in a test via
+   `CliRunner().invoke(mol_qmmm, [...])`), Click refuses to run it:
+   since it is a `MultiCommand` with an empty `commands` dict and no
+   subcommand token can ever resolve to one, Click's argument parsing
+   raises `Error: Missing command.` (exit code 2) before the group's
+   own callback body ever executes — confirmed empirically:
+   ```python
+   from click.testing import CliRunner
+   from chemsmart.cli.mol.mol import mol_qmmm
+   print(mol_qmmm.commands)  # {}
+   CliRunner().invoke(mol_qmmm, ["-f", "some.xyz"]).output
+   # "Error: Missing command."
+   ```
+   The only way to exercise the callback body at all is to bypass
+   Click's command routing entirely and invoke the raw function via
+   `click.Context(mol_qmmm)` + `ctx.invoke(mol_qmmm.callback, ...)`,
+   which is not a real invocation path available to any user.
+
+**Impact:** None currently (dead code), but it represents ~125 lines of
+unreachable, unmaintained duplicate logic that will silently drift out
+of sync with the `mol` group it was cloned from (e.g., it does not
+handle `-i`/`--si` aliasing at all, unlike `mol`'s equivalent check at
+lines 407-414, and its append/default label logic does not merge in
+the chemsmart-db-specific suffixes that `mol`'s does).
+
+**Reproduce:** see the code excerpt above; also
+`tests/test_mol_cli.py::TestMolQmmmGroupDirectInvocation` exercises the
+callback via the `ctx.invoke(mol_qmmm.callback, ...)` bypass technique
+to get direct-unit coverage on its logic despite it being unreachable
+through the real CLI.
+
+**Suggested direction:** either finish wiring `mol_qmmm` up (attach
+QMMM-aware subcommands and register the group somewhere reachable), or
+remove it entirely if QMMM-aware molecule loading for `mol` subcommands
+is meant to happen some other way (e.g. via the `--qmmm`
+flag/`ctx.obj["qmmm"]` mechanism already used elsewhere in the
+codebase).

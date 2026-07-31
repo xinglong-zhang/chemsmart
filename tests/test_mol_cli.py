@@ -33,6 +33,253 @@ def run_mol_and_capture_kwargs(job_class_path, cli_args):
     return result, call_kwargs
 
 
+NCI_JOB = "chemsmart.jobs.mol.nci.PyMOLNCIJob"
+
+
+class TestMolCLIGroupValidation:
+    """Direct CLI tests for the ``mol`` group callback's own parsing
+    and validation logic (chemsmart:cli/mol/mol.py), using the ``nci``
+    subcommand as a lightweight vehicle since group-level behavior is
+    independent of which subcommand is ultimately invoked."""
+
+    def test_index_and_structure_index_mutually_exclusive(
+        self, single_molecule_xyz_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-i",
+                "1",
+                "--si",
+                "1",
+                "nci",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_structure_index_used_as_index(self, multiple_molecules_xyz_file):
+        """``--si`` alone is treated as an alias for ``-i``."""
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            ["-f", multiple_molecules_xyz_file, "--si", "1", "nci"],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(kwargs["molecule"]) == 1
+
+    def test_chemsmart_db_requires_exactly_one_selector(
+        self, database_chemsmart_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            NCI_JOB, ["-f", database_chemsmart_file, "nci"]
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_rejects_multiple_selectors(
+        self, database_chemsmart_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "--sid",
+                "f751bb2c27e2",
+                "nci",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_index_requires_record_selector(
+        self, database_chemsmart_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "-i",
+                "1",
+                "nci",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "can only be used together with" in result.output
+
+    def test_directory_and_filetype_uses_auto_label(self, tmp_path):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB, ["-d", str(tmp_path), "-t", "xyz", "nci"]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == f"all_xyz_files_in_{tmp_path.name}"
+
+    def test_directory_and_filetype_respects_explicit_label(self, tmp_path):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB, ["-d", str(tmp_path), "-t", "xyz", "-l", "custom", "nci"]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "custom"
+
+    def test_directory_and_program_uses_auto_label(self, tmp_path):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB, ["-d", str(tmp_path), "-p", "gaussian", "nci"]
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            kwargs["label"]
+            == f"all_output_files_from_gaussian_in_{tmp_path.name}"
+        )
+
+    def test_directory_and_program_respects_explicit_label(self, tmp_path):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            ["-d", str(tmp_path), "-p", "gaussian", "-l", "custom", "nci"],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "custom"
+
+    def test_filenames_and_pubchem_both_specified_raises(
+        self, single_molecule_xyz_file
+    ):
+        with pytest.raises(ValueError, match="have been specified"):
+            run_mol_and_capture_kwargs(
+                NCI_JOB,
+                ["-f", single_molecule_xyz_file, "-P", "water", "nci"],
+            )
+
+    def test_multiple_filenames_non_align_task_raises(
+        self, single_molecule_xyz_file, two_rotated_molecules_xyz_file
+    ):
+        with pytest.raises(ValueError, match="can only process one file"):
+            run_mol_and_capture_kwargs(
+                NCI_JOB,
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-f",
+                    two_rotated_molecules_xyz_file,
+                    "nci",
+                ],
+            )
+
+    def test_label_and_append_label_both_given_raises(
+        self, single_molecule_xyz_file
+    ):
+        with pytest.raises(ValueError, match="not both"):
+            run_mol_and_capture_kwargs(
+                NCI_JOB,
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-l",
+                    "x",
+                    "-a",
+                    "y",
+                    "nci",
+                ],
+            )
+
+    def test_pubchem_only_without_label_crashes(self):
+        """Regression test: -P/--pubchem given without -l/--label
+        crashes, since the default-label derivation unconditionally
+        does os.path.basename(filenames) even though filenames stays
+        None for a pubchem-only invocation. Mirrors the same
+        pubchem-only-without-label bug already documented for the
+        gaussian/orca CLIs (BUGS_FOUND.md #25)."""
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[MagicMock()],
+        ):
+            with pytest.raises(TypeError):
+                run_mol_and_capture_kwargs(NCI_JOB, ["-P", "water", "nci"])
+
+    def test_append_label_non_chemsmart_db_file(
+        self, single_molecule_xyz_file
+    ):
+        """The is_chemsmart_db-specific suffix branches (SID/RID/RI/MID)
+        are skipped entirely for an ordinary (non-database) file."""
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            ["-f", single_molecule_xyz_file, "-a", "suffix", "nci"],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "crest_best_suffix"
+
+    def test_pubchem_with_label_succeeds(self):
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[MagicMock()],
+        ) as mock_from_pubchem:
+            result, kwargs = run_mol_and_capture_kwargs(
+                NCI_JOB, ["-P", "water", "-l", "water_mol", "nci"]
+            )
+        assert result.exit_code == 0, result.output
+        mock_from_pubchem.assert_called_once_with(
+            identifier="water", return_list=True
+        )
+        assert kwargs["label"] == "water_mol"
+
+    @pytest.mark.parametrize(
+        "selector_flag,selector_value",
+        [
+            ("--ri", "1"),
+            ("--rid", "6de213a0"),
+            ("--sid", "f751bb2c27e2"),
+            ("--mid", "YGQDVTLERYVWNN-UHFFFAOYSA-N"),
+        ],
+    )
+    def test_chemsmart_db_default_label_selector_branches(
+        self, database_chemsmart_file, selector_flag, selector_value
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            [
+                "-f",
+                database_chemsmart_file,
+                selector_flag,
+                selector_value,
+                "nci",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"].startswith("chemsmart_")
+
+    @pytest.mark.parametrize(
+        "selector_flag,selector_value",
+        [
+            ("--ri", "1"),
+            ("--rid", "6de213a0"),
+            ("--sid", "f751bb2c27e2"),
+            ("--mid", "YGQDVTLERYVWNN-UHFFFAOYSA-N"),
+        ],
+    )
+    def test_chemsmart_db_append_label_selector_branches(
+        self, database_chemsmart_file, selector_flag, selector_value
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            NCI_JOB,
+            [
+                "-f",
+                database_chemsmart_file,
+                selector_flag,
+                selector_value,
+                "-a",
+                "suffix",
+                "nci",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"].endswith("_suffix")
+
+
 class TestMolCLINciCommand:
     """CLI tests for the ``nci`` subcommand."""
 
@@ -438,3 +685,139 @@ class TestMolCLIVisualizeCommand:
             ],
         )
         assert result.exit_code != 0
+
+
+def _invoke_mol_qmmm_callback(**overrides):
+    """Direct-invocation helper for BUGS_FOUND.md #38: `mol_qmmm` has
+    no subcommands registered and is never attached to any parent CLI
+    group, so it cannot be reached via CliRunner (Click raises "Missing
+    command" before the group callback ever runs). This bypasses
+    Click's command routing to unit-test the callback body itself."""
+    import click
+
+    from chemsmart.cli.mol.mol import mol_qmmm
+
+    kwargs = dict(
+        filenames=None,
+        label=None,
+        append_label=None,
+        index=None,
+        directory=None,
+        filetype=None,
+        program=None,
+        pubchem=None,
+    )
+    kwargs.update(overrides)
+    ctx = click.Context(mol_qmmm, obj={})
+    ctx.invoke(mol_qmmm.callback, **kwargs)
+    return ctx.obj
+
+
+class TestMolQmmmGroupDirectInvocation:
+    """See BUGS_FOUND.md #38: mol_qmmm is orphaned code with no
+    reachable entry point. These tests exercise its callback body
+    directly via ctx.invoke to get unit coverage on logic that no real
+    CLI invocation can ever reach."""
+
+    def test_directory_and_filetype(self, tmp_path, single_molecule_xyz_file):
+        shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
+        obj = _invoke_mol_qmmm_callback(
+            directory=str(tmp_path), filetype="xyz"
+        )
+        assert obj["label"] == f"all_xyz_files_in_{tmp_path.name}"
+        assert len(obj["molecules"]) == 1
+
+    def test_directory_and_filetype_respects_explicit_label(
+        self, tmp_path, single_molecule_xyz_file
+    ):
+        shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
+        obj = _invoke_mol_qmmm_callback(
+            directory=str(tmp_path), filetype="xyz", label="custom"
+        )
+        assert obj["label"] == "custom"
+
+    def test_directory_and_program(self, tmp_path):
+        """An empty directory yields zero matched output files, so no
+        real Gaussian/ORCA log parsing is needed to exercise this
+        branch (mirrors the equivalent `mol`-group test)."""
+        obj = _invoke_mol_qmmm_callback(
+            directory=str(tmp_path), program="gaussian"
+        )
+        assert (
+            obj["label"]
+            == f"all_output_files_from_gaussian_in_{tmp_path.name}"
+        )
+        assert obj["molecules"] == []
+
+    def test_no_filenames_no_pubchem_warns_and_returns_none(self):
+        obj = _invoke_mol_qmmm_callback()
+        assert obj["molecules"] is None
+        assert obj["label"] is None
+        assert obj["qmmm"] is True
+
+    def test_filenames_and_pubchem_both_specified_raises(self):
+        with pytest.raises(ValueError, match="have been specified"):
+            _invoke_mol_qmmm_callback(filenames=("a.xyz",), pubchem="water")
+
+    def test_single_filename_loads_qmmm_molecule(
+        self, single_molecule_xyz_file
+    ):
+        obj = _invoke_mol_qmmm_callback(filenames=(single_molecule_xyz_file,))
+        assert obj["label"] == "crest_best"
+        assert len(obj["molecules"]) == 1
+
+    def test_multiple_filenames_early_return(self):
+        obj = _invoke_mol_qmmm_callback(filenames=("a.xyz", "b.xyz"))
+        assert obj["molecules"] is None
+        assert obj["filenames"] == ("a.xyz", "b.xyz")
+
+    def test_pubchem_success(self):
+        with patch(
+            "chemsmart.io.molecules.structure.QMMMMolecule.from_pubchem",
+            return_value=[MagicMock()],
+        ) as mock_from_pubchem:
+            obj = _invoke_mol_qmmm_callback(pubchem="water", label="water_mol")
+        assert obj["label"] == "water_mol"
+        mock_from_pubchem.assert_called_once_with(
+            identifier="water", return_list=True
+        )
+
+    def test_label_and_append_label_both_given_raises(
+        self, single_molecule_xyz_file
+    ):
+        with pytest.raises(ValueError, match="not both"):
+            _invoke_mol_qmmm_callback(
+                filenames=(single_molecule_xyz_file,),
+                label="x",
+                append_label="y",
+            )
+
+    def test_append_label_suffix(self, single_molecule_xyz_file):
+        obj = _invoke_mol_qmmm_callback(
+            filenames=(single_molecule_xyz_file,), append_label="suffix"
+        )
+        assert obj["label"] == "crest_best_suffix"
+
+    def test_index_selects_specific_structure(
+        self, multiple_molecules_xyz_file
+    ):
+        obj = _invoke_mol_qmmm_callback(
+            filenames=(multiple_molecules_xyz_file,), index="2"
+        )
+        assert len(obj["molecules"]) == 1
+
+    def test_default_index_uses_last_molecule(
+        self, multiple_molecules_xyz_file
+    ):
+        obj = _invoke_mol_qmmm_callback(
+            filenames=(multiple_molecules_xyz_file,)
+        )
+        assert len(obj["molecules"]) == 1
+
+    def test_molecules_converted_to_qmmm_molecule(
+        self, single_molecule_xyz_file
+    ):
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        obj = _invoke_mol_qmmm_callback(filenames=(single_molecule_xyz_file,))
+        assert all(isinstance(m, QMMMMolecule) for m in obj["molecules"])
