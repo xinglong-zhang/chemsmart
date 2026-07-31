@@ -1463,6 +1463,116 @@ class TestORCACLINebCommand:
         assert settings.joboption == "NEB-TS"
         assert settings.ending_xyzfile == single_molecule_xyz_file
 
+    def test_neb_all_options_applied(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.neb.ORCANEBJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "neb",
+                "-j",
+                "NEB-TS",
+                "-e",
+                single_molecule_xyz_file,
+                "-n",
+                "8",
+                "-i",
+                single_molecule_xyz_file,
+                "-r",
+                single_molecule_xyz_file,
+                "-s",
+                "XTB2",
+                "-o",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.nimages == 8
+        assert settings.intermediate_xyzfile == single_molecule_xyz_file
+        assert settings.restarting_xyzfile == single_molecule_xyz_file
+        assert settings.semiempirical == "XTB2"
+        assert settings.preopt_ends is True
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self, multiple_molecules_xyz_file
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.neb.ORCANEBJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "neb",
+                    "-j",
+                    "NEB-TS",
+                    "-e",
+                    multiple_molecules_xyz_file,
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+
+    def test_qmmm_child_subcommand_skips_direct_neb_job_creation(
+        self, single_molecule_xyz_file
+    ):
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.neb.ORCANEBJob") as mock_neb_job_cls:
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "neb",
+                    "-j",
+                    "NEB-TS",
+                    "-e",
+                    single_molecule_xyz_file,
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "def2-svp",
+                ],
+                obj={"jobrunner": None},
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_neb_job_cls.assert_not_called()
+
 
 class TestORCACLIQrcCommand:
     """CLI tests for the ``qrc`` subcommand group."""
