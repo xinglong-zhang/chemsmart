@@ -1302,6 +1302,105 @@ class TestORCACLIModredCommand:
         assert result.exit_code == 0, result.output
         assert settings is not None, "ORCAModredJob was never instantiated"
 
+    def test_explicit_jobtype_used(
+        self, single_molecule_xyz_file, run_orca_and_capture_settings
+    ):
+        """``-j modred`` explicitly (rather than falling back to the
+        default) still resolves modred settings correctly."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.modred.ORCAModredJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "modred",
+                "-j",
+                "modred",
+                "-c",
+                "[[1,2]]",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self, multiple_molecules_xyz_file
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch("chemsmart.jobs.orca.modred.ORCAModredJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "modred",
+                    "-c",
+                    "[[1,2]]",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+
+    def test_qmmm_child_subcommand_skips_direct_modred_job_creation(
+        self, single_molecule_xyz_file
+    ):
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca
+
+        with patch(
+            "chemsmart.jobs.orca.modred.ORCAModredJob"
+        ) as mock_modred_job_cls:
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "modred",
+                    "-c",
+                    "[[1,2]]",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "def2-svp",
+                ],
+                obj={"jobrunner": None},
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        mock_modred_job_cls.assert_not_called()
+
 
 class TestORCACLIQmmmSubcommand:
     """CLI tests for the ``qmmm`` subcommand attached to ``opt``."""
