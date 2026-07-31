@@ -1282,3 +1282,36 @@ conversion for its own subcommand scope.
 361-490) entirely, and remove the `ctx.invoked_subcommand == "qmmm"`
 try/except block from the `gaussian()` group callback, since it can
 never execute.
+
+## 27. `chemsmart/cli/gaussian/qmmm.py`'s `_populate_charge_and_multiplicity_on_settings` is an unused orphaned duplicate
+
+**Location:** `chemsmart/cli/gaussian/qmmm.py`, lines 385-413.
+
+This module defines
+`_populate_charge_and_multiplicity_on_settings(qs)` (charge/multiplicity
+fallback resolution from `charge_intermediate`/`charge_high`/
+`charge_total`), but nothing in `qmmm()` (the actual QMMM subcommand
+callback defined just above it in the same file) ever calls it, and no
+other module imports it from here. `chemsmart/cli/orca/qmmm.py` has its
+own **separately defined** copy of a function with the exact same name
+(line 460 in that file) which *is* actually called (line 418) — this
+Gaussian-side copy is simply an unused leftover, presumably from
+factoring the ORCA version out of a shared original or vice versa,
+never wired up on the Gaussian side.
+
+**Reproduce (informal):** grepped the whole codebase for
+`_populate_charge_and_multiplicity_on_settings` — the only call site is
+inside `chemsmart/cli/orca/qmmm.py`, calling *that file's own*
+same-named function, never this one.
+
+**Impact:** None today — the Gaussian `qmmm()` callback resolves
+charge/multiplicity through its own inline CLI-option assignments
+(`charge_total`/`mult_total` etc. from lines ~294-305), so nothing is
+missing in practice; this is simply 29 lines of dead code.
+
+**Suggested direction:** delete
+`_populate_charge_and_multiplicity_on_settings` from
+`chemsmart/cli/gaussian/qmmm.py`, or — if the intent was for the
+Gaussian `qmmm()` callback to also use it instead of duplicating the
+same fallback logic inline — wire it in and remove the redundant
+inline assignments.
