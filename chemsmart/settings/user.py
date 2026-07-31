@@ -1,5 +1,5 @@
 """
-User configuration management for ChemSmart computational chemistry software.
+User configuration management for CHEMSMART computational chemistry software.
 
 This module provides comprehensive user
 settings management including configuration
@@ -10,7 +10,7 @@ for computational chemistry software
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:
-    ChemsmartUserSettings: Main class for user configuration management
+    CHEMSMARTUserSettings: Main class for user configuration management
 
 Dependencies:
     - chemsmart.io.yaml: YAML file handling utilities
@@ -36,9 +36,9 @@ from chemsmart.io.yaml import YAMLFile
 logger = logging.getLogger(__name__)
 
 
-class ChemsmartUserSettings:
+class CHEMSMARTUserSettings:
     """
-    User configuration settings manager for ChemSmart.
+    User configuration settings manager for CHEMSMART.
 
     Manages user-specific configuration files, directories, and settings for
     computational chemistry software. Provides access to configuration paths,
@@ -55,6 +55,14 @@ class ChemsmartUserSettings:
     USER_YAML_FILE = "usersettings.yaml"
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
+    @classmethod
+    def resolve_config_dir(cls):
+        """Resolve user config directory with optional env override."""
+        configured_dir = os.environ.get(
+            "CHEMSMART_CONFIG_DIR", cls.USER_CONFIG_DIR
+        )
+        return os.path.expanduser(configured_dir)
+
     def __init__(self):
         """
         Initialize user settings manager.
@@ -62,8 +70,8 @@ class ChemsmartUserSettings:
         Loads user configuration from YAML file if it exists, otherwise
         initializes with empty configuration.
         """
-        self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
-        self.config_dir = self.USER_CONFIG_DIR
+        self.config_dir = self.resolve_config_dir()
+        self.yaml = os.path.join(self.config_dir, self.USER_YAML_FILE)
         try:
             self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
         except FileNotFoundError:

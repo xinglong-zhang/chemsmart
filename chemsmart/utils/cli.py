@@ -1,7 +1,7 @@
 """
-CLI utilities for ChemSmart.
+CLI utilities for CHEMSMART.
 
-Provides helpers and Click integrations used by the ChemSmart command line
+Provides helpers and Click integrations used by the CHEMSMART command line
 tools, including:
 
 - Custom Click `Group`/`Command` that persist subcommand metadata on the
@@ -662,7 +662,7 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
         "Use flags `-c -a -b -n` for coordinates, starting distance, ending distance and num-steps respectively.\n"
         "Example usage: `-c [[2,3],[6,7]] -x 3.0 -y 1.2 -n 15` to scan the distance between atom 2 and atom 3 "
         "and distance between atom 6 and 7 from distance 3.0 Angstrom to 1.2 Angstrom in 15 points.\n "
-        "Note: all indices should be 1-indexed. Chemsmart has already taken care of converting 0-indexed "
+        "Note: all indices should be 1-indexed. CHEMSMART has already taken care of converting 0-indexed "
         "(used in ORCA) to 1-indexed (used in visualization software such as PyMOL, Gaussview, etc)."
     )
 

@@ -719,15 +719,17 @@ class TestConfigurePathsInteractively:
                 "/path/to/g16",
                 "/path/to/orca",
                 "/path/to/nci",
+                "/path/to/scratch",
             ]
             cfg.configure_paths_interactively()
 
-        assert mock_update.call_count == 3
+        assert mock_update.call_count == 4
         mock_update.assert_any_call(tmp_path, "~/bin/g16", "/path/to/g16")
         mock_update.assert_any_call(
             tmp_path, "~/bin/orca_6_0_0", "/path/to/orca"
         )
         mock_update.assert_any_call(tmp_path, "~/bin/nciplot", "/path/to/nci")
+        mock_update.assert_any_call(tmp_path, "~/scratch", "/path/to/scratch")
 
     def test_skips_when_all_prompts_empty(self, tmp_path):
         """When the user presses Enter for all prompts, no YAML updates are made."""
@@ -758,7 +760,7 @@ class TestConfigurePathsInteractively:
             patch("chemsmart.cli.config.click.prompt") as mock_prompt,
         ):
             # Provide Gaussian, skip ORCA and NCIPLOT
-            mock_prompt.side_effect = ["/opt/g16", "", ""]
+            mock_prompt.side_effect = ["/opt/g16", "", "", ""]
             cfg.configure_paths_interactively()
 
         assert mock_update.call_count == 1

@@ -10,6 +10,7 @@ class TestNCIPLOTInputWriter:
     def test_write_nci_for_one_file(
         self,
         tmpdir,
+        monkeypatch,
         single_molecule_xyz_file,
         nciplot_jobrunner_no_scratch,
     ):
@@ -38,7 +39,7 @@ class TestNCIPLOTInputWriter:
         copy(single_molecule_xyz_file, tmpdir_xyz_file)
 
         # change to tmpdir and run test
-        os.chdir(tmpdir)
+        monkeypatch.chdir(tmpdir)
 
         # create nciplot job
         job = NCIPLOTJob(
@@ -82,6 +83,7 @@ class TestNCIPLOTInputWriter:
     def test_write_nci_for_two_files(
         self,
         tmpdir,
+        monkeypatch,
         single_molecule_xyz_file,
         nciplot_jobrunner_no_scratch,
     ):
@@ -113,7 +115,7 @@ class TestNCIPLOTInputWriter:
         copy(single_molecule_xyz_file, tmpdir_xyz_file2)
 
         # change to tmpdir and run test
-        os.chdir(tmpdir)
+        monkeypatch.chdir(tmpdir)
 
         # create nciplot job
         job = NCIPLOTJob(
@@ -167,6 +169,7 @@ class TestNCIPLOTInputWriter:
     def test_write_nci_promolecular_with_scratch(
         self,
         tmpdir,
+        monkeypatch,
         single_molecule_xyz_file,
         nciplot_jobrunner_scratch,
     ):
@@ -182,7 +185,7 @@ class TestNCIPLOTInputWriter:
         copy(single_molecule_xyz_file, tmpdir_xyz_file)
 
         # change to tmpdir
-        os.chdir(tmpdir)
+        monkeypatch.chdir(tmpdir)
 
         # create nciplot job with promolecular suffix in label
         # This simulates what happens in the CLI when processing .xyz files
@@ -223,6 +226,7 @@ class TestNCIPLOTPathHandling:
     def test_write_nci_with_full_path_in_scratch(
         self,
         tmpdir,
+        monkeypatch,
         single_molecule_xyz_file,
         nciplot_jobrunner_scratch,
     ):
@@ -247,7 +251,7 @@ class TestNCIPLOTPathHandling:
         # Change to a different working directory
         work_dir = os.path.join(tmpdir, "work")
         os.makedirs(work_dir)
-        os.chdir(work_dir)
+        monkeypatch.chdir(work_dir)
 
         # Create job with FULL PATH to the file (simulating real-world usage)
         # and with promolecular suffix in label (as the CLI would add)
@@ -286,6 +290,7 @@ class TestNCIPLOTPathHandling:
     def test_write_nci_converted_file_with_full_path(
         self,
         tmpdir,
+        monkeypatch,
         nciplot_jobrunner_scratch,
     ):
         """Test NCIPLOT correctly handles non-.xyz files with full paths.
@@ -309,7 +314,7 @@ class TestNCIPLOTPathHandling:
         # Change to work directory
         work_dir = os.path.join(tmpdir, "work")
         os.makedirs(work_dir)
-        os.chdir(work_dir)
+        monkeypatch.chdir(work_dir)
 
         # Create the converted .xyz file that the runner would have created
         # (simulating what _write_xyz_from_input_files does)

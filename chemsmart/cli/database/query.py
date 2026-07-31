@@ -69,7 +69,7 @@ def query(ctx, file, target, query, limit):
     \b
       -t records (default):
         Query calculation records.
-        Fields: source_file, jobtype, program, method, basis, total_energy,
+        Fields: source, jobtype, program, method, basis, total_energy,
         solvent_on, solvent_model, normal_termination, homo_energy, lumo_energy,
         fmo_gap, zero_point_energy, enthalpy, entropy, gibbs_free_energy,
 
@@ -92,7 +92,7 @@ def query(ctx, file, target, query, limit):
     Examples:
         chemsmart run database query -f my.db
         chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
-        chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
+        chemsmart run database query -f my.db -q "source ~ 'benzene'"
         chemsmart run database query -f my.db -t molecules
         chemsmart run database query -f my.db -t molecules -q "mass > 100"
         chemsmart run database query -f my.db -t structures -l 10

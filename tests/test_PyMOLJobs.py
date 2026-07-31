@@ -1,5 +1,6 @@
 import os.path
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,11 +12,30 @@ from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.runner import (
+    PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+    PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
+    PyMOLAlignJobRunner,
+    PyMOLJobRunner,
     PyMOLNCIJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
+    normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
-from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+from chemsmart.jobs.mol.templates import zhang_group_scientific_styles
+from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
+    SCIENTIFIC_STYLE_CLASSES,
+    ComicMetallicStyle,
+    GlossyStyle,
+    ScientificStyle,
+    StericSurfaceStyle,
+    metal_pymol_selection,
+    pymol_elem_selection,
+)
+from chemsmart.jobs.mol.visualize import (
+    PyMOLScientificStyleVisualizationJob,
+    PyMOLVisualizationJob,
+)
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
     is_pubchem_network_available,
@@ -880,3 +900,395 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert f"load {quote_path(dens_file)}" in command
         assert f"load {quote_path(grad_file)}" in command
         assert "; nci benzene_opt" in command
+
+
+class TestPyMOLStyleCommands:
+    label_1_mer = "1-mer"
+    coordination_bonds_1_mer = [
+        [1, 2],
+        [1, 5],
+        [1, 36],
+        [1, 3],
+        [1, 15],
+        [1, 8],
+    ]
+
+    def test_format_pymol_style_command_is_independent_of_coordinates(self):
+        """``-c`` is handled via distance/angle labels, not style args."""
+        for style, expected in (
+            (
+                "comic",
+                f"comic {self.label_1_mer}",
+            ),
+            ("soft_cartoon", f"soft_cartoon {self.label_1_mer}"),
+            (
+                "neon_coordination_core",
+                f"neon_coordination_core {self.label_1_mer}",
+            ),
+            (
+                "editorial_minimal",
+                f"editorial_minimal {self.label_1_mer}",
+            ),
+            ("soft_ceramic", f"soft_ceramic {self.label_1_mer}"),
+            ("matte_clay", f"matte_clay {self.label_1_mer}"),
+            (
+                "glossy",
+                f"glossy {self.label_1_mer}",
+            ),
+        ):
+            for coordinates in (None, self.coordination_bonds_1_mer):
+                job = SimpleNamespace(style=style, coordinates=coordinates)
+                command = PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                    job, self.label_1_mer
+                )
+                assert command == expected
+
+    def test_setup_style_cylview_flat(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style="cylview-flat", label=self.label_1_mer)
+        command = runner._setup_style(job, "pymol cmd")
+        assert command.endswith(f' -d "cylview_flat_style {self.label_1_mer}')
+
+        job_normalized = SimpleNamespace(
+            style="cylview_flat", label=self.label_1_mer
+        )
+        command_normalized = runner._setup_style(job_normalized, "pymol cmd")
+        assert command_normalized.endswith(
+            f' -d "cylview_flat_style {self.label_1_mer}'
+        )
+
+        assert normalize_pymol_style("cylview-flat") == "cylview_flat"
+
+    def test_align_setup_style_cylview_flat(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(
+            style="cylview-flat",
+            mol_names=[self.label_1_mer, "2-mer"],
+        )
+        command = runner._setup_style(job, "pymol cmd")
+        assert (
+            ' -d "cylview_flat_style 1-mer; cylview_flat_style 2-mer'
+            in command
+        )
+
+    def test_cylview_flat_visualization_job_label_suffix(self):
+        """cylview-flat PSE/xyz names must not collide with cylview."""
+        job_flat = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="cylview-flat",
+        )
+        assert job_flat.style == "cylview_flat"
+        assert job_flat.label == "mol_cylview_flat_visualization"
+        assert job_flat.job_basename == "mol_cylview_flat_visualization"
+
+        job_cylview = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="cylview",
+        )
+        assert job_cylview.label == "mol"
+        assert job_cylview.job_basename == "mol"
+
+        job_pymol = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="pymol",
+        )
+        assert job_pymol.label == "mol"
+
+    def test_scientific_style_registry_matches_classes(self):
+        template_commands = (
+            zhang_group_scientific_styles.PYMOL_SCIENTIFIC_STYLE_COMMANDS
+        )
+
+        assert PYMOL_SCIENTIFIC_STYLE_COMMANDS == template_commands
+        assert len(SCIENTIFIC_STYLE_CLASSES) == len(template_commands)
+        assert PYMOL_VISUALIZE_STYLE_CLI_CHOICES == [
+            style_cls.command.replace("_", "-")
+            for style_cls in SCIENTIFIC_STYLE_CLASSES
+        ]
+        for style_cls in SCIENTIFIC_STYLE_CLASSES:
+            assert template_commands[style_cls.command] == style_cls.command
+            wrapper = getattr(zhang_group_scientific_styles, style_cls.command)
+            assert wrapper.__name__ == style_cls.command
+
+    def test_select_coordination_uses_command_as_prefix(self, mocker):
+        style = StericSurfaceStyle()
+        mock_build = mocker.patch.object(
+            ScientificStyle, "build_coordination_atoms", return_value={}
+        )
+        style.select_coordination("all")
+        mock_build.assert_called_once_with(
+            selection="all",
+            prefix="steric_surface",
+            include_nh_h=False,
+        )
+
+    def test_comic_metallic_reuses_glossy_palette(self):
+        assert ComicMetallicStyle.colors is GlossyStyle.colors
+        assert ComicMetallicStyle.DONOR_ROLES
+
+    def test_zhang_group_scientific_styles_hide_distance_value_labels(
+        self, mocker
+    ):
+        mock_cmd = mocker.patch(
+            "chemsmart.jobs.mol.templates.zhang_group_scientific_styles.cmd"
+        )
+        mocker.patch.object(
+            ScientificStyle,
+            "_distance_object_names",
+            return_value=["d1", "d2"],
+        )
+        ScientificStyle.hide_distance_value_labels()
+        mock_cmd.hide.assert_any_call("labels", "d1")
+        mock_cmd.hide.assert_any_call("labels", "d2")
+        assert mock_cmd.hide.call_count == 2
+
+    def test_finish_default_runs_finalize_before_camera(self, mocker):
+        style = ComicMetallicStyle()
+        calls = []
+
+        def record_finalize():
+            calls.append("finalize")
+
+        def record_camera(selection):
+            calls.append(("camera", selection))
+
+        mocker.patch.object(style, "finalize", side_effect=record_finalize)
+        mocker.patch.object(style, "finish_camera", side_effect=record_camera)
+        style.finish_default("all")
+        assert calls == ["finalize", ("camera", "all")]
+
+    def test_scientific_style_runner_orders_distances_before_render(self):
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(
+            style="comic",
+            coordinates=[[1, 8]],
+            label=self.label_1_mer,
+        )
+        command = runner._setup_style(job, "pymol cmd")
+        command = runner._add_coordinates_labels(job, command)
+        command = runner._append_style_render(job, command)
+        assert command.index("distance d1, id 1, id 8") < command.index(
+            "comic"
+        )
+        assert "hide labels" not in command
+
+    def test_style_wrapper_ignores_pymol_self_kwarg(self, mocker):
+        mock_render = mocker.patch.object(ComicMetallicStyle, "render")
+        getattr(zhang_group_scientific_styles, "comic")("sel", _self="ignored")
+        mock_render.assert_called_once_with(selection="sel")
+
+    def test_build_coordination_atoms_uses_geometry_helpers(self):
+        assert hasattr(zhang_group_scientific_styles, "get_coordinating_atoms")
+        assert hasattr(zhang_group_scientific_styles, "is_metal")
+        assert hasattr(ScientificStyle, "_role_pymol_indices")
+
+    def test_element_category_helpers_are_centralized(self):
+        assert ScientificStyle.ELEMENT_CATEGORIES["halogen"] == "F+Cl+Br+I"
+        assert ScientificStyle.ELEMENT_CATEGORIES["N+O"] == "N+O"
+        assert ScientificStyle.ELEMENT_CATEGORIES["metal"].startswith("elem ")
+        assert (
+            ScientificStyle.element_category_selection("all", "halogen")
+            == "(all) and elem F+Cl+Br+I"
+        )
+        assert (
+            ScientificStyle.element_category_selection("sc_shell", "N+O")
+            == "(sc_shell) and elem N+O"
+        )
+        assert hasattr(ScientificStyle, "apply_element_palette")
+        assert hasattr(ScientificStyle, "_safe_set")
+
+    def test_pymol_elem_selection(self):
+        assert pymol_elem_selection(["Fe", "Cu"]) == "elem Fe+Cu"
+        assert pymol_elem_selection([]) == "none"
+
+    def test_metal_pymol_selection(self):
+        selection = metal_pymol_selection()
+        assert selection.startswith("elem ")
+        symbols = selection.replace("elem ", "").split("+")
+        assert "Mn" in symbols
+        assert "C" not in symbols
+        assert selection == ScientificStyle.METAL_ELEMENTS
+
+    def test_hybrid_is_not_a_derived_style(self):
+        # TODO: Remove this test if hybrid style is integrated with ScientificStyle
+        with pytest.raises(ValueError, match="not available"):
+            normalize_pymol_style("hybrid")
+
+    def test_derived_styles_hide_distance_value_labels_base_style_keeps_them(
+        self,
+    ):
+        base_runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        derived_runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(style="comic", coordinates=[[1, 8]])
+
+        base_command = base_runner._add_coordinates_labels(job, "cmd")
+        derived_command = derived_runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d1, id 1, id 8" in base_command
+        assert "distance d1, id 1, id 8" in derived_command
+        assert "hide labels" not in base_command
+        assert "hide labels" not in derived_command
+        assert hasattr(ScientificStyle, "hide_distance_value_labels")
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
+class TestPyMOLScientificStyleVisualizationJobs:
+    """Derived ``-s`` style jobs using the ``1-mer.xyz`` test geometry."""
+
+    coordination_bonds_1_mer = [
+        [1, 2],
+        [1, 5],
+        [1, 36],
+        [1, 3],
+        [1, 15],
+        [1, 8],
+    ]
+
+    def test_comic_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="comic",
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"comic {job.label}"
+        )
+
+    def test_comic_style_job_with_coordination_bonds_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="comic",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"comic {job.label}"
+        )
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        assert "distance d1, id 1, id 2" in runner._add_coordinates_labels(
+            job, "cmd"
+        )
+        assert "hide labels" not in runner._add_coordinates_labels(job, "cmd")
+
+    def test_glossy_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="glossy",
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"glossy {job.label}"
+        )
+
+    def test_editorial_minimal_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="editorial-minimal",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"editorial_minimal {job.label}"
+        )
+
+    def test_soft_ceramic_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="soft-ceramic",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"soft_ceramic {job.label}"
+        )

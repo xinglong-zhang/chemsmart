@@ -25,7 +25,12 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
+from chemsmart.io.xtb.route import XTBRoute
+from chemsmart.utils.repattern import (
+    gaussian_date_pattern,
+    orca_date_pattern,
+    xtb_date_pattern,
+)
 
 
 class FileMixin:
@@ -85,7 +90,7 @@ class FileMixin:
         Returns:
             list: List of strings, each representing a line from the file.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
@@ -96,7 +101,7 @@ class FileMixin:
         Returns:
             str: Complete file contents as a single string.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return f.read()
 
     @cached_property
@@ -204,7 +209,10 @@ class FileMixin:
             list or None: List of SOMO energies, or None for closed-shell.
         """
         if self.multiplicity != 1:
-            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[
+                    -self.num_unpaired_electrons :
+                ]
         return None
 
     @cached_property
@@ -393,6 +401,55 @@ class FileMixin:
             return self.beta_lumo_energy - self.beta_homo_energy
         else:
             return None
+
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
 
 
 class GaussianFileMixin(FileMixin):
@@ -1358,6 +1415,197 @@ class ORCAFileMixin(FileMixin):
             custom_solvent=dv.custom_solvent,
             forces=dv.forces,
         )
+
+
+class XTBFileMixin(FileMixin):
+    """
+    Mixin class for xTB computational chemistry files.
+
+    Extends FileMixin with xTB-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles xTB file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "xtb version" in line:
+                parts = line.split()
+                if "version" in parts:
+                    idx = parts.index("version")
+                    if idx + 1 < len(parts):
+                        return parts[idx + 1]
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "finished run on" in line:
+                match = re.search(xtb_date_pattern, line)
+                if match:
+                    date_str = match.group(1)  # YYYY/MM/DD
+                    time_str = match.group(2)  # HH:MM:SS
+                    try:
+                        # Convert from YYYY/MM/DD HH:MM:SS to YYYY-MM-DD HH:MM:SS
+                        date_obj = datetime.strptime(
+                            f"{date_str} {time_str}", "%Y/%m/%d %H:%M:%S"
+                        )
+                        return date_obj.strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from xTB main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Route string for xTB calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get route string from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed xTB route object from route string.
+
+        Creates an XTBRoute object from the route string to
+        provide structured access to calculation parameters.
+
+        Returns:
+            XTBRoute: Parsed xTB route object.
+        """
+        return XTBRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from xTB route string or output Hamiltonian."""
+        gfn = self.route_object.method
+        if gfn:
+            return gfn
+        hamiltonian = self.hamiltonian
+        if hamiltonian:
+            return hamiltonian.lower().split("-")[0]
+        return None
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """xTB does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def optimization_level(self):
+        """
+        Extract optimization level from route string.
+
+        Returns:
+            str or None: Optimization level (e.g., 'loose', 'normal', 'tight')
+        """
+        return self.route_object.optimization_level
+
+    @property
+    def solvent_model(self):
+        """
+        Extract solvent model from route string.
+
+        Returns:
+            str or None: Solvent model (e.g., 'alpb', 'gbsa', 'cosmo')
+        """
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """
+        Extract solvent identity from route string.
+
+        Returns:
+            str or None: Solvent identity (e.g., 'water', 'toluene')
+        """
+        return self.route_object.solvent_id
+
+    @property
+    def charge(self):
+        """
+        Extract molecular charge from route string.
+
+        Returns:
+            int or None: Molecular charge
+        """
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """
+        Extract number of unpaired electrons from route string.
+
+        Returns:
+            int or None: Number of unpaired electrons (Nalpha - Nbeta)
+        """
+        return self.route_object.uhf
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+
+        Returns:
+            bool: True if frequency calculation is specified
+        """
+        return self.route_object.freq
+
+    @property
+    def grad(self):
+        """
+        Check if gradient calculation is requested.
+
+        Returns:
+            bool: True if gradient calculation is specified
+        """
+        return self.route_object.grad
 
 
 class YAMLFileMixin(FileMixin):

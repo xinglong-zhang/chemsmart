@@ -258,7 +258,7 @@ For Gaussian and ORCA output files, the program can extract various types of ene
 
 .. note::
 
-   For Gaussian or ORCA output files, if the energy cannot be extracted correctly, ChemSmart will skip that molecule.
+   For Gaussian or ORCA output files, if the energy cannot be extracted correctly, CHEMSMART will skip that molecule.
    The XYZ file will still be saved, but it cannot be used with the energy grouper strategy.
 
 Supported energy types:

@@ -17,7 +17,8 @@ Run the configuration command:
 This command:
 
 -  Sets up the user-specific directory ``~/.chemsmart`` automatically.
--  Prompts for paths to Gaussian (g16) and ORCA software.
+-  Prompts for paths to Gaussian (g16), ORCA and NCIPLOT software.
+-  Prompts for paths to scratch folder.
 -  Updates the correct conda path for your user.
 -  Adds environment variables to your ``~/.bashrc`` file.
 

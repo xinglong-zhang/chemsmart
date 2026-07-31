@@ -8,10 +8,10 @@ from chemsmart.jobs.orca.settings import (
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
@@ -295,7 +295,7 @@ class ORCAProjectSettings(RegistryMixin):
             loaded settings or None if not found.
         """
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_orca_settings_dir,
+            CHEMSMARTUserSettings().user_orca_settings_dir,
             f"{project_name}.yaml",
         )
         user_settings_manager = ORCAProjectSettingsManager(

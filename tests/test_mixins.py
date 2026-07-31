@@ -6,6 +6,7 @@ from chemsmart.utils.mixins import (
     GaussianFileMixin,
     ORCAFileMixin,
     RegistryMixin,
+    XTBFileMixin,
 )
 
 
@@ -34,6 +35,92 @@ class TestFileMixin:
         assert dummy.forces_in_eV_per_angstrom == [None, None]
         assert dummy.input_translation_vectors == []
         assert dummy.num_energies == 2
+
+
+class TestFrequencyValidation:
+    def test_opt_job_no_imaginary_freqs_is_valid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [100.0, 200.0]
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "OPT"
+        assert report["total_imaginary_frequencies"] == 0
+        assert report["is_valid_minimum"] is True
+        assert report["is_valid_ts"] is False
+
+    def test_opt_job_with_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0, 200.0]
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "OPT"
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_ts_job_one_imaginary_freq_is_valid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-150.0, 200.0, 300.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is True
+
+    def test_ts_job_no_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [100.0, 200.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 0
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_ts_job_multiple_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-100.0, -200.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 2
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_no_frequencies_returns_valid_for_opt(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = None
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["is_valid_minimum"] is True
+        assert report["total_imaginary_frequencies"] == 0
+
+    def test_ignore_threshold(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-10.0, -20.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies(ignore_threshold=-15.0)
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_ts"] is True
+
+    def test_unknown_job_type(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0]
+        dummy.jobtype = "sp"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "SP"
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_none_job_type(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0]
+        dummy.jobtype = None
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "UNKNOWN"
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
 
 
 class DummyGaussianFile(GaussianFileMixin):
@@ -95,6 +182,29 @@ class TestORCAFileMixin:
         assert dummy.mdci_density == "1e-6"
         assert dummy.solvent_model == "smd"
         assert dummy.solvent_id == "water"
+
+
+class DummyXTBFile(XTBFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def route_string(self):
+        return "xtb p_benzyne.xyz --opt loose --gfn 2 --alpb toluene --chrg 0 --uhf 0 --grad"
+
+
+class TestXTBFileMixin:
+    def test_xtb_file_properties(self):
+        dummy = DummyXTBFile("test.out")
+        assert dummy.jobtype == "opt"
+        assert dummy.optimization_level == "loose"
+        assert dummy.gfn_version == "gfn2"
+        assert dummy.solvent_model == "alpb"
+        assert dummy.solvent_id == "toluene"
+        assert dummy.charge == 0
+        assert dummy.uhf == 0
+        assert dummy.freq is False
+        assert dummy.grad is True
 
 
 class TestYAMLFileMixin:

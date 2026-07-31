@@ -29,6 +29,10 @@ hartree_to_joules = 4.35974434e-18  # 1 Hartree = 4.35974434 × 10^-18 Joules
 cal_to_joules = 4.184  # 1 Calorie = 4.184 Joules
 kcal_per_mol_to_hartree = 1 / 627.509474  # 1 Hartree = 627.509474 kcal/mol
 
+# Energy conversion factors derived from ase.units for consistency
+hartree_to_kcal_mol = units.Hartree / (units.kcal / units.mol)
+HARTREE_TO_KCAL_MOL = hartree_to_kcal_mol
+
 # Conversion factors for energy units
 joule_per_mol_to_eV = 1.0364269574711572e-05  # J/mol to eV
 joule_per_mol_to_kcal_per_mol = 1 / 4184  # J/mol to kcal/mol
