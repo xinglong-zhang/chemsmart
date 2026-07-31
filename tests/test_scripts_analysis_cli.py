@@ -880,3 +880,286 @@ class TestGetThermochemistryScript:
             )
 
         assert result.exit_code == 0, result.output
+
+    def test_directory_with_log_filetype_globs_files(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("a.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", ".", "-ft", "log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        mock_cls.assert_called_once()
+
+    def test_directory_with_out_filetype_globs_files(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("a.out", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", ".", "-ft", "out"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        mock_cls.assert_called_once()
+
+    def test_cutoff_overrides_entropy_and_enthalpy_cutoffs(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "--cutoff", "50.0"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.call_args.kwargs["s_freq_cutoff"] == 50.0
+        assert mock_cls.call_args.kwargs["h_freq_cutoff"] == 50.0
+
+    @pytest.mark.parametrize(
+        "unit,expected_label",
+        [
+            ("eV", "eV"),
+            ("kcal/mol", "kcal/mol"),
+            ("kJ/mol", "kJ/mol"),
+        ],
+    )
+    def test_energy_unit_conversion(self, unit, expected_label):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "-u", unit],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_concentration_option_logged_instead_of_pressure(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "-c", "1.0"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.call_args.kwargs["concentration"] == 1.0
+
+    @pytest.mark.parametrize("flag", ["-qs", "-qh"])
+    def test_quasi_rrho_entropy_and_enthalpy_flags(self, flag):
+        """Covers the quasi_rrho_entropy-only and
+        quasi_rrho_enthalpy-only header/result-table branches (as
+        opposed to test_quasi_rrho_flag_run's combined -q flag)."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", flag],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_ts_with_single_imaginary_frequency_warns_but_keeps_structure(
+        self,
+    ):
+        """A transition state with exactly one (the expected) imaginary
+        frequency is reported with a warning rather than skipped."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0]
+        thermo.jobtype = "ts"
+        thermo.vibrational_frequencies = [-50.0, 100.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_ts_with_multiple_imaginary_frequencies_is_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0, -60.0]
+        thermo.jobtype = "ts"
+        thermo.vibrational_frequencies = [-50.0, -60.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_non_ts_with_imaginary_frequency_is_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0]
+        thermo.jobtype = "opt"
+        thermo.vibrational_frequencies = [-50.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_typeerror_after_energy_assigned_logs_warning_and_continues(
+        self,
+    ):
+        """When the TypeError instead occurs on a *later* property
+        (after `structure`/`energy` are already assigned), the
+        except TypeError handler works as intended: it logs the
+        "Frequency information not found" warning and moves on to the
+        next file, rather than crashing (contrast with
+        test_missing_frequency_data_crashes_instead_of_warning below,
+        where the very first property access is what's missing)."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = MagicMock()
+        thermo.electronic_energy = -100.0
+        thermo.zero_point_energy = 0.05
+        thermo.enthalpy = -99.9
+        thermo.qrrho_enthalpy = None  # None * float -> TypeError here
+        thermo.entropy_times_temperature = -0.02
+        thermo.qrrho_entropy_times_temperature = -0.02
+        thermo.gibbs_free_energy = -99.92
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_missing_frequency_data_crashes_instead_of_warning(self):
+        """Regression test for BUGS_FOUND.md #41: when
+        thermochemistry.electronic_energy is None (the real
+        "frequency information not found" case the except TypeError
+        handler's own message is meant to report), the handler itself
+        crashes with UnboundLocalError since `energy` was never
+        assigned before the exception, rather than logging the
+        intended per-structure warning and continuing."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = MagicMock()
+        thermo.electronic_energy = None
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                with pytest.raises(
+                    UnboundLocalError,
+                    match="local variable 'energy' referenced",
+                ):
+                    runner.invoke(
+                        entry_point,
+                        ["-f", "mol.log"],
+                        catch_exceptions=False,
+                    )
+
+    def test_generic_exception_during_processing_is_logged_and_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry",
+                side_effect=ValueError("simulated parse failure"),
+            ):
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output

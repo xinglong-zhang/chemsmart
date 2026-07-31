@@ -2070,3 +2070,71 @@ extension without checking whether it was actually reachable.
 (and the now-unused `import yaml` if nothing else in the module needs
 it) since the function never parses YAML — it only rewrites lines of
 text within `.yaml`-named files.
+
+## 41. `get_thermochemistry.py`'s `except TypeError` handler crashes with `UnboundLocalError` when the constructor's frequency-missing warning is actually needed
+
+**Location:** `chemsmart/scripts/get_thermochemistry.py`, `entry_point`
+(lines 365-493).
+
+```python
+for file in filenames:
+    try:
+        thermochemistry = Thermochemistry(file, ...)
+        structure = os.path.splitext(os.path.basename(file))[0]
+        energy = thermochemistry.electronic_energy * unit_conversion
+        zero_point_energy = thermochemistry.zero_point_energy * unit_conversion
+        ...
+    except TypeError:
+        log(
+            "{:2} {:39} {:13.6f} {:<50}\n".format(
+                " ×",
+                structure,
+                energy,
+                "  Warning! Frequency information not found ...",
+            )
+        )
+        continue
+```
+
+The `except TypeError` handler's own message ("Warning! Frequency
+information not found") makes clear its intended purpose: when a
+structure lacks frequency data, some `thermochemistry.*` property
+computation returns `None`, and multiplying `None * unit_conversion`
+raises `TypeError`. But by the time that first arithmetic line
+(`energy = thermochemistry.electronic_energy * unit_conversion`)
+raises, `energy` itself has **not yet been assigned** — the handler
+then tries to format `energy` into the warning message and crashes
+with `UnboundLocalError: local variable 'energy' referenced before
+assignment`, masking the original TypeError entirely and aborting the
+whole script (since `UnboundLocalError` is not itself caught by
+anything here).
+
+**Reproduce:**
+```python
+from unittest.mock import MagicMock, patch
+from click.testing import CliRunner
+from chemsmart.scripts.get_thermochemistry import entry_point
+
+runner = CliRunner()
+with runner.isolated_filesystem():
+    open("mol.log", "w").write("dummy")
+    with patch("chemsmart.scripts.get_thermochemistry.Thermochemistry") as mock_cls:
+        thermo = MagicMock()
+        thermo.electronic_energy = None  # simulates missing frequency data
+        mock_cls.return_value = thermo
+        result = runner.invoke(entry_point, ["-f", "mol.log"], catch_exceptions=True)
+        print(result.exception)
+        # UnboundLocalError: local variable 'energy' referenced before assignment
+```
+See `tests/test_scripts_analysis_cli.py::TestGetThermochemistryScript::test_missing_frequency_data_crashes_instead_of_warning`.
+
+**Impact:** Medium — any real output file missing frequency
+information (the exact case this handler exists to report gracefully)
+instead crashes the entire batch run with a confusing
+`UnboundLocalError`, rather than logging a per-structure warning and
+continuing to the next file as intended.
+
+**Suggested direction:** initialize `energy = None` (and any other
+values referenced in the `except` block) before the `try`, or restrict
+the message to `structure` alone / use a placeholder string when
+`energy` was never computed.
