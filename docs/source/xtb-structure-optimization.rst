@@ -30,6 +30,15 @@ Optimization Options
       -  choice
       -  Convergence level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``
 
+   -  -  ``--constrain``
+      -  string
+      -  Coordinates to constrain (1-indexed). Distance ``[i,j]``, angle ``[i,j,k]``, dihedral ``[i,j,k,l]``. Example:
+         ``[[1,2],[5,7,8],[3,4,1,7]]``
+
+   -  -  ``--force-constant``
+      -  float
+      -  Force constant for constraints
+
 Basic Usage
 ===========
 
@@ -44,6 +53,13 @@ Override the project optimization level:
 .. code:: bash
 
    chemsmart run xtb -p project -f molecule.xyz opt -O loose
+
+Constrained optimization (writes ``{label}.inp`` and passes ``--input``):
+
+.. code:: bash
+
+   chemsmart run xtb -p project -f molecule.xyz opt \
+     --constrain '[[1,2],[5,7,8],[3,4,1,7]]' --force-constant 0.5
 
 HPC job submission:
 
@@ -131,8 +147,9 @@ Basic Usage
 ***************
 
 Each xTB job runs in a dedicated folder named after the job label. CHEMSMART writes ``{label}.xyz`` and redirects
-stdout/stderr to ``{label}.out`` / ``{label}.err``. Additional xTB artifacts (``charges``, ``xtbopt.xyz``, ``g98.out``,
-``hessian``, etc.) appear in the same folder depending on the job type and flags.
+stdout/stderr to ``{label}.out`` / ``{label}.err``. When ``--constrain`` is used, it also writes ``{label}.inp``.
+Additional xTB artifacts (``charges``, ``xtbopt.xyz``, ``g98.out``, ``hessian``, etc.) appear in the same folder
+depending on the job type and flags.
 
 The resulting files and folders can later be:
 

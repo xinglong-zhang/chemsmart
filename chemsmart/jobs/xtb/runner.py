@@ -74,6 +74,7 @@ class XTBJobRunner(JobRunner):
 
         logger.debug(f"xTB running directory: {self.running_directory}")
         logger.debug(f"xTB geometry input path: {self.job_xyzfile}")
+        logger.debug(f"xTB detailed input path: {self.job_inputfile}")
         logger.debug(f"xTB output path: {self.job_outputfile}")
         logger.debug(f"xTB error path: {self.job_errfile}")
 
@@ -86,16 +87,26 @@ class XTBJobRunner(JobRunner):
         self.job_xyzfile = os.path.abspath(
             os.path.join(scratch_job_dir, f"{job.label}.xyz")
         )
+        self.job_inputfile = os.path.abspath(
+            os.path.join(scratch_job_dir, f"{job.label}.inp")
+        )
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _set_up_variables_in_job_directory(self, job):
         self.running_directory = job.folder
         self.job_xyzfile = os.path.abspath(job.xyzfile)
+        self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
         logger.info(f"Writing xTB geometry input file to: {self.job_xyzfile}")
         job.molecule.write_xyz(self.job_xyzfile, mode="w")
+
+        if job.settings.constraints:
+            from chemsmart.jobs.xtb.writer import XTBInputWriter
+
+            input_writer = XTBInputWriter(job=job)
+            input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):
         executable = self.executable.get_executable()
@@ -130,6 +141,8 @@ class XTBJobRunner(JobRunner):
             args.extend([f"--{settings.solvent_model}", settings.solvent_id])
         if settings.grad:
             args.append("--grad")
+        if settings.constraints:
+            args.extend(["--input", os.path.basename(self.job_inputfile)])
         if settings.additional_flags is not None:
             args.extend(settings.additional_flags.split())
         return args
@@ -201,6 +214,9 @@ class FakeXTBJobRunner(XTBJobRunner):
         self.job_xyzfile = os.path.abspath(
             os.path.join(scratch_job_dir, f"{job.label}.xyz")
         )
+        self.job_inputfile = os.path.abspath(
+            os.path.join(scratch_job_dir, f"{job.label}.inp")
+        )
         self.job_outputfile = os.path.abspath(job.outputfile)
         self.job_errfile = os.path.abspath(job.errfile)
 
@@ -208,6 +224,7 @@ class FakeXTBJobRunner(XTBJobRunner):
         self.running_directory = job.folder
         self._append_suffix_to_job_label(job, "_fake")
         self.job_xyzfile = os.path.abspath(job.xyzfile)
+        self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_outputfile = os.path.abspath(job.outputfile)
         self.job_errfile = os.path.abspath(job.errfile)
 

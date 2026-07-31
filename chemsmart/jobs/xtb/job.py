@@ -77,6 +77,7 @@ class XTBJob(Job):
     def _backup_files(self, **kwargs):
         folder = self._create_backup_folder_name()
         self.backup_file(self.xyzfile, folder=folder, **kwargs)
+        self.backup_file(self.inputfile, folder=folder, **kwargs)
         self.backup_file(self.outputfile, folder=folder, **kwargs)
         self.backup_file(self.restartfile, folder=folder, **kwargs)
 

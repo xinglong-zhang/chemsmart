@@ -101,6 +101,30 @@ class TestXTBCLISettings:
         assert settings.optimization_level == "loose"
         assert settings.freq is True
 
+    def test_opt_constrain_and_force_constant(self, single_molecule_xyz_file):
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.opt.XTBOptJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+                "--constrain",
+                "[[1,2],[1,2,3],[1,2,3,4]]",
+                "--force-constant",
+                "0.25",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.jobtype == "opt"
+        assert settings.constraints == [[1, 2], [1, 2, 3], [1, 2, 3, 4]]
+        assert settings.force_constant == 0.25
+
     def test_hess_instantiates_xtb_hess_job(self, single_molecule_xyz_file):
         result, settings, _ = _invoke_xtb_and_capture_settings(
             "chemsmart.jobs.xtb.hess.XTBHessJob",
