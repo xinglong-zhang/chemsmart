@@ -1,13 +1,13 @@
 """
-Direct unit tests for the pure geometry/array helper methods of
-:class:`IterateAnalyzer` in ``chemsmart.jobs.iterate.iterate``.
-
-The full ``run()``/``_optimize_lagrange`` numerical optimization
-pipeline is not exercised here (it requires realistic multi-atom
-skeleton/substituent geometries and is inherently slow); this focuses
-on the well-defined, independently-testable array/geometry
-transformations and input-validation branches.
+Direct unit tests for :class:`IterateAnalyzer` in
+``chemsmart.jobs.iterate.iterate``: the pure geometry/array helper
+methods, input-validation branches, and the ``run()`` dispatcher
+(using small sample counts to keep the underlying SLSQP optimization
+fast). The optimization internals themselves (``_optimize_lagrange``)
+are covered separately in ``test_iterate_optimize_lagrange_unit.py``.
 """
+
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -151,6 +151,43 @@ class TestFindOptimalPositionValidation:
                 sub_link_index=0,
                 method="not_a_real_method",
             )
+
+
+class TestIterateAnalyzerRun:
+    def test_run_returns_combined_molecule_on_success(self, methanol_molecule):
+        substituent = Molecule(
+            symbols=["F"],
+            positions=[[0.0, 0.0, 0.0]],
+        )
+        analyzer = IterateAnalyzer(
+            skeleton=methanol_molecule,
+            substituent=substituent,
+            skeleton_link_index=1,
+            substituent_link_index=1,
+            sphere_direction_samples_num=4,
+            axial_rotations_sample_num=2,
+        )
+        result = analyzer.run()
+        assert result is not None
+        assert len(result) == len(methanol_molecule) + len(substituent)
+
+    def test_run_returns_none_when_optimization_fails(self, methanol_molecule):
+        substituent = Molecule(
+            symbols=["F"],
+            positions=[[0.0, 0.0, 0.0]],
+        )
+        analyzer = IterateAnalyzer(
+            skeleton=methanol_molecule,
+            substituent=substituent,
+            skeleton_link_index=1,
+            substituent_link_index=1,
+            sphere_direction_samples_num=4,
+            axial_rotations_sample_num=2,
+        )
+        with patch.object(
+            IterateAnalyzer, "_find_optimal_position", return_value=None
+        ):
+            assert analyzer.run() is None
 
 
 class TestIterateAnalyzerConstruction:

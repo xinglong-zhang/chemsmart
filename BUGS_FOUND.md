@@ -1027,3 +1027,82 @@ truly be set independently, or — if the simplification is intentional
 — remove the dead branches and update the docstring to reflect that
 only "real", "intermediate", and "model" (not six independent
 sub-levels) can be specified.
+
+## 22. `BasePreprocessor._get_max_bonding_capacity`'s tuple-handling branch is unreachable dead code
+
+**Location:** `chemsmart/jobs/iterate/iterate.py`, `_get_max_bonding_capacity` (lines 58-71).
+
+```python
+default_valence = periodic_table.GetDefaultValence(atomic_num)
+
+if isinstance(default_valence, tuple):
+    return max(default_valence)
+return default_valence
+```
+
+The comment above this code claims `GetDefaultValence` "returns a
+tuple of possible valences" for some elements, but RDKit's
+`GetDefaultValence` (unlike `GetValenceList`) always returns a single
+`int` — never a tuple — for every element in the periodic table.
+
+**Reproduce (informal):** iterated `Chem.GetPeriodicTable().GetDefaultValence(z)`
+for every atomic number `z` from 1 to 99 and confirmed the return type
+is `int` in every case; `isinstance(default_valence, tuple)` is `False`
+for all of them, so the `return max(default_valence)` line can never
+execute.
+
+**Impact:** None observed — the `return default_valence` fallback is
+correct and always taken, so `_has_available_bonding_position` computes
+the right max-bonding-capacity regardless. This is purely dead code
+left over from confusing `GetDefaultValence` with `GetValenceList`
+(which does return a tuple/list of allowed valences).
+
+**Suggested direction:** remove the `isinstance`/`tuple` branch (and
+the stale comment) and just return `default_valence` directly — or,
+if the intent was genuinely to allow for multi-valence elements, switch
+to `GetValenceList` and take its max instead.
+
+## 23. `SkeletonPreprocessor._dfs_collect_branch`'s `node == excluded` guard is unreachable dead code
+
+**Location:** `chemsmart/jobs/iterate/iterate.py`, `_dfs_collect_branch`
+(lines 343-380).
+
+```python
+while stack:
+    node = stack.pop()
+    if node in visited or node == excluded:
+        continue
+    visited.add(node)
+    branch_atoms.append(node)
+
+    for neighbor in graph.neighbors(node):
+        if neighbor not in visited and neighbor != excluded:
+            stack.append(neighbor)
+```
+
+`excluded` can only ever end up on `stack` in one of two ways: as the
+initial `start` value, or via the neighbor-expansion loop. The only
+caller, `_find_non_skeleton_branches`, always invokes this with
+`start=neighbor` and `excluded=self.link_index`, where `neighbor` is by
+construction a graph-neighbor of `link_index` and therefore never
+equal to it (no self-loops). The neighbor-expansion loop itself already
+filters with `neighbor != excluded` before pushing onto the stack. So
+`excluded` is never pushed onto `stack` by either path, meaning the
+`node == excluded` half of the guard on line 370 can never be `True` —
+`node in visited` is the only condition that can ever fire `continue`.
+
+**Reproduce (informal):** constructed a 3-membered carbon ring and
+called `SkeletonPreprocessor._find_non_skeleton_branches()` with the
+ring's link atom — even in this "worst case" topology (a cycle
+containing the link atom, where DFS revisits nodes on the way back
+around the ring), the link atom index never reaches line 370 with
+`node in visited` being `False`, confirming the excluded-check never
+independently triggers a `continue`.
+
+**Impact:** None — the neighbor-expansion filter already guarantees
+correctness; this is purely redundant/dead defensive code.
+
+**Suggested direction:** drop the `or node == excluded` clause from
+line 370 (and, if desired, the `excluded` parameter entirely, since
+nothing pushes it onto the stack) since the neighbor-expansion filter
+already fully excludes it.

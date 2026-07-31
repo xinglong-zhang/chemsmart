@@ -61,6 +61,29 @@ class TestDetectSubstituent:
         pre = BasePreprocessor(molecule=lone_atom, link_index=1)
         assert pre.detect_substituent() == []
 
+    def test_ring_link_atom_has_no_severable_component(self):
+        import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        # A 3-membered carbon ring: removing any single bond to the
+        # link atom never disconnects its neighbor (the other path
+        # around the ring keeps everything in one component), so the
+        # inner "which component contains the neighbor" search never
+        # breaks for any neighbor.
+        ring = Molecule(
+            symbols=["C", "C", "C"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.51, 0.0, 0.0],
+                    [0.755, 1.308, 0.0],
+                ]
+            ),
+        )
+        pre = BasePreprocessor(molecule=ring, link_index=3)
+        assert pre.detect_substituent() == []
+
 
 class TestComplementAndExtraction:
     def test_get_complement_indices(self, methanol_molecule):
@@ -82,6 +105,27 @@ class TestComplementAndExtraction:
         assert extracted.chemical_symbols == ["C", "O"]
         assert extracted.charge == methanol_molecule.charge
         assert extracted.multiplicity == methanol_molecule.multiplicity
+
+    def test_extract_by_indices_subsets_frozen_atoms(self):
+        import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        mol = Molecule(
+            symbols=["C", "O", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.4, 0.0, 0.0],
+                    [-1.0, 0.0, 0.0],
+                ]
+            ),
+            frozen_atoms=[1, 0, 1],
+        )
+        pre = BasePreprocessor(molecule=mol, link_index=1)
+        extracted = pre._extract_by_indices([2, 0])
+        assert extracted.chemical_symbols == ["C", "H"]
+        assert extracted.frozen_atoms == [1, 1]
 
 
 class TestRunAutoDetectAndNewLinkIndex:

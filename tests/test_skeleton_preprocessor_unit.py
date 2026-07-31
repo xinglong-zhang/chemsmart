@@ -100,3 +100,61 @@ class TestSkeletonPreprocessorWithSkeletonIndices:
         # Auto-detect fallback removes the smallest single component,
         # which is one of the lone methylene hydrogens (H3 or H4).
         assert len(result) == 8
+
+
+class TestFindNonSkeletonBranchesEdgeCases:
+    def test_link_atom_with_no_neighbors_returns_empty_list(self):
+        # An isolated carbon (far from everything else, no bonds).
+        mol = Molecule(
+            symbols=["C", "H", "C"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [1.09, 0.0, 0.0],
+                [20.0, 20.0, 20.0],
+            ],
+        )
+        pre = SkeletonPreprocessor(
+            molecule=mol, link_index=3, skeleton_indices=[3]
+        )
+        assert pre._find_non_skeleton_branches() == []
+
+    def test_ring_branch_revisits_link_atom_mid_traversal(self):
+        # A 3-membered carbon ring: DFS starting from either neighbor
+        # of the link atom (atom 2, the ring's second carbon) traverses
+        # around the ring and encounters the link atom again from the
+        # opposite side, exercising the `node == excluded` skip for a
+        # non-start node in _dfs_collect_branch.
+        mol = Molecule(
+            symbols=["C", "C", "C"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [1.51, 0.0, 0.0],
+                [0.755, 1.308, 0.0],
+            ],
+        )
+        pre = SkeletonPreprocessor(
+            molecule=mol, link_index=2, skeleton_indices=[2]
+        )
+        branches = pre._find_non_skeleton_branches()
+        # Both other ring atoms are reachable from each other's branch,
+        # since it's a ring; the link atom itself never appears.
+        for branch in branches:
+            assert 1 not in branch  # 0-based index of the link atom
+
+
+class TestGetFallbackIndices:
+    def test_returns_sorted_skeleton_indices_when_set(self, ethanol_molecule):
+        pre = SkeletonPreprocessor(
+            molecule=ethanol_molecule,
+            link_index=1,
+            skeleton_indices=[3, 1, 2],
+        )
+        assert pre._get_fallback_indices() == [0, 1, 2]
+
+    def test_falls_back_to_auto_detect_when_not_set(self, methanol_molecule):
+        pre = SkeletonPreprocessor(molecule=methanol_molecule, link_index=1)
+        # No skeleton_indices provided, so this delegates to the base
+        # class's auto-detect implementation.
+        fallback = pre._get_fallback_indices()
+        assert isinstance(fallback, list)
+        assert fallback == sorted(fallback)

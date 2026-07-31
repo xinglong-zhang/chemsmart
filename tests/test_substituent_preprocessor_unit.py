@@ -44,3 +44,16 @@ class TestSubstituentPreprocessorAutoDetect:
         result = pre.run()
         assert len(result) == 5
         assert pre._final_indices is not None
+
+    def test_fallback_indices_when_saturated_and_run_not_called(
+        self, methanol_molecule
+    ):
+        # link atom is saturated (no available bonding position), so
+        # _get_fallback_indices() must delegate to the base class's
+        # auto-detect implementation instead of the "unchanged" shortcut.
+        pre = SubstituentPreprocessor(molecule=methanol_molecule, link_index=1)
+        assert pre._final_indices is None
+        fallback = pre._get_fallback_indices()
+        assert isinstance(fallback, list)
+        assert fallback == sorted(fallback)
+        assert pre.get_new_link_index() == 1
