@@ -338,6 +338,19 @@ class TestMolCLIMoCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["homo"] is True
 
+    def test_mo_invalid_coordinates_raises(self, single_molecule_xyz_file):
+        with pytest.raises(ValueError, match="Invalid coordinates input"):
+            run_mol_and_capture_kwargs(
+                "chemsmart.jobs.mol.mo.PyMOLMOJob",
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "mo",
+                    "-c",
+                    "not-a-literal(",
+                ],
+            )
+
 
 class TestMolCLIMovieCommand:
     """CLI tests for the ``movie`` subcommand."""
@@ -357,6 +370,19 @@ class TestMolCLIMovieCommand:
         )
         assert result.exit_code == 0, result.output
         assert kwargs["overwrite"] is True
+
+    def test_movie_invalid_coordinates_raises(self, single_molecule_xyz_file):
+        with pytest.raises(ValueError, match="Invalid coordinates input"):
+            run_mol_and_capture_kwargs(
+                "chemsmart.jobs.mol.movie.PyMOLMovieJob",
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "movie",
+                    "-c",
+                    "not-a-literal(",
+                ],
+            )
 
 
 class TestMolCLIIrcCommand:
@@ -405,6 +431,18 @@ class TestMolCLIIrcCommand:
             == "product.log"
         )
 
+    def test_irc_invalid_coordinates_raises(self):
+        runner = CliRunner()
+        with patch("chemsmart.jobs.mol.irc.PyMOLIRCMovieJob") as mock_job_cls:
+            mock_job_cls.from_files.return_value = MagicMock()
+            with pytest.raises(ValueError, match="Invalid coordinates input"):
+                runner.invoke(
+                    mol,
+                    ["irc", "-a", "full_irc.log", "-c", "not-a-literal("],
+                    obj={},
+                    catch_exceptions=False,
+                )
+
 
 class TestMolCLISpinCommand:
     """CLI tests for the ``spin`` subcommand."""
@@ -431,6 +469,19 @@ class TestMolCLISpinCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["spin_basename"] == "custom_label"
         assert kwargs["label"] == "custom_label"
+
+    def test_spin_invalid_coordinates_raises(self, single_molecule_xyz_file):
+        with pytest.raises(ValueError, match="Invalid coordinates input"):
+            run_mol_and_capture_kwargs(
+                "chemsmart.jobs.mol.spin.PyMOLSpinJob",
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "spin",
+                    "-c",
+                    "not-a-literal(",
+                ],
+            )
 
 
 class TestMolCLIAlignCommand:
