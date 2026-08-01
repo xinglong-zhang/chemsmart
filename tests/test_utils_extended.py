@@ -10,6 +10,8 @@ import pytest
 from chemsmart.utils.utils import (
     OrderedSet,
     content_blocks_by_paragraph,
+    convert_list_to_gaussian_frozen_list,
+    convert_list_to_orca_frozen_list,
     convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
     extract_number,
@@ -144,6 +146,26 @@ class TestFileCache:
         os.utime(str(path), (now_int, now_int))
         assert read_it(str(path)) == "changed"
         assert len(calls) == 2
+
+
+class TestConvertListToFrozenList:
+    def test_gaussian_frozen_list_is_1_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_gaussian_frozen_list([1, 3], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
+
+    def test_orca_frozen_list_is_0_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_orca_frozen_list([0, 2], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
 
 
 class TestOrderedSet:
