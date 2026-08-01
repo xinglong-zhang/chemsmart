@@ -19,6 +19,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
+    is_pymol_derived_style,
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
@@ -996,6 +997,162 @@ class TestPyMOLStyleCommands:
             style="pymol",
         )
         assert job_pymol.label == "mol"
+
+
+class TestPyMOLJobRunnerBaseHelpers:
+    """Direct tests for PyMOLJobRunner's private helper methods, using
+    a bare instance (__new__ bypass) plus SimpleNamespace fake jobs
+    since these do their own file I/O/regex work independent of a
+    fully constructed job/server pipeline."""
+
+    def test_is_pymol_derived_style_none_is_false(self):
+        assert is_pymol_derived_style(None) is False
+
+    def test_scratch_defaults_to_class_scratch_when_none(self, pbs_server):
+        runner = PyMOLJobRunner(server=pbs_server)
+        assert runner.scratch is PyMOLJobRunner.SCRATCH
+
+    def test_executable_raises_when_pymol_not_on_path(self, mocker):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        mocker.patch(
+            "chemsmart.jobs.mol.runner.shutil.which", return_value=None
+        )
+        with pytest.raises(FileNotFoundError, match="not found in PATH"):
+            runner.executable
+
+    def test_generate_visualization_style_script_overwrites_existing(
+        self, tmp_path
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(folder=str(tmp_path), label="testjob")
+        dest = tmp_path / "zhang_group_pymol_style.py"
+        dest.write_text("# existing stub\n")
+
+        result = runner._generate_visualization_style_script(job)
+
+        assert result == str(dest)
+        assert os.path.exists(result)
+        # isosurface_value/color_range default to None when absent
+        assert job.isosurface_value is None
+        assert job.color_range is None
+        # content was overwritten (no longer the stub)
+        assert dest.read_text() != "# existing stub\n"
+
+    def test_generate_visualization_style_script_modifies_when_isosurface_set(
+        self, tmp_path
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            label="testjob",
+            isosurface_value=0.8,
+            color_range=None,
+        )
+        result = runner._generate_visualization_style_script(job)
+        assert "isosurface=0.8" in open(result).read()
+
+    def test_modify_job_pymol_script_raises_when_missing(self, tmp_path):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            label="testjob",
+            isosurface_value=None,
+            color_range=None,
+        )
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            runner._modify_job_pymol_script(job)
+
+    def test_modify_job_pymol_script_updates_isosurface_and_color_range(
+        self, tmp_path
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        src = runner.pymol_templates_path / "zhang_group_pymol_style.py"
+        dest = tmp_path / "zhang_group_pymol_style.py"
+        shutil.copy(src, dest)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            label="testjob",
+            isosurface_value=0.8,
+            color_range=2.0,
+        )
+        result = runner._modify_job_pymol_script(job, str(dest))
+        content = open(result).read()
+        assert "isosurface=0.8" in content
+        assert "range=2.0" in content
+
+    def test_modify_job_pymol_script_no_change_skips_rewrite(self, tmp_path):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        src = runner.pymol_templates_path / "zhang_group_pymol_style.py"
+        dest = tmp_path / "zhang_group_pymol_style.py"
+        shutil.copy(src, dest)
+        original_mtime = os.path.getmtime(dest)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            label="testjob",
+            isosurface_value=None,
+            color_range=None,
+        )
+        result = runner._modify_job_pymol_script(job, str(dest))
+        assert result == str(dest)
+        assert os.path.getmtime(dest) == original_mtime
+
+    def test_get_gaussian_executable(self, mocker):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        runner.server = SimpleNamespace(name="local")
+        mock_exe_cls = mocker.patch(
+            "chemsmart.jobs.mol.runner.GaussianExecutable"
+        )
+        mock_exe = mocker.MagicMock()
+        mock_exe.executable_folder = "/opt/g16"
+        mock_exe_cls.from_servername.return_value = mock_exe
+
+        result = runner._get_gaussian_executable(SimpleNamespace())
+
+        assert result == "/opt/g16"
+        mock_exe_cls.from_servername.assert_called_once_with("local")
+
+    def test_generate_fchk_file_raises_when_neither_file_exists(
+        self, tmp_path
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(folder=str(tmp_path), source_basename="mol")
+        with pytest.raises(FileNotFoundError, match="is required"):
+            runner._generate_fchk_file(job)
+
+    def test_generate_fchk_file_skips_when_fchk_already_exists(
+        self, tmp_path, mocker
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        (tmp_path / "mol.fchk").write_text("stub")
+        job = SimpleNamespace(folder=str(tmp_path), source_basename="mol")
+        mocker.patch.object(
+            PyMOLJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        mock_run = mocker.patch("chemsmart.jobs.mol.runner.run_command")
+
+        runner._generate_fchk_file(job)
+
+        mock_run.assert_not_called()
+
+    def test_write_input_list_with_non_molecule_raises(self, tmp_path):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(
+            inputfile=str(tmp_path / "mol.xyz"),
+            molecule=["not-a-molecule"],
+        )
+        with pytest.raises(ValueError, match="not of Molecule type"):
+            runner._write_input(job)
+
+    def test_write_input_non_list_non_molecule_raises(self, tmp_path):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(
+            inputfile=str(tmp_path / "mol2.xyz"),
+            molecule="not-a-molecule-or-list",
+        )
+        with pytest.raises(ValueError, match="not of Molecule type"):
+            runner._write_input(job)
 
 
 class TestPyMOLAlignJobRunnerBatchProcessing:
