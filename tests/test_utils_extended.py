@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from chemsmart.utils.utils import (
     convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
     extract_number,
+    file_cache,
     get_list_from_string_range,
     get_prepend_string_for_modred,
     get_prepend_string_list_from_modred_free_format,
@@ -27,6 +29,121 @@ from chemsmart.utils.utils import (
     update_dict_with_existing_keys,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
+
+
+class TestFileCache:
+    """file_cache had no existing coverage anywhere."""
+
+    def test_no_file_arguments_bypasses_caching(self):
+        calls = []
+
+        @file_cache()
+        def add(a, b):
+            calls.append((a, b))
+            return a + b
+
+        assert add(1, 2) == 3
+        assert add(1, 2) == 3
+        # every call actually invokes the function since there are no
+        # file-path arguments to key the cache on
+        assert len(calls) == 2
+
+    def test_caches_result_for_unchanged_file(self, tmp_path):
+        calls = []
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+    def test_copy_result_true_prevents_cache_pollution(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=True)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3]
+
+    def test_copy_result_false_leaks_mutations_into_cache(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=False)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3, 999]
+
+    def test_unwraps_staticmethod(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+        calls = []
+
+        class Foo:
+            @file_cache()
+            @staticmethod
+            def bar(filepath):
+                calls.append(filepath)
+                return "result"
+
+        assert Foo.bar(str(path)) == "result"
+        assert Foo.bar(str(path)) == "result"
+        assert len(calls) == 1
+
+    def test_rejects_classmethod(self):
+        with pytest.raises(
+            ValueError, match="Unable to use this with classmethod"
+        ):
+
+            class Baz:
+                @file_cache()
+                @classmethod
+                def qux(cls, x):
+                    return x
+
+    def test_recently_modified_integer_mtime_uses_content_hash(self, tmp_path):
+        """When a file's mtime is a whole number of seconds and was
+        modified recently, the cache key falls back to a content hash
+        instead of the raw mtime (guards against low-resolution
+        filesystem timestamps within the same second)."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        # force an integer mtime so the hash-based branch is taken
+        now_int = int(time.time())
+        os.utime(str(path), (now_int, now_int))
+        calls = []
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+        # changing the content (same integer mtime) invalidates the cache
+        os.utime(str(path), (now_int, now_int))
+        path.write_text("changed")
+        os.utime(str(path), (now_int, now_int))
+        assert read_it(str(path)) == "changed"
+        assert len(calls) == 2
 
 
 class TestOrderedSet:
