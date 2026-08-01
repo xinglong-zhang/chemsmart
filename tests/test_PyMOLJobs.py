@@ -1424,6 +1424,150 @@ class TestPyMOLScientificStyleVisualizationJobRunnerHelpers:
         assert dest.read_text() != "# stub\n"
 
 
+class TestPyMOLMovieJobRunnerHelpers:
+    def test_setup_style_uses_cwd_style_file_when_present(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "zhang_group_pymol_style.py").write_text("# stub\n")
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        job = SimpleNamespace(job_basename="mol")
+        assert runner._setup_style(job, "cmd") == 'cmd -d "movie_style mol'
+
+    def test_set_ray_trace_frames_appends_when_trace_true(self):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        job = SimpleNamespace(trace=True)
+        assert (
+            runner._set_ray_trace_frames(job, "cmd")
+            == "cmd; set ray_trace_frames, 1; set ray_trace_mode, 1"
+        )
+
+    def test_create_movie_skips_when_mp4_exists_and_no_overwrite(
+        self, tmp_path
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        (tmp_path / "mol.mp4").write_text("stub")
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            job_basename="mol",
+            outputfile=str(tmp_path / "mol.pse"),
+            overwrite=False,
+        )
+        assert runner._create_movie(job) is None
+
+    def test_create_movie_raises_when_no_png_frames(self, tmp_path):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            job_basename="mol",
+            outputfile=str(tmp_path / "mol.pse"),
+            overwrite=False,
+        )
+        with pytest.raises(FileNotFoundError, match="No PNG frames found"):
+            runner._create_movie(job)
+
+    def test_create_movie_overwrites_existing_mp4_and_cleans_up_pngs(
+        self, tmp_path, mocker
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        (tmp_path / "mol.mp4").write_text("stub")
+        (tmp_path / "mol_frame_0001.png").write_text("stub")
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            job_basename="mol",
+            outputfile=str(tmp_path / "mol.pse"),
+            overwrite=True,
+        )
+        mock_run = mocker.patch("chemsmart.jobs.mol.runner.subprocess.run")
+
+        runner._create_movie(job)
+
+        mock_run.assert_called_once()
+        assert not (tmp_path / "mol_frame_0001.png").exists()
+
+    def test_create_movie_ffmpeg_called_process_error_propagates(
+        self, tmp_path, mocker
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        (tmp_path / "mol_frame_0001.png").write_text("stub")
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            job_basename="mol",
+            outputfile=str(tmp_path / "mol.pse"),
+            overwrite=False,
+        )
+        mocker.patch(
+            "chemsmart.jobs.mol.runner.subprocess.run",
+            side_effect=subprocess.CalledProcessError(
+                1, "ffmpeg", stderr="boom"
+            ),
+        )
+
+        with pytest.raises(subprocess.CalledProcessError):
+            runner._create_movie(job)
+
+    def test_create_movie_ffmpeg_not_installed_raises(self, tmp_path, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLMovieJobRunner
+
+        runner = PyMOLMovieJobRunner.__new__(PyMOLMovieJobRunner)
+        (tmp_path / "mol_frame_0001.png").write_text("stub")
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            job_basename="mol",
+            outputfile=str(tmp_path / "mol.pse"),
+            overwrite=False,
+        )
+        mocker.patch(
+            "chemsmart.jobs.mol.runner.subprocess.run",
+            side_effect=FileNotFoundError("no ffmpeg"),
+        )
+
+        with pytest.raises(FileNotFoundError, match="FFmpeg not found"):
+            runner._create_movie(job)
+
+
+class TestPyMOLIRCMovieJobRunnerHelpers:
+    def test_get_rotation_command_is_noop(self):
+        from chemsmart.jobs.mol.runner import PyMOLIRCMovieJobRunner
+
+        runner = PyMOLIRCMovieJobRunner.__new__(PyMOLIRCMovieJobRunner)
+        assert runner._get_rotation_command(SimpleNamespace(), "cmd") == "cmd"
+
+
+class TestPyMOLNCIJobRunnerHelpers:
+    @pytest.mark.parametrize(
+        "binary,intermediate,expected_fragment",
+        [
+            (True, False, "nci_binary mol"),
+            (False, True, "nci_intermediate mol"),
+            (False, False, "nci mol"),
+        ],
+    )
+    def test_run_nci_command_modes(
+        self, binary, intermediate, expected_fragment
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLNCIJobRunner
+
+        runner = PyMOLNCIJobRunner.__new__(PyMOLNCIJobRunner)
+        job = SimpleNamespace(
+            binary=binary, intermediate=intermediate, source_basename="mol"
+        )
+        command = runner._run_nci_command(job, "cmd")
+        assert command == f"cmd; {expected_fragment}"
+
+
 class TestPyMOLAlignJobRunnerBatchProcessing:
     """Direct tests for PyMOLAlignJobRunner._run_batch_processing and
     _execute_batch, exercised via a bare instance with the subprocess-
