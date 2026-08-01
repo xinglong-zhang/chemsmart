@@ -1,5 +1,6 @@
 import os.path
 import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,7 @@ from chemsmart.jobs.mol.runner import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
     PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
     PyMOLAlignJobRunner,
+    PyMOLHybridVisualizationJobRunner,
     PyMOLJobRunner,
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
@@ -1153,6 +1155,190 @@ class TestPyMOLJobRunnerBaseHelpers:
         )
         with pytest.raises(ValueError, match="not of Molecule type"):
             runner._write_input(job)
+
+    def test_get_visualization_command_skips_r_flag_when_style_missing(
+        self, mocker
+    ):
+        mocker.patch.object(
+            PyMOLJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        mocker.patch.object(
+            PyMOLJobRunner,
+            "_generate_visualization_style_script",
+            return_value="/nonexistent/style.py",
+        )
+        job = SimpleNamespace(
+            inputfile="/tmp/mol.xyz",
+            pymol_script=None,
+            label="mol",
+            quiet_mode=False,
+            command_line_only=False,
+        )
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        command = runner._get_visualization_command(job)
+        assert command == "/usr/bin/pymol /tmp/mol.xyz"
+
+    def test_get_visualization_command_uses_existing_user_script(self, mocker):
+        mocker.patch.object(
+            PyMOLJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        job = SimpleNamespace(
+            inputfile="/tmp/mol.xyz",
+            pymol_script="chemsmart/jobs/mol/runner.py",
+            label="mol",
+            quiet_mode=True,
+            command_line_only=True,
+        )
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        command = runner._get_visualization_command(job)
+        assert " -r chemsmart/jobs/mol/runner.py" in command
+        assert " -q" in command
+        assert " -c" in command
+
+    def test_get_visualization_command_missing_user_script_asserts(
+        self, mocker
+    ):
+        mocker.patch.object(
+            PyMOLJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        job = SimpleNamespace(
+            inputfile="/tmp/mol.xyz",
+            pymol_script="/no/such/file.py",
+            label="mol",
+            quiet_mode=False,
+            command_line_only=False,
+        )
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        with pytest.raises(AssertionError, match="does not exist"):
+            runner._get_visualization_command(job)
+
+    def test_setup_style_default_uses_existing_cwd_style_file(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "zhang_group_pymol_style.py").write_text("# stub\n")
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style=None, label="mol")
+        command = runner._setup_style(job, "cmd")
+        assert command == 'cmd -d "pymol_style mol'
+
+    @pytest.mark.parametrize(
+        "style,expected",
+        [
+            ("cylview", 'cmd -d "cylview_style mol'),
+            ("cylview-flat", 'cmd -d "cylview_flat_style mol'),
+        ],
+    )
+    def test_setup_style_cylview_variants(self, style, expected):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style=style, label="mol")
+        assert runner._setup_style(job, "cmd") == expected
+
+    def test_setup_style_invalid_style_raises(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style="bogus_style", label="mol")
+        with pytest.raises(ValueError, match="not available"):
+            runner._setup_style(job, "cmd")
+
+    def test_add_vdw_appends_when_requested(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(vdw=True, label="mol")
+        assert runner._add_vdw(job, "cmd") == "cmd; add_vdw mol"
+
+    def test_add_vdw_noop_when_not_requested(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(vdw=False, label="mol")
+        assert runner._add_vdw(job, "cmd") == "cmd"
+
+    def test_add_coordinates_labels_handles_angles_and_dihedrals(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(coordinates=[[1, 2, 3], [1, 2, 3, 4]])
+        command = runner._add_coordinates_labels(job, "cmd")
+        assert "angle a1, id 1, id 2, id 3" in command
+        assert "dihedral di1, id 1, id 2, id 3, id 4" in command
+
+    def test_offset_labels_sets_position_when_given(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(label_offset="(0,0,1.2)")
+        command = runner._offset_labels(job, "cmd")
+        assert command == "cmd; set label_position, (0,0,1.2)"
+
+    def test_offset_labels_noop_when_none(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(label_offset=None)
+        assert runner._offset_labels(job, "cmd") == "cmd"
+
+    def test_add_ray_command_appends_when_trace_true(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(trace=True)
+        assert runner._add_ray_command(job, "cmd") == "cmd; ray 2400,1800"
+
+    def test_add_ray_command_noop_when_trace_false(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(trace=False)
+        assert runner._add_ray_command(job, "cmd") == "cmd"
+
+    def test_job_specific_commands_base_passthrough(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        assert runner._job_specific_commands(SimpleNamespace(), "cmd") == "cmd"
+
+    def test_hide_labels_appends_command(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        assert (
+            runner._hide_labels(SimpleNamespace(), "cmd") == "cmd; hide labels"
+        )
+
+    def test_create_process_raises_on_nonzero_returncode(
+        self, tmp_path, mocker
+    ):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        runner.running_directory = str(tmp_path)
+        job = SimpleNamespace(
+            errfile=str(tmp_path / "j.err"), logfile=str(tmp_path / "j.log")
+        )
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mocker.patch(
+            "chemsmart.jobs.mol.runner.subprocess.Popen",
+            return_value=mock_process,
+        )
+
+        with pytest.raises(subprocess.CalledProcessError):
+            runner._create_process(job, "echo hi", {})
+
+    def test_write_hybrid_pml_overwrites_existing_file(self, tmp_path, mocker):
+        runner = PyMOLHybridVisualizationJobRunner.__new__(
+            PyMOLHybridVisualizationJobRunner
+        )
+        job = SimpleNamespace(folder=str(tmp_path), label="mol")
+        (tmp_path / "mol.pml").write_text("# existing\n")
+
+        mocker.patch.object(
+            PyMOLHybridVisualizationJobRunner, "_write_default_pymol_style"
+        )
+        mocker.patch.object(
+            PyMOLHybridVisualizationJobRunner, "_write_faded_colors"
+        )
+        mocker.patch.object(
+            PyMOLHybridVisualizationJobRunner, "_write_highlighted_colors"
+        )
+        mocker.patch.object(
+            PyMOLHybridVisualizationJobRunner, "_write_surface_settings"
+        )
+
+        result = runner._write_hybrid_pml(job)
+
+        assert result == str(tmp_path / "mol.pml")
 
 
 class TestPyMOLAlignJobRunnerBatchProcessing:
