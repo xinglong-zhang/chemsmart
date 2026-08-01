@@ -1568,6 +1568,138 @@ class TestPyMOLNCIJobRunnerHelpers:
         assert command == f"cmd; {expected_fragment}"
 
 
+class TestPyMOLMOJobRunnerHelpers:
+    def test_generate_mo_cube_file_no_selection_raises(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        mocker.patch.object(
+            PyMOLMOJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        job = SimpleNamespace(
+            number=None,
+            homo=False,
+            lumo=False,
+            job_basename="mol",
+            source_basename="mol",
+        )
+        with pytest.raises(ValueError, match="exactly one of"):
+            runner._generate_mo_cube_file(job)
+
+    def test_generate_mo_cube_file_multiple_selections_raises(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        mocker.patch.object(
+            PyMOLMOJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        job = SimpleNamespace(
+            number=5,
+            homo=True,
+            lumo=False,
+            job_basename="mol",
+            source_basename="mol",
+        )
+        with pytest.raises(ValueError, match="exactly one of"):
+            runner._generate_mo_cube_file(job)
+
+    def test_generate_mo_cube_file_skips_when_cube_exists(
+        self, tmp_path, monkeypatch, mocker
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mol.cube").write_text("stub")
+        mocker.patch.object(
+            PyMOLMOJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        mock_run = mocker.patch("chemsmart.jobs.mol.runner.run_command")
+        job = SimpleNamespace(
+            number=None,
+            homo=True,
+            lumo=False,
+            job_basename="mol",
+            source_basename="mol",
+        )
+
+        assert runner._generate_mo_cube_file(job) is None
+        mock_run.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "kwargs,expected_mo",
+        [
+            ({"number": 7, "homo": False, "lumo": False}, "7"),
+            ({"number": None, "homo": True, "lumo": False}, "HOMO"),
+            ({"number": None, "homo": False, "lumo": True}, "LUMO"),
+        ],
+    )
+    def test_generate_mo_cube_file_runs_cubegen(
+        self, tmp_path, monkeypatch, mocker, kwargs, expected_mo
+    ):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        monkeypatch.chdir(tmp_path)
+        mocker.patch.object(
+            PyMOLMOJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        mock_run = mocker.patch("chemsmart.jobs.mol.runner.run_command")
+        job = SimpleNamespace(
+            job_basename="mol", source_basename="mol", **kwargs
+        )
+
+        runner._generate_mo_cube_file(job)
+
+        assert mock_run.call_args.args[0] == (
+            f"/opt/g16/cubegen 0 MO={expected_mo} mol.fchk mol.cube 0 h"
+        )
+
+    def test_write_molecular_orbital_pml_overwrites_existing(self, tmp_path):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            mo_basename="mol_HOMO",
+            isosurface_value=0.05,
+            transparency_value=0.3,
+            surface_quality=1,
+            antialias_value=2,
+        )
+        pml_path = tmp_path / "mol_HOMO.pml"
+        pml_path.write_text("# existing\n")
+
+        runner._write_molecular_orbital_pml(job)
+
+        content = pml_path.read_text()
+        assert "load mol_HOMO.cube" in content
+        assert "isosurface pos_iso, mol_HOMO, 0.05" in content
+        assert "isosurface neg_iso, mol_HOMO, -0.05" in content
+
+    def test_offset_labels_is_noop(self):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        assert runner._offset_labels(SimpleNamespace(), "cmd") == "cmd"
+
+    def test_call_pml_appends_load_command(self):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        job = SimpleNamespace(folder="/tmp/testjob", mo_basename="mol_HOMO")
+        command = runner._call_pml(job, "cmd")
+        assert command == "cmd; load /tmp/testjob/mol_HOMO.pml"
+
+
 class TestPyMOLAlignJobRunnerBatchProcessing:
     """Direct tests for PyMOLAlignJobRunner._run_batch_processing and
     _execute_batch, exercised via a bare instance with the subprocess-
