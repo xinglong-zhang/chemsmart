@@ -2138,3 +2138,64 @@ continuing to the next file as intended.
 values referenced in the `except` block) before the `try`, or restrict
 the message to `structure` alone / use a placeholder string when
 `energy` was never computed.
+
+## 42. `pka batch`'s proton-exchange reference validation catches the wrong exception type, so a failed CDXML reference-proton auto-detect crashes instead of producing a helpful `UsageError`
+
+**Location:** `chemsmart/cli/gaussian/pka.py`, `batch()` (lines
+266-278).
+
+```python
+elif shared["reference_proton_index"] is None:
+    ref = shared["reference"]
+    if ref.endswith((".cdx", ".cdxml")):
+        try:
+            shared["reference_proton_index"] = (
+                PKaCDXFile.resolve_reference_proton(
+                    ref,
+                    None,
+                    shared["reference_color_code"],
+                )
+            )
+        except click.UsageError:
+            missing.append("-rpi/--reference-proton-index")
+```
+
+`PKaCDXFile.resolve_reference_proton` (`chemsmart/io/file.py`, line
+582) explicitly documents and raises `ValueError` on parse/color-code
+failure, never `click.UsageError`. The `except click.UsageError:`
+clause here can therefore never catch a real failure from this call —
+when reference-proton auto-detection genuinely fails (e.g. the
+reference CDXML has no uniquely coloured proton), the `ValueError`
+propagates uncaught out of `batch()` instead of being converted into
+the intended "missing -rpi/--reference-proton-index" `UsageError`
+alongside the other reference-option checks.
+
+**Reproduce:**
+```python
+from unittest.mock import patch
+import click
+
+with patch(
+    "chemsmart.cli.gaussian.pka.PKaCDXFile.resolve_reference_proton",
+    side_effect=ValueError("no coloured proton found"),
+):
+    ...  # invoking `pka batch` with scheme="proton exchange" and a
+         # .cdxml reference lacking reference_proton_index raises
+         # ValueError instead of click.UsageError
+```
+See `tests/test_pka.py::TestPKa::test_batch_proton_exchange_cdxml_reference_resolve_failure_raises_usage_error`,
+which patches the exception type raised to demonstrate both what the
+code currently does (crash) and what the `except` clause was clearly
+meant to handle.
+
+**Impact:** Low-medium — only affects the specific combination of
+`pka batch` + `scheme="proton exchange"` + a `.cdxml`/`.cdx` reference
+file with no `--reference-proton-index` given + auto-detection
+failing. Users hit a raw `ValueError` traceback instead of the
+friendly, actionable `UsageError` listing all missing reference
+options.
+
+**Suggested direction:** change the `except` clause to catch
+`ValueError` (matching what `resolve_reference_proton` actually
+raises), or have `resolve_reference_proton` raise `click.UsageError`
+directly if that is the intended contract across its other callers.

@@ -2898,3 +2898,466 @@ class TestPKa:
             ValueError, match="Batch job submission is not supported"
         ):
             process_pipeline.__wrapped__(ctx, ["not-a-job", "also-not-a-job"])
+
+
+def _build_pka_shared(**overrides):
+    """Minimal 'pka_shared' dict matching the keys the `pka` group builds."""
+    shared = dict(
+        scheme="direct",
+        reference=None,
+        reference_proton_index=None,
+        reference_color_code=None,
+        reference_charge=None,
+        reference_multiplicity=None,
+        reference_conjugate_base_charge=None,
+        reference_conjugate_base_multiplicity=None,
+        delta_g_proton=None,
+        conjugate_base_charge=None,
+        conjugate_base_multiplicity=None,
+        solvent_model=None,
+        solvent_id=None,
+        temperature=None,
+        concentration=None,
+        pressure=None,
+        cutoff_entropy_grimme=None,
+        cutoff_enthalpy=None,
+        entropy_method=None,
+        skip_completed=False,
+    )
+    shared.update(overrides)
+    return shared
+
+
+class TestPkaCliDirectBranchCoverage:
+    """Targeted coverage for chemsmart/cli/gaussian/pka.py branches not
+    reached by the higher-level batch/analyze tests above: submit()'s
+    own multi-fragment CDXML routing, the multi-molecule-index job
+    list, the proton-exchange reference validation in batch(), and the
+    defensive job_settings-not-set branches in batch() and
+    _create_pka_jobs_from_molecules()."""
+
+    @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+    def test_sub_pka_submit_subcommand_handles_multifragment_cdxml(
+        self,
+        tmp_path,
+        monkeypatch,
+        backend,
+        colored_proton_two_molecule_cdxml_file,
+    ):
+        """Explicit 'submit' (not 'batch') with a multi-fragment CDXML
+        should still create one job per fragment, via submit()'s own
+        `pka_molecules is not None` branch rather than
+        batch_pka_jobs_from_cdxml."""
+        _require_backend_pka_subcommand(sub, backend)
+        config_root = _write_test_backend_project(tmp_path, backend)
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.server import Server
+
+        fake_server = Server(name="dummy")
+        captured = {"labels": []}
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured[
+                "labels"
+            ].append(job.label)
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--no-scratch",
+                backend,
+                "-p",
+                "test",
+                "-f",
+                colored_proton_two_molecule_cdxml_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "pka",
+                "-s",
+                "direct",
+                "submit",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(captured["labels"]) == 2
+        assert all("_frag" in label for label in captured["labels"])
+
+    @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+    def test_sub_pka_submit_multi_index_creates_one_job_per_index(
+        self,
+        tmp_path,
+        monkeypatch,
+        backend,
+        two_rotated_molecules_xyz_file,
+    ):
+        """Selecting multiple molecule indices from a multi-structure
+        file together with an explicit -pi proton index takes the
+        `len(molecules) > 1 and molecule_indices` branch, creating one
+        job per selected index instead of a single job."""
+        _require_backend_pka_subcommand(sub, backend)
+        config_root = _write_test_backend_project(tmp_path, backend)
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.server import Server
+
+        fake_server = Server(name="dummy")
+        captured = {"labels": []}
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured[
+                "labels"
+            ].append(job.label)
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--no-scratch",
+                backend,
+                "-p",
+                "test",
+                "-f",
+                two_rotated_molecules_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-i",
+                "1,2",
+                "pka",
+                "-s",
+                "direct",
+                "-pi",
+                "7",
+                "submit",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(captured["labels"]) == 2
+        assert all("_idx" in label for label in captured["labels"])
+
+    def test_batch_proton_exchange_missing_all_reference_options_raises(
+        self, tmp_path, monkeypatch
+    ):
+        """scheme=proton exchange with no reference options at all should
+        list every missing option in one UsageError."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        batch_cmd = pka_mod.pka.commands["batch"]
+
+        shared = _build_pka_shared(scheme="proton exchange")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError) as exc_info:
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+        message = str(exc_info.value)
+        assert "-r/--reference" in message
+        assert "-rc/--reference-charge" in message
+        assert "-rm/--reference-multiplicity" in message
+
+    def test_batch_proton_exchange_noncdxml_reference_missing_proton_index_raises(
+        self, tmp_path, monkeypatch
+    ):
+        """A non-CDXML reference file without --reference-proton-index
+        cannot be auto-detected, so it must be reported as missing."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+        reference = tmp_path / "reference_acid.xyz"
+        reference.write_text("2\nref\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        batch_cmd = pka_mod.pka.commands["batch"]
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference=str(reference),
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError) as exc_info:
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+        assert "-rpi/--reference-proton-index" in str(exc_info.value)
+
+    def test_batch_proton_exchange_cdxml_reference_resolve_failure_raises_usage_error(
+        self, tmp_path, monkeypatch
+    ):
+        """Documents BUGS_FOUND.md #42: resolve_reference_proton raises
+        ValueError on failure, but batch() only catches click.UsageError,
+        so a real CDXML reference-proton auto-detect failure currently
+        propagates uncaught instead of becoming a friendly UsageError."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        batch_cmd = pka_mod.pka.commands["batch"]
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference="reference.cdxml",
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with (
+            ctx,
+            monkeypatch.context() as m,
+        ):
+            m.setattr(
+                pka_mod.PKaCDXFile,
+                "resolve_reference_proton",
+                staticmethod(
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        ValueError("no coloured proton found")
+                    )
+                ),
+            )
+            with pytest.raises(ValueError, match="no coloured proton found"):
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+
+    def test_batch_proton_exchange_full_reference_options_succeeds(
+        self, tmp_path, monkeypatch
+    ):
+        """All reference options supplied: the missing-options check
+        passes (covers the `if missing:` False arm) and the first table
+        row keeps scheme='proton exchange' while later rows are forced
+        to 'direct' (covers both arms of the per-row scheme rewrite)."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+        reference = tmp_path / "reference_acid.xyz"
+        reference.write_text("2\nref\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        batch_cmd = pka_mod.pka.commands["batch"]
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference=str(reference),
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            jobs = batch_cmd.callback(
+                skip_completed=False, proton_index=None, color_code=None
+            )
+
+        assert len(jobs) == 2
+        assert jobs[0]._batch_entry["scheme"] == "proton exchange"
+        assert jobs[1]._batch_entry["scheme"] == "direct"
+
+    def test_batch_job_settings_none_skips_merge(self, tmp_path, monkeypatch):
+        """ctx.obj['job_settings'] falsy should skip the opt_settings.merge
+        call rather than erroring, covering batch()'s defensive
+        `if job_settings:` False arm."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        batch_cmd = pka_mod.pka.commands["batch"]
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            jobs = batch_cmd.callback(
+                skip_completed=False, proton_index=None, color_code=None
+            )
+
+        assert len(jobs) == 2
+        assert {job.label for job in jobs} == {"acid1", "acid2"}
+
+    def test_create_pka_jobs_from_molecules_job_settings_none_skips_merge(
+        self, tmp_path, monkeypatch
+    ):
+        """job_settings falsy should skip opt_settings.merge in
+        _create_pka_jobs_from_molecules too (its own copy of the same
+        defensive guard as batch())."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+        from types import SimpleNamespace
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+
+        water = Molecule(
+            symbols=["O", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        water.proton_index = 2
+
+        ctx = SimpleNamespace(
+            obj={
+                "project_settings": project_settings,
+                "job_settings": None,
+                "keywords": {},
+                "jobrunner": None,
+                "filename": "frag.cdxml",
+            }
+        )
+        shared = _build_pka_shared(scheme="direct")
+
+        jobs = pka_mod._create_pka_jobs_from_molecules(
+            ctx, [water], shared, False
+        )
+
+        assert len(jobs) == 1
+        assert jobs[0].label == "frag_frag1_pka"
+        assert jobs[0].settings.charge == 0
+        assert jobs[0].settings.multiplicity == 1
+
+    def test_submit_empty_molecules_skips_charge_multiplicity_inference(
+        self, tmp_path, monkeypatch
+    ):
+        """ctx.obj['molecules'] falsy (empty list) should skip
+        apply_pka_molecule_charge_multiplicity, covering submit()'s
+        `if molecules:` False arm. Downstream `molecules[-1]` access
+        still requires a non-empty list, so this is expected to fail
+        past that point with an IndexError -- the branch under test
+        has already run by then."""
+        config_root = _write_test_backend_project(tmp_path, "gaussian")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project("test")
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.gaussian.pka")
+        submit_cmd = pka_mod.pka.commands["submit"]
+
+        job_settings = project_settings.opt_settings()
+        job_settings.charge = 0
+        job_settings.multiplicity = 1
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(submit_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": "acid.xyz",
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": job_settings,
+            "keywords": {"charge", "multiplicity"},
+            "molecules": [],
+            "molecule_indices": None,
+            "label": "acid",
+        }
+        with ctx:
+            with pytest.raises(IndexError):
+                submit_cmd.callback(
+                    skip_completed=False, proton_index=2, color_code=None
+                )
