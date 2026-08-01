@@ -1700,6 +1700,96 @@ class TestPyMOLMOJobRunnerHelpers:
         assert command == "cmd; load /tmp/testjob/mol_HOMO.pml"
 
 
+class TestPyMOLSpinJobRunnerHelpers:
+    def test_get_gaussian_executable(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        runner.server = SimpleNamespace(name="local")
+        mock_exe_cls = mocker.patch(
+            "chemsmart.jobs.mol.runner.GaussianExecutable"
+        )
+        mock_exe = mocker.MagicMock()
+        mock_exe.executable_folder = "/opt/g16"
+        mock_exe_cls.from_servername.return_value = mock_exe
+
+        result = runner._get_gaussian_executable(SimpleNamespace())
+
+        assert result == "/opt/g16"
+        mock_exe_cls.from_servername.assert_called_once_with("local")
+
+    def test_generate_spin_cube_file_runs_cubegen(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        mocker.patch.object(
+            PyMOLSpinJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        mock_run = mocker.patch("chemsmart.jobs.mol.runner.run_command")
+        job = SimpleNamespace(
+            source_basename="mol", job_basename="mol", npts=100
+        )
+
+        runner._generate_spin_cube_file(job)
+
+        assert (
+            mock_run.call_args.args[0]
+            == "/opt/g16/cubegen 0 spin mol.fchk mol.cube 100"
+        )
+
+    def test_write_spin_density_pml_overwrites_existing(self, tmp_path):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            spin_basename="mol_spin",
+            isosurface_value=0.004,
+            transparency_value=0.3,
+            surface_quality=1,
+            antialias_value=2,
+            ray_trace_mode=1,
+        )
+        pml_path = tmp_path / "mol_spin.pml"
+        pml_path.write_text("# existing\n")
+
+        runner._write_spin_density_pml(job)
+
+        content = pml_path.read_text()
+        assert "load mol_spin.cube" in content
+        assert "isosurface pos_iso_spin, mol_spin, 0.004" in content
+        assert "isosurface neg_iso_spin, mol_spin, -0.004" in content
+        assert "set ray_trace_mode, 1" in content
+
+    def test_job_specific_commands_chains_hide_pml_and_ray(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        job = SimpleNamespace(
+            folder="/tmp/testjob", spin_basename="mol_spin", trace=True
+        )
+        command = runner._job_specific_commands(job, "cmd")
+        assert "hide labels" in command
+        assert "load /tmp/testjob/mol_spin.pml" in command
+        assert "ray 2400,1800" in command
+
+    def test_offset_labels_is_noop(self):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        assert runner._offset_labels(SimpleNamespace(), "cmd") == "cmd"
+
+    def test_call_pml_appends_load_command(self):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        job = SimpleNamespace(folder="/tmp/testjob", spin_basename="mol_spin")
+        command = runner._call_pml(job, "cmd")
+        assert command == "cmd; load /tmp/testjob/mol_spin.pml"
+
+
 class TestPyMOLAlignJobRunnerBatchProcessing:
     """Direct tests for PyMOLAlignJobRunner._run_batch_processing and
     _execute_batch, exercised via a bare instance with the subprocess-
