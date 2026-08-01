@@ -2199,3 +2199,227 @@ options.
 `ValueError` (matching what `resolve_reference_proton` actually
 raises), or have `resolve_reference_proton` raise `click.UsageError`
 directly if that is the intended contract across its other callers.
+
+## 43. `Gaussian16Input.constrained_atoms` setter always crashes with `RecursionError` instead of setting anything
+
+**Location:** `chemsmart/io/gaussian/input.py`, lines 270-281.
+
+```python
+@property
+def constrained_atoms(self):
+    """
+    Get atoms with coordinate constraints.
+    """
+    return self.coordinate_block.constrained_atoms
+
+@constrained_atoms.setter
+def constrained_atoms(self, value):
+    """
+    Set atoms with coordinate constraints.
+    """
+    self.constrained_atoms = value
+```
+
+The setter assigns to `self.constrained_atoms`, which is the same
+property it is defining -- this re-invokes the setter itself,
+infinitely, until Python's recursion limit is hit. Any attempt to do
+`some_gaussian_input.constrained_atoms = [...]` crashes with
+`RecursionError: maximum recursion depth exceeded` instead of storing
+the value anywhere (there is no backing `_constrained_atoms`
+attribute for it to write to).
+
+**Reproduce:**
+```python
+from chemsmart.io.gaussian.input import Gaussian16Input
+
+gi = Gaussian16Input(filename="some_valid_input.com")
+gi.constrained_atoms = [1, 2]
+# RecursionError: maximum recursion depth exceeded
+```
+See `tests/test_GaussianIO.py::TestGaussian16InputDirectPropertyCoverage::test_constrained_atoms_setter_recurses_infinitely`.
+
+**Impact:** Low today -- grep shows no production code anywhere
+assigns to `.constrained_atoms` on a `Gaussian16Input`/
+`Gaussian16QMMMInput` instance, so this is currently dead code. But
+the setter exists and is part of the public property surface; anyone
+who reaches for it (a very natural thing to try, given the getter)
+will hit an opaque crash instead of the constraint being recorded.
+
+**Suggested direction:** either remove the setter entirely (the
+value is derived from `coordinate_block`, so a plain read-only
+property may be all that's intended), or have it write to a real
+backing attribute (e.g. `self._constrained_atoms = value`) that the
+getter falls back to.
+
+## 44. `Gaussian16Input.oniom_charge`/`oniom_multiplicity` crash with `AttributeError` on any non-QMMM input, because the `RecursionError` guard around `self.partition` catches the wrong exception type
+
+**Location:** `chemsmart/io/gaussian/input.py`, lines 140-147 and
+337-363.
+
+```python
+@property
+def oniom_charge(self):
+    oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+    return oniom_charge
+...
+def _get_oniom_charge_and_multiplicity(self, use_partition=True):
+    ...
+    if use_partition:
+        try:
+            partition_len = len(self.partition)
+        except RecursionError:
+            partition_len = None
+```
+
+`oniom_charge`/`oniom_multiplicity` call
+`_get_oniom_charge_and_multiplicity()` with the default
+`use_partition=True`, which accesses `self.partition`. But
+`partition` is only defined on the `Gaussian16QMMMInput` subclass
+(line 488) -- the base `Gaussian16Input` class has no such attribute
+at all. Accessing it raises `AttributeError`, not `RecursionError`,
+so the `except RecursionError` guard never catches it, and the
+`AttributeError` propagates uncaught out of `oniom_charge`/
+`oniom_multiplicity` for any plain (non-QMMM) `Gaussian16Input`
+instance.
+
+Contrast this with `charge`/`multiplicity` (lines 105-137), which
+call the same helper with `use_partition=False` explicitly and so
+never hit this path -- only the `oniom_charge`/`oniom_multiplicity`
+properties are affected.
+
+**Reproduce:**
+```python
+from chemsmart.io.gaussian.input import Gaussian16Input
+
+gi = Gaussian16Input(filename="some_valid_non_qmmm_input.com")
+gi.oniom_charge
+# AttributeError: 'Gaussian16Input' object has no attribute 'partition'
+```
+See `tests/test_GaussianIO.py::TestGaussian16InputDirectPropertyCoverage::test_oniom_charge_crashes_on_base_class_non_qmmm_input`.
+
+**Impact:** Low-medium -- only affects code that calls
+`.oniom_charge`/`.oniom_multiplicity` on a plain `Gaussian16Input`
+(rather than `Gaussian16QMMMInput`) instance. Since ONIOM-specific
+data only makes sense for QMMM inputs, this may never happen in
+practice, but nothing prevents a caller from doing so, and the result
+is a confusing `AttributeError` rather than a clean `None`/empty dict.
+
+**Suggested direction:** either catch `AttributeError` as well (or
+instead), or guard with `getattr(self, "partition", None)` so the
+base class degenerates gracefully instead of crashing.
+
+## 45. `Gaussian16QMMMInput.model_charge`/`model_multiplicity` crash with `KeyError` for real 2-layer ONIOM systems
+
+**Location:** `chemsmart/io/gaussian/input.py`, lines 463-466,
+483-486, 505-528.
+
+```python
+@property
+def model_charge(self):
+    oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+    return int(oniom_charge["model_charge"])
+...
+def _get_oniom_charge_and_multiplicity(self, use_partition=True):
+    ...
+    if len(self.partition) == 2:
+        print(charge_multiplicity_list)
+        charge_multiplicity_list = charge_multiplicity_list[0:3]
+        full_line = 6
+```
+
+For a 2-layer ONIOM system, `Gaussian16QMMMInput`'s own override of
+`_get_oniom_charge_and_multiplicity` slices
+`charge_multiplicity_list[0:3]`, keeping only
+`["charge_total", "real_multiplicity", "int_charge"]` -- it never
+includes `"model_charge"`/`"model_multiplicity"` in the resulting
+`oniom_charge`/`oniom_multiplicity` dicts for this case. But the
+`model_charge`/`model_multiplicity` properties unconditionally index
+`oniom_charge["model_charge"]`/`oniom_multiplicity["model_multiplicity"]`,
+so calling either on a 2-layer system raises `KeyError`.
+
+Compare with the base class's own `_get_oniom_charge_and_multiplicity`
+(lines 337-381), which for the equivalent 2-layer case keeps
+`charge_multiplicity_list[0:2] + charge_multiplicity_list[4:6]` --
+i.e. `charge_total`/`real_multiplicity`/`model_charge`/
+`model_multiplicity` (dropping the intermediate layer, keeping the
+model layer) -- the logically consistent choice for a 2-layer system,
+where "model" is the inner/high-level layer. The QMMM subclass's
+override uses different, inconsistent slicing that drops
+`model_charge`/`model_multiplicity` instead of `int_charge`/
+`int_multiplicity`.
+
+There's also a stray `print(charge_multiplicity_list)` debug
+statement left in this branch (line 526).
+
+**Reproduce:**
+```python
+from chemsmart.io.gaussian.input import Gaussian16QMMMInput
+
+gi = Gaussian16QMMMInput(filename="a_2layer_oniom_input.com")
+gi.model_charge
+# KeyError: 'model_charge'
+```
+See `tests/test_GaussianIO.py::TestGaussian16InputDirectPropertyCoverage::test_qmmm_2layer_model_charge_crashes_with_keyerror`.
+
+**Impact:** Medium -- any 2-layer ONIOM/QMMM job that calls
+`.model_charge`/`.model_multiplicity` (e.g. to report or reuse the
+inner-layer charge/multiplicity) crashes outright. 3-layer systems are
+unaffected (they keep the full 6-entry list).
+
+**Suggested direction:** align the QMMM subclass's 2-layer slicing
+with the base class's `[0:2] + [4:6]` (or whatever the intended
+semantics are for a 2-layer system), and remove the leftover debug
+`print`.
+
+## 46. `Gaussian16Input.charge`/`.multiplicity` return a `str` instead of `int` when falling back to oniom-line parsing
+
+**Location:** `chemsmart/io/gaussian/input.py`, lines 105-137.
+
+```python
+@property
+def charge(self):
+    charge_multiplicity = self._get_charge_and_multiplicity()
+    if charge_multiplicity is not None:
+        charge, _ = charge_multiplicity
+        return charge  # int, from _get_charge_and_multiplicity
+
+    oniom_charge, _ = self._get_oniom_charge_and_multiplicity(
+        use_partition=False
+    )
+    if oniom_charge:
+        return oniom_charge.get("charge_total")  # str, unconverted
+    return None
+```
+
+When the normal single "charge multiplicity" line is found,
+`_get_charge_and_multiplicity()` explicitly does `int(line_elements[0])`
+/ `int(line_elements[1])` (lines 333-334), so `.charge`/`.multiplicity`
+return `int`. But when that line isn't found (e.g. a combined
+multi-layer ONIOM charge/mult line with more than two numbers) and the
+code falls back to `_get_oniom_charge_and_multiplicity`, the values in
+`oniom_charge`/`oniom_multiplicity` are taken directly from
+`line.split()` with no `int()` conversion (see `_get_oniom_charge_and_multiplicity`,
+lines 322-381) -- so `.charge`/`.multiplicity` silently return a `str`
+in this case. Any caller that assumes an `int` (e.g. arithmetic like
+`pka_settings.charge - 1` in `chemsmart/cli/gaussian/pka.py`) would
+crash with `TypeError: unsupported operand type(s) for -: 'str' and
+'int'` if it ever received a Gaussian16Input parsed from such a file.
+
+**Reproduce:**
+```python
+from chemsmart.io.gaussian.input import Gaussian16Input
+
+gi = Gaussian16Input(filename="a_3layer_oniom_input_with_combined_charge_mult_line.com")
+gi.charge  # '0' (str), not 0 (int)
+gi.charge - 1  # TypeError: unsupported operand type(s) for -: 'str' and 'int'
+```
+See `tests/test_GaussianIO.py::TestGaussian16InputDirectPropertyCoverage::test_charge_and_multiplicity_fall_back_to_oniom_parsing`.
+
+**Impact:** Low-medium -- only affects `Gaussian16Input` (not the
+`Gaussian16QMMMInput` subclass) parsing a file whose charge/multiplicity
+line doesn't match the plain two-integer pattern. Silent type
+inconsistency is worse than an upfront crash since it can propagate
+before failing far from the actual cause.
+
+**Suggested direction:** wrap the oniom fallback values in `int(...)`
+before returning, matching the normal-path behavior.

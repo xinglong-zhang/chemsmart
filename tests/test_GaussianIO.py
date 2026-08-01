@@ -459,6 +459,238 @@ class TestGaussian16Input:
         assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
 
 
+class TestGaussian16InputDirectPropertyCoverage:
+    """Direct coverage for Gaussian16Input/Gaussian16QMMMInput
+    properties that TestGaussian16Input above doesn't reach directly
+    (it mostly asserts on higher-level derived values like molecule
+    formulas), plus three real bugs discovered along the way."""
+
+    def test_num_content_groups(self, gaussian_opt_genecp_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.num_content_groups == g16.num_content_blocks
+
+    def test_modredundant_group_present_when_modred_section_exists(
+        self, gaussian_modred_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16.modredundant_group == ["B 2 12 F", "B 9 2 F"]
+
+    def test_modredundant_group_none_without_modred(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.modredundant_group is None
+
+    def test_is_pbc_true_for_translation_vector_input(
+        self, gaussian_pbc_1d_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16.is_pbc is True
+        assert len(g16.translation_vectors) >= 1
+
+    def test_is_pbc_false_for_non_pbc_input(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.is_pbc is False
+
+    def test_mem_and_nproc(self, gaussian_opt_genecp_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.mem is not None
+        assert g16.nproc is not None
+
+    def test_charge_and_multiplicity_fall_back_to_oniom_parsing(
+        self, gaussian_qmmm_inputfile_3layer
+    ):
+        """When the charge/mult line has more than two numbers (as in a
+        combined-layer ONIOM line), the base class's charge/multiplicity
+        properties fall back to oniom parsing with use_partition=False
+        (which never touches self.partition, unlike oniom_charge)."""
+        g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
+        # the oniom fallback returns the raw parsed string, unlike the
+        # normal charge/mult line path which returns an int
+        assert g16.charge == "0"
+        assert g16.multiplicity == "1"
+
+    def test_oniom_charge_crashes_on_base_class_non_qmmm_input(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        """Documents BUGS_FOUND.md #44: oniom_charge/oniom_multiplicity
+        call _get_oniom_charge_and_multiplicity with the default
+        use_partition=True, which accesses self.partition -- an
+        attribute that only exists on the Gaussian16QMMMInput subclass.
+        On the plain base class this raises AttributeError, which the
+        `except RecursionError` guard cannot catch."""
+        g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_2layer)
+        with pytest.raises(AttributeError, match="partition"):
+            g16.oniom_charge
+        with pytest.raises(AttributeError, match="partition"):
+            g16.oniom_multiplicity
+
+    def test_has_frozen_coordinates_and_indices(
+        self, gaussian_frozen_opt_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16.has_frozen_coordinates
+        assert g16.frozen_coordinate_indices == list(range(1, 11))
+        assert g16.free_coordinate_indices == [11, 12, 13, 14]
+
+    def test_no_frozen_coordinates_returns_none(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert not g16.has_frozen_coordinates
+        assert g16.frozen_coordinate_indices is None
+        assert g16.free_coordinate_indices is None
+
+    def test_gen_genecp_group_and_light_heavy_elements_direct(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.gen_genecp_group is not None
+        assert g16.light_elements == ["H", "C", "O"]
+        assert g16.light_elements_basis == "def2svp"
+        assert g16.heavy_elements == ["Pd"]
+        assert g16.heavy_elements_basis == "def2-tzvppd"
+
+    def test_genecp_derived_properties_none_without_gen_basis(
+        self, gaussian_modred_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16.genecp_section is None
+        assert g16.light_elements is None
+        assert g16.light_elements_basis is None
+        assert g16.heavy_elements is None
+        assert g16.heavy_elements_basis is None
+        assert g16.custom_solvent is None
+        assert g16.custom_solvent_group is None
+
+    def test_gen_genecp_group_modred_and_solvent_present(
+        self, modred_genecp_custom_solvent_inputfile
+    ):
+        g16 = Gaussian16Input(filename=modred_genecp_custom_solvent_inputfile)
+        assert "modred" in g16.route_string
+        assert "solvent=generic" in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[4:-1]
+        assert g16.custom_solvent_group == g16.content_groups[-1]
+
+    def test_gen_genecp_group_modred_only(self, modred_gen_inputfile):
+        g16 = Gaussian16Input(filename=modred_gen_inputfile)
+        assert "modred" in g16.route_string
+        assert "solvent=generic" not in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[4:]
+
+    def test_gen_genecp_group_solvent_only(self, tmp_path):
+        """Neither of the existing genecp fixtures combines a custom
+        solvent without modred, so a minimal synthetic input covers
+        this branch of _get_gen_genecp_group."""
+        path = tmp_path / "solvent_only_genecp.com"
+        path.write_text(
+            "\n".join(
+                [
+                    "%chk=t.chk",
+                    "%mem=4GB",
+                    "# opt mn15/genecp scrf=(smd,solvent=generic,read)",
+                    "",
+                    "title",
+                    "",
+                    "0 1",
+                    "C 0.0 0.0 0.0",
+                    "H 0.0 0.0 1.0",
+                    "",
+                    "C 0",
+                    "def2svp",
+                    "****",
+                    "",
+                    "stoichiometry=CH4",
+                    "solventname=customsolvent",
+                    "eps=10.0",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Input(filename=str(path))
+        assert "modred" not in g16.route_string
+        assert "solvent=generic" in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[3:-1]
+        assert g16.custom_solvent is not None
+        assert "solventname=customsolvent" in g16.custom_solvent
+
+    def test_constrained_atoms_getter(self, gaussian_frozen_opt_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16.constrained_atoms == g16.coordinate_block.constrained_atoms
+
+    def test_constrained_atoms_setter_recurses_infinitely(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        """Documents BUGS_FOUND.md #43: the setter reassigns
+        self.constrained_atoms, recursing into itself forever instead
+        of storing the value anywhere."""
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        with pytest.raises(RecursionError):
+            g16.constrained_atoms = [1, 2]
+
+    def test_qmmm_2layer_oniom_charge_and_real_charge(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
+        assert g16.partition == {
+            "high level atoms": ["2-5"],
+            "low level atoms": ["6-9"],
+        }
+        assert g16.oniom_charge == {
+            "charge_total": "0",
+            "int_charge": "0",
+        }
+        assert g16.oniom_multiplicity == {"real_multiplicity": "1"}
+        assert g16.real_charge == 0
+        assert g16.int_charge == 0
+        assert g16.real_multiplicity == 1
+
+    def test_qmmm_3layer_partition_includes_medium_atoms(
+        self, gaussian_qmmm_inputfile_3layer
+    ):
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_3layer)
+        assert "medium level atoms" in g16.partition
+
+    def test_gen_genecp_group_none_for_semiempirical_without_basis(
+        self, tmp_path
+    ):
+        path = tmp_path / "semiempirical_no_basis.com"
+        path.write_text(
+            "\n".join(
+                [
+                    "%chk=t.chk",
+                    "%mem=4GB",
+                    "# opt freq pm6",
+                    "",
+                    "title",
+                    "",
+                    "0 1",
+                    "C 0.0 0.0 0.0",
+                    "H 0.0 0.0 1.0",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Input(filename=str(path))
+        assert g16.basis is None
+        assert g16.gen_genecp_group is None
+
+    def test_qmmm_2layer_model_charge_crashes_with_keyerror(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        """Documents BUGS_FOUND.md #45: for a 2-layer ONIOM system, the
+        QMMM subclass's own _get_oniom_charge_and_multiplicity keeps
+        charge_total/real_multiplicity/int_charge (not model_charge),
+        so model_charge/model_multiplicity crash with KeyError."""
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
+        with pytest.raises(KeyError, match="model_charge"):
+            g16.model_charge
+        with pytest.raises(KeyError, match="model_multiplicity"):
+            g16.model_multiplicity
+
+
 class TestGaussian16Output:
     def test_normal_termination_with_forces_and_frequencies(
         self, td_outputfile
