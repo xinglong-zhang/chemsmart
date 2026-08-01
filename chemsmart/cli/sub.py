@@ -11,6 +11,7 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
+from chemsmart.cli.plugins import JOB_COMMANDS, add_commands
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
@@ -345,5 +346,4 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         _process_single_job(job=job)
 
 
-for subcommand in subcommands:
-    sub.add_command(subcommand)
+add_commands(JOB_COMMANDS, sub, subcommands)
