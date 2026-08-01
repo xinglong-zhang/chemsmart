@@ -14,6 +14,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -85,18 +86,23 @@ def modred(
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.modred import ORCAModredJob
 
     # Get the original molecule indices from context
-    molecule_indices = ctx.obj.get(
-        "molecule_indices", list(range(1, len(molecules) + 1))
+    molecule_indices = ctx.obj.get("molecule_indices")
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
     )
+    batch_requested = len(job_targets) > 1
 
     # Handle multiple molecules: create one job per molecule
-    if len(molecules) > 1 and molecule_indices is not None:
-        logger.info(f"Creating {len(molecules)} ORCA modred jobs")
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA modred jobs")
         jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
+        for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
             logger.info(
                 f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
@@ -111,7 +117,18 @@ def modred(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA modred jobs")
-        return jobs
+
+        rewrite_cli = prepare_batch_jobs(
+            jobs,
+            molecule_indices,
+            job_token=ctx.info_name,
+            filepath=ctx.obj.get("filename"),
+        )
+        return ORCABatchJob(
+            jobs=jobs,
+            label=f"{label}_batch",
+            rewrite_cli=rewrite_cli,
+        )
     else:
         # Single molecule case
         molecule = molecules[-1]

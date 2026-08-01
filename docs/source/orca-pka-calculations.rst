@@ -91,6 +91,9 @@ These names align with the ``batch-analyze`` autodiscovery convention ``<basenam
  Batch Processing with Input Tables
 ************************************
 
+``pka batch`` requires at least two table rows (or a multi-molecule CDXML file); use ``pka submit`` for a single
+molecule.
+
 Proton exchange (default — reference acid required):
 
 .. code:: bash
@@ -113,8 +116,8 @@ Direct cycle:
    For proton exchange with multiple batch rows, only the first row uses the reference acid; subsequent rows switch to
    the direct cycle (same behaviour as Gaussian batch).
 
-   On HPC clusters, ``chemsmart sub ... pka batch`` writes one scheduler script per row or CDXML fragment with
-   reconstructed ``pka submit`` arguments. See :ref:`pka-hpc-batch-submission`.
+   Locally (``chemsmart run``), batch rows run one after another. On a cluster, use ``chemsmart sub`` so each row or
+   fragment can run as its own array task. See :ref:`cli-batch-array-submission` and :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -137,7 +140,8 @@ per-fragment coloured-proton detection. Labels are ``<basename>_frag<N>_pka`` (o
 
    chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-For cluster submission of multi-fragment CDXML, see :ref:`pka-hpc-batch-submission`.
+For cluster submission of multi-fragment CDXML, see :ref:`cli-batch-array-submission` and
+:ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files

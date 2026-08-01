@@ -20,9 +20,20 @@ The core idea:
 
 CHEMSMART automates this process, taking a TS frequency calculation output and directly submitting QRC jobs.
 
+.. note::
+
+   Forward and reverse QRC children inside one parent job run **serially**, each with the parent job's full
+   ``--num-cores`` / memory allocation. With ``chemsmart sub --run-in-parallel``, the forward and reverse legs are
+   submitted as separate scheduler array tasks and may run concurrently on the cluster, each still receiving the full
+   core and memory allocation. Independent QRC parents may still run concurrently when submitted as separate scheduler
+   jobs via ``chemsmart sub``.
+
 .. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] qrc [SUBCMD_OPTIONS]
+
+   # Forward and reverse as two concurrent array tasks
+   chemsmart sub -s SLURM --run-in-parallel gaussian -p my_project -f ts.log qrc
 
 *************
  QRC Options

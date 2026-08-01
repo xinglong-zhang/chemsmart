@@ -9,12 +9,13 @@ progress and completion tracking across the ensemble.
 
 import logging
 
+from chemsmart.jobs.batch import NestableJobMixin, run_nestable_job
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
 
 
-class GaussianCrestJob(GaussianJob):
+class GaussianCrestJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for CREST conformer ensemble calculations.
 
@@ -33,12 +34,8 @@ class GaussianCrestJob(GaussianJob):
 
     Properties:
         num_conformers (int): Total number of conformers in the ensemble.
-        last_run_job_index (int): Index of the first incomplete job; equals
-            total number if all jobs are complete.
         all_conformers_jobs (list[GaussianGeneralJob]): Prepared jobs for
             all conformers.
-        incomplete_conformers_jobs (list[GaussianGeneralJob]): Prepared
-            jobs that are not yet complete.
     """
 
     TYPE = "g16crest"
@@ -53,6 +50,7 @@ class GaussianCrestJob(GaussianJob):
         grouping_strategy=None,
         num_groups=None,
         skip_completed=True,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -73,6 +71,8 @@ class GaussianCrestJob(GaussianJob):
             grouping_strategy (str, optional): Grouping strategy for molecules.
             num_groups (int, optional): Number of groups to create when grouping
                 is enabled. Takes precedence over threshold-based grouping.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -94,6 +94,7 @@ class GaussianCrestJob(GaussianJob):
             num_confs_to_run = len(molecules)
 
         self.num_confs_to_opt = num_confs_to_run
+        self.child_index = child_index
 
         # if grouping strategy is provided, set the grouper
         # and carry out the grouping before running the group of molecules
@@ -140,21 +141,6 @@ class GaussianCrestJob(GaussianJob):
         return len(self.all_conformers)
 
     @property
-    def last_run_job_index(self):
-        """
-        Get the index of the first incomplete job.
-
-        Tracks progress through the conformer ensemble by identifying
-        the next job to run. Useful for resuming interrupted
-        calculations.
-
-        Returns:
-            int: Index of the first incomplete job; equals total number
-                of conformers if all jobs are complete.
-        """
-        return self._check_last_finished_job_index()
-
-    @property
     def all_conformers_jobs(self):
         """
         Get all conformer optimization jobs in the ensemble.
@@ -164,39 +150,22 @@ class GaussianCrestJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
+    def get_array_child_job(self, index: int):
+        """Build only the conformer child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        label = f"{self.label}_c{index + 1}"
+        return GaussianGeneralJob(
+            molecule=self.all_conformers[index],
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
     @property
-    def incomplete_conformers_jobs(self):
-        """
-        Get incomplete conformer optimization jobs.
-
-        Filters the job list to return only those jobs that have not
-        yet completed successfully. Useful for selective resubmission.
-
-        Returns:
-            list: List of incomplete GaussianGeneralJob objects.
-        """
-        return [
-            job for job in self.all_conformers_jobs if not job.is_complete()
-        ]
-
-    def _check_last_finished_job_index(self):
-        """
-        Find the index of the first incomplete job in the sequence.
-
-        Iterates through all conformer jobs to identify the last
-        point of progress. This is used for progress tracking and
-        resuming calculations.
-
-        Returns:
-            int: Index of the first incomplete job, or total number of
-                conformers if all jobs are complete.
-        """
-        for i, job in enumerate(self.all_conformers_jobs):
-            if not job.is_complete():
-                return i
-
-        # If all complete
-        return self.num_conformers
+    def num_array_children(self) -> int:
+        """Number of conformer children submitted for array/local nestable run."""
+        return min(self.num_confs_to_opt, self.num_conformers)
 
     def _prepare_all_jobs(self):
         """
@@ -234,14 +203,14 @@ class GaussianCrestJob(GaussianJob):
         for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
             job.run()
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the CREST conformer ensemble calculation.
 
         Main execution method that initiates all conformer optimization
         jobs. This is called internally by the job runner framework.
         """
-        self._run_all_jobs()
+        run_nestable_job(self, self._run_all_jobs)
 
     def is_complete(self):
         """

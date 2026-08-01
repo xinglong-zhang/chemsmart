@@ -15,7 +15,7 @@ Notice: If you have cloned this package before and find something that did not w
 
 CHEMSMART is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
-It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
+It uses the same submission command regardless of the queueing systems (SLURM, Torque or LSF) used by any High Performance Computing (HPC) cluster. 
 
 Users can customize their own HPC server settings and project settings to run different jobs, without modifying the codes in this package.
 

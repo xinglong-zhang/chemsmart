@@ -14,9 +14,11 @@ import click
 from chemsmart.cli.job import (
     click_job_options,
     click_molecule_vibrational_displacement_options,
+    click_nestable_options,
 )
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @orca.group("qrc", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_nestable_options
 @click_orca_jobtype_options
 @click_molecule_vibrational_displacement_options
 @click.pass_context
@@ -42,6 +45,7 @@ def qrc(
     normalize,
     return_xyz,
     skip_completed,
+    child_index,
     **kwargs,
 ):
     """
@@ -105,16 +109,67 @@ def qrc(
     # validate charge and multiplicity consistency only for direct qrc jobs
     check_charge_and_multiplicity(qrc_settings)
 
-    # get molecule from context (use the last molecule if multiple)
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running QRC calculation on molecule: {molecule}")
-
     # get label for the job output files
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
+    # normalize input to list for batch-friendly handling
+    molecules = ctx.obj["molecules"]
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+
+    molecule_indices = ctx.obj.get("molecule_indices")
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
+    )
+    batch_requested = len(job_targets) > 1
+
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.qrc import ORCAQRCJob
+
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA QRC jobs")
+        jobs = []
+        for molecule, idx in job_targets:
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running QRC for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+            jobs.append(
+                ORCAQRCJob(
+                    molecule=molecule,
+                    settings=qrc_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    mode_idx=mode_idx,
+                    amp=amp,
+                    nframes=nframes,
+                    phase=phase,
+                    normalize=normalize,
+                    return_xyz=return_xyz,
+                    skip_completed=skip_completed,
+                    child_index=child_index,
+                    **kwargs,
+                )
+            )
+
+        rewrite_cli = prepare_batch_jobs(
+            jobs,
+            molecule_indices,
+            job_token=ctx.info_name,
+            filepath=ctx.obj.get("filename"),
+        )
+        return ORCABatchJob(
+            jobs=jobs,
+            label=f"{label}_batch",
+            jobrunner=jobrunner,
+            rewrite_cli=rewrite_cli,
+        )
+
+    molecule = molecules[-1]
+    logger.info(f"Running QRC calculation on molecule: {molecule}")
 
     return ORCAQRCJob(
         molecule=molecule,
@@ -128,6 +183,7 @@ def qrc(
         normalize=normalize,
         return_xyz=return_xyz,
         skip_completed=skip_completed,
+        child_index=child_index,
         **kwargs,
     )
 

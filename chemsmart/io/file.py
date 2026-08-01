@@ -77,7 +77,6 @@ class CDXFile(FileMixin):
     """
 
     def __init__(self, filename):
-
         # Accept both str and pathlib.Path
         self.filename = (
             str(filename) if isinstance(filename, Path) else filename

@@ -80,6 +80,19 @@ Execution Control Options
       -  Force scratch on (``--scratch``) or off (``--no-scratch``). Omit both (``None``) to use program YAML
          ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
+   -  -  ``--run-in-parallel/--no-run-in-parallel``
+
+      -  bool
+
+      -  With ``chemsmart sub``: allow concurrent scheduler array tasks and expand nestable jobs (QRC/DIAS/CREST/traj)
+         into array tasks. Default is serial: top-level batches use one array task at a time (``%1``); nestable jobs
+         submit as a single parent with nested serial children. Local ``run`` keeps children serial.
+
+   -  -  ``-M, --max-tasks``
+      -  int
+      -  Max concurrent array tasks (``%M`` in SLURM/PBS/LSF). Ignored under serial mode. Deprecated aliases: ``-N``,
+         ``--num-nodes``
+
 .. note::
 
    Use ``-R`` at the end of the command to rerun a completed job.
@@ -166,6 +179,54 @@ These options are only available with ``chemsmart sub``:
    -  -  ``--print-command/--no-print-command``
       -  bool
       -  Print the generated command (default: disabled)
+
+.. _cli-batch-array-submission:
+
+*********************************
+ Batch jobs and scheduler arrays
+*********************************
+
+A top-level ``BatchJob`` (for example a multi-molecule pKa table, or other multi-target CLI batches) is submitted as
+**one** scheduler array with **one task per child**. Nestable jobs (QRC, DIAS, CREST, traj) are different: see
+``--run-in-parallel`` above.
+
+**Default (serial array)**
+
+Without ``--run-in-parallel``, batch arrays use one concurrent task (``%1`` on SLURM/PBS/LSF). Children still share a
+single array job, but only one runs at a time.
+
+**Concurrent tasks**
+
+Pass ``--run-in-parallel`` and optionally ``-M`` / ``--max-tasks`` to cap concurrency (``%M`` in SLURM
+``--array=1-N%M``, PBS ``#PBS -J 1-N%M``, or LSF ``#BSUB -J "name[1-N%M]"``). Each array task still uses one node;
+``-M`` is **not** a node count. Without ``-M``, all tasks may run at once unless ``CHEMSMART_MAX_SUBMITTERS`` (or the
+server / jobrunner max-submitters setting) limits concurrency.
+
+.. code:: bash
+
+   # Up to 4 concurrent tasks, 32 cores each (scheduler may pack them onto fewer nodes)
+   chemsmart sub -s SLURM --run-in-parallel -M 4 -n 32 gaussian -p my_project -f mols.xyz -i 1,2,3,4 -c 0 -m 1 opt
+
+   # Up to 4 concurrent tasks (cores from ``-n`` or server defaults)
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f mols.xyz -i 1,2,3,4 -c 0 -m 1 opt
+
+   # QRC forward/reverse as two array tasks
+   chemsmart sub -s SLURM --run-in-parallel gaussian -p my_project -f ts.log qrc
+
+   # pKa table: one task per row, at most 4 concurrent
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
+
+**Dry-run scripts**
+
+.. code:: bash
+
+   chemsmart sub --test --print-command gaussian -p my_project -f pka_input.csv pka -s direct batch
+
+This writes submit and run scripts without queueing. ``--print-command`` prints the reconstructed ``chemsmart run``
+arguments.
+
+Batch array submission requires **SLURM**, **PBS/Torque**, or **LSF**. See :doc:`configuration-server-settings` for
+``SCHEDULER`` and related server options.
 
 ********************
  Available Commands

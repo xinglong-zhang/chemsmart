@@ -105,7 +105,8 @@ Gaussian-labelled outputs are typically given as explicit paths).
 ************************************
 
 Pass a ``.csv`` or whitespace-delimited ``.txt`` file via ``-f`` and invoke ``pka batch`` (or omit the subcommand —
-batch is selected automatically when ``-f`` points to a submission table).
+batch is selected automatically when ``-f`` points to a submission table). Requires **at least two** table rows; use
+``pka submit`` for a single molecule.
 
 Proton exchange (default — reference acid required on the ``pka`` group):
 
@@ -127,10 +128,9 @@ Direct cycle (``-s direct`` must be set explicitly):
 
 .. note::
 
-   In batch mode, each table row becomes an independent pKa job.
-
-   On HPC clusters, use ``chemsmart sub`` instead of ``chemsmart run``; each row receives its own scheduler script with
-   a reconstructed single-row ``pka submit`` command. See :ref:`pka-hpc-batch-submission`.
+   In batch mode, each table row is an independent pKa job. Locally (``chemsmart run``), rows run one after another. On
+   a cluster, use ``chemsmart sub`` so each row can run as its own array task. See :ref:`cli-batch-array-submission` and
+   :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -166,9 +166,10 @@ Example ``pka_input_table.csv``:
 ChemDraw CDXML / CDX batch input
 ================================
 
-When ``-f`` is a ``.cdxml`` or ``.cdx`` file (not a CSV table), ``pka batch`` reads **every ChemDraw fragment** in the
-file, auto-detects the coloured proton in each fragment independently, and submits one pKa job per molecule. Labels
-follow ``<basename>_frag<N>_pka`` (e.g. ``acids_frag1_pka_HA_opt.log``).
+When ``-f`` is a ``.cdxml`` or ``.cdx`` file (not a CSV table), ``pka batch`` requires a **multi-molecule** drawing. It
+reads every ChemDraw fragment, auto-detects the coloured proton in each fragment independently, and submits one pKa job
+per molecule. Single-fragment CDXML files must use ``pka submit``. Labels follow ``<basename>_frag<N>_pka`` (e.g.
+``acids_frag1_pka_HA_opt.log``).
 
 .. code:: bash
 
@@ -186,8 +187,8 @@ A CSV table may list single-molecule ``.cdxml`` paths per row (see Table Format 
 coloured-proton auto-detection for that row. ``charge`` and ``multiplicity`` still come from the table columns for CSV
 rows; for multi-fragment CDXML passed directly as ``-f``, see :ref:`pka-calculations` (Charge and multiplicity).
 
-On clusters, ``chemsmart sub ... pka batch`` with a CDXML file creates one submission per fragment; each run script
-targets a single fragment via ``--index``. See :ref:`pka-hpc-batch-submission`.
+On clusters, submit the CDXML batch with ``chemsmart sub ... pka batch`` (one array task per fragment). See
+:ref:`cli-batch-array-submission` and :ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files

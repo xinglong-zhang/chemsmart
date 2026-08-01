@@ -8,11 +8,21 @@ These calculations analyze molecular fragmentation along reaction
 coordinates by computing energies of fragments and whole molecules.
 """
 
+import logging
+
+from chemsmart.jobs.batch import (
+    NestableJobMixin,
+    run_child_jobs_as_batch,
+    run_nestable_job,
+)
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.utils import get_list_from_string_range
 
+logger = logging.getLogger(__name__)
 
-class GaussianDIASJob(GaussianJob):
+
+class GaussianDIASJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for DI-AS fragmentation analysis calculations.
 
@@ -57,6 +67,7 @@ class GaussianDIASJob(GaussianJob):
         multiplicity_of_fragment1=None,
         charge_of_fragment2=None,
         multiplicity_of_fragment2=None,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -81,6 +92,8 @@ class GaussianDIASJob(GaussianJob):
             charge_of_fragment2 (int, optional): Charge for fragment 2.
             multiplicity_of_fragment2 (int, optional): Multiplicity for
                 fragment 2.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class.
         """
         super().__init__(
@@ -90,6 +103,7 @@ class GaussianDIASJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
+        self.child_index = child_index
         self.all_molecules = molecules  # alone IRC coordinate
         self.fragment_indices = fragment_indices
         self.every_n_points = every_n_points
@@ -198,6 +212,77 @@ class GaussianDIASJob(GaussianJob):
         if (self.num_molecules - 1) / self.every_n_points != 0:
             filtered_molecules.append(molecules[-1])
         return filtered_molecules
+
+    @property
+    def _num_sampled_points_per_phase(self) -> int:
+        """Number of sampled coordinate points in each DI-AS phase."""
+        mode = self.mode.lower()
+        if mode == "ts":
+            return 1
+        if mode == "irc":
+            return len(self._sample_molecules(self.all_molecules))
+        raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")
+
+    def _sampled_whole_molecule_at_point(self, point_index: int):
+        """Return the complete molecule for one sampled coordinate point."""
+        mode = self.mode.lower()
+        if mode == "irc":
+            return self._sample_molecules(self.all_molecules)[point_index]
+        if mode == "ts":
+            return self.all_molecules[-1]
+        raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")
+
+    def _build_molecule_job_at_point(self, point_index: int):
+        """Build one complete-molecule child at a sampled point."""
+        mode = self.mode.lower()
+        molecule = self._sampled_whole_molecule_at_point(point_index)
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}"
+        else:
+            label = f"{self.label}_p1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _build_fragment1_job_at_point(self, point_index: int):
+        """Build one fragment 1 child at a sampled point."""
+        mode = self.mode.lower()
+        molecule, _ = self._fragment_structure(
+            self._sampled_whole_molecule_at_point(point_index)
+        )
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}_f1"
+        else:
+            label = f"{self.label}_p1_f1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment1_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _build_fragment2_job_at_point(self, point_index: int):
+        """Build one fragment 2 child at a sampled point."""
+        mode = self.mode.lower()
+        _, molecule = self._fragment_structure(
+            self._sampled_whole_molecule_at_point(point_index)
+        )
+        if mode == "irc":
+            label = f"{self.label}_p{point_index}_f2"
+        else:
+            label = f"{self.label}_p1_f2"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment2_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
 
     @property
     def fragment1_jobs(self):
@@ -337,38 +422,82 @@ class GaussianDIASJob(GaussianJob):
                 )
             ]
 
+    def get_array_child_job(self, index: int):
+        """Build one flattened DI-AS child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        n = self._num_sampled_points_per_phase
+        if index < n:
+            return self._build_molecule_job_at_point(index)
+        if index < 2 * n:
+            return self._build_fragment1_job_at_point(index - n)
+        return self._build_fragment2_job_at_point(index - 2 * n)
+
+    @property
+    def num_array_children(self) -> int:
+        """Flattened molecule + fragment child count."""
+        return 3 * self._num_sampled_points_per_phase
+
+    def get_array_child_jobs(self):
+        """Return molecule + fragment jobs for scheduler array submission.
+
+        Flattens the three DI-AS phases into one list. Array tasks may run
+        across phases concurrently; final analysis still waits on all
+        children via ``is_complete``.
+        """
+        return (
+            list(self.all_molecules_jobs)
+            + list(self.fragment1_jobs)
+            + list(self.fragment2_jobs)
+        )
+
     def _run_all_molecules_jobs(self):
         """
         Execute all complete molecule calculation jobs.
 
-        Runs all jobs for complete molecular structures at sampled
-        points along the reaction coordinate. These calculations
-        provide reference energies for DI-AS analysis.
+        Runs molecule jobs serially through ``GaussianBatchJob``, each with
+        the parent jobrunner's full resources. These calculations provide
+        reference energies for DI-AS analysis.
         """
-        for job in self.all_molecules_jobs:
-            job.run()
+        logger.info("Running molecule jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.all_molecules_jobs,
+            parent=self,
+            label_suffix="_molecules_batch",
+        )
 
     def _run_fragment1_jobs(self):
         """
         Execute all fragment 1 calculation jobs.
 
-        Runs all jobs for fragment 1 structures at sampled points.
-        Fragment 1 energies are used with fragment 2 and complete
-        molecule energies to compute dissociation energies.
+        Runs fragment 1 jobs serially through ``GaussianBatchJob``, each
+        with the parent jobrunner's full resources. Energies are used with
+        fragment 2 and complete molecule energies to compute dissociation
+        energies.
         """
-        for job in self.fragment1_jobs:
-            job.run()
+        logger.info("Running fragment 1 jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.fragment1_jobs,
+            parent=self,
+            label_suffix="_fragment1_batch",
+        )
 
     def _run_fragment2_jobs(self):
         """
         Execute all fragment 2 calculation jobs.
 
-        Runs all jobs for fragment 2 structures at sampled points.
-        These calculations complete the energy data needed for
-        DI-AS fragmentation analysis.
+        Runs fragment 2 jobs serially through ``GaussianBatchJob``, each
+        with the parent jobrunner's full resources. These calculations
+        complete the energy data needed for DI-AS fragmentation analysis.
         """
-        for job in self.fragment2_jobs:
-            job.run()
+        logger.info("Running fragment 2 jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.fragment2_jobs,
+            parent=self,
+            label_suffix="_fragment2_batch",
+        )
 
     def _run(self, **kwargs):
         """
@@ -379,12 +508,19 @@ class GaussianDIASJob(GaussianJob):
         2. Fragment 1 structures at the same points
         3. Fragment 2 structures at the same points
 
+        When submitted as a scheduler array with
+        ``chemsmart sub --run-in-parallel``, only the selected child runs.
+
         Args:
             **kwargs: Additional keyword arguments for job execution.
         """
-        self._run_all_molecules_jobs()
-        self._run_fragment1_jobs()
-        self._run_fragment2_jobs()
+
+        def run_local() -> None:
+            self._run_all_molecules_jobs()
+            self._run_fragment1_jobs()
+            self._run_fragment2_jobs()
+
+        run_nestable_job(self, run_local)
 
     def is_complete(self):
         """

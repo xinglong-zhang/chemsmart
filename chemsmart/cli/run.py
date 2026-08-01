@@ -7,8 +7,14 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.jobs.batch import (
+    BatchExecutionError,
+    BatchJob,
+    warn_legacy_job_list,
+)
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -32,7 +38,7 @@ else:
 
 @click.group(name="run")
 @click.pass_context
-@click_jobrunner_options
+@click_jobrunner_options(entry_point="run")
 @logger_options
 def run(
     ctx,
@@ -40,9 +46,11 @@ def run(
     num_cores,
     num_gpus,
     mem_gb,
+    array_concurrency,
     fake,
     scratch,
     delete_scratch,
+    run_in_parallel,
     debug,
     stream,
 ):
@@ -57,14 +65,18 @@ def run(
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
+    if server is not None:
+        server = Server.from_servername(server)
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        no_run_in_parallel=not run_in_parallel,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
+        array_concurrency=array_concurrency,
     )
 
     # Log the scratch value for debugging purposes
@@ -73,22 +85,6 @@ def run(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
-
-
-def _run_single_job(job, jobrunner):
-    """Attach a typed jobrunner and execute one job locally."""
-    typed_runner = jobrunner.from_job(
-        job=job,
-        server=jobrunner.server,
-        scratch=jobrunner.scratch,
-        fake=jobrunner.fake,
-        delete_scratch=jobrunner.delete_scratch,
-        num_cores=jobrunner.num_cores,
-        num_gpus=jobrunner.num_gpus,
-        mem_gb=jobrunner.mem_gb,
-    )
-    job.jobrunner = typed_runner
-    job.run()
 
 
 @run.result_callback()
@@ -121,21 +117,71 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
+    def _prepare_runner(single_job):
+        return jobrunner.from_job(
+            job=single_job,
+            server=jobrunner.server,
+            scratch=jobrunner.scratch,
+            fake=jobrunner.fake,
+            delete_scratch=jobrunner.delete_scratch,
+            no_run_in_parallel=jobrunner.no_run_in_parallel,
+            num_cores=jobrunner.num_cores,
+            num_gpus=jobrunner.num_gpus,
+            mem_gb=jobrunner.mem_gb,
+            num_nodes=jobrunner.num_nodes,
+        )
+
+    # Handle list of jobs
     if isinstance(job, list):
         if not job:
             logger.debug("Empty job list. Skipping job execution.")
             return None
         if not all(isinstance(single_job, Job) for single_job in job):
-            raise ValueError(
-                "Batch job submission is not supported in this branch."
-            )
-        logger.info(f"Running {len(job)} jobs locally")
+            raise ValueError("Expected a list of Job instances.")
+        warn_legacy_job_list(stacklevel=2)
+        logger.info(
+            "Running %s jobs serially (legacy list path; prefer BatchJob)",
+            len(job),
+        )
+
+        failures = []
         for single_job in job:
-            _run_single_job(single_job, jobrunner)
+            logger.info(f"Running job: {single_job.label}")
+            single_job.jobrunner = _prepare_runner(single_job)
+            try:
+                single_job.run()
+            except Exception as exc:
+                logger.error(
+                    f"Job {single_job.label} failed in list execution: {exc}",
+                    exc_info=True,
+                )
+                failures.append({"label": single_job.label, "error": str(exc)})
+        if failures:
+            lines = [
+                f"- {item['label']}: {item['error']}" for item in failures
+            ]
+            raise BatchExecutionError(
+                f"{len(failures)} of {len(job)} list job(s) failed:\n"
+                + "\n".join(lines)
+            )
         return None
 
+    # Bind an engine runner from the first child so BatchJob can propagate
+    # copies onto each child job.
+    if isinstance(job, BatchJob):
+        if not job.jobs:
+            raise ValueError(f"BatchJob {job} has no child jobs to run.")
+        job.jobrunner = _prepare_runner(job.jobs[0])
+        job.run()
+        return None
+
+    # Instantiate a specific jobrunner based on job type
+    # jobrunner at this stage is an instance of specific JobRunner subclass
+    # to run the job
     if isinstance(job, Job):
-        _run_single_job(job, jobrunner)
+        # Attach jobrunner to job and run the job with the jobrunner
+        job.jobrunner = _prepare_runner(job)
+        job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 

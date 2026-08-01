@@ -13,13 +13,14 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.batch import NestableJobMixin, run_nestable_job
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
 
 logger = logging.getLogger(__name__)
 
 
-class GaussianTrajJob(GaussianJob):
+class GaussianTrajJob(NestableJobMixin, GaussianJob):
     """
     Gaussian job class for trajectory structure processing.
 
@@ -76,6 +77,7 @@ class GaussianTrajJob(GaussianJob):
         num_procs=1,
         proportion_structures_to_use=0.1,
         skip_completed=True,
+        child_index=None,
         **kwargs,
     ):
         """
@@ -98,6 +100,8 @@ class GaussianTrajJob(GaussianJob):
             proportion_structures_to_use (float): Fraction of trajectory
                 end to use for structure extraction (default: 0.1).
             skip_completed (bool): Skip already completed jobs.
+            child_index (int, optional): 1-based nestable child index for
+                single-child array tasks.
             **kwargs: Additional keyword arguments for parent class
                 and structure grouping.
 
@@ -121,6 +125,7 @@ class GaussianTrajJob(GaussianJob):
             skip_completed=skip_completed,
             **kwargs,
         )
+        self.child_index = child_index
         self.num_structures_to_run = num_structures_to_run
         self.grouping_strategy = grouping_strategy
         self.num_procs = num_procs
@@ -295,53 +300,43 @@ class GaussianTrajJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
+    def _selected_structure_indices(self) -> list[int]:
+        """Return 0-based indices into ``unique_structures`` for nestable run."""
+        n = self.num_unique_structures
+        if self.num_structures_to_run is None:
+            return list(range(n))
+        count = self.num_structures_to_run
+        if count <= 0:
+            return []
+        start = max(0, n - count)
+        return list(range(start, n))
+
     @property
-    def last_run_job_index(self):
-        """
-        Get the index of the last completed job.
+    def num_array_children(self) -> int:
+        """Number of selected trajectory structure children."""
+        return len(self._selected_structure_indices())
 
-        Tracks progress through the structure job list for resuming
-        interrupted calculations.
-
-        Returns:
-            int: Index of last finished job, or total number if
-                all jobs are complete.
-        """
-        return self._check_last_finished_job_index()
+    def get_array_child_job(self, index: int):
+        """Build only the selected structure child at 0-based *index*."""
+        self.validate_array_child_index(index)
+        structure_index = self._selected_structure_indices()[index]
+        label = f"{self.label}_c{structure_index + 1}"
+        return GaussianGeneralJob(
+            molecule=self.unique_structures[structure_index],
+            settings=self.settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
 
     @property
     def incomplete_structure_run_jobs(self):
-        """
-        Get incomplete structure calculation jobs.
-
-        Filters the job list to return only those that have not
-        completed successfully, useful for selective resubmission.
-
-        Returns:
-            list: Incomplete GaussianGeneralJob objects.
-        """
+        """Incomplete structure calculation jobs for selective local reruns."""
         return [
             job
             for job in self.all_structures_run_jobs
             if not job.is_complete()
         ]
-
-    def _check_last_finished_job_index(self):
-        """
-        Find the index of the last completed job in sequence.
-
-        Iterates through structure jobs to identify progress and
-        determine where to resume if needed.
-
-        Returns:
-            int: Index of last finished job, or total number of unique
-                structures if all jobs are complete.
-        """
-        for i, job in enumerate(self.all_structures_run_jobs):
-            if not job.is_complete():
-                return i
-        # If all complete
-        return self.num_unique_structures
 
     def _run_all_jobs(self):
         """
@@ -361,14 +356,14 @@ class GaussianTrajJob(GaussianJob):
         for job in jobs_to_run:
             job.run()
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Execute the trajectory structure processing workflow.
 
         Main execution method that initiates all configured structure
         calculations. Called internally by the job runner framework.
         """
-        self._run_all_jobs()
+        run_nestable_job(self, self._run_all_jobs)
 
     def is_complete(self):
         """

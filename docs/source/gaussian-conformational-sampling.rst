@@ -63,6 +63,13 @@ Run modred optimization with constraints:
 
    The ``<input_file>`` is typically the CREST output file named ``crest_conformers.xyz``.
 
+.. note::
+
+   Nested conformer jobs inside one CREST parent run **serially**, each with the parent job's full ``-n`` / memory
+   allocation. With ``chemsmart sub --run-in-parallel``, conformers are submitted as separate scheduler array tasks (cap
+   concurrency with ``-M`` / ``--max-tasks``). Independent CREST parents may still run concurrently as separate
+   scheduler jobs.
+
 Examples
 ========
 

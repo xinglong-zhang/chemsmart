@@ -13,6 +13,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_solvent_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -89,18 +90,29 @@ def sp(
     # get label for the job output files
     label = ctx.obj["label"]
 
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
     from chemsmart.utils.cli import create_sp_label
 
     # Get the original molecule indices from context
     molecule_indices = ctx.obj["molecule_indices"]
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
+    )
+    batch_requested = len(job_targets) > 1
 
     # Handle multiple molecules: create one job per molecule
-    if len(molecules) > 1 and molecule_indices is not None:
-        logger.info(f"Creating {len(molecules)} ORCA single point jobs")
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA single point jobs")
         jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
+        # labels before the solvent suffix; array tasks replay these and
+        # re-derive the same final label
+        replay_labels = []
+        for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
+            replay_labels.append(molecule_label)
             final_label = create_sp_label(molecule_label, sp_settings)
             logger.info(
                 f"Running single point for molecule {idx}: {molecule} with label {final_label}"
@@ -115,7 +127,19 @@ def sp(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA single point jobs")
-        return jobs
+
+        rewrite_cli = prepare_batch_jobs(
+            jobs,
+            molecule_indices,
+            job_token=ctx.info_name,
+            filepath=ctx.obj.get("filename"),
+            labels=replay_labels,
+        )
+        return ORCABatchJob(
+            jobs=jobs,
+            label=f"{label}_batch",
+            rewrite_cli=rewrite_cli,
+        )
     else:
         # Single molecule case
         molecule = molecules[-1]

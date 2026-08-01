@@ -590,6 +590,15 @@ def gaussian(
             f"No filename is supplied and Gaussian default settings are used:\n"
             f"{job_settings.__dict__} "
         )
+    elif filename.endswith(".csv"):
+        # CSV batch table: molecule loading and charge/multiplicity come
+        # from the table rows, not from the CLI.  Defer everything to the
+        # subcommand (e.g. pka batch).
+        job_settings = GaussianJobSettings.default()
+        logger.info(
+            f"CSV batch file detected: {filename}. "
+            "Molecule loading deferred to subcommand."
+        )
     elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!

@@ -32,10 +32,10 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
--  Use ``chemsmart run`` for local preparation and execution; use ``chemsmart sub`` on HPC clusters to generate
-   scheduler scripts (see :ref:`pka-hpc-batch-submission`).
--  A single structure yields one job; batch input (CSV table or multi-molecule CDXML) can produce multiple jobs in one
-   invocation.
+-  Use ``chemsmart run`` locally; use ``chemsmart sub`` on an HPC cluster (see :ref:`cli-batch-array-submission` and
+   :ref:`pka-hpc-batch-submission`).
+-  A single structure yields one job (``pka submit``). ``pka batch`` requires a CSV table or multi-molecule CDXML with
+   **at least two** rows or fragments; use ``submit`` for a single molecule.
 -  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
    runs.
 
@@ -133,6 +133,13 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
  Job Submission (Gaussian / ORCA)
 **********************************
 
+.. note::
+
+   Within one pKa calculation (one molecule), the HA / A⁻ optimizations, solvent single-points, and any reference legs
+   always run one after another. Parallelism across different molecules or table rows belongs on the cluster: use
+   ``chemsmart sub`` so each target is an array task (see :ref:`cli-batch-array-submission`). Locally, ``chemsmart run``
+   with a batch table or CDXML still processes targets one after another.
+
 Job submission is backend-specific. Use the dedicated pages for full examples and parameter tables:
 
 -  :ref:`gaussian-pka-calculations`
@@ -165,7 +172,8 @@ The default scheme is **proton exchange**, which requires a reference acid (``-r
 
 **Submission input table** (``pka batch``)
 
-Comma- or whitespace-delimited table with columns ``filepath``, ``proton_index``, ``charge``, ``multiplicity``.
+Comma- or whitespace-delimited table with columns ``filepath``, ``proton_index``, ``charge``, ``multiplicity``. ``pka
+batch`` requires **at least two rows**; use ``pka submit`` for a single molecule.
 
 ***************************************
  ChemDraw CDXML / CDX Input (pKa Jobs)
@@ -195,7 +203,7 @@ proton is uniquely coloured (or use ``-rcc`` / ``--reference-color-code``).
 A single ``.cdxml`` / ``.cdx`` file may contain **multiple molecules** (multiple ChemDraw fragments). CHEMSMART performs
 **per-fragment** coloured-proton detection and creates **one pKa job per fragment**.
 
-Pass the file with ``pka batch`` (or ``pka submit`` for a single-fragment file):
+Pass the file with ``pka batch`` (use ``pka submit`` for a single-fragment file):
 
 .. code:: bash
 
@@ -248,8 +256,9 @@ above) to create one job per ChemDraw fragment.
 
 .. note::
 
-   If ``-f`` is a CDXML file (not a CSV table), CHEMSMART routes to coloured-proton batch expansion automatically. For
-   general CDXML structure handling outside pKa, see :doc:`chemdraw-organometallic`.
+   If ``-f`` is a multi-molecule CDXML file (not a CSV table), pass ``pka batch`` to expand one job per ChemDraw
+   fragment. Single-fragment CDXML files use ``pka submit``. For general CDXML structure handling outside pKa, see
+   :doc:`chemdraw-organometallic`.
 
 **Proton and reference options for CDXML**
 
@@ -310,10 +319,11 @@ the stem (e.g. ``acid1_pka_HA_opt.out``). The output-analysis autodiscovery conv
  HPC Cluster Submission (``chemsmart sub``)
 ********************************************
 
-On a cluster, use ``chemsmart sub`` instead of ``chemsmart run`` to write scheduler scripts and per-job run wrappers.
-The pKa workflow is unchanged at the chemistry level; only the launch path differs.
+On a cluster, use ``chemsmart sub`` instead of ``chemsmart run``. Array concurrency, ``-M`` / ``--max-tasks``,
+``--test``, and scheduler support are documented in :ref:`cli-batch-array-submission` and
+:doc:`configuration-server-settings`.
 
-**Single job**
+**Single molecule**
 
 .. code:: bash
 
@@ -321,9 +331,7 @@ The pKa workflow is unchanged at the chemistry level; only the launch path diffe
 
 **Batch table or multi-fragment CDXML**
 
-One scheduler submission is created **per table row** or **per ChemDraw fragment**. CHEMSMART expands ``pka batch`` into
-multiple jobs locally, then writes a separate ``chemsmart_sub_<label>.sh`` and ``chemsmart_run_<label>.py`` for each
-job.
+One array task per table row or ChemDraw fragment:
 
 .. code:: bash
 
@@ -331,39 +339,12 @@ job.
 
    chemsmart sub gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-Per-job script reconstruction
-=============================
+   chemsmart sub -s SLURM --run-in-parallel -M 4 gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-Each cluster run wrapper must replay **one** pKa submission, not the entire batch table or full multi-fragment CDXML
-file. When a job is created from ``pka batch``, CHEMSMART stores row- or fragment-level metadata and rewrites the CLI
-inside ``chemsmart_run_<label>.py`` before submission:
+   chemsmart sub --test --print-command gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-#. **CSV batch rows** — replace the table path in ``-f`` / ``--filename`` with that row's ``filepath``; change ``batch``
-   to ``submit``.
-#. **Multi-fragment CDXML** — point ``-f`` at the same CDXML file but add ``--index`` / ``-i`` so only one fragment is
-   processed; change ``batch`` to ``submit``.
-#. **Explicit per-job options** — inject or update ``--proton-index``, ``--charge``, ``--multiplicity``, and ``--label``
-   so the reconstructed command is self-contained and passes Click validation on the cluster node.
-#. **Proton exchange tables** — rows after the first may run with ``-s direct``; reference-acid flags are dropped from
-   later rows automatically (same behaviour as local ``pka batch``).
-
-Example: a two-row CSV batch submitted with ``chemsmart sub ... pka batch`` yields two run scripts. The script for row
-two might equivalent to:
-
-.. code:: bash
-
-   chemsmart run gaussian -p my_project -f /path/to/acid2.xyz -c 0 -m 1 \
-       pka -pi 8 -s direct submit
-
-Example: a five-fragment CDXML file ``pka_scale.cdxml`` yields labels such as ``pka_scale_frag1_pka``, …,
-``pka_scale_frag5_pka``. Each run script targets one fragment via ``--index`` and the matching ``--proton-index``,
-``--label``, ``-c``, and ``-m``.
-
-This reconstruction is what allows ``chemsmart sub ... pka batch`` on a cluster to behave like five independent ``pka
-submit`` calls while you only maintain one top-level submission command locally.
-
-See also :doc:`cli-overview` for general ``chemsmart sub`` usage and :doc:`configuration-server-settings` for scheduler
-configuration.
+Output file names match local runs (for example ``acid1_HA_opt.log`` for Gaussian, or ``acid1_pka_HA_opt.out`` for
+ORCA).
 
 *****************************************
  Output Analysis (``chemsmart run pka``)

@@ -12,8 +12,17 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.jobs.batch import (
+    BatchJob,
+    get_nestable_array_children,
+    prepare_nestable_batch_jobs,
+    warn_legacy_job_list,
+)
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.batch import ORCABatchJob
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
+from chemsmart.settings.server import SchedulerArrayPolicy, Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
 
@@ -22,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="sub", cls=MyGroup)
 @click.pass_context
-@click_jobrunner_options
+@click_jobrunner_options(entry_point="sub")
 @logger_options
 @click.option(
     "-t",
@@ -55,6 +64,7 @@ def sub(
     num_cores,
     num_gpus,
     mem_gb,
+    array_concurrency,
     fake,
     scratch,
     delete_scratch,
@@ -93,9 +103,11 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        no_run_in_parallel=not kwargs.get("run_in_parallel", False),
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
+        array_concurrency=array_concurrency,
     )
 
     # Log the scratch value for debugging purposes
@@ -108,7 +120,7 @@ def sub(
 
 @sub.result_callback(replace=True)
 @click.pass_context
-def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
+def process_pipeline(ctx, *args, **kwargs):
     """
     Process the job for submission to queuing system.
 
@@ -117,9 +129,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     scheduler system.
     """
 
-    def _clean_command_list(commands):
+    def _clean_command(ctx):
         """
-        Remove keywords used in sub.py but not in run.py from a command list.
+        Remove keywords used in sub.py but not in run.py.
 
         Specifically: Some keywords/options (like queue, verbose, etc.)
         are only relevant to sub.py and not applicable to run.py.
@@ -128,170 +140,31 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         command = next(
             (
                 subcommand
-                for subcommand in commands
+                for subcommand in ctx.obj["subcommand"]
                 if subcommand["name"] == "sub"
             ),
             None,
         )
+        if not command:
+            raise ValueError("No 'sub' command found in context.")
 
-        if command:
-            # Find the keywords that are valid in sub.py
-            # but should not be passed to run.py and remove those
-            keywords_not_in_run = [
-                "time_hours",
-                "queue",
-                "verbose",
-                "test",
-                "print_command",
-            ]
+        # Find the keywords that are valid in sub.py
+        # but should not be passed to run.py and remove those
+        keywords_not_in_run = [
+            "time_hours",
+            "queue",
+            "verbose",
+            "test",
+            "print_command",
+            "array_concurrency",
+        ]
 
-            for keyword in keywords_not_in_run:
-                # Remove keyword if it exists
-                command["kwargs"].pop(keyword, None)
-
-    def _clean_command(ctx):
-        """
-        Remove keywords used in sub.py but not in run.py.
-        """
-        if "subcommand" in ctx.obj:
-            _clean_command_list(ctx.obj["subcommand"])
+        for keyword in keywords_not_in_run:
+            # Remove keyword if it exists
+            command["kwargs"].pop(keyword, None)
         return ctx
 
-    def _replace_batch_table_tokens(cli_args, batch_entry):
-        """Rewrite table-mode args to a single-entry invocation.
-
-        For pKa table mode we generated one job per table row. Submission
-        scripts should therefore execute just that row, not the entire table.
-        """
-        if not batch_entry:
-            return cli_args
-
-        args = list(cli_args)
-        table_option_names = {
-            "-f",
-            "--filename",
-        }
-
-        # Replace table filename with row filepath.
-        for idx in range(len(args) - 1):
-            if args[idx] in table_option_names:
-                args[idx + 1] = str(batch_entry["filepath"])
-                break
-
-        # Per-row scripts should run a single pKa submission, not table mode.
-        if "batch" in args:
-            args[args.index("batch")] = "submit"
-
-        def _drop_option(tokens, option_names):
-            idx = 0
-            while idx < len(tokens):
-                if tokens[idx] in option_names:
-                    del tokens[idx]
-                    if idx < len(tokens):
-                        del tokens[idx]
-                    continue
-                idx += 1
-
-        # Ensure row-level proton/charge/multiplicity are explicit.
-        option_map = {
-            "--proton-index": str(batch_entry["proton_index"]),
-            "-pi": str(batch_entry["proton_index"]),
-            "--charge": str(batch_entry["charge"]),
-            "-c": str(batch_entry["charge"]),
-            "--multiplicity": str(batch_entry["multiplicity"]),
-            "-m": str(batch_entry["multiplicity"]),
-        }
-
-        fragment_index = batch_entry.get("fragment_index")
-        if fragment_index is not None:
-            option_map["--index"] = str(fragment_index)
-            option_map["-i"] = str(fragment_index)
-
-        batch_label = batch_entry.get("label")
-        if batch_label is not None:
-            option_map["--label"] = str(batch_label)
-            option_map["-l"] = str(batch_label)
-
-        def _drop_option_pair(tokens, option_names):
-            idx = 0
-            while idx < len(tokens):
-                if tokens[idx] in option_names:
-                    del tokens[idx : idx + 2]
-                    continue
-                idx += 1
-
-        def _set_option(tokens, long_opt, short_opt, insert_before=None):
-            if long_opt in tokens:
-                pos = tokens.index(long_opt)
-                if pos + 1 < len(tokens):
-                    tokens[pos + 1] = option_map[long_opt]
-                return
-            if short_opt in tokens:
-                pos = tokens.index(short_opt)
-                if pos + 1 < len(tokens):
-                    tokens[pos + 1] = option_map[short_opt]
-                return
-
-            insert_idx = len(tokens)
-            if insert_before in tokens:
-                insert_idx = tokens.index(insert_before)
-            # Prefer long-form options to avoid Click treating multi-char
-            # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
-            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-        def _set_option_after(tokens, long_opt, short_opt, insert_after=None):
-            _drop_option_pair(tokens, {long_opt, short_opt})
-            insert_idx = len(tokens)
-            if insert_after in tokens:
-                insert_idx = tokens.index(insert_after) + 1
-            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-        # Proton index is declared on ``pka submit``; place it after ``submit``
-        # so per-row ``chemsmart run`` scripts parse it reliably.
-        _set_option_after(args, "--proton-index", "-pi", insert_after="submit")
-        # Charge/multiplicity belong to the backend group (gaussian/orca), so
-        # they must appear before entering the "pka" group.
-        _set_option(args, "--charge", "-c", insert_before="pka")
-        _set_option(args, "--multiplicity", "-m", insert_before="pka")
-        if fragment_index is not None:
-            _set_option(args, "--index", "-i", insert_before="pka")
-        if batch_label is not None:
-            _set_option(args, "--label", "-l", insert_before="pka")
-
-        batch_scheme = batch_entry.get("scheme")
-        if batch_scheme is not None:
-            option_map.update(
-                {
-                    "--scheme": str(batch_scheme),
-                    "-s": str(batch_scheme),
-                }
-            )
-            _set_option(args, "--scheme", "-s", insert_before="submit")
-
-            if batch_scheme == "direct":
-                # Subsequent batch rows run direct mode only; drop all
-                # reference-acid CLI options so click validation does not fail.
-                _drop_option(
-                    args,
-                    {
-                        "--reference",
-                        "-r",
-                        "--reference-proton-index",
-                        "-rpi",
-                        "--reference-color-code",
-                        "-rcc",
-                        "--reference-charge",
-                        "-rc",
-                        "--reference-multiplicity",
-                        "-rm",
-                        "--reference-conjugate-base-charge",
-                        "--reference-conjugate-base-multiplicity",
-                    },
-                )
-
-        return args
-
-    def _reconstruct_cli_args(ctx, job):
+    def _reconstruct_cli_args(ctx):
         """
         Get cli args that reconstruct the command line.
 
@@ -299,13 +172,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         for job submission purposes.
         """
         commands = ctx.obj["subcommand"]
+
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
-        cli_args = _replace_batch_table_tokens(
-            cli_args, getattr(job, "_batch_entry", None)
-        )
 
         if kwargs.get("print_command"):
             print(cli_args)
@@ -315,24 +186,118 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
-        cli_args = _reconstruct_cli_args(ctx, job)
+        cli_args = _reconstruct_cli_args(ctx)
 
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
+
+    def _invoked_job_token(ctx):
+        """Return the engine job-group token of the invoked command."""
+        names = [s["name"] for s in ctx.obj["subcommand"]]
+        job_token = next(
+            (
+                names[i + 1]
+                for i, name in enumerate(names)
+                if name in ("gaussian", "orca") and i + 1 < len(names)
+            ),
+            None,
+        )
+        if job_token is None:
+            raise ValueError(
+                "Could not determine the engine job-group token from the "
+                f"invoked commands {names!r}."
+            )
+        return job_token
+
+    def _process_nestable_array_job(parent_job):
+        """Expand nestable children and submit as a scheduler array.
+
+        Each array task re-runs the parent CLI with ``--child-index`` selecting
+        one nested child.
+        """
+        if kwargs.get("test"):
+            logger.warning('Not submitting as "test" flag specified.')
+
+        children = get_nestable_array_children(parent_job)
+        if not children:
+            raise ValueError(
+                f"Nestable job {parent_job} has no children to array-submit."
+            )
+
+        program = (parent_job.PROGRAM or "").lower()
+        batch_cls = ORCABatchJob if program == "orca" else GaussianBatchJob
+
+        rewrite_cli = prepare_nestable_batch_jobs(
+            children, job_token=_invoked_job_token(ctx)
+        )
+        batch_job = batch_cls(
+            jobs=children,
+            label=f"{parent_job.label}_array",
+            jobrunner=jobrunner,
+            rewrite_cli=rewrite_cli,
+        )
+        shared_cli_args = _reconstruct_cli_args(ctx)
+        logger.info(
+            "Expanding nestable job %r into array of %s child task(s) "
+            "(--run-in-parallel)",
+            parent_job.label,
+            len(children),
+        )
+        server = Server.from_servername(kwargs.get("server"))
+        server.submit_batch(
+            batch_job,
+            policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
+            test=kwargs.get("test"),
+            cli_args=shared_cli_args,
+        )
+
+    def _process_batch_job(batch_job):
+        """Submit a top-level BatchJob via ``Server.submit_batch``."""
+        if kwargs.get("test"):
+            logger.warning('Not submitting as "test" flag specified.')
+
+        shared_cli_args = _reconstruct_cli_args(ctx)
+        server = Server.from_servername(kwargs.get("server"))
+        server.submit_batch(
+            batch_job,
+            policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
+            test=kwargs.get("test"),
+            cli_args=shared_cli_args,
+        )
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
+    # Handle list of jobs (legacy path; prefer BatchJob from CLI fan-out)
     if isinstance(job, list):
-        logger.info(f"Processing {len(job)} jobs")
+        if not job:
+            logger.debug("Empty job list. Skipping job submission.")
+            return
+        if not all(isinstance(single_job, Job) for single_job in job):
+            raise ValueError("Expected a list of Job instances.")
+        warn_legacy_job_list(stacklevel=2)
+        logger.info(
+            "Processing %s jobs individually (legacy list path; prefer BatchJob)",
+            len(job),
+        )
         for single_job in job:
             single_job.jobrunner = jobrunner
             _process_single_job(job=single_job)
+    elif isinstance(job, BatchJob):
+        if not job.jobs:
+            raise ValueError(f"BatchJob {job} has no child jobs to submit.")
+        job.jobrunner = jobrunner
+        _process_batch_job(job)
     else:
         job.jobrunner = jobrunner
-        _process_single_job(job=job)
+        nestable_children = get_nestable_array_children(job)
+        # Default / --no-run-in-parallel: one parent job with nested serial
+        # children. --run-in-parallel: expand nestable parents to an array.
+        if nestable_children is not None and not jobrunner.no_run_in_parallel:
+            _process_nestable_array_job(job)
+        else:
+            _process_single_job(job=job)
 
 
 for subcommand in subcommands:

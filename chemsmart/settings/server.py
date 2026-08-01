@@ -3,7 +3,9 @@ import os
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
@@ -13,6 +15,49 @@ from chemsmart.utils.mixins import RegistryMixin, cached_property
 user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SchedulerArrayPolicy:
+    """Concurrency policy for submitting a ``BatchJob`` as a scheduler array.
+
+    Controls the array concurrency throttle ``M`` (SLURM ``--array=1-N%M``,
+    PBS ``#PBS -J 1-N%M``, LSF ``#BSUB -J "name[1-N%M]"``):
+
+    - ``no_run_in_parallel`` → ``M=1``
+    - else explicit CLI ``-M`` / ``--max-tasks`` when set and positive
+    - else ``min(num_jobs, max_concurrent)`` from env/server max submitters
+    - else all tasks at once (``M=num_jobs``)
+    """
+
+    no_run_in_parallel: bool = False
+    array_concurrency: Optional[int] = None
+    max_concurrent: Optional[int] = None
+
+    @classmethod
+    def from_jobrunner(cls, jobrunner: Any) -> "SchedulerArrayPolicy":
+        """Build a policy from a ``JobRunner`` (CLI ``sub`` resources/flags)."""
+        from chemsmart.jobs.runner import (
+            get_configured_array_concurrency_limit,
+        )
+
+        return cls(
+            no_run_in_parallel=bool(jobrunner.no_run_in_parallel),
+            array_concurrency=jobrunner.cli_array_concurrency,
+            max_concurrent=get_configured_array_concurrency_limit(jobrunner),
+        )
+
+    def array_throttle(self, num_jobs: int) -> int:
+        """Return the array concurrency throttle ``M`` for *num_jobs* tasks."""
+        if num_jobs <= 0:
+            return 1
+        if self.no_run_in_parallel:
+            return 1
+        if self.array_concurrency is not None and self.array_concurrency > 0:
+            return min(num_jobs, int(self.array_concurrency))
+        if self.max_concurrent is not None and self.max_concurrent > 0:
+            return min(num_jobs, int(self.max_concurrent))
+        return num_jobs
 
 
 class Server(RegistryMixin):
@@ -46,6 +91,7 @@ class Server(RegistryMixin):
         self.kwargs = kwargs
         self._num_hours = self.kwargs.get("NUM_HOURS", None)
         self._queue_name = self.kwargs.get("QUEUE_NAME", None)
+        self._num_nodes = self.kwargs.get("NUM_NODES", 1)
 
     def __str__(self):
         """
@@ -168,6 +214,29 @@ class Server(RegistryMixin):
             value (int): Number of hours for job time limit.
         """
         self._num_hours = value
+
+    @property
+    def num_nodes(self):
+        """
+        Get or set the number of nodes for job allocation.
+
+        Returns:
+            int: Number of nodes for job submission.
+        """
+        return self._num_nodes
+
+    @num_nodes.setter
+    def num_nodes(self, value):
+        """
+        Set the number of nodes for job allocation.
+
+        Args:
+            value (int): Number of nodes.
+        """
+        if value is None:
+            self._num_nodes = 1
+            return
+        self._num_nodes = int(value)
 
     @cached_property
     def mem_gb(self):
@@ -547,7 +616,7 @@ class Server(RegistryMixin):
         """
         # First check that the job to be
         # submitted is not already queued/running
-        self._check_running_jobs(job)
+        self.check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
         # Submit the job
@@ -555,7 +624,27 @@ class Server(RegistryMixin):
             self._submit_job(job)
 
     @staticmethod
-    def _check_running_jobs(job):
+    def _scheduler_labels_for_duplicate_check(job):
+        """
+        Return scheduler-visible labels to guard against duplicate submission.
+
+        For ``BatchJob`` containers, only the container label is queued by
+        the scheduler; child labels execute on the compute node and are not
+        checked here.
+        """
+        from chemsmart.jobs.batch import BatchJob
+        from chemsmart.jobs.gaussian import GaussianJob
+        from chemsmart.jobs.orca.job import ORCAJob
+
+        if job.label is None:
+            return []
+
+        if isinstance(job, (GaussianJob, ORCAJob, BatchJob)):
+            return [job.label]
+
+        return []
+
+    def check_running_jobs(self, job):
         """
         Check if the job is already running or queued.
 
@@ -565,22 +654,29 @@ class Server(RegistryMixin):
         Args:
             job: Job instance to check.
         """
-        from chemsmart.jobs.gaussian import GaussianJob
-        from chemsmart.utils.cluster import ClusterHelper
-
-        if not isinstance(job, GaussianJob) or job.label is None:
+        labels = self._scheduler_labels_for_duplicate_check(job)
+        if not labels:
             return
+
+        from chemsmart.utils.cluster import (
+            ClusterHelper,
+            normalize_scheduler_job_label,
+        )
 
         cluster_helper = ClusterHelper()
         running_job_ids, running_job_names = (
             cluster_helper.get_gaussian_running_jobs()
         )
+        running_labels = {
+            normalize_scheduler_job_label(name) for name in running_job_names
+        }
 
-        if job.label in running_job_names:
-            logger.info(
-                f"Warning: submitting job with duplicate name: {job.label}"
-            )
-            sys.exit(f"Duplicate job NOT submitted: {job.label}")
+        for label in labels:
+            if label in running_labels:
+                logger.info(
+                    f"Warning: submitting job with duplicate name: {label}"
+                )
+                sys.exit(f"Duplicate job NOT submitted: {label}")
 
     def _write_submission_script(self, job, cli_args, **kwargs):
         """
@@ -630,54 +726,149 @@ class Server(RegistryMixin):
         return p.wait()
 
     def submit_array_job(
-        self, jobs, num_nodes=None, test=False, cli_args=None, **kwargs
+        self,
+        jobs,
+        array_concurrency=None,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kwargs,
     ):
-        """
-        Submit a list of jobs as an array job to the scheduler.
+        """Submit child jobs as a scheduler array job.
 
-        Creates and submits an array job where independent jobs are distributed
-        across multiple nodes for parallel execution.
+        Writes per-task run scripts and an array submit script, then
+        optionally queues the array. Script naming uses *batch_label*
+        when provided (typically ``BatchJob.label``).
 
         Args:
-            jobs (list): List of Job instances to submit as an array.
-            num_nodes (int): Number of nodes to request for parallel execution.
-            test (bool): If True, only creates scripts without actual submission.
-                Defaults to False.
-            cli_args: Command line arguments for the jobs.
-            **kwargs: Additional submission parameters.
+            jobs: Child ``Job`` instances in array order.
+            array_concurrency: Optional array concurrency throttle ``M``
+                (SLURM ``--array=1-N%M``, PBS ``-J 1-N%M``, LSF ``-J "name[1-N%M]"``).
+            test: If True, write scripts only (do not submit).
+            cli_args: Shared or per-job CLI arguments for run scripts.
+            batch_label: Label for ``chemsmart_sub_array_<label>.sh``.
+            **kwargs: Extra submitter construction parameters.
         """
         if not jobs:
-            logger.warning("No jobs to submit")
+            logger.warning("No jobs to submit as array")
             return
 
-        # Use first job as template for submission
         first_job = jobs[0]
+        if batch_label is not None:
+            # Duplicate-check the batch container label, not every child.
+            from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+            from chemsmart.jobs.orca.batch import ORCABatchJob
 
-        # Check for duplicate/running jobs for each job in the array
-        for job in jobs:
-            self._check_running_jobs(job)
+            program = first_job.PROGRAM.lower() if first_job.PROGRAM else ""
+            if program == "orca":
+                check_job = ORCABatchJob(jobs=jobs, label=batch_label)
+            else:
+                check_job = GaussianBatchJob(jobs=jobs, label=batch_label)
+            self.check_running_jobs(check_job)
+        else:
+            for job in jobs:
+                self.check_running_jobs(job)
 
-        # Write array job submission script
         submitter = self.get_submitter(first_job, **kwargs)
         submitter.write_array_job(
-            jobs=jobs, num_nodes=num_nodes, cli_args=cli_args
+            jobs=jobs,
+            array_concurrency=array_concurrency,
+            cli_args=cli_args,
+            batch_label=batch_label,
         )
 
-        # Submit the array job
         if not test:
             self._submit_array_job(first_job, submitter)
 
-    def _submit_array_job(self, job, submitter):
-        """
-        Submit an array job to the scheduler.
+    def submit_batch(
+        self,
+        batch_job,
+        *,
+        policy: Optional[SchedulerArrayPolicy] = None,
+        test: bool = False,
+        cli_args: Optional[Sequence[str]] = None,
+        rewrite_cli: Optional[
+            Callable[
+                [Sequence[str], Optional[Mapping[str, Any]]],
+                list[str],
+            ]
+        ] = None,
+        **kwargs,
+    ):
+        """Submit a top-level ``BatchJob`` as a scheduler array.
+
+        Resolves per-task CLI args from *rewrite_cli* or
+        ``batch_job.rewrite_cli`` when children carry ``batch_entry``, applies
+        *policy* array concurrency throttle, then delegates to
+        ``submit_array_job``.
 
         Args:
-            job: Template job instance.
-            submitter: Submitter instance with array job script.
-
-        Returns:
-            int: Exit code from the submission command.
+            batch_job: Top-level ``BatchJob`` whose children become array tasks.
+            policy: Array concurrency policy; defaults to an empty policy
+                (throttle equals number of children).
+            test: If True, write scripts only (do not queue).
+            cli_args: Shared reconstructed ``chemsmart run`` CLI tokens.
+            rewrite_cli: Optional callback to rewrite shared CLI for each
+                child ``batch_entry``. Defaults to ``batch_job.rewrite_cli``.
+            **kwargs: Extra submitter construction parameters.
         """
+        from chemsmart.jobs.batch import (
+            BatchJob,
+            get_job_batch_entry,
+            resolve_array_cli_args,
+        )
+
+        if not isinstance(batch_job, BatchJob):
+            raise TypeError(
+                f"submit_batch expects a BatchJob, got {type(batch_job)!r}"
+            )
+        if not batch_job.jobs:
+            raise ValueError(
+                f"BatchJob {batch_job} has no child jobs to submit."
+            )
+
+        if policy is None:
+            policy = SchedulerArrayPolicy()
+
+        shared_cli_args = list(cli_args) if cli_args is not None else []
+        active_rewrite = (
+            rewrite_cli if rewrite_cli is not None else batch_job.rewrite_cli
+        )
+        has_batch_entries = any(
+            get_job_batch_entry(job) is not None for job in batch_job.jobs
+        )
+        if has_batch_entries and active_rewrite is None:
+            raise ValueError(
+                "BatchJob children have batch_entry but no "
+                "rewrite_cli callback was provided for per-task CLI args."
+            )
+        if not has_batch_entries:
+            active_rewrite = None
+        array_cli_args = resolve_array_cli_args(
+            batch_job.jobs,
+            shared_cli_args,
+            rewrite_cli=active_rewrite,
+        )
+
+        throttle = policy.array_throttle(len(batch_job.jobs))
+        logger.info(
+            "Submitting BatchJob %r as array with %s task(s), "
+            "concurrency throttle M=%s",
+            batch_job.label,
+            len(batch_job.jobs),
+            throttle,
+        )
+        return self.submit_array_job(
+            jobs=batch_job.jobs,
+            array_concurrency=throttle,
+            test=test,
+            cli_args=array_cli_args,
+            batch_label=batch_job.label,
+            **kwargs,
+        )
+
+    def _submit_array_job(self, job, submitter):
+        """Queue the array submit script for *job*'s folder."""
         command = self.submit_command
         if command is None:
             raise ValueError(
@@ -687,7 +878,6 @@ class Server(RegistryMixin):
         command += f" {submitter.array_submit_script}"
         logger.info(f"Submitting array job with command: {command}")
         if "<" in command or ">" in command or "|" in command:
-            # Use shell=True if the command has shell operators
             p = subprocess.Popen(command, shell=True)
         else:
             p = subprocess.Popen(shlex.split(command), cwd=job.folder)

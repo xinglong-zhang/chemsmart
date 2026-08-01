@@ -1,0 +1,2160 @@
+"""Tests for JobRunner class and no_run_in_parallel flag."""
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.runner import (
+    JobRunner,
+    run_phase_jobs,
+)
+
+
+class MockMolecule(Molecule):
+    def __init__(self, symbols=None, **kwargs):
+        self.symbols = symbols or ["C"]
+        self.coordinates = [[0.0, 0.0, 0.0]]
+        self.charge = 0
+        self.multiplicity = 1
+        self.num_atoms = len(self.symbols)
+        self._energy = None
+        self._empirical_formula = "C"
+
+    @property
+    def has_vibrations(self):
+        return True
+
+    def vibrationally_displaced(self, *args, **kwargs):
+        return MockMolecule()
+
+
+class TestJobRunner:
+    """Test JobRunner functionality."""
+
+    def test_jobrunner_default_no_run_in_parallel(self, pbs_server):
+        """Test that no_run_in_parallel defaults to False."""
+        runner = JobRunner(server=pbs_server, fake=True)
+        assert runner.no_run_in_parallel is False
+
+    def test_jobrunner_no_run_in_parallel_true(self, pbs_server):
+        """Test that no_run_in_parallel can be set to True."""
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        assert runner.no_run_in_parallel is True
+
+    def test_jobrunner_no_run_in_parallel_false(self, pbs_server):
+        """Test that no_run_in_parallel can be set to False."""
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+        assert runner.no_run_in_parallel is False
+
+    def test_run_phase_jobs_passes_stop_on_incomplete(
+        self, pbs_server, mocker
+    ):
+        from chemsmart.jobs.job import Job
+
+        runner = JobRunner(server=pbs_server, fake=True)
+        mock_child = Mock()
+        mock_child.run.return_value = None
+        mock_child.is_complete.return_value = True
+        mock_execute = mocker.patch.object(Job, "_execute_phase_jobs")
+
+        run_phase_jobs(
+            parent_runner=runner,
+            jobs=[mock_child],
+            stop_on_incomplete=True,
+            phase_label="test phase",
+        )
+
+        mock_execute.assert_called_once()
+        assert mock_execute.call_args.kwargs["stop_on_incomplete"] is True
+
+
+class TestSerialExecution:
+    """Test serial execution enforcement for jobs with subjobs."""
+
+    def test_crest_job_serial_execution_with_completion(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """Test that GaussianCrestJob runs all jobs when they complete successfully."""
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        # Create mock molecules
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+
+        # Create settings
+        settings = GaussianJobSettings()
+
+        # Create job with no_run_in_parallel=True
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
+        job = GaussianCrestJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_crest",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        # Mock conformer jobs that all complete successfully
+        mock_jobs = []
+        for i in range(3):
+            mock_job = Mock()
+            mock_job.label = f"conf_{i}"
+            mock_job.is_complete.return_value = True
+            mock_jobs.append(mock_job)
+
+        # Patch _prepare_all_jobs instead of the property
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        # Run the job
+        job._run()
+
+        # Verify all jobs were run
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
+
+    def test_crest_job_resumes_incomplete_conformers(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """Resubmit skips completed conformers and reruns incomplete ones."""
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.job import Job
+
+        class _RecordingConformerJob(Job):
+            TYPE = "test"
+            PROGRAM = "test"
+
+            def __init__(self, label, *, complete):
+                super().__init__(
+                    molecule=MockMolecule(),
+                    label=label,
+                    jobrunner=gaussian_jobrunner_no_scratch,
+                    skip_completed=True,
+                )
+                self._complete = complete
+                self.run_count = 0
+
+            def is_complete(self):
+                return self._complete
+
+            def _run(self, **kwargs):
+                self.run_count += 1
+
+        settings = GaussianJobSettings()
+        crest = GaussianCrestJob(
+            molecules=[MockMolecule() for _ in range(4)],
+            settings=settings,
+            label="crest_resume",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        # Conformers 1-2 complete; 3 timed out / incomplete; 4 not started.
+        children = [
+            _RecordingConformerJob("crest_resume_c1", complete=True),
+            _RecordingConformerJob("crest_resume_c2", complete=True),
+            _RecordingConformerJob("crest_resume_c3", complete=False),
+            _RecordingConformerJob("crest_resume_c4", complete=False),
+        ]
+        mocker.patch.object(crest, "_prepare_all_jobs", return_value=children)
+
+        crest._run_all_jobs()
+
+        assert [child.run_count for child in children] == [0, 0, 1, 1]
+
+
+class TestBatchJobRefactor:
+    """Tests for shared BatchJob orchestration."""
+
+    @staticmethod
+    def _dummy_batch_cls():
+        from chemsmart.jobs.batch import BatchJob
+
+        class DummyBatchJob(BatchJob):
+            PROGRAM = "dummy"
+
+        return DummyBatchJob
+
+    def test_batch_writes_success_and_failed_logs(self, pbs_server, tmp_path):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+
+        success_job = Mock()
+        success_job.label = "success_job"
+        success_job.run.return_value = None
+        success_job.is_complete.return_value = True
+
+        fail_job = Mock()
+        fail_job.label = "fail_job"
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        batch = dummy_batch_cls(
+            jobs=[success_job, fail_job],
+            write_outcome_logs=True,
+            jobrunner=runner,
+            label="batch_logs_test",
+        )
+        batch.folder = str(tmp_path)
+
+        with pytest.raises(BatchExecutionError):
+            batch.run()
+
+        success_lines = (tmp_path / "success.log").read_text().splitlines()
+        failed_lines = (tmp_path / "failed.log").read_text().splitlines()
+
+        assert "success_job" in success_lines
+        assert any(line.startswith("fail_job\t") for line in failed_lines)
+
+    def test_batch_run_raises_with_failed_job_summary(
+        self, pbs_server, tmp_path
+    ):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+
+        fail_job = Mock()
+        fail_job.label = "fail_job"
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job],
+            jobrunner=runner,
+            label="batch_raise_test",
+        )
+        batch.folder = str(tmp_path)
+
+        with pytest.raises(BatchExecutionError, match="fail_job"):
+            batch.run()
+
+    def test_serial_attempts_all_then_raises(self, pbs_server):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+
+        fail_job = Mock(label="fail_job")
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        ok_job = Mock(label="ok_job")
+        ok_job.run.return_value = None
+        ok_job.is_complete.return_value = True
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job, ok_job],
+            jobrunner=runner,
+        )
+
+        with pytest.raises(BatchExecutionError, match="1 of 2"):
+            batch.run()
+
+        fail_job.run.assert_called_once()
+        ok_job.run.assert_called_once()
+
+    def test_parallel_request_falls_back_to_serial(self, pbs_server):
+        """In-process parallel is disabled; children run serially."""
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+
+        fail_job = Mock(label="fail_job")
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        later_job = Mock(label="later_job")
+        later_job.run.return_value = None
+        later_job.is_complete.return_value = True
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job, later_job],
+            jobrunner=runner,
+        )
+
+        with pytest.raises(BatchExecutionError, match="1 of 2"):
+            batch.run()
+
+        fail_job.run.assert_called_once()
+        later_job.run.assert_called_once()
+        assert fail_job.jobrunner.num_cores == 16
+        assert fail_job.jobrunner.mem_gb == 32
+        assert later_job.jobrunner.num_cores == 16
+        assert later_job.jobrunner.mem_gb == 32
+
+    def test_run_child_jobs_as_batch_always_serial(self, pbs_server):
+        """Nested batches always run children serially with full resources."""
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        parent = Mock()
+        parent.label = "parent"
+        parent.jobrunner = runner
+
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        batch = run_child_jobs_as_batch(
+            batch_cls=dummy_batch_cls,
+            jobs=[child_a, child_b],
+            parent=parent,
+            label_suffix="_batch",
+        )
+
+        assert batch.label == "parent_batch"
+        child_a.run.assert_called_once()
+        child_b.run.assert_called_once()
+        assert child_a.jobrunner.num_cores == 16
+        assert child_a.jobrunner.mem_gb == 32
+        assert child_b.jobrunner.num_cores == 16
+        assert child_b.jobrunner.mem_gb == 32
+
+    def test_run_child_jobs_as_batch_ignores_array_env(
+        self, pbs_server, monkeypatch
+    ):
+        """Nested phase batches stay serial; array selection is at ``_run`` only."""
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        dummy_batch_cls = self._dummy_batch_cls()
+        parent = Mock()
+        parent.label = "parent"
+        parent.jobrunner = JobRunner(
+            server=pbs_server, fake=True, num_cores=8, mem_gb=16
+        )
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        run_child_jobs_as_batch(
+            batch_cls=dummy_batch_cls,
+            jobs=[child_a, child_b],
+            parent=parent,
+            label_suffix="_batch",
+        )
+
+        child_a.run.assert_called_once()
+        child_b.run.assert_called_once()
+
+    def test_dias_child_index_selects_from_flattened_phases(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Multi-phase DIAS selects one flattened child via ``child_index``."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        settings = GaussianJobSettings()
+        job = GaussianDIASJob(
+            molecules=[MockMolecule(), MockMolecule()],
+            settings=settings,
+            label="dias_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+            child_index=4,
+        )
+        mol_jobs = [Mock(label="mol_p1"), Mock(label="mol_p2")]
+        f1_jobs = [Mock(label="f1_p1"), Mock(label="f1_p2")]
+        f2_jobs = [Mock(label="f2_p1"), Mock(label="f2_p2")]
+        for child in mol_jobs + f1_jobs + f2_jobs:
+            child.run.return_value = None
+            child.is_complete.return_value = True
+
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: (mol_jobs + f1_jobs + f2_jobs)[i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=6,
+        )
+
+        mock_mol_batch = mocker.patch.object(job, "_run_all_molecules_jobs")
+        mock_f1_batch = mocker.patch.object(job, "_run_fragment1_jobs")
+        mock_f2_batch = mocker.patch.object(job, "_run_fragment2_jobs")
+
+        job._run()
+
+        # Flattened order: mol_p1, mol_p2, f1_p1, f1_p2, f2_p1, f2_p2
+        for child in mol_jobs + [f1_jobs[0]] + f2_jobs:
+            child.run.assert_not_called()
+        f1_jobs[1].run.assert_called_once()
+        mock_mol_batch.assert_not_called()
+        mock_f1_batch.assert_not_called()
+        mock_f2_batch.assert_not_called()
+
+    def test_dias_array_child_api_is_lazy(
+        self, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """``num_array_children`` and ``get_array_child_job`` must not bulk-build."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = GaussianDIASJob(
+            molecules=[molecule, molecule, molecule],
+            settings=settings,
+            label="dias_lazy",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+
+        assert job.num_array_children == 3
+        bulk_spy.assert_not_called()
+
+        child = job.get_array_child_job(1)
+        bulk_spy.assert_not_called()
+        assert child.label == "dias_lazy_p1_f1"
+
+        with pytest.raises(ValueError, match="out of range"):
+            job.get_array_child_job(99)
+
+        assert [j.label for j in job.get_array_child_jobs()] == [
+            job.get_array_child_job(i).label
+            for i in range(job.num_array_children)
+        ]
+
+    def test_dias_irc_array_child_api_indexes_sampled_phases(
+        self, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """IRC mode flattens sampled molecule + fragment phases."""
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = GaussianDIASJob(
+            molecules=[molecule, molecule, molecule],
+            settings=settings,
+            label="dias_irc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=2,
+            mode="irc",
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+        n = job._num_sampled_points_per_phase
+
+        assert n == 3
+        assert job.num_array_children == 9
+        bulk_spy.assert_not_called()
+
+        assert job.get_array_child_job(0).label == "dias_irc_p0"
+        assert job.get_array_child_job(n).label == "dias_irc_p0_f1"
+        assert job.get_array_child_job(2 * n).label == "dias_irc_p0_f2"
+        bulk_spy.assert_not_called()
+
+        with pytest.raises(ValueError, match="Invalid mode"):
+            GaussianDIASJob(
+                molecules=[molecule],
+                settings=GaussianJobSettings(),
+                label="dias_bad",
+                jobrunner=gaussian_jobrunner_no_scratch,
+                fragment_indices="1",
+                every_n_points=1,
+                mode="bogus",
+            ).num_array_children
+
+
+class TestBatchCliRewrite:
+    """Unit tests for batch submit-time CLI rewrite helpers."""
+
+    def test_resolve_array_cli_args_without_batch_entry_keeps_shared_list(
+        self,
+    ):
+        from chemsmart.jobs.batch import resolve_array_cli_args
+
+        jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+        assert resolve_array_cli_args(jobs, shared) == shared
+
+    def test_resolve_array_cli_args_with_batch_entry_uses_shared_rewrite(
+        self,
+    ):
+        from chemsmart.jobs.batch import (
+            make_batch_cli_rewriter,
+            resolve_array_cli_args,
+            set_job_batch_entry,
+        )
+
+        job1 = SimpleNamespace(label="mol_idx1")
+        job2 = SimpleNamespace(label="mol_idx2")
+        set_job_batch_entry(
+            job1, {"filepath": "mols.xyz", "molecule_index": 1}
+        )
+        set_job_batch_entry(
+            job2, {"filepath": "mols.xyz", "molecule_index": 2}
+        )
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+        cli_lists = resolve_array_cli_args(
+            [job1, job2],
+            shared,
+            rewrite_cli=make_batch_cli_rewriter("opt"),
+        )
+        assert cli_lists[0][cli_lists[0].index("-i") + 1] == "1"
+        assert cli_lists[1][cli_lists[1].index("-i") + 1] == "2"
+        assert all("1,2" not in args for args in cli_lists)
+
+    def test_resolve_array_cli_args_requires_rewrite_cli_when_entries_present(
+        self,
+    ):
+        from chemsmart.jobs.batch import (
+            resolve_array_cli_args,
+            set_job_batch_entry,
+        )
+
+        job = SimpleNamespace(label="acid1")
+        set_job_batch_entry(
+            job,
+            {
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": "direct",
+                "label": "acid1",
+            },
+        )
+        with pytest.raises(ValueError, match="rewrite_cli"):
+            resolve_array_cli_args([job], ["gaussian", "pka", "batch"])
+
+    def test_rewrite_batch_cli_args_narrows_shared_index(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2,3", "opt"]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {"filepath": "mols.xyz", "molecule_index": 2},
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("-i") + 1] == "2"
+        assert "1,2,3" not in rewritten
+        assert rewritten.index("-i") < rewritten.index("opt")
+
+    def test_rewrite_batch_cli_args_injects_child_index(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "ts.log", "qrc"]
+        rewritten = rewrite_batch_cli_args(
+            shared, {"child_index": 2}, job_token="qrc"
+        )
+        assert rewritten[rewritten.index("--child-index") + 1] == "2"
+        # Must land on the nestable command, not under gaussian options.
+        assert rewritten.index("qrc") < rewritten.index("--child-index")
+
+    def test_rewrite_batch_cli_args_keeps_label_matching_job_token(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        # Basename labels like ts/opt must not shift option placement.
+        qrc_shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "ts",
+            "qrc",
+        ]
+        qrc_rewritten = rewrite_batch_cli_args(
+            qrc_shared, {"child_index": 1}, job_token="qrc"
+        )
+        assert qrc_rewritten.index("qrc") < qrc_rewritten.index(
+            "--child-index"
+        )
+        assert qrc_rewritten[qrc_rewritten.index("--label") + 1] == "ts"
+
+        opt_shared = [
+            "gaussian",
+            "-f",
+            "opt.log",
+            "--label",
+            "opt",
+            "-i",
+            "1,2,3",
+            "sp",
+        ]
+        opt_rewritten = rewrite_batch_cli_args(
+            opt_shared,
+            {"molecule_index": 2, "label": "opt_idx2"},
+            job_token="sp",
+        )
+        assert opt_rewritten[opt_rewritten.index("-i") + 1] == "2"
+        assert "1,2,3" not in opt_rewritten
+        assert opt_rewritten.index("-i") < opt_rewritten.index("sp")
+        assert opt_rewritten.index("--label") < opt_rewritten.index("sp")
+        assert opt_rewritten[opt_rewritten.index("--label") + 1] == "opt_idx2"
+
+    def test_rewrite_batch_cli_args_label_collides_with_opt_job_token(self):
+        from chemsmart.jobs.batch import (
+            _find_job_token_index,
+            rewrite_batch_cli_args,
+        )
+
+        shared = [
+            "gaussian",
+            "--project",
+            "test",
+            "--filename",
+            "five_mols.xyz",
+            "--charge",
+            "0",
+            "--multiplicity",
+            "1",
+            "--label",
+            "opt",
+            "-i",
+            "1,2,3,4,5",
+            "opt",
+            "--no-forces",
+            "--no-remove-solvent",
+            "--no-skip-completed",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {
+                "filepath": "five_mols.xyz",
+                "molecule_index": 3,
+                "label": "opt_idx3",
+            },
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("--label") + 1] == "opt_idx3"
+        assert rewritten[rewritten.index("-i") + 1] == "3"
+        assert "1,2,3,4,5" not in rewritten
+        job_idx = _find_job_token_index(rewritten, "opt")
+        assert rewritten.index("-i") < job_idx
+        assert rewritten.index("--label") < job_idx
+
+        short_label = [
+            "gaussian",
+            "-f",
+            "five_mols.xyz",
+            "-l",
+            "opt",
+            "-i",
+            "1,2,3,4,5",
+            "opt",
+        ]
+        short_rewritten = rewrite_batch_cli_args(
+            short_label,
+            {
+                "filepath": "five_mols.xyz",
+                "molecule_index": 3,
+                "label": "opt_idx3",
+            },
+            job_token="opt",
+        )
+        assert short_rewritten[short_rewritten.index("-l") + 1] == "opt_idx3"
+        assert short_rewritten[short_rewritten.index("-i") + 1] == "3"
+        job_idx = _find_job_token_index(short_rewritten, "opt")
+        assert short_rewritten.index("-i") < job_idx
+
+        for flag in ("-a", "-r"):
+            via_option = [
+                "gaussian",
+                "-f",
+                "five_mols.xyz",
+                flag,
+                "opt",
+                "-i",
+                "1,2,3,4,5",
+                "opt",
+            ]
+            rewritten = rewrite_batch_cli_args(
+                via_option,
+                {
+                    "filepath": "five_mols.xyz",
+                    "molecule_index": 3,
+                    "label": "opt_idx3",
+                },
+                job_token="opt",
+            )
+            assert rewritten[rewritten.index("-i") + 1] == "3"
+            job_idx = _find_job_token_index(rewritten, "opt")
+            assert rewritten.index("-i") < job_idx
+
+    def test_rewrite_batch_cli_args_updates_short_label(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = [
+            "gaussian",
+            "-f",
+            "mols.xyz",
+            "-l",
+            "mols",
+            "-i",
+            "1,2",
+            "opt",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {"molecule_index": 2, "label": "mols_idx2"},
+            job_token="opt",
+        )
+        assert "-l" in rewritten
+        assert rewritten[rewritten.index("-l") + 1] == "mols_idx2"
+        assert "--label" not in rewritten
+        assert rewritten.index("-l") < rewritten.index("opt")
+        assert rewritten.index("-i") < rewritten.index("opt")
+
+    def test_rewrite_batch_cli_args_child_index_preserves_parent_label(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "parent_dias",
+            "dias",
+            "-i",
+            "1-10",
+            "--mode",
+            "ts",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared, {"child_index": 3}, job_token="dias"
+        )
+        assert rewritten[rewritten.index("--label") + 1] == "parent_dias"
+        assert rewritten.index("dias") < rewritten.index("--child-index")
+        assert rewritten[rewritten.index("--child-index") + 1] == "3"
+
+    def test_rewrite_batch_cli_args_injects_label(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {"molecule_index": 2, "label": "mols_opt_idx2"},
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("--label") + 1] == "mols_opt_idx2"
+        assert rewritten.index("--label") < rewritten.index("opt")
+        assert rewritten.index("-i") < rewritten.index("opt")
+
+    def test_rewrite_batch_cli_args_places_options_before_opt_after_flags(
+        self,
+    ):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        # Mirrors CtxObjArguments output: boolean flags precede the job token.
+        shared = [
+            "gaussian",
+            "--project",
+            "test",
+            "--filename",
+            "two.xyz",
+            "--charge",
+            "0",
+            "--multiplicity",
+            "1",
+            "--no-forces",
+            "--no-remove-solvent",
+            "opt",
+            "--skip-completed",
+        ]
+        rewritten = rewrite_batch_cli_args(
+            shared,
+            {
+                "filepath": "two.xyz",
+                "molecule_index": 1,
+                "label": "two_opt_idx1",
+            },
+            job_token="opt",
+        )
+        assert rewritten[rewritten.index("--index") + 1] == "1"
+        assert rewritten[rewritten.index("--label") + 1] == "two_opt_idx1"
+        assert rewritten.index("--index") < rewritten.index("opt")
+        assert rewritten.index("--label") < rewritten.index("opt")
+        assert rewritten.index("--no-forces") < rewritten.index("opt")
+        assert rewritten.index("--no-remove-solvent") < rewritten.index("opt")
+
+    def test_rewrite_batch_cli_args_without_entry_keeps_shared(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "ts.log", "qrc"]
+        assert rewrite_batch_cli_args(shared, None, job_token="qrc") == shared
+
+    def test_rewrite_batch_cli_args_requires_job_token_in_args(self):
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        shared = ["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"]
+        with pytest.raises(ValueError, match="job token 'sp' is not present"):
+            rewrite_batch_cli_args(
+                shared,
+                {"molecule_index": 1, "label": "mols_idx1"},
+                job_token="sp",
+            )
+
+    def test_prepare_batch_jobs_attaches_entries(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+            rewrite_batch_cli_args,
+        )
+
+        jobs = [
+            SimpleNamespace(label="mols_opt_idx1"),
+            SimpleNamespace(label="mols_opt_idx2"),
+        ]
+        rewrite_cli = prepare_batch_jobs(
+            jobs, [1, 2], job_token="opt", filepath="mols.xyz"
+        )
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": "opt"}
+        assert get_job_batch_entry(jobs[0]) == {
+            "filepath": "mols.xyz",
+            "molecule_index": 1,
+            "label": "mols_opt_idx1",
+        }
+        assert get_job_batch_entry(jobs[1]) == {
+            "filepath": "mols.xyz",
+            "molecule_index": 2,
+            "label": "mols_opt_idx2",
+        }
+
+    def test_prepare_batch_jobs_returns_none_for_single_job(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [SimpleNamespace(label="a")]
+        assert (
+            prepare_batch_jobs(jobs, [1], job_token="opt", filepath="mols.xyz")
+            is None
+        )
+        assert get_job_batch_entry(jobs[0]) is None
+
+    def test_prepare_batch_jobs_rejects_length_mismatch(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [
+            SimpleNamespace(label="a"),
+            SimpleNamespace(label="b"),
+            SimpleNamespace(label="c"),
+        ]
+        with pytest.raises(
+            ValueError, match="3 job\\(s\\) vs 2 molecule index"
+        ):
+            prepare_batch_jobs(
+                jobs, [1, 2], job_token="opt", filepath="mols.xyz"
+            )
+        assert get_job_batch_entry(jobs[0]) is None
+        assert get_job_batch_entry(jobs[1]) is None
+        assert get_job_batch_entry(jobs[2]) is None
+
+    def test_prepare_batch_jobs_uses_explicit_replay_labels(self):
+        """Derived child labels are replayed via their pre-derivation label."""
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [
+            SimpleNamespace(label="mols_sp_idx1_smd_water"),
+            SimpleNamespace(label="mols_sp_idx2_smd_water"),
+        ]
+        prepare_batch_jobs(
+            jobs,
+            [1, 2],
+            job_token="sp",
+            filepath="mols.xyz",
+            labels=["mols_sp_idx1", "mols_sp_idx2"],
+        )
+        assert get_job_batch_entry(jobs[0])["label"] == "mols_sp_idx1"
+        assert get_job_batch_entry(jobs[1])["label"] == "mols_sp_idx2"
+
+    def test_prepare_batch_jobs_rejects_label_length_mismatch(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_batch_jobs,
+        )
+
+        jobs = [SimpleNamespace(label="a"), SimpleNamespace(label="b")]
+        with pytest.raises(ValueError, match="2 job\\(s\\) vs 1 label"):
+            prepare_batch_jobs(
+                jobs, [1, 2], job_token="opt", labels=["only_one"]
+            )
+        assert get_job_batch_entry(jobs[0]) is None
+
+    def test_prepare_nestable_batch_jobs_injects_child_index(self):
+        from chemsmart.jobs.batch import (
+            get_job_batch_entry,
+            prepare_nestable_batch_jobs,
+            resolve_array_cli_args,
+            rewrite_batch_cli_args,
+        )
+
+        jobs = [SimpleNamespace(label="qf"), SimpleNamespace(label="qr")]
+        rewrite_cli = prepare_nestable_batch_jobs(jobs, job_token="qrc")
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": "qrc"}
+        assert get_job_batch_entry(jobs[0]) == {"child_index": 1}
+        assert get_job_batch_entry(jobs[1]) == {"child_index": 2}
+
+        shared = [
+            "gaussian",
+            "-f",
+            "ts.log",
+            "--label",
+            "ts_qrc",
+            "qrc",
+        ]
+        cli_lists = resolve_array_cli_args(jobs, shared, rewrite_cli)
+        assert cli_lists[0][cli_lists[0].index("--child-index") + 1] == "1"
+        assert cli_lists[1][cli_lists[1].index("--child-index") + 1] == "2"
+        assert all("qrc" in args for args in cli_lists)
+        assert all(
+            args.index("qrc") < args.index("--child-index")
+            for args in cli_lists
+        )
+        assert all(
+            args[args.index("--label") + 1] == "ts_qrc" for args in cli_lists
+        )
+
+
+class TestGaussianBatchDelegation:
+    """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""
+
+    def test_crest_job_local_run_calls_child_jobs_directly(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        job = GaussianCrestJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_crest",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [
+            Mock(label="conf_1"),
+            Mock(label="conf_2"),
+            Mock(label="conf_3"),
+        ]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        job._run_all_jobs()
+
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
+
+    def test_traj_job_local_run_calls_child_jobs_directly(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        job = GaussianTrajJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_traj",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+        )
+
+        mock_jobs = [
+            Mock(label="traj_1"),
+            Mock(label="traj_2"),
+            Mock(label="traj_3"),
+        ]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        job._run_all_jobs()
+
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
+
+    def test_traj_child_index_maps_stable_end_slice(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``child_index`` indexes the stable last-N set, not incompletes."""
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        molecules = [MockMolecule() for _ in range(5)]
+        for index, mol in enumerate(molecules):
+            mol.energy = float(index)
+
+        settings = GaussianJobSettings()
+        job = GaussianTrajJob(
+            molecules=molecules,
+            settings=settings,
+            label="traj_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+            num_structures_to_run=3,
+            skip_completed=False,
+            child_index=2,
+        )
+
+        prepared = []
+        for index in range(5):
+            child = Mock(label=f"traj_array_c{index + 1}")
+            child.run.return_value = None
+            child.is_complete.return_value = index == 3  # c4 complete
+            prepared.append(child)
+        # Stable last-3 indices are 2,3,4 → labels c3,c4,c5
+        selected = prepared[2:]
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: selected[i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=3,
+        )
+
+        job._run()
+
+        # Stable last-3 is c3,c4,c5; task 2 runs c4 only.
+        prepared[0].run.assert_not_called()
+        prepared[1].run.assert_not_called()
+        prepared[2].run.assert_not_called()
+        prepared[3].run.assert_called_once()
+        prepared[4].run.assert_not_called()
+
+    def test_traj_job_serial_mode_runs_prepared_jobs_directly(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
+        job = GaussianTrajJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_traj_serial",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+        )
+
+        mock_jobs = [
+            Mock(label="traj_1"),
+            Mock(label="traj_2"),
+            Mock(label="traj_3"),
+        ]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        job._run_all_jobs()
+
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
+
+    def test_crest_job_serial_mode_runs_prepared_jobs_directly(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
+        job = GaussianCrestJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_crest_serial",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [Mock(label="conf_1"), Mock(label="conf_2")]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        job._run_all_jobs()
+
+        for mock_job in mock_jobs:
+            mock_job.run.assert_called_once()
+
+    def test_qrc_job_nested_batch_always_serial(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        settings = GaussianJobSettings()
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [Mock(label="qrc_f"), Mock(label="qrc_r")]
+        mocker.patch.object(
+            job, "get_array_child_jobs", return_value=mock_jobs
+        )
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_both_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args.kwargs
+        assert call_kwargs["jobs"] == mock_jobs
+        assert call_kwargs["label"] == "test_qrc_batch"
+        mock_batch.run.assert_called_once()
+
+    def test_qrc_child_index_runs_selected_child_only(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``--child-index`` selects one QRC child via nestable helper."""
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        gaussian_jobrunner_no_scratch.num_cores = 16
+        gaussian_jobrunner_no_scratch.mem_gb = 32
+
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            child_index=2,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=2,
+        )
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+
+        job._run()
+
+        child_f.run.assert_not_called()
+        child_r.run.assert_called_once()
+        assert child_r.jobrunner is not gaussian_jobrunner_no_scratch
+        assert child_r.jobrunner.num_cores == 16
+        assert child_r.jobrunner.mem_gb == 32
+        mock_batch_cls.return_value.run.assert_not_called()
+
+    def test_qrc_child_index_raises_when_selected_child_incomplete(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Nestable array path fails if the selected child did not complete."""
+        from chemsmart.jobs.batch import BatchExecutionError
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_incomplete",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            child_index=1,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = False
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=2,
+        )
+
+        with pytest.raises(
+            BatchExecutionError, match="incomplete after execution"
+        ):
+            job._run()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
+
+    def test_qrc_slurm_env_without_child_index_runs_local_serial(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Scheduler env alone does not select a nestable child."""
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_local_with_slurm_env",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_jobs",
+            return_value=[child_f, child_r],
+        )
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run()
+
+        mock_batch_cls.assert_called_once()
+        mock_batch.run.assert_called_once()
+        child_f.run.assert_not_called()
+        child_r.run.assert_not_called()
+
+    def test_qrc_child_index_prefers_explicit_over_slurm_env(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``--child-index`` selects the child even when SLURM env differs."""
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        settings = GaussianJobSettings()
+        job = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="test_qrc_child_index",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            child_index=1,
+        )
+        child_f = Mock(label="qrc_f")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="qrc_r")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        mocker.patch.object(
+            type(job),
+            "num_array_children",
+            new_callable=mocker.PropertyMock,
+            return_value=2,
+        )
+
+        job._run()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
+
+    def test_orca_qrc_array_child_api_is_lazy(
+        self, orca_jobrunner_no_scratch, mocker
+    ):
+        """ORCA QRC builds one direction without bulk ``get_array_child_jobs``."""
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        settings = ORCAJobSettings(jobtype="opt")
+        job = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="orca_qrc",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+
+        assert job.num_array_children == 2
+        forward = job.get_array_child_job(0)
+        reverse = job.get_array_child_job(1)
+        bulk_spy.assert_not_called()
+        assert forward.label == "orca_qrcf_opt"
+        assert reverse.label == "orca_qrcr_opt"
+
+    def test_orca_qrc_child_index_runs_selected_child_only(
+        self, orca_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """``child_index`` selects one ORCA QRC direction without bulk build."""
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "1")
+        job = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=ORCAJobSettings(),
+            label="orca_qrc_array",
+            jobrunner=orca_jobrunner_no_scratch,
+            child_index=1,
+        )
+        child_f = Mock(label="orca_qrc_arrayf")
+        child_f.run.return_value = None
+        child_f.is_complete.return_value = True
+        child_r = Mock(label="orca_qrc_arrayr")
+        child_r.run.return_value = None
+        child_r.is_complete.return_value = True
+        mocker.patch.object(
+            job,
+            "get_array_child_job",
+            side_effect=lambda i: [child_f, child_r][i],
+        )
+        bulk_spy = mocker.spy(job, "get_array_child_jobs")
+        mock_batch_cls = mocker.patch("chemsmart.jobs.orca.qrc.ORCABatchJob")
+
+        job._run()
+
+        child_f.run.assert_called_once()
+        child_r.run.assert_not_called()
+        bulk_spy.assert_not_called()
+        mock_batch_cls.return_value.run.assert_not_called()
+
+    def test_multi_molecule_orca_qrc_outer_array_runs_both_directions(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Outer SLURM array must not steal nestable QRC child selection.
+
+        ``chemsmart sub ... orca -i 1,2,3 qrc`` yields ORCABatchJob of three
+        ORCAQRCJobs. Each array task runs one molecule; that QRC must still
+        run both forward and reverse. Task id 3 previously raised ValueError
+        against the two nested QRC children.
+        """
+        import os
+
+        from chemsmart.jobs.orca.batch import ORCABatchJob
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "3")
+        settings = ORCAJobSettings()
+        qrc_parents = []
+        nested_pairs = []
+        for index in range(3):
+            parent = ORCAQRCJob(
+                molecule=MockMolecule(),
+                settings=settings,
+                label=f"mol{index}_qrc",
+                jobrunner=orca_jobrunner_no_scratch,
+                skip_completed=False,
+            )
+            forward = Mock(label=f"mol{index}_f")
+            forward.run.return_value = None
+            forward.is_complete.return_value = True
+            reverse = Mock(label=f"mol{index}_r")
+            reverse.run.return_value = None
+            reverse.is_complete.return_value = True
+            nested = [forward, reverse]
+            nested_pairs.append(nested)
+            mocker.patch.object(
+                parent, "get_array_child_jobs", return_value=nested
+            )
+            qrc_parents.append(parent)
+
+        batch = ORCABatchJob(
+            jobs=qrc_parents,
+            label="mols_qrc_batch",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        batch.run()
+
+        # Outer array selected molecule 3 only.
+        for index, nested in enumerate(nested_pairs):
+            if index == 2:
+                nested[0].run.assert_called_once()
+                nested[1].run.assert_called_once()
+            else:
+                nested[0].run.assert_not_called()
+                nested[1].run.assert_not_called()
+
+        # Outer array env restored after the selected child finishes.
+        assert os.environ.get("SLURM_ARRAY_TASK_ID") == "3"
+
+
+class TestRunListFailureAggregation:
+    """List execution aggregates failures like BatchJob."""
+
+    def test_serial_list_execution_raises_aggregated_failures(
+        self, pbs_server, mocker
+    ):
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        from chemsmart.jobs.job import Job
+
+        ok_job = Mock(spec=Job, label="ok_job", TYPE="g16opt")
+        ok_job.run.return_value = None
+        fail_job = Mock(spec=Job, label="fail_job", TYPE="g16opt")
+        fail_job.run.side_effect = RuntimeError("boom")
+
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        with pytest.warns(DeprecationWarning, match="bare list of Job"):
+            with pytest.raises(
+                BatchExecutionError, match="fail_job"
+            ) as exc_info:
+                process_pipeline.__wrapped__(ctx, [ok_job, fail_job])
+
+        assert "1 of 2 list job(s) failed" in str(exc_info.value)
+        ok_job.run.assert_called_once()
+        fail_job.run.assert_called_once()
+
+    def test_sub_list_emits_deprecation_and_submits_individually(
+        self, pbs_server, monkeypatch
+    ):
+        import click
+
+        from chemsmart.cli.sub import process_pipeline, sub
+        from chemsmart.jobs.job import Job
+        from chemsmart.settings.server import Server
+
+        jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        ctx = click.Context(sub)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+        ctx.obj["subcommand"] = [
+            {
+                "name": "sub",
+                "kwargs": {
+                    "server": "dummy",
+                    "test": True,
+                    "print_command": False,
+                    "time_hours": None,
+                    "queue": None,
+                    "verbose": False,
+                },
+                "args": (),
+                "params": {},
+            }
+        ]
+
+        captured = {"submissions": []}
+        fake_server = Server(name="dummy")
+
+        def _fake_submit(job, test=False, cli_args=None, **kw):
+            captured["submissions"].append((job, test, cli_args))
+
+        fake_server.submit = _fake_submit
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+        monkeypatch.setattr(
+            "chemsmart.cli.sub.CtxObjArguments.reconstruct_command_line",
+            lambda self: ["sub", "gaussian", "opt"],
+        )
+
+        job_a = Mock(spec=Job, label="a", TYPE="g16opt")
+        job_b = Mock(spec=Job, label="b", TYPE="g16opt")
+
+        with pytest.warns(DeprecationWarning, match="bare list of Job"):
+            process_pipeline.__wrapped__(
+                ctx,
+                [job_a, job_b],
+                server="dummy",
+                test=True,
+                print_command=False,
+            )
+
+        assert len(captured["submissions"]) == 2
+        assert captured["submissions"][0][0] is job_a
+        assert captured["submissions"][1][0] is job_b
+        assert job_a.jobrunner is jobrunner
+        assert job_b.jobrunner is jobrunner
+
+    def test_run_forces_batchjob_serial_despite_parallel_flag(
+        self, pbs_server, mocker
+    ):
+        """chemsmart run serializes top-level BatchJob children."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.batch import BatchJob
+
+        jobrunner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        from chemsmart.jobs.job import Job
+
+        child = Mock(spec=Job, label="child", TYPE="g16opt")
+        child.run.return_value = None
+        child.is_complete.return_value = True
+
+        class _DummyBatch(BatchJob):
+            PROGRAM = "test"
+
+        batch = _DummyBatch(
+            jobs=[child],
+            jobrunner=jobrunner,
+            label="top_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        child.run.assert_called_once()
+        assert child.jobrunner.num_cores == 16
+        assert child.jobrunner.mem_gb == 32
+
+    def test_serial_batch_propagates_full_cores_and_memory(self, pbs_server):
+        """Serial BatchJob children receive full parent num_cores / mem_gb."""
+        from chemsmart.jobs.batch import BatchJob
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        class _DummyBatch(BatchJob):
+            PROGRAM = "test"
+
+        batch = _DummyBatch(
+            jobs=[child_a, child_b],
+            jobrunner=runner,
+            label="resource_batch",
+        )
+        batch.run()
+
+        assert child_a.jobrunner.num_cores == 16
+        assert child_a.jobrunner.mem_gb == 32
+        assert child_b.jobrunner.num_cores == 16
+        assert child_b.jobrunner.mem_gb == 32
+        assert child_a.jobrunner is not child_b.jobrunner
+        assert child_a.jobrunner is not runner
+
+
+class TestBatchSerialExecutionPolicy:
+    """Serial local/nested BatchJob policy with full per-child resources."""
+
+    @staticmethod
+    def _dummy_batch_cls():
+        from chemsmart.jobs.batch import BatchJob
+
+        class DummyBatchJob(BatchJob):
+            PROGRAM = "dummy"
+
+        return DummyBatchJob
+
+    def test_toplevel_run_batch_is_serial_with_full_resources(
+        self, pbs_server, mocker
+    ):
+        """Top-level chemsmart run BatchJob: serial children, full cores/mem."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.job import Job
+
+        jobrunner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        call_order = []
+        cores_seen = []
+        mem_seen = []
+        children = []
+        for index in range(4):
+            child = Mock(spec=Job, label=f"mol_{index}", TYPE="g16opt")
+            child.is_complete.return_value = True
+
+            def _run(child_ref=child):
+                call_order.append(child_ref.label)
+                cores_seen.append(child_ref.jobrunner.num_cores)
+                mem_seen.append(child_ref.jobrunner.mem_gb)
+
+            child.run.side_effect = _run
+            children.append(child)
+
+        batch_cls = self._dummy_batch_cls()
+        batch = batch_cls(
+            jobs=children,
+            jobrunner=jobrunner,
+            label="mols_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        assert call_order == ["mol_0", "mol_1", "mol_2", "mol_3"]
+        assert cores_seen == [16, 16, 16, 16]
+        assert mem_seen == [32, 32, 32, 32]
+
+    def test_run_in_parallel_does_not_oversubscribe_cores(
+        self, pbs_server, mocker
+    ):
+        """--run-in-parallel on run must not assign N× full cores or split cores."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.job import Job
+
+        parent_cores = 16
+        parent_mem = 32
+        num_children = 4
+        jobrunner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=parent_cores,
+            mem_gb=parent_mem,
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        children = []
+        for index in range(num_children):
+            child = Mock(spec=Job, label=f"job_{index}", TYPE="g16opt")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch_cls = self._dummy_batch_cls()
+        batch = batch_cls(
+            jobs=children,
+            jobrunner=jobrunner,
+            label="parallel_flag_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        split_cores = parent_cores // num_children
+        for child in children:
+            assert child.jobrunner.num_cores == parent_cores
+            assert child.jobrunner.mem_gb == parent_mem
+            assert child.jobrunner.num_cores != split_cores
+
+    def test_nested_crest_qrc_serial_despite_parallel_runner(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """Nested crest/QRC batches stay serial when runner allows parallel."""
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        settings = GaussianJobSettings()
+
+        crest = GaussianCrestJob(
+            molecules=[MockMolecule(), MockMolecule()],
+            settings=settings,
+            label="crest_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        crest_jobs = [Mock(label="c1"), Mock(label="c2")]
+        mocker.patch.object(
+            crest, "_prepare_all_jobs", return_value=crest_jobs
+        )
+        crest._run_all_jobs()
+
+        qrc = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="qrc_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        qrc_jobs = [Mock(label="qf"), Mock(label="qr")]
+        mocker.patch.object(qrc, "get_array_child_jobs", return_value=qrc_jobs)
+        qrc._run_both_jobs()
+
+        orca_settings = ORCAJobSettings()
+        orca_qrc = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=orca_settings,
+            label="orca_qrc_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        orca_jobs = [Mock(label="of"), Mock(label="or")]
+        mocker.patch.object(
+            orca_qrc, "get_array_child_jobs", return_value=orca_jobs
+        )
+        orca_qrc._run_both_jobs()
+
+    def test_single_child_keeps_full_engine_resources(self, pbs_server):
+        """A single child still receives the parent full core/memory allocation."""
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=64,
+            mem_gb=128,
+        )
+        child = Mock(label="only_child")
+        child.run.return_value = None
+        child.is_complete.return_value = True
+
+        batch = self._dummy_batch_cls()(
+            jobs=[child],
+            jobrunner=runner,
+            label="single_child_batch",
+        )
+        batch.run()
+
+        assert child.jobrunner.num_cores == 64
+        assert child.jobrunner.mem_gb == 128
+
+    def test_batchjob_has_no_inprocess_parallel_runner(self):
+        """Unsplit in-process parallel path is removed from BatchJob."""
+        from chemsmart.jobs.batch import BatchJob
+
+        assert "_run_jobs_in_parallel" not in vars(BatchJob)
+
+
+class TestBatchExecutionModes:
+    """local_batch vs array_task mode resolution for BatchJob.run()."""
+
+    @staticmethod
+    def _dummy_batch_cls():
+        from chemsmart.jobs.batch import BatchJob
+
+        class DummyBatchJob(BatchJob):
+            PROGRAM = "dummy"
+
+        return DummyBatchJob
+
+    def test_batch_execution_mode_enum_values(self):
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        assert BatchExecutionMode.LOCAL_BATCH.value == "local_batch"
+        assert BatchExecutionMode.ARRAY_TASK.value == "array_task"
+        assert not hasattr(BatchExecutionMode, "MULTI_NODE")
+
+    def test_resolve_batch_execution_mode_defaults_to_local_batch(
+        self, monkeypatch
+    ):
+        from chemsmart.jobs.batch import (
+            BatchExecutionMode,
+            resolve_batch_execution_mode,
+        )
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        assert resolve_batch_execution_mode() is BatchExecutionMode.LOCAL_BATCH
+
+    def test_resolve_batch_execution_mode_array_task_from_slurm(
+        self, monkeypatch
+    ):
+        from chemsmart.jobs.batch import (
+            BatchExecutionMode,
+            resolve_array_task_id,
+            resolve_batch_execution_mode,
+        )
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        assert resolve_array_task_id() == 2
+        assert resolve_batch_execution_mode() is BatchExecutionMode.ARRAY_TASK
+
+    def test_array_task_logs_execution_mode(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        children = []
+        for index in range(4):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="mols_batch",
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.ARRAY_TASK.value}"
+            in record.message
+            and "task=2/4" in record.message
+            and "cores=16" in record.message
+            for record in caplog.records
+        )
+
+    def test_array_task_runs_only_selected_child(
+        self, pbs_server, monkeypatch
+    ):
+        """SLURM_ARRAY_TASK_ID=2 runs child index 1 with full resources."""
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        children = []
+        for index in range(4):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="array_batch",
+        )
+        batch.run()
+
+        children[0].run.assert_not_called()
+        children[1].run.assert_called_once()
+        children[2].run.assert_not_called()
+        children[3].run.assert_not_called()
+        assert children[1].jobrunner.num_cores == 16
+        assert children[1].jobrunner.mem_gb == 32
+
+    def test_array_task_clears_scheduler_env_during_child_run(
+        self, pbs_server, monkeypatch
+    ):
+        """Outer array task id must not be visible inside child.run()."""
+        import os
+
+        from chemsmart.jobs.batch import resolve_array_task_id
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        seen = {}
+
+        def _record_env(**kwargs):
+            seen["task_id"] = resolve_array_task_id()
+            seen["slurm"] = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(3):
+            child = Mock(label=f"child_{index}")
+            child.run.side_effect = _record_env if index == 1 else None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="array_batch",
+        )
+        batch.run()
+
+        assert seen["task_id"] is None
+        assert seen["slurm"] is None
+        assert os.environ.get("SLURM_ARRAY_TASK_ID") == "2"
+
+    def test_array_task_rejects_out_of_range_task_id(
+        self, pbs_server, monkeypatch
+    ):
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "5")
+        runner = JobRunner(server=pbs_server, fake=True)
+        children = [
+            Mock(
+                label="child_0",
+                run=Mock(),
+                is_complete=Mock(return_value=True),
+            ),
+            Mock(
+                label="child_1",
+                run=Mock(),
+                is_complete=Mock(return_value=True),
+            ),
+        ]
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="array_batch",
+        )
+        with pytest.raises(ValueError, match="out of range"):
+            batch.run()
+
+    def test_local_batch_without_array_env_runs_all_children(
+        self, pbs_server, monkeypatch
+    ):
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(3):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="local_batch",
+        )
+        batch.run()
+
+        for child in children:
+            child.run.assert_called_once()
+
+    def test_local_batch_logs_serial_policy(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            num_cores=8,
+            mem_gb=16,
+        )
+        children = [
+            Mock(label="a", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="b", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="c", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="d", run=Mock(), is_complete=Mock(return_value=True)),
+        ]
+        for child in children:
+            child.run.return_value = None
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="mols_batch",
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
+            in record.message
+            and "children=4" in record.message
+            and "policy=serial" in record.message
+            for record in caplog.records
+        )
+
+    def test_run_child_jobs_as_batch_returns_completed_batch(
+        self, pbs_server, monkeypatch
+    ):
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        parent = Mock()
+        parent.label = "crest_parent"
+        parent.jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(2):
+            child = Mock(label=f"c{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = run_child_jobs_as_batch(
+            batch_cls=self._dummy_batch_cls(),
+            jobs=children,
+            parent=parent,
+            label_suffix="_children",
+        )
+        assert batch.label == "crest_parent_children"
+        assert len(batch.jobs) == 2
+
+    def test_slurm_nodelist_still_runs_serial_local_batch(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        """Multi-node SLURM allocation does not enable in-process fan-out."""
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("SLURM_JOB_NODELIST", "nodeA,nodeB")
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(2):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            jobrunner=runner,
+            label="multi_node_batch",
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
+            in record.message
+            and "children=2" in record.message
+            for record in caplog.records
+        )
+        assert not any(
+            "execution=multi_node" in record.message
+            for record in caplog.records
+        )
+        children[0].run.assert_called_once()
+        children[1].run.assert_called_once()
+
+    def test_pbs_arrayid_selects_array_task_mode(
+        self, pbs_server, monkeypatch
+    ):
+        monkeypatch.delenv("SLURM_ARRAY_TASK_ID", raising=False)
+        monkeypatch.setenv("PBS_ARRAYID", "1")
+
+        runner = JobRunner(server=pbs_server, fake=True)
+        child_a = Mock(label="child_a")
+        child_a.run.return_value = None
+        child_a.is_complete.return_value = True
+        child_b = Mock(label="child_b")
+        child_b.run.return_value = None
+        child_b.is_complete.return_value = True
+
+        batch = self._dummy_batch_cls()(
+            jobs=[child_a, child_b],
+            jobrunner=runner,
+            label="pbs_array_batch",
+        )
+        batch.run()
+
+        child_a.run.assert_called_once()
+        child_b.run.assert_not_called()

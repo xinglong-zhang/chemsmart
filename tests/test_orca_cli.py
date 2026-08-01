@@ -13,6 +13,14 @@ group and :mod:`unittest.mock` to intercept the job constructor so that
 the merged settings can be inspected without running an actual calculation.
 """
 
+from unittest.mock import MagicMock, patch
+
+from click.testing import CliRunner
+
+from chemsmart.cli.main import entry_point
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+
 
 class TestORCASolventCLISpCommand:
     """CLI solvent options propagated to the ``sp`` subcommand."""
@@ -568,6 +576,271 @@ class TestORCACpcmBlockOptions:
         assert result.exit_code == 0, result.output
         assert settings is not None
         assert settings.solventfilename == str(sf)
+
+
+class TestORCARunSubNoParallelIntegration:
+    """Integration-style tests for `run/sub --no-run-in-parallel` on ORCA."""
+
+    @staticmethod
+    def _cli_index(args):
+        for opt in ("-i", "--index"):
+            if opt in args:
+                return args[args.index(opt) + 1]
+        raise AssertionError(f"index option missing from {args!r}")
+
+    @staticmethod
+    def _assert_rewriter_bound_to(rewrite_cli, job_token):
+        """Assert the batch rewriter is bound to *job_token*."""
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": job_token}
+
+    @staticmethod
+    def _mock_opt_job_factory(*, prefix="job"):
+        counter = {"n": 0}
+
+        def _factory(*args, **kwargs):
+            counter["n"] += 1
+            label = kwargs.get("label", f"{prefix}{counter['n']}")
+            return MagicMock(label=label)
+
+        return _factory
+
+    def test_run_no_run_in_parallel_builds_serial_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`run --no-run-in-parallel` builds ORCA batch with serial execution."""
+
+        class DummyBatchJob(Job):
+            TYPE = "orcajob"
+
+            def run(self, **kwargs):
+                return None
+
+        job_settings = ORCAJobSettings.default()
+
+        runner = CliRunner()
+        dummy_batch_job = DummyBatchJob(
+            molecule=None,
+            label="orca_opt_batch",
+            jobrunner=None,
+        )
+        with (
+            patch(
+                "chemsmart.cli.run.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls,
+            patch(
+                "chemsmart.jobs.orca.batch.ORCABatchJob",
+                return_value=dummy_batch_job,
+            ) as mock_batch_cls,
+            patch.object(dummy_batch_job, "run") as mock_batch_run,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "run",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--no-scratch",
+                    "orca",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_batch_cls.call_count == 1
+        assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
+        assert mock_batch_run.call_count == 1
+
+    def test_sub_no_run_in_parallel_submits_array_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel` submits ORCA BatchJob as array with %1."""
+        job_settings = ORCAJobSettings.default()
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(
+                "chemsmart.jobs.orca.opt.ORCAOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ) as mock_job_cls,
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "orca",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "opt")
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
+        assert (
+            mock_submit_array.call_args.kwargs["batch_label"]
+            == batch_job.label
+        )
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+        assert self._cli_index(cli_args[0]) == "1"
+        assert self._cli_index(cli_args[1]) == "2"
+        assert all("--no-run-in-parallel" in args for args in cli_args)
+
+    def test_sub_array_task_cli_reproduces_ts_labels(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Replayed ``ts`` tasks derive exactly the parent's child labels."""
+        from chemsmart.cli.run import run
+        from chemsmart.jobs.orca.ts import ORCATSJob
+
+        job_settings = ORCAJobSettings.default()
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(
+                "chemsmart.jobs.orca.ts.ORCATSJob",
+                side_effect=self._mock_opt_job_factory(prefix="ts"),
+            ),
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--run-in-parallel",
+                    "--test",
+                    "orca",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "ts",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "ts")
+        child_labels = [job.label for job in batch_job.jobs]
+        assert all("optts" in label for label in child_labels)
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+
+        for task_cli, child_label in zip(cli_args, child_labels):
+            run_labels = []
+
+            def _fake_run(self, **kwargs):
+                run_labels.append(self.label)
+
+            with (
+                patch(
+                    "chemsmart.cli.run.Server.from_servername",
+                    return_value=pbs_server,
+                ),
+                patch(
+                    "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                    return_value=job_settings,
+                ),
+                patch.object(ORCATSJob, "run", _fake_run),
+            ):
+                result = runner.invoke(
+                    run, ["--no-scratch", "--fake"] + list(task_cli)
+                )
+            assert result.exit_code == 0, result.output
+            assert run_labels == [child_label]
 
 
 class TestORCALabelAndAuxBasisOptions:

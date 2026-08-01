@@ -9,6 +9,7 @@ from chemsmart.cli.gaussian.gaussian import (
 )
 from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
+from chemsmart.jobs.batch import prepare_batch_jobs
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_gaussian
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -89,16 +90,23 @@ def scan(
     if ctx.invoked_subcommand is None:
         check_charge_and_multiplicity(scan_settings)
 
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
         from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
         # Get the original molecule indices from context
         molecule_indices = ctx.obj["molecule_indices"]
+        job_targets = (
+            list(zip(molecules, molecule_indices))
+            if molecule_indices is not None
+            else [(molecules[-1], None)]
+        )
+        batch_requested = len(job_targets) > 1
 
         # Handle multiple molecules: create one job per molecule
-        if len(molecules) > 1 and molecule_indices is not None:
-            logger.info(f"Creating {len(molecules)} scan jobs")
+        if batch_requested:
+            logger.info(f"Creating {len(job_targets)} scan jobs")
             jobs = []
-            for molecule, idx in zip(molecules, molecule_indices):
+            for molecule, idx in job_targets:
                 molecule_label = f"{label}_idx{idx}"
                 logger.info(
                     f"Running scan for molecule {idx}: {molecule} with label {molecule_label}"
@@ -112,7 +120,17 @@ def scan(
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            rewrite_cli = prepare_batch_jobs(
+                jobs,
+                molecule_indices,
+                job_token=ctx.info_name,
+                filepath=ctx.obj.get("filename"),
+            )
+            return GaussianBatchJob(
+                jobs=jobs,
+                label=f"{label}_batch",
+                rewrite_cli=rewrite_cli,
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]

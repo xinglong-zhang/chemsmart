@@ -61,15 +61,6 @@ def _resolve_scratch(scratch, runner_cls, server):
     return runner_cls.SCRATCH
 
 
-@dataclass(frozen=True)
-class PhaseTransitionDecision:
-    """Decision payload for moving from one workflow phase to the next."""
-
-    proceed: bool
-    should_raise: bool
-    message: Optional[str] = None
-
-
 def run_phase_jobs(
     *,
     parent_runner,
@@ -80,7 +71,16 @@ def run_phase_jobs(
     logger_obj=None,
     phase_label: str = "phase",
 ) -> None:
-    """Shared phase runner wrapper."""
+    """Run a workflow phase of child jobs through ``Job._execute_phase_jobs``.
+
+    Phase siblings are always executed sequentially. When
+    ``stop_on_incomplete`` is true, an incomplete child stops the phase early.
+
+    For pKa, intra-molecule phases (gas opt, solvation SP, reference legs, etc.)
+    never run in parallel by design. ``--run-in-parallel`` applies to separate
+    pKa target jobs wrapped in ``BatchJob``, not to sub-jobs inside one pKa
+    thermodynamic cycle.
+    """
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
@@ -90,6 +90,15 @@ def run_phase_jobs(
         logger_obj=logger_obj,
         phase_label=phase_label,
     )
+
+
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
 
 
 def _positive_int_or_none(value) -> Optional[int]:
@@ -102,16 +111,21 @@ def _positive_int_or_none(value) -> Optional[int]:
     return parsed
 
 
-def get_configured_max_submitters(jobrunner=None) -> int:
-    """Return configured submitter concurrency limit.
+def get_configured_array_concurrency_limit(
+    jobrunner=None,
+) -> Optional[int]:
+    """Return optional scheduler array throttle from env or server policy.
+
+    Used for ``chemsmart sub --run-in-parallel`` when ``-M`` / ``--max-tasks`` is not passed.
+    Does not fall back to ``num_cores`` (cores per task and array concurrency
+    are unrelated).
 
     Resolution order:
     1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
     2. ``jobrunner.max_submitters`` (if present)
     3. ``jobrunner.server.max_submitters`` (if present)
-    4. ``jobrunner.num_cores``
-    5. ``jobrunner.server.num_cores``
-    6. ``os.cpu_count()``
+
+    Returns ``None`` when unset (caller may run all array tasks at once).
     """
     env_value = _positive_int_or_none(
         os.environ.get("CHEMSMART_MAX_SUBMITTERS")
@@ -119,39 +133,27 @@ def get_configured_max_submitters(jobrunner=None) -> int:
     if env_value is not None:
         return env_value
 
-    runner_value = _positive_int_or_none(
-        getattr(jobrunner, "max_submitters", None)
-    )
+    if jobrunner is None:
+        return None
+
+    try:
+        runner_value = _positive_int_or_none(jobrunner.max_submitters)
+    except AttributeError:
+        runner_value = None
     if runner_value is not None:
         return runner_value
 
-    server = getattr(jobrunner, "server", None)
-    server_value = _positive_int_or_none(
-        getattr(server, "max_submitters", None)
-    )
-    if server_value is not None:
-        return server_value
+    if isinstance(jobrunner, JobRunner):
+        try:
+            server_value = _positive_int_or_none(
+                jobrunner.server.max_submitters
+            )
+        except AttributeError:
+            server_value = None
+        if server_value is not None:
+            return server_value
 
-    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
-    if cores_value is not None:
-        return cores_value
-
-    server_cores_value = _positive_int_or_none(
-        getattr(server, "num_cores", None)
-    )
-    if server_cores_value is not None:
-        return server_cores_value
-
-    cpu_count = _positive_int_or_none(os.cpu_count())
-    return cpu_count if cpu_count is not None else 1
-
-
-def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
-    """Return bounded worker count for batch/list submitter threads."""
-    if num_jobs <= 0:
-        return 1
-    configured_max_submitters = get_configured_max_submitters(jobrunner)
-    return max(1, min(num_jobs, configured_max_submitters))
+    return None
 
 
 def decide_phase_transition(
@@ -218,7 +220,10 @@ class JobRunner(RegistryMixin):
         scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
         delete_scratch=False,
         fake=False,
+        no_run_in_parallel=False,
         num_cores=None,
+        array_concurrency=None,
+        num_nodes=None,
         num_gpus=None,
         mem_gb=None,
         **kwargs,
@@ -238,6 +243,7 @@ class JobRunner(RegistryMixin):
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
+        self.no_run_in_parallel = no_run_in_parallel
 
         if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
@@ -248,6 +254,13 @@ class JobRunner(RegistryMixin):
             self.num_cores = num_cores
         else:
             self.num_cores = self.server.num_cores
+
+        # CLI -M/--max-tasks only; never overrides server.num_nodes.
+        self.cli_array_concurrency = array_concurrency
+        if num_nodes is not None:
+            self.num_nodes = num_nodes
+        else:
+            self.num_nodes = self.server.num_nodes
 
         if num_gpus is not None:
             self.num_gpus = num_gpus
@@ -568,12 +581,13 @@ class JobRunner(RegistryMixin):
             # Basic sanity checks
             if not sd.exists() or not sd.is_dir():
                 logger.error(
-                    f"scratch_dir {sd} doesn't exist or is not a directory; "
-                    "refusing to proceed."
+                    "scratch_dir %s doesn't exist or is not a directory; "
+                    "refusing to proceed.",
+                    sd,
                 )
             elif rd == sd:
                 logger.warning(
-                    f"Refusing to delete the scratch root itself: {sd}"
+                    "Refusing to delete the scratch root itself: %s", sd
                 )
             # Python 3.9+: Path.is_relative_to
             elif rd.is_relative_to(sd):

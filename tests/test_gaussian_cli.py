@@ -19,6 +19,12 @@ can be inspected without running an actual calculation.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+from click.testing import CliRunner
+
+from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.main import entry_point
+
 
 class TestGaussianCLIPubChemOptCommand:
     """CLI tests for ``--pubchem`` structure loading without ``-f``."""
@@ -668,6 +674,783 @@ class TestGaussianCLIScanCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianBatchTriggeringGate:
+    """Regression tests for Gaussian multi-molecule fan-out gating."""
+
+    @pytest.mark.parametrize(
+        "subcommand,job_class_path,extra_args",
+        [
+            ("opt", "chemsmart.jobs.gaussian.opt.GaussianOptJob", []),
+            (
+                "sp",
+                "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+                [],
+            ),
+        ],
+    )
+    def test_fanout_when_multiple_indices(
+        self,
+        subcommand,
+        job_class_path,
+        extra_args,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """Multiple selected molecule indices fan out into one job each."""
+        runner = CliRunner()
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    subcommand,
+                    *extra_args,
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+
+    @pytest.mark.parametrize(
+        "subcommand,job_class_path,extra_args",
+        [
+            ("opt", "chemsmart.jobs.gaussian.opt.GaussianOptJob", []),
+            (
+                "sp",
+                "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+                [],
+            ),
+        ],
+    )
+    def test_fanout_still_happens_with_no_run_in_parallel(
+        self,
+        subcommand,
+        job_class_path,
+        extra_args,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """jobrunner.no_run_in_parallel controls execution mode, not fan-out."""
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
+
+        runner = CliRunner()
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    subcommand,
+                    *extra_args,
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        for call in mock_job_cls.call_args_list:
+            assert call.kwargs["jobrunner"].no_run_in_parallel is True
+
+
+class TestGaussianRunSubNoParallelIntegration:
+    """Integration-style tests for `run/sub --no-run-in-parallel`."""
+
+    @staticmethod
+    def _cli_index(args):
+        for opt in ("-i", "--index"):
+            if opt in args:
+                return args[args.index(opt) + 1]
+        raise AssertionError(f"index option missing from {args!r}")
+
+    @staticmethod
+    def _cli_label(args):
+        for opt in ("-l", "--label"):
+            if opt in args:
+                return args[args.index(opt) + 1]
+        raise AssertionError(f"label option missing from {args!r}")
+
+    @staticmethod
+    def _assert_engine_options_before_job(args, job="opt"):
+        job_idx = args.index(job)
+        for opt in (
+            "-i",
+            "--index",
+            "-l",
+            "--label",
+            "-c",
+            "--charge",
+            "-m",
+            "--multiplicity",
+            "-f",
+            "--filename",
+        ):
+            if opt in args:
+                assert (
+                    args.index(opt) < job_idx
+                ), f"{opt!r} must precede {job!r} in {args!r}"
+
+    @staticmethod
+    def _assert_rewriter_bound_to(rewrite_cli, job_token):
+        """Assert the batch rewriter is bound to *job_token*."""
+        from chemsmart.jobs.batch import rewrite_batch_cli_args
+
+        assert rewrite_cli.func is rewrite_batch_cli_args
+        assert rewrite_cli.keywords == {"job_token": job_token}
+
+    @staticmethod
+    def _mock_opt_job_factory(*, prefix="job"):
+        counter = {"n": 0}
+
+        def _factory(*args, **kwargs):
+            counter["n"] += 1
+            label = kwargs.get("label", f"{prefix}{counter['n']}")
+            return MagicMock(label=label)
+
+        return _factory
+
+    @staticmethod
+    def _round_trip_array_task_cli(task_cli, server, job_cls=None):
+        """Replay one array task CLI under ``chemsmart run``."""
+        from chemsmart.cli.run import run
+        from chemsmart.jobs.gaussian.opt import GaussianOptJob
+
+        if job_cls is None:
+            job_cls = GaussianOptJob
+
+        runner = CliRunner()
+        run_labels = []
+
+        def _fake_run(self, **kwargs):
+            run_labels.append(self.label)
+
+        with (
+            patch(
+                "chemsmart.cli.run.Server.from_servername",
+                return_value=server,
+            ),
+            patch.object(job_cls, "run", _fake_run),
+        ):
+            result = runner.invoke(
+                run, ["--no-scratch", "--fake"] + list(task_cli)
+            )
+        assert result.exit_code == 0, result.output
+        assert run_labels, f"expected {job_cls.__name__}.run to be invoked"
+        return run_labels
+
+    def test_run_no_run_in_parallel_builds_serial_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`run --no-run-in-parallel` builds Gaussian batch with serial execution."""
+        from chemsmart.jobs.job import Job
+
+        class DummyBatchJob(Job):
+            TYPE = "g16opt"
+
+            def run(self, **kwargs):
+                return None
+
+        runner = CliRunner()
+        dummy_batch_job = DummyBatchJob(
+            molecule=None,
+            label="opt_batch",
+            jobrunner=None,
+        )
+        with (
+            patch(
+                "chemsmart.cli.run.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob"
+            ) as mock_job_cls,
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=dummy_batch_job,
+            ) as mock_batch_cls,
+            patch.object(dummy_batch_job, "run") as mock_batch_run,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "run",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--no-scratch",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_batch_cls.call_count == 1
+        assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
+        assert mock_batch_run.call_count == 1
+
+    def test_sub_no_run_in_parallel_submits_array_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel` submits BatchJob as array with %1."""
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ) as mock_job_cls,
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "opt")
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
+        assert (
+            mock_submit_array.call_args.kwargs["batch_label"]
+            == batch_job.label
+        )
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 2
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+        assert self._cli_index(cli_args[0]) == "1"
+        assert self._cli_index(cli_args[1]) == "2"
+        assert self._cli_label(cli_args[0]) == batch_job.jobs[0].label
+        assert self._cli_label(cli_args[1]) == batch_job.jobs[1].label
+        for task_cli in cli_args:
+            self._assert_engine_options_before_job(task_cli, job="opt")
+            assert "--no-forces" in task_cli or "--forces" in task_cli
+        assert all("--no-run-in-parallel" in args for args in cli_args)
+        assert all(
+            "--array-concurrency" not in args
+            and "--max-concurrency" not in args
+            for args in cli_args
+        )
+        self._round_trip_array_task_cli(cli_args[0], pbs_server)
+
+    def test_sub_default_is_serial_array_throttle(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Default ``sub`` (no parallel flag) uses %1 array throttle."""
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ),
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "4",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "opt")
+        assert mock_submit_array.call_count == 1
+        # -M 4 ignored for throttle when serial default applies
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 1
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert self._cli_index(cli_args[0]) == "1"
+        assert self._cli_index(cli_args[1]) == "2"
+        for task_cli in cli_args:
+            self._assert_engine_options_before_job(task_cli, job="opt")
+        self._round_trip_array_task_cli(cli_args[0], pbs_server)
+
+    def test_sub_run_in_parallel_uses_array_concurrency_throttle(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --run-in-parallel -M 2` throttles to 2."""
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ),
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-M",
+                    "2",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2,3",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "opt")
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 2
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 3
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 3
+        assert self._cli_index(cli_args[0]) == "1"
+        assert self._cli_index(cli_args[1]) == "2"
+        assert self._cli_index(cli_args[2]) == "3"
+        for task_cli in cli_args:
+            self._assert_engine_options_before_job(task_cli, job="opt")
+        self._round_trip_array_task_cli(cli_args[0], pbs_server)
+
+    def test_sub_run_in_parallel_without_n_ignores_num_cores(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Parallel batch without -M must not use num_cores."""
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=self._mock_opt_job_factory(prefix="j"),
+            ),
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-n",
+                    "64",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2,3",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_submit_batch.call_count == 1
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "opt")
+        assert mock_submit_array.call_args.kwargs["array_concurrency"] == 3
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 3
+        assert self._cli_index(cli_args[2]) == "3"
+
+    def test_sub_array_task_cli_reproduces_single_point_labels(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """Replayed ``sp`` tasks derive exactly the parent's child labels."""
+        from chemsmart.jobs.gaussian.singlepoint import (
+            GaussianSinglePointJob,
+        )
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+                side_effect=self._mock_opt_job_factory(prefix="sp"),
+            ),
+            patch.object(
+                pbs_server,
+                "submit_batch",
+                wraps=pbs_server.submit_batch,
+            ) as mock_submit_batch,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "sp",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        batch_job = mock_submit_batch.call_args.args[0]
+        self._assert_rewriter_bound_to(batch_job.rewrite_cli, "sp")
+        child_labels = [job.label for job in batch_job.jobs]
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+        for task_cli, child_label in zip(cli_args, child_labels):
+            self._assert_engine_options_before_job(task_cli, job="sp")
+            assert self._round_trip_array_task_cli(
+                task_cli, pbs_server, job_cls=GaussianSinglePointJob
+            ) == [child_label]
+
+    def test_sub_run_in_parallel_expands_qrc_to_array(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """`sub --run-in-parallel ... qrc` expands forward/reverse to an array."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_not_called()
+        assert mock_submit_array.call_count == 1
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 2
+        assert (
+            mock_submit_array.call_args.kwargs["batch_label"] == "ts_qrc_array"
+        )
+        cli_args = mock_submit_array.call_args.kwargs["cli_args"]
+        assert len(cli_args) == 2
+        assert cli_args[0][cli_args[0].index("--child-index") + 1] == "1"
+        assert cli_args[1][cli_args[1].index("--child-index") + 1] == "2"
+        assert all("qrc" in args for args in cli_args)
+        assert all(
+            args.index("qrc") < args.index("--child-index")
+            for args in cli_args
+        )
+
+    def test_sub_no_run_in_parallel_submits_qrc_as_single_parent(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel ... qrc` submits one nestable parent job."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit_array.assert_not_called()
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["job"] is mock_qrc
+        assert "qrc" in mock_submit.call_args.kwargs["cli_args"]
+
+    def test_sub_default_submits_qrc_as_single_parent(
+        self,
+        single_molecule_xyz_file,
+        pbs_server,
+    ):
+        """Default ``sub ... qrc`` (no parallel flag) is one nestable parent."""
+        child_f = MagicMock(label="ts_qrcf", PROGRAM="Gaussian")
+        child_r = MagicMock(label="ts_qrcr", PROGRAM="Gaussian")
+        mock_qrc = MagicMock()
+        mock_qrc.PROGRAM = "Gaussian"
+        mock_qrc.label = "ts_qrc"
+        mock_qrc.get_array_child_jobs.return_value = [child_f, child_r]
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+                return_value=mock_qrc,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+            patch.object(pbs_server, "submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "qrc",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_submit_array.assert_not_called()
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["job"] is mock_qrc
 
     def test_scan_settings_from_project(
         self,

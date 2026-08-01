@@ -141,3 +141,6 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# local HPC helper scripts
+scripts/hpc/
