@@ -2477,3 +2477,43 @@ succeed as written.
 
 **Suggested direction:** compare against the lowercase spelling
 (`"orcafffilename"`), matching the other checks in this same loop.
+
+## 48. `PyMOLJob._backup_files(backup_chk=True)` always crashes with `AttributeError`, since no PyMOL job defines a `chkfile` property
+
+**Location:** `chemsmart/jobs/mol/job.py`, `_backup_files` (lines
+199-214).
+
+```python
+def _backup_files(self, backup_chk=False, **kwargs):
+    folder = self._create_backup_folder_name()
+    self.backup_file(self.inputfile, folder=folder, **kwargs)
+    self.backup_file(self.outputfile, folder=folder, **kwargs)
+    if backup_chk:
+        self.backup_file(self.chkfile, folder=folder, **kwargs)
+```
+
+`PyMOLJob` and its subclasses never define a `chkfile` property or
+attribute anywhere (checkpoint files are a Gaussian-specific concept;
+PyMOL jobs only have `.xyz`/`.pse`/`.err`/log files). Passing
+`backup_chk=True` to `_backup_files` (or to `Job.backup(**kwargs)`,
+which forwards to it) unconditionally accesses `self.chkfile`, which
+raises `AttributeError` before `backup_file` is ever called.
+
+**Reproduce:**
+```python
+from chemsmart.jobs.mol.job import PyMOLJob
+
+job = PyMOLJob(molecule=some_molecule, label="test")
+job._backup_files(backup_chk=True)
+# AttributeError: 'PyMOLJob' object has no attribute 'chkfile'
+```
+See `tests/test_pymol_job_base_unit.py::TestPyMOLJobBackupFiles::test_backup_chk_crashes_since_pymol_jobs_have_no_chkfile`.
+
+**Impact:** Low -- `backup_chk` is only meaningful for Gaussian jobs
+(which do define `chkfile`), so this would only surface if a caller
+passed `backup_chk=True` generically to a PyMOL job's `backup()`
+call, e.g. via a shared CLI flag applied uniformly across job types.
+
+**Suggested direction:** either drop the `backup_chk` parameter from
+`PyMOLJob._backup_files` entirely (it doesn't apply to this job
+type), or guard the block with `getattr(self, "chkfile", None)`.
