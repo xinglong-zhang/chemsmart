@@ -2151,6 +2151,90 @@ class TestPyMOLAlignJobRunnerBatchProcessing:
         assert " -c" in command
 
 
+class TestPyMOLAlignJobRunnerNonBatchCommandHelpers:
+    """Direct tests for PyMOLAlignJobRunner's own overrides of
+    _add_style_script, _get_visualization_command, _setup_style, and
+    _align_command (used by the non-batch-processing path)."""
+
+    def test_add_style_script_uses_existing_folder_style_file(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        style_file = tmp_path / "zhang_group_pymol_style.py"
+        style_file.write_text("# stub\n")
+        job = SimpleNamespace(pymol_script=None, folder=str(tmp_path))
+
+        command = runner._add_style_script(job, "cmd")
+
+        assert command == f"cmd -r {style_file}"
+
+    def test_add_style_script_uses_existing_user_script(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        script = tmp_path / "custom_style.py"
+        script.write_text("# stub\n")
+        job = SimpleNamespace(pymol_script=str(script))
+
+        command = runner._add_style_script(job, "cmd")
+
+        assert command == f"cmd -r {script}"
+
+    def test_add_style_script_missing_user_script_raises(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(pymol_script="/no/such/file.py")
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            runner._add_style_script(job, "cmd")
+
+    def test_get_visualization_command_raises_when_no_xyz_files(self, mocker):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        job = SimpleNamespace(xyz_absolute_paths=[])
+        with pytest.raises(ValueError, match="No XYZ files found"):
+            runner._get_visualization_command(job)
+
+    def test_get_visualization_command_single_file_with_flags(self, mocker):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        job = SimpleNamespace(
+            xyz_absolute_paths=["/tmp/m0.xyz"],
+            quiet_mode=True,
+            command_line_only=True,
+        )
+
+        command = runner._get_visualization_command(job)
+
+        assert command == "/usr/bin/pymol /tmp/m0.xyz -q -c"
+
+    def test_setup_style_cylview(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(style="cylview", mol_names=["mol1", "mol2"])
+        command = runner._setup_style(job, "cmd")
+        assert command == 'cmd -d "cylview_style mol1; cylview_style mol2'
+
+    def test_setup_style_invalid_raises(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(style="bogus_style", mol_names=["mol1"])
+        with pytest.raises(ValueError, match="not available"):
+            runner._setup_style(job, "cmd")
+
+    def test_align_command_noop_with_single_molecule(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(mol_names=["mol1"])
+        assert runner._align_command(job, "cmd") == "cmd"
+
+
 @pytest.mark.usefixtures("skip_if_no_pymol")
 class TestPyMOLStyleCommandsContinued:
     label_1_mer = "1-mer"
