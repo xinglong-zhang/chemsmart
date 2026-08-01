@@ -765,6 +765,102 @@ class TestParseIndexSpecification:
         # After normalization: [1-1=0, 5+(-5)=0]
         assert result == [0, 0]
 
+    def test_non_string_input_raises_value_error(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="must be a string"):
+            parse_index_specification(1)
+
+    def test_comma_list_skips_empty_parts(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,,3") == [0, 2]
+
+    def test_comma_list_range_part_with_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("1,0-5")
+
+    def test_comma_list_range_part_mixed_sign(self):
+        """A range part like "1--1" (1 to -1) inside a comma list
+        appends the start and end separately rather than expanding a
+        range, since one side is negative."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,1--1") == [0, 0, -1]
+
+    def test_comma_list_invalid_range_format_reraised(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="Invalid range format: 1-abc"):
+            parse_index_specification("1,1-abc")
+
+    def test_comma_list_with_total_count_and_boundary_disabled(self):
+        """total_count set with allow_out_of_range=False and every
+        index actually in range skips the filter step but still
+        normalizes negative indices."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1,3", total_count=5, allow_out_of_range=False
+        ) == [0, 2]
+
+    def test_hyphen_range_with_total_count_and_boundary_disabled(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1-3", total_count=5, allow_out_of_range=False
+        ) == [0, 1, 2]
+
+    def test_hyphen_range_start_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("0-5")
+
+    def test_hyphen_range_end_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("1-0")
+
+    def test_standalone_hyphen_range_mixed_sign_without_total_count(self):
+        """ "1--2" (1 to -2), with no commas, exercises the standalone
+        hyphen-range branch's mixed positive/negative sub-case
+        directly rather than via the comma-list parser."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1--2") == [0, -2]
+
+    def test_standalone_hyphen_range_mixed_sign_with_total_count(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1--2", total_count=5) == [0, 3]
+
+    def test_standalone_hyphen_range_mixed_sign_boundary_disabled(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1--2", total_count=5, allow_out_of_range=False
+        ) == [0, 3]
+
+    def test_single_index_with_total_count_normalizes(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("3", total_count=5) == 2
+
+    def test_hyphen_range_fully_out_of_range_raises_even_when_allowed(self):
+        """allow_out_of_range=True filters *some* out-of-range indices,
+        but if every index in the range is out of bounds there is
+        nothing left, so this still raises."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "100-101", total_count=10, allow_out_of_range=True
+            )
+
     def test_parse_index_boundary_detection_disabled(self):
         """Test boundary detection when allow_out_of_range=False."""
         from chemsmart.utils.utils import parse_index_specification
