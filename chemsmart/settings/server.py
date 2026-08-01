@@ -616,7 +616,7 @@ class Server(RegistryMixin):
         """
         # First check that the job to be
         # submitted is not already queued/running
-        self._check_running_jobs(job)
+        self.check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
         # Submit the job
@@ -644,7 +644,7 @@ class Server(RegistryMixin):
 
         return []
 
-    def _check_running_jobs(self, job):
+    def check_running_jobs(self, job):
         """
         Check if the job is already running or queued.
 
@@ -764,10 +764,10 @@ class Server(RegistryMixin):
                 check_job = ORCABatchJob(jobs=jobs, label=batch_label)
             else:
                 check_job = GaussianBatchJob(jobs=jobs, label=batch_label)
-            self._check_running_jobs(check_job)
+            self.check_running_jobs(check_job)
         else:
             for job in jobs:
-                self._check_running_jobs(job)
+                self.check_running_jobs(job)
 
         submitter = self.get_submitter(first_job, **kwargs)
         submitter.write_array_job(
