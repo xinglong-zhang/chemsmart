@@ -3,6 +3,7 @@
 import os
 import tempfile
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -412,6 +413,26 @@ class TestConvertStringIndex:
         """Test that zero raises error."""
         with pytest.raises(ValueError):
             convert_string_index_from_1_based_to_0_based("0")
+
+    def test_actual_int_positive_converted(self):
+        """Passing a real int (not a numeric string) takes the direct
+        int branch rather than the string parser."""
+        assert convert_string_index_from_1_based_to_0_based(5) == 4
+
+    def test_actual_int_negative_returned_as_is(self):
+        assert convert_string_index_from_1_based_to_0_based(-2) == -2
+
+    def test_actual_int_zero_raises_error(self):
+        with pytest.raises(ValueError, match="out of range"):
+            convert_string_index_from_1_based_to_0_based(0)
+
+    def test_slice_passed_through_unchanged(self):
+        s = slice(1, 5, 2)
+        assert convert_string_index_from_1_based_to_0_based(s) is s
+
+    def test_invalid_type_raises_value_error(self):
+        with pytest.raises(ValueError, match="Invalid index type"):
+            convert_string_index_from_1_based_to_0_based(1.5)
 
 
 class TestReturnObjectsFromStringIndex:

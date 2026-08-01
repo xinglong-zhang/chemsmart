@@ -448,6 +448,24 @@ class TestGetListFromStringRange:
         s6_list = str_indices_range_to_list(str_indices=s6)
         assert s6_list == [2]
 
+    def test_comma_separated_list_with_a_range_part(self):
+        assert str_indices_range_to_list("1-3,7") == [1, 2, 3, 7]
+
+    def test_comma_separated_list_skips_empty_parts(self):
+        assert str_indices_range_to_list("1,,3") == [1, 3]
+
+    def test_bare_colon_returns_empty_list(self):
+        assert str_indices_range_to_list(":") == []
+
+    def test_open_ended_slice_returns_empty_list(self):
+        assert str_indices_range_to_list("5:") == []
+
+    def test_single_negative_index(self):
+        assert str_indices_range_to_list("-1") == [-1]
+
+    def test_comma_separated_negative_index(self):
+        assert str_indices_range_to_list("1,-1") == [1, -1]
+
 
 class TestString2Index1Based:
     def test_single_integer(self):
@@ -514,6 +532,26 @@ class TestString2Index1Based:
         # Mixed invalid formats
         with pytest.raises(ValueError):
             string2index_1based("1:x:2")
+
+    def test_negative_index_returned_as_is(self):
+        # negative indices are already 0-based-compatible from the end
+        assert string2index_1based("-1") == -1
+        assert string2index_1based("-3") == -3
+
+    def test_non_integer_numeric_string_returned_as_is(self):
+        """A unicode numeral that isnumeric() accepts but int() can't
+        parse (e.g. superscript two) falls back to being returned
+        unconverted rather than raising."""
+        assert string2index_1based("²") == "²"
+
+    def test_zero_start_slice_left_unadjusted(self):
+        """A slice starting at 0 isn't shifted to 0-based (0 is not >
+        0), unlike a plain "0" index which would raise via
+        adjust_to_0based."""
+        result = string2index_1based("0:5")
+        assert isinstance(result, slice)
+        assert result.start == 0
+        assert result.stop == 4
 
 
 class TestParseIndexSpecification:
