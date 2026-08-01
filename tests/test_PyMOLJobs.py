@@ -1,3 +1,4 @@
+import io
 import os.path
 import shutil
 import subprocess
@@ -1339,6 +1340,88 @@ class TestPyMOLJobRunnerBaseHelpers:
         result = runner._write_hybrid_pml(job)
 
         assert result == str(tmp_path / "mol.pml")
+
+    def test_write_highlighted_colors_reuses_schemes_when_more_groups(self):
+        """More groups than default color schemes triggers the
+        reuse-with-multiplier warning branch."""
+        runner = PyMOLHybridVisualizationJobRunner.__new__(
+            PyMOLHybridVisualizationJobRunner
+        )
+        job = SimpleNamespace(
+            groups=[f"{i}-{i + 4}" for i in range(0, 55, 5)],  # 11 groups
+            colors=[],
+            stick_radius=None,
+        )
+        buf = io.StringIO()
+        runner._write_highlighted_colors(job, buf)
+        content = buf.getvalue()
+        # 11 groups > 10 default color schemes: colors are reused via
+        # the multiplier, so group11 wraps back around to the first
+        # color scheme (cbap).
+        assert "util.cbap group11" in content
+
+    def test_write_highlighted_colors_uses_custom_stick_radius(self):
+        runner = PyMOLHybridVisualizationJobRunner.__new__(
+            PyMOLHybridVisualizationJobRunner
+        )
+        job = SimpleNamespace(groups=["1-5"], colors=[], stick_radius=0.5)
+        buf = io.StringIO()
+        runner._write_highlighted_colors(job, buf)
+        assert "set stick_radius, 0.5," in buf.getvalue()
+
+    def test_write_surface_settings_uses_job_overrides(self):
+        runner = PyMOLHybridVisualizationJobRunner.__new__(
+            PyMOLHybridVisualizationJobRunner
+        )
+        job = SimpleNamespace(surface_color="blue", surface_transparency="0.5")
+        buf = io.StringIO()
+        runner._write_surface_settings(job, buf)
+        content = buf.getvalue()
+        assert "set surface_color, blue, all" in content
+        assert "set transparency, 0.5, all" in content
+
+    def test_write_surface_settings_uses_defaults(self):
+        runner = PyMOLHybridVisualizationJobRunner.__new__(
+            PyMOLHybridVisualizationJobRunner
+        )
+        job = SimpleNamespace(surface_color=None, surface_transparency=None)
+        buf = io.StringIO()
+        runner._write_surface_settings(job, buf)
+        content = buf.getvalue()
+        assert "set surface_color, grey, all" in content
+        assert "set transparency, 0.7, all" in content
+
+
+class TestPyMOLScientificStyleVisualizationJobRunnerHelpers:
+    def test_format_style_command_raises_for_non_scientific_style(self):
+        from chemsmart.jobs.mol.runner import (
+            PyMOLScientificStyleVisualizationJobRunner,
+        )
+
+        job = SimpleNamespace(style="pymol")
+        with pytest.raises(ValueError, match="not available"):
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, "mol"
+            )
+
+    def test_generate_visualization_style_script_overwrites_existing(
+        self, tmp_path
+    ):
+        from chemsmart.jobs.mol.runner import (
+            PyMOLScientificStyleVisualizationJobRunner,
+        )
+
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(style="comic", folder=str(tmp_path))
+        dest = tmp_path / "zhang_group_scientific_styles.py"
+        dest.write_text("# stub\n")
+
+        result = runner._generate_visualization_style_script(job)
+
+        assert result == str(dest)
+        assert dest.read_text() != "# stub\n"
 
 
 class TestPyMOLAlignJobRunnerBatchProcessing:
