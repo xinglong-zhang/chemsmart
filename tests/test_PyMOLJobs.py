@@ -1790,6 +1790,133 @@ class TestPyMOLSpinJobRunnerHelpers:
         assert command == "cmd; load /tmp/testjob/mol_spin.pml"
 
 
+class TestPyMOLAlignJobRunnerWriteInputAndRun:
+    """Direct tests for PyMOLAlignJobRunner._write_input and run."""
+
+    def _make_molecule(self, name, x=0.0):
+        mol = Molecule(
+            symbols=["Ar"], positions=[[x, 0.0, 0.0]], charge=0, multiplicity=1
+        )
+        mol.name = name
+        return mol
+
+    def test_write_input_writes_xyz_files_and_sets_no_batch(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        mols = [self._make_molecule("mol1"), self._make_molecule("mol2", 1.0)]
+        job = SimpleNamespace(folder=str(tmp_path), molecule=mols)
+
+        runner._write_input(job)
+
+        assert job.use_batch_processing is False
+        assert job.total_batches == 1
+        assert job.mol_names == ["mol1", "mol2"]
+        assert all(os.path.exists(p) for p in job.xyz_absolute_paths)
+
+    def test_write_input_skips_writing_when_xyz_already_exists(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        (tmp_path / "mol1.xyz").write_text("existing stub\n")
+        job = SimpleNamespace(
+            folder=str(tmp_path), molecule=[self._make_molecule("mol1")]
+        )
+
+        runner._write_input(job)
+
+        # file content is untouched (not overwritten by mol.write)
+        assert (tmp_path / "mol1.xyz").read_text() == "existing stub\n"
+
+    def test_write_input_non_molecule_raises(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path), molecule=["not-a-molecule"]
+        )
+        with pytest.raises(ValueError, match="not of Molecule type"):
+            runner._write_input(job)
+
+    def test_write_input_missing_name_attribute_raises(self, tmp_path):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        mol = Molecule(
+            symbols=["Ar"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        job = SimpleNamespace(folder=str(tmp_path), molecule=[mol])
+        with pytest.raises(ValueError, match="missing .name attribute"):
+            runner._write_input(job)
+
+    def test_write_input_enables_batch_processing_above_threshold(
+        self, tmp_path
+    ):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        runner.MAX_MOLECULES_PER_BATCH = 3
+        mols = [self._make_molecule(f"m{i}", float(i)) for i in range(7)]
+        job = SimpleNamespace(folder=str(tmp_path), molecule=mols)
+
+        runner._write_input(job)
+
+        assert job.use_batch_processing is True
+        assert job.total_batches == 3
+
+    def test_run_dispatches_to_batch_processing(self, mocker):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+
+        def fake_write_input(job):
+            job.use_batch_processing = True
+            job.total_batches = 2
+            job.xyz_absolute_paths = ["a.xyz", "b.xyz"]
+
+        mocker.patch.object(PyMOLAlignJobRunner, "_prerun")
+        mocker.patch.object(
+            PyMOLAlignJobRunner, "_write_input", side_effect=fake_write_input
+        )
+        mock_batch = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_run_batch_processing",
+            return_value="batch-result",
+        )
+
+        job = SimpleNamespace()
+        result = runner.run(job)
+
+        assert result == "batch-result"
+        mock_batch.assert_called_once_with(job)
+
+    def test_run_dispatches_to_single_batch_path(self, mocker):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+
+        def fake_write_input(job):
+            job.use_batch_processing = False
+            job.xyz_absolute_paths = ["a.xyz"]
+
+        mocker.patch.object(PyMOLAlignJobRunner, "_prerun")
+        mocker.patch.object(
+            PyMOLAlignJobRunner, "_write_input", side_effect=fake_write_input
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner, "_get_command", return_value="cmd"
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner, "_update_os_environ", return_value={}
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+        mock_postrun = mocker.patch.object(PyMOLAlignJobRunner, "_postrun")
+        mock_cleanup = mocker.patch.object(
+            PyMOLAlignJobRunner, "_postrun_cleanup"
+        )
+
+        job = SimpleNamespace()
+        result = runner.run(job)
+
+        assert result is job
+        mock_postrun.assert_called_once_with(job)
+        mock_cleanup.assert_called_once_with(job)
+
+
 class TestPyMOLAlignJobRunnerBatchProcessing:
     """Direct tests for PyMOLAlignJobRunner._run_batch_processing and
     _execute_batch, exercised via a bare instance with the subprocess-
