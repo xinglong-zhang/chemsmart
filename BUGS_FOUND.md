@@ -2423,3 +2423,57 @@ before failing far from the actual cause.
 
 **Suggested direction:** wrap the oniom fallback values in `int(...)`
 before returning, matching the normal-path behavior.
+
+## 47. `ORCAQMMMInput.qm_force_field` always crashes with `KeyError` -- `_get_qmmm_block`'s `ORCAFFFilename` check is compared against an already-lowercased line
+
+**Location:** `chemsmart/io/orca/input.py`, `_get_qmmm_block` (lines
+490-511), used by the `qm_force_field` property (line 287-289).
+
+```python
+def _get_qmmm_block(self):
+    block = {}
+    for line in self.contents:
+        line = line.lower()
+        if "qmatoms" in line:
+            ...
+        if "qm2atoms" in line:
+            ...
+        if "optregion_fixedatoms" in line:
+            ...
+        if "ORCAFFFilename" in line:
+            force_field = line.split()[-1]
+            block["force field"] = force_field
+    return block
+```
+
+`line` is reassigned to `line.lower()` at the top of the loop, but the
+`ORCAFFFilename` check still uses the original mixed-case spelling.
+Since a lowercased string can never contain the substring
+`"ORCAFFFilename"` (only `"orcafffilename"`), this branch can never
+match, so `block["force field"]` is never set -- for any input file,
+regardless of whether an `ORCAFFFilename` directive is actually
+present. `qm_force_field` therefore always raises `KeyError:
+'force field'`.
+
+This was already noticed once: `tests/test_ORCAIO.py`'s
+`test_orca_qmmm_input` has a commented-out
+`# assert orca_inp.qm_force_field` line, suggesting a previous author
+hit this and quietly worked around it rather than filing it.
+
+**Reproduce:**
+```python
+from chemsmart.io.orca.input import ORCAQMMMInput
+
+qi = ORCAQMMMInput(filename="any_qmmm_input_with_ORCAFFFilename.inp")
+qi.qm_force_field
+# KeyError: 'force field'
+```
+See `tests/test_ORCAIO.py::TestORCAQMMMInputDirectPropertyCoverage::test_qm_force_field_always_crashes_with_keyerror`.
+
+**Impact:** Medium -- any QM/MM job that specifies a force-field file
+via `ORCAFFFilename` and later calls `.qm_force_field` (e.g. to report
+or re-emit the setting) crashes outright; the property can never
+succeed as written.
+
+**Suggested direction:** compare against the lowercase spelling
+(`"orcafffilename"`), matching the other checks in this same loop.

@@ -305,6 +305,311 @@ class TestORCAInput:
         # "ionic_crystal_qmmm.inp")
 
 
+def _write_orca_input(tmp_path, name, content):
+    path = tmp_path / name
+    path.write_text(content)
+    return str(path)
+
+
+class TestORCAInputDirectPropertyCoverage:
+    """Direct coverage for ORCAInput/ORCAQMMMInput branches that the
+    fixture-driven tests above don't reach, using minimal synthetic
+    .inp files since most of these branches depend on specific
+    keyword combinations no single existing fixture covers."""
+
+    def test_no_asterisk_line_returns_none_for_coord_derived_properties(
+        self, tmp_path
+    ):
+        path = _write_orca_input(
+            tmp_path,
+            "no_star.inp",
+            "! hf def2-svp\n%scf maxiter 100 end\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.coordinate_type is None
+        assert oi.charge is None
+        assert oi.multiplicity is None
+        assert oi.molecule is None
+
+    def test_scf_maxiter_on_following_line(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "maxiter_nextline.inp",
+            "! hf def2-svp\n%scf\nmaxiter 250\nend\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_maxiter == 250
+
+    def test_scf_maxiter_falls_back_to_next_maxiter_mention(self, tmp_path):
+        """The first "maxiter" mention has a non-numeric value following
+        it (int() raises ValueError), so the search continues into the
+        remaining lines for another "maxiter" occurrence."""
+        path = _write_orca_input(
+            tmp_path,
+            "maxiter_fallback.inp",
+            "! hf def2-svp\n%scf\nmaxiter true\nend\nmaxiter 500\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_maxiter == 500
+
+    def test_scf_maxiter_absent_returns_none(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "no_maxiter.inp",
+            "! hf def2-svp\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_maxiter is None
+
+    def test_scf_convergence_same_line(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "conv_sameline.inp",
+            "! hf def2-svp\n%scf convergence tight end\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_convergence == "tight"
+
+    def test_scf_convergence_on_following_line(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "conv_nextline.inp",
+            "! hf def2-svp\n%scf\nconvergence loose\nend\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_convergence == "loose"
+
+    def test_scf_convergence_found_after_intervening_line(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "conv_two_lines_later.inp",
+            "! hf def2-svp\n%scf\nmaxiter 100\nconvergence tight\nend\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_convergence == "tight"
+
+    def test_scf_convergence_none_when_scf_block_lacks_it(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "scf_no_convergence.inp",
+            "! hf def2-svp\n%scf\nmaxiter 100\nend\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_convergence is None
+
+    def test_scf_convergence_absent_returns_none(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path, "no_conv.inp", "! hf def2-svp\n* xyz 0 1\nO 0 0 0\n*\n"
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.scf_convergence is None
+
+    def test_dipole_and_quadrupole_present(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "elprop.inp",
+            "! hf def2-svp\n%elprop\ndipole true\nquadrupole true\nend\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.dipole == "true"
+        assert oi.quadrupole == "true"
+
+    def test_dipole_and_quadrupole_absent_return_none(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path, "no_elprop.inp", "! hf def2-svp\n* xyz 0 1\nO 0 0 0\n*\n"
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.dipole is None
+        assert oi.quadrupole is None
+
+    def test_molecule_raises_filenotfounderror_for_missing_xyzfile(
+        self, tmp_path
+    ):
+        path = _write_orca_input(
+            tmp_path,
+            "missing_xyzfile.inp",
+            "! hf def2-svp\n* xyzfile 0 1 nonexistent.xyz\n",
+        )
+        oi = ORCAInput(filename=path)
+        with pytest.raises(FileNotFoundError, match="nonexistent.xyz"):
+            oi.molecule
+
+    def test_molecule_none_when_embedded_coords_malformed(self, tmp_path):
+        """No symbols parse from the embedded block, and no '* xyzfile'
+        line is present to fall back to, so molecule stays None."""
+        path = _write_orca_input(
+            tmp_path,
+            "malformed.inp",
+            "! hf def2-svp\n* xyz 0 1\nnotanatom notanumber notanumber notanumber\n*\n",
+        )
+        oi = ORCAInput(filename=path)
+        assert oi.molecule is None
+
+
+class TestORCAQMMMInputDirectPropertyCoverage:
+    """Direct coverage for ORCAQMMMInput branches not reached by
+    test_orca_qmmm_input's two dna_qmmm fixtures."""
+
+    def test_qm_force_field_always_crashes_with_keyerror(self, tmp_path):
+        """Documents BUGS_FOUND.md #47: _get_qmmm_block's ORCAFFFilename
+        check compares against an already-lowercased line, so it can
+        never match and "force field" is never set."""
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_ff.inp",
+            "! QM/QM2 OPT\n%QMMM\nQMATOMS {1} end\n"
+            "ORCAFFFilename test.ff\nEND\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        with pytest.raises(KeyError, match="force field"):
+            qi.qm_force_field
+
+    def test_qm_functional_reads_advanced_method_block(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_method.inp",
+            "! QM/QM2 OPT\n%method\nmethod dft\nend\n%QMMM\nQMATOMS {1} end\n"
+            "END\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_functional == ["method dft", "end"]
+
+    def test_qm_functional_falls_back_to_route_functional(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_nomethod.inp",
+            "! QM/QM2 OPT b3lyp def2-svp\n%QMMM\nQMATOMS {1} end\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_functional == "b3lyp"
+
+    def test_qm2_level_of_theory_functional_basis_none_without_qm2custom(
+        self, tmp_path
+    ):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_no_qm2custom.inp",
+            "! QM/QM2 OPT\n%QMMM\nQMATOMS {1} end\nEND\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm2_level_of_theory is None
+        assert qi.qm2_functional is None
+        assert qi.qm2_basis is None
+        assert qi.qm_opt_region_fixed_atoms is None
+
+    def test_qm_opt_region_fixed_atoms_present(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_opt_region.inp",
+            "! QM/QM2 OPT\n%QMMM\nOptRegion_FixedAtoms {1 2 3} end\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_opt_region_fixed_atoms == ["1", "2", "3"]
+
+    def test_qm_total_charge_and_multiplicity_succeed_without_medium_layer(
+        self, tmp_path
+    ):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_total_only.inp",
+            "! QM/QM2 OPT\n%QMMM\nCharge_Total 0\nMult_Total 1\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_total_charge == 0
+        assert qi.qm_total_multiplicity == 1
+        with pytest.raises(
+            AssertionError, match="QM2 layer has not been specified"
+        ):
+            qi.qm2_charge
+        with pytest.raises(
+            AssertionError, match="QM2 region has not been specified"
+        ):
+            qi.qm2_multiplicity
+
+    def test_qm_total_charge_asserts_when_medium_layer_present(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_with_medium.inp",
+            "! QM/QM2 OPT\n%QMMM\nCharge_Total 0\nMult_Total 1\n"
+            "Charge_Medium 0\nMult_Medium 1\nEND\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        with pytest.raises(
+            AssertionError,
+            match="Only charge of QM and medium region will be specified",
+        ):
+            qi.qm_total_charge
+        with pytest.raises(
+            AssertionError,
+            match="Only multiplicity of QM and medium region will be specified",
+        ):
+            qi.qm_total_multiplicity
+
+    def test_boundary_interaction_false_variants(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_boundary_false.inp",
+            "! QM/QM2 OPT\n%QMMM\nDeleteLADoubleCounting false\n"
+            "DeleteLABondDoubleCounting false\nEND\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        interaction, embedding, treatment = qi._get_qm_boundary_interaction()
+        assert "Will include bends" in interaction
+        assert "Will include bonds" in interaction
+        assert embedding == "electrostatic"
+        assert treatment == "xtb"
+
+    def test_boundary_interaction_true_bond_and_custom_embedding(
+        self, tmp_path
+    ):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_boundary_true_bond.inp",
+            "! QM/QM2 OPT\n%QMMM\nDeleteLABondDoubleCounting true\n"
+            "Embedding mechanical\nEND\n* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        interaction, embedding, _ = qi._get_qm_boundary_interaction()
+        assert "Will neglect bonds" in interaction
+        assert embedding == "mechanical"
+
+    def test_h_bond_length_from_h_dist_filename(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_h_dist_filename.inp",
+            "! QM/QM2 OPT\n%QMMM\nH_Dist_Filename hdist.txt\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_h_bond_length == "hdist.txt"
+
+    def test_active_atoms_from_pdb_info(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_pdb.inp",
+            "! QM/QM2 OPT\n%QMMM\nUse_QM_InfoFromPDB true\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert "PDB file" in qi.qm_active_atoms
+
+    def test_active_atoms_from_braces_pattern(self, tmp_path):
+        path = _write_orca_input(
+            tmp_path,
+            "qmmm_activeatoms.inp",
+            "! QM/QM2 OPT\n%QMMM\nActiveAtoms {1 2 3} end\nEND\n"
+            "* xyz 0 1\nO 0 0 0\n*\n",
+        )
+        qi = ORCAQMMMInput(filename=path)
+        assert qi.qm_active_atoms == ["1", "2", "3"]
+
+
 class TestORCANEBInput:
     """Test suite for ORCANEBInput class."""
 
@@ -459,6 +764,27 @@ END
         # Inherited properties
         assert neb_inp.charge == -1
         assert neb_inp.multiplicity == 2
+
+    def test_neb_keyword_present_but_regex_fails_to_match(self, tmpdir):
+        """When a NEB xyz-filename keyword is present but its value
+        doesn't actually end in .xyz/.allxyz, the regex match fails and
+        _get_geometries falls through without setting that field."""
+        neb_content = (
+            "! NEB-TS\n"
+            "NEB_End_XYZFile no_extension_here\n"
+            "NEB_TS_XYZFile also_missing\n"
+            "Restart_AllXYZFile still_missing\n"
+            "* xyz 0 1\nO 0.0 0.0 0.0\n*\n"
+        )
+        neb_file = tmpdir.join("neb_no_match.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+        assert neb_inp.ending_xyzfile is None
+        assert neb_inp.ts_xyzfile is None
+        assert neb_inp.restarting_allxyzfile is None
+        # falls back to the embedded coordinate lines
+        assert neb_inp.starting_xyzfile == ["O 0.0 0.0 0.0"]
 
 
 class TestORCAOutput:
