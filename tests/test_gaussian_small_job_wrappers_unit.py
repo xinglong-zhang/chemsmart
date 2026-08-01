@@ -10,6 +10,7 @@ of the caller-supplied ``jobrunner`` argument.
 
 import pytest
 
+from chemsmart.jobs.gaussian.custom import GaussianCustomJob
 from chemsmart.jobs.gaussian.nci import GaussianNCIJob
 from chemsmart.jobs.gaussian.resp import GaussianRESPJob
 from chemsmart.jobs.gaussian.settings import (
@@ -109,6 +110,34 @@ class TestGaussianRESPJob:
             label="resp_test",
         )
         # unlike WBI/NCI, RESP does not force-disable freq
+        assert job.settings.freq is True
+
+
+class TestGaussianCustomJob:
+    """The CLI tests in test_gaussian_cli.py mock GaussianCustomJob
+    entirely, so its real __init__ (a thin pass-through to GaussianJob)
+    was never actually exercised."""
+
+    def test_type_identifier(self):
+        assert GaussianCustomJob.TYPE == "g16job"
+
+    def test_jobrunner_is_respected(self, ethanol_molecule, gaussian_settings):
+        sentinel_runner = object()
+        job = GaussianCustomJob(
+            molecule=ethanol_molecule,
+            settings=gaussian_settings,
+            label="custom_test",
+            jobrunner=sentinel_runner,
+        )
+        assert job.jobrunner is sentinel_runner
+
+    def test_settings_not_mutated(self, ethanol_molecule, gaussian_settings):
+        gaussian_settings.freq = True
+        job = GaussianCustomJob(
+            molecule=ethanol_molecule,
+            settings=gaussian_settings,
+            label="custom_test",
+        )
         assert job.settings.freq is True
 
 
