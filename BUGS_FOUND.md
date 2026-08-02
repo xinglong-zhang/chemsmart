@@ -2759,3 +2759,60 @@ validate its fallback guess against `self.PERIODIC_TABLE` and raise
 when it isn't a real element, or have
 `_infer_element_from_atom_name` itself validate the returned symbol
 against the periodic table before returning it.
+
+## 54. `cli/sub.py`'s `_replace_batch_table_tokens` guards against `label`/`scheme` being `None`, but its only two callers never pass `None`
+
+**Location:** `chemsmart/cli/sub.py`, lines 210-213 and 258-269
+(the `if batch_label is not None:` / `if batch_scheme is not None:`
+guards inside `_replace_batch_table_tokens`, a closure nested in
+`process_pipeline`).
+
+```python
+batch_label = batch_entry.get("label")
+if batch_label is not None:
+    option_map["--label"] = str(batch_label)
+    option_map["-l"] = str(batch_label)
+...
+if batch_label is not None:
+    _set_option(args, "--label", "-l", insert_before="pka")
+
+batch_scheme = batch_entry.get("scheme")
+if batch_scheme is not None:
+    ...
+```
+
+`batch_entry` is only ever constructed in four places --
+`_create_pka_jobs_from_table` and `_create_pka_jobs_from_molecules`
+in both `chemsmart/cli/gaussian/pka.py` and
+`chemsmart/cli/orca/pka.py` -- and all four unconditionally set both
+`"label"` and `"scheme"` to real, non-`None` values (`label`/
+`base_label`/`mol_label` and `row_shared["scheme"]`/`shared["scheme"]`
+respectively). Only `"fragment_index"` is conditionally absent (the
+table-based callers omit it entirely, unlike the CDXML-fragment
+callers), so that particular `is not None` guard is genuinely
+reachable, but the `label`/`scheme` ones are not reachable through any
+current call path.
+
+**Reproduce:** grep confirms all four `_batch_entry` construction
+sites always populate `"label"` and `"scheme"`:
+```
+$ grep -n '"label"\|"scheme"' chemsmart/cli/gaussian/pka.py chemsmart/cli/orca/pka.py
+```
+See `tests/test_pka.py::TestSubProcessPipelineDirectInvocation::test_batch_scheme_and_label_none_skip_their_rewrite_blocks`,
+which drives these branches directly via a hand-built `batch_entry`
+since no real CLI invocation can produce one with `label`/`scheme` set
+to `None`.
+
+**Impact:** Low -- purely defensive dead code. If a future call site
+ever added a `_batch_entry` without `"label"`/`"scheme"` keys, the
+`.get(...)` fallback to `None` combined with these guards would
+silently skip rewriting those options rather than raising, which is
+probably the desired behavior anyway -- so this isn't a functional
+risk, just unreachable code inflating the function's apparent branch
+complexity.
+
+**Suggested direction:** no action needed unless a future caller
+intentionally omits `label`/`scheme`; if so, this guard already does
+the right thing. Otherwise, the guards could be simplified to plain
+assignments (dropping the `is not None` checks) once it's confirmed no
+call site needs the optional behavior.

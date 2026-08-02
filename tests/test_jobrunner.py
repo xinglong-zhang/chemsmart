@@ -289,6 +289,91 @@ class TestScratchCLI:
         assert "--no-scratch" not in captured["cli_args"]
         assert "--scratch" not in captured["cli_args"]
 
+    def test_sub_time_hours_and_queue_override_server_settings(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        fake_server = Server(name="dummy")
+        fake_server.submit = lambda job, test=False, cli_args=None, **kw: None
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--time-hours",
+                "48.0",
+                "--queue",
+                "gpu",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert fake_server.num_hours == 48.0
+        assert fake_server.queue_name == "gpu"
+
+    def test_sub_verbose_flag_enables_stream_and_debug_logging(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        fake_server = Server(name="dummy")
+        fake_server.submit = lambda job, test=False, cli_args=None, **kw: None
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+        captured = {}
+        monkeypatch.setattr(
+            "chemsmart.cli.sub.create_logger",
+            lambda **kw: captured.update(kw),
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--verbose",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured == {"stream": True, "debug": True}
+
 
 def _write_server_yaml(path, *, gaussian_scratch, orca_scratch):
     """Write a minimal server YAML with optional program SCRATCH keys."""

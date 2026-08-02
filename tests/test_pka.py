@@ -3361,3 +3361,326 @@ class TestPkaCliDirectBranchCoverage:
                 submit_cmd.callback(
                     skip_completed=False, proton_index=2, color_code=None
                 )
+
+
+def _invoke_sub_process_pipeline_directly(
+    cli_tokens,
+    batch_entry=None,
+    subcommand_list=None,
+    _omit_subcommand_key=False,
+    **result_kwargs,
+):
+    """Directly invoke ``sub``'s result callback with a stubbed
+    ``CtxObjArguments.reconstruct_command_line`` output.
+
+    This bypasses the need to build a fully realistic
+    ``ctx.obj["subcommand"]`` chain (which only ``MyGroup``/``MyCommand``
+    invocation normally populates) so that ``_replace_batch_table_tokens``
+    can be driven with exact, hand-picked token lists to reach its less
+    common rewrite branches.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, patch
+
+    import click
+
+    import chemsmart.cli.sub as sub_module
+    from chemsmart.settings.server import Server
+
+    class _StubArgs:
+        def __init__(self, commands, entry_point):
+            pass
+
+        def reconstruct_command_line(self):
+            return ["placeholder"] + list(cli_tokens)
+
+    fake_server = Server(name="dummy")
+    captured = {"cli_args": None}
+    fake_server.submit = (
+        lambda job, test=False, cli_args=None, **kw: captured.update(
+            cli_args=cli_args
+        )
+    )
+
+    job = SimpleNamespace()
+    if batch_entry is not None:
+        job._batch_entry = batch_entry
+
+    if subcommand_list is None:
+        subcommand_list = [{"name": "sub", "kwargs": {}}]
+
+    kwargs = {"test": False, "print_command": False, "server": "dummy"}
+    kwargs.update(result_kwargs)
+
+    with (
+        patch.object(sub_module, "CtxObjArguments", _StubArgs),
+        patch(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        ),
+    ):
+        ctx = click.Context(sub_module.sub)
+        ctx.obj = {"jobrunner": MagicMock()}
+        if not _omit_subcommand_key:
+            ctx.obj["subcommand"] = subcommand_list
+        with ctx:
+            sub_module.sub._result_callback(job, **kwargs)
+
+    return captured["cli_args"]
+
+
+class TestSubProcessPipelineDirectInvocation:
+    """Direct-invocation tests for ``cli/sub.py``'s ``process_pipeline``
+    and its nested ``_replace_batch_table_tokens`` helper, covering
+    rewrite branches that real pKa-batch CLI runs don't naturally hit."""
+
+    def test_missing_subcommand_key_skips_cleanup(self):
+        """``_clean_command`` must no-op (not raise) when ``ctx.obj``
+        has no "subcommand" key at all -- ``MyGroup``/``MyCommand``
+        always populate it in real invocations, so downstream code
+        (``_reconstruct_cli_args``) still assumes it is present and
+        raises once cleanup returns; that later ``KeyError`` is exactly
+        what proves ``_clean_command`` itself didn't raise first."""
+        with pytest.raises(KeyError, match="subcommand"):
+            _invoke_sub_process_pipeline_directly(
+                ["gaussian", "-p", "test", "opt"],
+                subcommand_list=None,
+                _omit_subcommand_key=True,
+            )
+
+    def test_no_sub_entry_in_subcommand_list_skips_cleanup(self):
+        """``_clean_command_list`` finds no entry named "sub" (e.g. if
+        invoked from something other than the ``sub`` entry point), so
+        it must no-op instead of raising."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "opt"],
+            subcommand_list=[{"name": "other", "kwargs": {"verbose": {}}}],
+        )
+        assert cli_args == ["gaussian", "-p", "test", "opt"]
+
+    def test_batch_entry_without_filename_token_leaves_args_unmatched(self):
+        """When reconstructed args contain no "-f"/"--filename" token,
+        the table-filename-replacement loop must run to completion
+        without ever matching (no IndexError, no replacement)."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "opt"],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        # No "-f" was present to rewrite, and "batch"/"pka" markers are
+        # absent too, so the args pass through with only the always-run
+        # charge/multiplicity/proton-index rewrites applied (each
+        # appended since their markers are absent).
+        assert "acid1.xyz" not in cli_args
+
+    def test_batch_scheme_and_label_none_skip_their_rewrite_blocks(self):
+        """``scheme``/``label`` are always populated by the real pKa
+        job-creation call sites, but the helper still defensively
+        guards against them being ``None`` -- exercise that guard
+        directly. See BUGS_FOUND.md #54."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "-f", "table.csv", "pka", "submit"],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        assert "--label" not in cli_args
+        assert "--scheme" not in cli_args
+        assert "acid1.xyz" in cli_args
+
+    def test_batch_scheme_direct_drops_trailing_reference_flag_without_value(
+        self,
+    ):
+        """``_drop_option`` must handle a reference flag that is the
+        very last token (no following value) without raising."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            [
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                "table.csv",
+                "pka",
+                "submit",
+                "--reference",
+            ],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": "direct",
+                "label": "acid1_pka",
+            },
+        )
+        assert "--reference" not in cli_args
+
+    def test_batch_entry_replaces_preexisting_proton_index_tokens(self):
+        """If the reconstructed args already contain a stale
+        "--proton-index" pair (e.g. from the table's own submit-level
+        option), it must be dropped and replaced by the row-specific
+        value, not duplicated."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            [
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                "table.csv",
+                "pka",
+                "submit",
+                "--proton-index",
+                "99",
+            ],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": "direct",
+                "label": "acid1_pka",
+            },
+        )
+        assert cli_args.count("--proton-index") == 1
+        idx = cli_args.index("--proton-index")
+        assert cli_args[idx + 1] == "2"
+
+    def test_batch_entry_charge_as_trailing_token_without_value(self):
+        """``_set_option`` must handle its long option being the very
+        last token in the reconstructed args (no following value).
+
+        "submit" must precede "--charge" here so that the always-run
+        proton-index insertion (which targets the position right after
+        "submit") lands before "--charge" instead of after it, keeping
+        "--charge" the last token by the time ``_set_option`` runs."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            [
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                "table.csv",
+                "pka",
+                "submit",
+                "--charge",
+            ],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        assert cli_args.count("--charge") == 1
+        assert cli_args[-1] == "--charge"
+
+    def test_batch_entry_short_form_charge_flag_gets_updated_value(self):
+        """``_set_option`` must also resolve the short-form alias
+        ("-c") when the long form isn't present."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            [
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                "table.csv",
+                "-c",
+                "99",
+                "pka",
+            ],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        idx = cli_args.index("-c")
+        assert cli_args[idx + 1] == "0"
+
+    def test_batch_entry_short_form_charge_as_trailing_token_without_value(
+        self,
+    ):
+        """``_set_option`` must handle the short-form alias being the
+        very last token too (no following value), mirroring the
+        long-option case above.
+
+        A pre-existing "-m 1" pair is included so the always-run
+        multiplicity rewrite updates it in place instead of appending
+        a new pair after "-c", which would otherwise disturb the
+        "-c is last" setup this test relies on."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            [
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                "table.csv",
+                "-m",
+                "1",
+                "submit",
+                "-c",
+            ],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        assert cli_args.count("-c") == 1
+        assert cli_args[-1] == "-c"
+
+    def test_batch_entry_without_pka_marker_appends_options_at_end(self):
+        """When the "pka" insertion marker is absent from the
+        reconstructed args, charge/multiplicity options must be
+        appended at the end instead of raising."""
+        cli_args = _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "-f", "table.csv"],
+            batch_entry={
+                "filepath": "acid1.xyz",
+                "proton_index": 2,
+                "charge": 0,
+                "multiplicity": 1,
+                "scheme": None,
+                "label": None,
+            },
+        )
+        assert cli_args[-4:] == [
+            "--charge",
+            "0",
+            "--multiplicity",
+            "1",
+        ]
+
+    def test_print_command_flag_prints_reconstructed_args(self, capsys):
+        _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "opt"],
+            print_command=True,
+        )
+        captured = capsys.readouterr()
+        assert "gaussian" in captured.out
+
+    def test_non_test_submission_skips_test_warning_log(self, caplog):
+        _invoke_sub_process_pipeline_directly(
+            ["gaussian", "-p", "test", "opt"],
+            test=False,
+        )
+        assert "Not submitting" not in caplog.text
