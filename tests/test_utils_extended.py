@@ -17,9 +17,11 @@ from chemsmart.utils.utils import (
     convert_string_index_from_1_based_to_0_based,
     extract_number,
     file_cache,
+    get_key_by_value_and_number,
     get_list_from_string_range,
     get_prepend_string_for_modred,
     get_prepend_string_list_from_modred_free_format,
+    get_value_by_number,
     is_float,
     iterative_compare,
     kabsch_align,
@@ -532,6 +534,35 @@ class TestGetPrependStringListFromModredFreeFormat:
         """Test invalid input raises error."""
         with pytest.raises(ValueError):
             get_prepend_string_list_from_modred_free_format("not a list")
+
+
+class TestGetValueByNumber:
+    def test_returns_value_for_matching_key_number(self):
+        data = {"atom1": "C", "atom2": "H", "atom10": "O"}
+        assert get_value_by_number(2, data) == "H"
+        assert get_value_by_number(10, data) == "O"
+
+    def test_returns_none_when_no_key_matches(self):
+        data = {"atom1": "C", "atom2": "H"}
+        assert get_value_by_number(99, data) is None
+
+
+class TestGetKeyByValueAndNumber:
+    def test_returns_key_matching_both_value_and_number(self):
+        data = {"charge1": 0, "charge2": 1, "charge3": 0}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
+
+    def test_returns_none_when_value_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(99, 2, data) is None
+
+    def test_returns_none_when_number_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 99, data) is None
+
+    def test_skips_keys_with_no_trailing_number(self):
+        data = {"nonumberkey": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
 
 
 class TestTwoFilesHaveSimilarContents:

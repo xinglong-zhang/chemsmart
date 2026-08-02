@@ -1403,6 +1403,18 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         assert result_objects == ["a", "c", "e", "g"]
         assert result_indices == [1, 3, 5, 7]
 
+    def test_slice_on_non_list_sequence_uses_single_object_branch(self):
+        """Slicing a non-list sequence (e.g. a tuple) doesn't produce a
+        `list`, so the function falls back to its "single object from
+        slice" branch and reports just the slice's start index rather
+        than one index per selected item."""
+        objects = ("a", "b", "c", "d")
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == ("b", "c")
+        assert result_indices == 2
+
     def test_user_defined_range(self):
         """Test user-defined range format (comma-separated)."""
         objects = ["a", "b", "c", "d", "e"]
