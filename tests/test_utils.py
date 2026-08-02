@@ -1908,6 +1908,105 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="multiplicity must be >= 1"):
             entry.validate()
 
+    def test_pka_table_entry_validate_empty_filepath(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            filepath=None, proton_index=1, charge=0, multiplicity=1
+        )
+        with pytest.raises(ValueError, match="Empty filepath"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_proton_index_non_cdxml(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=None,
+            charge=0,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Missing proton_index"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_proton_index(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index="abc",
+            charge=0,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Invalid proton_index"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=None,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Missing charge"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge="abc",
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Invalid charge"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_multiplicity(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=0,
+            multiplicity=None,
+        )
+        with pytest.raises(ValueError, match="Missing multiplicity"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_multiplicity(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=0,
+            multiplicity="abc",
+        )
+        with pytest.raises(ValueError, match="Invalid multiplicity"):
+            entry.validate()
+
     def test_validate_pka_table_entries(self, tmp_path):
         """Test batch validation of PKaTableEntry list."""
         from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
@@ -1928,6 +2027,121 @@ class TestPKaTableParsing:
             entries, check_file_exists=True
         )
         assert result == entries
+
+    def test_normalize_table_cell_pandas_na_and_whitespace(self):
+        """normalize_table_cell had no direct coverage for pandas.NA,
+        NaN, whitespace-only strings, or plain pass-through values."""
+        import pandas as pd
+
+        from chemsmart.utils.datasets import normalize_table_cell
+
+        assert normalize_table_cell(pd.NA) is None
+        assert normalize_table_cell(float("nan")) is None
+        assert normalize_table_cell(None) is None
+        assert normalize_table_cell("   ") is None
+        assert normalize_table_cell("  hi  ") == "hi"
+        assert normalize_table_cell(5) == 5
+
+    def test_normalize_table_cell_pandas_isna_type_error_falls_through(self):
+        """If pd.isna() itself raises (e.g. unsupported pandas
+        version/type), the exception is swallowed and processing
+        continues to the plain-value branches."""
+        from unittest.mock import patch
+
+        from chemsmart.utils.datasets import normalize_table_cell
+
+        with patch("pandas.isna", side_effect=TypeError("boom")):
+            assert normalize_table_cell("hello") == "hello"
+
+    def test_resolve_column_optional_and_required_branches(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert (
+            PKaTableEntry.resolve_column(
+                ["Total Energy"], ["energy", "total_energy"]
+            )
+            == "Total Energy"
+        )
+        assert (
+            PKaTableEntry.resolve_column(["a"], ["missing"], required=False)
+            is None
+        )
+        with pytest.raises(ValueError, match="Could not resolve"):
+            PKaTableEntry.resolve_column(["a"], ["missing"])
+
+    def test_parse_table_shim_delegates_to_tabular_dataset(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text(
+            "filepath,proton_index,charge,multiplicity\nmol.xyz,1,0,1\n"
+        )
+        dataset = PKaTableEntry.parse_table(str(csv_path))
+        assert dataset.columns == [
+            "filepath",
+            "proton_index",
+            "charge",
+            "multiplicity",
+        ]
+
+    def test_constructor_rejects_invalid_positional_args(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        with pytest.raises(TypeError, match="accepts either"):
+            PKaTableEntry(1, 2, 3)
+
+    def test_from_headers_and_row_length_mismatch_raises(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        with pytest.raises(ValueError, match="Header/value length mismatch"):
+            PKaTableEntry.from_headers_and_row(["a", "b"], [1])
+
+    def test_dict_like_interface(self, tmp_path):
+        """__getitem__/__contains__/get/get_canonical/keys/items/values
+        had no direct coverage at all."""
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            {
+                "filepath": "mol.xyz",
+                "charge": 0,
+                "multiplicity": 1,
+                "extra": "x",
+            }
+        )
+
+        # __getitem__
+        assert entry["filepath"] == "mol.xyz"
+        assert entry["q"] == 0  # alias resolves to canonical "charge"
+        with pytest.raises(KeyError):
+            entry["nonexistent"]
+
+        # __contains__
+        assert "filepath" in entry
+        assert "q" in entry  # alias
+        assert "nonexistent" not in entry
+
+        # get
+        assert entry.get("filepath") == "mol.xyz"
+        assert entry.get("q") == 0
+        assert entry.get("nonexistent", "default") == "default"
+
+        # get_canonical
+        assert entry.get_canonical("filepath") == "mol.xyz"
+        assert entry.get_canonical("proton_index", default="none") == "none"
+        assert entry.get_canonical("charge") == 0
+        assert entry.get_canonical("multiplicity") == 1
+        assert entry.get_canonical("extra") == "x"
+
+        # keys/items/values
+        assert set(entry.keys()) == {
+            "filepath",
+            "charge",
+            "multiplicity",
+            "extra",
+        }
+        assert dict(entry.items())["extra"] == "x"
+        assert "x" in list(entry.values())
 
     def test_pka_table_entry_repr(self):
         """Test PKaTableEntry string representation."""
