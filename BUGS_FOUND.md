@@ -2645,3 +2645,44 @@ this flag.
 `@click.option("--verbose/--no-verbose", default=True)` so the
 negative form is actually reachable, matching what the flag's name
 implies.
+
+## 52. `chemsmart/cli/gaussian/qmmm.py`'s `_populate_charge_and_multiplicity_on_settings` is defined but never called
+
+**Location:** `chemsmart/cli/gaussian/qmmm.py`, lines 385-413.
+
+```python
+def _populate_charge_and_multiplicity_on_settings(qs):
+    charge = getattr(qs, "charge", None)
+    mult = getattr(qs, "multiplicity", None)
+    ...
+```
+
+This module-level helper is fully defined but never referenced
+anywhere else in `qmmm.py`, nor anywhere else in the codebase apart
+from `chemsmart/cli/orca/qmmm.py`, which has its own separate,
+identically named (and near-identical) copy of the function that
+*it* actually calls (`orca/qmmm.py` line 418). The Gaussian copy
+appears to be an orphaned leftover -- likely copied from the ORCA
+module during development but never wired into the Gaussian QMMM
+settings-building flow (`qmmm()`'s charge/multiplicity handling at
+lines 294-305 does its own inline `if charge_total is not None: ...`
+assignment instead of delegating to this helper).
+
+**Reproduce:** grep confirms zero call sites:
+```
+$ grep -rn "_populate_charge_and_multiplicity_on_settings" chemsmart/
+chemsmart/cli/gaussian/qmmm.py:385:def _populate_charge_and_multiplicity_on_settings(qs):
+chemsmart/cli/orca/qmmm.py:418:        _populate_charge_and_multiplicity_on_settings(qmmm_settings)
+chemsmart/cli/orca/qmmm.py:460:def _populate_charge_and_multiplicity_on_settings(qs):
+```
+See `tests/test_gaussian_qmmm_cli.py::TestPopulateChargeAndMultiplicityOnSettings`,
+which unit-tests the function directly since no code path reaches it.
+
+**Impact:** Low -- dead code with no behavioral effect (the inline
+logic in `qmmm()` already handles charge/multiplicity assignment).
+Purely a maintenance/clarity issue: a future edit to the intended
+(inline) logic could silently diverge from this unused duplicate
+without anyone noticing.
+
+**Suggested direction:** delete the function, or wire it in if it was
+meant to replace the inline charge/multiplicity block.
