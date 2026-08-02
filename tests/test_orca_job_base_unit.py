@@ -132,6 +132,22 @@ class TestORCAJobBackupAndOutput:
         mock_cls.assert_called_once_with(job.outputfile)
         assert result is mock_output
 
+    def test_output_returns_none_on_attribute_error(
+        self, a_molecule, orca_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = ORCAJob(
+            molecule=a_molecule, settings=orca_settings, label="mylabel"
+        )
+        with open(job.outputfile, "w") as f:
+            f.write("dummy output")
+
+        with patch(
+            "chemsmart.io.orca.output.ORCAOutput",
+            side_effect=AttributeError("malformed output"),
+        ):
+            assert job._output() is None
+
 
 class TestORCAJobRun:
     def test_run_delegates_to_jobrunner(self, a_molecule, orca_settings):
@@ -215,6 +231,60 @@ class TestORCAJobFactories:
                 settings=orca_settings,
             )
 
+    def test_from_filename_creates_jobrunner_when_omitted(
+        self, single_molecule_xyz_file, orca_settings
+    ):
+        sentinel_runner = MagicMock()
+        with patch(
+            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            return_value=sentinel_runner,
+        ) as mock_from_job:
+            job = ORCAJob.from_filename(
+                filename=single_molecule_xyz_file,
+                settings=orca_settings,
+            )
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is sentinel_runner
+
+    def test_from_pubchem_creates_jobrunner_when_omitted(self, orca_settings):
+        pubchem_molecule = MagicMock(spec=Molecule)
+        pubchem_molecule.get_chemical_formula.return_value = "H2O"
+        pubchem_molecule.copy.return_value = pubchem_molecule
+        sentinel_runner = MagicMock()
+        with (
+            patch(
+                "chemsmart.jobs.orca.job.Molecule.from_pubchem",
+                return_value=pubchem_molecule,
+            ),
+            patch(
+                "chemsmart.jobs.orca.job.JobRunner.from_job",
+                return_value=sentinel_runner,
+            ) as mock_from_job,
+        ):
+            job = ORCAJob.from_pubchem(
+                identifier="water",
+                settings=orca_settings,
+            )
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is sentinel_runner
+
+    @pytest.mark.parametrize("jobtype", ["opt", "inp", "orca"])
+    def test_from_jobtype_creates_jobrunner_when_omitted(
+        self, jobtype, a_molecule, orca_settings
+    ):
+        sentinel_runner = MagicMock()
+        with patch(
+            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            return_value=sentinel_runner,
+        ) as mock_from_job:
+            job = ORCAJob.from_jobtype(
+                jobtype=jobtype,
+                molecule=a_molecule,
+                settings=orca_settings,
+            )
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is sentinel_runner
+
 
 class TestORCAInpJob:
     def test_from_filename_requires_inp_extension(
@@ -231,6 +301,47 @@ class TestORCAInpJob:
         assert isinstance(job, ORCAInpJob)
         assert job.settings.input_string is not None
         assert job.jobrunner is mock_jobrunner
+
+    def test_from_filename_explicit_label_is_kept(self, water_sp_input_path):
+        """Covers the `if label is None:` False arm: an explicitly
+        passed label must not be overwritten by the filename-derived
+        default."""
+        mock_jobrunner = MagicMock()
+        job = ORCAInpJob.from_filename(
+            filename=water_sp_input_path,
+            label="my_custom_label",
+            jobrunner=mock_jobrunner,
+        )
+        assert job.label == "my_custom_label"
+
+    def test_from_filename_creates_jobrunner_when_omitted(
+        self, water_sp_input_path
+    ):
+        sentinel_runner = MagicMock()
+        with patch(
+            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            return_value=sentinel_runner,
+        ) as mock_from_job:
+            job = ORCAInpJob.from_filename(filename=water_sp_input_path)
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is sentinel_runner
+
+    def test_run_copies_input_and_delegates_to_jobrunner(
+        self, a_molecule, orca_settings
+    ):
+        mock_runner = MagicMock()
+        job = ORCAInpJob(
+            molecule=a_molecule,
+            settings=orca_settings,
+            label="mylabel",
+            jobrunner=mock_runner,
+        )
+        job._copy_input = MagicMock()
+
+        job._run()
+
+        job._copy_input.assert_called_once()
+        mock_runner.run.assert_called_once_with(job)
 
     def test_copy_input_regular_folder_logs_info(
         self, a_molecule, orca_settings, tmp_path, monkeypatch, caplog
