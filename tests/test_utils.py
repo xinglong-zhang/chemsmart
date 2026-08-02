@@ -1810,6 +1810,26 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="not an integer"):
             PKaTableEntry.parse_pka_table(str(table_file))
 
+    def test_parse_pka_table_invalid_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "bad_charge.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\nmol1.xyz 1 abc 1\n"
+        )
+        with pytest.raises(ValueError, match="Invalid charge"):
+            PKaTableEntry.parse_pka_table(str(table_file))
+
+    def test_parse_pka_table_invalid_multiplicity(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "bad_mult.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\nmol1.xyz 1 0 abc\n"
+        )
+        with pytest.raises(ValueError, match="Invalid multiplicity"):
+            PKaTableEntry.parse_pka_table(str(table_file))
+
     def test_parse_pka_table_blank_proton_index_for_cdxml(
         self, tmp_path, colored_proton_cdxml_file
     ):
@@ -2160,6 +2180,23 @@ class TestPKaTableParsing:
         assert "'proton_index': 10" in repr_str
         assert "'charge': 0" in repr_str
         assert "'multiplicity': 1" in repr_str
+
+    def test_constructor_skips_row_number_key_inside_data_dict(self):
+        """row_number embedded in the data dict itself (as opposed to
+        the separate row_number= kwarg) is skipped, not stored as an
+        extra field."""
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            {
+                "row_number": 99,
+                "filepath": "x.xyz",
+                "charge": 0,
+                "multiplicity": 1,
+            }
+        )
+        assert entry.row_number is None
+        assert "row_number" not in entry._data
 
     def test_pka_table_entry_from_headers_and_row_dynamic(self):
         from chemsmart.utils.datasets import PKaTableEntry
@@ -2741,6 +2778,41 @@ class TestPKaTableParsing:
         assert d["basename"] == "sys"
         assert d["ha_gas"] == "a.log"
         assert d["pka_ref"] == 6.75
+
+    def test_pka_output_table_entry_dict_like_interface(self):
+        """__getitem__/__setitem__/__contains__/get/keys/items for
+        PKaOutputTableEntry had no direct coverage beyond canonical-key
+        __getitem__ lookups elsewhere in this file."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "mol", "ha_gas": "mol_HA.log", "extra_col": "x"}
+        )
+
+        # __getitem__: canonical, alias, and missing
+        assert entry["ha_gas"] == "mol_HA.log"
+        assert entry["ha_opt"] == "mol_HA.log"  # alias for ha_gas
+        with pytest.raises(KeyError):
+            entry["nonexistent"]
+
+        # __contains__: canonical, alias, and missing
+        assert "ha_gas" in entry
+        assert "ha_opt" in entry
+        assert "nonexistent" not in entry
+
+        # __setitem__ updates both the attribute and derived fields
+        entry["a_gas"] = "mol_A.log"
+        assert entry.a_gas == "mol_A.log"
+        assert entry["a_gas"] == "mol_A.log"
+
+        # get: canonical, alias, default
+        assert entry.get("ha_gas") == "mol_HA.log"
+        assert entry.get("ha_opt") == "mol_HA.log"
+        assert entry.get("nonexistent", "default") == "default"
+
+        # keys/items
+        assert "extra_col" in entry.keys()
+        assert dict(entry.items())["extra_col"] == "x"
 
     def test_export_pka_results_table_matches_stdout_format(self, tmp_path):
         """-O output should match the formatted batch table printed to stdout."""
