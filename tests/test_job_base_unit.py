@@ -6,7 +6,7 @@ job orchestration, and backup helpers) that every job subclass inherits.
 """
 
 import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -145,6 +145,21 @@ class TestJobOptimizedStructure:
             "s2",
         ]
 
+    def test_all_intermediate_optimization_points_writes_xyz(
+        self, concrete_job
+    ):
+        output = MagicMock()
+        output.all_structures = ["s1", "s2"]
+        concrete_job._output_obj = output
+
+        with patch("ase.io.write") as mock_write:
+            result = concrete_job.all_intermediate_optimization_points
+
+        assert result == ["s1", "s2"]
+        mock_write.assert_called_once_with(
+            concrete_job.label + "_intermediate_opt_points.xyz", ["s1", "s2"]
+        )
+
 
 class TestJobRunnerPropagation:
     def test_propagate_runner_returns_none_for_falsy_runner(self):
@@ -244,6 +259,22 @@ class TestJobExecutePhaseJobs:
         # job2 should never run since job1 stayed incomplete and broke the loop.
         assert job2.ran is False
 
+    def test_logger_obj_logs_running_and_incomplete_messages(self):
+        job1 = ConcreteJob(
+            molecule=None, label="j1", jobrunner=None, complete=False
+        )
+        mock_logger = MagicMock()
+
+        Job._execute_phase_jobs(
+            parent_runner=None,
+            jobs=[job1],
+            stop_on_incomplete=True,
+            logger_obj=mock_logger,
+            phase_label="opt",
+        )
+
+        assert mock_logger.info.call_count == 2
+
 
 class TestJobBackup:
     def test_previous_backup_folders_empty_initially(self, concrete_job):
@@ -288,6 +319,115 @@ class TestJobBackup:
         concrete_job._backup_files = MagicMock()
         concrete_job.backup(extra="kwarg")
         concrete_job._backup_files.assert_called_once_with(extra="kwarg")
+
+    def test_backup_file_uses_default_folder_when_none(
+        self, concrete_job, tmp_path
+    ):
+        src = tmp_path / "data.txt"
+        src.write_text("hello")
+
+        concrete_job.backup_file(str(src))
+
+        default_folders = concrete_job._previous_backup_folders()
+        assert len(default_folders) == 1
+        assert os.path.exists(os.path.join(default_folders[0], "data.txt"))
+
+    def test_backup_file_copies_directory(self, concrete_job, tmp_path):
+        src_dir = tmp_path / "srcdir"
+        src_dir.mkdir()
+        (src_dir / "inner.txt").write_text("hi")
+        backup_folder = tmp_path / "backup"
+
+        concrete_job.backup_file(str(src_dir), folder=str(backup_folder))
+
+        copied_dir = backup_folder / "srcdir"
+        assert copied_dir.is_dir()
+        assert (copied_dir / "inner.txt").read_text() == "hi"
+
+    def test_backup_file_directory_collision_renames_existing(
+        self, concrete_job, tmp_path
+    ):
+        src_dir = tmp_path / "srcdir"
+        src_dir.mkdir()
+        (src_dir / "inner.txt").write_text("hi")
+        backup_folder = tmp_path / "backup"
+        backup_folder.mkdir()
+        existing = backup_folder / "srcdir"
+        existing.mkdir()
+        (existing / "old.txt").write_text("old")
+
+        concrete_job.backup_file(str(src_dir), folder=str(backup_folder))
+
+        # The pre-existing "srcdir" must have been renamed out of the way,
+        # and the new copy placed at the original destination path.
+        assert (backup_folder / "srcdir" / "inner.txt").read_text() == "hi"
+        renamed = [
+            p for p in backup_folder.iterdir() if p.name.startswith("srcdir_")
+        ]
+        assert len(renamed) == 1
+        assert (renamed[0] / "old.txt").read_text() == "old"
+
+
+class TestJobDefaultRunBackupAndCompletion:
+    """ConcreteJob overrides _run/_backup_files/_job_is_complete, so the
+    base Job class's own default bodies (used by real subclasses that
+    don't need custom behavior, e.g. via `super()._run(**kwargs)`) are
+    never exercised there. These tests use a subclass that keeps the
+    base defaults instead."""
+
+    class DefaultBehaviorJob(Job):
+        TYPE = "default_behavior"
+
+        def __init__(self, output=None, **kwargs):
+            super().__init__(**kwargs)
+            self._output_obj = output
+
+        def _run(self, **kwargs):
+            return super()._run(**kwargs)
+
+        def _output(self):
+            return self._output_obj
+
+    def test_default_run_delegates_to_jobrunner(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        mock_jobrunner = MagicMock()
+        job = self.DefaultBehaviorJob(
+            molecule=None, label="myjob", jobrunner=mock_jobrunner
+        )
+
+        job._run(extra="kwarg")
+
+        mock_jobrunner.run.assert_called_once_with(job, extra="kwarg")
+
+    def test_default_backup_files_raises_not_implemented(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = self.DefaultBehaviorJob(
+            molecule=None, label="myjob", jobrunner=None
+        )
+        with pytest.raises(NotImplementedError):
+            job.backup()
+
+    def test_default_job_is_complete_false_without_output(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = self.DefaultBehaviorJob(
+            molecule=None, label="myjob", jobrunner=None, output=None
+        )
+        assert job._job_is_complete() is False
+
+    def test_default_job_is_complete_reflects_normal_termination(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        fake_output = MagicMock()
+        fake_output.normal_termination = True
+        job = self.DefaultBehaviorJob(
+            molecule=None, label="myjob", jobrunner=None, output=fake_output
+        )
+        assert job._job_is_complete() is True
 
 
 class TestJobFromMolecule:
