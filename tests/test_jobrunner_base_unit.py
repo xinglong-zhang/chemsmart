@@ -14,10 +14,13 @@ import pytest
 
 from chemsmart.jobs.runner import (
     JobRunner,
+    _executable_class_for_program,
     decide_phase_transition,
     get_configured_max_submitters,
     get_submitter_worker_count,
+    run_phase_jobs,
 )
+from chemsmart.settings.server import Server
 
 
 class ConcreteJobRunner(JobRunner):
@@ -65,6 +68,33 @@ class TestJobRunnerConstruction:
         text = repr(runner)
         assert "ConcreteJobRunner" in text
 
+    def test_server_as_string_resolves_via_from_servername(self):
+        fake_server = MagicMock(spec=Server)
+        fake_server.num_cores = 8
+        fake_server.num_gpus = 0
+        fake_server.mem_gb = 32
+        with patch.object(
+            Server, "from_servername", return_value=fake_server
+        ) as mock_from_servername:
+            runner = ConcreteJobRunner(server="myserver", scratch=False)
+        mock_from_servername.assert_called_once_with("myserver")
+        assert runner.server is fake_server
+
+    def test_num_gpus_explicit_override(self, pbs_server):
+        runner = ConcreteJobRunner(
+            server=pbs_server, scratch=False, num_gpus=3
+        )
+        assert runner.num_gpus == 3
+
+    def test_mem_gb_explicit_override(self, pbs_server):
+        runner = ConcreteJobRunner(
+            server=pbs_server, scratch=False, mem_gb=256
+        )
+        assert runner.mem_gb == 256
+
+    def test_servername_property_delegates_to_server(self, runner):
+        assert runner.servername == runner.server.name
+
 
 class TestJobRunnerScratchDirSetter:
     def test_setter_rejects_nonexistent_path(self, runner):
@@ -80,6 +110,24 @@ class TestJobRunnerScratchDirSetter:
         # expanded to an absolute path.
         runner.scratch_dir = "~"
         assert runner._scratch_dir == os.path.expanduser("~")
+
+    def test_setter_accepts_none_without_validation(self, runner):
+        """Covers the setter's `if value is not None:` False arm: a
+        None value skips expanduser/exists-check entirely."""
+        runner._scratch_dir = "/some/previous/value"
+        runner.scratch_dir = None
+        assert runner._scratch_dir is None
+
+    def test_getter_computes_and_caches_when_unset(self, pbs_server, tmp_path):
+        """Covers the getter's `if self._scratch_dir is None:` branch:
+        the first access to .scratch_dir must resolve and cache it via
+        _set_scratch(), rather than staying None forever."""
+        with patch.object(type(pbs_server), "scratch_dir", new=str(tmp_path)):
+            runner = ConcreteJobRunner(server=pbs_server, scratch=True)
+            assert runner._scratch_dir is None
+            resolved = runner.scratch_dir
+        assert resolved == str(tmp_path)
+        assert runner._scratch_dir == str(tmp_path)
 
 
 class TestJobRunnerSetScratch:
@@ -157,6 +205,46 @@ class TestJobRunnerRunOrchestration:
         process.poll.assert_called_once()
         assert result == 0
 
+    def test_prerun_write_input_postrun_are_no_ops_by_default(self, runner):
+        """ConcreteJobRunner doesn't override these optional hooks, so
+        the base class's own pass-through bodies run for real."""
+        job = MagicMock()
+        assert runner._prerun(job) is None
+        assert runner._write_input(job) is None
+        assert runner._postrun(job) is None
+
+
+class TestUpdateOsEnviron:
+    def test_no_executable_returns_plain_environ_copy(self, runner):
+        job = MagicMock()
+        env = runner._update_os_environ(job)
+        assert env == dict(os.environ)
+
+    def test_empty_executable_env_returns_plain_environ_copy(self, runner):
+        job = MagicMock()
+        with patch.object(
+            type(runner),
+            "executable",
+            new=property(lambda self: MagicMock(env={})),
+        ):
+            env = runner._update_os_environ(job)
+        assert env == dict(os.environ)
+
+    def test_executable_env_vars_are_applied_with_user_expansion(self, runner):
+        job = MagicMock()
+        with patch.object(
+            type(runner),
+            "executable",
+            new=property(
+                lambda self: MagicMock(
+                    env={"MY_STR_VAR": "~/mydir", "MY_INT_VAR": 5}
+                )
+            ),
+        ):
+            env = runner._update_os_environ(job)
+        assert env["MY_STR_VAR"] == os.path.expanduser("~/mydir")
+        assert env["MY_INT_VAR"] == "5"
+
 
 class TestJobRunnerCopy:
     def test_copy_returns_shallow_copy(self, runner):
@@ -183,6 +271,33 @@ class TestJobRunnerFromJob:
         job.TYPE = "totally_unregistered_jobtype_xyz"
         with pytest.raises(ValueError, match="Could not find any runners"):
             JobRunner.from_job(job, server=pbs_server)
+
+    def test_from_job_treats_notimplemented_jobtypes_as_empty_list(
+        self, pbs_server
+    ):
+        """A registered runner subclass that never overrides JOBTYPES
+        (still NotImplemented) must be treated as supporting no
+        jobtypes, not crash the `jobtype in runner_jobtypes` check."""
+
+        class _RunnerWithoutJobtypes(JobRunner):
+            PROGRAM = "concrete_no_jobtypes"
+            FAKE = False
+            SCRATCH = False
+
+            @property
+            def executable(self):
+                return None
+
+            def _get_command(self, job):
+                return "echo hi"
+
+            def _create_process(self, job, command, env):
+                return MagicMock()
+
+        job = MagicMock()
+        job.TYPE = "concrete_runner_type"
+        result = JobRunner.from_job(job, server=pbs_server, fake=True)
+        assert isinstance(result, ConcreteJobRunner)
 
 
 class TestJobRunnerErrFileCleanup:
@@ -301,6 +416,41 @@ class TestJobRunnerDeleteScratchDirectory:
         assert not job_dir.exists()
         assert scratch_root.exists()
 
+    def test_logs_error_when_scratch_dir_missing(
+        self, runner, tmp_path, caplog
+    ):
+        """Covers the `if not sd.exists() or not sd.is_dir():` branch:
+        running_directory exists, but the resolved scratch_dir itself
+        doesn't -- refuse to proceed instead of raising."""
+        running_dir = tmp_path / "running"
+        running_dir.mkdir()
+
+        runner.running_directory = str(running_dir)
+        runner._scratch_dir = str(tmp_path / "does_not_exist_scratch")
+
+        with (
+            patch("chemsmart.jobs.runner.rmtree") as mock_rmtree,
+            caplog.at_level("ERROR"),
+        ):
+            runner._delete_scratch_directory()
+
+        mock_rmtree.assert_not_called()
+        assert "doesn't exist or is not a directory" in caplog.text
+
+    def test_rmtree_failure_is_logged_not_raised(self, runner, tmp_path):
+        scratch_root = tmp_path / "scratch"
+        job_dir = scratch_root / "myjob"
+        job_dir.mkdir(parents=True)
+
+        runner.running_directory = str(job_dir)
+        runner._scratch_dir = str(scratch_root)
+
+        with patch(
+            "chemsmart.jobs.runner.rmtree",
+            side_effect=OSError("simulated rmtree failure"),
+        ):
+            runner._delete_scratch_directory()  # should not raise
+
 
 class TestModuleLevelHelpers:
     def test_get_configured_max_submitters_from_env(self, monkeypatch):
@@ -314,6 +464,43 @@ class TestModuleLevelHelpers:
         runner = MagicMock(spec=[])
         runner.num_cores = 4
         assert get_configured_max_submitters(jobrunner=runner) == 4
+
+    def test_get_configured_max_submitters_zero_env_falls_through(
+        self, monkeypatch
+    ):
+        """A non-positive env value is treated as unset (covers
+        _positive_int_or_none's `parsed <= 0` branch), falling through
+        to the next resolution step instead of returning 0."""
+        monkeypatch.setenv("CHEMSMART_MAX_SUBMITTERS", "0")
+        runner = MagicMock(spec=[])
+        runner.num_cores = 5
+        assert get_configured_max_submitters(jobrunner=runner) == 5
+
+    def test_get_configured_max_submitters_from_runner_max_submitters(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("CHEMSMART_MAX_SUBMITTERS", raising=False)
+        runner = MagicMock(spec=["max_submitters"])
+        runner.max_submitters = 9
+        assert get_configured_max_submitters(jobrunner=runner) == 9
+
+    def test_get_configured_max_submitters_from_server_max_submitters(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("CHEMSMART_MAX_SUBMITTERS", raising=False)
+        runner = MagicMock(spec=["server"])
+        runner.server = MagicMock(spec=["max_submitters"])
+        runner.server.max_submitters = 6
+        assert get_configured_max_submitters(jobrunner=runner) == 6
+
+    def test_get_configured_max_submitters_from_server_num_cores(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("CHEMSMART_MAX_SUBMITTERS", raising=False)
+        runner = MagicMock(spec=["server"])
+        runner.server = MagicMock(spec=["num_cores"])
+        runner.server.num_cores = 12
+        assert get_configured_max_submitters(jobrunner=runner) == 12
 
     def test_get_configured_max_submitters_falls_back_to_cpu_count(
         self, monkeypatch
@@ -357,3 +544,34 @@ class TestDecidePhaseTransition:
         assert decision.proceed is False
         assert decision.should_raise is False
         assert "incomplete" in decision.message
+
+
+class TestExecutableClassForProgram:
+    def test_falsy_program_returns_none(self):
+        assert _executable_class_for_program(None) is None
+        assert _executable_class_for_program("") is None
+
+    def test_notimplemented_program_returns_none(self):
+        assert _executable_class_for_program(NotImplemented) is None
+
+
+class TestRunPhaseJobs:
+    def test_delegates_to_job_execute_phase_jobs(self):
+        with patch(
+            "chemsmart.jobs.runner.Job._execute_phase_jobs"
+        ) as mock_execute:
+            run_phase_jobs(
+                parent_runner="runner-sentinel",
+                jobs=["job1"],
+                stop_on_incomplete=True,
+                phase_label="opt",
+            )
+        mock_execute.assert_called_once_with(
+            parent_runner="runner-sentinel",
+            jobs=["job1"],
+            jobs_factory=None,
+            stop_on_incomplete=True,
+            before_run=None,
+            logger_obj=None,
+            phase_label="opt",
+        )
