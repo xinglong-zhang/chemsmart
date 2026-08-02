@@ -3024,3 +3024,46 @@ mode.
 **Suggested direction:** add the same
 `else: raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")`
 clause to `all_molecules_jobs` for consistency with its two siblings.
+
+## 59. `canonicalize_positions`'s equal-mass diatomic sign check can never flip
+
+**Location:** `chemsmart/utils/geometry.py`, lines 352-354 (inside the
+diatomic branch of `canonicalize_positions`).
+
+```python
+elif masses[0] == masses[1]:
+    if rotated[0, 2] > 0:
+        rotated[:, 2] *= -1
+```
+
+For a two-atom system with equal masses, the centre of mass is the
+midpoint of the two atoms, so `shifted[0] = (r0 - r1) / 2 = -vec / 2`
+where `vec = r1 - r0` and `z_hat = vec / norm(vec)`. Since
+`rotated[0, 2] = shifted[0] . z_hat = -norm(vec) / 2`, which is always
+negative (`norm(vec) > 0` for any two distinct points), the condition
+`rotated[0, 2] > 0` can never be true for a genuine equal-mass
+diatomic -- the flip on line 354 is dead code. (The unequal-mass case
+right above it, `masses[0] > masses[1]`, does an *unconditional* flip
+and is unaffected by this.)
+
+**Reproduce:**
+```python
+>>> from chemsmart.utils.geometry import canonicalize_positions
+>>> for coords in [[[0,0,0],[1,0,0]], [[1,1,1],[2,2,2]], [[3,1,2],[1,4,0]]]:
+...     print(canonicalize_positions([14.0, 14.0], coords))
+```
+Every case places atom 0 at `z = -bond_length/2` without ever needing
+the line 354 flip.
+
+**Impact:** Low -- purely dead code; the function's actual output
+(atom 0 always at negative z) is self-consistent and matches its
+docstring's "deterministic sign convention" goal regardless. Covered
+in `tests/test_geometry.py::TestCanonicalizePositions` only via the
+surrounding branches (heavier-first/heavier-second-atom flip tests),
+since the equal-mass flip itself is unreachable.
+
+**Suggested direction:** no action needed; the surrounding branches
+already guarantee deterministic output. Could be simplified by
+removing the dead `if` check and just asserting the invariant, or left
+as-is as a defensive check against a future refactor of the COM/z_hat
+computation above it.

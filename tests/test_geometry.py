@@ -9,6 +9,7 @@ from chemsmart.utils.geometry import (
     calculate_molecular_volume_vdp,
     calculate_moments_of_inertia,
     calculate_vdw_volume,
+    calculate_voronoi_dirichlet_occupied_volume,
     canonicalize_positions,
     clean_rotational_constants_by_geometry,
     get_coordinating_atoms,
@@ -200,6 +201,101 @@ class TestCleanRotationalConstantsByGeometry:
         with pytest.raises(ValueError):
             clean_rotational_constants_by_geometry([1.0, 2.0, 3.0], mode="bad")
 
+    def test_physical_mode_single_value_is_linear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_wrong_size_is_unknown(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [1.0, 2.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [1.0, 2.0])
+        assert status == "unknown"
+
+    def test_physical_mode_non_finite_bc_is_unknown(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, np.inf, 5.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.isinf(cleaned[1])
+        assert status == "unknown"
+
+    def test_physical_mode_inf_axial_bc_not_close_is_nonlinear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 2.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [np.inf, 8.30647, 2.0], equal_nan=False)
+        assert status == "nonlinear"
+
+    def test_physical_mode_finite_axial_bc_close_but_not_equal(self):
+        """B and C are near-degenerate (isclose but not ==) with a
+        moderate axial constant -- neither zero nor huge -- covering
+        the collapsible-but-nonlinear result via the isclose branch."""
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, 8.306470, 8.306471],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [5.0, 8.306470, 8.306471])
+        assert status == "nonlinear"
+
+    def test_physical_mode_collapsible_bc_moderate_axial_is_nonlinear(self):
+        """B == C exactly (collapsible), but the axial constant is
+        neither ~0 nor huge relative to B_perp, so the result must
+        stay "nonlinear" rather than "linear"/"quasi_linear"."""
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [5.0, 8.30647, 8.30647])
+        assert status == "nonlinear"
+
+
+class TestCalculateVoronoiDirichletOccupiedVolume:
+    def test_mismatched_lengths_raises(self):
+        with pytest.raises(ValueError, match="Number of coordinates"):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0, 0, 0], [1, 0, 0]],
+                radii=[1.0],
+            )
+
+    def test_non_3d_coordinates_raises(self):
+        with pytest.raises(ValueError, match="must be 3D"):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0, 0], [1, 0]],
+                radii=[1.0, 1.0],
+            )
+
+    def test_returns_positive_volume_for_simple_cluster(self):
+        coords = [
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 1.5],
+        ]
+        radii = [1.0, 1.0, 1.0, 1.0]
+        volume = calculate_voronoi_dirichlet_occupied_volume(coords, radii)
+        assert volume > 0
+
+    def test_explicit_dispersion_used_as_padding(self):
+        coords = [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]]
+        radii = [1.0, 1.0]
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords, radii, dispersion=3.0
+        )
+        assert volume > 0
+
 
 class TestCalculateCrudeOccupiedVolume:
     """Tests for the calculate_crude_occupied_volume function."""
@@ -348,6 +444,15 @@ class TestCalculateMolecularVolumeVDP:
         # Volume can be 0 for some configurations depending on tessellation
         assert volume >= 0
 
+    def test_voronoi_failure_raises_runtime_error(self):
+        """Collinear points with no dummy padding give qhull too few
+        points to construct a Voronoi diagram, which must surface as a
+        RuntimeError rather than qhull's own raw exception."""
+        coords = [[0, 0, 0], [1, 0, 0], [2, 0, 0]]
+        radii = [1.0, 1.0, 1.0]
+        with pytest.raises(RuntimeError, match="Voronoi tessellation failed"):
+            calculate_molecular_volume_vdp(coords, radii, dummy_points=False)
+
 
 class TestCanonicalizePositions:
     """Tests for the canonicalize_positions function."""
@@ -381,6 +486,40 @@ class TestCanonicalizePositions:
         # bond length = ||r2 - r1|| = sqrt(1^2 + 2^2 + 2^2) = 3
         # canonical positions = (0,0,±|v|/2) = (0,0,±1.5)
         assert np.allclose(result, [[0.0, 0.0, -1.5], [0.0, 0.0, 1.5]])
+
+    def test_diatomic_zero_length_bond_returns_shifted(self):
+        """Two atoms at the same position give a zero-length bond
+        vector; canonicalize_positions must return the (zero) shifted
+        coordinates rather than dividing by a zero norm."""
+        result = canonicalize_positions(
+            [1.0, 1.0], [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+        )
+        assert np.allclose(result, [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+    def test_diatomic_bond_along_x_uses_y_axis_trial(self):
+        """When the bond vector is nearly parallel to the default trial
+        axis ([1,0,0]), the fallback trial axis ([0,1,0]) must be used
+        to build a valid right-handed frame."""
+        result = canonicalize_positions(
+            [14.0, 14.0], [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        )
+        assert np.allclose(result, [[0.0, 0.0, -0.5], [0.0, 0.0, 0.5]])
+
+    def test_diatomic_heavier_first_atom_flips_z_sign(self):
+        """masses[0] > masses[1] triggers an unconditional z-sign flip."""
+        result = canonicalize_positions(
+            [20.0, 5.0], [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        )
+        assert result[0, 2] > 0
+        assert result[1, 2] < 0
+
+    def test_diatomic_heavier_second_atom_no_flip(self):
+        """masses[0] < masses[1] takes neither sign-flip branch."""
+        result = canonicalize_positions(
+            [5.0, 20.0], [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        )
+        assert result[0, 2] < 0
+        assert result[1, 2] > 0
 
     def test_translation_invariance(self):
         """Translating all atoms by a constant vector must not change the result."""
