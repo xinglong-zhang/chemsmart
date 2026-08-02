@@ -117,11 +117,10 @@ class TestGaussianQmmmSubcommand:
         """A label that already mentions "qmmm" (case-insensitive)
         should not get an extra ``_qmmm`` appended at the start of the
         function; the later unconditional endswith check still applies."""
-        from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
-
-        with patch.object(
-            GaussianQMMMJob, "__new__", return_value=MagicMock()
-        ) as mock_new:
+        with patch(
+            "chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
             result = CliRunner().invoke(
                 gaussian,
                 [
@@ -148,8 +147,8 @@ class TestGaussianQmmmSubcommand:
                 catch_exceptions=False,
             )
         assert result.exit_code == 0, result.output
-        assert mock_new.call_count == 1
-        _, kwargs = mock_new.call_args
+        assert mock_job_cls.call_count == 1
+        _, kwargs = mock_job_cls.call_args
         assert kwargs["label"] == "myjob_qmmm"
 
     def test_label_containing_but_not_ending_with_qmmm_gets_suffixed_once(
@@ -163,11 +162,10 @@ class TestGaussianQmmmSubcommand:
         "_qmmm" suffix (e.g. it appears at the start) skips the first
         append check but still gets suffixed by the later endswith
         check."""
-        from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
-
-        with patch.object(
-            GaussianQMMMJob, "__new__", return_value=MagicMock()
-        ) as mock_new:
+        with patch(
+            "chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
             result = CliRunner().invoke(
                 gaussian,
                 [
@@ -194,7 +192,7 @@ class TestGaussianQmmmSubcommand:
                 catch_exceptions=False,
             )
         assert result.exit_code == 0, result.output
-        _, kwargs = mock_new.call_args
+        _, kwargs = mock_job_cls.call_args
         assert kwargs["label"] == "qmmm_experiment_qmmm"
 
     def test_project_qmmm_settings_loaded_from_yaml(
