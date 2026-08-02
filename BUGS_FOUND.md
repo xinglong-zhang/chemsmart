@@ -2517,3 +2517,87 @@ call, e.g. via a shared CLI flag applied uniformly across job types.
 **Suggested direction:** either drop the `backup_chk` parameter from
 `PyMOLJob._backup_files` entirely (it doesn't apply to this job
 type), or guard the block with `getattr(self, "chkfile", None)`.
+
+## 49. `get_prepend_string_list_from_modred_free_format`'s single-list branch crashes with `UnboundLocalError` for an invalid `program`, instead of the clean `ValueError` the list-of-lists branch gives
+
+**Location:** `chemsmart/utils/utils.py`, lines 1297-1308.
+
+```python
+elif isinstance(input_modred[0], int):
+    # for a single list; e.g.: [2,3]
+    prepend_string = get_prepend_string_for_modred(input_modred)
+    if program == "gaussian" or program == "pymol":
+        modred_string = convert_modred_list_to_string(input_modred)
+    elif program == "orca":
+        modred_string = convert_modred_list_to_string(
+            [a - 1 for a in input_modred]
+        )
+    each_frozen_string = f"{prepend_string} {modred_string}"
+    prepend_string_list.append(each_frozen_string)
+```
+
+Compare with the list-of-lists branch immediately above it (lines
+1280-1296), which has a final `else: raise ValueError(...)` for an
+unrecognized `program`. The single-list branch has no such `else` --
+if `program` is neither `"gaussian"`/`"pymol"` nor `"orca"`,
+`modred_string` is never assigned, and the very next line references
+it, raising `UnboundLocalError: local variable 'modred_string'
+referenced before assignment` instead of a clear, actionable
+`ValueError`.
+
+**Reproduce:**
+```python
+from chemsmart.utils.utils import get_prepend_string_list_from_modred_free_format
+
+get_prepend_string_list_from_modred_free_format([1, 2], program="invalid")
+# UnboundLocalError: local variable 'modred_string' referenced before assignment
+```
+See `tests/test_utils_extended.py::TestGetPrependStringListFromModredFreeFormat::test_single_list_invalid_program_crashes_with_unboundlocalerror`.
+
+**Impact:** Low -- only triggered by an invalid `program` argument
+combined with the single-list (not list-of-lists) input shape, which
+requires a caller-side typo since valid callers only ever pass
+`"gaussian"`, `"pymol"`, or `"orca"`. Still, the resulting crash is
+far more confusing to debug than the list-of-lists branch's explicit
+error.
+
+**Suggested direction:** add the same `else: raise ValueError(...)`
+to the single-list branch that the list-of-lists branch already has.
+
+## 50. `sdf2molecule` crashes with `UnboundLocalError` for any input that's neither a `list` nor a `str`
+
+**Location:** `chemsmart/utils/utils.py`, lines 1359-1364.
+
+```python
+if isinstance(sdf_lines, list):
+    line_elements = sdf_lines
+elif isinstance(sdf_lines, str):
+    line_elements = sdf_lines.split("\n")
+
+for line in line_elements:
+    ...
+```
+
+Same shape as bug #49: there's no `else` branch, so if `sdf_lines` is
+neither a `list` nor a `str` (e.g. `None`, or an int), `line_elements`
+is never assigned, and the following `for line in line_elements:`
+raises `UnboundLocalError: local variable 'line_elements' referenced
+before assignment` instead of a clear `TypeError`/`ValueError`
+describing what was actually expected.
+
+**Reproduce:**
+```python
+from chemsmart.utils.utils import sdf2molecule
+
+sdf2molecule(12345)
+# UnboundLocalError: local variable 'line_elements' referenced before assignment
+```
+See `tests/test_utils.py::TestSdf2Molecule::test_invalid_type_crashes_with_unboundlocalerror`.
+
+**Impact:** Low -- the function's own docstring already documents the
+accepted types as `Union[list, str]`, so this only surfaces if a
+caller passes something else by mistake; the confusing crash message
+is the only issue.
+
+**Suggested direction:** add an `else: raise TypeError(...)` (or
+`ValueError`) describing the expected `Union[list, str]` input.

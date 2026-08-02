@@ -535,6 +535,35 @@ class TestGetPrependStringListFromModredFreeFormat:
         with pytest.raises(ValueError):
             get_prepend_string_list_from_modred_free_format("not a list")
 
+    def test_list_of_lists_orca_program_0_indexed(self):
+        result = get_prepend_string_list_from_modred_free_format(
+            [[1, 2], [3, 4]], program="orca"
+        )
+        assert result == ["B 0 1", "B 2 3"]
+
+    def test_list_of_lists_invalid_program_raises_value_error(self):
+        with pytest.raises(ValueError, match="Program type should be"):
+            get_prepend_string_list_from_modred_free_format(
+                [[1, 2]], program="invalid"
+            )
+
+    def test_single_list_invalid_program_crashes_with_unboundlocalerror(self):
+        """Documents BUGS_FOUND.md #49: unlike the list-of-lists branch,
+        the single-list branch has no final else-raise for an
+        unrecognized program, so it crashes with UnboundLocalError
+        instead of a clear ValueError."""
+        with pytest.raises(UnboundLocalError):
+            get_prepend_string_list_from_modred_free_format(
+                [1, 2], program="invalid"
+            )
+
+    def test_neither_list_of_lists_nor_int_list_returns_empty(self):
+        """Neither the list-of-lists nor single-int-list branch
+        matches (e.g. a list of strings), so nothing is appended."""
+        assert (
+            get_prepend_string_list_from_modred_free_format(["a", "b"]) == []
+        )
+
 
 class TestGetValueByNumber:
     def test_returns_value_for_matching_key_number(self):

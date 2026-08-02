@@ -14,6 +14,7 @@ from chemsmart.utils.io import (
     line_of_integer_followed_by_floats,
 )
 from chemsmart.utils.utils import (
+    check_charge_and_multiplicity,
     cmp_with_ignore,
     content_blocks_by_paragraph,
     convert_string_index_from_1_based_to_0_based,
@@ -23,8 +24,10 @@ from chemsmart.utils.utils import (
     is_float,
     iterative_compare,
     naturally_sorted,
+    prune_list_of_elements,
     return_objects_and_indices_from_string_index,
     run_command,
+    sdf2molecule,
     str_indices_range_to_list,
     string2index_1based,
 )
@@ -465,6 +468,72 @@ class TestGetListFromStringRange:
 
     def test_comma_separated_negative_index(self):
         assert str_indices_range_to_list("1,-1") == [1, -1]
+
+
+class TestSdf2Molecule:
+    _sdf_lines = [
+        "",
+        "  Some header",
+        "",
+        "  2  1  0  0  0  0  0  0  0  0999 V2000",
+        "    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0",
+        "    0.0000    0.0000    0.9600 H   0  0  0  0  0  0  0  0  0  0  0  0",
+        "M  END",
+    ]
+
+    def test_accepts_list_of_lines(self):
+        molecule = sdf2molecule(self._sdf_lines)
+        assert molecule.chemical_symbols == ["O", "H"]
+        assert molecule.positions[1][2] == pytest.approx(0.96)
+
+    def test_accepts_newline_joined_string(self):
+        molecule = sdf2molecule("\n".join(self._sdf_lines))
+        assert molecule.chemical_symbols == ["O", "H"]
+
+    def test_invalid_type_crashes_with_unboundlocalerror(self):
+        """Documents BUGS_FOUND.md #50: neither the list nor str branch
+        matches, so line_elements is never assigned."""
+        with pytest.raises(UnboundLocalError):
+            sdf2molecule(12345)
+
+
+class TestPruneListOfElements:
+    def test_returns_only_elements_present_in_molecule(self):
+        from types import SimpleNamespace
+
+        molecule = SimpleNamespace(chemical_symbols=["Pd", "C", "H"])
+        assert prune_list_of_elements(["Pd", "Ag", "Au"], molecule) == ["Pd"]
+
+    def test_returns_empty_when_no_overlap(self):
+        from types import SimpleNamespace
+
+        molecule = SimpleNamespace(chemical_symbols=["C", "H"])
+        assert prune_list_of_elements(["Pd", "Ag"], molecule) == []
+
+
+class TestCheckChargeAndMultiplicity:
+    def test_passes_when_both_set(self):
+        from types import SimpleNamespace
+
+        check_charge_and_multiplicity(
+            SimpleNamespace(charge=0, multiplicity=1)
+        )
+
+    def test_raises_when_charge_missing(self):
+        from types import SimpleNamespace
+
+        with pytest.raises(ValueError, match="must be set"):
+            check_charge_and_multiplicity(
+                SimpleNamespace(charge=None, multiplicity=1)
+            )
+
+    def test_raises_when_multiplicity_missing(self):
+        from types import SimpleNamespace
+
+        with pytest.raises(ValueError, match="must be set"):
+            check_charge_and_multiplicity(
+                SimpleNamespace(charge=0, multiplicity=None)
+            )
 
 
 class TestString2Index1Based:
