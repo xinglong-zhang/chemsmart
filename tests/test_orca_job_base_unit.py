@@ -291,3 +291,20 @@ class TestORCAGeneralJob:
         job = ORCAGeneralJob(molecule=a_molecule, settings=orca_settings)
         assert job.TYPE == "orcajob"
         assert isinstance(job, ORCAJob)
+
+
+class TestORCAIRCJob:
+    """ORCAIRCJob had no direct construction test anywhere."""
+
+    def test_construction(self, a_molecule):
+        from chemsmart.jobs.orca.irc import ORCAIRCJob
+        from chemsmart.jobs.orca.settings import ORCAIRCJobSettings
+
+        job = ORCAIRCJob(
+            molecule=a_molecule,
+            settings=ORCAIRCJobSettings(),
+            label="irc_test",
+        )
+        assert job.TYPE == "orcairc"
+        assert job.label == "irc_test"
+        assert isinstance(job, ORCAJob)

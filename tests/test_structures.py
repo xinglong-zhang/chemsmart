@@ -27,6 +27,35 @@ from chemsmart.utils.cluster import (
 from chemsmart.utils.utils import cmp_with_ignore
 
 
+class TestCovalentRadiusAndBondCutoff:
+    """get_covalent_radius/get_bond_cutoff had no direct test coverage."""
+
+    def test_get_covalent_radius_known_element(self):
+        from chemsmart.io.molecules import get_covalent_radius
+
+        assert get_covalent_radius("c") == pytest.approx(0.76)
+
+    def test_get_covalent_radius_unknown_element_raises(self):
+        from chemsmart.io.molecules import get_covalent_radius
+
+        with pytest.raises(ValueError, match="Unknown element"):
+            get_covalent_radius("Xx")
+
+    def test_get_bond_cutoff_uses_default_buffer(self):
+        from chemsmart.io.molecules import (
+            DEFAULT_BUFFER,
+            get_bond_cutoff,
+            get_covalent_radius,
+        )
+
+        expected = (
+            get_covalent_radius("C")
+            + get_covalent_radius("H")
+            + DEFAULT_BUFFER
+        )
+        assert get_bond_cutoff("C", "H") == pytest.approx(expected)
+
+
 class TestCoordinateBlock:
     def test_read_coordinate_block(self):
         coordinates_string = """

@@ -2601,3 +2601,47 @@ is the only issue.
 
 **Suggested direction:** add an `else: raise TypeError(...)` (or
 `ValueError`) describing the expected `Union[list, str]` input.
+
+## 51. `chemsmart`'s top-level `--verbose` flag can never actually be turned off
+
+**Location:** `chemsmart/cli/main.py`, lines 23-33.
+
+```python
+@click.option("--verbose", is_flag=True, default=True)
+def entry_point(ctx, verbose):
+    if verbose:
+        debug = True
+        stream = True
+    else:
+        debug = False
+        stream = False
+```
+
+`--verbose` is declared as a plain `is_flag=True` option (not the
+`--verbose/--no-verbose` dual-name form Click supports for toggle
+flags), with `default=True`. A bare boolean flag can only ever be
+*absent* (uses the default, `True`) or *present* (forces `True`) --
+there is no way to pass `False` on the command line. `--no-verbose`
+is not recognized (`Error: No such option: --no-verbose`). The
+`else` branch handling `verbose=False` is therefore permanently dead
+code when invoked through the real CLI; the option exists but cannot
+do what its name implies.
+
+**Reproduce:**
+```
+$ chemsmart --no-verbose sub gaussian ...
+Error: No such option: --no-verbose Did you mean --verbose?
+```
+See `tests/test_main_cli.py::TestMainEntryPoint::test_verbose_false_branch_via_direct_callback_invocation`,
+which reaches the `else` branch only by calling `entry_point.callback`
+directly (bypassing Click's option parsing entirely) since there is
+no real CLI invocation that produces `verbose=False`.
+
+**Impact:** Low -- cosmetic/usability only. Logging always runs in
+debug+stream mode regardless of user intent; nobody can quiet it via
+this flag.
+
+**Suggested direction:** declare the option as
+`@click.option("--verbose/--no-verbose", default=True)` so the
+negative form is actually reachable, matching what the flag's name
+implies.

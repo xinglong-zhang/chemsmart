@@ -93,6 +93,72 @@ class TestNciplotCLI:
         )
         assert result.exit_code != 0
 
+    def test_ranges_option_parsed(self, single_molecule_xyz_file):
+        result, kwargs = run_nciplot_and_capture_kwargs(
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "--ranges",
+                "[[-0.1,-0.02],[-0.02,0.02]]",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["settings"].ranges == [[-0.1, -0.02], [-0.02, 0.02]]
+
+    def test_invalid_ranges_option_raises(self, single_molecule_xyz_file):
+        result, _ = run_nciplot_and_capture_kwargs(
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "--ranges",
+                "not-a-literal(",
+            ]
+        )
+        assert result.exit_code != 0
+
+    def test_wfn_file_skips_promolecular_suffix(self, tmp_path):
+        wfn_file = tmp_path / "test.wfn"
+        wfn_file.write_text("dummy wavefunction data")
+        result, kwargs = run_nciplot_and_capture_kwargs(["-f", str(wfn_file)])
+        assert result.exit_code == 0, result.output
+        assert not kwargs["label"].endswith("_promolecular")
+
+    def test_custom_label_already_ending_promolecular_not_duplicated(
+        self, single_molecule_xyz_file
+    ):
+        result, kwargs = run_nciplot_and_capture_kwargs(
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-l",
+                "my_label_promolecular",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "my_label_promolecular"
+
+    def test_pubchem_success_appends_promolecular_suffix(self):
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=MagicMock(),
+        ):
+            result, kwargs = run_nciplot_and_capture_kwargs(
+                ["-P", "water", "-l", "water_label"]
+            )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "water_label_promolecular"
+
+    def test_pubchem_label_already_ending_promolecular_not_duplicated(self):
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=MagicMock(),
+        ):
+            result, kwargs = run_nciplot_and_capture_kwargs(
+                ["-P", "water", "-l", "water_promolecular"]
+            )
+        assert result.exit_code == 0, result.output
+        assert kwargs["label"] == "water_promolecular"
+
     def test_pubchem_requires_label(self):
         with patch(
             "chemsmart.io.molecules.structure.Molecule.from_pubchem",

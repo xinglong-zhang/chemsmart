@@ -8,6 +8,7 @@ directly (``gaussian``, ``orca``, ...) rather than through
 ``entry_point``.
 """
 
+import click
 from click.testing import CliRunner
 
 from chemsmart.cli.main import entry_point
@@ -31,3 +32,13 @@ class TestMainEntryPoint:
         assert result.exit_code == 0
         for subcommand in ["run", "sub", "config", "update"]:
             assert subcommand in result.output
+
+    def test_verbose_false_branch_via_direct_callback_invocation(self):
+        """Documents BUGS_FOUND.md #51: --verbose is a plain is_flag
+        option (not --verbose/--no-verbose), so there is no real CLI
+        invocation that produces verbose=False. The else branch is
+        reached here only by calling the callback directly."""
+        ctx = click.Context(entry_point)
+        ctx.ensure_object(dict)
+        with ctx:
+            entry_point.callback(verbose=False)  # should not raise
