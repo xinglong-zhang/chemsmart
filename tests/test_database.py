@@ -1043,6 +1043,81 @@ class TestDatabaseQuery:
         assert len(empty_summaries) == 0
         assert "No records" in empty.format_summary(empty.query_summaries())
 
+        # Unquoted numeric-looking values parse as float when not a
+        # plain int, and fall back to the raw string when neither.
+        float_query = DatabaseQuery(db.db_file, "total_energy = -3.5")
+        _, float_params = float_query.parse_query()
+        assert float_params == (-3.5,)
+
+        bareword_query = DatabaseQuery(db.db_file, "program = ORCA")
+        _, bareword_params = bareword_query.parse_query()
+        assert bareword_params == ("ORCA",)
+
+        # format_summary with a limit but no query string covers the
+        # "no query" skip alongside the "limit set" branch together.
+        limited_no_query = DatabaseQuery(db.db_file, None, limit=1)
+        formatted_limited = limited_no_query.format_summary(
+            limited_no_query.query_summaries()
+        )
+        assert "Query   :" not in formatted_limited
+        assert "Limit   : 1" in formatted_limited
+
+    def test_format_table_empty_and_missing_values(self, tmp_path):
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, None)
+
+        assert dq._format_table([]) == []
+
+        rows = dq._format_table([{"record_index": 1}])
+        assert any("" in row for row in rows[2:])
+
+    def test_parse_query_empty_clause_parts_is_unreachable_defensively(
+        self, tmp_path, monkeypatch
+    ):
+        """See BUGS_FOUND.md #60: `if not clause_parts:` can never be
+        true through any real query string, since every token either
+        appends to clause_parts or raises. Force an empty token list
+        directly to exercise the guard for coverage."""
+        import types
+
+        import chemsmart.database.query as query_module
+
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, "program = 'ORCA'")
+
+        fake_splitter = types.SimpleNamespace(split=lambda s: [])
+        monkeypatch.setattr(query_module, "_LOGIC_SPLIT_RE", fake_splitter)
+        with pytest.raises(ValueError, match="Empty query string"):
+            dq.parse_query()
+
+    def test_parse_query_unsupported_operator_is_unreachable_defensively(
+        self, tmp_path, monkeypatch
+    ):
+        """See BUGS_FOUND.md #60: query_condition_pattern's operator
+        group only ever matches operators already in
+        SUPPORTED_OPERATORS, so `if operator not in SUPPORTED_OPERATORS`
+        can never be true through any real query string. Force a fake
+        match object to exercise the guard for coverage."""
+        import types
+
+        import chemsmart.database.query as query_module
+
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, "total_energy !! -3")
+
+        fake_match = types.SimpleNamespace(
+            groups=lambda: ("total_energy", "!!", "-3")
+        )
+        fake_condition_re = types.SimpleNamespace(
+            fullmatch=lambda token: fake_match
+        )
+        monkeypatch.setattr(query_module, "_CONDITION_RE", fake_condition_re)
+        with pytest.raises(ValueError, match="Unsupported operator"):
+            dq.parse_query()
+
 
 class TestDatabaseExport:
     def test_json_and_csv_export(

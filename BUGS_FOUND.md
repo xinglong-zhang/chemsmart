@@ -3067,3 +3067,52 @@ already guarantee deterministic output. Could be simplified by
 removing the dead `if` check and just asserting the invariant, or left
 as-is as a defensive check against a future refactor of the COM/z_hat
 computation above it.
+
+## 60. `DatabaseQuery.parse_query` has two guards that can never trigger through any real query string
+
+**Location:** `chemsmart/database/query.py`, lines 237-241 (unsupported
+operator) and 266-267 (empty clause parts).
+
+```python
+if operator not in SUPPORTED_OPERATORS:
+    raise ValueError(
+        f"Unsupported operator: '{operator}'. "
+        f"Supported: {', '.join(sorted(SUPPORTED_OPERATORS))}"
+    )
+...
+if not clause_parts:
+    raise ValueError("Empty query string.")
+```
+
+Both guards are unreachable in practice:
+
+1. **Unsupported operator.** The operator substring can only ever be
+   whatever `query_condition_pattern` (in `chemsmart/utils/repattern.py`)
+   itself matched: `==|<=|>=|!=|~|<|>|=` -- exactly the same seven
+   operators as `SUPPORTED_OPERATORS`. Any other operator text fails
+   the regex match earlier and raises "Invalid condition" instead of
+   ever reaching this check.
+2. **Empty clause parts.** `_LOGIC_SPLIT_RE.split(...)` on a non-empty
+   string never returns an empty list (worst case `['']` for an
+   all-whitespace input), and every token in the loop either matches
+   `AND`/`OR` (appended), matches a condition (appended), or fails to
+   match (raises) -- there is no path where a token is silently
+   skipped. So `clause_parts` can never be empty when this check runs.
+
+**Reproduce:** grep confirms the regex's operator alternation exactly
+mirrors `SUPPORTED_OPERATORS`:
+```
+$ grep -n "query_condition_pattern\|SUPPORTED_OPERATORS" chemsmart/utils/repattern.py chemsmart/database/query.py
+```
+See `tests/test_database.py::TestDatabaseQuery::test_parse_query_unsupported_operator_is_unreachable_defensively`
+and `test_parse_query_empty_clause_parts_is_unreachable_defensively`,
+both of which monkeypatch the module's compiled regex objects to force
+these states directly, since no real query string can produce them.
+
+**Impact:** Low -- purely defensive dead code with helpful error
+messages that happen to never fire. No functional risk.
+
+**Suggested direction:** no action needed; these guards are harmless
+and provide a clear error message if the regex/operator-set invariant
+is ever broken by a future edit (e.g. adding an operator to one list
+but not the other).
