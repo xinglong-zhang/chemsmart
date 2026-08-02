@@ -498,6 +498,16 @@ class TestDatabaseSchemaAndInsertion:
         assert "idx_record_id" in indexes
         assert "idx_struct_molecule_id" in indexes
 
+    def test_get_record_without_index_or_id_returns_none(self, tmp_path):
+        db = Database(str(tmp_path / "empty2.db"))
+        db.create()
+        assert db.get_record() is None
+
+    def test_get_record_missing_id_returns_none(self, tmp_path):
+        db = Database(str(tmp_path / "empty3.db"))
+        db.create()
+        assert db.get_record(record_id="no-such-record") is None
+
     def test_insert_deduplicates_molecules(
         self,
         tmp_path,
@@ -816,6 +826,120 @@ class TestDatabaseRecordMoleculeStructureQueries:
             db.get_structure_by_partial_id(STRUCTURE_ID_ORIGIN_HE[:12])
             == STRUCTURE_ID_ORIGIN_HE
         )
+
+    def test_partial_id_resolution_error_branches(self, tmp_path):
+        """No-match and ambiguous-match errors for
+        get_structure_by_partial_id, exercised via raw rows rather
+        than real assembled data (real content-hash structure_ids
+        don't collide on a short prefix in a small test database)."""
+        db = Database(str(tmp_path / "partial_errors.db"))
+        db.create()
+        conn = db.get_connection()
+        conn.execute("INSERT INTO molecules (molecule_id) VALUES (?)", ("m1",))
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("abc111", "m1"),
+        )
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("abc222", "m1"),
+        )
+        conn.commit()
+        conn.close()
+
+        with pytest.raises(ValueError, match="No structure found"):
+            db.get_structure_by_partial_id("xyz")
+
+        with pytest.raises(ValueError, match="Ambiguous ID prefix"):
+            db.get_structure_by_partial_id("abc")
+
+
+class TestDatabaseForcesQueries:
+    """pick_primary_forces_method_basis, resolve_method_basis,
+    get_forces_for_structure_at, and get_forces_for_record_structure_at
+    had no test coverage at all. Populated via raw SQL rows rather than
+    a full SingleFileAssembler pipeline, since these queries only care
+    about the records/structures/record_structures columns directly."""
+
+    def _seed_forces_db(self, tmp_path):
+        db = Database(str(tmp_path / "forces.db"))
+        db.create()
+        conn = db.get_connection()
+        conn.execute("INSERT INTO molecules (molecule_id) VALUES (?)", ("m1",))
+        conn.execute(
+            "INSERT INTO records (record_id, method, basis, record_index) "
+            "VALUES (?, ?, ?, ?)",
+            ("rec1", "b3lyp", "def2svp", 1),
+        )
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("struct1", "m1"),
+        )
+        conn.execute(
+            "INSERT INTO record_structures "
+            "(record_id, structure_id, index_in_record, energy, forces_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("rec1", "struct1", 0, -100.0, json.dumps([[0.1, 0.2, 0.3]])),
+        )
+        conn.commit()
+        conn.close()
+        return db
+
+    def test_pick_primary_forces_method_basis_returns_best_match(
+        self, tmp_path
+    ):
+        db = self._seed_forces_db(tmp_path)
+        assert db.pick_primary_forces_method_basis(["struct1"]) == (
+            "b3lyp",
+            "def2svp",
+        )
+
+    def test_pick_primary_forces_method_basis_empty_input(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.pick_primary_forces_method_basis([]) == (None, None)
+
+    def test_resolve_method_basis_case_insensitive_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis("B3LYP", "DEF2SVP") == (
+            "b3lyp",
+            "def2svp",
+        )
+
+    def test_resolve_method_basis_none_input_returns_none(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis(None, "def2svp") is None
+
+    def test_resolve_method_basis_no_match_returns_none(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis("nomatch", "nomatch") is None
+
+    def test_get_forces_for_structure_at_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        forces, energy = db.get_forces_for_structure_at(
+            "struct1", "b3lyp", "def2svp"
+        )
+        assert forces == [[0.1, 0.2, 0.3]]
+        assert energy == -100.0
+
+    def test_get_forces_for_structure_at_no_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.get_forces_for_structure_at(
+            "nomatch", "b3lyp", "def2svp"
+        ) == (None, None)
+
+    def test_get_forces_for_record_structure_at_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        forces, energy = db.get_forces_for_record_structure_at(
+            "rec1", "struct1", "b3lyp", "def2svp"
+        )
+        assert forces == [[0.1, 0.2, 0.3]]
+        assert energy == -100.0
+
+    def test_get_forces_for_record_structure_at_no_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.get_forces_for_record_structure_at(
+            "rec1", "nomatch", "b3lyp", "def2svp"
+        ) == (None, None)
 
 
 class TestDatabaseQuery:
