@@ -3684,3 +3684,400 @@ class TestSubProcessPipelineDirectInvocation:
             test=False,
         )
         assert "Not submitting" not in caplog.text
+
+
+class TestOrcaPkaCliDirectBranchCoverage:
+    """chemsmart/cli/orca/pka.py has its own copy of the
+    proton-exchange reference-validation logic inside batch() (a
+    near-duplicate of chemsmart/cli/gaussian/pka.py's), which the
+    existing gaussian-focused tests in TestPkaCliDirectBranchCoverage
+    never exercise since they only import chemsmart.cli.gaussian.pka.
+    These tests mirror that coverage for the ORCA module directly."""
+
+    def _orca_batch_cmd(self):
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.orca.pka")
+        return pka_mod, pka_mod.pka.commands["batch"]
+
+    def test_batch_proton_exchange_missing_all_reference_options_raises(
+        self, tmp_path, monkeypatch
+    ):
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(scheme="proton exchange")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError) as exc_info:
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+        message = str(exc_info.value)
+        assert "-r/--reference" in message
+        assert "-rc/--reference-charge" in message
+        assert "-rm/--reference-multiplicity" in message
+
+    def test_batch_proton_exchange_noncdxml_reference_missing_proton_index_raises(
+        self, tmp_path, monkeypatch
+    ):
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+        reference = tmp_path / "reference_acid.xyz"
+        reference.write_text("2\nref\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference=str(reference),
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError) as exc_info:
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+        assert "-rpi/--reference-proton-index" in str(exc_info.value)
+
+    def test_batch_proton_exchange_cdxml_reference_resolve_failure_raises(
+        self, tmp_path, monkeypatch
+    ):
+        """Mirrors BUGS_FOUND.md #42 for the ORCA copy of this logic:
+        resolve_reference_proton's ValueError isn't caught by batch()'s
+        `except click.UsageError`, so it propagates uncaught."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        pka_mod, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference="reference.cdxml",
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with (
+            ctx,
+            monkeypatch.context() as m,
+        ):
+            m.setattr(
+                pka_mod.PKaCDXFile,
+                "resolve_reference_proton",
+                staticmethod(
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        ValueError("no coloured proton found")
+                    )
+                ),
+            )
+            with pytest.raises(ValueError, match="no coloured proton found"):
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+
+    def test_orca_batch_proton_exchange_cdxml_reference_usage_error_is_caught(
+        self, tmp_path, monkeypatch
+    ):
+        """Unlike the ValueError case above, a click.UsageError raised
+        by resolve_reference_proton IS caught by batch()'s own
+        `except click.UsageError:` and folded into the combined
+        "missing options" error instead of propagating raw."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        pka_mod, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference="reference.cdxml",
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with (
+            ctx,
+            monkeypatch.context() as m,
+        ):
+            m.setattr(
+                pka_mod.PKaCDXFile,
+                "resolve_reference_proton",
+                staticmethod(
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        click.UsageError("no coloured proton found")
+                    )
+                ),
+            )
+            with pytest.raises(click.UsageError) as exc_info:
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+        assert "-rpi/--reference-proton-index" in str(exc_info.value)
+
+    def test_batch_proton_exchange_full_reference_options_succeeds(
+        self, tmp_path, monkeypatch
+    ):
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+        reference = tmp_path / "reference_acid.xyz"
+        reference.write_text("2\nref\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(
+            scheme="proton exchange",
+            reference=str(reference),
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            jobs = batch_cmd.callback(
+                skip_completed=False, proton_index=None, color_code=None
+            )
+
+        assert len(jobs) == 2
+        assert jobs[0]._batch_entry["scheme"] == "proton exchange"
+        assert jobs[1]._batch_entry["scheme"] == "direct"
+
+    def test_batch_job_settings_none_skips_merge(self, tmp_path, monkeypatch):
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        table = _build_pka_batch_table(tmp_path)
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            jobs = batch_cmd.callback(
+                skip_completed=False, proton_index=None, color_code=None
+            )
+
+        assert len(jobs) == 2
+        assert {job.label for job in jobs} == {"acid1_pka", "acid2_pka"}
+
+    def test_batch_no_filename_raises_usage_error(self, tmp_path, monkeypatch):
+        """batch() requires the parent -f/--filename; without it, it
+        must raise a UsageError rather than proceeding with `None`."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": None,
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError, match="Batch mode requires"):
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+
+    def test_batch_table_parse_error_becomes_usage_error(
+        self, tmp_path, monkeypatch
+    ):
+        """A malformed table should surface as a friendly UsageError
+        (batch()'s `except (FileNotFoundError, ValueError)` guard)."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+        bad_table = tmp_path / "bad_table.csv"
+        bad_table.write_text("not,a,valid,pka,table\n1,2,3,4,5\n")
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        _, batch_cmd = self._orca_batch_cmd()
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(batch_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": str(bad_table),
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": None,
+            "keywords": {},
+        }
+        with ctx:
+            with pytest.raises(click.UsageError):
+                batch_cmd.callback(
+                    skip_completed=False, proton_index=None, color_code=None
+                )
+
+    def test_pka_group_with_no_subcommand_and_non_table_input_dispatches_to_submit(
+        self, tmp_path, monkeypatch, single_molecule_xyz_file
+    ):
+        """When invoked with no explicit submit/batch subcommand and a
+        non-table input file, the pka group must auto-dispatch straight
+        to submit() (as opposed to batch(), used for table inputs)."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.server import Server
+
+        fake_server = Server(name="dummy")
+        captured = {"labels": []}
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured[
+                "labels"
+            ].append(job.label)
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "--no-scratch",
+                "orca",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "pka",
+                "-s",
+                "direct",
+                "-pi",
+                "1",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(captured["labels"]) == 1
+
+    def test_submit_empty_molecules_skips_charge_multiplicity_inference(
+        self, tmp_path, monkeypatch
+    ):
+        """submit()'s `if molecules:` guard must not blow up when the
+        list is empty (covers its False arm); the subsequent
+        unconditional `molecules[-1]` then raises IndexError, mirroring
+        the equivalent Gaussian-side test above."""
+        config_root = _write_test_backend_project(tmp_path, "orca")
+        monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+        from chemsmart.settings.orca import ORCAProjectSettings
+
+        project_settings = ORCAProjectSettings.from_project("test")
+        job_settings = project_settings.opt_settings()
+        job_settings.charge = 0
+        job_settings.multiplicity = 1
+
+        import importlib
+
+        pka_mod = importlib.import_module("chemsmart.cli.orca.pka")
+        submit_cmd = pka_mod.pka.commands["submit"]
+
+        shared = _build_pka_shared(scheme="direct")
+        ctx = click.Context(submit_cmd)
+        ctx.obj = {
+            "pka_shared": shared,
+            "filename": "acid.xyz",
+            "jobrunner": None,
+            "project_settings": project_settings,
+            "job_settings": job_settings,
+            "keywords": {"charge", "multiplicity"},
+            "molecules": [],
+            "molecule_indices": None,
+            "label": "acid",
+        }
+        with ctx:
+            with pytest.raises(IndexError):
+                submit_cmd.callback(
+                    skip_completed=False, proton_index=2, color_code=None
+                )
