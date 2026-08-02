@@ -408,3 +408,210 @@ class TestServerSubmitArrayJob:
         submitter = MagicMock()
         with pytest.raises(ValueError, match="no submit command"):
             server._submit_array_job(job, submitter)
+
+    def test_submit_array_job_uses_split_command_without_shell_operators(
+        self,
+    ):
+        server = Server("s", SCHEDULER="PBS")
+        job = MagicMock()
+        job.folder = "/some/folder"
+        submitter = MagicMock()
+        submitter.array_submit_script = "chemsmart_array_x.sh"
+
+        with patch("chemsmart.settings.server.subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            result = server._submit_array_job(job, submitter)
+
+        mock_popen.assert_called_once_with(
+            ["qsub", "chemsmart_array_x.sh"], cwd="/some/folder"
+        )
+        assert result == 0
+
+    def test_submit_array_job_uses_shell_true_for_shell_operators(self):
+        server = Server("s", SCHEDULER="LSF")
+        job = MagicMock()
+        job.folder = "/some/folder"
+        submitter = MagicMock()
+        submitter.array_submit_script = "chemsmart_array_x.sh"
+
+        with patch("chemsmart.settings.server.subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            server._submit_array_job(job, submitter)
+
+        assert mock_popen.call_args.kwargs.get("shell") is True
+
+
+class TestCheckRunningJobsNoDuplicate:
+    def test_check_running_jobs_returns_normally_when_not_duplicate(self):
+        """Covers the `if job.label in running_job_names:` False arm:
+        a Gaussian job whose label isn't in the cluster's running-job
+        list should return quietly instead of exiting."""
+        from chemsmart.jobs.gaussian.job import GaussianGeneralJob
+
+        job = MagicMock(spec=GaussianGeneralJob)
+        job.label = "not_running_job"
+
+        mock_cluster_helper = MagicMock()
+        mock_cluster_helper.get_gaussian_running_jobs.return_value = (
+            ["123"],
+            ["some_other_job"],
+        )
+        with patch(
+            "chemsmart.utils.cluster.ClusterHelper",
+            return_value=mock_cluster_helper,
+        ):
+            assert Server._check_running_jobs(job) is None
+
+
+class TestWriteSubmissionScript:
+    def test_write_submission_script_delegates_to_submitter(self):
+        server = Server("s", SCHEDULER="PBS")
+        job = MagicMock()
+        mock_submitter = MagicMock()
+
+        with patch.object(
+            server, "get_submitter", return_value=mock_submitter
+        ) as mock_get_submitter:
+            server._write_submission_script(job, cli_args=["opt"], extra=1)
+
+        mock_get_submitter.assert_called_once_with(job, extra=1)
+        mock_submitter.write.assert_called_once_with(["opt"])
+
+
+class TestFromYaml:
+    def test_empty_name_raises(self):
+        with pytest.raises(ValueError, match="No yaml file provided"):
+            Server.from_yaml(name=None)
+
+
+class TestFromServernameYamlSuffix:
+    def test_name_already_ending_in_yaml_is_not_double_suffixed(
+        self, server_yaml_file
+    ):
+        """Covers the `if server_name.endswith(".yaml"): server_name =
+        server_name` no-op branch by passing a name that already ends
+        with ".yaml"."""
+        assert server_yaml_file.endswith(".yaml")
+        server = Server.from_servername(server_yaml_file)
+        assert server.num_cores == 64
+
+
+class TestFromSchedulerTypeSubclassMatch:
+    def test_matching_scheduler_dispatches_to_subclass(self):
+        from chemsmart.settings.server import SLURMServer
+
+        with (
+            patch.object(
+                Server, "detect_server_scheduler", return_value="SLURM"
+            ),
+            patch.object(
+                SLURMServer,
+                "from_servername",
+                return_value="slurm-sentinel",
+            ) as mock_from_servername,
+        ):
+            result = Server.from_scheduler_type()
+
+        mock_from_servername.assert_called_once_with("SLURM")
+        assert result == "slurm-sentinel"
+
+    def test_no_matching_subclass_raises(self):
+        with patch.object(
+            Server, "detect_server_scheduler", return_value="HTCondor"
+        ):
+            with pytest.raises(
+                ValueError, match="No server class defined for scheduler"
+            ):
+                Server.from_scheduler_type()
+
+
+class TestDetectServerSchedulerCheckOutput:
+    def test_sge_detected_via_check_output_match(self, monkeypatch):
+        for var in [
+            "SLURM_JOB_ID",
+            "SLURM_CLUSTER_NAME",
+            "PBS_JOBID",
+            "PBS_QUEUE",
+            "LSB_JOBID",
+            "LSB_MCPU_HOSTS",
+        ]:
+            monkeypatch.delenv(var, raising=False)
+
+        def fake_run(command, **kwargs):
+            # PBS also tries a bare "qstat" (with no check_output), so
+            # that exact command must fail here to let the loop reach
+            # SGE's own second command option, "qstat -help".
+            if command == ["qstat", "-help"]:
+                result = MagicMock()
+                result.stdout = b"Sun Grid Engine\n"
+                return result
+            raise FileNotFoundError()
+
+        with patch(
+            "chemsmart.settings.server.subprocess.run", side_effect=fake_run
+        ):
+            assert Server.detect_server_scheduler() == "SGE"
+
+    def test_sge_check_output_no_match_falls_through(self, monkeypatch):
+        for var in [
+            "SLURM_JOB_ID",
+            "SLURM_CLUSTER_NAME",
+            "PBS_JOBID",
+            "PBS_QUEUE",
+            "LSB_JOBID",
+            "LSB_MCPU_HOSTS",
+        ]:
+            monkeypatch.delenv(var, raising=False)
+
+        def fake_run(command, **kwargs):
+            # Only SGE's second command option ("qstat -help") should
+            # actually run; every other scheduler's command (including
+            # PBS's plain "qstat") must fail so the loop reaches SGE's
+            # check_output without detecting an earlier scheduler.
+            if command == ["qstat", "-help"]:
+                result = MagicMock()
+                result.stdout = b"unrelated output\n"
+                return result
+            raise FileNotFoundError()
+
+        with patch(
+            "chemsmart.settings.server.subprocess.run", side_effect=fake_run
+        ):
+            assert Server.detect_server_scheduler() == "Unknown Scheduler"
+
+
+class TestRegisterSuccessPathsIsolated:
+    """Bug #7 (see TestServerRegisterBug above) means register() always
+    crashes when the shared global _REGISTRY contains unrelated
+    non-Server entries, as it does in the real app. These tests
+    temporarily swap in a clean _REGISTRY containing only Server
+    instances to exercise register()'s own intended logic in
+    isolation, purely for coverage."""
+
+    def test_register_appends_new_instance(self):
+        original_registry = Server._REGISTRY
+        Server._REGISTRY = []
+        try:
+            server = Server("isolated-register-test")
+            result = server.register()
+            assert result is server
+            assert server in Server._REGISTRY
+        finally:
+            Server._REGISTRY = original_registry
+
+    def test_register_is_idempotent_for_already_registered_instance(self):
+        original_registry = Server._REGISTRY
+        try:
+            server = Server("isolated-register-test-2")
+            Server._REGISTRY = [server]
+            result = server.register()
+            assert result is server
+            assert Server._REGISTRY == [server]
+        finally:
+            Server._REGISTRY = original_registry
