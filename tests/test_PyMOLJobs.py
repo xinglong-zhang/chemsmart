@@ -682,6 +682,26 @@ class TestPyMOLJobs:
         )
         assert job_nci_combined.binary is True
         assert job_nci_combined.intermediate is True
+
+        # None isosurface_value/color_range fall back to their defaults
+        job_nci_none_defaults = PyMOLNCIJob(
+            molecules,
+            label="benzene",
+            isosurface_value=None,
+            color_range=None,
+        )
+        assert job_nci_none_defaults.isosurface_value == 0.5
+        assert job_nci_none_defaults.color_range == 1.0
+
+        # explicit nci_basename is used as-is (not derived from label)
+        job_nci_explicit_basename = PyMOLNCIJob(
+            molecules,
+            label="benzene",
+            isosurface_value=0.5,
+            color_range=1.0,
+            nci_basename="custom_name",
+        )
+        assert job_nci_explicit_basename.nci_basename == "custom_name"
         assert "binary" in job_nci_combined.nci_basename
         assert "intermediate" in job_nci_combined.nci_basename
 

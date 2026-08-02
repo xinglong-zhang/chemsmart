@@ -737,6 +737,73 @@ class TestMolCLIVisualizeCommand:
         )
         assert result.exit_code != 0
 
+    def test_visualize_invalid_coordinates_raises(
+        self, single_molecule_xyz_file
+    ):
+        with pytest.raises(ValueError, match="Invalid coordinates input"):
+            run_mol_and_capture_kwargs(
+                "chemsmart.jobs.mol.visualize.PyMOLVisualizationJob",
+                [
+                    "-f",
+                    single_molecule_xyz_file,
+                    "visualize",
+                    "-c",
+                    "not-a-literal(",
+                ],
+            )
+
+    def test_visualize_hybrid_only_option_without_hybrid_raises(
+        self, single_molecule_xyz_file
+    ):
+        result, _ = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.visualize.PyMOLVisualizationJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "visualize",
+                "--surface-color",
+                "blue",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "-H/--hybrid" in result.output
+
+    def test_visualize_hybrid_only_option_with_hybrid_is_forwarded(
+        self, single_molecule_xyz_file
+    ):
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.visualize.PyMOLHybridVisualizationJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "visualize",
+                "-H",
+                "--surface-color",
+                "blue",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["surface_color"] == "blue"
+
+    def test_visualize_non_derived_style_job_creation(
+        self, single_molecule_xyz_file
+    ):
+        """A -s value that isn't one of the derived
+        zhang_group_scientific_styles.py styles (e.g. "cylview") is
+        passed straight through as the plain style kwarg."""
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.visualize.PyMOLVisualizationJob",
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "visualize",
+                "-s",
+                "cylview",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["style"] == "cylview"
+
 
 def _invoke_mol_qmmm_callback(**overrides):
     """Direct-invocation helper for BUGS_FOUND.md #38: `mol_qmmm` has
