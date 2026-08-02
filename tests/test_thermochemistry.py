@@ -1,6 +1,7 @@
 import importlib
 import os.path
 from shutil import copyfile
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -4350,6 +4351,267 @@ class TestCleanedFrequencies:
         )
         with pytest.raises(ValueError, match="must be positive"):
             Thermochemistry.cleaned_frequencies.fget(mock)
+
+
+class TestThermochemistryFileObjectAndRotationalConstants:
+    """file_object, average_rotational_constant,
+    geometry/gaussian/effective_rotational_constants_in_Hz,
+    effective_rotational_temperatures, and vibrational/real/imaginary
+    frequencies had several branches never reached by the extensive
+    real-fixture tests elsewhere in this file (which all use normally
+    terminated, non-monoatomic, frequency-bearing Gaussian outputs).
+    """
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    @staticmethod
+    def _cached(name, mock):
+        return Thermochemistry.__dict__[name].func(mock)
+
+    def test_file_object_constructs_real_xtb_output(self, xtb_co2_outfolder):
+        """No test anywhere actually constructs a Thermochemistry from
+        an xTB output despite several tests being named as if they
+        did -- they only ever construct XTBOutput directly."""
+        main_out = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        thermochem = Thermochemistry(filename=main_out, temperature=298.15)
+        assert thermochem.program == "xtb"
+        from chemsmart.io.xtb.output import XTBOutput
+
+        assert isinstance(thermochem.file_object, XTBOutput)
+        assert thermochem.gibbs_free_energy is not None
+
+    def test_file_object_unsupported_format_raises(self):
+        mock = self._mock_with(program="unknown", filename="some.xyz")
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            self._cached("file_object", mock)
+
+    def test_file_object_abnormal_termination_raises(self):
+        mock = self._mock_with(program="gaussian", filename="some.log")
+        with patch(
+            "chemsmart.analysis.thermochemistry.Gaussian16Output"
+        ) as mock_g16:
+            mock_g16.return_value = MagicMock(normal_termination=False)
+            with pytest.raises(ValueError, match="did not terminate normally"):
+                self._cached("file_object", mock)
+
+    def test_average_rotational_constant_none_when_constants_none(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=None,
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_average_rotational_constant_none_when_constants_empty(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=[],
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_geometry_rotational_constants_none_for_monoatomic(self):
+        mock = self._mock_with(molecule=MagicMock(is_monoatomic=True))
+        assert (
+            self._cached("geometry_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_for_non_gaussian_output(self):
+        from chemsmart.io.orca.output import ORCAOutput
+
+        mock = self._mock_with(file_object=MagicMock(spec=ORCAOutput))
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_when_empty(self):
+        fake_g16 = MagicMock(spec=Gaussian16Output)
+        fake_g16.all_rotational_constants.return_value = []
+        mock = self._mock_with(file_object=fake_g16)
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_effective_rotational_constants_gaussian_mode_falls_back(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=None,
+            geometry_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_gaussian_mode_succeeds(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_unsupported_mode_raises(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="bogus",
+        )
+        with pytest.raises(ValueError, match="Unsupported rotational"):
+            self._cached("effective_rotational_constants_in_Hz", mock)
+
+    def test_effective_rotational_temperatures_none(self):
+        mock = self._mock_with(effective_rotational_constants_in_Hz=None)
+        assert self._cached("effective_rotational_temperatures", mock) is None
+
+    def test_vibrational_frequencies_none_without_freq_job(self):
+        mock = self._mock_with(file_object=MagicMock(freq=False))
+        assert Thermochemistry.vibrational_frequencies.fget(mock) is None
+
+    def test_real_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.real_frequencies.fget(mock) is None
+
+    def test_imaginary_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.imaginary_frequencies.fget(mock) is None
+
+
+class TestThermochemistryNoFrequencyDataPropertyGuards:
+    """Every real fixture used elsewhere in this file has vibrational
+    frequency data, so the "no frequencies available" (theta/v/derived
+    property is None) branch of ~20 downstream properties was never
+    exercised. Calls each property's getter directly on a
+    MagicMock(spec=Thermochemistry) with only the specific upstream
+    attribute it checks set to None, bypassing the need to construct
+    a full Thermochemistry from a real (freq-less) output file."""
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    def test_vibrational_partition_function_bot_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_bot=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_bot.fget(mock)
+            is None
+        )
+
+    def test_vibrational_partition_function_v0_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_v0=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_v0.fget(mock)
+            is None
+        )
+
+    def test_vibrational_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_entropy.fget(mock) is None
+
+    def test_zero_point_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.zero_point_energy.fget(mock) is None
+
+    def test_vibrational_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_internal_energy.fget(mock) is None
+
+    def test_vibrational_heat_capacity_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_heat_capacity.fget(mock) is None
+
+    def test_total_partition_function_none(self):
+        mock = self._mock_with(vibrational_partition_function_v0=None)
+        assert Thermochemistry.total_partition_function.fget(mock) is None
+
+    def test_total_entropy_none(self):
+        mock = self._mock_with(vibrational_entropy=None)
+        assert Thermochemistry.total_entropy.fget(mock) is None
+
+    def test_total_internal_energy_none(self):
+        mock = self._mock_with(vibrational_internal_energy=None)
+        assert Thermochemistry.total_internal_energy.fget(mock) is None
+
+    def test_total_heat_capacity_none(self):
+        mock = self._mock_with(vibrational_heat_capacity=None)
+        assert Thermochemistry.total_heat_capacity.fget(mock) is None
+
+    def test_calculate_damping_function_none_freq_cutoff(self):
+        mock = self._mock_with()
+        assert Thermochemistry._calculate_damping_function(mock, None) is None
+
+    def test_calculate_damping_function_none_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry._calculate_damping_function(mock, 100.0) is None
+
+    def test_free_rotor_entropy_none_without_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) is None
+
+    def test_free_rotor_entropy_empty_list_without_bav(self):
+        mock = self._mock_with(v=[1.0, 2.0], Bav=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) == []
+
+    def test_rrho_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_entropy.fget(mock) is None
+
+    def test_rrho_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_internal_energy.fget(mock) is None
+
+    def test_enthalpy_none(self):
+        mock = self._mock_with(total_internal_energy=None)
+        assert Thermochemistry.enthalpy.fget(mock) is None
+
+    def test_qrrho_total_entropy_none(self):
+        mock = self._mock_with(qrrho_vibrational_entropy=None)
+        assert Thermochemistry.qrrho_total_entropy.fget(mock) is None
+
+    def test_entropy_times_temperature_none(self):
+        mock = self._mock_with(total_entropy=None)
+        assert Thermochemistry.entropy_times_temperature.fget(mock) is None
+
+    def test_qrrho_entropy_times_temperature_none(self):
+        mock = self._mock_with(qrrho_total_entropy=None)
+        assert (
+            Thermochemistry.qrrho_entropy_times_temperature.fget(mock) is None
+        )
+
+    def test_gibbs_free_energy_none(self):
+        mock = self._mock_with(entropy_times_temperature=None, enthalpy=1.0)
+        assert Thermochemistry.gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_total_internal_energy_none(self):
+        mock = self._mock_with(qrrho_vibrational_internal_energy=None)
+        assert Thermochemistry.qrrho_total_internal_energy.fget(mock) is None
+
+    def test_qrrho_enthalpy_none(self):
+        mock = self._mock_with(qrrho_total_internal_energy=None)
+        assert Thermochemistry.qrrho_enthalpy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, qrrho_entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qs_none(self):
+        mock = self._mock_with(
+            qrrho_entropy_times_temperature=None, enthalpy=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qs.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qh_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qh.fget(mock) is None
 
 
 class TestThermochemistryCLI:
