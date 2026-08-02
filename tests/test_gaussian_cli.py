@@ -1005,6 +1005,76 @@ class TestGaussianCLIGroupValidation:
         assert settings.dieze_tag == "n"
         assert settings.forces is True
 
+    def _direct_invoke_gaussian_group(self, **kwarg_overrides):
+        """Call gaussian()'s own undecorated callback directly,
+        bypassing Click's option parsing/validation entirely. Used to
+        reach a couple of defensive branches in the default-label
+        fallback chain that real CLI invocations can't trigger: an
+        empty (not None) filename sidesteps the unconditional
+        `os.path.basename(filename)` crash documented in
+        BUGS_FOUND.md #25, letting execution reach the `if filename:
+        ... else: label = "output"` branch below it."""
+        import inspect
+
+        import click
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        real_fn = inspect.unwrap(gaussian.callback)
+
+        kwargs = dict(
+            project="gas_solv",
+            filename="",
+            label=None,
+            append_label=None,
+            title=None,
+            charge=0,
+            multiplicity=1,
+            functional=None,
+            basis=None,
+            semiempirical=None,
+            index=None,
+            record_index=None,
+            record_id=None,
+            structure_id=None,
+            structure_index=None,
+            molecule_id=None,
+            additional_opt_options=None,
+            additional_route_parameters=None,
+            append_additional_info=None,
+            custom_solvent=None,
+            dieze_tag=None,
+            forces=False,
+            pubchem=None,
+            remove_solvent=False,
+            solvent_model=None,
+            solvent_id=None,
+            solvent_options=None,
+        )
+        kwargs.update(kwarg_overrides)
+
+        ctx = click.Context(gaussian)
+        ctx.obj = {}
+        ctx.invoked_subcommand = kwargs.pop("_invoked_subcommand", "opt")
+        with ctx:
+            real_fn(ctx, **kwargs)
+        return ctx
+
+    def test_empty_filename_falls_back_to_output_label(self):
+        """Covers the `if filename: ... else: label = "output"` False
+        arm directly, since a real CLI run can't reach it (filename is
+        either a real path or None, and None crashes earlier per
+        BUGS_FOUND.md #25)."""
+        ctx = self._direct_invoke_gaussian_group(_invoked_subcommand=None)
+        assert ctx.obj["label"] == "output"
+
+    def test_invoked_subcommand_suffixes_default_label_when_present(self):
+        """Covers the `if ctx.invoked_subcommand:` True arm of the
+        same fallback chain: the invoked subcommand name gets appended
+        to the "output" default label."""
+        ctx = self._direct_invoke_gaussian_group(_invoked_subcommand="opt")
+        assert ctx.obj["label"] == "output_opt"
+
 
 class TestGaussianCLISinglePointCommand:
     """CLI tests for the ``sp`` (single point) subcommand."""

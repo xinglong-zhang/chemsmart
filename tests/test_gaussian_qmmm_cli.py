@@ -460,3 +460,222 @@ class TestPopulateChargeAndMultiplicityOnSettings:
         _populate_charge_and_multiplicity_on_settings(qs)
         assert not hasattr(qs, "charge")
         assert not hasattr(qs, "multiplicity")
+
+
+class TestClickGaussianQmmmOptionsIsUnusedDeadCode:
+    """Documents BUGS_FOUND.md #56: click_gaussian_qmmm_options in
+    chemsmart/cli/gaussian/gaussian.py is defined but never applied
+    anywhere -- create_qmmm_subcommand in cli/gaussian/qmmm.py defines
+    its own separate, near-identical set of click.option decorators
+    directly instead of using this one. Exercised directly here purely
+    for coverage since no real command uses it."""
+
+    def test_decorator_applies_all_expected_options(self):
+        import click
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import (
+            click_gaussian_qmmm_options,
+        )
+
+        @click.command()
+        @click_gaussian_qmmm_options
+        def dummy(**kwargs):
+            click.echo(str(sorted(kwargs.items())))
+
+        result = CliRunner().invoke(
+            dummy,
+            [
+                "-hx",
+                "b3lyp",
+                "-hb",
+                "6-31g(d)",
+                "-ha",
+                "1-3",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "high_level_functional" in result.output
+        assert "b3lyp" in result.output
+
+
+def _invoke_gaussian_group_forcing_qmmm_subcommand(single_molecule_xyz_file):
+    """Directly invoke gaussian()'s own callback with
+    ctx.invoked_subcommand forced to "qmmm" -- a state Click's normal
+    command resolution can never produce (see
+    TestQmmmMoleculeConversionBlockInGaussianGroup's docstring)."""
+    import inspect
+
+    import click
+
+    from chemsmart.cli.gaussian.gaussian import gaussian
+
+    real_gaussian_fn = inspect.unwrap(gaussian.callback)
+
+    ctx = click.Context(gaussian)
+    ctx.obj = {}
+    ctx.invoked_subcommand = "qmmm"
+
+    kwargs = dict(
+        project="gas_solv",
+        filename=single_molecule_xyz_file,
+        label="test",
+        append_label=None,
+        title=None,
+        charge=0,
+        multiplicity=1,
+        functional=None,
+        basis=None,
+        semiempirical=None,
+        index=None,
+        record_index=None,
+        record_id=None,
+        structure_id=None,
+        structure_index=None,
+        molecule_id=None,
+        additional_opt_options=None,
+        additional_route_parameters=None,
+        append_additional_info=None,
+        custom_solvent=None,
+        dieze_tag=None,
+        forces=False,
+        pubchem=None,
+        remove_solvent=False,
+        solvent_model=None,
+        solvent_id=None,
+        solvent_options=None,
+    )
+
+    with ctx:
+        real_gaussian_fn(ctx, **kwargs)
+
+    return ctx
+
+
+class TestQmmmMoleculeConversionBlockInGaussianGroup:
+    """Documents BUGS_FOUND.md #57: gaussian()'s own
+    `if ctx.invoked_subcommand == "qmmm":` early-conversion block can
+    never fire through any genuine CLI invocation, because "qmmm" is
+    always a grandchild subcommand attached to opt/ts/sp/scan/modred/
+    qrc -- Click's ctx.invoked_subcommand on the *gaussian* group's own
+    context only ever reflects the immediate next command (e.g.
+    "opt"), never a subcommand of a subcommand. The conversion logic
+    itself is exercised directly here (bypassing Click's normal
+    command-resolution, which can never produce this ctx state) purely
+    for coverage."""
+
+    def test_molecules_converted_to_qmmmmolecule_when_forced(
+        self, single_molecule_xyz_file
+    ):
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        ctx = _invoke_gaussian_group_forcing_qmmm_subcommand(
+            single_molecule_xyz_file
+        )
+
+        molecules = ctx.obj["molecules"]
+        assert len(molecules) == 1
+        assert isinstance(molecules[0], QMMMMolecule)
+
+    def test_already_qmmmmolecule_instances_are_left_as_is(
+        self, single_molecule_xyz_file
+    ):
+        from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+
+        real_molecule = Molecule.from_filepath(single_molecule_xyz_file)
+        qmmm_molecule = QMMMMolecule(molecule=real_molecule)
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=[qmmm_molecule],
+        ):
+            ctx = _invoke_gaussian_group_forcing_qmmm_subcommand(
+                single_molecule_xyz_file
+            )
+
+        molecules = ctx.obj["molecules"]
+        assert molecules == [qmmm_molecule]
+
+    def test_molecule_kwarg_init_failure_falls_back_to_dict_init(
+        self, single_molecule_xyz_file
+    ):
+        """When ``QMMMMolecule(molecule=m)`` raises, the code retries
+        with a dict-based init from ``m.__dict__``; that retry
+        succeeding covers the fallback's success path.
+
+        The fake ``__init__`` below doesn't delegate its dict-based
+        branch to the real ``Molecule.__init__``: a genuine
+        ``Molecule.__dict__`` always contains private/derived keys
+        (``_positions``, ``_num_atoms``, ...) that the constructor
+        rejects, so the real fallback can never actually succeed for a
+        real ``Molecule`` -- see BUGS_FOUND.md #57's note on this."""
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        call_kwargs = []
+
+        def fake_init(self, *args, **kwargs):
+            call_kwargs.append(kwargs)
+            if "molecule" in kwargs:
+                raise TypeError("simulated molecule= init failure")
+            self.molecule = None
+
+        with patch.object(QMMMMolecule, "__init__", fake_init):
+            ctx = _invoke_gaussian_group_forcing_qmmm_subcommand(
+                single_molecule_xyz_file
+            )
+
+        molecules = ctx.obj["molecules"]
+        assert len(molecules) == 1
+        assert isinstance(molecules[0], QMMMMolecule)
+        assert any("molecule" in kw for kw in call_kwargs)
+        assert any("molecule" not in kw for kw in call_kwargs)
+
+    def test_both_init_attempts_failing_keeps_original_molecule(
+        self, single_molecule_xyz_file
+    ):
+        """When both the molecule= and dict-based QMMMMolecule init
+        attempts fail, the original (unconverted) molecule is kept
+        instead of raising."""
+        from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+
+        with patch.object(
+            QMMMMolecule,
+            "__init__",
+            side_effect=TypeError("simulated init failure"),
+        ):
+            ctx = _invoke_gaussian_group_forcing_qmmm_subcommand(
+                single_molecule_xyz_file
+            )
+
+        molecules = ctx.obj["molecules"]
+        assert len(molecules) == 1
+        assert isinstance(molecules[0], Molecule)
+        assert not isinstance(molecules[0], QMMMMolecule)
+
+    def test_unexpected_error_in_conversion_block_is_swallowed(
+        self, single_molecule_xyz_file
+    ):
+        """Any failure outside the per-molecule try/except (e.g.
+        iterating "molecules" itself blowing up) is caught by the
+        block's own outer `except Exception`, leaving the original
+        molecules in place rather than propagating."""
+        from chemsmart.io.molecules.structure import Molecule
+
+        real_molecule = Molecule.from_filepath(single_molecule_xyz_file)
+
+        class _ExplodingList(list):
+            def __iter__(self):
+                raise RuntimeError("simulated iteration failure")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=_ExplodingList([real_molecule]),
+        ):
+            ctx = _invoke_gaussian_group_forcing_qmmm_subcommand(
+                single_molecule_xyz_file
+            )
+
+        # Index rather than iterate: the stored list's own __iter__ is
+        # still the exploding one, since the outer except left it as-is.
+        assert len(ctx.obj["molecules"]) == 1
+        assert ctx.obj["molecules"][0] is real_molecule

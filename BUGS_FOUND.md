@@ -2816,3 +2816,167 @@ intentionally omits `label`/`scheme`; if so, this guard already does
 the right thing. Otherwise, the guards could be simplified to plain
 assignments (dropping the `is not None` checks) once it's confirmed no
 call site needs the optional behavior.
+
+## 55. `cli/gaussian/gaussian.py`'s `click_gaussian_qmmm_options` is defined but never applied
+
+**Location:** `chemsmart/cli/gaussian/gaussian.py`, lines 361-490.
+
+```python
+def click_gaussian_qmmm_options(f):
+    """Common click options for QMMM jobs."""
+
+    @click.option(
+        "-hx",
+        "--high-level-functional",
+        ...
+```
+
+This decorator factory defines the full set of QMMM CLI options
+(high/medium/low-level functional/basis/force-field, real/int/model
+charge and multiplicity, atom-range options, bonded-atoms, and
+scale-factors) but is never applied to any command. The actual `qmmm`
+subcommand, built by `create_qmmm_subcommand` in
+`chemsmart/cli/gaussian/qmmm.py`, defines its own separate,
+near-identical set of `@click.option` decorators directly instead of
+using this one -- an apparent copy that was never wired in, or a
+leftover from before the options were inlined into `qmmm.py`.
+
+**Reproduce:** grep confirms zero call sites:
+```
+$ grep -rn "click_gaussian_qmmm_options" chemsmart/
+chemsmart/cli/gaussian/gaussian.py:361:def click_gaussian_qmmm_options(f):
+```
+See `tests/test_gaussian_qmmm_cli.py::TestClickGaussianQmmmOptionsIsUnusedDeadCode`,
+which applies the decorator directly to a throwaway command purely to
+exercise it, since no real command does.
+
+**Impact:** Low -- dead code with no behavioral effect. A future edit
+to QMMM's real CLI options (in `qmmm.py`) could drift from this unused
+duplicate without anyone noticing, similar to bug #52.
+
+**Suggested direction:** delete `click_gaussian_qmmm_options`, or
+refactor `create_qmmm_subcommand` to use it instead of its own inline
+copy.
+
+## 56. `cli/gaussian/gaussian.py`'s QMMM-molecule early-conversion block never runs, and its own fallback can't actually succeed for real molecules
+
+**Location:** `chemsmart/cli/gaussian/gaussian.py`, lines 819-858.
+
+```python
+    # If the user requested the qmmm subcommand, ensure molecules are
+    # represented as QMMMMolecule so the subcommand sees QMMM-specific
+    # attributes early (e.g., high_level_atoms, bonded_atoms).
+    try:
+        if ctx.invoked_subcommand == "qmmm":
+            ...
+```
+
+Two separate defects in this block:
+
+1. **The guard can never be true.** `qmmm` is always attached as a
+   sub-subcommand of a jobtype group (`opt qmmm`, `ts qmmm`, `sp qmmm`,
+   etc.) -- never as a direct child of the `gaussian` group itself. In
+   Click, `ctx.invoked_subcommand` on a given group's own context only
+   ever reflects the *immediate* next command from that context (e.g.
+   `"opt"`), never a subcommand of a subcommand. Verified directly:
+   ```python
+   >>> # outer group -> inner group -> leaf command
+   >>> CliRunner().invoke(outer, ["inner", "leaf"])
+   outer invoked_subcommand: inner   # never "leaf"
+   ```
+   So `if ctx.invoked_subcommand == "qmmm":` is always `False` for any
+   real `chemsmart run gaussian ... opt qmmm ...` invocation, and this
+   whole block never executes. Impact is mitigated because
+   `chemsmart/jobs/gaussian/writer.py:360` independently converts the
+   job's molecule to `QMMMMolecule` at write time, and
+   `chemsmart/cli/gaussian/qmmm.py`'s own callback only ever sets
+   plain attributes on the molecule (which works identically on a
+   plain `Molecule`), so no QMMM job is known to actually break from
+   this -- the intended "early" conversion is simply a no-op.
+
+2. **Even if reached, its own fallback rarely helps.** When
+   `QMMMMolecule(molecule=m)` raises, the code retries with
+   `QMMMMolecule(**getattr(m, "__dict__", {}))`. For a real `Molecule`
+   instance, `__dict__` always contains private/derived keys (e.g.
+   `_positions`, `_num_atoms`, `_energy`) that aren't valid
+   `Molecule.__init__`/`QMMMMolecule.__init__` parameters, so this
+   retry itself raises `TypeError` and falls through to the final
+   `except Exception as exc2: ... converted.append(m)` (keeping the
+   original molecule) rather than ever actually producing a converted
+   `QMMMMolecule` via the fallback path:
+   ```
+   >>> QMMMMolecule(**vars(Molecule.from_filepath("some.xyz")))
+   TypeError: Molecule.__init__() got an unexpected keyword argument '_positions'
+   ```
+
+**Reproduce:** see
+`tests/test_gaussian_qmmm_cli.py::TestQmmmMoleculeConversionBlockInGaussianGroup`,
+which forces `ctx.invoked_subcommand = "qmmm"` directly (a state Click
+itself can never produce) to exercise the block's logic in isolation,
+including a demonstration that the dict-based fallback needs a
+custom-mocked `__init__` to succeed at all, since the real one can't
+for a genuine `Molecule`.
+
+**Impact:** Low -- the primary write-time conversion in
+`writer.py` already ensures QMMM jobs get a proper `QMMMMolecule`
+before input files are written, so no known job output is affected.
+This is a latent correctness gap (the stated intent of "early"
+QMMM-attribute visibility never happens) rather than an active bug.
+
+**Suggested direction:** either move this conversion into
+`create_qmmm_subcommand`'s own callback (where `ctx.invoked_subcommand`
+would correctly resolve, or where the subcommand already has direct
+access to its own molecules), or remove the block entirely and rely on
+`writer.py`'s existing write-time conversion.
+
+## 57. `cli/gaussian/gaussian.py` has several `is not None` guards that are unreachable given earlier validation
+
+**Location:** `chemsmart/cli/gaussian/gaussian.py`, lines 774-790
+(the `elif record_index is not None:` arms inside both the
+`append_label` and default-label chemsmart-db suffix chains) and lines
+811-814 (`if molecule_indices is not None and not isinstance(...)`).
+
+The `structure_id`/`record_id`/`record_index` chain:
+```python
+if is_chemsmart_db:
+    if structure_id is not None:
+        label = f"{label}_SID-{structure_id}"
+    elif record_id is not None:
+        label = f"{label}_RID-{record_id}"
+    elif record_index is not None:
+        label = f"{label}_RI-{record_index}"
+```
+is only ever reached when `is_chemsmart_db` is `True`, but an earlier
+guard in the same function (lines 552-558) already requires that
+`sum([record_index is not None, record_id is not None]) +
+(structure_id is not None) == 1` whenever `is_chemsmart_db` is `True`
+-- i.e. *exactly one* of the three is guaranteed set, or the function
+raises `click.UsageError` before ever reaching this chain. So the
+"none of the three matched" fall-through (falling past the final
+`elif` with no branch taken) can never happen through any genuine
+invocation.
+
+Similarly, `molecule_indices` at line 811 is only ever set to a
+non-`None`, non-list value in lock-step with `molecules` becoming
+non-list (both come from the same
+`return_objects_and_indices_from_string_index` call at lines 803-807),
+so whenever the outer `if molecules is not None and not
+isinstance(molecules, list):` at line 809 is true via that path,
+`molecule_indices` is simultaneously non-list too, making the `False`
+arm of line 811's check effectively unreachable in the same way.
+
+**Reproduce:** grep confirms the invariant-establishing guard:
+```
+$ grep -n "sum(record_selectors)" chemsmart/cli/gaussian/gaussian.py
+chemsmart/cli/gaussian/gaussian.py:553:        if sum(record_selectors) + (structure_id is not None) != 1:
+```
+
+**Impact:** Low -- purely defensive dead code, consistent with
+several similar findings this session (e.g. bugs #42-43, #52, #54).
+No behavioral risk since the guarantee they depend on is enforced
+immediately upstream in the same function.
+
+**Suggested direction:** no action needed; documenting for awareness
+only. These three branch arms remain uncovered by tests since
+constructing a call that reaches them would require bypassing the
+earlier validation that guarantees they can't occur.
