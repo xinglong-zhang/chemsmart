@@ -1,4 +1,6 @@
+import shlex
 import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -79,6 +81,21 @@ class TestUtils:
             gaussian_written_opt_file_with_route,
             ignore_string=["#", "job"],
         )
+
+    def test_cmp_with_ignore_invalid_type_raises_value_error(self, tmp_path):
+        f1 = tmp_path / "a.txt"
+        f2 = tmp_path / "b.txt"
+        f1.write_text("line1\n")
+        f2.write_text("line1\n")
+        with pytest.raises(ValueError, match="string or a list of strings"):
+            cmp_with_ignore(str(f1), str(f2), ignore_string=123)
+
+    def test_cmp_with_ignore_detects_real_difference(self, tmp_path):
+        f1 = tmp_path / "a.txt"
+        f2 = tmp_path / "b.txt"
+        f1.write_text("line1\nline2\n")
+        f2.write_text("line1\nDIFFERENT\n")
+        assert cmp_with_ignore(str(f1), str(f2)) is False
 
     def test_get_list_from_string_range(self):
         s1 = "1-3"
@@ -1376,6 +1393,24 @@ class TestRunCommand:
             "Invalid command type: <class 'int'>. Expected str or list."
             in capture_log.text
         )
+
+
+class TestQuotePath:
+    """quote_path had no test coverage at all."""
+
+    def test_non_windows_uses_shlex_quote(self):
+        from chemsmart.utils.utils import quote_path
+
+        assert quote_path("/some/plain/path") == "/some/plain/path"
+        assert quote_path("/a path/with space.txt") == shlex.quote(
+            "/a path/with space.txt"
+        )
+
+    def test_windows_double_quotes_posix_path(self, monkeypatch):
+        from chemsmart.utils.utils import quote_path
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        assert quote_path("C:/some path/file.txt") == '"C:/some path/file.txt"'
 
 
 class TestReturnObjectsAndIndicesFromStringIndex:
