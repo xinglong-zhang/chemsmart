@@ -456,6 +456,13 @@ class TestReturnObjectsFromStringIndex:
         result = return_objects_from_string_index(objects, "1:3")
         assert result == ["a", "b"]
 
+    def test_list_index(self):
+        """A comma-separated index string resolves to a list of
+        indices, selecting multiple objects at once."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "1,3")
+        assert result == ["a", "c"]
+
 
 class TestGetPrependStringForModred:
     """Tests for the get_prepend_string_for_modred function."""

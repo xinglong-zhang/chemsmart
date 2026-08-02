@@ -904,6 +904,83 @@ class TestParseIndexSpecification:
                 "8,9,10", total_count=5, allow_out_of_range=True
             )
 
+    def test_duplicate_check_passes_when_no_duplicates_present(self):
+        """allow_duplicates=False with a genuinely duplicate-free list
+        should not raise -- exercises the "no duplicates found" arm of
+        the duplicate-detection block."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1,3", total_count=5, allow_duplicates=False
+        ) == [0, 2]
+
+
+class TestIndexValidationHelpers:
+    """Direct coverage for the private index-validation helpers behind
+    parse_index_specification: _validate_parsed_indices,
+    _filter_out_of_range_indices, _is_index_in_bounds,
+    _normalize_negative_indices, and _validate_single_index_bounds.
+    Some branches (e.g. the single-int path of
+    _filter_out_of_range_indices) are never reached through the public
+    parse_index_specification API, which always calls it with a list,
+    so they're exercised directly here."""
+
+    def test_validate_parsed_indices_int_branch_skips_when_allowed(self):
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        # allow_out_of_range=True means the int branch's bounds check
+        # is never invoked, regardless of whether idx is in range
+        _validate_parsed_indices(999, 5, True, True)
+
+    def test_validate_parsed_indices_non_list_non_int_is_noop(self):
+        """Neither the list nor the int branch matches (e.g. a slice),
+        so validation is a no-op -- slices are handled gracefully by
+        Python itself, per the function's own comment."""
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        assert _validate_parsed_indices(slice(1, 2), 5, True, False) is None
+
+    def test_validate_parsed_indices_int_branch_raises_when_disallowed(self):
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        with pytest.raises(ValueError, match="out of range"):
+            _validate_parsed_indices(999, 5, True, False)
+
+    def test_filter_out_of_range_indices_single_index_in_bounds(self):
+        from chemsmart.utils.utils import _filter_out_of_range_indices
+
+        assert _filter_out_of_range_indices(2, 5) == 2
+
+    def test_filter_out_of_range_indices_single_index_out_of_bounds(self):
+        from chemsmart.utils.utils import _filter_out_of_range_indices
+
+        with pytest.raises(ValueError, match="Index is out of range"):
+            _filter_out_of_range_indices(10, 5)
+
+    def test_is_index_in_bounds_non_int_always_valid(self):
+        from chemsmart.utils.utils import _is_index_in_bounds
+
+        assert _is_index_in_bounds(slice(1, 2), 5) is True
+        assert _is_index_in_bounds("not-an-int", 5) is True
+
+    def test_normalize_negative_indices_single_int(self):
+        from chemsmart.utils.utils import _normalize_negative_indices
+
+        assert _normalize_negative_indices(-1, 5) == 4
+        assert _normalize_negative_indices(2, 5) == 2
+
+    def test_normalize_negative_indices_slice_passthrough(self):
+        from chemsmart.utils.utils import _normalize_negative_indices
+
+        s = slice(1, 2)
+        assert _normalize_negative_indices(s, 5) is s
+
+    def test_validate_single_index_bounds_non_int_is_noop(self):
+        from chemsmart.utils.utils import _validate_single_index_bounds
+
+        # Should not raise for a non-int value
+        assert _validate_single_index_bounds("not-an-int", 5) is None
+
 
 class TestIOUtilities:
     def test_clean_duplicate_structure(self):
