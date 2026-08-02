@@ -2686,3 +2686,76 @@ without anyone noticing.
 
 **Suggested direction:** delete the function, or wire it in if it was
 meant to replace the inline charge/multiplicity block.
+
+## 53. `PDBFile._infer_element_from_atom_name`'s exception handling around `to_element` is unreachable
+
+**Location:** `chemsmart/io/pdb/pdbfile.py`, lines 283-289 and
+317-336 (the `except Exception:` clauses wrapping calls to
+`PeriodicTable.to_element`).
+
+```python
+if len(cleaned) == 1:
+    try:
+        return p.to_element(cleaned[0].upper())
+    except Exception:
+        raise ValueError(
+            f"Unable to infer element from atom name '{atom_name}'"
+        )
+...
+if cleaned[:2].upper() not in ambiguous_biomolecular_names:
+    try:
+        return p.to_element(normalized_two_letter)
+    except Exception:
+        pass
+...
+try:
+    return p.to_element(candidate)
+except Exception:
+    raise ValueError(
+        f"Unable to infer element from atom name '{atom_name}'"
+    )
+```
+
+`chemsmart/utils/periodictable.py`'s `PeriodicTable.to_element` only
+raises `ValueError` when its input is empty after stripping
+non-alphabetic characters (see its own `if not cleaned: raise
+ValueError(...)` guards). For any non-empty alphabetic candidate --
+which is guaranteed here, since `cleaned` was already validated
+non-empty and is built purely from `[A-Za-z]` characters -- it always
+returns *something*, falling back to a best-effort guess (e.g.
+`to_element("Q")` returns `"Q"`, `to_element("Xy")` returns `"X"`)
+rather than raising. This means none of the three `except Exception`
+clauses above can ever trigger through genuine parsing of a PDB atom
+name; they are only reachable by mocking `to_element` directly (see
+`tests/test_converter.py::TestPDBFile::test_infer_element_single_letter_lookup_failure_raises`,
+`test_infer_element_two_letter_failure_falls_back_to_single`, and
+`test_infer_element_two_and_single_letter_failure_raises`, all of
+which patch `pdbfile.p.to_element` with a raising side effect purely
+to exercise these lines for coverage).
+
+**Reproduce:**
+```python
+>>> from chemsmart.utils.periodictable import PeriodicTable
+>>> PeriodicTable().to_element("Q")
+'Q'
+>>> PeriodicTable().to_element("Zz")
+'Zz'
+```
+Neither call raises, even though `"Q"` and `"Zz"` are not real
+element symbols -- so `_infer_element_from_atom_name` can silently
+return a bogus symbol like `"Q"` for a malformed atom name with blank
+element columns, instead of raising `ValueError` as its docstring
+promises.
+
+**Impact:** Low-to-moderate -- a PDB file with unrecognized atom
+names and blank element columns (77-78) will get an invalid element
+symbol silently assigned to the `Molecule`, rather than a clear
+`ValueError` at parse time. Downstream code (element lookups, atomic
+number/mass calculations) would then fail confusingly later instead
+of failing fast here.
+
+**Suggested direction:** either make `PeriodicTable.to_element`
+validate its fallback guess against `self.PERIODIC_TABLE` and raise
+when it isn't a real element, or have
+`_infer_element_from_atom_name` itself validate the returned symbol
+against the periodic table before returning it.
