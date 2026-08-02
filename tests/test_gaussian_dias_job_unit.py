@@ -9,7 +9,7 @@ directly: fragment splitting, IRC-mode point sampling, TS-mode endpoint
 selection, job list generation, and run/is_complete orchestration.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -358,3 +358,134 @@ class TestRunAndIsComplete:
         job._run_fragment2_jobs_are_complete = MagicMock(return_value=True)
 
         assert job.is_complete() is False
+
+
+class TestRunHelpersAndCompletionChecksDirect:
+    """The tests above mock out _run_*_jobs/_run_*_jobs_are_complete
+    entirely, so their real bodies (each a one-line loop or `all(...)`
+    call) are never exercised. These call the real methods directly,
+    mocking only GaussianGeneralJob so no actual calculation runs."""
+
+    def _make_job(self, irc_molecules, gaussian_settings, mode="ts"):
+        return GaussianDIASJob(
+            molecules=irc_molecules,
+            settings=gaussian_settings,
+            label="dias_test",
+            jobrunner=MagicMock(),
+            fragment_indices="1-3",
+            every_n_points=2,
+            mode=mode,
+        )
+
+    def test_run_all_molecules_jobs_runs_each_job(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            job._run_all_molecules_jobs()
+        mock_job.run.assert_called_once()
+
+    def test_run_fragment1_jobs_runs_each_job(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            job._run_fragment1_jobs()
+        mock_job.run.assert_called_once()
+
+    def test_run_fragment2_jobs_runs_each_job(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            job._run_fragment2_jobs()
+        mock_job.run.assert_called_once()
+
+    def test_run_all_molecules_jobs_are_complete_reflects_job_state(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        mock_job.is_complete.return_value = True
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            assert job._run_all_molecules_jobs_are_complete() is True
+
+    def test_run_fragment1_jobs_are_complete_reflects_job_state(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        mock_job.is_complete.return_value = False
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            assert job._run_fragment1_jobs_are_complete() is False
+
+    def test_run_fragment2_jobs_are_complete_reflects_job_state(
+        self, irc_molecules, gaussian_settings
+    ):
+        job = self._make_job(irc_molecules, gaussian_settings)
+        mock_job = MagicMock()
+        mock_job.is_complete.return_value = True
+        with patch(
+            "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
+            return_value=mock_job,
+        ):
+            assert job._run_fragment2_jobs_are_complete() is True
+
+
+class TestSampleMoleculesSingleMolecule:
+    def test_single_molecule_does_not_duplicate_last(
+        self, ethanol_molecule, gaussian_settings
+    ):
+        """With only one molecule, (num_molecules - 1) / every_n_points
+        is 0, so the "always include the last point" append must be
+        skipped -- otherwise the single molecule would be duplicated."""
+        job = GaussianDIASJob(
+            molecules=[ethanol_molecule],
+            settings=gaussian_settings,
+            label="dias_test",
+            jobrunner=MagicMock(),
+            fragment_indices="1-3",
+            every_n_points=2,
+            mode="irc",
+        )
+        sampled = job._sample_molecules([ethanol_molecule])
+        assert sampled == [ethanol_molecule]
+
+
+class TestAllMoleculesJobsInvalidMode:
+    def test_invalid_mode_silently_returns_none(
+        self, irc_molecules, gaussian_settings
+    ):
+        """Unlike fragment1_jobs/fragment2_jobs, which raise
+        ValueError for an unrecognized mode, all_molecules_jobs has no
+        matching `else` clause and silently falls through, returning
+        None instead of raising -- an inconsistency worth flagging
+        (see BUGS_FOUND.md)."""
+        job = GaussianDIASJob(
+            molecules=irc_molecules,
+            settings=gaussian_settings,
+            label="dias_test",
+            jobrunner=MagicMock(),
+            fragment_indices="1-3",
+            every_n_points=2,
+            mode="bogus",
+        )
+        assert job.all_molecules_jobs is None

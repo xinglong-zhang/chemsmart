@@ -2980,3 +2980,47 @@ immediately upstream in the same function.
 only. These three branch arms remain uncovered by tests since
 constructing a call that reaches them would require bypassing the
 earlier validation that guarantees they can't occur.
+
+## 58. `GaussianDIASJob.all_molecules_jobs` silently returns `None` for an invalid mode, unlike its sibling properties
+
+**Location:** `chemsmart/jobs/gaussian/dias.py`, lines 312-338.
+
+```python
+@property
+def all_molecules_jobs(self):
+    ...
+    if self.mode.lower() == "irc":
+        ...
+        return jobs
+    elif self.mode.lower() == "ts":
+        ...
+        return [...]
+    # no else/raise here
+```
+
+`fragment1_jobs` and `fragment2_jobs` both end their identical
+`if/elif` chain with an `else: raise ValueError(f"Invalid mode: ...")`
+for any mode other than `"irc"`/`"ts"`. `all_molecules_jobs` has the
+same two branches but no `else` clause at all, so an invalid
+`self.mode` makes it fall through and implicitly return `None`
+instead of raising. Any caller that then does
+`len(job.all_molecules_jobs)` or iterates over it gets a confusing
+`TypeError: object of type 'NoneType' has no len()` /
+`'NoneType' object is not iterable` instead of the clear "Invalid
+mode" message the other two properties give for the exact same input.
+
+**Reproduce:** see
+`tests/test_gaussian_dias_job_unit.py::TestAllMoleculesJobsInvalidMode::test_invalid_mode_silently_returns_none`,
+which constructs a `GaussianDIASJob` with `mode="bogus"` and confirms
+`job.all_molecules_jobs is None` (whereas the equivalent
+`fragment1_jobs`/`fragment2_jobs` calls raise `ValueError`).
+
+**Impact:** Low -- `mode` is only ever set from a CLI option validated
+upstream to `"irc"`/`"ts"`, so this isn't reachable through normal
+usage. But it's an easy trap for anyone constructing `GaussianDIASJob`
+programmatically (e.g. in a script or future refactor) with a typo'd
+mode.
+
+**Suggested direction:** add the same
+`else: raise ValueError(f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'.")`
+clause to `all_molecules_jobs` for consistency with its two siblings.
