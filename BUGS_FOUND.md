@@ -3116,3 +3116,73 @@ messages that happen to never fire. No functional risk.
 and provide a clear error message if the regex/operator-set invariant
 is ever broken by a future edit (e.g. adding an operator to one list
 but not the other).
+
+## 61. `GaussianFileMixin.jobtype`'s setter never actually persists a value
+
+**Location:** `chemsmart/utils/mixins.py`, `GaussianFileMixin.route_object`
+(lines ~704-719), `jobtype` getter/setter (lines ~734-758), and
+`_get_modredundant_conditions` (lines 623/628, which rely on the
+setter to record the detected job type).
+
+```python
+@property
+def route_object(self):
+    try:
+        route_object = GaussianRoute(route_string=self.route_string)
+        return route_object
+    except TypeError as err:
+        print(err)
+
+@property
+def jobtype(self):
+    return self.route_object.jobtype
+
+@jobtype.setter
+def jobtype(self, value):
+    self.route_object.jobtype = value
+```
+
+`route_object` is a plain `@property` (not `@cached_property`), so
+every access -- including the one inside the setter -- constructs a
+brand-new `GaussianRoute` from `route_string`. `jobtype = "scan"`
+therefore sets an attribute on a throwaway `GaussianRoute` instance
+that is discarded immediately; the very next `self.jobtype` read
+builds yet another fresh `GaussianRoute` and re-derives the job type
+purely from `route_string`, never seeing the earlier assignment. This
+makes `_get_modredundant_conditions`'s `self.jobtype = "scan"` /
+`self.jobtype = "modred"` calls (used to disambiguate a modredundant
+block into a scan vs. a frozen-coordinate job) complete no-ops.
+
+**Reproduce:**
+```python
+>>> from chemsmart.utils.mixins import GaussianFileMixin
+>>> class F(GaussianFileMixin):
+...     def __init__(self):
+...         self.filename = "x"
+...     route_string = "modred"
+>>> f = F()
+>>> f.jobtype = "scan"
+>>> f.jobtype
+'sp'  # not "scan" -- the assignment never took effect
+```
+See `tests/test_mixins.py::TestGaussianFileMixin::test_modred_scan_coords_skips_non_scan_lines`,
+whose docstring documents this in place of asserting the (non-functional)
+jobtype mutation.
+
+**Impact:** Low-to-moderate -- `read_settings()` builds
+`GaussianJobSettings(jobtype=self.jobtype, ..., modred=self.modred,
+...)` in a single call, evaluating `self.jobtype` *before*
+`self.modred` runs (kwarg values are evaluated left-to-right), so even
+if the mutation worked it would already be too late for this call
+site. In practice this means a `GaussianJobSettings` built via
+`read_settings()` from a file with a modredundant scan block gets a
+`jobtype` that reflects the route string's own (generic) job type
+rather than `"scan"`/`"modred"`, while `modred` itself is still parsed
+correctly.
+
+**Suggested direction:** cache `route_object` (e.g. via
+`@cached_property`, invalidated appropriately if `route_string` can
+change), or have `jobtype`'s setter store the override on `self`
+directly (e.g. `self._jobtype_override`) and have the getter check
+that first, rather than routing through a freshly-constructed
+`GaussianRoute` each time.

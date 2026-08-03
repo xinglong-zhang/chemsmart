@@ -2292,27 +2292,18 @@ def temp_text_file():
 
 @pytest.fixture()
 def dummy_yaml_file():
-    class DummyYAMLFile:
+    from chemsmart.utils.mixins import YAMLFileMixin
+
+    class DummyYAMLFile(YAMLFileMixin):
         def __init__(self):
             self.filename = "dummy.yaml"
-            self.content_lines_string = yaml.dump(
+            self._content_lines_string = yaml.dump(
                 {"key1": "value1", "key2": "value2"}
             )
 
         @property
-        def yaml_contents_dict(self):
-            return yaml.safe_load(self.content_lines_string)
-
-        @property
-        def yaml_contents_keys(self):
-            return self.yaml_contents_dict.keys()
-
-        @property
-        def yaml_contents_values(self):
-            return self.yaml_contents_dict.values()
-
-        def yaml_contents_by_key(self, key):
-            return self.yaml_contents_dict.get(key)
+        def content_lines_string(self):
+            return self._content_lines_string
 
     return DummyYAMLFile()
 

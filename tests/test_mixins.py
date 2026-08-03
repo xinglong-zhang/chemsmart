@@ -47,6 +47,16 @@ class TestFileMixin:
             [0.0, 1.0, 0.0],
         ]
 
+    def test_input_translation_vectors_block_without_vectors(
+        self, temp_text_file
+    ):
+        class DummyBlockNoVectors:
+            translation_vectors = None
+
+        dummy = DummyFile(temp_text_file)
+        dummy.input_coordinates_block = DummyBlockNoVectors()
+        assert dummy.input_translation_vectors == []
+
 
 class TestFrontierOrbitalProperties:
     """Direct tests for FileMixin's frontier-orbital cached_properties,
@@ -312,7 +322,7 @@ class DummyGaussianFile(GaussianFileMixin):
 
     @property
     def modredundant_group(self):
-        return ["F 1 2 3", "S 1 2 10 0.05"]
+        return ["B 2 12 F", "B 9 2 S 10 0.05"]
 
 
 class TestGaussianFileMixin:
@@ -392,6 +402,26 @@ class TestGaussianFileMixin:
 
         assert NoVersionFile()._get_version() is None
 
+    def test_get_version_marker_without_gaussian_line_keeps_looking(self):
+        """Covers the `if "Gaussian" in next_line:` False arm: a
+        "****" marker line followed by an unrelated line must not
+        return, and should keep scanning for a later real match."""
+
+        class MultiMarkerFile(GaussianFileMixin):
+            def __init__(self):
+                self.filename = "v.log"
+
+            @property
+            def contents(self):
+                return [
+                    "******************************************",
+                    "not a version line",
+                    "******************************************",
+                    "Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017",
+                ]
+
+        assert MultiMarkerFile()._get_version() == "G16RevB.01"
+
     def test_file_date_empty_contents_returns_none(self):
         class EmptyFile(GaussianFileMixin):
             def __init__(self):
@@ -416,6 +446,17 @@ class TestGaussianFileMixin:
 
         assert MalformedDateFile().file_date is None
 
+    def test_file_date_matched_but_strptime_fails(self):
+        class BadDateFile(GaussianFileMixin):
+            def __init__(self):
+                self.filename = "bd.log"
+
+            @property
+            def contents(self):
+                return [" Normal termination of Gaussian at nonsense-date."]
+
+        assert BadDateFile().file_date is None
+
     def test_read_settings_builds_gaussian_job_settings(self):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
@@ -435,6 +476,24 @@ class TestGaussianFileMixin:
         assert settings.multiplicity == 1
         assert settings.functional == "b3lyp"
         assert "mytest.gjf" in settings.title
+
+    def test_modred_scan_coords_skips_non_scan_lines(self):
+        """DummyGaussianFile's modredundant_group mixes a frozen ("F")
+        line with a scan ("S") line; _get_modred_scan_coords must skip
+        the non-scan line (continue) rather than trying to parse it as
+        a scan spec.
+
+        Note: the `self.jobtype = "scan"` assignment inside
+        _get_modredundant_conditions doesn't actually persist, since
+        `jobtype`'s setter writes through the non-cached `route_object`
+        property (a fresh GaussianRoute is built on every access) --
+        see BUGS_FOUND.md #61. This test only asserts the returned
+        modred dict, not the jobtype mutation."""
+        dummy = DummyGaussianFile("test.gjf")
+        modred = dummy.modred
+        assert modred["coords"] == [[9, 2]]
+        assert modred["num_steps"] == 10
+        assert modred["step_size"] == 0.05
 
 
 class DummyORCAFile(ORCAFileMixin):
@@ -486,6 +545,17 @@ class TestORCAFileMixin:
         assert NoSolventFile().solvent_model is None
         assert NoSolventFile().solvent_id is None
 
+    def test_solvent_model_cpcm_without_smd(self):
+        class CpcmOnlyFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "cpcm.inp"
+
+            @property
+            def contents(self):
+                return ["%cpcm", "  epsilon 80.4", "%end"]
+
+        assert CpcmOnlyFile().solvent_model == "cpcm"
+
     def test_contents_string_joins_lines(self):
         dummy = DummyORCAFile("test.inp")
         assert dummy.contents_string == "\n".join(dummy.contents)
@@ -501,6 +571,39 @@ class TestORCAFileMixin:
 
         assert NoMdciFile().mdci_cutoff is None
         assert NoMdciFile().mdci_density is None
+
+    def test_mdci_cutoff_absent_within_block_returns_none(self):
+        class NoCutoffFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nc.inp"
+
+            @property
+            def contents(self):
+                return ["%mdci", "  density 1e-6", "%end"]
+
+        assert NoCutoffFile().mdci_cutoff is None
+
+    def test_mdci_cutoff_skips_non_cutoff_lines_before_match(self):
+        class DelayedCutoffFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "dc.inp"
+
+            @property
+            def contents(self):
+                return ["%mdci", "  density 1e-6", "  cutoff 1e-5", "%end"]
+
+        assert DelayedCutoffFile().mdci_cutoff == "1e-5"
+
+    def test_mdci_density_absent_within_block_returns_none(self):
+        class NoDensityFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nd2.inp"
+
+            @property
+            def contents(self):
+                return ["%mdci", "  cutoff 1e-5", "%end"]
+
+        assert NoDensityFile().mdci_density is None
 
     def test_get_version_not_found(self):
         class NoVersionFile(ORCAFileMixin):
@@ -554,6 +657,21 @@ class TestORCAFileMixin:
                 return ["nothing relevant here"]
 
         assert NoDateFile().file_date is None
+
+    def test_file_date_starting_time_substring_without_full_pattern(self):
+        """ "Starting time:" is present, but without the leading "* "
+        marker orca_date_pattern requires, so the regex search itself
+        must fail (as opposed to strptime failing on a match)."""
+
+        class UnmatchedMarkerFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "um.out"
+
+            @property
+            def contents(self):
+                return ["Starting time: not actually parseable"]
+
+        assert UnmatchedMarkerFile().file_date is None
 
     def test_solvent_model_route_fallback_variants(self):
         for keyword, expected in [
@@ -858,6 +976,12 @@ class TestRegistryMixin:
         assert SubRegistry1 in subclasses
         assert SubRegistry2 in subclasses
 
+    def test_non_registerable_subclass_is_not_registered(self):
+        class NonRegisterableSub(BaseRegistry):
+            REGISTERABLE = False
+
+        assert NonRegisterableSub not in BaseRegistry._REGISTRY
+
 
 class DummyFolder(FolderMixin):
     def __init__(self, folder):
@@ -879,3 +1003,187 @@ class TestFolderMixin:
         )
         assert file2 in log_files
         assert file1 not in log_files
+
+    def test_folderpath_is_absolute(self, tmp_path):
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.folderpath == os.path.abspath(str(tmp_path))
+
+    def test_get_all_output_files_unsupported_program_raises(self, tmp_path):
+        import pytest
+
+        dummy = DummyFolder(str(tmp_path))
+        with pytest.raises(ValueError, match="Unsupported program"):
+            dummy.get_all_output_files_in_current_folder_by_program(
+                "bogus_program"
+            )
+
+    def _write(self, path, content):
+        path.write_text(content)
+        return str(path)
+
+    def test_get_all_output_files_by_program_non_recursive(self, tmp_path):
+        gaussian_log = self._write(
+            tmp_path / "job.log", "Entering Gaussian System\n"
+        )
+        self._write(tmp_path / "empty.log", "")
+        (tmp_path / "subdir").mkdir()
+        self._write(
+            tmp_path / "subdir" / "nested.log", "Entering Gaussian System\n"
+        )
+        self._write(tmp_path / "notes.txt", "just some text\n")
+        self._write(tmp_path / "unknown.log", "nothing recognizable\n")
+
+        dummy = DummyFolder(str(tmp_path))
+        gaussian_files = (
+            dummy.get_all_output_files_in_current_folder_by_program("gaussian")
+        )
+        assert gaussian_files == [gaussian_log]
+
+        all_files = dummy.get_all_output_files_in_current_folder_by_program()
+        assert gaussian_log in all_files
+        assert all(f.endswith(".log") or f.endswith(".out") for f in all_files)
+
+    def test_get_all_output_files_by_program_recursive(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        nested_log = self._write(
+            tmp_path / "sub" / "nested.log", "Entering Gaussian System\n"
+        )
+        top_log = self._write(
+            tmp_path / "top.log", "Entering Gaussian System\n"
+        )
+        # An empty file and a non-matching-suffix file, both within the
+        # recursive walk, must be skipped without raising.
+        self._write(tmp_path / "sub" / "empty.log", "")
+        self._write(tmp_path / "sub" / "notes.txt", "irrelevant\n")
+        # A broken symlink appears in os.walk's "files" list but fails
+        # os.path.isfile, covering that skip branch too.
+        os.symlink(
+            tmp_path / "sub" / "does_not_exist.log",
+            tmp_path / "sub" / "broken_link.log",
+        )
+
+        dummy = DummyFolder(str(tmp_path))
+        found = dummy.get_all_output_files_in_current_folder_and_subfolders_by_program(
+            "gaussian"
+        )
+        assert set(found) == {nested_log, top_log}
+
+    def test_get_all_output_files_recursive_program_none(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        nested_log = self._write(
+            tmp_path / "sub" / "nested.log", "Entering Gaussian System\n"
+        )
+        self._write(tmp_path / "sub" / "notes.dat", "irrelevant\n")
+
+        dummy = DummyFolder(str(tmp_path))
+        found = (
+            dummy.get_all_output_files_in_current_folder_and_subfolders_by_program()
+        )
+        assert found == [nested_log]
+
+    def test_is_program_calculation_directory(self, tmp_path):
+        self._write(tmp_path / "job.log", "Entering Gaussian System\n")
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.is_program_calculation_directory("gaussian") is True
+        assert dummy.is_program_calculation_directory("orca") is False
+
+    def test_is_program_calculation_directory_missing_folder(self, tmp_path):
+        dummy = DummyFolder(str(tmp_path / "does_not_exist"))
+        assert dummy.is_program_calculation_directory("gaussian") is False
+
+    def test_get_program_type_from_folder_unknown(self, tmp_path):
+        self._write(tmp_path / "notes.txt", "nothing relevant\n")
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.get_program_type_from_folder() == "unknown"
+
+    def test_get_program_type_from_folder_single_program(self, tmp_path):
+        self._write(tmp_path / "job.out", "x T B\nsome xtb output\n")
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.get_program_type_from_folder() == "xtb"
+
+    def test_get_program_type_from_folder_mixed(self, tmp_path):
+        self._write(tmp_path / "xtb_job.out", "x T B\nsome xtb output\n")
+        self._write(
+            tmp_path / "crest_job.out",
+            "C R E S T\nsome crest output\n",
+        )
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.get_program_type_from_folder() == "mixed"
+
+    def test_get_all_files_by_suffix_skips_empty_files(self, tmp_path):
+        kept = self._write(tmp_path / "kept.txt", "content")
+        self._write(tmp_path / "empty.txt", "")
+        dummy = DummyFolder(str(tmp_path))
+        assert dummy.get_all_files_in_current_folder_by_suffix(".txt") == [
+            kept
+        ]
+
+    def test_get_all_files_by_regex_skips_empty_files(self, tmp_path):
+        kept = self._write(tmp_path / "kept.log", "content")
+        self._write(tmp_path / "empty.log", "")
+        dummy = DummyFolder(str(tmp_path))
+        matched = dummy.get_all_files_in_current_folder_matching_regex(
+            r".*\.log"
+        )
+        assert matched == [kept]
+
+    def test_get_all_files_and_subfolders_by_suffix(self, tmp_path):
+        top = self._write(tmp_path / "top.log", "content")
+        (tmp_path / "sub").mkdir()
+        nested = self._write(tmp_path / "sub" / "nested.log", "content")
+        self._write(tmp_path / "other.txt", "content")
+
+        dummy = DummyFolder(str(tmp_path))
+        found = dummy.get_all_files_in_current_folder_and_subfolders_by_suffix(
+            ".log"
+        )
+        assert set(found) == {top, nested}
+
+    def test_get_all_files_by_program_and_suffix_non_recursive(self, tmp_path):
+        gaussian_log = self._write(
+            tmp_path / "job.log", "Entering Gaussian System\n"
+        )
+        self._write(tmp_path / "empty.log", "")
+        self._write(tmp_path / "unknown.log", "nothing recognizable\n")
+        self._write(
+            tmp_path / "job.dat", "Entering Gaussian System\n"
+        )  # wrong suffix
+        (tmp_path / "subdir").mkdir()
+
+        dummy = DummyFolder(str(tmp_path))
+        found = dummy.get_all_files_in_current_folder_by_program_and_suffix(
+            "gaussian", ".log"
+        )
+        assert found == [gaussian_log]
+
+    def test_get_all_files_by_program_and_suffix_recursive(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        nested = self._write(
+            tmp_path / "sub" / "nested.log", "Entering Gaussian System\n"
+        )
+        top = self._write(tmp_path / "top.log", "Entering Gaussian System\n")
+        self._write(
+            tmp_path / "sub" / "wrong_suffix.dat",
+            "Entering Gaussian System\n",
+        )
+        self._write(
+            tmp_path / "sub" / "wrong_program.log", "nothing recognizable\n"
+        )
+
+        dummy = DummyFolder(str(tmp_path))
+        found = dummy.get_all_files_in_current_folder_and_subfolders_by_program_and_suffix(
+            "gaussian", ".log"
+        )
+        assert set(found) == {nested, top}
+
+    def test_get_all_files_and_subfolders_matching_regex(self, tmp_path):
+        top = self._write(tmp_path / "top.log", "content")
+        (tmp_path / "sub").mkdir()
+        nested = self._write(tmp_path / "sub" / "nested.log", "content")
+        self._write(tmp_path / "other.txt", "content")
+
+        dummy = DummyFolder(str(tmp_path))
+        found = dummy.get_all_files_in_current_folder_and_subfolders_matching_regex(
+            r".*\.log"
+        )
+        assert set(found) == {top, nested}
