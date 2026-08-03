@@ -649,6 +649,51 @@ class TestORCAFileMixin:
         with pytest.raises(NotImplementedError):
             BareOrcaFile().route_string
 
+    def test_method_dispersion_scf_algorithm_forwarding(self):
+        class RichRouteFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "rich.inp"
+
+            @property
+            def contents(self):
+                return [self.route_string]
+
+            @property
+            def route_string(self):
+                return "! B3LYP D3BJ def2-SVP DIIS"
+
+        dummy = RichRouteFile()
+        assert dummy.method == "b3lyp"
+        assert dummy.dispersion == "d3bj"
+        assert dummy.scf_algorithm == "diis"
+
+    def test_read_settings_builds_orca_job_settings(self):
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        class SettingsFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "settings.inp"
+                self.charge = 0
+                self.multiplicity = 1
+                self.scf_maxiter = None
+                self.scf_convergence = None
+                self.dipole = False
+                self.quadrupole = False
+
+            @property
+            def contents(self):
+                return [self.route_string]
+
+            @property
+            def route_string(self):
+                return "! B3LYP def2-SVP"
+
+        settings = SettingsFile().read_settings()
+        assert isinstance(settings, ORCAJobSettings)
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp"
+
 
 class DummyXTBFile(XTBFileMixin):
     def __init__(self, filename):
@@ -671,6 +716,119 @@ class TestXTBFileMixin:
         assert dummy.uhf == 0
         assert dummy.freq is False
         assert dummy.grad is True
+
+    def test_get_route_raises_not_implemented(self):
+        import pytest
+
+        class BareXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "bare.out"
+
+        with pytest.raises(NotImplementedError):
+            BareXTBFile()._get_route()
+
+    def test_custom_solvent_always_none(self):
+        assert DummyXTBFile("test.out").custom_solvent is None
+
+    def test_get_version_found_and_not_found(self):
+        class VersionedXTBFile(XTBFileMixin):
+            def __init__(self, lines):
+                self.filename = "v.out"
+                self._lines = lines
+
+            @property
+            def contents(self):
+                return self._lines
+
+        assert (
+            VersionedXTBFile(["  * xtb version 6.5.1"])._get_version()
+            == "6.5.1"
+        )
+        assert VersionedXTBFile(["  * xtb version"])._get_version() is None
+        assert VersionedXTBFile(["no marker"])._get_version() is None
+        # "xtb version" substring matches, but whitespace-splitting
+        # doesn't produce an exact "version" token (it's part of a
+        # larger word), so the inner `if "version" in parts:` is False.
+        assert VersionedXTBFile(["xtb versioning 1.0"])._get_version() is None
+
+    def test_file_date_parses_finished_run_line(self):
+        class DatedXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "d.out"
+
+            @property
+            def contents(self):
+                return ["* finished run on 2026/01/05 at 12:34:56"]
+
+        assert DatedXTBFile().file_date == "2026-01-05 12:34:56"
+
+    def test_file_date_no_marker_returns_none(self):
+        class NoDateXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "nd.out"
+
+            @property
+            def contents(self):
+                return ["nothing relevant"]
+
+        assert NoDateXTBFile().file_date is None
+
+    def test_file_date_marker_present_but_unmatched_pattern(self):
+        class UnmatchedDateXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "ud.out"
+
+            @property
+            def contents(self):
+                return ["* finished run on today at noon"]
+
+        assert UnmatchedDateXTBFile().file_date is None
+
+    def test_file_date_matched_but_strptime_fails(self):
+        class BadDateXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "bd.out"
+
+            @property
+            def contents(self):
+                return ["* finished run on 2026/99/99 at 99:99:99"]
+
+        assert BadDateXTBFile().file_date is None
+
+    def test_method_returns_gfn_directly_when_present_in_route(self):
+        class GfnRouteXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "g.out"
+
+            @property
+            def route_string(self):
+                return "xtb structure.xyz --opt --gfn 2"
+
+        assert GfnRouteXTBFile().method == "gfn2"
+
+    def test_method_falls_back_to_hamiltonian(self):
+        class HamiltonianXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "h.out"
+                self.hamiltonian = "GFN2-xTB"
+
+            @property
+            def route_string(self):
+                return "xtb structure.xyz --opt"
+
+        assert HamiltonianXTBFile().method == "gfn2"
+
+    def test_method_none_without_gfn_or_hamiltonian(self):
+        class NoMethodXTBFile(XTBFileMixin):
+            def __init__(self):
+                self.filename = "nm.out"
+                self.hamiltonian = None
+
+            @property
+            def route_string(self):
+                return "xtb structure.xyz --opt"
+
+        assert NoMethodXTBFile().method is None
 
 
 class TestYAMLFileMixin:
