@@ -59,6 +59,16 @@
       "rationale": "Continuation may be transport-only; private reasoning is not persisted or scientific evidence"
     }
   ],
+  "post_integration_changes": [
+    {
+      "change": "project-local-skill-removal",
+      "disposition": "removed_from_repository",
+      "recorded_commit": "2703baa5f19a9f5c0d05e239342aa8a6574d24ca",
+      "recovery_commit": "222d93a9efdec44d57979d538714721e64bcf5ba",
+      "replacement": "user-managed global agent skill registry",
+      "rationale": "Avoid vendored skill drift and keep the checked-out source, generated CLI schema, and tests authoritative. Historical source-path entries below remain custody records rather than current-tree destinations."
+    }
+  ],
   "schema": "chemsmart-migration-ledger-v2",
   "source_path_entries": [
     {

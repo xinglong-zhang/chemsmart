@@ -20,12 +20,12 @@ Evidence states used below are:
 - **unknown**: requires a live provider observation or a deferred validation
   gate.
 
-As of 2026-08-03, the provider adapter, paired-campaign composer, fourteen-case
-definition, typed host, and deterministic receipt models are **observed** in
-the integration tree. No live DeepSeek V4 Flash episode has been run from this
-tree, so provider conformance, H0/H1 effect, scientific planning quality, and
-cost are **unknown**. No chemistry engine or scheduler call is part of this
-campaign.
+As of 2026-08-04, bounded live DeepSeek sessions have exercised provider
+continuation, the typed host, project promotion, preview, approved CPU
+execution, result validation, and honest GPU blocking. The complete
+fourteen-case paired H0/H1 schedule has not run, so its causal effect and
+aggregate cost remain **unknown**. The separately approved water calculations
+are integration observations, not episodes in this boundary-regression study.
 
 ## Boundary-regression research question
 
@@ -260,8 +260,8 @@ Stop the campaign on the first applicable condition:
 
 Normal exhaustion of the frozen episode schedule is recorded as
 `schedule_completed`, not `no_valid_hypothesis`. The additive enum and runner
-path are implemented in the integration tree but remain unobserved until the
-deferred focused gate and live campaign.
+path are implemented, but full-schedule behavior remains unobserved until the
+paired campaign is run.
 
 Do not spend quota on duplicate prompts without a measurement purpose. Do not
 route around quota or credentials through another provider.

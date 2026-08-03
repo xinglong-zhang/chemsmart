@@ -17,8 +17,8 @@ or state-of-the-art performance.
 |---|---|---|---|
 | Program plane | implemented and live-observed | PySCF CPU `sp`, `opt`, and `hess` and xTB CPU `sp` executed through ChemSmart; GPU planning remained blocked on missing CUDA dependencies. | No GPU, Gaussian, ORCA, scheduler, or HPC execution was performed. |
 | Agent plane | implemented and live-observed | The public `agent plan` and `agent run` paths reached the real DeepSeek session, typed tool host, command compiler, safe preview, approval-bound execution, result validation, and OPT-to-HESS handoff. | Generality beyond the bounded water cases is not established. |
-| Focused validation | partially green | The selected group produced 277 passes. One strengthened xTB provenance test fixture remained red twice because its mocked writer did not create the execution-input file; the fixture was corrected after the allowed rerun. Read-only lint found four unused imports, which were removed manually. | The final fixture and import corrections have source-level checks only; the focused suite and lint were not run a third time. The full repository suite was not run. |
-| Local integration | in progress | The tree is being divided into three reviewable local commits. | No push, pull request, release, or remote mutation is part of this checkpoint. |
+| Focused validation | bounded checks green | The selected group produced 277 passing tests before the final fixture correction. The corrected xTB provenance test then passed as a targeted check, and read-only Ruff over the four corrected Python files was green. | The complete focused group was not rerun after the fixture correction, and the full repository suite was not run. |
+| Local integration | committed release candidate | The program, agent, and test layers are recorded as reviewable local commits. Project-local skill packages were removed in a separate commit because maintained skills belong to the user's global registry. | Remote publication is established only by fetching the public ref after the release push; this document does not infer it from local state. |
 
 ## Live observations
 
@@ -108,18 +108,19 @@ Confirmed in the current tree or preserved local evidence:
 - DeepSeek thinking-mode tool continuation;
 - exact OPT-to-HESS geometry handoff;
 - 277 selected focused tests passing;
+- the corrected xTB provenance test passing in a targeted run;
+- read-only Ruff passing on the four files corrected after the focused run;
 - no raw provider response, calculation artifact, credential, or private
   reasoning file added to the repository;
 - no case-insensitive forbidden integration-tool name in public content.
 
 Not yet confirmed:
 
-- a green post-correction rerun of the focused test group;
-- a post-correction lint rerun;
+- a complete post-correction rerun of the focused test group;
 - the full repository suite;
 - GPU execution or CPU/GPU parity;
 - broad chemistry or paper-level generalization;
-- release or remote-branch readiness.
+- broad release readiness beyond the bounded checks and remote-ref verification.
 
 ## Canonical implementation map
 
@@ -133,9 +134,10 @@ Not yet confirmed:
 | Approval, execution, and geometry handoff | `chemsmart/agent/execution.py`, `chemsmart/agent/tool_runtime.py` |
 | Runtime V2 and DeepSeek continuation | `chemsmart/agent/runtime/`, `chemsmart/agent/services/`, `chemsmart/agent/live_session.py` |
 
-## Next gate
+## Publication gate
 
-Create the three local commits described in the approved integration plan and
-stop for review before any push. A later publication gate may run the full
-suite, repeat read-only lint, and perform remote checks under separate
-authorization.
+The release candidate is locally committed. Publication must bind a fresh
+observation of the public fork's `main` ref, preserve its previous value in a
+recoverable local bundle, use an exact lease for the replacement, and fetch the
+remote ref again to prove local/remote equality. The full repository suite
+remains explicitly unrun and must not be implied by a successful push.

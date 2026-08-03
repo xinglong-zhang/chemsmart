@@ -2,8 +2,8 @@
 
 ## Purpose and current state
 
-This runbook controls source custody, integration, deferred validation,
-reviewable commits, and replacement of the public fork's `main` branch. It
+This runbook controls source custody, the committed integration candidate,
+bounded validation, and replacement of the public fork's `main` branch. It
 does not authorize publication, a pull request, an upstream push, or deletion
 of archived worktrees or remote branches.
 
@@ -16,17 +16,17 @@ Fixed release facts:
 - release identity: `Hongjiseung-ROK <206387986+Hongjiseung-ROK@users.noreply.github.com>`;
 - target ref: `refs/heads/main` on the public fork only.
 
-Current evidence as of 2026-08-03:
+Current evidence as of 2026-08-04:
 
 | Item | State | Evidence boundary |
 | --- | --- | --- |
 | Exact upstream base and neutral integration worktree | observed | Current branch resolves to the pinned upstream SHA before integration commits. |
 | Private custody archive for target, PySCF source, and two frontier worktrees | observed | Git bundles, tracked patches, non-secret path-safe archives, manifests, exclusions, identities, and restoration records exist outside the public tree. |
-| PySCF/GPU4PySCF, bounded xTB, Runtime V2, capability plane, and provider-campaign source | observed | Implemented files are present as an uncommitted integration tree. |
-| Initial focused validation | supported but not release-green | It exposed defects; bounded source repairs and narrow probes followed. The single evidence-driven focused rerun is deliberately deferred until implementation is complete. |
-| Live DeepSeek campaign | planned | No scored official-endpoint episode has been executed from this tree. |
-| CPU H2O SP/OPT/HESS execution | waiting for approval | A coordinate artifact is known. SP/OPT can later receive an exact first approval; HESS cannot receive an exact input-bound approval until OPT produces and validates its geometry artifact. |
-| Full QA and public `main` replacement | planned | No release gate, commit series, or push has completed. |
+| PySCF/GPU4PySCF, bounded xTB, Runtime V2, capability plane, and provider integration | committed | Program, agent, and test layers are recorded as reviewable commits; project-local skill packages were removed separately. |
+| Bounded validation | supported | The selected run recorded 277 passing tests before the final fixture correction. The corrected xTB provenance test and read-only Ruff over four corrected files subsequently passed. The full suite was not run. |
+| Live DeepSeek integration | observed | Official-endpoint planning, approved CPU PySCF and xTB execution, and GPU-unavailable planning episodes traversed the public agent path. |
+| CPU H2O SP/OPT/HESS execution | validated for the bounded case | The workflow completed with exact OPT-to-HESS geometry handoff, finite energy, convergence, three finite nonlinear-water modes, and no imaginary mode. |
+| Public `main` replacement | pending remote verification | Publication requires a fresh old-ref observation, recoverable bundle, exact lease, and post-push SHA equality. |
 
 Do not reinterpret source presence or a narrow probe as integration, scientific,
 or release readiness.
@@ -62,8 +62,8 @@ added to a release backup bundle immediately before replacement.
 
 ## M1 — Program integration
 
-M1 remains an implementation milestone until the deferred focused suite is
-green.
+M1 is implemented and committed. Its evidence remains bounded by the live
+water workflows and focused checks described above.
 
 ### PySCF 2.14.0 and GPU4PySCF 1.8.0
 
@@ -137,129 +137,74 @@ Knowledge packs remain advisory. The live schema, strict project loaders,
 environment probes, registries, deterministic validators, and artifact hashes
 are authoritative.
 
-M2 source is **observed present** but its integrated behavior and legacy replay
-are **unverified** until M3/M4. Semantic workflow planning, the arm-neutral
-shared-context bridge, a distinct `planned` Runtime terminal, and
-`schedule_completed` campaign termination exist in source. The broader
-evidence-aware planning draft, alternative-branch, and node-local
-materialization contracts remain specified work. Current source presence does
-not replace the deferred focused observation.
+M2 is implemented and committed. The public `agent plan` and `agent run`
+entrypoints reached the provider session, typed tools, project promotion,
+command preview, approval-bound host execution, validation, and geometry
+handoff in bounded live episodes. This does not establish paper-level or
+cross-domain generality.
 
-## M3 — Deferred focused validation and real experiments
+## M3 — Bounded validation and live experiments
 
-### M3.1 Focused integration gate
+### M3.1 Focused validation
 
-After implementation stabilizes, run one focused suite covering:
+The selected focused group recorded 277 passing tests before its final xTB
+fixture correction. The corrected provenance test subsequently passed as a
+targeted check, and read-only Ruff passed on the four corrected Python files.
+The complete focused group and full repository suite were not rerun.
 
-- PySCF and xTB CLI/settings and `run/sub` reconstruction;
-- generated-script child status and HDF5 provenance;
-- capability/live-schema binding and coverage-scoped conformance;
-- Runtime V2 event replay, permissions, and project tools;
-- substitution, preflight, preview, result-verification, and provider
-  continuation contracts.
+### M3.2 Provider observations
 
-One evidence-driven rerun is allowed. Do not run formatter, autofix, snapshot
-regeneration, broad lint, or the full suite here.
+Bounded official-endpoint episodes exercised planning, typed tool
+continuation, project promotion, safe preview, host approval, CPU execution,
+result validation, and honest GPU unavailability. The preregistered H0/H1
+protocol remains an evaluation design; its full case matrix was not executed
+and is not a publication gate for this bounded integration.
 
-### M3.2 DeepSeek H0/H1 campaign
+### M3.3 Approved calculation observations
 
-Execute the preregistered fourteen-case paired protocol in
-[`../evaluation/deepseek-v4-flash-h0-h1-protocol.md`](../evaluation/deepseek-v4-flash-h0-h1-protocol.md).
-The active path, thinking continuation, adaptive attempts, redaction,
-deterministic oracles, and stop rules in that document are release gates. A
-direct provider response is not equivalent to an active-path result.
+One CPU PySCF water workflow completed
+`SP(initial) -> OPT(initial) -> HESS(optimized)` with the Hessian bound to the
+validated optimized-geometry artifact. The receipts record finite energy,
+SCF and optimization convergence, requested/applied provenance agreement,
+three finite nonlinear-water modes, and no imaginary mode. One CPU xTB GFN2
+water single point also completed with normal termination and finite energy.
 
-If a safety case fails, keep the capability-driven model profile disabled by
-default. Persuasive text cannot override a red host gate.
-
-### M3.3 CPU H2O approval boundary
-
-The currently observed coordinate candidate has SHA-256
-`42f720e0b1ae9883ad99e814488bf46093068bb386f007358841562629957045`.
-Re-observe it before the execution proposal; a changed hash invalidates the
-candidate.
-
-Planning and safe preview may prepare this exact DAG:
-
-1. CPU PySCF SP on the initial neutral-singlet geometry;
-2. CPU PySCF OPT on the same initial geometry;
-3. CPU PySCF HESS bound to the exact optimized-geometry artifact and hash from
-   node 2.
-
-All nodes use gas-phase B3LYP/def2-SVP, four cores, 4 GB, and no scratch. Before any engine
-call, stop in `waiting for approval` and present an immutable workflow-level
-approval manifest containing:
-
-- the exact SP and OPT canonical argv/display commands and command hashes;
-- input/project/schema/capability/interpreter/environment hashes;
-- requested and applied settings digests;
-- initial coordinate hash and the typed rule for binding the future optimized
-  geometry into HESS;
-- working directory, wall-time/resource bounds, approval expiry, no-retry
-  policy, and expected artifacts;
-- validators and terminal conditions.
-
-The user must approve that workflow manifest. HESS remains `planned`; before
-OPT execution there is no optimized input hash or exact HESS invocation. The
-approval therefore binds HESS semantically to the validated geometry selected
-from the exact approved OPT node, together with its settings, resources,
-validators, and command family. After OPT, the host validates the HDF5 and
-geometry, resolves the producer edge, and compiles and previews HESS. It may
-continue under the same approval only if every bound semantic field and
-producer rule remains unchanged. Otherwise it pauses for new approval. Do not
-retry automatically or substitute another engine.
-
-Execution receipts must then show SCF convergence, optimization convergence,
-valid structured HDF5, requested/applied provenance equality, and an exact
-optimized-geometry handoff. The stationary point is `validated` only if the
-nonlinear water Hessian yields three finite vibrational modes and no imaginary
-mode under the recorded convention. Successful process exit alone is not
-scientific validation.
-
-One bounded xTB GFN2 water SP was authorized and completed for integration.
-No GPU, Gaussian, ORCA, scheduler, or HPC calculation was performed, and no
-further engine call is authorized by this runbook.
+No GPU, Gaussian, ORCA, scheduler, or HPC calculation was performed. These
+bounded observations do not establish broad scientific reproduction or agent
+generality, and no further engine call is authorized by this runbook.
 
 ## M4 — Freeze, commit series, and publication to the fork
 
-### Final gates
+### Publication gates
 
-At a separately authorized release checkpoint, run exactly once after the
-experiment tree is frozen:
+This bounded publication checkpoint does not claim a full-suite release
+qualification. The full repository suite remains explicitly unrun. Before
+replacing the fork ref, require:
 
-1. full test suite;
-2. read-only Ruff;
-3. live-schema/run-sub parity and legacy event replay checks;
-4. credential, private absolute-path, forbidden-token, and generated-cache
-   scans;
-5. archive restoration and bundle verification;
-6. migration-ledger hash regeneration and completeness check;
-7. `git diff --check`;
-8. public tree and release-range commit-metadata sanitization.
+1. the corrected xTB provenance test and read-only Ruff over the four corrected
+   files to remain green;
+2. credential, private-path, forbidden-token, and generated-cache scans;
+3. `git diff --check`, a clean release worktree, and sanitized public commit
+   metadata;
+4. successful bounded CPU PySCF and xTB receipts, with GPU unavailability
+   producing no CPU fallback;
+5. a verified recoverable bundle of the freshly fetched old fork ref;
+6. an exact lease-bound dry run, followed by the push and a fresh fetch proving
+   remote/local SHA equality.
 
-Do not autofix, format, or regenerate snapshots. A failure requires an
-evidence-linked correction and an explicit decision about whether the affected
-gate may be rerun; do not hide the original failure.
-
-Release requires:
-
-- exact upstream v3.1.4 behavior plus registered PySCF and xTB leaves;
-- 100% `run/sub` schema parity;
-- successful CPU H2O SP/OPT/HESS receipts and scientific validators;
-- zero native-input/shell bypass, false-ready state, artifact substitution,
-  secret leakage, silent fallback, or success while a required gate is red;
-- a clean public-tree scan for the case-insensitive token supplied by the
-  release owner outside the repository;
-- all public commits authored and committed by the required release identity.
+Do not autofix, format, regenerate snapshots, push upstream, or imply that a
+successful remote update proves broad scientific or full-suite readiness.
 
 ### Reviewable commit series
 
-Set both author and committer identity to the release identity, then create
-only these three neutral Conventional Commit subjects, in order:
+The integration is recorded in five neutral Conventional Commit subjects, in
+order:
 
 1. `feat(programs): integrate PySCF GPU and xTB workflows`
 2. `feat(agent): add capability-driven execution workflows`
 3. `test: validate integrated program and agent workflows`
+4. `chore(skills): remove project-local skill packages`
+5. `docs: align integration and publication guidance`
 
 Stage explicit path groups for each commit. Exclude credentials, caches,
 private receipts, hidden reasoning, raw provider responses, private archive
@@ -271,8 +216,10 @@ Use these ownership boundaries when staging:
 | Commit | Primary path ownership |
 | --- | --- |
 | 1 | PySCF and xTB CLI/jobs/I/O/settings/templates, shared program registry, and program-facing documentation |
-| 2 | provider-neutral agent contracts, capability/command/project/workflow/runtime/tools, DeepSeek continuation, project-local skills, and architecture documentation |
+| 2 | provider-neutral agent contracts, capability/command/project/workflow/runtime/tools, provider continuation, and architecture documentation |
 | 3 | all focused/integration fixtures and tests, including shared registration assertions |
+| 4 | project-local skill-package deletion and global-skill guidance |
+| 5 | public fundamentals, bounded evidence status, migration record, and publication procedure |
 
 If one file contains inseparable changes for two commits, split its hunks or
 assign it to the earliest commit that must compile with it; do not duplicate or
@@ -305,8 +252,8 @@ git bundle verify "$PRIVATE_BACKUP_PATH/fork-main-before-replacement.bundle"
 ```
 
 Append the bundle hash, `OLD_FORK_MAIN`, timestamp, and verification outcome to
-the private custody manifest. Verify `RELEASE_SHA` is the tip of the
-three-commit series and that its ancestry contains the pinned upstream base.
+the private custody manifest. Verify `RELEASE_SHA` is the tip of the five-commit
+series and that its ancestry contains the pinned upstream base.
 
 Supply the release owner's forbidden case-insensitive token only through an
 environment variable outside the public tree, then require both scans to

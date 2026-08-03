@@ -6,9 +6,16 @@
    :width: 400
    :align: center
 
-CHEMSMART is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
-files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, and other computational
-chemistry software.
+CHEMSMART is the canonical command-line and project-YAML hub for automating
+computational-chemistry workflows across Gaussian, ORCA, PySCF, xTB, and
+related tools. It centralizes scientific configuration, backend input
+generation, local or scheduled execution, and result inspection so users and
+agents can operate supported programs through one transparent interface.
+
+The provider-neutral ``chemsmart agent plan`` and ``chemsmart agent run``
+entrypoints use the same project loaders and command compiler. Models propose
+typed scientific intent; CHEMSMART owns executable commands, approvals,
+execution state, and deterministic validation.
 
 .. toctree::
    :maxdepth: 2

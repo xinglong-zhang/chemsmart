@@ -20,6 +20,18 @@ The integration adds three maintained layers:
    deterministic ChemSmart code owns commands, environment evidence,
    approvals, validation, and terminal state.
 
+These layers preserve one authority: ChemSmart is the canonical multi-program
+CLI and project-YAML hub. The agent does not maintain a parallel catalog of
+backend syntax. It queries the live command schema and strict project loaders,
+then asks ChemSmart to generate and inspect program-specific artifacts.
+
+The public natural-language entrypoints are:
+
+- `chemsmart agent plan`, which creates typed projects and workflows and runs
+  safe previews without chemistry execution;
+- `chemsmart agent run`, which follows the same path and exposes host-compiled
+  execution only when an explicit approval file is supplied.
+
 ## Source-custody policy
 
 The integration was prepared from independently preserved source snapshots.
@@ -82,6 +94,31 @@ Keep these claims distinct. In particular, do not confuse the source enum
 - `validated`: all required deterministic and scientific checks passed.
 
 No lower grade entails a higher grade.
+
+## Bounded integration evidence
+
+The integration milestone includes one approval-enabled CPU PySCF water
+workflow (`SP -> OPT -> HESS`) and one approval-enabled CPU xTB GFN2 water
+single point through the generic agent execution path. The PySCF handoff bound
+the Hessian to the validated optimized geometry; the xTB audit observed a
+finite energy and preserved the three-atom neutral-singlet identity.
+
+A GPU4PySCF `sp|opt|hess` planning probe correctly reported the local CUDA
+stack unavailable and performed no CPU fallback. These observations establish
+the bounded paths only; they do not establish GPU execution, broad chemistry
+generality, independent reproduction, or state-of-the-art performance.
+
+The selected focused run recorded 277 passing tests before its final xTB
+fixture correction. The corrected xTB provenance test later passed as a
+targeted check, and read-only Ruff over the four corrected Python files was
+green. The complete focused group was not rerun after that correction, and the
+full repository suite was not run.
+
+## Skill ownership
+
+Project-local agent skill packages are not part of the public integration.
+Maintained skills live in the user's global registry and must defer to the
+checked-out CLI schema, project loaders, tests, and runtime contracts.
 
 ## Maintenance sequence
 
