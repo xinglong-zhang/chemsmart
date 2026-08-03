@@ -235,6 +235,44 @@ def test_gromacs_runner_get_grompp_command_with_index(tmp_path):
     ]
 
 
+def test_gromacs_runner_get_grompp_command_with_checkpoint(tmp_path):
+    mdp_file = tmp_path / "npt.mdp"
+    structure_file = tmp_path / "nvt.gro"
+    top_file = tmp_path / "topol.top"
+    tpr_file = tmp_path / "npt.tpr"
+    checkpoint_file = tmp_path / "nvt.cpt"
+
+    job = GromacsNPTJob(
+        molecule=None,
+        label="npt",
+        jobrunner=None,
+        mdp_file=mdp_file,
+        structure_file=structure_file,
+        top_file=top_file,
+        tpr_file=tpr_file,
+        checkpoint_file=checkpoint_file,
+    )
+
+    runner = _make_runner()
+
+    command = runner._get_grompp_command(job)
+
+    assert command == [
+        "gmx",
+        "grompp",
+        "-f",
+        str(mdp_file),
+        "-c",
+        str(structure_file),
+        "-p",
+        str(top_file),
+        "-o",
+        str(tpr_file),
+        "-t",
+        str(checkpoint_file),
+    ]
+
+
 def test_gromacs_runner_get_grompp_command_with_maxwarn(tmp_path):
     mdp_file = tmp_path / "em.mdp"
     structure_file = tmp_path / "input.gro"

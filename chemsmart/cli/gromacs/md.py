@@ -97,6 +97,19 @@ logger = logging.getLogger(__name__)
     help="Optional GROMACS .itp include file. Can be used multiple times.",
 )
 @click.option(
+    "-t",
+    "--checkpoint",
+    "checkpoint_file",
+    type=click.Path(
+        exists=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=Path,
+    ),
+    default=None,
+    help="Checkpoint file passed to gmx grompp with -t.",
+)
+@click.option(
     "--workflow",
     type=click.Choice(["prepared", "full_setup"]),
     default=None,
@@ -112,6 +125,7 @@ def md(
     top,
     index,
     itp,
+    checkpoint_file,
     workflow,
     molecule=None,
     **kwargs,
@@ -151,6 +165,7 @@ def md(
                 settings=settings,
                 molecule=molecule,
                 jobrunner=jobrunner,
+                checkpoint_file=checkpoint_file,
                 skip_completed=skip_completed,
                 **kwargs,
             )
@@ -168,6 +183,7 @@ def md(
     logger.info("GROMACS MD mdp file: %s", mdp)
     logger.info("GROMACS MD topology file: %s", top)
     logger.info("GROMACS MD itp files: %s", itp)
+    logger.info("GROMACS MD checkpoint file: %s", checkpoint_file)
     logger.info("GROMACS MD workflow: %s", workflow)
 
     if ctx.invoked_subcommand is None:
@@ -181,6 +197,7 @@ def md(
             top_file=Path(top) if top else None,
             itp_files=list(itp) if itp else [],
             index_file=Path(index) if index else None,
+            checkpoint_file=checkpoint_file,
             workflow=workflow,
             skip_completed=skip_completed,
             **kwargs,
