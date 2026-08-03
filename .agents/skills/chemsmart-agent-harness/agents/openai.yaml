@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSmart Agent Harness"
+  short_description: "Build command-compiled agent harnesses"
+  default_prompt: "Use $chemsmart-agent-harness to plan a safe typed ChemSmart command-workflow change."

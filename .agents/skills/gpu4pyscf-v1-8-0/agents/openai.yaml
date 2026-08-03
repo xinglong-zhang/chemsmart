@@ -1,0 +1,4 @@
+interface:
+  display_name: "GPU4PySCF 1.8.0 for ChemSmart"
+  short_description: "GPU delta, version lock, and hard limits"
+  default_prompt: "Use $gpu4pyscf-v1-8-0 to decide whether a ChemSmart pyscf job can run on GPU and how to dispatch it."

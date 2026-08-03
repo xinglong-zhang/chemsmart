@@ -1,0 +1,534 @@
+{
+  "base": {
+    "package_version": "3.1.4",
+    "upstream_revision": "5d486b34501b9c040ad1db30d41a0eaa3850b15f"
+  },
+  "entries": [
+    {
+      "component": "upstream-v3-core",
+      "destination": "repository root",
+      "disposition": "ported",
+      "rationale": "Exact upstream base and existing v3 command, settings, job, and parser behavior"
+    },
+    {
+      "component": "pyscf-program",
+      "destination": "chemsmart/cli/pyscf, chemsmart/jobs/pyscf, chemsmart/io/pyscf",
+      "disposition": "adapted",
+      "rationale": "First-class structured PySCF workflow hardened for interpreter, provenance, and child-status binding"
+    },
+    {
+      "component": "gpu4pyscf-engine",
+      "destination": "PySCF engine and environment contracts",
+      "disposition": "adapted",
+      "rationale": "GPU execution remains an explicit PySCF engine with no silent CPU fallback"
+    },
+    {
+      "component": "legacy-xtb-execution",
+      "destination": "chemsmart/cli/xtb and chemsmart/jobs/xtb",
+      "disposition": "adapted",
+      "rationale": "Only the bounded execution plane is retained; v3 xTB I/O remains authoritative"
+    },
+    {
+      "component": "runtime-v2-agent",
+      "destination": "chemsmart/agent",
+      "disposition": "adapted",
+      "rationale": "Replay-compatible provider-neutral runtime extended with capability-driven program management"
+    },
+    {
+      "component": "frontier-experiment-evidence",
+      "destination": "private custody archive",
+      "disposition": "archive_only",
+      "rationale": "Preserved for reproducibility without publishing raw prompts, benchmark answers, or checkout-specific evidence"
+    },
+    {
+      "component": "legacy-static-program-inventories",
+      "destination": null,
+      "disposition": "rejected",
+      "rationale": "Live Click schema plus the immutable capability registry replace copied enums and stale schema digests"
+    },
+    {
+      "component": "model-authored-native-input-and-shell",
+      "destination": null,
+      "disposition": "rejected",
+      "rationale": "Typed intent and deterministic generation are mandatory"
+    },
+    {
+      "component": "provider-private-reasoning",
+      "destination": null,
+      "disposition": "rejected",
+      "rationale": "Continuation may be transport-only; private reasoning is not persisted or scientific evidence"
+    }
+  ],
+  "schema": "chemsmart-migration-ledger-v2",
+  "source_path_entries": [
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/SKILL.md",
+      "destination_sha256": "28e9c7decae9b64c387e3cfa6c32e6c957b1925ebed68a068c453388e07b73cf",
+      "disposition": "adapted",
+      "rationale": "Retained maintainership knowledge while aligning it with the public command-first operating and evidence contracts.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/SKILL.md",
+      "source_sha256": "3fc955db85143888d994b1e8d6608f9f35ca79c6e59ec1784c33ae65c83ae56a"
+    },
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/agents/openai.yaml",
+      "destination_sha256": "e2d1b8b04079768c1bb7aefc423ee98a0efbbe2fbe4e788cf53ed4ff2d0a6951",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/agents/openai.yaml",
+      "source_sha256": "e2d1b8b04079768c1bb7aefc423ee98a0efbbe2fbe4e788cf53ed4ff2d0a6951"
+    },
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/references/adding-a-program.md",
+      "destination_sha256": "2cbe3a2b7e7782d61d8859ec74462cdf63057ccbdc37dbd9cf50309eeb289674",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/references/adding-a-program.md",
+      "source_sha256": "2cbe3a2b7e7782d61d8859ec74462cdf63057ccbdc37dbd9cf50309eeb289674"
+    },
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/references/agent-harness-forward-compatibility.md",
+      "destination_sha256": "b3ddbb6aece2e77a9a35f1355c646d916d0589eb7cb79d1860468558217f8b57",
+      "disposition": "adapted",
+      "rationale": "Retained maintainership knowledge while aligning it with the public command-first operating and evidence contracts.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/references/agent-harness-forward-compatibility.md",
+      "source_sha256": "84120e6c3d72fbada42f38f784db6a3b74cfabf1e25d13521cc488c9904c7959"
+    },
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/references/project-yaml-contract.md",
+      "destination_sha256": "fb8a1c5351385ab9becf0be16562de8fa42440cf4fda40ff1469fc329ac3280a",
+      "disposition": "adapted",
+      "rationale": "Retained maintainership knowledge while aligning it with the public command-first operating and evidence contracts.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/references/project-yaml-contract.md",
+      "source_sha256": "0311d39af8f2ef95b0d92df03fc9b9dc8a926c5798fd842038796c33a7924cf4"
+    },
+    {
+      "destination_path": ".agents/skills/chemsmart-v3-1-4/references/v3-surface-delta.md",
+      "destination_sha256": "4e1a3a4423bbbf15eacec366f3a50c04f38261ca75a3fb3340998e456e8a0a92",
+      "disposition": "adapted",
+      "rationale": "Retained maintainership knowledge while aligning it with the public command-first operating and evidence contracts.",
+      "source_path": ".agents/skills/chemsmart-v3-1-4/references/v3-surface-delta.md",
+      "source_sha256": "19919ffbe7487082d55507258d4caad308604fc6350cb13457ec7378461b1bb1"
+    },
+    {
+      "destination_path": ".agents/skills/gpu4pyscf-v1-8-0/SKILL.md",
+      "destination_sha256": "241c29a7afbfde413ac9af48a09c719b34dd0f0ab6303aa4d1d7ef5a3905d35c",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/gpu4pyscf-v1-8-0/SKILL.md",
+      "source_sha256": "241c29a7afbfde413ac9af48a09c719b34dd0f0ab6303aa4d1d7ef5a3905d35c"
+    },
+    {
+      "destination_path": ".agents/skills/gpu4pyscf-v1-8-0/agents/openai.yaml",
+      "destination_sha256": "c18e5792e4392d66b01f393a316bfed69368db20ab0fb206a40f73231c8bf80c",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/gpu4pyscf-v1-8-0/agents/openai.yaml",
+      "source_sha256": "c18e5792e4392d66b01f393a316bfed69368db20ab0fb206a40f73231c8bf80c"
+    },
+    {
+      "destination_path": ".agents/skills/gpu4pyscf-v1-8-0/references/gpu-dispatch-and-limits.md",
+      "destination_sha256": "7147296756ef1cdbc7596e97ed5b51913c8eb1b19c7166c296cd3812980f8492",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/gpu4pyscf-v1-8-0/references/gpu-dispatch-and-limits.md",
+      "source_sha256": "7147296756ef1cdbc7596e97ed5b51913c8eb1b19c7166c296cd3812980f8492"
+    },
+    {
+      "destination_path": ".agents/skills/pyscf-v2-14-0/SKILL.md",
+      "destination_sha256": "23cab92ae591f23867671c7f5e2e340d02e5f35e9ef56684c2857bfc66361dda",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/pyscf-v2-14-0/SKILL.md",
+      "source_sha256": "23cab92ae591f23867671c7f5e2e340d02e5f35e9ef56684c2857bfc66361dda"
+    },
+    {
+      "destination_path": ".agents/skills/pyscf-v2-14-0/agents/openai.yaml",
+      "destination_sha256": "ea7e2704bfcb76d7b84afa8a362f8b73a38edbf565b12bcc20dbf580113aeb11",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/pyscf-v2-14-0/agents/openai.yaml",
+      "source_sha256": "ea7e2704bfcb76d7b84afa8a362f8b73a38edbf565b12bcc20dbf580113aeb11"
+    },
+    {
+      "destination_path": ".agents/skills/pyscf-v2-14-0/references/capability-boundaries.md",
+      "destination_sha256": "d2440d87c8683420c92b65ebb6df5f935fc2af20b4f2f36eb63a149d9d1b6700",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/pyscf-v2-14-0/references/capability-boundaries.md",
+      "source_sha256": "d2440d87c8683420c92b65ebb6df5f935fc2af20b4f2f36eb63a149d9d1b6700"
+    },
+    {
+      "destination_path": ".agents/skills/pyscf-v2-14-0/references/chemsmart-settings-map.md",
+      "destination_sha256": "b61067eed944f40749dd1363619478ea8bb6a2d3d2c0f422ae9f13b320fc6fc3",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": ".agents/skills/pyscf-v2-14-0/references/chemsmart-settings-map.md",
+      "source_sha256": "b61067eed944f40749dd1363619478ea8bb6a2d3d2c0f422ae9f13b320fc6fc3"
+    },
+    {
+      "destination_path": "AGENTS.md",
+      "destination_sha256": "a5b42a8b1105d61e02b3bdb947d833bfb79b83f2b091d5cbf7844fd271848b2a",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "AGENTS.md",
+      "source_sha256": "2509943e540a70f99e8065b7f85469fec0658910fd73d697fed8ec4603ffbef9"
+    },
+    {
+      "destination_path": "CLAUDE.md",
+      "destination_sha256": "43c7ddbf8c337a709d27ba8948d7554f6a2415664276cf63b457024162b890c0",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "CLAUDE.md",
+      "source_sha256": "b53ef4ab7b5eda3e82a16d9c1f6abc3ad97957eaaaa20f7167814b2227b8ee36"
+    },
+    {
+      "destination_path": "chemsmart/analysis/thermochemistry.py",
+      "destination_sha256": "cdb59e843edef3d5cc0a13404e8745b651e7d2904b2fccf0866bf5fe9e104d04",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/analysis/thermochemistry.py",
+      "source_sha256": "cdb59e843edef3d5cc0a13404e8745b651e7d2904b2fccf0866bf5fe9e104d04"
+    },
+    {
+      "destination_path": "chemsmart/cli/config.py",
+      "destination_sha256": "c8069ff46c9c843f40f660feedccba82ca3e5f39ac28750b499cff0a085d6406",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/config.py",
+      "source_sha256": "a987fbfef861fb318309cf0d810505c5a74b77ddacec7bfdd284a3d50143bd51"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/__init__.py",
+      "destination_sha256": "6359e10142c016b51f11486ad7afe2f95943e132f20593ba88e9a7a0c5935b74",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/cli/pyscf/__init__.py",
+      "source_sha256": "6359e10142c016b51f11486ad7afe2f95943e132f20593ba88e9a7a0c5935b74"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/common.py",
+      "destination_sha256": "0938417694764940cdd87406034a3326d2f4c3208cca710f4002ae8d29e7af9b",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/pyscf/common.py",
+      "source_sha256": "cca86d88ab0e749b3f48beca9f70d712681c6f6dca394dd92b2c53beae128c5d"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/hess.py",
+      "destination_sha256": "168ed34cf79d67f333453a95ed022ff766585c717a06a9ccbc73b7b8a52af3d7",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/cli/pyscf/hess.py",
+      "source_sha256": "168ed34cf79d67f333453a95ed022ff766585c717a06a9ccbc73b7b8a52af3d7"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/opt.py",
+      "destination_sha256": "037df8a4a82d59447ed68bdf74e6255f49b0247e440156af2666ccacf0f0f607",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/pyscf/opt.py",
+      "source_sha256": "b68cd7551349f550c628181a629c817e56049f1ee9d851a7a35a86617d538ab5"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/pyscf.py",
+      "destination_sha256": "3882ea5d16ace229a37ed535063cf8e23c0d211c16f951aa01fe38de341b2ca3",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/pyscf/pyscf.py",
+      "source_sha256": "ff8ed958e6ac3fb4f784106c9e2576e07541cdd71258a9e5462de03be908ad14"
+    },
+    {
+      "destination_path": "chemsmart/cli/pyscf/singlepoint.py",
+      "destination_sha256": "b25251386bb8011848eda5d1e70c3a7c40636ce9c680aca173ae1c0b780bafe2",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/pyscf/singlepoint.py",
+      "source_sha256": "cb882fa31a00b02b734ea6254bbf79d503e3156025709f302720e960e1f0444c"
+    },
+    {
+      "destination_path": "chemsmart/cli/subcommands.py",
+      "destination_sha256": "09e0dc3f394ac9d2066b78e9f8456d6bb29ccda0f2566d91ec778615c45ce41b",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/cli/subcommands.py",
+      "source_sha256": "3746e4fbaffcdce3ddcc0aed92e4093d2a92bddbebef4863e30d9f4591313d34"
+    },
+    {
+      "destination_path": "chemsmart/database/assemble.py",
+      "destination_sha256": "3ab59bd725bb93cdb83e21c534caf36318e95319023c74f188e329f61bb05692",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/database/assemble.py",
+      "source_sha256": "db70d765d9cfdf5c5e73a986b64e71928740f4f93b57b5b0fee2d8dcca7760d1"
+    },
+    {
+      "destination_path": "chemsmart/io/molecules/structure.py",
+      "destination_sha256": "349434225d1374e7e3cb2484367acd05df1558685802a1b04f6788447b7f86df",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/io/molecules/structure.py",
+      "source_sha256": "93863fb225c6971cad34a4b499e1a63d0f59e7de7dd1448345613dde2ff59740"
+    },
+    {
+      "destination_path": "chemsmart/io/pyscf/__init__.py",
+      "destination_sha256": "714f7b748d817a3b0ce91c0cc804a4c6af5c11be5d0d5337c755a8ad15c3d08e",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/io/pyscf/__init__.py",
+      "source_sha256": "714f7b748d817a3b0ce91c0cc804a4c6af5c11be5d0d5337c755a8ad15c3d08e"
+    },
+    {
+      "destination_path": "chemsmart/io/pyscf/output.py",
+      "destination_sha256": "420ed1d1257a9567b3cbf4a5700c1de015c5c4b7b7ed28cb7319c11eb624b3aa",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/io/pyscf/output.py",
+      "source_sha256": "7a496191cba4ad9064ac3f1df5d4406e5d81ab51b02bd07f8e5445cb99341b52"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/__init__.py",
+      "destination_sha256": "2b64bfb152616675e6fb27558dcac96e1fdedc9f4119c665607a98229b8e9d2c",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/__init__.py",
+      "source_sha256": "b538380696f667611a764133156c1f36432c5688106e06d928d2521a9d0d30c5"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/hess.py",
+      "destination_sha256": "13fa7f9f165f9e75ff18c5b335f769a2b16260aba6133fc84dd07ddbd6d140a0",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/jobs/pyscf/hess.py",
+      "source_sha256": "13fa7f9f165f9e75ff18c5b335f769a2b16260aba6133fc84dd07ddbd6d140a0"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/job.py",
+      "destination_sha256": "c9769725a48acd1697ce00fb1269d4d69b0a0c019b1731170508ffe749892abf",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/job.py",
+      "source_sha256": "1f54688be0bc1c46d14cecbae2f0ede38c40902695655b72ac7c873633cf484e"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/opt.py",
+      "destination_sha256": "60462687b081c9f1c346de82a69223845346656869ebe6144d57e61d352521ee",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/jobs/pyscf/opt.py",
+      "source_sha256": "60462687b081c9f1c346de82a69223845346656869ebe6144d57e61d352521ee"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/runner.py",
+      "destination_sha256": "94c87d7cae7f00dcde4974fb7db9bdb2331d767875a495d8105d20bd79b092f5",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/runner.py",
+      "source_sha256": "79efc32822909a6dc1490e8a69a711121922f696bac1721d194d72ab3fe33067"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/settings.py",
+      "destination_sha256": "8d9a535ef97dc93d4602483b9f5906066a0391645b06df2ee6fef15a222e9f42",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/settings.py",
+      "source_sha256": "4dc6bfaa90a60e896729743374eafbd86c9ff6aa18ac809a6ef4fa545d7fc723"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/singlepoint.py",
+      "destination_sha256": "68fc1375bd72e9c77b34653453a383a0b93503c1070d4395a887996c43ad8e57",
+      "disposition": "ported",
+      "rationale": "Preserved byte-identically from the archived source working tree.",
+      "source_path": "chemsmart/jobs/pyscf/singlepoint.py",
+      "source_sha256": "68fc1375bd72e9c77b34653453a383a0b93503c1070d4395a887996c43ad8e57"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/validation.py",
+      "destination_sha256": "06bb3d523e3d34c9ca32a89d40963deeacf64f5a720bea04c814d09a21ff85c0",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/validation.py",
+      "source_sha256": "3c561ff72a4d2107255de2780c7ab96f0429712649aa61eafd2cff78dcf616ef"
+    },
+    {
+      "destination_path": "chemsmart/jobs/pyscf/writer.py",
+      "destination_sha256": "09e35ba5d5a50578002bd199e8e938d1774b1e0ee0779fa09008fadc9bfa71bc",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/jobs/pyscf/writer.py",
+      "source_sha256": "d0571d4c8541d6e72ab4fb3b813394d45a41a84e25931c0251e0c87c1ba3cd9f"
+    },
+    {
+      "destination_path": "chemsmart/jobs/settings.py",
+      "destination_sha256": "7d75c8cc4a8ddc29433494fd6ac378ce5d46a732ee9655bd27d56c06d918f84f",
+      "disposition": "rejected",
+      "rationale": "Rejected the source generic gas/solv PySCF adapter; the strict sp/opt/hess project loader is the sole PySCF YAML authority.",
+      "source_path": "chemsmart/jobs/settings.py",
+      "source_sha256": "5e0c5782b6ea1a6cd961bcfa36e19dd9ae83adaa3d17e0dfed401cc5493baaa6"
+    },
+    {
+      "destination_path": "chemsmart/settings/capabilities.py",
+      "destination_sha256": "36c07c92a462d90dd52ee01fa4cc691fc23acd4776caae387e92e965d5b2e3d8",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/settings/capabilities.py",
+      "source_sha256": "ffe089e8735882790a679c0432d445f201c71083aaf2b4ec4236bd8720379852"
+    },
+    {
+      "destination_path": "chemsmart/settings/executable.py",
+      "destination_sha256": "1707994ac22641698d8b19b5f6377edf2e85f3c9bdc7170309a21394a89127a7",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/settings/executable.py",
+      "source_sha256": "d1e0d59cf5a01088e0619088cd7988a19c44b170a16b2292c83a68aca9df672a"
+    },
+    {
+      "destination_path": "chemsmart/settings/pyscf.py",
+      "destination_sha256": "0137f7599b75a0b761e910607ebe4112fdc30c1cdc25c487742d5400f6f0570c",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/settings/pyscf.py",
+      "source_sha256": "20b415a871f9634550f33d5cdbb7fc19a3bff8f2fcaabad739ed761f40457980"
+    },
+    {
+      "destination_path": "chemsmart/settings/submitters.py",
+      "destination_sha256": "805d2a2f342f0b39efce5c62492a78c01ef8dc749964adb5d038f8ea3a21d14e",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/settings/submitters.py",
+      "source_sha256": "10f77808b3544f22095b1410518eacc9c8bb7182c6f08bfe41d9e03bc0adfe68"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/.chemsmart/pyscf/test.yaml",
+      "destination_sha256": "08495f4f276bff7d77e42006a3a8192a0dac8c62f1a02c4406929efc917da068",
+      "disposition": "adapted",
+      "rationale": "Converted the source project shape to strict explicit sp/opt/hess stages; legacy gas/solv inheritance was not retained.",
+      "source_path": "chemsmart/settings/templates/.chemsmart/pyscf/test.yaml",
+      "source_sha256": "5071f92355a10fcd3526c3fc533fe830ba84c6a54779b304cb7dbd938253e8a6"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/.chemsmart/server/PBS.yaml",
+      "destination_sha256": "6c9a4215cfbac91a6cc3f69ac35dc7af3e8cac9ad5358f94e7139d1b5e39e9c4",
+      "disposition": "adapted",
+      "rationale": "Retained explicit program blocks while removing implicit GPU selection and binding execution to validated resources.",
+      "source_path": "chemsmart/settings/templates/.chemsmart/server/PBS.yaml",
+      "source_sha256": "53dc50227cec89be899e2ea87220f465d721f1bd0db972d2f1278f78281aff16"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/.chemsmart/server/SLURM.yaml",
+      "destination_sha256": "e1aab3db080b3bc1e68b51ceea1af42aaef9c87065b01707a767b5abec1d1216",
+      "disposition": "adapted",
+      "rationale": "Retained explicit program blocks while removing implicit GPU selection and binding execution to validated resources.",
+      "source_path": "chemsmart/settings/templates/.chemsmart/server/SLURM.yaml",
+      "source_sha256": "b32582924d2eaaea6e22c5587cc87fcca763aa6fe73cfaa5aefa77dbbf324e65"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/.chemsmart/server/local.yaml",
+      "destination_sha256": "743fc8b909cef8c0b74c749a6ac3ca7f787c9482f2813657e14a023c51d20038",
+      "disposition": "adapted",
+      "rationale": "Retained explicit program blocks while removing implicit GPU selection and binding execution to validated resources.",
+      "source_path": "chemsmart/settings/templates/.chemsmart/server/local.yaml",
+      "source_sha256": "1578cbbcfe40248df055e3dec5c835ddb17bafe382538b1fe5ce14bd251b7b16"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/.chemsmart/server/small.yaml",
+      "destination_sha256": "e3429f2efa51f2462078f059c463a2c8e1c88bc16ef2673324b6eeb30da01eb9",
+      "disposition": "adapted",
+      "rationale": "Retained explicit program blocks while removing implicit GPU selection and binding execution to validated resources.",
+      "source_path": "chemsmart/settings/templates/.chemsmart/server/small.yaml",
+      "source_sha256": "3bc9bfa947bc88b2b85c3ab46c6a3b7eaef73d4855f46da0bdf59faf2439ccbf"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/server.yaml",
+      "destination_sha256": "f4ea14ecd53993f62eb790da7705b415a2380babba73a6cc185425712a4d2128",
+      "disposition": "adapted",
+      "rationale": "Retained explicit program blocks while removing implicit GPU selection and binding execution to validated resources.",
+      "source_path": "chemsmart/settings/templates/server.yaml",
+      "source_sha256": "5baefc8e79954f5e4c8a3ab7ac2667404a606d00abc3de7ff96f13d9e80bad6b"
+    },
+    {
+      "destination_path": "chemsmart/settings/templates/template_pyscf_simple.yaml",
+      "destination_sha256": "a73b4fc47590d1c8dec3f83cf8e29556ac80d2a259b1091ddb484182a30364f5",
+      "disposition": "adapted",
+      "rationale": "Converted the source project shape to strict explicit sp/opt/hess stages; legacy gas/solv inheritance was not retained.",
+      "source_path": "chemsmart/settings/templates/template_pyscf_simple.yaml",
+      "source_sha256": "68e1469e4b638ff02460895b9a91ef01c4dace2bba4f6e76c5fdfe67a5b27c94"
+    },
+    {
+      "destination_path": "chemsmart/settings/user.py",
+      "destination_sha256": "e6134d1680685a90a5cf8de992f61182081da443c88709409061cf48d9461c79",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/settings/user.py",
+      "source_sha256": "945458dbc3e3f86a012668907693699f75dab50f925c8d9141ecec97a22c5613"
+    },
+    {
+      "destination_path": "chemsmart/utils/io.py",
+      "destination_sha256": "7d6c5ce2a95247ba155b800dcb0028ac9cc4d91f49273c9d8446e178fa0b9821",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "chemsmart/utils/io.py",
+      "source_sha256": "4f027b8a1f6a24d122e750cb0c66e892391f726fc11fca60a476e809ffca0e5f"
+    },
+    {
+      "destination_path": "tests/data/PySCFTests/project_yaml/test.yaml",
+      "destination_sha256": "08495f4f276bff7d77e42006a3a8192a0dac8c62f1a02c4406929efc917da068",
+      "disposition": "adapted",
+      "rationale": "Converted the source project shape to strict explicit sp/opt/hess stages; legacy gas/solv inheritance was not retained.",
+      "source_path": "tests/data/PySCFTests/project_yaml/test.yaml",
+      "source_sha256": "5071f92355a10fcd3526c3fc533fe830ba84c6a54779b304cb7dbd938253e8a6"
+    },
+    {
+      "destination_path": "tests/test_PySCFValidation.py",
+      "destination_sha256": "41b77ec31dd26a2c2debe598c3eced382247e124577d27ba907acd35c157c3f9",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_PySCFValidation.py",
+      "source_sha256": "4285d48af686c25fca54861ea85c5f5dacd566a50a3cd8962390e58880dcb735"
+    },
+    {
+      "destination_path": "tests/test_PyscfIO.py",
+      "destination_sha256": "221b07bb33145852ff7b06939dcb36fe7c8bd578caaeabd794076afaa6f47c27",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_PyscfIO.py",
+      "source_sha256": "32600090481b8e11b831a27c0bef83201d7e4228f7e7a15e0029f8dceacff11d"
+    },
+    {
+      "destination_path": "tests/test_PyscfSettings.py",
+      "destination_sha256": "29f9969f809c3ce2120c793ef6d3d4630a9de8bcd2639c2f7c873e2a95398ee2",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_PyscfSettings.py",
+      "source_sha256": "314f69799b89d94a0a39cf4412ed4338cd026489781f55e6c6070d9ca6c36d07"
+    },
+    {
+      "destination_path": "tests/test_capabilities.py",
+      "destination_sha256": "bc4c09c78dc89b3ad4fc61b9fd126db08842a761202ef399f49100238f0bb003",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_capabilities.py",
+      "source_sha256": "2bf8603684d4252190975fdf4ca867787529e8c9cf9870f9e600bf26919de071"
+    },
+    {
+      "destination_path": "tests/test_pyscf_cli.py",
+      "destination_sha256": "3b992749dc86faf84a54aad92ad7d53ac2699bb544223347fb2adca260df47eb",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_pyscf_cli.py",
+      "source_sha256": "63c3a334e173ca9596a47fafdc67a93730a125e99e5d37c426b5373333d8c144"
+    },
+    {
+      "destination_path": "tests/test_pyscf_provenance.py",
+      "destination_sha256": "7a8a06ce197f99adb1d8e500bc65633a3aaed766dac647b96fc1e8dab6126836",
+      "disposition": "adapted",
+      "rationale": "Reconciled the source implementation with upstream v3.1.4 and hardened capability, provenance, validation, or compatibility contracts.",
+      "source_path": "tests/test_pyscf_provenance.py",
+      "source_sha256": "02a1cc3dcfde2f87675c059c935e9fc441c24b08e3af4dd0b20c835530fbcbe0"
+    }
+  ],
+  "source_snapshot": {
+    "archive_manifest": "source-v314-pyscf/snapshot-manifest.json",
+    "archive_manifest_sha256": "6438dab96f35a0b1d81bcf79367ca4e724c8af78d9ac56ca72e9b6d22631bbf6",
+    "path_count": 58
+  }
+}

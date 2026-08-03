@@ -1,0 +1,4 @@
+interface:
+  display_name: "PySCF 2.14.0 for ChemSmart"
+  short_description: "PySCF CLI, validation, and HDF5 provenance"
+  default_prompt: "Use $pyscf-v2-14-0 to map and preflight a ChemSmart PySCF job, then verify its applied settings and HDF5 provenance."
