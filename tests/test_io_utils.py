@@ -140,6 +140,20 @@ class TestGetOutfileFormat:
         assert result == "unknown"
         os.unlink(f.name)
 
+    def test_pyscf_hdf5_detection_uses_structured_schema(self, tmp_path):
+        from chemsmart.jobs.pyscf.writer import write_pyscf_h5
+
+        path = tmp_path / "structured.h5"
+        write_pyscf_h5(
+            path,
+            spec={},
+            provenance={},
+            status={},
+            results={},
+        )
+
+        assert get_program_type_from_file(path) == "pyscf"
+
     def test_thermochemistry_init_gaussian(self, gaussian_singlet_opt_outfile):
         from chemsmart.analysis.thermochemistry import Thermochemistry
 

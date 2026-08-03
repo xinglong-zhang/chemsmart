@@ -1,0 +1,29 @@
+# Built-in compute-light PySCF project.
+sp:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: true
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  solvent_model: smd
+  solvent_id: water
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  freq: true
+  density_fit: true
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  opt_solver: geometric
+  opt_maxsteps: 100
+hess:
+  functional: b3lyp
+  basis: def2-svp
+  freq: true
+  density_fit: true
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100

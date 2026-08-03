@@ -2,7 +2,10 @@
  Project Settings
 ##################
 
-Configure project-specific settings for Gaussian and ORCA calculations.
+Configure project-specific settings for Gaussian, ORCA, PySCF, and xTB
+calculations.  PySCF and xTB use strict stage-specific schemas; see
+:doc:`pyscf-cli-options` and :doc:`xtb-cli-options` for their complete
+contracts.
 
 ***************************
  Gaussian Project Settings

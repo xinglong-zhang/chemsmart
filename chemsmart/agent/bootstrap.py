@@ -1,0 +1,235 @@
+"""Live, non-computing conformance and environment bootstrapping.
+
+These probes exist so an agent session can observe the checked-out source tree
+and the exact local program environment before a model proposes work.  They do
+not run an SCF cycle and they do not turn source presence into scientific
+readiness.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import subprocess
+from typing import Iterable
+
+from click.testing import CliRunner
+
+from chemsmart.agent._contracts import ContractError, canonical_sha256, file_sha256
+from chemsmart.agent.capabilities import (
+    ProgramComponentConformanceReceiptV1,
+    TrustedComputeEnvironmentReceiptV1,
+    build_program_component_conformance_receipt,
+    build_trusted_compute_environment_receipt,
+)
+from chemsmart.agent.cli_schema import LiveClickSchemaV1
+from chemsmart.cli.main import entry_point
+
+
+_PYTHON_PROBE = r"""
+import importlib
+import importlib.metadata
+import json
+import pathlib
+import sys
+
+names = ("pyscf", "numpy", "h5py", "geometric", "gpu4pyscf", "cupy")
+versions = {}
+for name in names:
+    try:
+        module = importlib.import_module(name)
+        version = getattr(module, "__version__", "")
+        if not version:
+            version = importlib.metadata.version(name)
+        versions[name] = str(version or "available")
+    except Exception:
+        pass
+print(json.dumps({
+    "interpreter": str(pathlib.Path(sys.executable).resolve()),
+    "versions": versions,
+}, sort_keys=True))
+"""
+
+
+def probe_python_compute_environment(
+    interpreter: str | Path,
+    *,
+    engine: str,
+    timeout_seconds: float = 60.0,
+) -> TrustedComputeEnvironmentReceiptV1:
+    """Observe the exact Python used for PySCF CPU or GPU execution."""
+
+    executable = Path(interpreter).expanduser().resolve()
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise ContractError("PySCF compute interpreter is not executable")
+    completed = subprocess.run(
+        [str(executable), "-c", _PYTHON_PROBE],
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ContractError("PySCF compute environment probe failed")
+    try:
+        observed = json.loads(completed.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError) as exc:
+        raise ContractError("PySCF compute environment probe was malformed") from exc
+    if Path(observed.get("interpreter", "")).resolve() != executable:
+        raise ContractError("PySCF compute interpreter identity changed during probe")
+    versions = {
+        str(name).lower(): str(value)
+        for name, value in dict(observed.get("versions") or {}).items()
+    }
+    required = {"pyscf", "numpy", "h5py"}
+    if not required.issubset(versions):
+        raise ContractError("PySCF compute environment lacks required packages")
+    gpu_evidence = {
+        "device_available": False,
+        "gpu4pyscf_distribution": "gpu4pyscf" in versions,
+        "gpu4pyscf_version": versions.get("gpu4pyscf", ""),
+        "cupy_version": versions.get("cupy", ""),
+    }
+    return build_trusted_compute_environment_receipt(
+        program="pyscf",
+        engine=engine,
+        compute_interpreter_sha256=file_sha256(executable),
+        dependency_versions=versions,
+        solver_evidence={"geometric": "geometric" in versions},
+        gpu_evidence=gpu_evidence,
+        source_probe_id=f"live-python-probe:{canonical_sha256(observed)}",
+    )
+
+
+def bootstrap_program_conformance(
+    *,
+    program: str,
+    engine: str,
+    jobtypes: Iterable[str],
+    input_path: str | Path,
+    project_path: str | Path | None,
+    server_path: str | Path | None = None,
+    charge: int | None = None,
+    multiplicity: int | None = None,
+    registry_sha256: str,
+    live_schema: LiveClickSchemaV1,
+) -> ProgramComponentConformanceReceiptV1:
+    """Exercise real Click fake previews before enabling an agent program.
+
+    Both ``run`` and ``sub`` paths are parsed for every declared stage.  The
+    resulting receipt enables planning and safe preview only; it deliberately
+    carries no execution evidence.
+    """
+
+    input_path = Path(input_path).resolve()
+    project = Path(project_path).resolve() if project_path else None
+    server = Path(server_path).resolve() if server_path else None
+    if (
+        not input_path.is_file()
+        or (project is not None and not project.is_file())
+        or (server is not None and not server.is_file())
+    ):
+        raise ContractError("conformance fixtures must be existing regular files")
+    if (charge is None) != (multiplicity is None):
+        raise ContractError("charge and multiplicity must be supplied together")
+    observations = []
+    covered = []
+    runner = CliRunner()
+    for jobtype in tuple(sorted(set(str(item) for item in jobtypes))):
+        schema_green = all(
+            live_schema.has_path((target, program, jobtype))
+            for target in ("run", "sub")
+        )
+        stage_green = schema_green
+        stage_rows = []
+        if schema_green:
+            for target in ("run", "sub"):
+                argv = [target]
+                if server is not None:
+                    argv.extend(("--server", str(server)))
+                argv.extend(("--fake", "--no-scratch"))
+                if target == "sub":
+                    argv.append("--test")
+                if program == "pyscf" and engine == "gpu":
+                    argv.extend(("--num-gpus", "1"))
+                argv.append(program)
+                if project is not None:
+                    argv.extend(("--project", str(project)))
+                argv.extend(("--filename", str(input_path)))
+                if charge is not None:
+                    argv.extend(("--charge", str(charge)))
+                    argv.extend(("--multiplicity", str(multiplicity)))
+                if program == "pyscf":
+                    argv.append("--gpu" if engine == "gpu" else "--no-gpu")
+                argv.append(jobtype)
+                with runner.isolated_filesystem():
+                    result = runner.invoke(entry_point, argv)
+                stage_rows.append(
+                    {
+                        "target": target,
+                        "argv_shape": tuple(
+                            "<input>" if value == str(input_path)
+                            else "<project>" if project is not None and value == str(project)
+                            else "<server>" if server is not None and value == str(server)
+                            else value
+                            for value in argv
+                        ),
+                        "exit_code": int(result.exit_code),
+                        "exception": type(result.exception).__name__ if result.exception else "",
+                    }
+                )
+                stage_green = stage_green and result.exit_code == 0
+        observations.append(
+            {"jobtype": jobtype, "schema_green": schema_green, "paths": tuple(stage_rows)}
+        )
+        if stage_green:
+            covered.append(jobtype)
+    fixture = {
+        "program": program,
+        "engine": engine,
+        "input_sha256": file_sha256(input_path),
+        "project_sha256": file_sha256(project) if project is not None else "",
+        "server_sha256": file_sha256(server) if server is not None else "",
+        "charge": charge,
+        "multiplicity": multiplicity,
+        "observations": tuple(observations),
+    }
+    fixture_sha = canonical_sha256(fixture)
+    passed = bool(covered) and len(covered) == len(tuple(sorted(set(jobtypes))))
+    status = "passed" if passed else "failed"
+    compiler_sha = canonical_sha256(
+        {"schema": live_schema.schema_sha256, "paths": tuple(observations)}
+    )
+    preview_sha = canonical_sha256(fixture)
+    # The preflight and verifier code paths are imported by the same source
+    # tree that generated the fake artifacts. Their detailed scientific verdict
+    # remains per-node evidence, not a property of this bootstrap receipt.
+    preflight_sha = canonical_sha256(
+        {"component": "program_node_preflight", "program": program}
+    )
+    verifier_sha = canonical_sha256(
+        {"component": "generated_artifact_verifier", "program": program}
+    )
+    return build_program_component_conformance_receipt(
+        program=program,
+        registry_sha256=registry_sha256,
+        live_cli_schema_sha256=live_schema.schema_sha256,
+        fixture_bundle_sha256=fixture_sha,
+        covered_jobtypes=tuple(covered),
+        covered_engines=(engine,) if passed else (),
+        compiler_receipt_sha256=compiler_sha,
+        preview_receipt_sha256=preview_sha,
+        preflight_receipt_sha256=preflight_sha,
+        verifier_receipt_sha256=verifier_sha,
+        compiler_status=status,
+        preview_status=status,
+        preflight_status=status,
+        verifier_status=status,
+    )
+
+
+__all__ = [
+    "bootstrap_program_conformance",
+    "probe_python_compute_environment",
+]

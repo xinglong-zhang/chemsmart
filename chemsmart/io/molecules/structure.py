@@ -1115,6 +1115,11 @@ class Molecule:
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
 
+        if basename.endswith(".h5"):
+            return cls._read_pyscf_resultsfile(
+                filepath, index, return_list=return_list, **kwargs
+            )
+
         if basename.endswith(".out"):
             from chemsmart.utils.io import get_program_type_from_file
 
@@ -1125,9 +1130,14 @@ class Molecule:
                 return cls._read_xtb_outfile(filepath, index, **kwargs)
             elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            elif program == "pyscf":
+                return cls._read_pyscf_resultsfile(
+                    filepath, index, return_list=return_list, **kwargs
+                )
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
-                "Only Gaussian, ORCA, and xTB are currently supported."
+                "Only Gaussian, ORCA, xTB, and PySCF are currently "
+                "supported."
             )
 
         if basename.endswith(".gro"):
@@ -1289,6 +1299,32 @@ class Molecule:
         )
         xtb_output = XTBOutput(folder=folder)
         return xtb_output.get_molecule(index=index)
+
+    @staticmethod
+    def _read_pyscf_resultsfile(filepath, index, return_list=False, **kwargs):
+        """
+        Read PySCF results.
+
+        ``filepath`` may be the authoritative ``.h5`` artifact or its sibling
+        ``.out`` log. The log is never parsed. Geometry, energy, vibrational
+        data, and downstream artifact identity all come from exact HDF5 bytes.
+        This reader intentionally bypasses the generic mtime cache: when an
+        ``.out`` path is supplied, the sibling HDF5 bytes—not the log mtime—
+        determine molecular identity.
+
+        Args:
+            filepath (str): Path to PySCF ``.h5`` results or ``.out`` log.
+            index (str or int): Accepted for interface parity. A PySCF job
+                stores one final structure, so there is nothing to index.
+            return_list (bool): Wrap the result in a list.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule from the PySCF results.
+        """
+        from chemsmart.io.pyscf.output import PySCFOutput
+
+        pyscf_output = PySCFOutput(filename=filepath)
+        return pyscf_output.get_molecule(index=index, return_list=return_list)
 
     @classmethod
     def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):

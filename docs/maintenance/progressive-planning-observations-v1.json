@@ -1,0 +1,58 @@
+{
+  "schema": "chemsmart-progressive-planning-observations-v1",
+  "status": "historical_pre_live_milestone",
+  "superseded_by": "integration-status-v314.md",
+  "observed_on": "2026-08-03",
+  "source_state": "uncommitted integration tree",
+  "observations": [
+    {
+      "id": "PP-OBS-001",
+      "kind": "source_syntax",
+      "result": "pass",
+      "files_parsed": 11,
+      "claim_boundary": "Python AST parsing only; no import, test, or integration claim"
+    },
+    {
+      "id": "PP-OBS-002",
+      "kind": "permissive_semantic_draft",
+      "result": "pass",
+      "requested_program": "psi4",
+      "jobtype": "sp",
+      "unresolved_fields": [
+        "basis",
+        "geometry",
+        "method"
+      ],
+      "draft_state": "planned",
+      "localized_findings": [
+        "workflow.input.unresolved",
+        "workflow.program.not_declared"
+      ],
+      "terminal_state": "planned",
+      "claim_boundary": "The semantic plan was retained; no command, preview, environment, or readiness claim"
+    },
+    {
+      "id": "PP-OBS-003",
+      "kind": "boundary_fixture_construction",
+      "result": "pass",
+      "fixture_count": 14,
+      "episode_plan_count": 28,
+      "paired_public_context_equal": true,
+      "opt_hess_future_edge_state": "future_unresolved",
+      "external_conformance_receipts": 0,
+      "claim_boundary": "Fixture and schedule construction only; no provider or chemistry-engine call"
+    }
+  ],
+  "calls": {
+    "provider": 0,
+    "chemistry_engine": 0,
+    "scheduler_or_hpc": 0
+  },
+  "deferred": [
+    "focused integration suite",
+    "full test suite",
+    "read-only lint",
+    "live provider experiment",
+    "chemistry execution"
+  ]
+}

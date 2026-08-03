@@ -15,6 +15,15 @@ Notice: If you have cloned this package before and find something that did not w
 
 CHEMSMART is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
+CHEMSMART is also the canonical command-line and project-configuration hub for
+operating multiple computational-chemistry programs. Users and automation
+systems express scientific settings in validated project YAML and invoke the
+same CHEMSMART command families instead of reproducing each backend's input
+grammar. CHEMSMART then owns backend-specific input generation, execution, and
+result inspection. This separation makes computational choices visible and
+reusable while reducing the opportunity for an agent to invent unsupported
+program syntax.
+
 It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
 
 Users can customize their own HPC server settings and project settings to run different jobs, without modifying the codes in this package.
@@ -249,7 +258,54 @@ to get the options for running CHEMSMART package.
 
 ## Usage
 
-With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).
+With setup completed, one is able to run different computational chemistry jobs via the command-line interface (CLI).
+
+The integrated 3.1.4 surface includes the existing Gaussian and ORCA command
+families plus bounded PySCF and xTB workflows:
+
+- `chemsmart run|sub pyscf ... sp|opt|hess` uses strict stage-specific project
+  YAML and structured HDF5 results. GPU4PySCF is an explicit PySCF engine and
+  never silently falls back to CPU.
+- `chemsmart run|sub xtb ... sp|opt|hess` supports the maintained CPU
+  GFN0/GFN1/GFN2/GFN-FF surface with optional strict project YAML.
+
+See the [PySCF CLI contract](docs/source/pyscf-cli-options.rst) and
+[xTB CLI contract](docs/source/xtb-cli-options.rst). A registered command does
+not by itself prove that its executable, Python environment, or optional GPU
+stack is installed.
+
+### Natural-language agent entrypoint
+
+The provider-neutral agent uses the same project loaders and CLI compiler as
+the conventional command surface. `plan` creates typed project and workflow
+proposals and performs safe previews; it does not execute a chemistry engine:
+
+```bash
+chemsmart agent plan \
+  --provider deepseek \
+  --task-file research-task.txt \
+  --secret-file provider.env \
+  --workspace ./agent-workspace
+```
+
+`run` follows the same path and can execute only host-compiled workflow nodes
+covered by an explicit approval document. Without `--approval-file`, it remains
+preview-only:
+
+```bash
+chemsmart agent run \
+  --provider deepseek \
+  --task-file research-task.txt \
+  --secret-file provider.env \
+  --workspace ./agent-workspace \
+  --approval-file workflow-approval.json
+```
+
+Exactly one of `--task` and `--task-file` is required. The model proposes typed
+scientific intent; deterministic CHEMSMART code resolves project artifacts,
+canonical commands, environments, approvals, execution state, and validation.
+
+The following examples introduce the existing Gaussian workflow.
 
 To submit (and run) a geometry optimization job, do:
 

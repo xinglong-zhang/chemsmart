@@ -169,6 +169,22 @@ class CHEMSMARTUserSettings:
         """
         return os.path.join(self.config_dir, "orca")
 
+    @property
+    def user_pyscf_settings_dir(self):
+        """
+        Get the user PySCF settings directory.
+
+        Returns:
+            str: Path to the directory containing PySCF-specific settings.
+        """
+        return os.path.join(self.config_dir, "pyscf")
+
+    @property
+    def user_xtb_settings_dir(self):
+        """Directory containing user xTB project YAML files."""
+
+        return os.path.join(self.config_dir, "xtb")
+
     @cached_property
     def server_yaml_files(self):
         """
@@ -200,6 +216,22 @@ class CHEMSMARTUserSettings:
             list: List of paths to ORCA project configuration YAML files.
         """
         return glob.glob(os.path.join(self.user_orca_settings_dir, "*.yaml"))
+
+    @cached_property
+    def pyscf_project_yaml_files(self):
+        """
+        Get list of PySCF project YAML configuration files.
+
+        Returns:
+            list: List of paths to PySCF project configuration YAML files.
+        """
+        return glob.glob(os.path.join(self.user_pyscf_settings_dir, "*.yaml"))
+
+    @cached_property
+    def xtb_project_yaml_files(self):
+        """Return user xTB project YAML files."""
+
+        return glob.glob(os.path.join(self.user_xtb_settings_dir, "*.yaml"))
 
     @cached_property
     def scratch(self):
@@ -274,4 +306,27 @@ class CHEMSMARTUserSettings:
         return [
             os.path.basename(o).removesuffix(".yaml")
             for o in self.orca_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_pyscf_projects(self):
+        """
+        Get list of all available PySCF project configurations.
+
+        Returns:
+            list: List of PySCF project names (without .yaml extension)
+                  available in the user PySCF settings directory.
+        """
+        return [
+            os.path.basename(p).removesuffix(".yaml")
+            for p in self.pyscf_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_xtb_projects(self):
+        """Return user xTB project names without their YAML suffix."""
+
+        return [
+            os.path.basename(path).removesuffix(".yaml")
+            for path in self.xtb_project_yaml_files
         ]

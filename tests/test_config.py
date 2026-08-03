@@ -4,7 +4,11 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from chemsmart.cli.config import Config
+from chemsmart.cli.config import (
+    Config,
+    ensure_program_blocks,
+    set_program_exefolder,
+)
 from chemsmart.utils.io import update_powershell_profiles, update_windows_env
 
 
@@ -189,6 +193,40 @@ class TestConfig:
             cfg.setup_environment()
         # Existing content should be untouched
         assert marker.read_text() == "keep me"
+        assert (dest / "pyscf" / "test.yaml").is_file()
+        assert (dest / "xtb" / "test.yaml").is_file()
+
+    def test_existing_server_yaml_gets_only_missing_program_blocks(
+        self, tmp_path
+    ):
+        server_dir = tmp_path / "server"
+        server_dir.mkdir()
+        server_yaml = server_dir / "existing.yaml"
+        original = "GAUSSIAN:\n    EXEFOLDER: /opt/g16\n"
+        server_yaml.write_text(original, encoding="utf-8")
+
+        ensure_program_blocks(server_dir)
+
+        updated = server_yaml.read_text(encoding="utf-8")
+        assert updated.startswith(original)
+        assert updated.count("PYSCF:") == 1
+        assert updated.count("XTB:") == 1
+        assert "/opt/g16" in updated
+
+    def test_exefolder_configuration_appends_missing_program_block(
+        self, tmp_path
+    ):
+        server_yaml = tmp_path / "existing.yaml"
+        server_yaml.write_text(
+            "GAUSSIAN:\n    EXEFOLDER: /opt/g16\n", encoding="utf-8"
+        )
+
+        set_program_exefolder(tmp_path, "PYSCF", "/opt/pyscf/bin")
+
+        updated = server_yaml.read_text(encoding="utf-8")
+        assert "PYSCF:\n" in updated
+        assert 'EXEFOLDER: "/opt/pyscf/bin"' in updated
+        assert "LOCAL_RUN: true" in updated
 
     def test_setup_environment_windows_calls_update_env(self, tmp_path):
         """On native Windows (no POSIX shell, no PS), setup_environment
