@@ -1019,6 +1019,59 @@ class TestXTBFolder:
         assert p_benzyne_sp_folder._input_geometry() is not None
         assert p_benzyne_sp_folder._xtbtopo_mol() is not None
 
+    def test_is_xtb_calculation_directory_false_without_output(self, tmp_path):
+        folder = XTBFolder(str(tmp_path))
+        assert folder._xtb_out() is None
+        assert folder.is_xtb_calculation_directory is False
+
+    def test_is_xtb_calculation_directory_false_without_markers(
+        self, tmp_path
+    ):
+        """An xTB *.out file is present, but none of the common
+        auxiliary marker files (xtbrestart, charges, xtbtopo.mol,
+        wbo) exist -- must not be considered a valid xTB directory."""
+        (tmp_path / "job.out").write_text("x T B\nsome xtb output\n")
+        folder = XTBFolder(str(tmp_path))
+        assert folder._xtb_out() is not None
+        assert folder.is_xtb_calculation_directory is False
+
+    def test_input_geometry_skips_xtbopt_prefixed_parseable_files(
+        self, tmp_path
+    ):
+        """A parseable-format file whose name starts with "xtbopt" is
+        the optimized-geometry output, not the input geometry, and
+        must be skipped by _input_geometry."""
+        (tmp_path / "xtbopt.xyz").write_text("optimized geometry\n")
+        real_input = tmp_path / "structure.xyz"
+        real_input.write_text("input geometry\n")
+
+        folder = XTBFolder(str(tmp_path))
+        assert folder._input_geometry() == str(real_input)
+
+    def test_input_geometry_skips_xtbopt_prefixed_unsupported_files(
+        self, tmp_path
+    ):
+        (tmp_path / "xtbopt.coord").write_text("optimized geometry\n")
+        real_input = tmp_path / "structure.coord"
+        real_input.write_text("input geometry\n")
+
+        folder = XTBFolder(str(tmp_path))
+        assert folder._input_geometry() == str(real_input)
+
+    def test_input_geometry_none_when_nothing_found(self, tmp_path):
+        folder = XTBFolder(str(tmp_path))
+        assert folder._input_geometry() is None
+
+    def test_xtb_out_raises_for_multiple_output_files(self, tmp_path):
+        import pytest
+
+        (tmp_path / "job1.out").write_text("x T B\nsome xtb output\n")
+        (tmp_path / "job2.out").write_text("x T B\nsome xtb output\n")
+
+        folder = XTBFolder(str(tmp_path))
+        with pytest.raises(ValueError, match="Multiple xTB main output"):
+            folder._xtb_out()
+
 
 class TestXTBOutput:
 
