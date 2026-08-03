@@ -6,10 +6,12 @@ group and :mod:`unittest.mock` to intercept the job constructor so that
 the merged settings can be inspected without running an actual PyMOL job.
 """
 
+import inspect
 import os
 import shutil
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -669,6 +671,92 @@ class TestMolCLIAlignCommand:
         assert result.exit_code != 0
         assert "Error processing file" in result.output
         assert "out of range" in result.output
+
+
+def _invoke_align_callback_directly(**ctx_obj_overrides):
+    """Directly call align's own undecorated callback, bypassing both
+    Click's option-parsing and mol.py's own group-level ctx.obj
+    population.
+
+    Several of align.py's own internal guards (a second
+    directory-without-filetype check, a second no-input-files check,
+    an isinstance(filenames, str) normalization, and the "may not
+    select enough structures" hint's False arm) are unreachable
+    through the real CLI: mol.py's group callback already validates
+    directory/filetype pairing before align.py runs, and always
+    populates ctx.obj["filenames"] as a real list whenever directory
+    mode is used, so align.py's own re-checks of the same invariants
+    never see the states they guard against. See
+    BUGS_FOUND.md for the corresponding entry.
+    """
+    import sys
+
+    import click
+
+    import chemsmart.cli.mol.align  # noqa: F401 - ensures submodule cached
+
+    align_mod = sys.modules["chemsmart.cli.mol.align"]
+    real_fn = inspect.unwrap(align_mod.align.callback)
+
+    ctx_obj = {
+        "index": None,
+        "label": None,
+        "filenames": None,
+        "directory": None,
+        "filetype": None,
+    }
+    ctx_obj.update(ctx_obj_overrides)
+
+    ctx = click.Context(align_mod.align)
+    ctx.obj = ctx_obj
+    with ctx:
+        return real_fn(
+            ctx,
+            file=None,
+            style=None,
+            trace=None,
+            quiet=False,
+            command_line_only=False,
+            skip_completed=False,
+        )
+
+
+class TestMolCLIAlignDirectInvocation:
+    """Covers align.py branches unreachable through the real ``mol``
+    group CLI (see BUGS_FOUND.md)."""
+
+    def test_directory_without_filetype_second_guard(self, tmp_path):
+        with pytest.raises(
+            click.exceptions.BadParameter, match="no filetype provided"
+        ):
+            _invoke_align_callback_directly(directory=str(tmp_path))
+
+    def test_filenames_as_plain_string_is_normalized(
+        self, single_molecule_xyz_file, two_rotated_molecules_xyz_file
+    ):
+        """Covers `if isinstance(filenames, str): filenames = [filenames]`,
+        unreachable via real CLI since mol.py always supplies a list/tuple."""
+        with pytest.raises(
+            click.exceptions.BadParameter, match="out of range"
+        ):
+            _invoke_align_callback_directly(
+                filenames=single_molecule_xyz_file,
+                index="100",
+            )
+
+    def test_not_enough_molecules_without_filenames_hint(self, tmp_path):
+        """Covers the "may not select enough structures" hint's False
+        arm: with filenames falsy (e.g. molecules supplied via some
+        other means), the hint must not be appended."""
+        single_atom_file = tmp_path / "single.xyz"
+        single_atom_file.write_text("1\ncomment\nH 0.0 0.0 0.0\n")
+        with pytest.raises(click.exceptions.BadParameter) as exc_info:
+            _invoke_align_callback_directly(
+                directory=str(tmp_path), filetype="xyz"
+            )
+        message = str(exc_info.value)
+        assert "at least 2 molecules" in message
+        assert "may not select enough structures" not in message
 
 
 class TestMolCLIVisualizeCommand:

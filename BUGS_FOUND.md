@@ -3215,3 +3215,28 @@ See `tests/test_groupers.py::TestGroupers::test_check_isomorphism_direct`, which
 **Impact:** Low-to-moderate -- purely a performance gap, not a correctness bug: pairwise isomorphism checks (O(n^2) for n molecules) never benefit from `num_procs > 1`, unlike the graph-conversion step. For large conformer sets this could be a meaningful missed optimization, but results are still correct.
 
 **Suggested direction:** either wire `_check_isomorphism` into the pairwise-check loop via `Parallel(n_jobs=self.num_procs)(delayed(self._check_isomorphism)(pair) for pair in indices)` (mirroring the graph-conversion step), or delete it if serial checking is intentional (e.g. because Union-Find's sequential `union()` calls don't parallelize cleanly).
+
+## 63. `cli/mol/align.py` has several validation checks that duplicate upstream guarantees and are unreachable through any input
+
+**Location:** `chemsmart/cli/mol/align.py`:
+- lines 68-77 (the `if index is None: if ... elif ... elif ...:` chain's third branch, `75->79`)
+- lines 136-141 (a second "directory without filetype" `click.BadParameter`)
+- lines 181-185 (a second "no input files" `click.BadParameter`)
+- lines 187-189 (`if not isinstance(molecules, list): molecules = list(molecules) if molecules else []`)
+- lines 202-208 (`base_label = "molecules"` fallback when `base_file_for_label` is falsy)
+
+Each of these re-checks a condition already guaranteed impossible earlier in the *same function* or by `chemsmart/cli/mol/mol.py`'s own group callback:
+
+- The lines 61-65 guard already raises if `directory` is truthy without `filetype`, so by the time execution reaches the `if directory: ... else: raise ...` at line 136-141, `filetype` is guaranteed truthy whenever `directory` is -- the `else` can never execute.
+- The line 56-59 guard already raises if neither `filenames` nor `directory` is set, so the final `else` at line 181-185 (reached only when neither `if directory:` nor `elif filenames:` matched) can never execute either -- confirmed empirically: even calling the undecorated callback directly with a hand-built `ctx.obj` (bypassing Click and `mol.py`'s own group logic entirely) still hits the *first* guard before ever reaching this one.
+- For the same reason, once execution passes line 56-59, at least one of `directory`/`filenames` is truthy, and combined with the 61-65 guard (directory implies filetype), the `if/elif/elif` index-defaulting chain's third branch's False arm (line 75, falling through to line 79) can never actually occur -- one of the three branches always matches.
+- `molecules` is initialized as `molecules = []` at line 79 and only ever mutated via `.extend(...)` afterwards, so it is always already a `list` by line 188; the `isinstance` guard's True arm can't fire.
+- `base_file_for_label` is unconditionally assigned inside both live branches of the `if directory: ... elif filenames: ...` chain (`matched_files[0]` and `filenames[0]` respectively) before the label-generation block runs, so the `"molecules"` fallback at line 208 can only fire from the (also dead) `else` branch at line 181.
+
+Additionally, `mol.py`'s own group callback (`chemsmart/cli/mol/mol.py`) independently validates and populates `ctx.obj["filenames"]`/`ctx.obj["directory"]` *before* `align()` ever runs, so the CLI can never even reach `align()` in a state where these dead branches' guarded conditions hold true.
+
+**Reproduce:** see `tests/test_mol_cli.py::TestMolCLIAlignDirectInvocation`, which calls `align`'s undecorated callback directly (via `inspect.unwrap`) with a hand-built `ctx.obj`, bypassing both Click's parsing and `mol.py`'s group logic, to reach the *reachable* dead branches (the second directory/filetype guard, the `isinstance(filenames, str)` normalization, and the "may not select enough structures" hint's False arm). Attempting to also reach the "no input files" second guard (line 183) via the same direct-invocation technique still hits the *first* guard (line 56-59) instead, proving it's unreachable via any input, not just via the real CLI.
+
+**Impact:** Low -- entirely redundant defensive code with no behavioral effect; consistent with several other findings this session (e.g. bugs #42-43, #52, #60) where copy-pasted or belt-and-suspenders validation duplicates an invariant already enforced earlier in the same call path.
+
+**Suggested direction:** no action needed; could be simplified by deleting the unreachable duplicate checks (139, 183, and the `isinstance`/`molecules` normalizations) now that they're confirmed dead, trusting the earlier guards instead.
