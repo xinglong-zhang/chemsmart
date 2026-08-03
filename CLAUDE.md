@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 rules, approval boundaries, PySCF-specific constraints). This file covers commands
 and architecture only, and does not repeat it.
 
-Version-pinned ground truth lives in `.agents/skills/` and is loadable as skills:
-`chemsmart-v3-1-4` (CLI, project YAML, registry), `pyscf-v2-14-0`,
-`gpu4pyscf-v1-8-0`. Read the relevant skill before changing CLI, settings, job, or
-runner code.
+The global agent skill registry provides `chemsmart-cli-program-hub` (CLI,
+project YAML, registry), `pyscf-v2-14-0`, and `gpu4pyscf-v1-8-0`. Read the
+relevant skill before changing CLI, settings, job, or runner code, but treat
+the checked-out source and live schema as authoritative.
 
 ## Commands
 
@@ -68,8 +68,8 @@ common bug here — see `AGENTS.md`.
 `~/.chemsmart/<program>/<name>.yaml`, then the built-in test projects, then
 raises. The YAML's `gas:` section feeds most jobtypes and `solv:` feeds `sp`; if
 `gas:` is absent, `solv:` feeds everything. `sp` defaults to `freq: False`, but an
-explicit `freq:` in `solv:` overrides that default. Details in the
-`chemsmart-v3-1-4` skill.
+explicit `freq:` in `solv:` overrides that default. Details are in the
+`chemsmart-cli-program-hub` skill.
 
 `settings/server.py` + `submitters.py` handle PBS/SLURM/LSF; `executable.py` maps
 a `PROGRAM` name to a block in the server YAML for `EXEFOLDER`, `CONDA_ENV`,
@@ -78,9 +78,9 @@ a `PROGRAM` name to a block in the server YAML for `EXEFOLDER`, `CONDA_ENV`,
 `settings/capabilities.py` is the immutable, agent-independent declaration of
 executable program names, immediate Click jobtype children, project requirements,
 project-owned CLI parameters, and CPU/GPU execution engines. Its projections have
-deliberately narrower meanings than similarly named agent-harness lists. Read the
-`chemsmart-v3-1-4` skill's
-`references/agent-harness-forward-compatibility.md` before consuming them.
+deliberately narrower meanings than similarly named agent-harness lists. Read
+the `chemsmart-cli-program-hub` skill's program-management integration
+reference before consuming them.
 
 Note `settings/gaussian.py` and `settings/orca.py` are structurally identical
 copies. Do not add a third — see the `adding-a-program` reference.

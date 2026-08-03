@@ -1,4 +1,0 @@
-interface:
-  display_name: "ChemSmart v3.1.4"
-  short_description: "v3 CLI, project YAML, and capability registry"
-  default_prompt: "Use $chemsmart-v3-1-4 to ground a ChemSmart CLI, project-YAML, capability-registry, or program-registration change in the active v3.1.4 tree."

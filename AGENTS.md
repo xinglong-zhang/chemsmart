@@ -193,16 +193,23 @@ of evidence, not the evidence source. Use QCSchema-compatible records where
 practical, retain native engine artifacts, and make each numerical claim
 traceable to a receipt.
 
-## Project-local skills
+## Registered skills
 
 Use the smallest matching skill set:
 
+- `chemsmart-cli-program-hub` for the live CLI, project YAML, capability
+  registry, program/engine integration, and run/sub parity;
 - `chemsmart-agent-harness` for provider adapters, tool loops, permissions,
   Runtime V2, task graphs, and harness evaluation;
 - `chemsmart-scientific-workflow` for Gaussian, ORCA, xTB, and PySCF task
   intake, preflight, approved execution, and physical validation;
 - `chemsmart-evidence-audit` for provenance, claims, citations, reports,
   red-teaming, and evaluation.
+
+These skills are maintained in the user's global agent skill registry rather
+than vendored in this repository. Repository source, tests, and generated
+schema remain authoritative when a skill description and the checked-out tree
+disagree.
 
 ## Validation and reporting discipline
 

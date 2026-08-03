@@ -1,4 +1,0 @@
-interface:
-  display_name: "ChemSmart Evidence Audit"
-  short_description: "Audit command and scientific evidence"
-  default_prompt: "Use $chemsmart-evidence-audit to audit a ChemSmart command receipt, claims, and evidence."
