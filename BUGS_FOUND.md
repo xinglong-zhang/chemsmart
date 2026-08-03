@@ -3186,3 +3186,32 @@ change), or have `jobtype`'s setter store the override on `self`
 directly (e.g. `self._jobtype_override`) and have the getter check
 that first, rather than routing through a freshly-constructed
 `GaussianRoute` each time.
+
+## 62. `ConnectivityGrouper._check_isomorphism` is defined but never called
+
+**Location:** `chemsmart/jobs/grouper/connectivity.py`, lines 99-116.
+
+```python
+def _check_isomorphism(
+    self, idx_pair: Tuple[int, int]
+) -> Tuple[int, int, bool]:
+    """
+    Check graph isomorphism between two molecules for multiprocessing.
+    ...
+    """
+    i, j = idx_pair
+    return i, j, self._are_isomorphic(self.graphs[i], self.graphs[j])
+```
+
+Despite its docstring describing it as "multiprocessing-compatible" (implying it's meant to be dispatched via `joblib.Parallel`/`delayed` for the pairwise isomorphism checks), `group()`'s actual pairwise-check loop calls `self._are_isomorphic(...)` directly in a plain Python `for` loop (see lines 180-184), never `_check_isomorphism`. Only the graph-conversion step (`to_graph_wrapper` via `Parallel`) is actually parallelized; the isomorphism checks themselves run serially regardless of `num_procs`.
+
+**Reproduce:** grep confirms zero call sites:
+```
+$ grep -rn "_check_isomorphism" chemsmart/
+chemsmart/jobs/grouper/connectivity.py:99:    def _check_isomorphism(
+```
+See `tests/test_groupers.py::TestGroupers::test_check_isomorphism_direct`, which unit-tests the function directly since no code path reaches it.
+
+**Impact:** Low-to-moderate -- purely a performance gap, not a correctness bug: pairwise isomorphism checks (O(n^2) for n molecules) never benefit from `num_procs > 1`, unlike the graph-conversion step. For large conformer sets this could be a meaningful missed optimization, but results are still correct.
+
+**Suggested direction:** either wire `_check_isomorphism` into the pairwise-check loop via `Parallel(n_jobs=self.num_procs)(delayed(self._check_isomorphism)(pair) for pair in indices)` (mirroring the graph-conversion step), or delete it if serial checking is intentional (e.g. because Union-Find's sequential `union()` calls don't parallelize cleanly).
