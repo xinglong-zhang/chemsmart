@@ -1442,9 +1442,7 @@ class TestOpenBabelWriteFallback:
         for path in created_temps:
             assert not os.path.exists(path)
 
-    def test_write_pdb_pybabel_delegates(
-        self, single_model_pdb_file, tmpdir
-    ):
+    def test_write_pdb_pybabel_delegates(self, single_model_pdb_file, tmpdir):
         pytest.importorskip("openbabel")
         mol = Molecule.from_filepath(single_model_pdb_file)
         output_path = os.path.join(str(tmpdir), "water_ob.pdb")
@@ -1452,9 +1450,7 @@ class TestOpenBabelWriteFallback:
         assert os.path.exists(output_path)
         assert os.path.getsize(output_path) > 0
 
-    def test_cleanup_false_keeps_temp_xyz(
-        self, single_model_pdb_file, tmpdir
-    ):
+    def test_cleanup_false_keeps_temp_xyz(self, single_model_pdb_file, tmpdir):
         pytest.importorskip("openbabel")
         mol = Molecule.from_filepath(single_model_pdb_file)
         output_path = os.path.join(str(tmpdir), "water.mol2")
@@ -1468,9 +1464,7 @@ class TestOpenBabelWriteFallback:
             return tmp
 
         with patch("tempfile.NamedTemporaryFile", side_effect=_tracking_ntf):
-            mol._write_via_openbabel(
-                output_path, "mol2", cleanup=False
-            )
+            mol._write_via_openbabel(output_path, "mol2", cleanup=False)
 
         assert created_temps
         assert os.path.exists(created_temps[0])
@@ -1609,9 +1603,7 @@ class TestOpenBabelWriteFallback:
         mol.write_xyz(xyz_path, mode="w")
         pdb_path = os.path.join(str(tmpdir), "from_existing.pdb")
 
-        FileConverter.xyz_to_pdb(
-            mol, pdb_path, xyz_filename=xyz_path
-        )
+        FileConverter.xyz_to_pdb(mol, pdb_path, xyz_filename=xyz_path)
 
         assert os.path.exists(pdb_path)
         assert os.path.exists(xyz_path)  # caller-supplied path kept
@@ -1632,9 +1624,7 @@ class TestConverterCoverageGaps:
 
     def test_convert_unsupported_batch_type_raises(self, tmpdir):
         with pytest.raises(ValueError, match="not supported"):
-            FileConverter(
-                directory=str(tmpdir), type="xyzzy"
-            ).convert_files()
+            FileConverter(directory=str(tmpdir), type="xyzzy").convert_files()
 
     def test_convert_unsupported_single_type_raises(self, tmpdir):
         path = os.path.join(str(tmpdir), "x.xyzzy")
@@ -1722,7 +1712,9 @@ class TestConverterCoverageGaps:
     ):
         from shutil import copy
 
-        copy(gaussian_ozone_opt_outfile, os.path.join(str(tmpdir), "ozone.log"))
+        copy(
+            gaussian_ozone_opt_outfile, os.path.join(str(tmpdir), "ozone.log")
+        )
         FileConverter(
             directory=str(tmpdir),
             type="log",
@@ -1807,18 +1799,12 @@ class TestConverterCoverageGaps:
         assert os.path.exists(xyz_path)
         assert os.path.exists(pdb_path)
 
-    def test_xyz_to_pdb_empty_read_raises(
-        self, single_model_pdb_file, tmpdir
-    ):
+    def test_xyz_to_pdb_empty_read_raises(self, single_model_pdb_file, tmpdir):
         pytest.importorskip("openbabel")
         mol = Molecule.from_filepath(single_model_pdb_file)
         xyz_path = os.path.join(str(tmpdir), "emptyish.xyz")
         mol.write_xyz(xyz_path, mode="w")
         pdb_path = os.path.join(str(tmpdir), "fail.pdb")
-        with patch(
-            "openbabel.pybel.readfile", return_value=iter([])
-        ):
+        with patch("openbabel.pybel.readfile", return_value=iter([])):
             with pytest.raises(ValueError, match="Unable to read"):
-                FileConverter.xyz_to_pdb(
-                    mol, pdb_path, xyz_filename=xyz_path
-                )
+                FileConverter.xyz_to_pdb(mol, pdb_path, xyz_filename=xyz_path)

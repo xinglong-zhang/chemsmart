@@ -3778,9 +3778,7 @@ H       1.0 0.0 0.0
             Molecule.from_filepath(bad)
 
     def test_read_chemsmart_db(self):
-        db = os.path.join(
-            "tests", "data", "DatabaseTests", "chemsmart.db"
-        )
+        db = os.path.join("tests", "data", "DatabaseTests", "chemsmart.db")
         if not os.path.exists(db):
             pytest.skip("chemsmart.db fixture missing")
         mols = Molecule.from_filepath(db, return_list=True)
@@ -3834,7 +3832,9 @@ H       1.0 0.0 0.0
         assert g.number_of_edges() >= 2
         g2 = water.to_graph_non_vectorized(adjust_H=True)
         assert g2.number_of_edges() >= 2
-        g3 = water.to_graph_non_vectorized(adjust_H=False, bond_cutoff_buffer=0.5)
+        g3 = water.to_graph_non_vectorized(
+            adjust_H=False, bond_cutoff_buffer=0.5
+        )
         assert g3.number_of_nodes() == 3
         orders = water.get_bond_orders_from_graph()
         assert len(orders) >= 2
@@ -3990,8 +3990,8 @@ H 1.0 0.0 0.0 L
             medium_level_atoms="3",
             low_level_atoms="4-5",
         )
-        h, m, l = q._get_partition_levels()
-        assert h == [1, 2] and m == [3] and l == [4, 5]
+        h, m, low = q._get_partition_levels()
+        assert h == [1, 2] and m == [3] and low == [4, 5]
         with pytest.raises(ValueError, match="High level"):
             QMMMMolecule(
                 symbols=["C", "C"],
@@ -4046,7 +4046,9 @@ H 1.0 0.0 0.0 L
     def test_bond_lengths_helper(self):
         co2 = Molecule(
             symbols=["C", "O", "O"],
-            positions=np.array([[0.0, 0.0, 0.0], [1.16, 0.0, 0.0], [-1.16, 0.0, 0.0]]),
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.16, 0.0, 0.0], [-1.16, 0.0, 0.0]]
+            ),
         )
         dists = co2.bond_lengths()
         assert len(dists) == 3
@@ -4108,7 +4110,9 @@ H 1.0 0.0 0.0 L
         cb = CoordinateBlock(block)
         assert cb.molecule.num_atoms == 2
 
-    def test_write_via_openbabel_fallback(self, single_molecule_xyz_file, tmpdir):
+    def test_write_via_openbabel_fallback(
+        self, single_molecule_xyz_file, tmpdir
+    ):
         pytest.importorskip("openbabel")
         mol = Molecule.from_filepath(single_molecule_xyz_file)
         path = os.path.join(str(tmpdir), "out.mol")

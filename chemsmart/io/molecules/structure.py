@@ -783,9 +783,7 @@ class Molecule:
                 reconstructed = pca.inverse_transform(
                     pca.transform(self.positions)
                 )
-                error = np.linalg.norm(
-                    self.positions - reconstructed, axis=1
-                )
+                error = np.linalg.norm(self.positions - reconstructed, axis=1)
                 return float(np.max(error, initial=0.0)) < 1e-2
 
     @property
@@ -1590,9 +1588,7 @@ class Molecule:
         fmt = format.lower()
         native = {
             "xyz": lambda: self.write_xyz(filename, mode=mode, **kwargs),
-            "extxyz": lambda: self.write_extxyz(
-                filename, mode=mode, **kwargs
-            ),
+            "extxyz": lambda: self.write_extxyz(filename, mode=mode, **kwargs),
             "com": lambda: self.write_com(filename, **kwargs),
             "pdb": lambda: self.write_pdb(filename, mode=mode, **kwargs),
             "cosmorsxyz": lambda: self.write_cosmorsxyz(
@@ -1825,9 +1821,7 @@ class Molecule:
             if cleanup:
                 try:
                     os.remove(xyz_filename)
-                    logger.debug(
-                        f"Removed temporary XYZ file {xyz_filename}"
-                    )
+                    logger.debug(f"Removed temporary XYZ file {xyz_filename}")
                 except OSError as exc:
                     logger.warning(
                         f"Failed to remove temporary file {xyz_filename}: "
