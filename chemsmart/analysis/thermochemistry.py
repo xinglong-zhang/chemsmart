@@ -160,6 +160,12 @@ class Thermochemistry:
             # auxiliary files in that directory will provide additional data.
             folder = os.path.dirname(os.path.abspath(self.filename))
             output = XTBOutput(folder)
+        elif program == "pyscf":
+            # PySCF results are read from the structured sibling .h5 file;
+            # the .out log only identifies the program.
+            from chemsmart.io.pyscf.output import PySCFOutput
+
+            output = PySCFOutput(self.filename)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")

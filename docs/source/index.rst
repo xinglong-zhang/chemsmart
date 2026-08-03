@@ -62,6 +62,13 @@ chemistry software.
    orca-direct-input
    orca-multiscale-calculations
 
+.. toctree::
+   :maxdepth: 2
+   :caption: PySCF and xTB Jobs
+
+   pyscf-cli-options
+   xtb-cli-options
+
 ..
    .. toctree::
 

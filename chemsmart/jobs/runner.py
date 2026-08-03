@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import subprocess
 from abc import abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
@@ -49,7 +50,7 @@ def _resolve_scratch(scratch, runner_cls, server):
     1. Explicit CLI/API ``scratch`` (``True``/``False``) wins.
     2. If omitted (``None``), use program-block ``SCRATCH`` from server YAML
        when that key is set and the runner maps to an ``Executable`` subclass
-       (Gaussian, ORCA, or NCIPLOT).
+       (including Gaussian, ORCA, NCIPLOT, PySCF, and xTB).
     3. If the YAML key is absent or the program has no executable config,
        use the runner class ``SCRATCH`` default.
     """
@@ -430,11 +431,22 @@ class JobRunner(RegistryMixin):
         process = self._create_process(job, command=command, env=env)
         logger.debug(f"Process created for job {job}: {process}")
         logger.debug(f"Running process for job: {job}")
-        self._run(process, **kwargs)
+        returncode = self._run(process, **kwargs)
         logger.debug(f"Postrunning job: {job}")
-        self._postrun(job)
-        logger.debug(f"Postrun cleanup for job: {job}")
-        self._postrun_cleanup(job)
+        postrun_error = None
+        try:
+            self._postrun(job)
+            logger.debug(f"Postrun cleanup for job: {job}")
+            self._postrun_cleanup(job)
+        except Exception as exc:
+            postrun_error = exc
+        if isinstance(returncode, int) and returncode != 0:
+            raise subprocess.CalledProcessError(
+                returncode, command
+            ) from postrun_error
+        if postrun_error is not None:
+            raise postrun_error
+        return returncode
 
     def copy(self):
         return copy.copy(self)
@@ -448,7 +460,8 @@ class JobRunner(RegistryMixin):
         ``scratch`` arrives as ``None``. It is resolved here, in order:
 
         1. Explicit ``True``/``False`` from ``--scratch`` or ``--no-scratch``
-        2. Program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only)
+        2. Program ``SCRATCH`` in server YAML when the runner has a registered
+           executable or library configuration
         3. The selected runner's class ``SCRATCH`` default
 
         The typed runner is then constructed with that resolved ``bool``.

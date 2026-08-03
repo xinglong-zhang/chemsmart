@@ -624,7 +624,7 @@ class Server(RegistryMixin):
         logger.info(f"Submitting job with command: {command}")
         if "<" in command or ">" in command or "|" in command:
             # Use shell=True if the command has shell operators
-            p = subprocess.Popen(command, shell=True)
+            p = subprocess.Popen(command, shell=True, cwd=job.folder)
         else:
             p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()

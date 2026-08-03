@@ -1,0 +1,21 @@
+# ChemSmart xTB project schema: exactly sp, opt, and hess sections.
+# Omitted charge/multiplicity inherit the selected source geometry state.
+# To override that state, declare charge and multiplicity together.
+sp:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+opt:
+  gfn_version: gfn2
+  optimization_level: vtight
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+hess:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false

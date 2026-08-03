@@ -313,6 +313,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = _replace_batch_table_tokens(
             cli_args, getattr(job, "_batch_entry", None)
         )
+        rewrite_for_submission = getattr(
+            job, "rewrite_submission_cli_args", None
+        )
+        if callable(rewrite_for_submission):
+            cli_args = rewrite_for_submission(cli_args)
 
         if kwargs.get("print_command"):
             print(cli_args)

@@ -249,7 +249,23 @@ to get the options for running CHEMSMART package.
 
 ## Usage
 
-With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).
+With setup completed, one is able to run different computational chemistry jobs via the command-line interface (CLI).
+
+The integrated 3.1.4 surface includes the existing Gaussian and ORCA command
+families plus bounded PySCF and xTB workflows:
+
+- `chemsmart run|sub pyscf ... sp|opt|hess` uses strict stage-specific project
+  YAML and structured HDF5 results. GPU4PySCF is an explicit PySCF engine and
+  never silently falls back to CPU.
+- `chemsmart run|sub xtb ... sp|opt|hess` supports the maintained CPU
+  GFN0/GFN1/GFN2/GFN-FF surface with optional strict project YAML.
+
+See the [PySCF CLI contract](docs/source/pyscf-cli-options.rst) and
+[xTB CLI contract](docs/source/xtb-cli-options.rst). A registered command does
+not by itself prove that its executable, Python environment, or optional GPU
+stack is installed.
+
+The following examples introduce the existing Gaussian workflow.
 
 To submit (and run) a geometry optimization job, do:
 

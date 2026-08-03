@@ -1,5 +1,8 @@
 import logging
 import os.path
+import platform
+import shutil
+import sys
 from typing import Optional
 
 from chemsmart.io.yaml import YAMLFile
@@ -25,6 +28,7 @@ class Executable(RegistryMixin):
     """
 
     PROGRAM: Optional[str] = None
+    EXEFOLDER_REQUIRED = True
 
     def __init__(
         self,
@@ -80,10 +84,17 @@ class Executable(RegistryMixin):
         )
         server_yaml = YAMLFile(filename=server_yaml_file)
 
-        # Extract configuration for the specific program
-        executable_folder = os.path.expanduser(
-            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
-        )
+        # Extract configuration for the specific program.
+        # EXEFOLDER is optional: a library backend such as PySCF has no
+        # executable folder, and its subclass resolves an interpreter
+        # instead. Every sibling key already uses .get().
+        program_config = server_yaml.yaml_contents_dict[cls.PROGRAM]
+        if cls.EXEFOLDER_REQUIRED:
+            executable_folder = program_config["EXEFOLDER"]
+        else:
+            executable_folder = program_config.get("EXEFOLDER")
+        if executable_folder is not None:
+            executable_folder = os.path.expanduser(executable_folder)
         local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "LOCAL_RUN", False
         )
@@ -321,3 +332,116 @@ class NCIPLOTExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "nciplot")
             return executable_path
+
+
+class PySCFExecutable(Executable):
+    """
+    Executable handler for the PySCF library backend.
+
+    PySCF is a Python library, not a binary, so the "executable" is the
+    interpreter that owns it. ``EXEFOLDER`` is therefore optional and, when
+    present, names the ``bin/`` of the environment PySCF is installed in --
+    exactly as ``XTB: EXEFOLDER: /path/to/environment/bin`` already does.
+    That is what lets a GPU4PySCF job run in a CUDA environment while ChemSmart
+    stays in its own, whose numpy is pinned to 1.x by rdkit and pymol.
+
+    The program block is still needed for ``CONDA_ENV``, ``MODULES``,
+    ``ENVARS`` and ``SCRATCH``.
+    """
+
+    PROGRAM = "PYSCF"
+    EXEFOLDER_REQUIRED = False
+
+    @classmethod
+    def from_servername(cls, servername):
+        """Return the PySCF executable configuration for ``servername``.
+
+        Unlike a binary backend, PySCF needs no server configuration at all:
+        with no ``PYSCF:`` block it runs in ChemSmart's own interpreter,
+        which is correct whenever PySCF shares that environment. Requiring a
+        block would break every existing server YAML the first time someone
+        ran a PySCF job, for no information we do not already have.
+
+        A block is still read when present, and is the way to point a job at
+        a different environment -- a CUDA one for GPU4PySCF, for instance.
+        """
+        try:
+            return super().from_servername(servername)
+        except KeyError:
+            logger.debug(
+                f"No PYSCF block in server '{servername}'; using the running "
+                f"interpreter {sys.executable}."
+            )
+            return cls(executable_folder=None, local_run=True)
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize PySCFExecutable instance.
+
+        Args:
+            executable_folder (str, optional): Path to the ``bin/`` directory
+                of the Python environment that has PySCF installed.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the Python interpreter used to run PySCF jobs.
+
+        Returns:
+            str: Path to the interpreter. Falls back to the interpreter
+                running ChemSmart when ``EXEFOLDER`` is not configured, which
+                is correct whenever PySCF shares ChemSmart's environment.
+        """
+        if self.executable_folder is not None:
+            interpreter = (
+                "python.exe" if platform.system() == "Windows" else "python"
+            )
+            return os.path.join(self.executable_folder, interpreter)
+        return sys.executable
+
+
+class XTBExecutable(Executable):
+    """Resolve the external xTB binary without inferring readiness.
+
+    An explicit ``EXEFOLDER`` is authoritative and therefore fails closed if
+    it does not contain ``xtb``.  With no XTB server block, local execution may
+    discover ``xtb`` on ``PATH``; the runner still performs its own preflight.
+    """
+
+    PROGRAM = "XTB"
+    EXEFOLDER_REQUIRED = False
+
+    @classmethod
+    def from_servername(cls, servername):
+        try:
+            return super().from_servername(servername)
+        except KeyError:
+            logger.debug(
+                "No XTB block in server %r; resolving the binary from PATH.",
+                servername,
+            )
+            return cls(executable_folder=None, local_run=True)
+
+    def get_executable(self):
+        executable_name = (
+            "xtb.exe" if platform.system() == "Windows" else "xtb"
+        )
+        if self.executable_folder is not None:
+            candidate = os.path.join(self.executable_folder, executable_name)
+            if not (
+                os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+            ):
+                raise FileNotFoundError(
+                    "Configured xTB executable is missing or not executable: "
+                    f"{candidate}"
+                )
+            return candidate
+        candidate = shutil.which(executable_name)
+        if candidate is None:
+            raise FileNotFoundError(
+                "xTB executable was not configured and is not available on "
+                "PATH."
+            )
+        return candidate

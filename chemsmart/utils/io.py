@@ -64,6 +64,20 @@ PROGRAM_INFO = {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
         "suffixes": [".out"],
     },
+    "pyscf": {
+        # "ChemSmart PySCF driver" is the second line of the generated
+        # driver script, which PySCF echoes into the log before anything
+        # else. It is listed first because PySCF's own "PySCF version"
+        # banner is printed *after* that echo, and a large molecule can push
+        # it past the 200-line window this detection reads. The native
+        # banners still match a hand-run PySCF log.
+        "keywords": [
+            "ChemSmart PySCF driver",
+            "PySCF version",
+            "PySCF path",
+        ],
+        "suffixes": [".out"],
+    },
 }
 SUPPORTED_PROGRAMS = set(PROGRAM_INFO.keys())
 ALL_SUFFIXES = tuple(
@@ -345,9 +359,28 @@ def get_program_type_from_file(filepath):
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name ("gaussian", "orca", "xtb", "crest") or "unknown"
-             if the format cannot be detected.
+        str: Program name ("gaussian", "orca", "xtb", "crest", "pyscf")
+             or "unknown" if the format cannot be detected.
     """
+    if os.path.splitext(os.fspath(filepath))[1].lower() == ".h5":
+        try:
+            import h5py
+
+            with h5py.File(filepath, "r") as handle:
+                version = handle.attrs.get("schema_version")
+                if isinstance(version, bytes):
+                    version = version.decode("utf-8")
+                required = {"spec", "provenance", "status", "results"}
+                if str(version) in {"1.0", "2.0"} and required.issubset(
+                    handle.keys()
+                ):
+                    return "pyscf"
+        except (ImportError, OSError, TypeError, ValueError):
+            logger.debug(
+                "Could not identify HDF5 artifact '%s' as PySCF.", filepath
+            )
+        return "unknown"
+
     max_lines = 200
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -401,10 +434,10 @@ def discover_pka_target_companion_outputs(ha_gas_path, program=None):
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
     supported in CHEMMART."""
-    if program_name.lower() not in {"gaussian", "orca", "xtb"}:
+    if program_name.lower() not in {"gaussian", "orca", "pyscf", "xtb"}:
         raise ValueError(
             f"Unsupported program '{program_name}' for thermochemistry.\n"
-            f"Please choose one of ['gaussian', 'orca', 'xtb']."
+            "Please choose one of ['gaussian', 'orca', 'pyscf', 'xtb']."
         )
 
 

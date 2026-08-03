@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import platform
@@ -76,6 +77,17 @@ class Config:
     def chemsmart_orca(self):
         """Path to the ``orca`` sub-directory of the user config."""
         return self.chemsmart_dest / "orca"
+
+    @property
+    def chemsmart_pyscf(self):
+        """Path to the ``pyscf`` sub-directory of the user config."""
+        return self.chemsmart_dest / "pyscf"
+
+    @property
+    def chemsmart_xtb(self):
+        """Path to the ``xtb`` sub-directory of the user config."""
+
+        return self.chemsmart_dest / "xtb"
 
     @property
     def chemsmart_package_path(self):
@@ -350,9 +362,23 @@ class Config:
                 shutil.copytree(src_dir, self.chemsmart_dest)
             logger.info(f"Copied templates to {self.chemsmart_dest}")
         else:
+            with resources.as_file(self.chemsmart_template) as src_dir:
+                for source in sorted(Path(src_dir).rglob("*")):
+                    if not source.is_file():
+                        continue
+                    destination = self.chemsmart_dest / source.relative_to(
+                        src_dir
+                    )
+                    if destination.exists():
+                        continue
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+                    logger.info(f"Added missing template {destination}")
             logger.info(
-                f"Config directory already exists: {self.chemsmart_dest}"
+                "Preserved existing configuration and added only missing "
+                f"templates under {self.chemsmart_dest}"
             )
+        ensure_program_blocks(self.chemsmart_server)
 
         # -- Register chemsmart in the active shell environment -----------
         shell_file = self.shell_config
@@ -454,6 +480,122 @@ def add_lines_in_yaml_files(
             logger.info(f"Error reading {yaml_file}: {e}")
         except Exception as e:
             logger.error(f"Unexpected error while processing {yaml_file}: {e}")
+
+
+def set_program_exefolder(target_directory, program, folder):
+    """Set one program's ``EXEFOLDER`` without rewriting the YAML document.
+
+    Server templates intentionally keep PySCF's interpreter optional and
+    commented.  This line-oriented update activates or replaces only the
+    requested program field, preserving comments and block-scalar commands in
+    the rest of each server file.
+    """
+    if not target_directory.exists():
+        logger.info(f"Target directory not found: {target_directory}")
+        return
+
+    rendered_folder = json.dumps(str(folder))
+    program_header = f"{str(program).upper()}:"
+    for yaml_file in target_directory.glob("*.yaml"):
+        lines = yaml_file.read_text().splitlines(keepends=True)
+        updated = []
+        in_program = False
+        field_written = False
+        program_found = False
+
+        for line in lines:
+            stripped = line.strip()
+            is_top_level = bool(stripped) and not line[0].isspace()
+            if stripped == program_header and is_top_level:
+                in_program = True
+                program_found = True
+                updated.append(line)
+                continue
+
+            if in_program and is_top_level and not stripped.startswith("#"):
+                if not field_written:
+                    updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                    field_written = True
+                in_program = False
+
+            if in_program and stripped in {
+                "EXEFOLDER:",
+                "# EXEFOLDER:",
+            }:
+                # A value-less field is unusual but still replaceable.
+                updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                field_written = True
+                continue
+            if in_program and (
+                stripped.startswith("EXEFOLDER:")
+                or stripped.startswith("# EXEFOLDER:")
+            ):
+                updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                field_written = True
+                continue
+            updated.append(line)
+
+        if in_program and not field_written:
+            updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+            field_written = True
+        if not program_found:
+            if updated and not updated[-1].endswith("\n"):
+                updated[-1] += "\n"
+            if updated and updated[-1].strip():
+                updated.append("\n")
+            updated.extend(
+                (
+                    f"{program_header}\n",
+                    f"    EXEFOLDER: {rendered_folder}\n",
+                    "    LOCAL_RUN: true\n",
+                    "    SCRATCH: false\n",
+                )
+            )
+            field_written = True
+        if field_written:
+            yaml_file.write_text("".join(updated))
+            logger.info(
+                f"Configured {program_header[:-1]} EXEFOLDER in {yaml_file}"
+            )
+
+
+def ensure_program_blocks(target_directory):
+    """Append safe missing PySCF/xTB blocks without rewriting user YAML."""
+
+    if not target_directory.exists():
+        return
+    defaults = {
+        "PYSCF": ("    LOCAL_RUN: true\n", "    SCRATCH: false\n"),
+        "XTB": ("    LOCAL_RUN: true\n", "    SCRATCH: true\n"),
+    }
+    for yaml_file in sorted(target_directory.glob("*.yaml")):
+        try:
+            parsed = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            logger.warning(
+                f"Could not inspect {yaml_file} for program migration: {exc}"
+            )
+            continue
+        if not isinstance(parsed, dict):
+            logger.warning(
+                f"Skipped program migration for non-mapping YAML {yaml_file}"
+            )
+            continue
+        missing = [name for name in defaults if name not in parsed]
+        if not missing:
+            continue
+        original = yaml_file.read_text(encoding="utf-8")
+        additions = []
+        for program in missing:
+            additions.append(f"{program}:\n")
+            additions.extend(defaults[program])
+        separator = "" if not original or original.endswith("\n\n") else "\n"
+        yaml_file.write_text(
+            original + separator + "".join(additions), encoding="utf-8"
+        )
+        logger.info(
+            f"Added missing {'/'.join(missing)} block(s) to {yaml_file}"
+        )
 
 
 @click.group(name="config", invoke_without_command=True)
@@ -566,6 +708,58 @@ def orca(ctx, folder):
 @click.option(
     "-f",
     "--folder",
+    type=click.Path(file_okay=False, path_type=Path),
+    required=True,
+    help="Path to the bin/ directory whose python owns PySCF.",
+)
+def pyscf(ctx, folder):
+    """Configure the Python interpreter used for PySCF jobs.
+
+    ``FOLDER`` names an environment's ``bin/`` directory, for example
+    ``~/miniconda3/envs/pyscf-gpu/bin``.  PySCF itself is never installed or
+    imported by this command.
+    """
+    cfg = ctx.obj["cfg"]
+    folder = Path(folder).expanduser()
+    if not folder.is_dir():
+        raise click.BadParameter(f"PySCF bin directory not found: {folder}")
+    if not (
+        folder / ("python.exe" if platform.system() == "Windows" else "python")
+    ).exists():
+        raise click.BadParameter(
+            f"No Python interpreter found in PySCF bin directory: {folder}"
+        )
+    set_program_exefolder(cfg.chemsmart_server, "PYSCF", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=click.Path(file_okay=False, path_type=Path),
+    required=True,
+    help="Path to the directory containing the xTB executable.",
+)
+def xtb(ctx, folder):
+    """Configure the external xTB executable directory."""
+
+    cfg = ctx.obj["cfg"]
+    folder = Path(folder).expanduser()
+    binary_name = "xtb.exe" if platform.system() == "Windows" else "xtb"
+    binary = folder / binary_name
+    if not folder.is_dir() or not binary.is_file():
+        raise click.BadParameter(f"xTB executable not found: {binary}")
+    if platform.system() != "Windows" and not os.access(binary, os.X_OK):
+        raise click.BadParameter(f"xTB executable is not executable: {binary}")
+    set_program_exefolder(cfg.chemsmart_server, "XTB", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
     type=str,
     required=True,
     help="Path to the NCIPLOT folder.",
@@ -621,6 +815,8 @@ def scratch(ctx, folder):
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
+config.add_command(pyscf)
+config.add_command(xtb)
 config.add_command(nciplot)
 config.add_command(scratch)
 

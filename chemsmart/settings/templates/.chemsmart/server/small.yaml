@@ -48,7 +48,25 @@ ORCA:
         export SCRATCH=~/scratch  # required if scratch is true
         export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
-        
+
+
+PYSCF:
+    # Optional: EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin
+    # It names the bin/ directory whose python owns PySCF/GPU4PySCF.
+    LOCAL_RUN: True
+    SCRATCH: False
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+
+XTB:
+    # Optional: EXEFOLDER: ~/bin
+    # Omit EXEFOLDER to resolve an existing xTB binary from PATH.
+    LOCAL_RUN: True
+    SCRATCH: True
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot
@@ -62,4 +80,3 @@ NCIPLOT:
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export NCIPLOT_HOME=~/bin/nciplot
-        

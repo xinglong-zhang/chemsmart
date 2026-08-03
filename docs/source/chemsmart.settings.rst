@@ -15,6 +15,15 @@
    :undoc-members:
    :show-inheritance:
 
+****************************************
+ chemsmart.settings.capabilities module
+****************************************
+
+.. automodule:: chemsmart.settings.capabilities
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ************************************
  chemsmart.settings.gaussian module
 ************************************
@@ -29,6 +38,24 @@
 ********************************
 
 .. automodule:: chemsmart.settings.orca
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+*********************************
+ chemsmart.settings.pyscf module
+*********************************
+
+.. automodule:: chemsmart.settings.pyscf
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+******************************
+ chemsmart.settings.xtb module
+******************************
+
+.. automodule:: chemsmart.settings.xtb
    :members:
    :undoc-members:
    :show-inheritance:

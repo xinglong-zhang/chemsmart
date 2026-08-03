@@ -1,12 +1,16 @@
 import inspect
 import logging
+import os
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import (
+from chemsmart.settings.executable import (  # noqa: F401
+    Executable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    PySCFExecutable,
+    XTBExecutable,
 )
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -31,7 +35,9 @@ class RunScript:
         cli_args: Command line arguments to pass to the job.
     """
 
-    def __init__(self, filename, cli_args, batch=False):
+    def __init__(
+        self, filename, cli_args, batch=False, execution_cwd=None
+    ):
         """
         Initialize the run script generator.
 
@@ -43,6 +49,11 @@ class RunScript:
         self.filename = filename
         self.batch = batch
         self.cli_args = cli_args
+        self.execution_cwd = (
+            None
+            if execution_cwd is None
+            else os.path.abspath(os.fspath(execution_cwd))
+        )
 
     def write(self):
         """
@@ -64,18 +75,29 @@ class RunScript:
         Args:
             f: File handle to write the script contents to.
         """
+        cwd_statement = (
+            f"os.chdir({self.execution_cwd!r})"
+            if self.execution_cwd
+            else "pass"
+        )
         contents = f"""\
         #!/usr/bin/env python
         import os
+        import subprocess
+        import sys
         os.environ['OMP_NUM_THREADS'] = '1'
-        
+
         from chemsmart.cli.run import run
 
         def run_job():
+            {cwd_statement}
             run({self.cli_args!r})
 
         if __name__ == '__main__':
-            run_job()
+            try:
+                run_job()
+            except subprocess.CalledProcessError as error:
+                sys.exit(error.returncode)
         """
 
         # Needed to remove leading whitespace in the docstring
@@ -247,25 +269,28 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            Executable: Instance of the ``Executable`` subclass whose
+            ``PROGRAM`` matches ``job.PROGRAM``.
 
         Raises:
-            ValueError: If the job's program is not supported.
-        """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
+            ValueError: If no executable is registered for the job's program.
 
-        else:
-            # Need to add programs here to be
-            # supported for other types of programs
-            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        Resolved from the ``Executable`` registry rather than a hardcoded
+        if/elif chain, so a newly registered program works under ``sub`` as
+        soon as it works under ``run``. The previous chain silently limited
+        submission to Gaussian, ORCA and NCIPLOT, which broke run/sub parity
+        for any program added later.
+        """
+        program = str(self.job.PROGRAM or "").upper()
+        for executable_class in Executable.subclasses():
+            if str(executable_class.PROGRAM or "").upper() == program:
+                return executable_class.from_servername(self.server.name)
+        raise ValueError(
+            f"Program {self.job.PROGRAM} not supported: no Executable "
+            f"subclass registered with PROGRAM={program!r}. Registered "
+            f"programs: "
+            f"{sorted(str(c.PROGRAM) for c in Executable.subclasses())}"
+        )
 
     def write(self, cli_args):
         """
@@ -279,6 +304,7 @@ class Submitter(RegistryMixin):
         """
         if self.job.is_complete():
             logger.warning("Submitting an already complete job.")
+        os.makedirs(self.submit_folder, exist_ok=True)
         self._write_runscript(cli_args)
         self._write_submitscript()
 
@@ -407,7 +433,13 @@ class Submitter(RegistryMixin):
         Args:
             cli_args: Command line arguments for the job.
         """
-        runscript = RunScript(self.run_script, cli_args)
+        runscript = RunScript(
+            os.path.join(self.submit_folder, self.run_script),
+            cli_args,
+            execution_cwd=getattr(
+                self.job, "submission_execution_cwd", self.job.folder
+            ),
+        )
         logger.debug(f"Writing run script to: {runscript.filename}")
         runscript.write()
 
@@ -418,8 +450,13 @@ class Submitter(RegistryMixin):
         Creates a shell script with scheduler directives and job execution
         commands appropriate for the target cluster management system.
         """
-        with open(self.submit_script, "w") as f:
-            logger.debug(f"Writing submission script to: {self.submit_script}")
+        submit_script_path = os.path.join(
+            self.submit_folder, self.submit_script
+        )
+        with open(submit_script_path, "w") as f:
+            logger.debug(
+                f"Writing submission script to: {submit_script_path}"
+            )
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
@@ -597,15 +634,16 @@ class Submitter(RegistryMixin):
         """
         Write the final job execution commands.
 
-        Makes the run script executable and executes it in the background,
-        then waits for completion.
+        Make the run script executable and replace the scheduler shell with
+        that process. ``exec`` preserves the exact child exit status; the old
+        background-plus-operandless-``wait`` sequence could report scheduler
+        success after the ChemSmart child had failed.
 
         Args:
             f: File handle for writing job execution commands.
         """
         f.write(f"chmod +x ./{self.run_script}\n")
-        f.write(f"./{self.run_script} &\n")
-        f.write("wait\n")
+        f.write(f"exec ./{self.run_script}\n")
 
     @classmethod
     def from_scheduler_type(cls, scheduler_type, **kwargs):
