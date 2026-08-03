@@ -2595,6 +2595,61 @@ class Molecule:
 
         return X
 
+    def calculate_soap(
+        self,
+        *,
+        r_cut=6.0,
+        n_max=8,
+        l_max=6,
+        sigma=1.0,
+        species=None,
+        centers=None,
+        aggregation=None,
+    ):
+        """Compute SOAP descriptors from this molecule's geometry.
+
+        Requires the optional DScribe dependency (``pip install
+        'chemsmart[soap]'``). Only finite (non-periodic) molecules are
+        supported.
+
+        Args:
+            r_cut (float): Cutoff radius in Å. Must be greater than 1 Å.
+                Default ``6.0``.
+            n_max (int): Number of radial basis functions. Default ``8``.
+            l_max (int): Maximum angular momentum. Default ``6``.
+            sigma (float): Gaussian width in Å (standard deviation). Default
+                ``1.0``.
+            species (sequence of str, optional): Explicit SOAP species
+                basis. When omitted, a sorted unique list of this
+                molecule's elements is used. Pass a shared list for
+                comparable features across a dataset.
+            centers (sequence of int, optional): 1-based atom indices on
+                which to evaluate SOAP. When omitted, all atoms are used.
+            aggregation (str, optional): ``None`` returns local
+                per-center vectors ``(n_centers, n_features)``.
+                ``"mean"`` returns the outer average of local power
+                spectra; ``"sum"`` returns their extensive sum.
+
+        Returns:
+            numpy.ndarray: Dense ``float64`` SOAP feature array.
+
+        Raises:
+            ImportError: If DScribe is not installed.
+            ValueError: For invalid inputs or active PBC.
+        """
+        from chemsmart.analysis.soap import calculate_soap
+
+        return calculate_soap(
+            self,
+            r_cut=r_cut,
+            n_max=n_max,
+            l_max=l_max,
+            sigma=sigma,
+            species=species,
+            centers=centers,
+            aggregation=aggregation,
+        )
+
     def vibrationally_displaced(
         self,
         mode_idx,
