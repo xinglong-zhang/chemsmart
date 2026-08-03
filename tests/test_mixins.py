@@ -416,6 +416,26 @@ class TestGaussianFileMixin:
 
         assert MalformedDateFile().file_date is None
 
+    def test_read_settings_builds_gaussian_job_settings(self):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        dummy = DummyGaussianFile("mytest.gjf")
+        dummy._route_string = "#p opt freq b3lyp/6-31g(d)"
+        dummy.charge = 0
+        dummy.multiplicity = 1
+        dummy.heavy_elements = None
+        dummy.heavy_elements_basis = None
+        dummy.light_elements_basis = None
+        dummy.custom_solvent = None
+
+        settings = dummy.read_settings()
+
+        assert isinstance(settings, GaussianJobSettings)
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp"
+        assert "mytest.gjf" in settings.title
+
 
 class DummyORCAFile(ORCAFileMixin):
     def __init__(self, filename):
@@ -444,6 +464,190 @@ class TestORCAFileMixin:
         assert dummy.mdci_density == "1e-6"
         assert dummy.solvent_model == "smd"
         assert dummy.solvent_id == "water"
+
+    def test_solvent_on_true_when_model_and_id_present(self):
+        dummy = DummyORCAFile("test.inp")
+        assert dummy.solvent_on is True
+
+    def test_solvent_on_false_without_solvent_block(self):
+        class NoSolventFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nosolv.inp"
+
+            @property
+            def contents(self):
+                return ["! B3LYP def2-SVP"]
+
+            @property
+            def route_string(self):
+                return "! B3LYP def2-SVP"
+
+        assert NoSolventFile().solvent_on is False
+        assert NoSolventFile().solvent_model is None
+        assert NoSolventFile().solvent_id is None
+
+    def test_contents_string_joins_lines(self):
+        dummy = DummyORCAFile("test.inp")
+        assert dummy.contents_string == "\n".join(dummy.contents)
+
+    def test_mdci_cutoff_and_density_none_without_mdci_block(self):
+        class NoMdciFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "no_mdci.inp"
+
+            @property
+            def contents(self):
+                return ["! B3LYP def2-SVP"]
+
+        assert NoMdciFile().mdci_cutoff is None
+        assert NoMdciFile().mdci_density is None
+
+    def test_get_version_not_found(self):
+        class NoVersionFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "v.out"
+
+            @property
+            def contents(self):
+                return ["no version marker here"]
+
+        assert NoVersionFile()._get_version() is None
+
+    def test_file_date_parses_starting_time(self):
+        class DatedFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "d.out"
+
+            @property
+            def contents(self):
+                return [
+                    "* Starting time: Mon Jan  5 12:34:56 2026",
+                ]
+
+        assert DatedFile().file_date == "2026-01-05 12:34:56"
+
+    def test_file_date_regex_matches_but_strptime_fails(self):
+        """A line matching orca_date_pattern's shape but with an
+        invalid weekday/month combination that datetime.strptime
+        still rejects should be treated as "continue looking" rather
+        than raising."""
+
+        class BadDateFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "bd.out"
+
+            @property
+            def contents(self):
+                return [
+                    "* Starting time: Xxx Jan 99 99:99:99 2026",
+                ]
+
+        assert BadDateFile().file_date is None
+
+    def test_file_date_no_starting_time_returns_none(self):
+        class NoDateFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nd.out"
+
+            @property
+            def contents(self):
+                return ["nothing relevant here"]
+
+        assert NoDateFile().file_date is None
+
+    def test_solvent_model_route_fallback_variants(self):
+        for keyword, expected in [
+            ("COSMORS(water)", "cosmors"),
+            ("CPCMC", "cpcmc"),
+            ("SMD(water)", "smd"),
+            ("CPCM", "cpcm"),
+        ]:
+
+            class RouteFile(ORCAFileMixin):
+                def __init__(self, route):
+                    self.filename = "r.inp"
+                    self._route = route
+
+                @property
+                def contents(self):
+                    return [f"! B3LYP def2-SVP {self._route}"]
+
+                @property
+                def route_string(self):
+                    return f"! B3LYP def2-SVP {self._route}"
+
+            assert RouteFile(keyword).solvent_model == expected
+
+    def test_solvent_model_route_string_not_implemented_is_swallowed(self):
+        class NoRouteStringFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nr.inp"
+
+            @property
+            def contents(self):
+                return ["! B3LYP def2-SVP"]
+
+        assert NoRouteStringFile().solvent_model is None
+
+    def test_solvent_id_from_solvent_name_line(self):
+        class SolventNameFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "sn.out"
+
+            @property
+            def contents(self):
+                return ["Solvent name: water"]
+
+        assert SolventNameFile().solvent_id == "water"
+
+    def test_solvent_id_raises_when_not_quoted(self):
+        import pytest
+
+        class UnquotedSolventFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "us.inp"
+
+            @property
+            def contents(self):
+                return ["  solvent water"]
+
+        with pytest.raises(Exception, match="not in quotes"):
+            UnquotedSolventFile().solvent_id
+
+    def test_solvent_id_route_fallback_and_not_implemented(self):
+        class RouteSolventFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "rs.inp"
+
+            @property
+            def contents(self):
+                return ["! B3LYP def2-SVP SMD(cyclohexane)"]
+
+            @property
+            def route_string(self):
+                return "! B3LYP def2-SVP SMD(cyclohexane)"
+
+        assert RouteSolventFile().solvent_id == "cyclohexane"
+
+        class NoRouteStringFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "nrs.inp"
+
+            @property
+            def contents(self):
+                return ["! B3LYP def2-SVP"]
+
+        assert NoRouteStringFile().solvent_id is None
+
+    def test_route_string_not_overridden_raises(self):
+        import pytest
+
+        class BareOrcaFile(ORCAFileMixin):
+            def __init__(self):
+                self.filename = "bare.inp"
+
+        with pytest.raises(NotImplementedError):
+            BareOrcaFile().route_string
 
 
 class DummyXTBFile(XTBFileMixin):
