@@ -131,7 +131,7 @@ def _register_subcommands():
     """
     import importlib
 
-    for module_name in ("em", "nvt", "npt", "md"):
+    for module_name in ("em", "nvt", "npt", "md", "workflow"):
         importlib.import_module(
             f"chemsmart.cli.gromacs.{module_name}"
         )
