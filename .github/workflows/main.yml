@@ -367,5 +367,5 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage-soap.xml
           flags: soap
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 

@@ -48,6 +48,22 @@ def _has_active_pbc(molecule: Molecule) -> bool:
     return any(bool(c) for c in conditions)
 
 
+def _has_translation_vectors(molecule: Molecule) -> bool:
+    """Return True if the molecule carries a non-empty cell / TV list.
+
+    Some constructors (e.g. ``Molecule.from_coordinate_block_text``) set
+    ``translation_vectors`` without setting ``pbc_conditions``. Finite-system
+    SOAP rejects those geometries as well.
+    """
+    tvs = molecule.translation_vectors
+    if tvs is None:
+        return False
+    try:
+        return len(tvs) > 0
+    except TypeError:
+        return True
+
+
 def _normalize_species(species: Sequence[str] | None, symbols: list[str]):
     """Return the SOAP elemental species basis.
 
@@ -139,9 +155,9 @@ def _validate_positions(positions: np.ndarray, num_atoms: int) -> np.ndarray:
 
 
 def _live_symbols(molecule: Molecule) -> list[str]:
-    """Return current chemical symbols without using cached properties."""
-    # Prefer ``symbols`` over the ``chemical_symbols`` cached_property so
-    # SOAP always reflects the molecule's current elemental composition.
+    """Return current chemical symbols from the live ``symbols`` attribute."""
+    # Prefer ``symbols`` over ``chemical_symbols`` so SOAP always reflects
+    # the molecule's current elemental composition after in-place mutation.
     if molecule.symbols is None:
         raise ValueError("Cannot compute SOAP for a molecule with no atoms.")
     return [str(s) for s in list(molecule.symbols)]
@@ -174,13 +190,15 @@ def calculate_soap(
             descriptors across a dataset, pass a shared species list that
             covers every element present in the dataset.
         centers: Optional 1-based atom indices on which to evaluate SOAP.
-            When ``None``, every atom is used as a center. Order is preserved.
+            When ``None``, every atom is used as a center. Order is preserved
+            and duplicate indices are kept (they overweight ``"mean"`` /
+            ``"sum"`` aggregations).
         aggregation: ``None`` returns local (per-center) vectors with shape
-            ``(n_centers, n_features)``. ``"mean"`` returns the arithmetic
-            mean of local power spectra over the selected centers (DScribe
-            outer averaging). ``"sum"`` returns the extensive sum over the
-            selected centers. Mean is preferred for size-comparable
-            fingerprints; sum scales with the number of centers.
+            ``(n_centers, n_features)``. ``"mean"`` / ``"sum"`` are computed
+            post-hoc over DScribe ``average="off"`` local power spectra
+            (outer-average / extensive-sum equivalent). Mean is preferred
+            for size-comparable fingerprints; sum scales with the number of
+            centers.
 
     Returns:
         Dense ``float64`` NumPy array of SOAP features.
@@ -188,18 +206,19 @@ def calculate_soap(
     Raises:
         ImportError: If DScribe is not installed.
         ValueError: For invalid geometry, hyperparameters, centers, species,
-            aggregation, active periodic boundary conditions, or unrecognized
-            elemental symbols.
+            aggregation, active periodic boundary conditions, non-empty
+            translation vectors, or unrecognized elemental symbols.
         TypeError: For invalid center / hyperparameter types.
     """
     if not isinstance(molecule, Molecule):
         raise TypeError(
             f"molecule must be a Molecule instance; got {type(molecule)}."
         )
-    if _has_active_pbc(molecule):
+    if _has_active_pbc(molecule) or _has_translation_vectors(molecule):
         raise ValueError(
             "Periodic SOAP is not supported. The molecule has active PBC "
-            "conditions. Use a finite (non-periodic) molecular geometry."
+            "conditions and/or translation vectors (cell). Use a finite "
+            "(non-periodic) molecular geometry."
         )
     if aggregation not in _VALID_AGGREGATIONS:
         raise ValueError(

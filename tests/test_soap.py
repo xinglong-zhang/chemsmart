@@ -149,6 +149,30 @@ class TestCalculateSoapBasics:
         )
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
+    def test_duplicate_centers_preserved_and_bias_mean(self, water_molecule):
+        # Duplicates are kept; mean aggregation overweights that center.
+        local = calculate_soap(
+            water_molecule, centers=[1, 1], n_max=4, l_max=2
+        )
+        assert local.shape[0] == 2
+        np.testing.assert_allclose(local[0], local[1], rtol=RTOL, atol=ATOL)
+
+        mean_dup = calculate_soap(
+            water_molecule,
+            centers=[1, 1],
+            n_max=4,
+            l_max=2,
+            aggregation="mean",
+        )
+        mean_all = calculate_soap(
+            water_molecule, n_max=4, l_max=2, aggregation="mean"
+        )
+        single = calculate_soap(
+            water_molecule, centers=[1], n_max=4, l_max=2, aggregation="mean"
+        )
+        np.testing.assert_allclose(mean_dup, single, rtol=RTOL, atol=ATOL)
+        assert not np.allclose(mean_dup, mean_all, rtol=RTOL, atol=ATOL)
+
     def test_explicit_species_basis(self, water_molecule):
         species = ["H", "C", "O", "N"]
         features = calculate_soap(
@@ -286,6 +310,22 @@ class TestValidation:
         water_molecule.pbc_conditions = [1, 0, 0]
         with pytest.raises(ValueError, match="Periodic SOAP is not supported"):
             calculate_soap(water_molecule, n_max=4, l_max=2)
+
+    def test_rejects_translation_vectors_without_pbc(self, water_molecule):
+        # Coordinate-block style: TVs set, pbc_conditions left unset.
+        water_molecule.pbc_conditions = None
+        water_molecule.translation_vectors = [
+            [5.0, 0.0, 0.0],
+            [0.0, 5.0, 0.0],
+            [0.0, 0.0, 5.0],
+        ]
+        with pytest.raises(ValueError, match="Periodic SOAP is not supported"):
+            calculate_soap(water_molecule, n_max=4, l_max=2)
+
+    def test_empty_translation_vectors_allowed(self, water_molecule):
+        water_molecule.translation_vectors = []
+        features = calculate_soap(water_molecule, n_max=4, l_max=2)
+        assert features.shape[0] == 3
 
     def test_rejects_zero_pbc_flags_as_inactive(self, water_molecule):
         # Explicit all-false PBC should still be treated as finite.

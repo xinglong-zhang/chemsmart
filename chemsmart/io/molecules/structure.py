@@ -2610,7 +2610,8 @@ class Molecule:
 
         Requires the optional DScribe dependency (``pip install
         'chemsmart[soap]'``). Only finite (non-periodic) molecules are
-        supported.
+        supported; active PBC flags and non-empty translation vectors
+        are rejected.
 
         Args:
             r_cut (float): Cutoff radius in Å. Must be greater than 1 Å.
@@ -2625,17 +2626,19 @@ class Molecule:
                 comparable features across a dataset.
             centers (sequence of int, optional): 1-based atom indices on
                 which to evaluate SOAP. When omitted, all atoms are used.
+                Order is preserved; duplicates overweight aggregations.
             aggregation (str, optional): ``None`` returns local
                 per-center vectors ``(n_centers, n_features)``.
-                ``"mean"`` returns the outer average of local power
-                spectra; ``"sum"`` returns their extensive sum.
+                ``"mean"`` / ``"sum"`` average or sum local power spectra
+                post-hoc (outer-average equivalent).
 
         Returns:
             numpy.ndarray: Dense ``float64`` SOAP feature array.
 
         Raises:
             ImportError: If DScribe is not installed.
-            ValueError: For invalid inputs or active PBC.
+            ValueError: For invalid inputs, active PBC, or translation
+                vectors.
         """
         from chemsmart.analysis.soap import calculate_soap
 

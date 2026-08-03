@@ -32,13 +32,13 @@ Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises
    # Local (per-atom) SOAP vectors: shape (n_atoms, n_features)
    local = mol.calculate_soap(r_cut=6.0, n_max=8, l_max=6, sigma=1.0)
 
-   # Global fingerprint by outer averaging / summing local power spectra
-   # over the selected centers (DScribe average="outer" semantics).
+   # Global fingerprint by post-hoc outer averaging / summing of local
+   # power spectra (DScribe average="off", then mean/sum over centers).
    # Prefer "mean" for size-comparable fingerprints; "sum" is extensive.
    global_mean = mol.calculate_soap(aggregation="mean")
    global_sum = mol.calculate_soap(aggregation="sum")
 
-   # SOAP centered on selected atoms (1-based indices)
+   # SOAP centered on selected atoms (1-based indices; duplicates kept)
    metal_centered = mol.calculate_soap(centers=[1])
 
 *****************
@@ -61,9 +61,12 @@ Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises
 | ``species``      | Elemental basis of the SOAP feature space.               |
 +------------------+----------------------------------------------------------+
 | ``centers``      | Optional 1-based atom indices used as SOAP centers.      |
+|                  | Order is preserved; duplicate indices are kept and      |
+|                  | overweight ``"mean"`` / ``"sum"`` aggregations.          |
 +------------------+----------------------------------------------------------+
-| ``aggregation``  | ``None`` (local), ``"mean"``, or ``"sum"`` (outer        |
-|                  | average / sum of local power spectra).                   |
+| ``aggregation``  | ``None`` (local), ``"mean"``, or ``"sum"``. Mean/sum     |
+|                  | are post-hoc over ``average="off"`` local power          |
+|                  | spectra (outer-average / extensive-sum equivalent).      |
 +------------------+----------------------------------------------------------+
 
 ****************************
@@ -91,11 +94,14 @@ SOAP from geometry works well for molecular conformers, transition states, organ
 frames that are treated as finite molecules.
 
 This CHEMSMART interface currently supports **finite (non-periodic)** molecules only. Structures with active periodic
-boundary conditions are rejected.
+boundary conditions or non-empty translation vectors (cell) are rejected.
 
-Aggregation modes ``"mean"`` and ``"sum"`` implement **outer** averaging of local power-spectrum vectors over the
-selected centers. They are **not** DScribe's ``average="inner"`` global fingerprint (average expansion coefficients
-before forming the power spectrum). Inner averaging is not exposed by this API.
+Aggregation modes ``"mean"`` and ``"sum"`` are computed **post-hoc** over local power-spectrum vectors from DScribe
+with ``average="off"``. That is equivalent to DScribe's outer averaging / summing over the selected centers. They are
+**not** DScribe's ``average="inner"`` global fingerprint (average expansion coefficients before forming the power
+spectrum). Inner averaging is not exposed by this API.
+
+Duplicate ``centers`` entries are allowed and preserved; they overweight ``"mean"`` and ``"sum"`` aggregations.
 
 Standard geometric SOAP does **not** distinguish structures that share the same nuclear coordinates but differ
 electronically, for example different:
