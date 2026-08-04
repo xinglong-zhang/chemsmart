@@ -65,6 +65,13 @@ class PySCFJob(Job):
 
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = settings.copy()
+        if (self.settings.charge is None) != (
+            self.settings.multiplicity is None
+        ):
+            raise ValueError(
+                "PySCF charge and multiplicity overrides must be supplied "
+                "together, or both inherited from the molecular source."
+            )
         # Preserve an electronic state carried by the source artifact unless
         # the project or CLI already supplied an explicit replacement.  This
         # also keeps direct programmatic job construction consistent with the
@@ -281,6 +288,7 @@ class PySCFJob(Job):
                     "project_yaml_sha256"
                 ),
                 "require_applied_settings_sha256": True,
+                "require_engine_complete": True,
             }
             if "input_artifact_kind" in run_receipt:
                 expected["input_artifact_kind"] = run_receipt.get(

@@ -1,6 +1,7 @@
 """PySCF project settings with a canonical stage-specific representation.
 
-New project files use explicit ``sp``, ``opt`` and ``hess`` sections.  The
+New project files use explicit ``sp``, ``opt``, ``hess`` and experimental
+``td`` sections.  The
 historical ChemSmart ``gas``/``solv`` dialect remains a supported migration
 input: ``gas`` feeds ``opt`` and ``hess`` while ``solv`` feeds ``sp``.  A
 project may temporarily contain both representations, but duplicate
@@ -25,14 +26,33 @@ from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
 
-PYSCF_JOBTYPES = ("sp", "opt", "hess")
+PYSCF_JOBTYPES = ("sp", "opt", "hess", "td")
 PYSCF_MIGRATION_SECTIONS = ("gas", "solv")
 PYSCF_ALLOWED_SECTIONS = PYSCF_JOBTYPES + PYSCF_MIGRATION_SECTIONS
 PYSCF_STAGE_SOURCES = {
     "sp": ("sp", "solv"),
     "opt": ("opt", "gas"),
     "hess": ("hess", "gas"),
+    "td": ("td",),
 }
+
+# Loader-owned defaults that materially affect the generated PySCF script.
+# Canonical project output records these values even when the source proposal
+# omitted them, so the promoted YAML is a complete view of the settings the
+# host will apply.  Method and basis remain mandatory user/model proposals;
+# charge and multiplicity remain owned by the input artifact unless both were
+# explicitly supplied.
+PYSCF_CANONICAL_EFFECTIVE_FIELDS = (
+    "density_fit",
+    "engine",
+    "freq",
+    "scf_maxiter",
+    "scf_tol",
+)
+PYSCF_CANONICAL_OPT_EFFECTIVE_FIELDS = (
+    "opt_maxsteps",
+    "opt_solver",
+)
 
 
 class PySCFProjectSettings(RegistryMixin):
@@ -69,6 +89,13 @@ class PySCFProjectSettings(RegistryMixin):
         settings = self.main_settings().copy()
         settings.jobtype = "hess"
         settings.freq = True
+        return settings
+
+    def td_settings(self):
+        """Return preview-only vertical-excitation settings."""
+
+        settings = self.main_settings().copy()
+        settings.jobtype = "td"
         return settings
 
     def explicit_fields(self, jobtype):
@@ -216,6 +243,9 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
     def hess_settings(self):
         return self._settings_for_job("hess")
 
+    def td_settings(self):
+        return self._settings_for_job("td")
+
     def canonical_sections(self, jobtypes=None):
         """Return stage-keyed settings suitable for canonical YAML output."""
 
@@ -239,8 +269,19 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
 class YamlPySCFProjectSettingsBuilder:
     """Build a lazy dual-dialect :class:`YamlPySCFProjectSettings`."""
 
-    def __init__(self, filename):
-        self.filename = os.path.abspath(filename)
+    def __init__(self, filename=None, *, sections=None):
+        if (filename is None) == (sections is None):
+            raise ValueError(
+                "Provide exactly one PySCF project filename or section map."
+            )
+        self.filename = (
+            os.path.abspath(filename) if filename is not None else None
+        )
+        self._input_sections = (
+            {str(name): dict(values) for name, values in sections.items()}
+            if sections is not None
+            else None
+        )
         self._config = None
         self._source_bytes = None
         self._resolved = {}
@@ -257,9 +298,18 @@ class YamlPySCFProjectSettingsBuilder:
     def _read_config(self):
         if self._config is not None:
             return self._config
-        with open(self.filename, "rb") as handle:
-            self._source_bytes = handle.read()
-        config = yaml.safe_load(self._source_bytes)
+        if self.filename is not None:
+            with open(self.filename, "rb") as handle:
+                self._source_bytes = handle.read()
+            config = yaml.safe_load(self._source_bytes)
+        else:
+            config = self._input_sections
+            self._source_bytes = yaml.safe_dump(
+                config,
+                sort_keys=True,
+                default_flow_style=False,
+                allow_unicode=True,
+            ).encode("utf-8")
         if not isinstance(config, Mapping):
             raise ValueError("PySCF project YAML must contain a mapping.")
         unknown = sorted(set(config).difference(PYSCF_ALLOWED_SECTIONS))
@@ -267,7 +317,8 @@ class YamlPySCFProjectSettingsBuilder:
             raise ValueError(
                 "Unsupported PySCF top-level section(s): "
                 f"{', '.join(map(str, unknown))}; use canonical sp, opt, "
-                "and hess sections or migration-only gas and solv sections."
+                "hess, and td sections or migration-only gas and solv "
+                "sections."
             )
         if not any(name in config for name in PYSCF_ALLOWED_SECTIONS):
             raise ValueError(
@@ -327,7 +378,18 @@ class YamlPySCFProjectSettingsBuilder:
                 )
 
         raw["jobtype"] = jobtype
-        if jobtype == "hess":
+        if jobtype == "opt":
+            if section == "opt" and raw.get("freq") is True:
+                raise ValueError(
+                    "PySCF canonical opt section requires freq=False; add a "
+                    "separate hess stage so the optimized-geometry handoff "
+                    "remains explicit."
+                )
+            # Historical gas.freq requested an in-process Hessian.  Migration
+            # keeps the settings readable but materializes the modern explicit
+            # opt node; the hess node is available independently from gas.
+            raw["freq"] = False
+        elif jobtype == "hess":
             if section == "hess" and raw.get("freq") is False:
                 raise ValueError(
                     "PySCF canonical hess section cannot declare freq=False."
@@ -408,10 +470,13 @@ class YamlPySCFProjectSettingsBuilder:
         return settings, explicit_fields
 
     def canonical_sections(self, jobtypes=None):
-        """Materialize canonical stage sections for rendering.
+        """Materialize canonical, loader-effective stage sections.
 
         When *jobtypes* is omitted only stages represented by the source file
         are emitted.  Supplying a subset preserves lazy stage validation.
+        Explicit values are retained, while scientifically relevant loader
+        defaults are added by the host so a promoted project does not hide
+        settings that will affect the generated script.
         """
 
         if jobtypes is None:
@@ -430,7 +495,12 @@ class YamlPySCFProjectSettingsBuilder:
         for jobtype in PYSCF_JOBTYPES:
             if jobtype not in jobtypes:
                 continue
-            _, _, canonical_raw = self._resolve_job(jobtype)
+            settings, _, canonical_raw = self._resolve_job(jobtype)
+            fields = PYSCF_CANONICAL_EFFECTIVE_FIELDS
+            if jobtype == "opt":
+                fields += PYSCF_CANONICAL_OPT_EFFECTIVE_FIELDS
+            for field in fields:
+                canonical_raw.setdefault(field, getattr(settings, field))
             rendered[jobtype] = canonical_raw
         return rendered
 
@@ -440,7 +510,24 @@ class YamlPySCFProjectSettingsBuilder:
         return hashlib.sha256(self._source_bytes).hexdigest()
 
     def _parse_project_name(self):
+        if self.filename is None:
+            return "materialized"
         return os.path.splitext(os.path.basename(self.filename))[0]
+
+
+def materialize_canonical_project_sections(sections):
+    """Return host-owned canonical PySCF sections from a typed candidate.
+
+    This is the project-renderer hook used by the agent.  It shares the exact
+    dual-dialect loader and validation path with file-backed projects, but is
+    compute-free and does not create an intermediate file.
+    """
+
+    if not isinstance(sections, Mapping):
+        raise ValueError("PySCF project sections must contain a mapping.")
+    return YamlPySCFProjectSettingsBuilder(
+        sections=sections
+    ).canonical_sections()
 
 
 class PySCFProjectSettingsManager:

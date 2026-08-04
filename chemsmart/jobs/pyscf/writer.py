@@ -1,8 +1,9 @@
 """Generate the standalone PySCF driver script for a job.
 
 The emitted ``label.py`` is a **fixed skeleton plus one configuration dict**.
-Because v1 covers only sp/opt/hess the driver logic is invariant, so nothing
-is gained by templating source text -- and free-form generation would add a
+Executable v1 workflows cover only sp/opt/hess; td is a declarative preview
+that the emitted driver refuses to run. The driver logic is invariant, so
+nothing is gained by templating source text -- and free-form generation adds a
 quoting, escaping and injection surface for no benefit. Only ``CONFIG``
 varies, and it holds scalars, strings and a geometry array.
 
@@ -20,6 +21,8 @@ import math
 import os
 from numbers import Integral, Real
 
+from ase.data import atomic_numbers as ASE_ATOMIC_NUMBERS
+
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.io.pyscf.output import pyscf_source_artifact_binding
 from chemsmart.jobs.pyscf.settings import (
@@ -36,6 +39,15 @@ logger = logging.getLogger(__name__)
 RESULTS_SCHEMA_VERSION = "2.0"
 LEGACY_RESULTS_SCHEMA_VERSION = "1.0"
 
+#: Additive contract marker carried inside ``spec``.  The HDF5 container
+#: remains schema 2.0 so historical artifacts stay readable; this marker
+#: identifies records that satisfy the stricter state, status, and runtime
+#: reference checks required for new execution/data-edge admission.
+RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v3"
+TD_RESPONSE_MATERIALIZATION_SCHEMA_VERSION = (
+    "chemsmart.pyscf-td-response-materialization.v1"
+)
+
 #: Marker used for an explicit JSON-style null. HDF5 has no native null scalar,
 #: so a marked empty uint8 dataset distinguishes "known to be unavailable" from
 #: a missing field.
@@ -43,7 +55,7 @@ H5_NULL_ATTRIBUTE = "chemsmart_is_null"
 
 #: Fields copied from the resolved driver configuration into ``spec/``.
 #: Fake and real artifacts use the same applied-settings vocabulary.
-APPLIED_SPEC_FIELDS = (
+LEGACY_APPLIED_SPEC_FIELDS = (
     "run_id",
     "run_nonce",
     "label",
@@ -77,6 +89,11 @@ APPLIED_SPEC_FIELDS = (
     "solvent_lebedev_order",
     "opt_solver",
     "opt_maxsteps",
+    "response_method",
+    "state_manifold",
+    "nstates",
+    "preview_only",
+    "materializations",
     "num_threads",
     "max_memory_mb",
     "input_geometry_sha256",
@@ -87,10 +104,120 @@ APPLIED_SPEC_FIELDS = (
     "settings_digest",
 )
 
+APPLIED_SPEC_FIELDS = LEGACY_APPLIED_SPEC_FIELDS + (
+    "result_contract_version",
+    "reference_family",
+)
+
+# Units are part of the machine contract rather than prose in a reader.  Every
+# numeric dataset the fixed driver can emit has one explicit unit, including
+# quantities that are dimensionless.
+RESULT_UNITS = {
+    "atomic_numbers": "dimensionless",
+    "dipole_moment": "Debye",
+    "energies": "Eh",
+    "excitation_energies": "Eh",
+    "force_constants": "Dyne/Angstrom",
+    "forces": "Eh/Bohr",
+    "hessian": "Eh/Bohr^2",
+    "mo_energy": "Eh",
+    "mo_occ": "electron",
+    "mulliken_charges": "elementary_charge",
+    "normal_modes": "atomic_mass_unit^-1/2",
+    "oscillator_strengths": "dimensionless",
+    "positions": "Angstrom",
+    "reduced_masses": "atomic_mass_unit",
+    "spin_square": "dimensionless",
+    "spin_square_effective_multiplicity": "dimensionless",
+    "vibrational_frequencies": "cm^-1",
+}
+
 
 def applied_pyscf_spec(config):
     """Return the resolved fields written under ``spec/``."""
     return {key: config.get(key) for key in APPLIED_SPEC_FIELDS}
+
+
+def applied_pyscf_spec_fields(spec):
+    """Return the digest vocabulary for a current or historical artifact."""
+
+    if spec.get("result_contract_version") == RESULT_CONTRACT_VERSION:
+        return APPLIED_SPEC_FIELDS
+    return LEGACY_APPLIED_SPEC_FIELDS
+
+
+def pyscf_td_response_materialization(settings):
+    """Map typed TD/TDA intent to a non-executable PySCF response plan.
+
+    The preview artifact remains inert. This manifest makes the intended
+    target-library construction explicit and testable without embedding a
+    dormant engine call that could later become an execution escape hatch.
+    """
+
+    if str(getattr(settings, "jobtype", "")).strip().lower() != "td":
+        return None
+    response_method = str(settings.response_method).strip().lower()
+    factory_api = {
+        "tda": "pyscf.tdscf.rks.TDA",
+        "tddft": "pyscf.tdscf.rks.TDDFT",
+    }[response_method]
+    body = {
+        "schema_version": TD_RESPONSE_MATERIALIZATION_SCHEMA_VERSION,
+        "ground_state_reference_family": "rks",
+        "ground_state_stage": "scf",
+        "response_method": response_method,
+        "response_factory_api": factory_api,
+        "state_manifold": "singlet",
+        "nstates": int(settings.nstates),
+        "operation_order": (
+            "ground_state_scf",
+            "response_construct",
+            "set_singlet_channel",
+            "set_nstates",
+            "vertical_excitation_kernel",
+        ),
+        "execution_policy": "preview_only",
+    }
+    payload = json.dumps(body, sort_keys=True, separators=(",", ":"))
+    return {
+        **body,
+        "receipt_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
+
+def pyscf_reference_family(*, symbols, charge, multiplicity, xc):
+    """Derive the PySCF reference family from host-owned molecular state.
+
+    ``pyscf.scf.HF`` selects its concrete class from electron count and spin;
+    in particular, the one-electron open-shell path is ``HF1e``/ROHF rather
+    than UHF.  Recording that decision before script generation lets result
+    validation detect a runtime reference substitution independently.
+    """
+
+    if isinstance(charge, bool) or not isinstance(charge, Integral):
+        raise ValueError("charge must be an integer, not a boolean")
+    if isinstance(multiplicity, bool) or not isinstance(
+        multiplicity, Integral
+    ):
+        raise ValueError("multiplicity must be an integer, not a boolean")
+    try:
+        electron_count = sum(
+            int(ASE_ATOMIC_NUMBERS[str(symbol)]) for symbol in symbols
+        ) - int(charge)
+    except (KeyError, TypeError) as exc:
+        raise ValueError("symbols must resolve to atomic numbers") from exc
+    spin = int(multiplicity) - 1
+    if electron_count < 0 or spin < 0 or spin > electron_count:
+        raise ValueError("electron count and multiplicity are inconsistent")
+    if (electron_count - spin) % 2:
+        raise ValueError("electron count and multiplicity have invalid parity")
+    if xc is not None:
+        return "rks" if spin == 0 else "uks"
+    if spin == 0:
+        return "rhf"
+    if electron_count == 1:
+        return "rohf"
+    return "uhf"
 
 
 def write_pyscf_h5(
@@ -116,7 +243,30 @@ def write_pyscf_h5(
         _write_mapping(handle.create_group("spec"), spec)
         _write_mapping(handle.create_group("provenance"), provenance)
         _write_mapping(handle.create_group("status"), status)
-        _write_mapping(handle.create_group("results"), results)
+        results_group = handle.create_group("results")
+        _write_mapping(results_group, results)
+        _attach_result_units(results_group)
+
+
+def _attach_result_units(group):
+    """Attach mandatory units to every numeric result dataset."""
+
+    import h5py
+
+    for key, node in group.items():
+        if isinstance(node, h5py.Group):
+            _attach_result_units(node)
+            continue
+        if bool(node.attrs.get(H5_NULL_ATTRIBUTE, False)):
+            continue
+        if node.dtype.kind not in {"b", "i", "u", "f", "c"}:
+            continue
+        unit = RESULT_UNITS.get(key)
+        if unit is None:
+            raise ValueError(
+                f"Numeric PySCF result {node.name} has no declared unit."
+            )
+        node.attrs["unit"] = unit
 
 
 def _write_mapping(group, mapping):
@@ -245,6 +395,7 @@ class PySCFScriptWriter:
 
         config = {
             "schema_version": RESULTS_SCHEMA_VERSION,
+            "result_contract_version": RESULT_CONTRACT_VERSION,
             "run_id": getattr(jobrunner, "_run_id", None),
             "run_nonce": getattr(jobrunner, "_run_nonce", None),
             # Captured by the ChemSmart process because the standalone driver
@@ -264,6 +415,12 @@ class PySCFScriptWriter:
             # PySCF's spin is 2S = Nalpha - Nbeta, NOT the multiplicity.
             "spin": int(multiplicity) - 1,
             "xc": settings.xc,
+            "reference_family": pyscf_reference_family(
+                symbols=symbols,
+                charge=charge,
+                multiplicity=multiplicity,
+                xc=settings.xc,
+            ),
             "ab_initio": settings.ab_initio,
             "method": settings.method_name,
             "dispersion": settings.dispersion,
@@ -289,6 +446,26 @@ class PySCFScriptWriter:
             "opt_maxsteps": (
                 settings.opt_maxsteps if "opt" in job.stages else None
             ),
+            "response_method": (
+                str(getattr(settings, "response_method", None)).strip().lower()
+                if getattr(settings, "response_method", None) is not None
+                else None
+            ),
+            "state_manifold": (
+                str(getattr(settings, "state_manifold", None)).strip().lower()
+                if getattr(settings, "state_manifold", None) is not None
+                else None
+            ),
+            "nstates": (
+                int(getattr(settings, "nstates", None))
+                if getattr(settings, "nstates", None) is not None
+                else None
+            ),
+            # TD/TDA is deliberately a typed preview, not a latent engine
+            # escape hatch. The generated artifact carries the requested
+            # semantics but refuses direct execution even outside ChemSmart.
+            "preview_only": settings.jobtype == "td",
+            "materializations": {},
             "engine": settings.engine,
             "num_threads": int(num_threads),
             "max_memory_mb": max_memory_mb,
@@ -305,6 +482,11 @@ class PySCFScriptWriter:
                 input_artifact["sha256"] if input_artifact else None
             ),
         }
+        td_materialization = pyscf_td_response_materialization(settings)
+        if td_materialization is not None:
+            config["materializations"]["td_response_plan"] = (
+                td_materialization
+            )
         geometry_payload = {
             "symbols": config["symbols"],
             "positions": config["positions"],
@@ -339,6 +521,7 @@ class PySCFScriptWriter:
         """
         ignored = {
             "schema_version",
+            "result_contract_version",
             "run_id",
             "run_nonce",
             "chemsmart_version",
@@ -398,7 +581,8 @@ _SKELETON = '''#!/usr/bin/env python
 """PySCF driver generated by ChemSmart.
 
 DO NOT EDIT: this file is regenerated on every run, so edits are lost.
-Rerun it directly with `python <this file>` to reproduce the calculation.
+Executable SP/OPT/HESS artifacts may be rerun with the bound environment.
+Preview-only artifacts refuse direct execution.
 
 Imports pyscf, numpy, h5py and the standard library only -- never chemsmart.
 """
@@ -450,6 +634,47 @@ def _build_mole(config, log_path):
     return pyscf.M(**kwargs)
 
 
+def _functional_definition(
+    libxc,
+    xc,
+    *,
+    pyscf_version,
+    environment_receipt_sha256,
+):
+    """Materialize the target LibXC interpretation of one DFT literal."""
+    parser_hybrid, components = libxc.parse_xc(xc)
+    ordered_components = sorted(components)
+    return {
+        "schema_version": "chemsmart.pyscf-functional-definition.v3",
+        "field": "xc",
+        "source": "pyscf.dft.libxc.parse_xc",
+        "source_key": xc,
+        "pyscf_version": str(pyscf_version),
+        "libxc_version": str(libxc.libxc_version()),
+        "environment_receipt_sha256": environment_receipt_sha256,
+        # ``parse_xc`` returns parser decomposition metadata.  For compound
+        # LibXC aliases such as B3LYPG/PBE0 this tuple may be all zero even
+        # though the actual exact-exchange fraction is non-zero, so it must
+        # not be described as the physical hybrid coefficient.
+        "parser_hybrid_decomposition": [
+            float(value) for value in parser_hybrid
+        ],
+        "exact_exchange_fraction": float(libxc.hybrid_coeff(xc)),
+        "range_separation_coefficients": [
+            float(value) for value in libxc.rsh_coeff(xc)
+        ],
+        # Parallel primitive vectors remain lossless while being directly
+        # serializable as numeric HDF5 datasets.  A list of dictionaries would
+        # become an object array and fail before any real DFT result is saved.
+        "functional_ids": [
+            int(functional_id) for functional_id, _ in ordered_components
+        ],
+        "functional_factors": [
+            float(factor) for _, factor in ordered_components
+        ],
+    }
+
+
 def _build_method(config, mol):
     """Construct the mean-field object.
 
@@ -458,6 +683,7 @@ def _build_method(config, mol):
     and the solvent is attached last. Attaching a solvent before `.to_gpu()`
     leaves a CPU-resident solvent object on a GPU method.
     """
+    import pyscf
     from pyscf import dft, scf
 
     def _is_gpu4pyscf_object(value):
@@ -483,6 +709,16 @@ def _build_method(config, mol):
         mf = scf.HF(mol)
     else:
         mf = dft.KS(mol, xc=config["xc"])
+        config.setdefault("materializations", {})[
+            "functional_definition"
+        ] = _functional_definition(
+            dft.libxc,
+            config["xc"],
+            pyscf_version=pyscf.__version__,
+            environment_receipt_sha256=os.environ.get(
+                "CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256"
+            ),
+        )
         if config["atom_grid"]:
             mf.grids.atom_grid = tuple(config["atom_grid"])
 
@@ -524,6 +760,23 @@ def _build_method(config, mol):
         # time; setting the name, rather than overriding eps, preserves that
         # implementation path.
         config["solvent_eps"] = _solvent_dielectric(config["solvent_id"])
+    if call is not None:
+        config.setdefault("materializations", {})[
+            "solvent_dielectric"
+        ] = {
+            "schema_version": (
+                "chemsmart.pyscf-solvent-materialization.v1"
+            ),
+            "field": "solvent_eps",
+            "source": "pyscf.solvent.smd.solvent_db",
+            "source_key": config["solvent_id"],
+            "value": config["solvent_eps"],
+            "unit": "dimensionless_relative_permittivity",
+            "pyscf_version": pyscf.__version__,
+            "environment_receipt_sha256": os.environ.get(
+                "CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256"
+            ),
+        }
     if call is not None and config["solvent_lebedev_order"] is not None:
         # GPU4PySCF 1.8.0's solvent path is pinned to this quadrature order;
         # record and apply it explicitly instead of relying on a runtime
@@ -650,7 +903,7 @@ def _provenance(config, started_at, ended_at, wall_seconds, runtime):
     try:
         from pyscf.dft import libxc
 
-        libxc_version = getattr(libxc, "__version__", None)
+        libxc_version = str(libxc.libxc_version())
     except Exception:
         libxc_version = None
 
@@ -698,7 +951,8 @@ def _provenance(config, started_at, ended_at, wall_seconds, runtime):
 
 def _settings_digest(config):
     ignored = {
-        "schema_version", "run_id", "run_nonce", "chemsmart_version",
+        "schema_version", "result_contract_version",
+        "run_id", "run_nonce", "chemsmart_version",
         "label", "title", "num_threads", "max_memory_mb",
         "project_yaml_digest", "input_geometry_sha256",
         "input_artifact_kind", "input_artifact_sha256",
@@ -763,7 +1017,28 @@ def _write_h5(path, spec, provenance, status, results):
         _write_mapping(handle.create_group("spec"), spec)
         _write_mapping(handle.create_group("provenance"), provenance)
         _write_mapping(handle.create_group("status"), status)
-        _write_mapping(handle.create_group("results"), results)
+        results_group = handle.create_group("results")
+        _write_mapping(results_group, results)
+        _attach_result_units(results_group)
+
+
+def _attach_result_units(group):
+    """Attach the controller-declared unit to each numeric result dataset."""
+    units = __CHEMSMART_RESULT_UNITS__
+    for key, node in group.items():
+        if isinstance(node, h5py.Group):
+            _attach_result_units(node)
+            continue
+        if bool(node.attrs.get(_H5_NULL_ATTRIBUTE, False)):
+            continue
+        if node.dtype.kind not in {"b", "i", "u", "f", "c"}:
+            continue
+        unit = units.get(key)
+        if unit is None:
+            raise ValueError(
+                "Numeric PySCF result %s has no declared unit" % node.name
+            )
+        node.attrs["unit"] = unit
 
 
 def _to_host_array(array):
@@ -772,17 +1047,46 @@ def _to_host_array(array):
     return np.asarray(getter() if callable(getter) else array)
 
 
+def _spin_diagnostic(mf):
+    """Return PySCF's final-state ``(<S^2>, effective multiplicity)``."""
+    evaluator = getattr(mf, "spin_square", None)
+    if not callable(evaluator):
+        raise AttributeError("mean-field object has no spin_square evaluator")
+    observed = evaluator()
+    if not isinstance(observed, (tuple, list)) or len(observed) != 2:
+        raise ValueError("spin_square must return two scalar values")
+    values = []
+    for value in observed:
+        materialized = _to_host_array(value)
+        if materialized.size != 1:
+            raise ValueError("spin_square returned a non-scalar value")
+        values.append(float(materialized.reshape(-1)[0]))
+    return tuple(values)
+
+
 def main():
     label = CONFIG["label"]
     log_path = label + ".out"
     results_path = label + ".h5"
+
+    if CONFIG.get("preview_only"):
+        raise RuntimeError(
+            "This ChemSmart PySCF artifact is preview-only and cannot launch "
+            "a chemistry engine."
+        )
 
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     t0 = time.time()
 
     spec_fields = __CHEMSMART_APPLIED_SPEC_FIELDS__
     spec = {key: CONFIG.get(key) for key in spec_fields}
-    status = {"stages": {}, "normal_termination": False, "failure": None}
+    status = {
+        "stages": {},
+        "engine_complete": False,
+        "normal_termination": False,
+        "failure": None,
+        "properties": {},
+    }
     results = {}
     runtime = {}
     current_stage = "initialization"
@@ -799,6 +1103,7 @@ def main():
         spec["solvent_lebedev_order"] = CONFIG.get(
             "solvent_lebedev_order"
         )
+        spec["materializations"] = CONFIG.get("materializations", {})
         CONFIG["applied_settings_sha256"] = _settings_digest(spec)
         spec["applied_settings_sha256"] = CONFIG[
             "applied_settings_sha256"
@@ -863,6 +1168,10 @@ def main():
                     analysis["force_const_dyne"], dtype=float
                 )
                 status["stages"]["hess"] = {"converged": True}
+            elif stage == "td":
+                raise RuntimeError(
+                    "PySCF TD/TDA is a ChemSmart preview-only capability."
+                )
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
@@ -880,7 +1189,21 @@ def main():
         # contracts expose forces, so negate the exact final-geometry gradient.
         # Optional properties are explicit status records. Missing values must
         # never be indistinguishable from a property that was not attempted.
-        status["properties"] = {}
+        try:
+            spin_square, effective_multiplicity = _spin_diagnostic(mf)
+            results["spin_square"] = spin_square
+            results[
+                "spin_square_effective_multiplicity"
+            ] = effective_multiplicity
+            status["properties"]["spin_square"] = {"status": "ok"}
+        except Exception as exc:
+            status["properties"]["spin_square"] = {
+                "status": "unavailable",
+                "failure": {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            }
         try:
             results["forces"] = -_to_host_array(
                 mf.nuc_grad_method().kernel()
@@ -940,8 +1263,11 @@ def main():
         spec["num_electrons"] = int(mol.nelectron)
         spec["nelec"] = [int(n) for n in mol.nelec]
 
-        status["normal_termination"] = (
+        status["engine_complete"] = (
             len(status["stages"]) == len(CONFIG["stages"])
+        )
+        status["normal_termination"] = (
+            status["engine_complete"]
             and all(
                 entry.get("converged", False)
                 for entry in status["stages"].values()
@@ -977,4 +1303,7 @@ if __name__ == "__main__":
 # tuple from the same declaration used by the fake runner.
 _SKELETON = _SKELETON.replace(
     "__CHEMSMART_APPLIED_SPEC_FIELDS__", repr(APPLIED_SPEC_FIELDS)
+)
+_SKELETON = _SKELETON.replace(
+    "__CHEMSMART_RESULT_UNITS__", repr(RESULT_UNITS)
 )

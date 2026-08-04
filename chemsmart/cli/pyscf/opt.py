@@ -18,9 +18,8 @@ logger = logging.getLogger(__name__)
 def opt(ctx, skip_completed, **kwargs):
     """Run a PySCF geometry optimisation.
 
-    Uses the ``opt:`` section of the project YAML. When that section sets
-    ``freq: True`` the Hessian runs in the same process against the
-    already-converged mean-field object, instead of paying for a second SCF.
+    Uses the ``opt:`` section of the project YAML. A Hessian must be a separate
+    ``hess`` node bound to the validated optimized-geometry artifact.
     """
     from chemsmart.jobs.pyscf.opt import PySCFOptJob
 

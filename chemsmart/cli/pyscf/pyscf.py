@@ -1,7 +1,7 @@
 """PySCF CLI group.
 
 Group-level options are execution controls and per-invocation overrides only.
-Method, basis, phase and freq are governed by the project YAML, as they are
+Method, basis, response settings and phase are governed by project YAML, as
 for Gaussian and ORCA.
 
 Option names deliberately reuse the existing ChemSmart vocabulary
@@ -140,10 +140,10 @@ def click_pyscf_settings_options(f):
     @click.option(
         "--gpu/--no-gpu",
         default=None,
-        help="Run on GPU via gpu4pyscf only when --gpu is explicit and the "
-        "server allocation resolves a positive NUM_GPUS. Omission and "
-        "--no-gpu both select CPU; GPU and CPU are scientifically distinct "
-        "execution requests recorded in the results file.",
+        help="Override the project engine. Real --gpu execution requires a "
+        "positive resolved NUM_GPUS; --fake may preview the GPU script without "
+        "a device. --no-gpu selects CPU. Omission preserves project YAML, and "
+        "an unavailable GPU request never falls back to CPU.",
     )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
@@ -224,7 +224,7 @@ def pyscf(
     """CLI subcommand for running PySCF jobs using the chemsmart framework.
 
     Resolves the project settings, the molecules and the per-invocation
-    overrides, then publishes them on ``ctx.obj`` for the sp/opt/hess leaves.
+    overrides, then publishes them on ``ctx.obj`` for the sp/opt/hess/td leaves.
     """
     from chemsmart.jobs.pyscf.settings import PySCFJobSettings
     from chemsmart.settings.pyscf import PySCFProjectSettings
@@ -244,6 +244,12 @@ def pyscf(
     explicit_state_fields = set(
         project_explicit_fields & {"charge", "multiplicity"}
     )
+
+    if (charge is None) != (multiplicity is None):
+        raise ValueError(
+            "PySCF CLI charge and multiplicity overrides must be supplied "
+            "together so the electronic state cannot be partially replaced."
+        )
 
     if title is not None:
         job_settings.title = title
@@ -312,8 +318,9 @@ def pyscf(
         job_settings.opt_maxsteps = opt_maxsteps
         keywords += ("opt_maxsteps",)
 
-    # GPU is opt-in even on GPU nodes. Resolved late, in the leaf, so the
-    # server allocation is available; here we only record an explicit request.
+    # An explicit flag overrides the project engine.  Omission deliberately
+    # leaves ``engine`` out of the merge whitelist so project YAML remains
+    # authoritative.  Allocation conformance is resolved later in the leaf.
     if gpu is not None:
         job_settings.engine = "gpu" if gpu else "cpu"
         keywords += ("engine",)

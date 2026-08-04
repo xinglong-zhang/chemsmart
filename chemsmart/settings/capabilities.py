@@ -28,6 +28,29 @@ def _validate_names(
         raise ValueError(f"{field} must contain lower-case identifiers")
 
 
+@dataclass(frozen=True, order=True)
+class EngineJobCapability:
+    """One exact program-engine/job pairing and its execution boundary.
+
+    ``preview_supported`` describes whether ChemSmart can compile and fake-run
+    the pair.  ``execution_supported`` is deliberately narrower: it says the
+    implementation is allowed to become executable after environment,
+    approval, and validation gates pass.  Neither flag establishes that the
+    current host is ready.
+    """
+
+    engine: str
+    jobtype: str
+    preview_supported: bool = True
+    execution_supported: bool = True
+
+    def __post_init__(self) -> None:
+        _validate_names("engine", (self.engine,))
+        _validate_names("jobtype", (self.jobtype,))
+        if self.execution_supported and not self.preview_supported:
+            raise ValueError("execution support requires preview support")
+
+
 @dataclass(frozen=True)
 class ProgramCapability:
     """Agent-operability facts for one executable chemistry program."""
@@ -41,6 +64,7 @@ class ProgramCapability:
     project_parameter_domains: tuple[
         tuple[str, tuple[str, ...]], ...
     ] = ()
+    engine_job_capabilities: tuple[EngineJobCapability, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -83,6 +107,41 @@ class ProgramCapability:
                 raise ValueError(
                     "project parameter domain values must be lower-case"
                 )
+        if self.engine_job_capabilities:
+            if self.engine_job_capabilities != tuple(
+                sorted(set(self.engine_job_capabilities))
+            ):
+                raise ValueError(
+                    "engine_job_capabilities must be sorted and unique"
+                )
+            for item in self.engine_job_capabilities:
+                if item.engine not in self.engines:
+                    raise ValueError(
+                        "engine-job capability uses an undeclared engine"
+                    )
+                if item.jobtype not in self.jobtypes:
+                    raise ValueError(
+                        "engine-job capability uses an undeclared jobtype"
+                    )
+
+    @property
+    def resolved_engine_job_capabilities(
+        self,
+    ) -> tuple[EngineJobCapability, ...]:
+        """Return the exact matrix, deriving the legacy Cartesian declaration.
+
+        Empty matrices remain valid migration input for the original registry,
+        where engines and jobtypes were independent lists.  New non-Cartesian
+        programs must declare their exact matrix.
+        """
+
+        if self.engine_job_capabilities:
+            return self.engine_job_capabilities
+        return tuple(
+            EngineJobCapability(engine=engine, jobtype=jobtype)
+            for engine in self.engines
+            for jobtype in self.jobtypes
+        )
 
 
 # This is the project-owned option-name union used today by the agent harness
@@ -121,12 +180,15 @@ _PYSCF_PROJECT_PARAMETERS = (
     "dispersion",
     "freq",
     "functional",
+    "nstates",
     "opt_maxsteps",
     "opt_solver",
+    "response_method",
     "scf_maxiter",
     "scf_tol",
     "solvent_id",
     "solvent_model",
+    "state_manifold",
 )
 
 _XTB_PROJECT_PARAMETERS = (
@@ -201,17 +263,32 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             program="pyscf",
             requires_project_configuration=True,
             supports_project_configuration=True,
-            jobtypes=("hess", "opt", "sp"),
+            jobtypes=("hess", "opt", "sp", "td"),
             project_owned_parameters=_PYSCF_PROJECT_PARAMETERS,
             engines=("cpu", "gpu"),
             project_parameter_domains=(
                 ("ab_initio", ("hf",)),
                 ("defgrid", ("defgrid1", "defgrid2", "defgrid3")),
                 ("opt_solver", ("ase", "berny", "geometric")),
+                ("response_method", ("tda", "tddft")),
                 (
                     "solvent_model",
                     ("cosmo", "cpcm", "iefpcm", "pcm", "smd", "ssvpe"),
                 ),
+                ("state_manifold", ("singlet",)),
+            ),
+            engine_job_capabilities=(
+                EngineJobCapability(engine="cpu", jobtype="hess"),
+                EngineJobCapability(engine="cpu", jobtype="opt"),
+                EngineJobCapability(engine="cpu", jobtype="sp"),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="td",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(engine="gpu", jobtype="hess"),
+                EngineJobCapability(engine="gpu", jobtype="opt"),
+                EngineJobCapability(engine="gpu", jobtype="sp"),
             ),
         ),
         "xtb": ProgramCapability(
@@ -358,6 +435,7 @@ __all__ = [
     "PROJECT_PROGRAM_ORDER",
     "PROJECT_REQUIRED_PROGRAMS",
     "ProgramCapability",
+    "EngineJobCapability",
     "EngineCapability",
     "engine_capability",
     "program_capability",

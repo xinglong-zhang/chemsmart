@@ -320,6 +320,12 @@ class PySCFOutput(FileMixin):
         """Numeric result arrays."""
         return self._payload[3]
 
+    @cached_property
+    def result_units(self):
+        """Return HDF5 result-dataset paths and their explicit units."""
+
+        return read_pyscf_result_units(self.resultsfile)
+
     # ------------------------------------------------------------------
     # provenance / identity
     # ------------------------------------------------------------------
@@ -336,6 +342,16 @@ class PySCFOutput(FileMixin):
         except (FileNotFoundError, ValueError, KeyError, OSError) as e:
             logger.debug(f"Could not read PySCF status: {e}")
             return False
+
+    @property
+    def engine_complete(self):
+        """Return whether every requested engine stage finished.
+
+        Completion is distinct from convergence and deterministic validation.
+        Historical artifacts without this additive observation report False.
+        """
+
+        return self.status.get("engine_complete") is True
 
     @property
     def failure(self):
@@ -540,9 +556,16 @@ class PySCFOutput(FileMixin):
         if energy.ndim == 2:  # unrestricted: shape (2, nmo)
             alpha_e, beta_e = energy[0], energy[1]
             alpha_o, beta_o = occupancy[0], occupancy[1]
-        else:  # restricted: occupancies are 2.0 / 0.0
+        else:  # restricted: occupancies are 2.0 / 1.0 / 0.0
             alpha_e = beta_e = energy
-            alpha_o = beta_o = occupancy
+            # PySCF's restricted open-shell representation uses one spatial
+            # orbital array with alpha-first occupations: a doubly occupied
+            # orbital belongs to both spin channels, while a singly occupied
+            # orbital belongs only to alpha.  Duplicating ``mo_occ`` into both
+            # channels would therefore invent a beta electron for one-electron
+            # and other ROHF results.
+            alpha_o = np.clip(occupancy, 0.0, 1.0)
+            beta_o = np.clip(occupancy - 1.0, 0.0, 1.0)
 
         ev = units.Hartree  # Hartree -> eV
         return (
@@ -850,6 +873,31 @@ def read_pyscf_h5(filename):
         status = _read_group(handle["status"])
         results = _read_group(handle["results"], preserve_arrays=True)
         return spec, provenance, status, results
+
+
+def read_pyscf_result_units(filename):
+    """Return explicit units for numeric datasets below ``/results``."""
+
+    import h5py
+
+    observed = {}
+    with h5py.File(filename, "r") as handle:
+        results = handle["results"]
+
+        def visit(name, node):
+            if not isinstance(node, h5py.Dataset):
+                return
+            if bool(node.attrs.get(H5_NULL_ATTRIBUTE, False)):
+                return
+            if node.dtype.kind not in {"b", "i", "u", "f", "c"}:
+                return
+            unit = node.attrs.get("unit")
+            if isinstance(unit, bytes):
+                unit = unit.decode("utf-8")
+            observed[f"results/{name}"] = unit
+
+        results.visititems(visit)
+    return observed
 
 
 def _require_nodes(handle, names):

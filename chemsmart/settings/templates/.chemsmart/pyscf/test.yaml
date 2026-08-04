@@ -12,13 +12,24 @@ sp:
 opt:
   functional: b3lyp
   basis: def2-svp
-  freq: true
+  freq: false
   density_fit: true
   defgrid: defgrid2
   scf_tol: 1.0e-9
   scf_maxiter: 100
   opt_solver: geometric
   opt_maxsteps: 100
+td:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: true
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  response_method: tda
+  state_manifold: singlet
+  nstates: 10
 hess:
   functional: b3lyp
   basis: def2-svp

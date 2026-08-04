@@ -48,7 +48,9 @@ PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 
 #: Execution engines. ``gpu`` routes through gpu4pyscf via ``.to_gpu()``.
 PYSCF_ENGINES = ("cpu", "gpu")
-PYSCF_JOBTYPES = ("hess", "opt", "sp")
+PYSCF_JOBTYPES = ("hess", "opt", "sp", "td")
+PYSCF_RESPONSE_METHODS = ("tda", "tddft")
+PYSCF_STATE_MANIFOLDS = ("singlet",)
 
 #: Functionals for which the perturbative correlation term is not implemented
 #: by this v1 mean-field-only backend.  Passing one of these names to
@@ -72,29 +74,113 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
     "double-hybrid",
 )
 
-#: Functionals whose *name* means different things in different programs.
-#: Maps a ChemSmart functional name to (libxc name, note).
-#:
-#: Measured on H2O/def2-SVP at a fixed geometry (pyscf 2.14.0, ORCA 6.1.1):
-#:
-#:   PySCF 'b3lyp'  (VWN3, Gaussian's definition) = -76.35815198 Ha
-#:   PySCF 'b3lyp5' (VWN5, ORCA's definition)     = -76.32100288 Ha
-#:   ORCA  'B3LYP'                                = -76.32111960 Ha
-#:
-#: i.e. the two B3LYP definitions differ by **23.2 kcal/mol**, far larger
-#: than any density-fitting or grid error (0.006 kcal/mol here). ChemSmart
-#: resolves ``b3lyp`` to the Gaussian/VWN3 definition, which is both libxc's
-#: default and the dominant convention in the literature. Ask for
-#: ``b3lyp5`` explicitly to reproduce an ORCA B3LYP number.
+#: Functionals whose *name* means different things in different programs or
+#: target configurations. Maps the ChemSmart literal to an unambiguous PySCF
+#: LibXC alias plus a public explanation. In PySCF 2.14, the bare ``B3LYP``
+#: alias may be redirected by ``__config__.B3LYP_WITH_VWN5``; ``B3LYPG`` is
+#: the explicit VWN3/Gaussian convention and is not changed by that switch.
 FUNCTIONAL_DIVERGENCES = {
     "b3lyp": (
-        "b3lyp",
-        "resolved to the Gaussian/VWN3 definition; ORCA's B3LYP is the "
-        "VWN5 variant, which is 'b3lyp5' here and differs by ~23 kcal/mol "
-        "for H2O/def2-SVP. Do not compare a PySCF 'b3lyp' energy with an "
-        "ORCA 'B3LYP' energy.",
+        "b3lypg",
+        "resolved to PySCF's explicit B3LYPG (VWN3/Gaussian convention) so "
+        "target-level B3LYP_WITH_VWN5 configuration cannot change the "
+        "calculation. Request b3lyp5 explicitly for the VWN5 variant.",
     ),
 }
+
+# Public, deterministic semantics for aliases whose scientific interpretation
+# can be stated without launching PySCF.  This registry intentionally stops at
+# the alias/convention boundary: exact LibXC primitive IDs, factors, and hybrid
+# coefficients remain target-environment observations produced by the child
+# driver at execution time.
+_REGISTERED_FUNCTIONAL_VARIANTS = {
+    "b3lypg": {
+        "functional_family": "b3lyp",
+        "correlation_convention": "vwn3_gaussian",
+        "rule_id": "pyscf.functional.b3lypg_vwn3_gaussian",
+    },
+    "b3lyp5": {
+        "functional_family": "b3lyp",
+        "correlation_convention": "vwn5",
+        "rule_id": "pyscf.functional.b3lyp5_vwn5",
+    },
+}
+
+
+def describe_functional_resolution(functional=None, *, ab_initio=None):
+    """Describe the host-side functional literal applied by ChemSmart.
+
+    The record is safe to expose during planning because it is derived by the
+    same resolver used by :attr:`PySCFJobSettings.xc`.  It does not pretend to
+    be the execution-time LibXC materialization: arbitrary literals and
+    composite expressions remain explicitly unclassified until the target
+    interpreter records ``libxc.parse_xc`` output in the result artifact.
+    """
+
+    method = str(ab_initio or "").strip().lower()
+    if method == "hf":
+        return {
+            "schema_version": "chemsmart.pyscf-functional-resolution.v1",
+            "status": "not_applicable",
+            "requested_method_kind": "hf",
+            "requested_literal": None,
+            "normalized_requested_literal": "",
+            "applied_xc": None,
+            "normalized_applied_xc": "",
+            "functional_family": "hartree_fock",
+            "correlation_convention": "not_applicable",
+            "source": "chemsmart.jobs.pyscf.settings.resolve_functional",
+            "rule_id": "pyscf.functional.not_applicable_hf",
+        }
+    if functional is None or not str(functional).strip():
+        return {
+            "schema_version": "chemsmart.pyscf-functional-resolution.v1",
+            "status": "missing",
+            "requested_method_kind": "dft",
+            "requested_literal": None,
+            "normalized_requested_literal": "",
+            "applied_xc": None,
+            "normalized_applied_xc": "",
+            "functional_family": "",
+            "correlation_convention": "unresolved",
+            "source": "chemsmart.jobs.pyscf.settings.resolve_functional",
+            "rule_id": "pyscf.functional.missing",
+        }
+
+    requested = str(functional).strip()
+    key = requested.lower()
+    divergence = FUNCTIONAL_DIVERGENCES.get(key)
+    # Call the executable resolver rather than reproducing its behaviour in
+    # this evidence function.  Pass-through and composite strings therefore
+    # retain the exact bytes that the writer will place in ``config["xc"]``.
+    applied = str(resolve_functional(requested)).strip()
+    applied_key = applied.lower()
+    variant = _REGISTERED_FUNCTIONAL_VARIANTS.get(applied_key)
+    if variant is None:
+        return {
+            "schema_version": "chemsmart.pyscf-functional-resolution.v1",
+            "status": "literal_preserved",
+            "requested_method_kind": "dft",
+            "requested_literal": requested,
+            "normalized_requested_literal": key,
+            "applied_xc": applied,
+            "normalized_applied_xc": applied_key,
+            "functional_family": "unclassified_libxc_literal",
+            "correlation_convention": "not_declared",
+            "source": "chemsmart.jobs.pyscf.settings.resolve_functional",
+            "rule_id": "pyscf.functional.literal_preserved",
+        }
+    return {
+        "schema_version": "chemsmart.pyscf-functional-resolution.v1",
+        "status": "registered_alias" if divergence else "explicit_variant",
+        "requested_method_kind": "dft",
+        "requested_literal": requested,
+        "normalized_requested_literal": key,
+        "applied_xc": applied,
+        "normalized_applied_xc": applied_key,
+        **variant,
+        "source": "chemsmart.jobs.pyscf.settings.resolve_functional",
+    }
 
 
 def resolve_functional(functional):
@@ -163,10 +249,13 @@ class PySCFJobSettings(MolecularJobSettings):
         defgrid=None,
         scf_tol=None,
         scf_maxiter=None,
+        response_method=None,
+        state_manifold=None,
+        nstates=None,
         charge=None,
         multiplicity=None,
         freq=False,
-        density_fit=True,
+        density_fit=False,
         opt_solver="geometric",
         opt_maxsteps=100,
         engine="cpu",
@@ -205,6 +294,9 @@ class PySCFJobSettings(MolecularJobSettings):
         self.aux_basis = aux_basis
         self.scf_tol = scf_tol
         self.scf_maxiter = scf_maxiter
+        self.response_method = response_method
+        self.state_manifold = state_manifold
+        self.nstates = nstates
         self.density_fit = density_fit
         self.opt_solver = opt_solver
         self.opt_maxsteps = opt_maxsteps
@@ -356,6 +448,12 @@ class PySCFJobSettings(MolecularJobSettings):
                     "so the applied dielectric/environment is explicit."
                 )
 
+        if (self.charge is None) != (self.multiplicity is None):
+            raise ValueError(
+                "PySCF charge and multiplicity overrides must be supplied "
+                "together, or both inherited from the molecular source."
+            )
+
         if self.opt_solver not in PYSCF_OPT_SOLVERS:
             raise ValueError(
                 f"Unknown opt_solver {self.opt_solver!r}; "
@@ -382,15 +480,75 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 f"freq must be a strict boolean, got {self.freq!r}."
             )
-        if self.jobtype == "sp" and self.freq:
+        if self.jobtype != "hess" and self.freq:
             raise ValueError(
-                "PySCF sp rejects freq=True; use the hess jobtype or an "
-                "opt stage with freq=True."
+                f"PySCF {self.jobtype} requires freq=False; use a separate "
+                "hess node so its input geometry is explicit."
             )
         if self.jobtype == "hess" and not self.freq:
             raise ValueError(
                 "PySCF hess requires freq=True so the project setting "
                 "matches the executed Hessian stage."
+            )
+
+        td_fields = {
+            "response_method": self.response_method,
+            "state_manifold": self.state_manifold,
+            "nstates": self.nstates,
+        }
+        if self.jobtype == "td":
+            response_method = str(self.response_method or "").strip().lower()
+            if response_method not in PYSCF_RESPONSE_METHODS:
+                raise ValueError(
+                    "PySCF td requires response_method to be one of "
+                    f"{PYSCF_RESPONSE_METHODS}, got {self.response_method!r}."
+                )
+            manifold = str(self.state_manifold or "").strip().lower()
+            if manifold not in PYSCF_STATE_MANIFOLDS:
+                raise ValueError(
+                    "PySCF td currently supports only an explicit singlet "
+                    f"state_manifold, got {self.state_manifold!r}."
+                )
+            if (
+                isinstance(self.nstates, bool)
+                or not isinstance(self.nstates, Integral)
+                or int(self.nstates) <= 0
+            ):
+                raise ValueError(
+                    "PySCF td requires nstates to be a positive integer, "
+                    f"got {self.nstates!r}."
+                )
+            if self.ab_initio is not None or not self.functional:
+                raise ValueError(
+                    "PySCF td preview supports closed-shell DFT only; set a "
+                    "functional and do not set ab_initio."
+                )
+            if self.multiplicity not in (None, 1):
+                raise ValueError(
+                    "PySCF td preview supports only a closed-shell singlet "
+                    f"reference, got multiplicity={self.multiplicity!r}."
+                )
+            if self.solvent_model is not None or self.solvent_id is not None:
+                raise ValueError(
+                    "PySCF td preview is gas-phase only; solvent response is "
+                    "not enabled."
+                )
+            if self.dispersion is not None:
+                raise ValueError(
+                    "PySCF td preview does not accept a ground-state "
+                    "dispersion correction as an excited-state setting."
+                )
+            if str(self.engine or "cpu").strip().lower() != "cpu":
+                raise ValueError(
+                    "PySCF td is a CPU-only preview capability; "
+                    "GPU4PySCF response calculations are not validated."
+                )
+        elif any(value is not None for value in td_fields.values()):
+            populated = ", ".join(
+                key for key, value in td_fields.items() if value is not None
+            )
+            raise ValueError(
+                f"PySCF {populated} are valid only for the td jobtype."
             )
         if self.scf_tol is not None and (
             isinstance(self.scf_tol, bool)

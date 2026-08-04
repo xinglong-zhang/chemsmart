@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class PySCFOptJob(PySCFJob):
-    """Geometry optimisation, optionally followed by a Hessian.
+    """Geometry optimisation as one explicit workflow node.
 
     Attributes:
         TYPE (str): Job type identifier ('pyscf_opt').
@@ -29,14 +29,8 @@ class PySCFOptJob(PySCFJob):
     def stages(self):
         """Return the ordered stage list the generated script executes.
 
-        When the project YAML sets ``freq: True`` the Hessian runs in the
-        *same* process, against the already-converged mean-field object.
-        Splitting it into a second ChemSmart job would re-converge the SCF
-        from scratch and re-pay density-fitting factorisation and grid
-        construction -- the one place PySCF's in-process nature is a genuine
-        advantage over the file-based engines.
+        A Hessian is deliberately not appended in-process.  The host binds the
+        validated optimized-geometry artifact to an explicit ``hess`` node,
+        keeping stage identity and evidence consistent across programs.
         """
-        stages = ["scf", "opt"]
-        if self.settings.freq:
-            stages.append("hess")
-        return stages
+        return ["scf", "opt"]

@@ -14,7 +14,7 @@ sp:
 opt:
   functional: b3lyp
   basis: def2-svp
-  freq: true
+  freq: false
   density_fit: true
   aux_basis: null
   defgrid: defgrid2
@@ -31,3 +31,15 @@ hess:
   defgrid: defgrid2
   scf_tol: 1.0e-9
   scf_maxiter: 100
+td:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: true
+  aux_basis: null
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  response_method: tda
+  state_manifold: singlet
+  nstates: 10

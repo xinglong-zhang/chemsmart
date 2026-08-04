@@ -29,9 +29,8 @@ class PySCFSinglePointJob(PySCFJob):
     def stages(self):
         """Return the ordered stage list the generated script executes.
 
-        A single point converges the SCF and stops. ``freq`` is ignored here
-        even if the project YAML sets it, because a Hessian at a non-optimised
-        geometry is not a meaningful frequency calculation -- use ``hess``
-        explicitly if that is really wanted.
+        A single point converges the SCF and stops. ``freq=True`` is rejected
+        during settings validation rather than silently ignored; use an
+        explicit ``hess`` node when a fixed-geometry Hessian is intended.
         """
         return ["scf"]

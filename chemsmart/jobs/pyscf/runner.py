@@ -45,8 +45,9 @@ from chemsmart.jobs.pyscf.environment import (
 )
 from chemsmart.jobs.pyscf.validation import (
     FREQUENCY_VALIDATION_SCHEMA_VERSION,
-    frequency_validation_receipt,
+    RESULT_VALIDATION_SCHEMA_VERSION,
     preflight,
+    validate_pyscf_result,
     verify_provenance,
 )
 from chemsmart.jobs.pyscf.writer import (
@@ -56,6 +57,10 @@ from chemsmart.jobs.pyscf.writer import (
 )
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import PySCFExecutable
+from chemsmart.utils.process_observation import (
+    launch_failure_observation,
+    observe_process,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,7 @@ _PREVIEW_DEFERRED_RULES = frozenset(
         "pyscf.gpu.basis_angular_momentum",
         "pyscf.gpu.aux_basis_angular_momentum",
         "pyscf.gpu.functional_unverified",
+        "pyscf.td.preview_only_capability",
     }
 )
 
@@ -108,6 +114,26 @@ class PySCFResultValidationError(RuntimeError):
                 for finding in self.findings
             )
         )
+
+
+def _run_receipt_state(
+    *, fake, findings, engine_complete, result_validation_state
+):
+    """Separate engine completion from scientific result validation."""
+
+    if findings:
+        return "failed"
+    if fake:
+        return "previewed"
+    if result_validation_state == "validated":
+        return "validated"
+    if engine_complete and result_validation_state == "unclassified":
+        # A direct Hessian command can prove an intact, completed engine
+        # artifact without proving whether that geometry is a minimum or a
+        # transition state.  Preserve the useful execution outcome without
+        # fabricating an expected imaginary-mode count.
+        return "engine_complete"
+    return "failed"
 
 
 def _json_safe(value):
@@ -179,10 +205,13 @@ class PySCFJobRunner(JobRunner):
         "pyscf_sp",
         "pyscf_opt",
         "pyscf_hess",
+        "pyscf_td",
         "pyscfjob",
     ]
     FAKE = False
     SCRATCH = False
+    NODE_TIMEOUT_SECONDS = 600
+    PROCESS_SAMPLE_INTERVAL_SECONDS = 0.1
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
@@ -489,7 +518,11 @@ class PySCFJobRunner(JobRunner):
             raise ValueError(
                 f"num_gpus must be a non-negative integer, got {self.num_gpus!r}"
             )
-        if job.settings.engine == "gpu" and self.num_gpus <= 0:
+        if (
+            job.settings.engine == "gpu"
+            and self.num_gpus <= 0
+            and not self.FAKE
+        ):
             raise ValueError(
                 "engine='gpu' requires a positive resolved num_gpus; "
                 "ChemSmart will not invent a GPU device"
@@ -614,6 +647,7 @@ class PySCFJobRunner(JobRunner):
                 ),
                 "stages": config["stages"],
                 "engine": config["engine"],
+                "materializations": config.get("materializations", {}),
                 "quarantined_targets": self._quarantined_targets,
             },
         )
@@ -692,6 +726,11 @@ class PySCFJobRunner(JobRunner):
             self._child_returncode = self._run(process, **kwargs)
         except Exception as exc:
             self._child_returncode = None
+            self._process_observation = launch_failure_observation(
+                timeout_seconds=self.NODE_TIMEOUT_SECONDS,
+                memory_limit_mb=self._process_memory_limit_mb(),
+                error_type=type(exc).__name__,
+            ).as_dict()
             self._launch_failure = {
                 "type": type(exc).__name__,
                 "message": str(exc)[:500],
@@ -717,6 +756,7 @@ class PySCFJobRunner(JobRunner):
             "_input_config",
             "_input_artifact_binding",
             "_launch_failure",
+            "_process_observation",
             "_run_receipt",
             "_quarantined_targets",
             "_targets_quarantined",
@@ -728,6 +768,24 @@ class PySCFJobRunner(JobRunner):
     def _begin_run_identity(self):
         self._run_id = str(uuid.uuid4())
         self._run_nonce = secrets.token_hex(32)
+
+    def _process_memory_limit_mb(self):
+        """Return the exact configured process-memory boundary in MiB."""
+
+        return None if self.mem_gb is None else float(self.mem_gb) * 1024.0
+
+    def _run(self, process, **kwargs):
+        """Observe the child tree under fixed time and memory boundaries."""
+
+        del kwargs
+        result = observe_process(
+            process,
+            timeout_seconds=self.NODE_TIMEOUT_SECONDS,
+            memory_limit_mb=self._process_memory_limit_mb(),
+            sample_interval_seconds=self.PROCESS_SAMPLE_INTERVAL_SECONDS,
+        )
+        self._process_observation = result.observation.as_dict()
+        return result.observation.returncode
 
     def _postrun_cleanup(self, job):
         """Validate immutable result provenance before declaring success."""
@@ -756,15 +814,22 @@ class PySCFJobRunner(JobRunner):
                 "project_yaml_sha256"
             ],
             "require_applied_settings_sha256": not self.FAKE,
+            "require_engine_complete": not self.FAKE,
         }
-        findings = [
-            _json_safe(item)
-            for item in verify_provenance(
-                job.settings,
-                job.resultsfile,
-                expected_receipt=expected,
+        findings = []
+        if self.FAKE:
+            # A fake artifact proves compilation and serialization only.  Its
+            # deliberately incomplete engine status is not a preview failure,
+            # while every other provenance mismatch remains a hard finding.
+            findings.extend(
+                _json_safe(item)
+                for item in verify_provenance(
+                    job.settings,
+                    job.resultsfile,
+                    expected_receipt=expected,
+                )
+                if item.rule_id != "pyscf.provenance.incomplete_calculation"
             )
-        ]
         try:
             current_input_artifact = self._current_input_artifact_binding(job)
         except PySCFArtifactBindingError as exc:
@@ -842,6 +907,7 @@ class PySCFJobRunner(JobRunner):
                     }
                 )
         launch_failure = getattr(self, "_launch_failure", None)
+        process_observation = getattr(self, "_process_observation", None)
         if launch_failure:
             findings.append(
                 {
@@ -852,6 +918,58 @@ class PySCFJobRunner(JobRunner):
                     "evidence_ref": f"file:{os.path.basename(job.errfile)}",
                 }
             )
+        elif process_observation and process_observation.get("timed_out"):
+            findings.append(
+                {
+                    "rule_id": "pyscf.process.timeout",
+                    "field": "process.wall_seconds",
+                    "expected": {
+                        "maximum_seconds": process_observation.get(
+                            "timeout_seconds"
+                        )
+                    },
+                    "observed": process_observation.get("wall_seconds"),
+                    "evidence_ref": "run:process_observation",
+                }
+            )
+            if not process_observation.get("termination_confirmed"):
+                findings.append(
+                    {
+                        "rule_id": "pyscf.process.termination_ambiguous",
+                        "field": "process.termination_confirmed",
+                        "expected": True,
+                        "observed": process_observation.get(
+                            "termination_confirmed"
+                        ),
+                        "evidence_ref": "run:process_observation",
+                    }
+                )
+        elif process_observation and process_observation.get(
+            "memory_limit_exceeded"
+        ):
+            findings.append(
+                {
+                    "rule_id": "pyscf.process.memory_limit_exceeded",
+                    "field": "process.peak_rss_mb",
+                    "expected": {
+                        "maximum_mb": self._process_memory_limit_mb()
+                    },
+                    "observed": process_observation.get("peak_rss_mb"),
+                    "evidence_ref": "run:process_observation",
+                }
+            )
+            if not process_observation.get("termination_confirmed"):
+                findings.append(
+                    {
+                        "rule_id": "pyscf.process.termination_ambiguous",
+                        "field": "process.termination_confirmed",
+                        "expected": True,
+                        "observed": process_observation.get(
+                            "termination_confirmed"
+                        ),
+                        "evidence_ref": "run:process_observation",
+                    }
+                )
         elif returncode != 0:
             findings.append(
                 {
@@ -894,36 +1012,47 @@ class PySCFJobRunner(JobRunner):
         findings.extend(
             finding for finding in property_findings if finding["required"]
         )
-        frequency_validation = {
-            "schema_version": FREQUENCY_VALIDATION_SCHEMA_VERSION,
-            "state": "not_applicable",
+        result_validation = {
+            "schema_version": RESULT_VALIDATION_SCHEMA_VERSION,
+            "state": "not_evaluated_preview",
+            "jobtype": str(job.settings.jobtype).lower(),
             "findings": [],
+            "frequency_validation": {
+                "schema_version": FREQUENCY_VALIDATION_SCHEMA_VERSION,
+                "state": (
+                    "not_evaluated_preview"
+                    if "hess" in job.stages
+                    else "not_applicable"
+                ),
+                "findings": [],
+            },
         }
-        if "hess" in job.stages:
-            if self.FAKE:
-                frequency_validation["state"] = "not_evaluated_preview"
-            else:
-                frequency_validation = _json_safe(
-                    frequency_validation_receipt(
-                        symbols=(
-                            result_spec.get("symbols")
-                            or job.molecule.chemical_symbols
-                        ),
-                        positions=result_values.get("positions"),
-                        frequencies=result_values.get(
-                            "vibrational_frequencies"
-                        ),
-                        expected_imaginary_modes=0,
-                    )
+        if not self.FAKE:
+            result_validation = _json_safe(
+                validate_pyscf_result(
+                    job.resultsfile,
+                    settings=job.settings,
+                    expected_jobtype=self._input_config["jobtype"],
+                    expected_charge=self._input_config["charge"],
+                    expected_multiplicity=self._input_config["multiplicity"],
+                    expected_symbols=self._input_config["symbols"],
+                    expected_positions=self._input_config["positions"],
+                    expected_receipt=expected,
                 )
-                findings.extend(frequency_validation["findings"])
+            )
+            findings.extend(result_validation["findings"])
+        frequency_validation = result_validation["frequency_validation"]
 
-        state = (
-            "previewed"
-            if self.FAKE and not findings
-            else "validated"
-            if not findings
-            else "failed"
+        engine_complete = bool(
+            not self.FAKE
+            and returncode == 0
+            and result_status.get("engine_complete") is True
+        )
+        state = _run_receipt_state(
+            fake=bool(self.FAKE),
+            findings=findings,
+            engine_complete=engine_complete,
+            result_validation_state=result_validation.get("state"),
         )
         receipt = _finalize_receipt(
             self.run_receiptfile,
@@ -934,6 +1063,12 @@ class PySCFJobRunner(JobRunner):
                 "state": state,
                 "fake": bool(self.FAKE),
                 "child_returncode": returncode,
+                "process_observation": process_observation,
+                "engine_complete": engine_complete,
+                "scientifically_validated": state == "validated",
+                "scientific_validation_state": result_validation.get(
+                    "state"
+                ),
                 "script_sha256": expected["script_sha256"],
                 "input_receipt_sha256": expected[
                     "input_receipt_sha256"
@@ -959,6 +1094,7 @@ class PySCFJobRunner(JobRunner):
                 "result_sha256": result_sha256,
                 "findings": findings,
                 "property_findings": property_findings,
+                "result_validation": result_validation,
                 "frequency_validation": frequency_validation,
                 "quarantined_targets": self._quarantined_targets,
             },
@@ -1028,6 +1164,12 @@ class PySCFJobRunner(JobRunner):
                 provenance.get(provenance_field),
                 f"h5:/provenance/{provenance_field}",
             )
+        compare(
+            "provenance.libxc_version",
+            receipt.get("libxc_version"),
+            provenance.get("libxc_version"),
+            "h5:/provenance/libxc_version",
+        )
         if provenance.get("engine") == "gpu":
             runtime = provenance.get("runtime") or {}
             compare(
@@ -1117,6 +1259,7 @@ class PySCFJobRunner(JobRunner):
                 stderr=subprocess.STDOUT,
                 env=env,
                 cwd=self.running_directory,
+                start_new_session=True,
             )
 
     def _postrun(self, job):
@@ -1164,20 +1307,21 @@ class FakePySCFJobRunner(PySCFJobRunner):
         import numpy as np
 
         config = self._input_config
-        num_atoms = len(config["symbols"])
 
         spec = applied_pyscf_spec(config)
-        spec["num_basis_functions"] = 0
-        spec["num_shells"] = 0
-        spec["num_electrons"] = 0
-        spec["nelec"] = [0, 0]
         spec["fake"] = True
 
         status = {
             "stages": {
-                stage: {"converged": True} for stage in config["stages"]
+                stage: {
+                    "state": "not_evaluated_preview",
+                    "converged": None,
+                }
+                for stage in config["stages"]
             },
-            "normal_termination": True,
+            "normal_termination": False,
+            "engine_complete": False,
+            "evaluation_state": "not_evaluated_preview",
             "failure": None,
             "preview_only": True,
             "properties": {
@@ -1227,22 +1371,12 @@ class FakePySCFJobRunner(PySCFJobRunner):
             "runtime": {"mean_field_class": None, "preview_only": True},
         }
 
+        # Preserve the exact preview geometry for inspection without
+        # fabricating energies, orbital data, atomic numbers, modes, or any
+        # other numerical chemistry result.
         results = {
-            "energies": np.zeros(1, dtype=float),
             "positions": np.asarray(config["positions"], dtype=float),
-            "atomic_numbers": np.zeros(num_atoms, dtype=int),
-            "mo_energy": np.zeros(1, dtype=float),
-            "mo_occ": np.zeros(1, dtype=float),
-            "point_group": "C1",
         }
-        if "hess" in config["stages"]:
-            num_modes = max(3 * num_atoms - 6, 1)
-            results["vibrational_frequencies"] = np.zeros(
-                num_modes, dtype=float
-            )
-            results["normal_modes"] = np.zeros(
-                (num_modes, num_atoms, 3), dtype=float
-            )
 
         with open(self.job_outputfile, "w") as handle:
             handle.write(

@@ -444,6 +444,9 @@ def _probe_request(job):
         "dispersion": settings.dispersion,
         "solvent_id": settings.solvent_id,
         "opt_solver": settings.opt_solver,
+        "response_method": getattr(settings, "response_method", None),
+        "state_manifold": getattr(settings, "state_manifold", None),
+        "nstates": getattr(settings, "nstates", None),
         "engine": settings.engine,
         "symbols": sorted(set(molecule.chemical_symbols)),
         "stages": list(job.stages),
@@ -516,12 +519,52 @@ def import_detail(name):
 def solver_detail(module_name, dependency_name):
     try:
         module = importlib.import_module(module_name)
+        kernel = getattr(module, "kernel", None)
+        dependency_present = importlib.util.find_spec(dependency_name) is not None
+        if not callable(kernel) or not dependency_present:
+            return {
+                "callable": False,
+                "dependency_present": bool(dependency_present),
+                "call_probe": "not_reached",
+            }
+        try:
+            # Enter the real adapter entry point with a sentinel that cannot
+            # launch chemistry.  Each supported adapter must reject the
+            # sentinel only after its optional dependency and callable path
+            # have loaded.  This avoids the known false green from importing
+            # pyscf.geomopt alone.
+            kernel(object())
+        except (
+            AttributeError,
+            NotImplementedError,
+            RuntimeError,
+            TypeError,
+        ) as exc:
+            return {
+                "callable": True,
+                "dependency_present": True,
+                "call_probe": "entrypoint_reached",
+                "probe_exception_type": type(exc).__name__,
+            }
+        except Exception as exc:
+            return {
+                "callable": False,
+                "dependency_present": True,
+                "call_probe": "unexpected_failure",
+                "probe_exception_type": type(exc).__name__,
+            }
         return {
-            "callable": bool(callable(getattr(module, "kernel", None)))
-            and importlib.util.find_spec(dependency_name) is not None
+            "callable": False,
+            "dependency_present": True,
+            "call_probe": "sentinel_unexpectedly_accepted",
         }
-    except Exception:
-        return {"callable": False}
+    except Exception as exc:
+        return {
+            "callable": False,
+            "dependency_present": False,
+            "call_probe": "import_failed",
+            "probe_exception_type": type(exc).__name__,
+        }
 
 
 def basis_max_l(name, symbols):
@@ -574,10 +617,83 @@ def functional_available(name):
         return False
 
 
+def dispersion_detail(method, literal):
+    """Probe one exact dispersion literal without constructing a molecule.
+
+    ``parse_disp`` resolves the requested parameterization and ``check_disp``
+    verifies target-version support.  The deliberately uninitialized mean-field
+    object supplies only the method label inspected by ``check_disp``; this
+    performs no molecule construction, integral evaluation, or SCF work.
+    """
+    requested_method = str(method or "hf").strip().lower()
+    base = {
+        "schema_version": "chemsmart.pyscf-dispersion-conformance.v1",
+        "requested_method": requested_method,
+        "requested_literal": literal,
+        "supported": False,
+        "method_compatible": False,
+    }
+    try:
+        from pyscf import dft
+        from pyscf.scf import dispersion as dispersion_api
+
+        if not isinstance(literal, str) or not literal:
+            raise ValueError("dispersion literal must be a non-empty string")
+        parsed_method, parsed_version, with_3body = dispersion_api.parse_disp(
+            requested_method, literal
+        )
+        canonical_method, _nlc, _implicit_dispersion = (
+            dispersion_api.parse_dft(requested_method)
+        )
+        canonical_method = dispersion_api.XC_MAP.get(
+            canonical_method, canonical_method
+        )
+        if requested_method == "hf":
+            method_probe = object()
+        else:
+            method_probe = object.__new__(dft.rks.RKS)
+            method_probe.xc = requested_method
+        supported = dispersion_api.check_disp(method_probe, literal) is True
+        compatible = (
+            str(parsed_method).strip().lower()
+            == str(canonical_method).strip().lower()
+        )
+        base.update(
+            {
+                "parsed_method": parsed_method,
+                "dispersion_version": parsed_version,
+                "with_3body": bool(with_3body),
+                "supported": supported,
+                "method_compatible": compatible,
+                "status": (
+                    "supported" if supported and compatible else "incompatible"
+                ),
+            }
+        )
+    except Exception as exc:
+        base.update(
+            {
+                "status": "invalid",
+                "error_type": type(exc).__name__,
+                "error_message": str(exc)[:300],
+            }
+        )
+    return base
+
+
 packages = distribution_versions()
 dependencies = {
     name: import_detail(name) for name in ("pyscf", "numpy", "h5py")
 }
+try:
+    import pyscf
+    from pyscf.dft import libxc
+
+    pyscf_runtime_version = str(pyscf.__version__)
+    libxc_runtime_version = str(libxc.libxc_version())
+except Exception:
+    pyscf_runtime_version = None
+    libxc_runtime_version = None
 try:
     dispersion_module_available = (
         importlib.util.find_spec("pyscf.dispersion") is not None
@@ -602,6 +718,8 @@ auxiliary_basis_l = basis_max_l(
 result = {
     "python_version": platform.python_version(),
     "interpreter_observed": sys.executable,
+    "pyscf_version": pyscf_runtime_version,
+    "libxc_version": libxc_runtime_version,
     "packages": packages,
     "dependencies": dependencies,
     "solver_callables": {
@@ -632,6 +750,12 @@ result = {
         )
     } if request.get("functional") else {},
 }
+
+dispersion = request.get("dispersion")
+if dispersion is not None:
+    result["dispersion_conformance"] = dispersion_detail(
+        request.get("functional") or "hf", dispersion
+    )
 
 try:
     from pyscf.solvent.smd import solvent_db
