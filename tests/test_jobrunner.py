@@ -476,7 +476,7 @@ class TestScratchYamlOverride:
         )
         assert runner.scratch is False
 
-        
+
 class TestSubResourceOverrides:
     def test_cli_resources_reach_submission_server(
         self,

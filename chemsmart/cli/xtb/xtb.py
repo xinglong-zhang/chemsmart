@@ -106,6 +106,7 @@ def click_xtb_constrain_options(f):
     """Reusable CLI options for xTB geometry constraints."""
 
     @click.option(
+        "-c",
         "--constrain",
         type=str,
         default=None,
@@ -114,6 +115,7 @@ def click_xtb_constrain_options(f):
         "Example: [[1,2],[5,7,8],[3,4,1,7]].",
     )
     @click.option(
+        "-f",
         "--force-constant",
         type=float,
         default=None,
