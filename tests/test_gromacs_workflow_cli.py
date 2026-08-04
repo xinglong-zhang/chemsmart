@@ -8,9 +8,7 @@ from click.testing import CliRunner
 
 from chemsmart.cli.gromacs.gromacs import gromacs
 
-workflow_module = importlib.import_module(
-    "chemsmart.cli.gromacs.workflow"
-)
+workflow_module = importlib.import_module("chemsmart.cli.gromacs.workflow")
 
 
 class DummyGromacsWorkflow:

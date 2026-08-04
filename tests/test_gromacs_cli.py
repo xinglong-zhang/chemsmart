@@ -9,6 +9,7 @@ em_module = importlib.import_module("chemsmart.cli.gromacs.em")
 npt_module = importlib.import_module("chemsmart.cli.gromacs.npt")
 md_module = importlib.import_module("chemsmart.cli.gromacs.md")
 
+
 class DummyGromacsEMJob:
     """
     Dummy job class used to test CLI argument flow without creating a real job
@@ -127,6 +128,7 @@ inputs:
 
     return yaml_file
 
+
 @pytest.fixture(autouse=True)
 def patch_gromacs_npt_and_md_jobs(monkeypatch):
     DummyGromacsNPTJob.captured_from_settings = {}
@@ -144,6 +146,7 @@ def patch_gromacs_npt_and_md_jobs(monkeypatch):
         "GromacsMDJob",
         DummyGromacsMDJob,
     )
+
 
 def test_cli_project_yaml_creates_job(demo_project_yaml):
     """
@@ -349,6 +352,7 @@ def test_cli_rejects_missing_project_yaml(tmp_path):
     assert result.exit_code != 0
     assert result.exception is not None
 
+
 def test_cli_npt_direct_options_creates_job(tmp_path):
     runner = CliRunner()
 
@@ -421,6 +425,7 @@ def test_cli_md_direct_options_creates_job(tmp_path):
     assert captured["mdp_file"] == mdp_file
     assert captured["structure_file"] == structure_file
     assert captured["top_file"] == top_file
+
 
 def test_cli_npt_project_yaml_creates_job(tmp_path):
     yaml_file = tmp_path / "npt_project.yaml"

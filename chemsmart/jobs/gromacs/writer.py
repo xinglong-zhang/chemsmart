@@ -205,6 +205,7 @@ class GromacsInputWriter:
                 "gen_vel": "no",
             }
         )
+
     def _build_md_mdp(self):
         """
         Build a default production MD .mdp file.
@@ -269,6 +270,7 @@ class GromacsInputWriter:
                 "nstxout-compressed": 5000,
             }
         )
+
     @staticmethod
     def _value_or_default(value, default=None):
         """

@@ -5,11 +5,11 @@ from .job import (
     GromacsNPTJob,
     GromacsNVTJob,
 )
+from .runner import GromacsJobRunner
 from .workflow import (
     GromacsStageArtifacts,
     GromacsWorkflow,
 )
-from .runner import GromacsJobRunner
 
 __all__ = [
     "GromacsJob",
@@ -17,6 +17,7 @@ __all__ = [
     "GromacsNVTJob",
     "GromacsNPTJob",
     "GromacsMDJob",
+    "GromacsJobRunner",
     "GromacsWorkflow",
     "GromacsStageArtifacts",
-    ]
+]

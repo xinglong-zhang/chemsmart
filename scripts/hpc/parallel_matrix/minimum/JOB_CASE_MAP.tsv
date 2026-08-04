@@ -1,0 +1,37 @@
+# Minimum covering map: one case per top-level job type (28 rows).
+# Columns: case program job input_kind file indices job_args expect
+# expect: array_serial | array_serial_M | array_parallel | o2_labels | n1_nestable | n2_nestable | single
+# job_args: extra CLI after the job token (shell-split); use - for none
+# indices: molecule index list for -i, or - if unused
+#
+# Canonical owners: B1=gaussian/sp B2=gaussian/opt B6=orca/sp O2=gaussian/td
+#   N1=gaussian/dias N2=gaussian/qrc E3=singles (+ live SP timing gate in runner)
+case	program	job	input_kind	file	indices	job_args	expect
+B1	gaussian	sp	five_mols	five_mols.xyz	1,2,3,4,5	-	array_serial
+B2	gaussian	opt	five_mols	five_mols.xyz	1,2,3,4,5	-	array_serial_M
+B6	orca	sp	five_mols	five_mols.xyz	1,2,3,4,5	-	array_parallel
+O2	gaussian	td	two_mols	two_mols.xyz	1,2	-	o2_labels
+N1	gaussian	dias	dias	DIAS_LOG	-	-	n1_nestable
+N2	gaussian	qrc	qrc	ts_freq.log	-	-	n2_nestable
+B1	gaussian	ts	five_mols	five_mols.xyz	1,2,3,4,5	-	array_serial
+B1	gaussian	modred	five_mols	five_mols.xyz	1,2,3,4,5	-c [1,2]	array_serial
+B1	gaussian	scan	five_mols	five_mols.xyz	1,2,3,4,5	-c [1,2] -s 0.1 -n 2	array_serial
+B1	gaussian	pka	pka_min	pka_scale.csv	-	--scheme direct batch	array_serial_pka
+B6	orca	opt	five_mols	five_mols.xyz	1,2,3,4,5	-	array_parallel
+B6	orca	ts	five_mols	five_mols.xyz	1,2,3,4,5	-	array_parallel
+B6	orca	modred	five_mols	five_mols.xyz	1,2,3,4,5	-c [1,2]	array_parallel
+B6	orca	scan	five_mols	five_mols.xyz	1,2,3,4,5	-c [1,2] -x 0.7 -y 1.0 -n 2	array_parallel
+B1	orca	irc	five_mols	five_mols.xyz	1,2,3,4,5	-	array_serial
+B1	orca	pka	pka_min	pka_scale.csv	-	--scheme direct batch	array_serial_pka
+N1	gaussian	crest	five_mols	five_mols.xyz	-	-j opt	n1_nestable
+N2	gaussian	traj	five_mols	five_mols.xyz	-	-j opt -ns 2	n2_nestable
+N2	orca	qrc	orca_qrc	orca_freq.out	-	-	n2_nestable
+E3	gaussian	com	single	water.com	-	-	single
+E3	gaussian	irc	single	h2.xyz	-	-	single
+E3	gaussian	link	single	h2.xyz	-	-j opt	single
+E3	gaussian	nci	single	h2.xyz	-	-	single
+E3	gaussian	resp	single	h2.xyz	-	-	single
+E3	gaussian	userjob	single	h2.xyz	-	-r hf/sto-3g	single
+E3	gaussian	wbi	single	h2.xyz	-	-	single
+E3	orca	inp	single	water.inp	-	-	single
+E3	orca	neb	neb	h2.xyz	-	-j NEB -e h2_product.xyz	single

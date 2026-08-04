@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Staged GROMACS workflow orchestration.
 
@@ -11,10 +9,11 @@ Each stage remains an independent GromacsJob. The workflow only manages
 dependencies and passes generated structures and checkpoints between stages.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
 
 from chemsmart.jobs.gromacs.job import (
     GromacsEMJob,
@@ -94,16 +93,9 @@ class GromacsWorkflow:
         self.jobrunner = jobrunner
         self.folder = Path(folder)
 
-        self.itp_files = [
-            Path(path)
-            for path in (itp_files or [])
-        ]
+        self.itp_files = [Path(path) for path in (itp_files or [])]
 
-        self.index_file = (
-            Path(index_file)
-            if index_file is not None
-            else None
-        )
+        self.index_file = Path(index_file) if index_file is not None else None
 
         self.mdp_files = {
             stage: Path(path)
@@ -146,8 +138,7 @@ class GromacsWorkflow:
 
         if missing:
             raise FileNotFoundError(
-                "Missing GROMACS workflow input files: "
-                + ", ".join(missing)
+                "Missing GROMACS workflow input files: " + ", ".join(missing)
             )
 
         self.folder.mkdir(
@@ -160,9 +151,7 @@ class GromacsWorkflow:
         Return expected output paths for one stage.
         """
         if stage not in self.STAGE_ORDER:
-            raise ValueError(
-                f"Unsupported GROMACS workflow stage: {stage}"
-            )
+            raise ValueError(f"Unsupported GROMACS workflow stage: {stage}")
 
         stem = self.folder / stage
 
@@ -178,20 +167,14 @@ class GromacsWorkflow:
         """
         Return validated options for one stage.
         """
-        options = dict(
-            self.stage_options.get(stage, {})
-        )
+        options = dict(self.stage_options.get(stage, {}))
 
-        invalid = (
-            self.RESERVED_STAGE_OPTIONS
-            .intersection(options)
-        )
+        invalid = self.RESERVED_STAGE_OPTIONS.intersection(options)
 
         if invalid:
             raise ValueError(
                 "Reserved GROMACS workflow options cannot be "
-                f"overridden for stage {stage}: "
-                + ", ".join(sorted(invalid))
+                f"overridden for stage {stage}: " + ", ".join(sorted(invalid))
             )
 
         return options
@@ -276,21 +259,14 @@ class GromacsWorkflow:
         ]
 
         if stage in {"nvt", "npt"}:
-            required.append(
-                artifacts.checkpoint_file
-            )
+            required.append(artifacts.checkpoint_file)
 
-        missing = [
-            str(path)
-            for path in required
-            if not path.exists()
-        ]
+        missing = [str(path) for path in required if not path.exists()]
 
         if missing:
             raise RuntimeError(
                 f"GROMACS stage {stage} did not produce "
-                "the required output files: "
-                + ", ".join(missing)
+                "the required output files: " + ", ".join(missing)
             )
 
         if not self._log_finished(artifacts.log_file):
@@ -315,9 +291,7 @@ class GromacsWorkflow:
             # EM -> NVT only passes the minimized structure.
             # NVT -> NPT and NPT -> MD also pass the checkpoint.
             checkpoint_file = (
-                previous_checkpoint
-                if stage in {"npt", "md"}
-                else None
+                previous_checkpoint if stage in {"npt", "md"} else None
             )
 
             job = self._build_stage_job(
@@ -328,10 +302,7 @@ class GromacsWorkflow:
 
             self.jobs[stage] = job
 
-            if (
-                self.skip_completed
-                and self._stage_completed(stage)
-            ):
+            if self.skip_completed and self._stage_completed(stage):
                 logger.info(
                     "Skipping completed GROMACS stage: %s",
                     stage,
@@ -343,16 +314,10 @@ class GromacsWorkflow:
                 )
                 job.run()
 
-            artifacts = self._validate_stage_outputs(
-                stage
-            )
+            artifacts = self._validate_stage_outputs(stage)
 
-            input_structure = (
-                artifacts.structure_file
-            )
+            input_structure = artifacts.structure_file
 
-            previous_checkpoint = (
-                artifacts.checkpoint_file
-            )
+            previous_checkpoint = artifacts.checkpoint_file
 
         return self.jobs

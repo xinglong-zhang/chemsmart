@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 GROMACS job runner for executing molecular dynamics workflows.
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -176,10 +176,12 @@ class GromacsJobRunner(JobRunner):
             command.extend(["-t", str(job.checkpoint_file)])
 
         if job.restraint_reference_file is not None:
-            command.extend([
-                "-r",
-                str(job.restraint_reference_file),
-            ])
+            command.extend(
+                [
+                    "-r",
+                    str(job.restraint_reference_file),
+                ]
+            )
 
         if job.grompp_maxwarn is not None:
             command.extend(["-maxwarn", str(job.grompp_maxwarn)])
@@ -665,8 +667,7 @@ class GromacsJobRunner(JobRunner):
 
         if missing:
             raise FileNotFoundError(
-                "Missing required GROMACS input files: "
-                + ", ".join(missing)
+                "Missing required GROMACS input files: " + ", ".join(missing)
             )
 
     def _validate_full_setup_inputs(self, job):

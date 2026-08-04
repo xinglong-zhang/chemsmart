@@ -114,6 +114,8 @@ def test_gromacs_job_is_incomplete_when_log_missing_success_markers(tmp_path):
     (tmp_path / "em.log").write_text("Starting mdrun\n", encoding="utf-8")
 
     assert job.is_complete() is False
+
+
 def test_gromacs_md_job_defaults():
     job = GromacsMDJob(
         molecule=None,

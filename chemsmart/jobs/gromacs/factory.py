@@ -1,8 +1,8 @@
 from chemsmart.jobs.gromacs.job import (
     GromacsEMJob,
-    GromacsNVTJob,
-    GromacsNPTJob,
     GromacsMDJob,
+    GromacsNPTJob,
+    GromacsNVTJob,
 )
 from chemsmart.settings.gromacs import GromacsProjectSettings
 

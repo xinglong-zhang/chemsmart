@@ -4,7 +4,10 @@ import subprocess
 import pytest
 
 from chemsmart.jobs.gromacs.job import (
-    GromacsEMJob, GromacsNVTJob, GromacsNPTJob,GromacsMDJob,
+    GromacsEMJob,
+    GromacsMDJob,
+    GromacsNPTJob,
+    GromacsNVTJob,
 )
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
 from chemsmart.settings.executable import GromacsExecutable
@@ -828,6 +831,7 @@ def test_gromacs_writer_generates_nvt_mdp_when_missing(tmp_path):
     assert "dt" in content
     assert "0.001" in content
 
+
 def test_gromacs_writer_generates_npt_mdp_when_missing(tmp_path):
     job = GromacsNPTJob(
         molecule=None,
@@ -870,6 +874,7 @@ def test_gromacs_writer_generates_npt_mdp_when_missing(tmp_path):
     assert "gen_vel" in content
     assert "no" in content
 
+
 def test_gromacs_writer_generates_md_mdp_when_missing(tmp_path):
     job = GromacsMDJob(
         molecule=None,
@@ -911,6 +916,7 @@ def test_gromacs_writer_generates_md_mdp_when_missing(tmp_path):
     assert "no" in content
     assert "nstxout-compressed" in content
     assert "5000" in content
+
 
 def test_gromacs_writer_does_not_overwrite_user_mdp(tmp_path):
     mdp_file = tmp_path / "custom.mdp"

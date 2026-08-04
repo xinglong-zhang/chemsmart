@@ -207,13 +207,10 @@ def workflow(
 
     if missing:
         raise click.UsageError(
-            "Missing required workflow options: "
-            + ", ".join(missing)
+            "Missing required workflow options: " + ", ".join(missing)
         )
 
-    logger.info(
-        "Creating GROMACS staged workflow: EM -> NVT -> NPT -> MD"
-    )
+    logger.info("Creating GROMACS staged workflow: EM -> NVT -> NPT -> MD")
     logger.info("Initial structure file: %s", structure)
     logger.info("Topology file: %s", top)
     logger.info("Workflow output folder: %s", folder)

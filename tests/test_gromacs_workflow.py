@@ -79,29 +79,16 @@ def test_workflow_passes_stage_outputs(
     assert calls[0]["structure_file"] == initial_structure
     assert calls[0]["checkpoint_file"] is None
 
-    assert calls[1]["structure_file"] == (
-        workflow_dir / "em.gro"
-    )
+    assert calls[1]["structure_file"] == (workflow_dir / "em.gro")
     assert calls[1]["checkpoint_file"] is None
 
-    assert calls[2]["structure_file"] == (
-        workflow_dir / "nvt.gro"
-    )
-    assert calls[2]["checkpoint_file"] == (
-        workflow_dir / "nvt.cpt"
-    )
+    assert calls[2]["structure_file"] == (workflow_dir / "nvt.gro")
+    assert calls[2]["checkpoint_file"] == (workflow_dir / "nvt.cpt")
 
-    assert calls[3]["structure_file"] == (
-        workflow_dir / "npt.gro"
-    )
-    assert calls[3]["checkpoint_file"] == (
-        workflow_dir / "npt.cpt"
-    )
+    assert calls[3]["structure_file"] == (workflow_dir / "npt.gro")
+    assert calls[3]["checkpoint_file"] == (workflow_dir / "npt.cpt")
 
-    assert all(
-        call["top_file"] == topology
-        for call in calls
-    )
+    assert all(call["top_file"] == topology for call in calls)
 
 
 def test_workflow_rejects_missing_initial_structure(
@@ -125,6 +112,4 @@ def test_workflow_rejects_missing_initial_structure(
     except FileNotFoundError as error:
         assert str(missing_structure) in str(error)
     else:
-        raise AssertionError(
-            "Expected FileNotFoundError"
-        )
+        raise AssertionError("Expected FileNotFoundError")
