@@ -102,8 +102,9 @@ rule. Invalidate it when any scientific setting, resource, producer, selection
 rule, validator, or command family changes. Keep secrets out of prompts, logs,
 commits, and evidence bundles.
 
-Use a paid DeepSeek model call or literature lookup only through an existing
-user-owned quota and a short-lived standard Keychain lease. Never print,
+Use a paid model-provider call or literature lookup only through an existing
+user-owned quota and a short-lived credential lease. Provider selection must
+remain explicit and attributable; a fallback is never silent. Never print,
 persist, transmit in a prompt, or infer a secret. Record only the provider,
 endpoint class, key-validation outcome, quota-sufficiency outcome, and
 non-secret error class. Do not top up a quota, change a billing plan, or turn a
@@ -153,6 +154,13 @@ or billing change needs new authority.
   intent round-trip comparison. A structured counterexample may support at
   most two constrained repairs; it must not silently change an explicit
   program, geometry, charge, multiplicity, method, or constraint.
+- Represent multi-stage chemistry with one replayable scientific DAG. Control
+  edges schedule otherwise independent work; data edges bind a producer
+  output to an exact consumer input. Planning, partial materialization, frozen
+  approval, launch state, engine completion, and scientific validation are
+  distinct contracts. A tuple order or model narrative is not a substitute
+  for a typed edge, and a future producer artifact cannot be assigned a hash
+  before the host observes it.
 - Keep exploratory and draft planning available before all execution evidence
   exists. Missing hashes, installed-program evidence, or project artifacts are
   explicit unresolved fields at the planning level; they block only the
