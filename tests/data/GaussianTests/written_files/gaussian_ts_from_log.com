@@ -1,6 +1,6 @@
 %chk=gaussian_ts_from_log.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt=(ts,calcfc,noeigentest) freq b3lyp empiricaldispersion=gd3bj def2svp
 
 Job prepared from Gaussian file nhc_neutral_singlet.log

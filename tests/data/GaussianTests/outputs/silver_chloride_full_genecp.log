@@ -1,0 +1,3551 @@
+ Entering Gaussian System, Link 0=/project/xlzhang/shared/bin/g16/g16
+ Input=/users/s1155246975/huiwen_scratch/huiwen/silver_chloride_full_genecp/silver_chloride_full_genecp.com
+ Output=/users/s1155246975/huiwen_scratch/huiwen/silver_chloride_full_genecp/silver_chloride_full_genecp.log
+ Initial command:
+ /project/xlzhang/shared/bin/g16/l1.exe "/ss02/scratch/s1/xlzhang/huiwen/silver_chloride_full_genecp/Gau-3996031.inp" -scrdir="/ss02/scratch/s1/xlzhang/huiwen/silver_chloride_full_genecp/"
+ Entering Link 1 = /project/xlzhang/shared/bin/g16/l1.exe PID=   3996032.
+  
+ Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
+  
+ This is part of the Gaussian(R) 16 program.  It is based on
+ the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
+ the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
+ the Gaussian(R) 98 system (copyright 1998, Gaussian, Inc.),
+ the Gaussian(R) 94 system (copyright 1995, Gaussian, Inc.),
+ the Gaussian 92(TM) system (copyright 1992, Gaussian, Inc.),
+ the Gaussian 90(TM) system (copyright 1990, Gaussian, Inc.),
+ the Gaussian 88(TM) system (copyright 1988, Gaussian, Inc.),
+ the Gaussian 86(TM) system (copyright 1986, Carnegie Mellon
+ University), and the Gaussian 82(TM) system (copyright 1983,
+ Carnegie Mellon University). Gaussian is a federally registered
+ trademark of Gaussian, Inc.
+  
+ This software contains proprietary and confidential information,
+ including trade secrets, belonging to Gaussian, Inc.
+  
+ This software is provided under written license and may be
+ used, copied, transmitted, or stored only in accord with that
+ written license.
+  
+ The following legend is applicable only to US Government
+ contracts under FAR:
+  
+                    RESTRICTED RIGHTS LEGEND
+  
+ Use, reproduction and disclosure by the US Government is
+ subject to restrictions as set forth in subparagraphs (a)
+ and (c) of the Commercial Computer Software - Restricted
+ Rights clause in FAR 52.227-19.
+  
+ Gaussian, Inc.
+ 340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
+  
+  
+ ---------------------------------------------------------------
+ Warning -- This program may not be used in any manner that
+ competes with the business of Gaussian, Inc. or will provide
+ assistance to any competitor of Gaussian, Inc.  The licensee
+ of this program is prohibited from giving any competitor of
+ Gaussian, Inc. access to this program.  By using this program,
+ the user acknowledges that Gaussian, Inc. is engaged in the
+ business of creating and licensing software in the field of
+ computational chemistry and represents and warrants to the
+ licensee that it is not a competitor of Gaussian, Inc. and that
+ it will not use this program in any manner prohibited above.
+ ---------------------------------------------------------------
+  
+
+ Cite this work as:
+ Gaussian 16, Revision B.01,
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
+ 
+ ******************************************
+ Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
+                20-May-2026 
+ ******************************************
+ %chk=silver_chloride_full_genecp.chk
+ %nprocshared=64
+ Will use up to   64 processors via shared memory.
+ %mem=90GB
+ -----------------------
+ #p opt freq mn15 genecp
+ -----------------------
+ 1/18=20,19=15,26=3,38=1/1,3;
+ 2/9=110,12=2,17=6,18=5,40=1/2;
+ 3/5=7,11=2,16=1,17=8,25=1,30=1,71=1,74=-73/1,2,3;
+ 4//1;
+ 5/5=2,38=5/2;
+ 6/7=2,8=2,9=2,10=2,28=1/1;
+ 7//1,2,3,16;
+ 1/18=20,19=15,26=3/3(2);
+ 2/9=110/2;
+ 99//99;
+ 2/9=110/2;
+ 3/5=7,6=1,11=2,16=1,17=8,25=1,30=1,71=1,74=-73,82=7/1,2,3;
+ 4/5=5,16=3,69=1/1;
+ 5/5=2,38=5/2;
+ 7//1,2,3,16;
+ 1/18=20,19=15,26=3/3(-5);
+ 2/9=110/2;
+ 6/7=2,8=2,9=2,10=2,19=2,28=1/1;
+ 99/9=1/99;
+ Leave Link    1 at Wed May 20 14:12:17 2026, MaxMem= 12079595520 cpu:             920.2 elap:              15.0
+ (Enter /project/xlzhang/shared/bin/g16/l101.exe)
+ ----------------------------------
+ Gaussian job with default settings
+ ----------------------------------
+ Symbolic Z-matrix:
+ Charge =  0 Multiplicity = 1
+ Ag                    0.8593    0.        0. 
+ Cl                   -0.8593    0.        0. 
+ 
+ ITRead=  0  0
+ MicOpt= -1 -1
+ NAtoms=      2 NQM=        2 NQMF=       0 NMMI=      0 NMMIF=      0
+                NMic=       0 NMicF=      0.
+                    Isotopes and Nuclear Properties:
+ (Nuclear quadrupole moments (NQMom) in fm**2, nuclear magnetic moments (NMagM)
+  in nuclear magnetons)
+
+  Atom         1           2
+ IAtWgt=         107          35
+ AtmWgt= 106.9050900  34.9688527
+ NucSpn=           1           3
+ AtZEff=  -0.0000000  -0.0000000
+ NQMom=    0.0000000  -8.1650000
+ NMagM=   -0.1135700   0.8218740
+ AtZNuc=  47.0000000  17.0000000
+ Leave Link  101 at Wed May 20 14:12:24 2026, MaxMem= 12079595520 cpu:              50.3 elap:               3.7
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Initialization pass.
+                           ----------------------------
+                           !    Initial Parameters    !
+                           ! (Angstroms and Degrees)  !
+ --------------------------                            --------------------------
+ ! Name  Definition              Value          Derivative Info.                !
+ --------------------------------------------------------------------------------
+ ! R1    R(1,2)                  1.7186         estimate D2E/DX2                !
+ --------------------------------------------------------------------------------
+ Trust Radius=3.00D-01 FncErr=1.00D-07 GrdErr=1.00D-06 EigMax=2.50D+02 EigMin=1.00D-04
+ Number of steps in this run=     20 maximum allowed number of steps=    100.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:29 2026, MaxMem= 12079595520 cpu:              21.8 elap:               3.0
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.859300    0.000000    0.000000
+      2         17           0       -0.859300    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.456503
+      2         17           0        0.000000    0.000000   -1.262097
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           6.4936736           6.4936736
+ Leave Link  202 at Wed May 20 14:12:33 2026, MaxMem= 12079595520 cpu:              28.4 elap:               1.5
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ General basis read from cards:  (5D, 7F)
+ Centers:       2
+ def2svp
+ ****
+ Centers:       1
+ S 2 1.00
+     Exponent=  1.9000000000D+01 Coefficients= -1.6600104141D-01
+     Exponent=  1.5428199933D+01 Coefficients=  3.5665095918D-01
+ S 1 1.00
+     Exponent=  6.0553507268D+00 Coefficients=  1.0000000000D+00
+ S 1 1.00
+     Exponent=  1.4162368935D+00 Coefficients=  1.0000000000D+00
+ S 1 1.00
+     Exponent=  6.1758635858D-01 Coefficients=  1.0000000000D+00
+ S 1 1.00
+     Exponent=  1.0474197431D-01 Coefficients=  1.0000000000D+00
+ S 1 1.00
+     Exponent=  3.7685106264D-02 Coefficients=  1.0000000000D+00
+ P 4 1.00
+     Exponent=  1.3188180180D+01 Coefficients=  6.6928737147D-02
+     Exponent=  7.7952789138D+00 Coefficients= -2.4735235409D-01
+     Exponent=  2.0351571912D+00 Coefficients=  4.9154280216D-01
+     Exponent=  9.8093914842D-01 Coefficients=  4.9741609006D-01
+ P 1 1.00
+     Exponent=  4.4451179958D-01 Coefficients=  1.0000000000D+00
+ P 1 1.00
+     Exponent=  1.3000000000D-01 Coefficients=  1.0000000000D+00
+ P 1 1.00
+     Exponent=  4.1200000000D-02 Coefficients=  1.0000000000D+00
+ D 4 1.00
+     Exponent=  2.5784397351D+01 Coefficients=  3.5645063082D-03
+     Exponent=  1.1396636755D+01 Coefficients= -1.2984262784D-02
+     Exponent=  2.7345581361D+00 Coefficients=  2.4108826548D-01
+     Exponent=  1.1873583605D+00 Coefficients=  4.2412330744D-01
+ D 1 1.00
+     Exponent=  4.7316910566D-01 Coefficients=  1.0000000000D+00
+ D 1 1.00
+     Exponent=  1.6746017986D-01 Coefficients=  1.0000000000D+00
+ F 1 1.00
+     Exponent=  1.3971100000D+00 Coefficients=  1.0000000000D+00
+ ****
+ ======================================================================================================
+                                       Pseudopotential Parameters
+ ======================================================================================================
+  Center     Atomic      Valence      Angular      Power
+  Number     Number     Electrons     Momentum     of R      Exponent        Coefficient   SO-Coeffient
+ ======================================================================================================
+    1         47           19
+                                      F and up 
+                                                     2       14.2200000      -33.68992012    0.00000000
+                                                     2        7.1100000       -5.53112021    0.00000000
+                                      S - F
+                                                     2       13.1300000      255.13936452    0.00000000
+                                                     2        6.5100000       36.86612154    0.00000000
+                                                     2       14.2200000       33.68992012    0.00000000
+                                                     2        7.1100000        5.53112021    0.00000000
+                                      P - F
+                                                     2       11.7400000      182.18186871    0.00000000
+                                                     2        6.2000000       30.35775148    0.00000000
+                                                     2       14.2200000       33.68992012    0.00000000
+                                                     2        7.1100000        5.53112021    0.00000000
+                                      D - F
+                                                     2       10.2100000       73.71926087    0.00000000
+                                                     2        4.3800000       12.50211712    0.00000000
+                                                     2       14.2200000       33.68992012    0.00000000
+                                                     2        7.1100000        5.53112021    0.00000000
+    2         17
+                                   No pseudopotential on this center.
+ ======================================================================================================
+ Ernie: Thresh=  0.10000D-02 Tol=  0.10000D-05 Strict=F.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        99.4555097912 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ Leave Link  301 at Wed May 20 14:12:34 2026, MaxMem= 12079595520 cpu:               4.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     253 LenP2D=     755.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  4.47D-03  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:34 2026, MaxMem= 12079595520 cpu:               8.1 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:34 2026, MaxMem= 12079595520 cpu:               1.4 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ ExpMin= 3.77D-02 ExpMax= 1.04D+04 ExpMxC= 1.57D+03 IAcc=3 IRadAn=         5 AccDes= 0.00D+00
+ Harris functional with IExCor= 1009 and IRadAn=       5 diagonalized for initial guess.
+ HarFok:  IExCor= 1009 AccDes= 0.00D+00 IRadAn=         5 IDoV= 1 UseB2=F ITyADJ=14
+ ICtDFT=  3500011 ScaDFX=  1.000000  1.000000  1.000000  1.000000
+ Defaulting to unpruned grid for atomic number  47.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=           0
+         NFxFlg=           0 DoJE=T BraDBF=F KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=   200000004 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Harris En= -607.012838288369    
+ JPrj=0 DoOrth=F DoCkMO=F.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (SG) (PI) (PI) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PHI) (PHI)
+                 (PI) (PI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Leave Link  401 at Wed May 20 14:12:34 2026, MaxMem= 12079595520 cpu:               9.0 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.357794838259    
+ DIIS: error= 6.66D-02 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.357794838259     IErMin= 1 ErrMin= 6.66D-02
+ ErrMax= 6.66D-02  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.77D-01 BMatP= 1.77D-01
+ IDIUse=3 WtCom= 3.34D-01 WtEn= 6.66D-01
+ Coeff-Com:  0.100D+01
+ Coeff-En:   0.100D+01
+ Coeff:      0.100D+01
+ Gap=     0.298 Goal=   None    Shift=    0.000
+ GapD=    0.298 DampG=1.000 DampE=0.250 DampFc=0.2500 IDamp=-1.
+ Damping current iteration by 2.50D-01
+ RMSDP=1.07D-02 MaxDP=1.53D-01              OVMax= 1.83D-01
+
+ Cycle   2  Pass 1  IDiag  1:
+ E= -606.403191612008     Delta-E=       -0.045396773749 Rises=F Damp=T
+ DIIS: error= 2.73D-02 at cycle   2 NSaved=   2.
+ NSaved= 2 IEnMin= 2 EnMin= -606.403191612008     IErMin= 2 ErrMin= 2.73D-02
+ ErrMax= 2.73D-02  0.00D+00 EMaxC= 1.00D-01 BMatC= 3.22D-02 BMatP= 1.77D-01
+ IDIUse=3 WtCom= 7.27D-01 WtEn= 2.73D-01
+ Coeff-Com: -0.577D+00 0.158D+01
+ Coeff-En:   0.000D+00 0.100D+01
+ Coeff:     -0.420D+00 0.142D+01
+ Gap=     0.259 Goal=   None    Shift=    0.000
+ RMSDP=3.83D-03 MaxDP=4.71D-02 DE=-4.54D-02 OVMax= 7.95D-02
+
+ Cycle   3  Pass 1  IDiag  1:
+ E= -606.470789105600     Delta-E=       -0.067597493591 Rises=F Damp=F
+ DIIS: error= 1.52D-02 at cycle   3 NSaved=   3.
+ NSaved= 3 IEnMin= 3 EnMin= -606.470789105600     IErMin= 3 ErrMin= 1.52D-02
+ ErrMax= 1.52D-02  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.14D-02 BMatP= 3.22D-02
+ IDIUse=3 WtCom= 8.48D-01 WtEn= 1.52D-01
+ Coeff-Com:  0.514D+00-0.633D+00 0.112D+01
+ Coeff-En:   0.000D+00 0.000D+00 0.100D+01
+ Coeff:      0.436D+00-0.537D+00 0.110D+01
+ Gap=     0.246 Goal=   None    Shift=    0.000
+ RMSDP=1.57D-03 MaxDP=2.95D-02 DE=-6.76D-02 OVMax= 1.77D-02
+
+ Cycle   4  Pass 1  IDiag  1:
+ E= -606.476370116501     Delta-E=       -0.005581010901 Rises=F Damp=F
+ DIIS: error= 4.09D-03 at cycle   4 NSaved=   4.
+ NSaved= 4 IEnMin= 4 EnMin= -606.476370116501     IErMin= 4 ErrMin= 4.09D-03
+ ErrMax= 4.09D-03  0.00D+00 EMaxC= 1.00D-01 BMatC= 9.54D-04 BMatP= 1.14D-02
+ IDIUse=3 WtCom= 9.59D-01 WtEn= 4.09D-02
+ Coeff-Com:  0.132D+00-0.179D+00 0.421D+00 0.627D+00
+ Coeff-En:   0.000D+00 0.000D+00 0.000D+00 0.100D+01
+ Coeff:      0.126D+00-0.172D+00 0.404D+00 0.642D+00
+ Gap=     0.250 Goal=   None    Shift=    0.000
+ RMSDP=5.04D-04 MaxDP=1.04D-02 DE=-5.58D-03 OVMax= 1.20D-02
+
+ Cycle   5  Pass 1  IDiag  1:
+ E= -606.476916139007     Delta-E=       -0.000546022506 Rises=F Damp=F
+ DIIS: error= 8.21D-04 at cycle   5 NSaved=   5.
+ NSaved= 5 IEnMin= 5 EnMin= -606.476916139007     IErMin= 5 ErrMin= 8.21D-04
+ ErrMax= 8.21D-04  0.00D+00 EMaxC= 1.00D-01 BMatC= 4.67D-05 BMatP= 9.54D-04
+ IDIUse=3 WtCom= 9.92D-01 WtEn= 8.21D-03
+ Coeff-Com:  0.155D-01-0.271D-01 0.112D+00 0.333D+00 0.567D+00
+ Coeff-En:   0.000D+00 0.000D+00 0.000D+00 0.000D+00 0.100D+01
+ Coeff:      0.154D-01-0.269D-01 0.111D+00 0.330D+00 0.571D+00
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=1.14D-04 MaxDP=1.69D-03 DE=-5.46D-04 OVMax= 1.75D-03
+
+ Cycle   6  Pass 1  IDiag  1:
+ E= -606.476955707846     Delta-E=       -0.000039568839 Rises=F Damp=F
+ DIIS: error= 1.17D-04 at cycle   6 NSaved=   6.
+ NSaved= 6 IEnMin= 6 EnMin= -606.476955707846     IErMin= 6 ErrMin= 1.17D-04
+ ErrMax= 1.17D-04  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.15D-06 BMatP= 4.67D-05
+ IDIUse=3 WtCom= 9.99D-01 WtEn= 1.17D-03
+ Coeff-Com: -0.168D-01 0.222D-01-0.244D-01 0.228D-01 0.410D-01 0.955D+00
+ Coeff-En:   0.000D+00 0.000D+00 0.000D+00 0.000D+00 0.000D+00 0.100D+01
+ Coeff:     -0.168D-01 0.221D-01-0.243D-01 0.228D-01 0.410D-01 0.955D+00
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=4.87D-05 MaxDP=6.50D-04 DE=-3.96D-05 OVMax= 1.61D-03
+
+ Cycle   7  Pass 1  IDiag  1:
+ E= -606.476958990944     Delta-E=       -0.000003283099 Rises=F Damp=F
+ DIIS: error= 8.67D-05 at cycle   7 NSaved=   7.
+ NSaved= 7 IEnMin= 7 EnMin= -606.476958990944     IErMin= 7 ErrMin= 8.67D-05
+ ErrMax= 8.67D-05  0.00D+00 EMaxC= 1.00D-01 BMatC= 4.90D-07 BMatP= 1.15D-06
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.861D-03-0.422D-03-0.126D-01-0.375D-01-0.104D+00 0.868D-01
+ Coeff-Com:  0.107D+01
+ Coeff:      0.861D-03-0.422D-03-0.126D-01-0.375D-01-0.104D+00 0.868D-01
+ Coeff:      0.107D+01
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=2.73D-05 MaxDP=7.36D-04 DE=-3.28D-06 OVMax= 9.33D-04
+
+ Cycle   8  Pass 1  IDiag  1:
+ E= -606.476959680313     Delta-E=       -0.000000689369 Rises=F Damp=F
+ DIIS: error= 1.10D-05 at cycle   8 NSaved=   8.
+ NSaved= 8 IEnMin= 8 EnMin= -606.476959680313     IErMin= 8 ErrMin= 1.10D-05
+ ErrMax= 1.10D-05  0.00D+00 EMaxC= 1.00D-01 BMatC= 9.78D-09 BMatP= 4.90D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.101D-02-0.121D-02-0.138D-02-0.806D-02-0.279D-01-0.379D-01
+ Coeff-Com:  0.171D+00 0.905D+00
+ Coeff:      0.101D-02-0.121D-02-0.138D-02-0.806D-02-0.279D-01-0.379D-01
+ Coeff:      0.171D+00 0.905D+00
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=4.54D-06 MaxDP=7.14D-05 DE=-6.89D-07 OVMax= 1.48D-04
+
+ Cycle   9  Pass 1  IDiag  1:
+ E= -606.476959699065     Delta-E=       -0.000000018752 Rises=F Damp=F
+ DIIS: error= 1.72D-06 at cycle   9 NSaved=   9.
+ NSaved= 9 IEnMin= 9 EnMin= -606.476959699065     IErMin= 9 ErrMin= 1.72D-06
+ ErrMax= 1.72D-06  0.00D+00 EMaxC= 1.00D-01 BMatC= 2.04D-10 BMatP= 9.78D-09
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.185D-06-0.815D-05 0.474D-03 0.110D-02 0.135D-02-0.351D-02
+ Coeff-Com: -0.357D-01 0.965D-01 0.940D+00
+ Coeff:      0.185D-06-0.815D-05 0.474D-03 0.110D-02 0.135D-02-0.351D-02
+ Coeff:     -0.357D-01 0.965D-01 0.940D+00
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=4.17D-07 MaxDP=6.67D-06 DE=-1.88D-08 OVMax= 8.00D-06
+
+ Cycle  10  Pass 1  IDiag  1:
+ E= -606.476959699307     Delta-E=       -0.000000000242 Rises=F Damp=F
+ DIIS: error= 2.46D-07 at cycle  10 NSaved=  10.
+ NSaved=10 IEnMin=10 EnMin= -606.476959699307     IErMin=10 ErrMin= 2.46D-07
+ ErrMax= 2.46D-07  0.00D+00 EMaxC= 1.00D-01 BMatC= 6.30D-12 BMatP= 2.04D-10
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.750D-05 0.741D-05 0.385D-04 0.808D-04 0.628D-03 0.495D-03
+ Coeff-Com: -0.288D-02-0.143D-01 0.128D-01 0.100D+01
+ Coeff:     -0.750D-05 0.741D-05 0.385D-04 0.808D-04 0.628D-03 0.495D-03
+ Coeff:     -0.288D-02-0.143D-01 0.128D-01 0.100D+01
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=8.30D-08 MaxDP=1.35D-06 DE=-2.42D-10 OVMax= 1.28D-06
+
+ Cycle  11  Pass 1  IDiag  1:
+ E= -606.476959699313     Delta-E=       -0.000000000006 Rises=F Damp=F
+ DIIS: error= 1.98D-08 at cycle  11 NSaved=  11.
+ NSaved=11 IEnMin=11 EnMin= -606.476959699313     IErMin=11 ErrMin= 1.98D-08
+ ErrMax= 1.98D-08  0.00D+00 EMaxC= 1.00D-01 BMatC= 5.41D-14 BMatP= 6.30D-12
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.160D-05-0.218D-05-0.646D-05-0.204D-04-0.344D-04 0.164D-05
+ Coeff-Com:  0.431D-03-0.799D-03-0.113D-01-0.994D-01 0.111D+01
+ Coeff:      0.160D-05-0.218D-05-0.646D-05-0.204D-04-0.344D-04 0.164D-05
+ Coeff:      0.431D-03-0.799D-03-0.113D-01-0.994D-01 0.111D+01
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=1.79D-08 MaxDP=4.54D-07 DE=-6.25D-12 OVMax= 3.41D-07
+
+ Cycle  12  Pass 1  IDiag  1:
+ E= -606.476959699313     Delta-E=       -0.000000000000 Rises=F Damp=F
+ DIIS: error= 4.12D-09 at cycle  12 NSaved=  12.
+ NSaved=12 IEnMin=12 EnMin= -606.476959699313     IErMin=12 ErrMin= 4.12D-09
+ ErrMax= 4.12D-09  0.00D+00 EMaxC= 1.00D-01 BMatC= 9.43D-16 BMatP= 5.41D-14
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.122D-07 0.313D-07 0.526D-06 0.157D-05-0.409D-05-0.101D-04
+ Coeff-Com:  0.237D-05 0.315D-03 0.122D-02-0.617D-02-0.912D-01 0.110D+01
+ Coeff:     -0.122D-07 0.313D-07 0.526D-06 0.157D-05-0.409D-05-0.101D-04
+ Coeff:      0.237D-05 0.315D-03 0.122D-02-0.617D-02-0.912D-01 0.110D+01
+ Gap=     0.248 Goal=   None    Shift=    0.000
+ RMSDP=1.90D-09 MaxDP=3.15D-08 DE=-3.41D-13 OVMax= 3.69D-08
+
+ SCF Done:  E(RMN15) =  -606.476959699     A.U. after   12 cycles
+            NFock= 12  Conv=0.19D-08     -V/T= 2.1764
+ KE= 5.155174068783D+02 PE=-1.608807910599D+03 EE= 3.873580342298D+02
+ Leave Link  502 at Wed May 20 14:12:35 2026, MaxMem= 12079595520 cpu:              33.6 elap:               0.6
+ (Enter /project/xlzhang/shared/bin/g16/l601.exe)
+ Copying SCF densities to generalized density rwf, IOpCl= 0 IROHF=0.
+
+ **********************************************************************
+
+            Population analysis using the SCF Density.
+
+ **********************************************************************
+
+ Orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (SG) (PI) (PI) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PHI) (PHI)
+                 (PI) (PI) (SG) (SG) (SG)
+ The electronic state is 1-SG.
+ Alpha  occ. eigenvalues -- -100.30561  -9.16256  -7.18670  -7.17560  -7.17560
+ Alpha  occ. eigenvalues --   -3.72357  -2.40562  -2.36114  -2.36114  -0.86418
+ Alpha  occ. eigenvalues --   -0.52513  -0.51773  -0.51773  -0.42777  -0.42777
+ Alpha  occ. eigenvalues --   -0.31094  -0.30492  -0.30492
+ Alpha virt. eigenvalues --   -0.05723   0.04486   0.04486   0.10507   0.14879
+ Alpha virt. eigenvalues --    0.21827   0.21827   0.38579   0.40495   0.40495
+ Alpha virt. eigenvalues --    0.46104   0.46104   0.55762   0.74075   0.76509
+ Alpha virt. eigenvalues --    0.80241   0.80241   0.83699   0.83699   1.05913
+ Alpha virt. eigenvalues --    1.05913   1.30939   1.59697   1.59697   1.69591
+ Alpha virt. eigenvalues --    1.96569   1.99401   1.99401   2.03136   2.03136
+ Alpha virt. eigenvalues --    2.27329   2.48894   2.48895   2.50767   2.50767
+ Alpha virt. eigenvalues --    2.54259   2.54259   2.87618  32.78230 110.50420
+          Condensed to atoms (all electrons):
+               1          2
+     1  Ag  18.450611   0.221485
+     2  Cl   0.221485  17.106418
+ Mulliken charges:
+               1
+     1  Ag   0.327903
+     2  Cl  -0.327903
+ Sum of Mulliken charges =   0.00000
+ Mulliken charges with hydrogens summed into heavy atoms:
+               1
+     1  Ag   0.327903
+     2  Cl  -0.327903
+ Electronic spatial extent (au):  <R**2>=            181.6306
+ Charge=              0.0000 electrons
+ Dipole moment (field-independent basis, Debye):
+    X=              0.0000    Y=              0.0000    Z=              3.2787  Tot=              3.2787
+ Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=            -32.4821   YY=            -32.4821   ZZ=            -30.2503
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Traceless Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=             -0.7439   YY=             -0.7439   ZZ=              1.4879
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Octapole moment (field-independent basis, Debye-Ang**2):
+  XXX=              0.0000  YYY=              0.0000  ZZZ=             27.0537  XYY=              0.0000
+  XXY=              0.0000  XXZ=              7.6041  XZZ=              0.0000  YZZ=              0.0000
+  YYZ=              7.6041  XYZ=              0.0000
+ Hexadecapole moment (field-independent basis, Debye-Ang**3):
+ XXXX=            -37.8151 YYYY=            -37.8151 ZZZZ=           -164.3359 XXXY=              0.0000
+ XXXZ=              0.0000 YYYX=              0.0000 YYYZ=              0.0000 ZZZX=              0.0000
+ ZZZY=              0.0000 XXYY=            -12.6050 XXZZ=            -35.2451 YYZZ=            -35.2451
+ XXYZ=              0.0000 YYXZ=              0.0000 ZZXY=              0.0000
+ N-N= 9.945550979120D+01 E-N=-1.608807910708D+03  KE= 5.155174068783D+02
+ Symmetry A1   KE= 3.918399259456D+02
+ Symmetry A2   KE= 6.795293747948D+00
+ Symmetry B1   KE= 5.844109359236D+01
+ Symmetry B2   KE= 5.844109359236D+01
+ No NMR shielding tensors so no spin-rotation constants.
+ Leave Link  601 at Wed May 20 14:12:35 2026, MaxMem= 12079595520 cpu:               4.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral first derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     253 LenP2D=     755.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link  701 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:              15.9 elap:               0.3
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               0.7 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral first derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=      2127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=    2127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      2127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:              27.0 elap:               0.4
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 1.28993373D+00
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47           0.504859861   -0.000000000   -0.000000000
+      2       17          -0.504859861   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.504859861 RMS     0.291480976
+ Leave Link  716 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               1.0 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ FormGI is forming the generalized inverse of G from B-inverse, IUseBI=4.
+ Internal  Forces:  Max     0.504859861 RMS     0.504859861
+ Search for a local minimum.
+ Step number   1 out of a maximum of   20
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ RMS Force = .50486D+00 SwitMx=.10000D-02 MixMth= 1
+ Mixed Optimization -- RFO/linear search
+ Second derivative matrix not updated -- first step.
+ The second derivative matrix:
+                          R1
+           R1           1.19766
+ ITU=  0
+     Eigenvalues ---    1.19766
+ RFO step:  Lambda=-1.84419728D-01 EMin= 1.19766386D+00
+ Linear search not attempted -- first point.
+ Maximum step size (   0.300) exceeded in Quadratic search.
+    -- Step size scaled by   0.821
+ Iteration  1 RMS(Cart)=  0.14142136 RMS(Int)=  0.10000000
+ Iteration  2 RMS(Cart)=  0.07071068 RMS(Int)=  0.00000000
+ Iteration  3 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 1.50D-01 DCOld= 1.00D+10 DXMaxT= 3.00D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 2.22D-16 for atom     2.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        3.24768   0.50486   0.00000   0.30000   0.30000   3.54768
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.504860     0.000450     NO 
+ RMS     Force            0.504860     0.000300     NO 
+ Maximum Displacement     0.150000     0.001800     NO 
+ RMS     Displacement     0.212132     0.001200     NO 
+ Predicted change in Energy=-9.756308D-02
+ Lowest energy point so far.  Saving SCF results.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               0.9 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.938677    0.000000    0.000000
+      2         17           0       -0.938677    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.498672
+      2         17           0        0.000000    0.000000   -1.378681
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           5.4418694           5.4418694
+ Leave Link  202 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               0.3 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ Basis read from rwf:  (5D, 7F)
+ Pseudo-potential data read from rwf file.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        91.0453304528 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ No density basis found on file   724.
+ Leave Link  301 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               1.2 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     749.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  7.84D-03  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:36 2026, MaxMem= 12079595520 cpu:               9.8 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:37 2026, MaxMem= 12079595520 cpu:               6.4 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ Initial guess from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ B after Tr=     0.000000    0.000000    0.000000
+         Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ Guess basis will be translated and rotated to current coordinates.
+ JPrj=2 DoOrth=T DoCkMO=T.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (SG) (PI) (PI) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PHI) (PHI)
+                 (PI) (PI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Generating alternative initial guess.
+ ExpMin= 3.77D-02 ExpMax= 1.04D+04 ExpMxC= 1.57D+03 IAcc=3 IRadAn=         5 AccDes= 0.00D+00
+ Harris functional with IExCor= 1009 and IRadAn=       5 diagonalized for initial guess.
+ HarFok:  IExCor= 1009 AccDes= 0.00D+00 IRadAn=         5 IDoV= 1 UseB2=F ITyADJ=14
+ ICtDFT=  3500011 ScaDFX=  1.000000  1.000000  1.000000  1.000000
+ Defaulting to unpruned grid for atomic number  47.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=           0
+         NFxFlg=           0 DoJE=T BraDBF=F KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=   200000004 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Harris En= -607.109907234988    
+ Leave Link  401 at Wed May 20 14:12:37 2026, MaxMem= 12079595520 cpu:              11.0 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.570461369648    
+ DIIS: error= 7.38D-02 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.570461369648     IErMin= 1 ErrMin= 7.38D-02
+ ErrMax= 7.38D-02  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.45D-01 BMatP= 1.45D-01
+ IDIUse=3 WtCom= 2.62D-01 WtEn= 7.38D-01
+ Coeff-Com:  0.100D+01
+ Coeff-En:   0.100D+01
+ Coeff:      0.100D+01
+ Recover alternate guess density for next cycle.
+ RMSDP=5.00D-03 MaxDP=6.83D-02              OVMax= 0.00D+00
+
+ Cycle   2  Pass 1  IDiag  1:
+ E= -606.481108863607     Delta-E=        0.089352506041 Rises=F Damp=F
+ Switch densities from cycles 1 and 2 for lowest energy.
+ DIIS: error= 6.31D-02 at cycle   2 NSaved=   2.
+ NSaved= 2 IEnMin= 1 EnMin= -606.570461369648     IErMin= 2 ErrMin= 6.31D-02
+ ErrMax= 6.31D-02  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.46D-01 BMatP= 1.45D-01
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.502D+00 0.498D+00
+ Coeff:      0.502D+00 0.498D+00
+ Gap=     0.252 Goal=   None    Shift=    0.000
+ RMSDP=4.17D-03 MaxDP=6.29D-02 DE= 8.94D-02 OVMax= 7.04D-02
+
+ Cycle   3  Pass 1  IDiag  1:
+ E= -606.537546728149     Delta-E=       -0.056437864542 Rises=F Damp=F
+ DIIS: error= 4.21D-02 at cycle   3 NSaved=   3.
+ NSaved= 3 IEnMin= 1 EnMin= -606.570461369648     IErMin= 3 ErrMin= 4.21D-02
+ ErrMax= 4.21D-02  0.00D+00 EMaxC= 1.00D+00 BMatC= 8.91D-02 BMatP= 1.45D-01
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.415D-01 0.416D+00 0.542D+00
+ Coeff:      0.415D-01 0.416D+00 0.542D+00
+ Gap=     0.247 Goal=   None    Shift=    0.000
+ RMSDP=3.03D-03 MaxDP=6.14D-02 DE=-5.64D-02 OVMax= 4.75D-02
+
+ Cycle   4  Pass 1  IDiag  1:
+ E= -606.583875117346     Delta-E=       -0.046328389197 Rises=F Damp=F
+ DIIS: error= 2.94D-03 at cycle   4 NSaved=   4.
+ NSaved= 4 IEnMin= 4 EnMin= -606.583875117346     IErMin= 4 ErrMin= 2.94D-03
+ ErrMax= 2.94D-03  0.00D+00 EMaxC= 1.00D+00 BMatC= 5.81D-04 BMatP= 8.91D-02
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.120D-02 0.386D-01-0.120D-02 0.964D+00
+ Coeff:     -0.120D-02 0.386D-01-0.120D-02 0.964D+00
+ Gap=     0.236 Goal=   None    Shift=    0.000
+ RMSDP=6.88D-04 MaxDP=1.73D-02 DE=-4.63D-02 OVMax= 8.80D-03
+
+ Cycle   5  Pass 1  IDiag  1:
+ E= -606.584177919484     Delta-E=       -0.000302802138 Rises=F Damp=F
+ DIIS: error= 1.38D-03 at cycle   5 NSaved=   5.
+ NSaved= 5 IEnMin= 5 EnMin= -606.584177919484     IErMin= 5 ErrMin= 1.38D-03
+ ErrMax= 1.38D-03  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.90D-04 BMatP= 5.81D-04
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.381D-03 0.130D-02-0.256D-01 0.419D+00 0.605D+00
+ Coeff:      0.381D-03 0.130D-02-0.256D-01 0.419D+00 0.605D+00
+ Gap=     0.241 Goal=   None    Shift=    0.000
+ RMSDP=3.92D-04 MaxDP=9.33D-03 DE=-3.03D-04 OVMax= 9.68D-03
+
+ Cycle   6  Pass 1  IDiag  1:
+ E= -606.584388959278     Delta-E=       -0.000211039793 Rises=F Damp=F
+ DIIS: error= 3.99D-04 at cycle   6 NSaved=   6.
+ NSaved= 6 IEnMin= 6 EnMin= -606.584388959278     IErMin= 6 ErrMin= 3.99D-04
+ ErrMax= 3.99D-04  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.25D-05 BMatP= 1.90D-04
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.285D-03-0.306D-02-0.659D-02 0.194D-01 0.202D+00 0.788D+00
+ Coeff:     -0.285D-03-0.306D-02-0.659D-02 0.194D-01 0.202D+00 0.788D+00
+ Gap=     0.240 Goal=   None    Shift=    0.000
+ RMSDP=8.56D-05 MaxDP=1.25D-03 DE=-2.11D-04 OVMax= 2.13D-03
+
+ Cycle   7  Pass 1  IDiag  1:
+ E= -606.584405938148     Delta-E=       -0.000016978871 Rises=F Damp=F
+ DIIS: error= 8.96D-05 at cycle   7 NSaved=   7.
+ NSaved= 7 IEnMin= 7 EnMin= -606.584405938148     IErMin= 7 ErrMin= 8.96D-05
+ ErrMax= 8.96D-05  0.00D+00 EMaxC= 1.00D+00 BMatC= 7.17D-07 BMatP= 1.25D-05
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.371D-04-0.385D-03 0.987D-03-0.436D-01-0.811D-02 0.454D-01
+ Coeff-Com:  0.101D+01
+ Coeff:     -0.371D-04-0.385D-03 0.987D-03-0.436D-01-0.811D-02 0.454D-01
+ Coeff:      0.101D+01
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=4.52D-05 MaxDP=8.52D-04 DE=-1.70D-05 OVMax= 1.71D-03
+
+ Cycle   8  Pass 1  IDiag  1:
+ E= -606.584408568200     Delta-E=       -0.000002630052 Rises=F Damp=F
+ DIIS: error= 4.62D-05 at cycle   8 NSaved=   8.
+ NSaved= 8 IEnMin= 8 EnMin= -606.584408568200     IErMin= 8 ErrMin= 4.62D-05
+ ErrMax= 4.62D-05  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.54D-07 BMatP= 7.17D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.326D-05 0.412D-03 0.897D-05-0.557D-02-0.230D-01-0.124D+00
+ Coeff-Com:  0.110D+00 0.104D+01
+ Coeff:      0.326D-05 0.412D-03 0.897D-05-0.557D-02-0.230D-01-0.124D+00
+ Coeff:      0.110D+00 0.104D+01
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=1.96D-05 MaxDP=5.04D-04 DE=-2.63D-06 OVMax= 7.30D-04
+
+ Cycle   9  Pass 1  IDiag  1:
+ E= -606.584408866677     Delta-E=       -0.000000298477 Rises=F Damp=F
+ DIIS: error= 6.06D-06 at cycle   9 NSaved=   9.
+ NSaved= 9 IEnMin= 9 EnMin= -606.584408866677     IErMin= 9 ErrMin= 6.06D-06
+ ErrMax= 6.06D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 2.94D-09 BMatP= 1.54D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.768D-05 0.112D-03-0.649D-04-0.260D-03-0.572D-02-0.369D-01
+ Coeff-Com: -0.368D-02 0.297D+00 0.749D+00
+ Coeff:      0.768D-05 0.112D-03-0.649D-04-0.260D-03-0.572D-02-0.369D-01
+ Coeff:     -0.368D-02 0.297D+00 0.749D+00
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=1.88D-06 MaxDP=2.44D-05 DE=-2.98D-07 OVMax= 4.09D-05
+
+ Cycle  10  Pass 1  IDiag  1:
+ E= -606.584408871177     Delta-E=       -0.000000004500 Rises=F Damp=F
+ DIIS: error= 1.27D-06 at cycle  10 NSaved=  10.
+ NSaved=10 IEnMin=10 EnMin= -606.584408871177     IErMin=10 ErrMin= 1.27D-06
+ ErrMax= 1.27D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 9.32D-11 BMatP= 2.94D-09
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.113D-06-0.647D-05-0.948D-05 0.360D-03 0.659D-03 0.285D-02
+ Coeff-Com: -0.459D-02-0.337D-01 0.920D-01 0.942D+00
+ Coeff:      0.113D-06-0.647D-05-0.948D-05 0.360D-03 0.659D-03 0.285D-02
+ Coeff:     -0.459D-02-0.337D-01 0.920D-01 0.942D+00
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=3.45D-07 MaxDP=6.81D-06 DE=-4.50D-09 OVMax= 7.32D-06
+
+ Cycle  11  Pass 1  IDiag  1:
+ E= -606.584408871320     Delta-E=       -0.000000000144 Rises=F Damp=F
+ DIIS: error= 1.46D-07 at cycle  11 NSaved=  11.
+ NSaved=11 IEnMin=11 EnMin= -606.584408871320     IErMin=11 ErrMin= 1.46D-07
+ ErrMax= 1.46D-07  0.00D+00 EMaxC= 1.00D+00 BMatC= 2.57D-12 BMatP= 9.32D-11
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.514D-07-0.233D-05 0.326D-05 0.955D-05 0.403D-04 0.840D-03
+ Coeff-Com: -0.310D-04-0.566D-02-0.160D-01-0.178D-01 0.104D+01
+ Coeff:     -0.514D-07-0.233D-05 0.326D-05 0.955D-05 0.403D-04 0.840D-03
+ Coeff:     -0.310D-04-0.566D-02-0.160D-01-0.178D-01 0.104D+01
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=6.86D-08 MaxDP=1.09D-06 DE=-1.44D-10 OVMax= 1.22D-06
+
+ Cycle  12  Pass 1  IDiag  1:
+ E= -606.584408871323     Delta-E=       -0.000000000003 Rises=F Damp=F
+ DIIS: error= 1.68D-08 at cycle  12 NSaved=  12.
+ NSaved=12 IEnMin=12 EnMin= -606.584408871323     IErMin=12 ErrMin= 1.68D-08
+ ErrMax= 1.68D-08  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.77D-14 BMatP= 2.57D-12
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.515D-09 0.207D-06-0.543D-06-0.605D-05-0.145D-04-0.121D-03
+ Coeff-Com:  0.646D-04 0.103D-02-0.513D-03-0.140D-01-0.979D-01 0.111D+01
+ Coeff:     -0.515D-09 0.207D-06-0.543D-06-0.605D-05-0.145D-04-0.121D-03
+ Coeff:      0.646D-04 0.103D-02-0.513D-03-0.140D-01-0.979D-01 0.111D+01
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=1.03D-08 MaxDP=1.70D-07 DE=-2.50D-12 OVMax= 1.88D-07
+
+ Cycle  13  Pass 1  IDiag  1:
+ E= -606.584408871323     Delta-E=        0.000000000000 Rises=F Damp=F
+ DIIS: error= 2.03D-09 at cycle  13 NSaved=  13.
+ NSaved=13 IEnMin=12 EnMin= -606.584408871323     IErMin=13 ErrMin= 2.03D-09
+ ErrMax= 2.03D-09  0.00D+00 EMaxC= 1.00D+00 BMatC= 3.21D-16 BMatP= 1.77D-14
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.246D-09 0.224D-08 0.164D-07 0.531D-06 0.192D-05 0.590D-05
+ Coeff-Com: -0.938D-05-0.324D-04 0.127D-03 0.169D-02 0.250D-02-0.151D+00
+ Coeff-Com:  0.115D+01
+ Coeff:      0.246D-09 0.224D-08 0.164D-07 0.531D-06 0.192D-05 0.590D-05
+ Coeff:     -0.938D-05-0.324D-04 0.127D-03 0.169D-02 0.250D-02-0.151D+00
+ Coeff:      0.115D+01
+ Gap=     0.239 Goal=   None    Shift=    0.000
+ RMSDP=1.11D-09 MaxDP=1.32D-08 DE= 2.27D-13 OVMax= 3.34D-08
+
+ SCF Done:  E(RMN15) =  -606.584408871     A.U. after   13 cycles
+            NFock= 13  Conv=0.11D-08     -V/T= 2.1774
+ KE= 5.151734105249D+02 PE=-1.592664788961D+03 EE= 3.798616391119D+02
+ Leave Link  502 at Wed May 20 14:12:37 2026, MaxMem= 12079595520 cpu:              34.1 elap:               0.6
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral first derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     749.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link  701 at Wed May 20 14:12:38 2026, MaxMem= 12079595520 cpu:              18.0 elap:               0.4
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:38 2026, MaxMem= 12079595520 cpu:               0.5 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral first derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=      2127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=    2127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      2127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:39 2026, MaxMem= 12079595520 cpu:              28.4 elap:               0.5
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 1.50946072D+00
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47           0.239285768   -0.000000000   -0.000000000
+      2       17          -0.239285768   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.239285768 RMS     0.138151703
+ Leave Link  716 at Wed May 20 14:12:39 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Using GEDIIS/GDIIS optimizer.
+ Red2BG is reusing G-inverse.
+ Internal  Forces:  Max     0.239285768 RMS     0.239285768
+ Search for a local minimum.
+ Step number   2 out of a maximum of   20
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ RMS Force = .23929D+00 SwitMx=.10000D-02 MixMth= 1
+ Mixed Optimization -- RFO/linear search
+ Update second derivatives using D2CorX and points    1    2
+ DE= -1.07D-01 DEPred=-9.76D-02 R= 1.10D+00
+ TightC=F SS=  1.41D+00  RLast= 3.00D-01 DXNew= 5.0454D-01 9.0000D-01
+ Trust test= 1.10D+00 RLast= 3.00D-01 DXMaxT set to 5.05D-01
+ The second derivative matrix:
+                          R1
+           R1           0.88525
+ ITU=  1  0
+ Use linear search instead of GDIIS.
+ Linear search step of   1.407 exceeds DXMaxT=   0.505 scaled by   0.717
+ Quartic linear search produced a step of  3.36359.
+ Iteration  1 RMS(Cart)=  0.14142136 RMS(Int)=  0.80907570
+ Iteration  2 RMS(Cart)=  0.14142136 RMS(Int)=  0.60907570
+ Iteration  3 RMS(Cart)=  0.14142136 RMS(Int)=  0.40907570
+ Iteration  4 RMS(Cart)=  0.14142136 RMS(Int)=  0.20907570
+ Iteration  5 RMS(Cart)=  0.14142136 RMS(Int)=  0.00907570
+ Iteration  6 RMS(Cart)=  0.00641749 RMS(Int)=  0.00000000
+ Iteration  7 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 5.05D-01 DCOld= 1.00D+10 DXMaxT= 5.05D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 0.00D+00 for atom     0.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        3.54768   0.23929   1.00908   0.00000   1.00908   4.55676
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.239286     0.000450     NO 
+ RMS     Force            0.239286     0.000300     NO 
+ Maximum Displacement     0.504538     0.001800     NO 
+ RMS     Displacement     0.713524     0.001200     NO 
+ Predicted change in Energy=-2.092367D-01
+ Lowest energy point so far.  Saving SCF results.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:39 2026, MaxMem= 12079595520 cpu:               0.3 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        1.205667    0.000000    0.000000
+      2         17           0       -1.205667    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.640510
+      2         17           0        0.000000    0.000000   -1.770823
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           3.2985698           3.2985698
+ Leave Link  202 at Wed May 20 14:12:39 2026, MaxMem= 12079595520 cpu:               0.3 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ Basis read from rwf:  (5D, 7F)
+ Pseudo-potential data read from rwf file.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        70.8837133733 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ No density basis found on file   724.
+ Leave Link  301 at Wed May 20 14:12:40 2026, MaxMem= 12079595520 cpu:               3.0 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     737.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  2.00D-02  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:40 2026, MaxMem= 12079595520 cpu:               5.9 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:40 2026, MaxMem= 12079595520 cpu:               5.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ Initial guess from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ B after Tr=     0.000000    0.000000    0.000000
+         Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ Guess basis will be translated and rotated to current coordinates.
+ JPrj=2 DoOrth=T DoCkMO=T.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (SG) (PI) (PI) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PHI) (PHI)
+                 (PI) (PI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Generating alternative initial guess.
+ ExpMin= 3.77D-02 ExpMax= 1.04D+04 ExpMxC= 1.57D+03 IAcc=3 IRadAn=         5 AccDes= 0.00D+00
+ Harris functional with IExCor= 1009 and IRadAn=       5 diagonalized for initial guess.
+ HarFok:  IExCor= 1009 AccDes= 0.00D+00 IRadAn=         5 IDoV= 1 UseB2=F ITyADJ=14
+ ICtDFT=  3500011 ScaDFX=  1.000000  1.000000  1.000000  1.000000
+ Defaulting to unpruned grid for atomic number  47.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=           0
+         NFxFlg=           0 DoJE=T BraDBF=F KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=   200000004 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Harris En= -607.163286032707    
+ Leave Link  401 at Wed May 20 14:12:40 2026, MaxMem= 12079595520 cpu:               7.2 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.596940015954    
+ DIIS: error= 1.33D-01 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.596940015954     IErMin= 1 ErrMin= 1.33D-01
+ ErrMax= 1.33D-01  0.00D+00 EMaxC= 1.00D-01 BMatC= 4.81D-01 BMatP= 4.81D-01
+ IDIUse=3 WtCom= 0.00D+00 WtEn= 1.00D+00
+ Coeff-Com:  0.100D+01
+ Coeff-En:   0.100D+01
+ Coeff:      0.100D+01
+ Recover alternate guess density for next cycle.
+ RMSDP=5.95D-03 MaxDP=8.54D-02              OVMax= 0.00D+00
+
+ Cycle   2  Pass 1  IDiag  1:
+ E= -606.581875442146     Delta-E=        0.015064573808 Rises=F Damp=F
+ Switch densities from cycles 1 and 2 for lowest energy.
+ DIIS: error= 5.08D-02 at cycle   2 NSaved=   2.
+ NSaved= 2 IEnMin= 1 EnMin= -606.596940015954     IErMin= 2 ErrMin= 5.08D-02
+ ErrMax= 5.08D-02  0.00D+00 EMaxC= 1.00D+00 BMatC= 8.53D-02 BMatP= 4.81D-01
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.144D+00 0.856D+00
+ Coeff:      0.144D+00 0.856D+00
+ Gap=     0.216 Goal=   None    Shift=    0.000
+ RMSDP=6.53D-03 MaxDP=6.81D-02 DE= 1.51D-02 OVMax= 1.53D-01
+
+ Cycle   3  Pass 1  IDiag  1:
+ E= -606.569541851707     Delta-E=        0.012333590439 Rises=F Damp=F
+ DIIS: error= 5.29D-02 at cycle   3 NSaved=   3.
+ NSaved= 3 IEnMin= 1 EnMin= -606.596940015954     IErMin= 2 ErrMin= 5.08D-02
+ ErrMax= 5.29D-02  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.36D-01 BMatP= 8.53D-02
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.212D-01 0.550D+00 0.429D+00
+ Coeff:      0.212D-01 0.550D+00 0.429D+00
+ Gap=     0.195 Goal=   None    Shift=    0.000
+ RMSDP=4.69D-03 MaxDP=1.13D-01 DE= 1.23D-02 OVMax= 9.33D-02
+
+ Cycle   4  Pass 1  IDiag  1:
+ E= -606.648018167163     Delta-E=       -0.078476315457 Rises=F Damp=F
+ DIIS: error= 2.69D-03 at cycle   4 NSaved=   4.
+ NSaved= 4 IEnMin= 4 EnMin= -606.648018167163     IErMin= 4 ErrMin= 2.69D-03
+ ErrMax= 2.69D-03  0.00D+00 EMaxC= 1.00D+00 BMatC= 7.40D-04 BMatP= 8.53D-02
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.508D-03 0.519D-01 0.616D-02 0.942D+00
+ Coeff:     -0.508D-03 0.519D-01 0.616D-02 0.942D+00
+ Gap=     0.187 Goal=   None    Shift=    0.000
+ RMSDP=8.40D-04 MaxDP=2.14D-02 DE=-7.85D-02 OVMax= 1.13D-02
+
+ Cycle   5  Pass 1  IDiag  1:
+ E= -606.648255810898     Delta-E=       -0.000237643735 Rises=F Damp=F
+ DIIS: error= 2.25D-03 at cycle   5 NSaved=   5.
+ NSaved= 5 IEnMin= 5 EnMin= -606.648255810898     IErMin= 5 ErrMin= 2.25D-03
+ ErrMax= 2.25D-03  0.00D+00 EMaxC= 1.00D+00 BMatC= 3.39D-04 BMatP= 7.40D-04
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.501D-04-0.294D-02-0.244D-01 0.427D+00 0.600D+00
+ Coeff:     -0.501D-04-0.294D-02-0.244D-01 0.427D+00 0.600D+00
+ Gap=     0.196 Goal=   None    Shift=    0.000
+ RMSDP=5.56D-04 MaxDP=1.45D-02 DE=-2.38D-04 OVMax= 1.57D-02
+
+ Cycle   6  Pass 1  IDiag  1:
+ E= -606.648675386600     Delta-E=       -0.000419575702 Rises=F Damp=F
+ DIIS: error= 2.86D-04 at cycle   6 NSaved=   6.
+ NSaved= 6 IEnMin= 6 EnMin= -606.648675386600     IErMin= 6 ErrMin= 2.86D-04
+ ErrMax= 2.86D-04  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.06D-05 BMatP= 3.39D-04
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.157D-03-0.374D-02-0.225D-02-0.302D-02 0.127D+00 0.882D+00
+ Coeff:     -0.157D-03-0.374D-02-0.225D-02-0.302D-02 0.127D+00 0.882D+00
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=9.54D-05 MaxDP=1.72D-03 DE=-4.20D-04 OVMax= 3.20D-03
+
+ Cycle   7  Pass 1  IDiag  1:
+ E= -606.648697107652     Delta-E=       -0.000021721052 Rises=F Damp=F
+ DIIS: error= 1.05D-04 at cycle   7 NSaved=   7.
+ NSaved= 7 IEnMin= 7 EnMin= -606.648697107652     IErMin= 7 ErrMin= 1.05D-04
+ ErrMax= 1.05D-04  0.00D+00 EMaxC= 1.00D+00 BMatC= 6.64D-07 BMatP= 1.06D-05
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.166D-04-0.612D-04 0.188D-02-0.464D-01-0.323D-01 0.128D+00
+ Coeff-Com:  0.949D+00
+ Coeff:     -0.166D-04-0.612D-04 0.188D-02-0.464D-01-0.323D-01 0.128D+00
+ Coeff:      0.949D+00
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=4.54D-05 MaxDP=9.01D-04 DE=-2.17D-05 OVMax= 1.50D-03
+
+ Cycle   8  Pass 1  IDiag  1:
+ E= -606.648699897836     Delta-E=       -0.000002790184 Rises=F Damp=F
+ DIIS: error= 4.59D-05 at cycle   8 NSaved=   8.
+ NSaved= 8 IEnMin= 8 EnMin= -606.648699897836     IErMin= 8 ErrMin= 4.59D-05
+ ErrMax= 4.59D-05  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.34D-07 BMatP= 6.64D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.226D-05 0.500D-03-0.270D-03-0.344D-02-0.202D-01-0.128D+00
+ Coeff-Com:  0.787D-01 0.107D+01
+ Coeff:      0.226D-05 0.500D-03-0.270D-03-0.344D-02-0.202D-01-0.128D+00
+ Coeff:      0.787D-01 0.107D+01
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=2.13D-05 MaxDP=4.43D-04 DE=-2.79D-06 OVMax= 6.70D-04
+
+ Cycle   9  Pass 1  IDiag  1:
+ E= -606.648700263627     Delta-E=       -0.000000365791 Rises=F Damp=F
+ DIIS: error= 5.16D-06 at cycle   9 NSaved=   9.
+ NSaved= 9 IEnMin= 9 EnMin= -606.648700263627     IErMin= 9 ErrMin= 5.16D-06
+ ErrMax= 5.16D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.84D-09 BMatP= 1.34D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.378D-05 0.849D-04-0.904D-04 0.342D-03-0.212D-02-0.215D-01
+ Coeff-Com: -0.135D-01 0.173D+00 0.863D+00
+ Coeff:      0.378D-05 0.849D-04-0.904D-04 0.342D-03-0.212D-02-0.215D-01
+ Coeff:     -0.135D-01 0.173D+00 0.863D+00
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=1.48D-06 MaxDP=2.51D-05 DE=-3.66D-07 OVMax= 4.61D-05
+
+ Cycle  10  Pass 1  IDiag  1:
+ E= -606.648700267194     Delta-E=       -0.000000003567 Rises=F Damp=F
+ DIIS: error= 2.34D-06 at cycle  10 NSaved=  10.
+ NSaved=10 IEnMin=10 EnMin= -606.648700267194     IErMin=10 ErrMin= 2.34D-06
+ ErrMax= 2.34D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 2.45D-10 BMatP= 1.84D-09
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.589D-06-0.240D-04 0.646D-05 0.450D-03 0.148D-02 0.758D-02
+ Coeff-Com: -0.113D-01-0.687D-01 0.212D+00 0.858D+00
+ Coeff:     -0.589D-06-0.240D-04 0.646D-05 0.450D-03 0.148D-02 0.758D-02
+ Coeff:     -0.113D-01-0.687D-01 0.212D+00 0.858D+00
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=4.17D-07 MaxDP=7.32D-06 DE=-3.57D-09 OVMax= 1.43D-05
+
+ Cycle  11  Pass 1  IDiag  1:
+ E= -606.648700267625     Delta-E=       -0.000000000431 Rises=F Damp=F
+ DIIS: error= 1.95D-07 at cycle  11 NSaved=  11.
+ NSaved=11 IEnMin=11 EnMin= -606.648700267625     IErMin=11 ErrMin= 1.95D-07
+ ErrMax= 1.95D-07  0.00D+00 EMaxC= 1.00D+00 BMatC= 3.58D-12 BMatP= 2.45D-10
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.223D-07-0.883D-06 0.276D-05-0.438D-04-0.106D-03 0.146D-03
+ Coeff-Com:  0.110D-02 0.118D-02-0.504D-01-0.770D-01 0.113D+01
+ Coeff:     -0.223D-07-0.883D-06 0.276D-05-0.438D-04-0.106D-03 0.146D-03
+ Coeff:      0.110D-02 0.118D-02-0.504D-01-0.770D-01 0.113D+01
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=8.12D-08 MaxDP=1.11D-06 DE=-4.31D-10 OVMax= 2.16D-06
+
+ Cycle  12  Pass 1  IDiag  1:
+ E= -606.648700267638     Delta-E=       -0.000000000014 Rises=F Damp=F
+ DIIS: error= 3.63D-08 at cycle  12 NSaved=  12.
+ NSaved=12 IEnMin=12 EnMin= -606.648700267638     IErMin=12 ErrMin= 3.63D-08
+ ErrMax= 3.63D-08  0.00D+00 EMaxC= 1.00D+00 BMatC= 6.99D-14 BMatP= 3.58D-12
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.164D-08 0.495D-06-0.798D-06-0.571D-05-0.160D-04-0.141D-03
+ Coeff-Com:  0.173D-03 0.100D-02 0.295D-04-0.887D-02-0.105D+00 0.111D+01
+ Coeff:      0.164D-08 0.495D-06-0.798D-06-0.571D-05-0.160D-04-0.141D-03
+ Coeff:      0.173D-03 0.100D-02 0.295D-04-0.887D-02-0.105D+00 0.111D+01
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=1.20D-08 MaxDP=1.63D-07 DE=-1.39D-11 OVMax= 2.91D-07
+
+ Cycle  13  Pass 1  IDiag  1:
+ E= -606.648700267637     Delta-E=        0.000000000001 Rises=F Damp=F
+ DIIS: error= 3.21D-09 at cycle  13 NSaved=  13.
+ NSaved=13 IEnMin=12 EnMin= -606.648700267638     IErMin=13 ErrMin= 3.21D-09
+ ErrMax= 3.21D-09  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.09D-15 BMatP= 6.99D-14
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.447D-09-0.123D-08 0.112D-06 0.519D-06 0.328D-05 0.142D-04
+ Coeff-Com: -0.416D-04-0.132D-03 0.954D-03 0.303D-02-0.140D-01-0.798D-01
+ Coeff-Com:  0.109D+01
+ Coeff:     -0.447D-09-0.123D-08 0.112D-06 0.519D-06 0.328D-05 0.142D-04
+ Coeff:     -0.416D-04-0.132D-03 0.954D-03 0.303D-02-0.140D-01-0.798D-01
+ Coeff:      0.109D+01
+ Gap=     0.194 Goal=   None    Shift=    0.000
+ RMSDP=1.82D-09 MaxDP=3.80D-08 DE= 1.48D-12 OVMax= 3.73D-08
+
+ SCF Done:  E(RMN15) =  -606.648700268     A.U. after   13 cycles
+            NFock= 13  Conv=0.18D-08     -V/T= 2.1785
+ KE= 5.147779689963D+02 PE=-1.553222283463D+03 EE= 3.609119008261D+02
+ Leave Link  502 at Wed May 20 14:12:41 2026, MaxMem= 12079595520 cpu:              50.9 elap:               0.8
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral first derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     737.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link  701 at Wed May 20 14:12:41 2026, MaxMem= 12079595520 cpu:              12.9 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:42 2026, MaxMem= 12079595520 cpu:               0.5 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral first derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=      2127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=    2127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      2127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:42 2026, MaxMem= 12079595520 cpu:              25.8 elap:               0.4
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 2.19859097D+00
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47          -0.023847890   -0.000000000   -0.000000000
+      2       17           0.023847890   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.023847890 RMS     0.013768586
+ Leave Link  716 at Wed May 20 14:12:42 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Using GEDIIS/GDIIS optimizer.
+ Red2BG is reusing G-inverse.
+ Internal  Forces:  Max     0.023847890 RMS     0.023847890
+ Search for a local minimum.
+ Step number   3 out of a maximum of   20
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ RMS Force = .23848D-01 SwitMx=.10000D-02 MixMth= 1
+ Mixed Optimization -- RFO/linear search
+ Update second derivatives using D2CorX and points    2    3
+ The second derivative matrix:
+                          R1
+           R1           0.26077
+ ITU=  0  1
+ Use linear search instead of GDIIS.
+     Eigenvalues ---    0.26077
+ RFO step:  Lambda= 0.00000000D+00 EMin= 2.60767016D-01
+ Quartic linear search produced a step of -0.27324.
+ Iteration  1 RMS(Cart)=  0.14142136 RMS(Int)=  0.07571527
+ Iteration  2 RMS(Cart)=  0.05353878 RMS(Int)=  0.00000000
+ Iteration  3 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 1.38D-01 DCOld= 1.00D+10 DXMaxT= 5.05D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 0.00D+00 for atom     0.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        4.55676  -0.02385  -0.27572   0.00000  -0.27572   4.28104
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.023848     0.000450     NO 
+ RMS     Force            0.023848     0.000300     NO 
+ Maximum Displacement     0.137858     0.001800     NO 
+ RMS     Displacement     0.194960     0.001200     NO 
+ Predicted change in Energy=-3.336385D-03
+ Lowest energy point so far.  Saving SCF results.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:42 2026, MaxMem= 12079595520 cpu:               3.8 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        1.132715    0.000000    0.000000
+      2         17           0       -1.132715    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.601755
+      2         17           0        0.000000    0.000000   -1.663676
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           3.7371323           3.7371323
+ Leave Link  202 at Wed May 20 14:12:43 2026, MaxMem= 12079595520 cpu:               0.2 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ Basis read from rwf:  (5D, 7F)
+ Pseudo-potential data read from rwf file.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        75.4488903918 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ No density basis found on file   724.
+ Leave Link  301 at Wed May 20 14:12:43 2026, MaxMem= 12079595520 cpu:               1.2 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  1.82D-02  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:43 2026, MaxMem= 12079595520 cpu:               6.0 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:43 2026, MaxMem= 12079595520 cpu:               0.7 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ Initial guess from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ B after Tr=     0.000000    0.000000    0.000000
+         Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ Guess basis will be translated and rotated to current coordinates.
+ JPrj=2 DoOrth=T DoCkMO=T.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (PI) (PI) (SG) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (DLTA) (DLTA) (PI)
+                 (PI) (SG) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PI) (PI)
+                 (PHI) (PHI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Generating alternative initial guess.
+ ExpMin= 3.77D-02 ExpMax= 1.04D+04 ExpMxC= 1.57D+03 IAcc=3 IRadAn=         5 AccDes= 0.00D+00
+ Harris functional with IExCor= 1009 and IRadAn=       5 diagonalized for initial guess.
+ HarFok:  IExCor= 1009 AccDes= 0.00D+00 IRadAn=         5 IDoV= 1 UseB2=F ITyADJ=14
+ ICtDFT=  3500011 ScaDFX=  1.000000  1.000000  1.000000  1.000000
+ Defaulting to unpruned grid for atomic number  47.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=           0
+         NFxFlg=           0 DoJE=T BraDBF=F KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=   200000004 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Harris En= -607.166042070869    
+ Leave Link  401 at Wed May 20 14:12:43 2026, MaxMem= 12079595520 cpu:               7.6 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.650188429563    
+ DIIS: error= 2.11D-02 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.650188429563     IErMin= 1 ErrMin= 2.11D-02
+ ErrMax= 2.11D-02  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.24D-02 BMatP= 1.24D-02
+ IDIUse=3 WtCom= 7.89D-01 WtEn= 2.11D-01
+ Coeff-Com:  0.100D+01
+ Coeff-En:   0.100D+01
+ Coeff:      0.100D+01
+ Recover alternate guess density for next cycle.
+ RMSDP=4.65D-03 MaxDP=6.50D-02              OVMax= 0.00D+00
+
+ Cycle   2  Pass 1  IDiag  1:
+ E= -606.579195026821     Delta-E=        0.070993402741 Rises=F Damp=F
+ Switch densities from cycles 1 and 2 for lowest energy.
+ DIIS: error= 5.33D-02 at cycle   2 NSaved=   2.
+ NSaved= 2 IEnMin= 1 EnMin= -606.650188429563     IErMin= 1 ErrMin= 2.11D-02
+ ErrMax= 5.33D-02  0.00D+00 EMaxC= 1.00D+00 BMatC= 9.52D-02 BMatP= 1.24D-02
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.870D+00 0.130D+00
+ Coeff:      0.870D+00 0.130D+00
+ Gap=     0.208 Goal=   None    Shift=    0.000
+ RMSDP=1.02D-03 MaxDP=1.69D-02 DE= 7.10D-02 OVMax= 1.69D-02
+
+ Cycle   3  Pass 1  IDiag  1:
+ E= -606.650668112903     Delta-E=       -0.071473086081 Rises=F Damp=F
+ DIIS: error= 6.88D-03 at cycle   3 NSaved=   3.
+ NSaved= 3 IEnMin= 3 EnMin= -606.650668112903     IErMin= 3 ErrMin= 6.88D-03
+ ErrMax= 6.88D-03  0.00D+00 EMaxC= 1.00D+00 BMatC= 2.12D-03 BMatP= 1.24D-02
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.320D-01 0.113D+00 0.855D+00
+ Coeff:      0.320D-01 0.113D+00 0.855D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=5.48D-04 MaxDP=7.51D-03 DE=-7.15D-02 OVMax= 1.33D-02
+
+ Cycle   4  Pass 1  IDiag  1:
+ E= -606.651852181437     Delta-E=       -0.001184068534 Rises=F Damp=F
+ DIIS: error= 7.28D-04 at cycle   4 NSaved=   4.
+ NSaved= 4 IEnMin= 4 EnMin= -606.651852181437     IErMin= 4 ErrMin= 7.28D-04
+ ErrMax= 7.28D-04  0.00D+00 EMaxC= 1.00D+00 BMatC= 5.76D-05 BMatP= 2.12D-03
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.222D-02 0.114D-01 0.170D+00 0.821D+00
+ Coeff:     -0.222D-02 0.114D-01 0.170D+00 0.821D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=1.03D-04 MaxDP=1.10D-03 DE=-1.18D-03 OVMax= 2.68D-03
+
+ Cycle   5  Pass 1  IDiag  1:
+ E= -606.651884319598     Delta-E=       -0.000032138161 Rises=F Damp=F
+ DIIS: error= 3.57D-04 at cycle   5 NSaved=   5.
+ NSaved= 5 IEnMin= 5 EnMin= -606.651884319598     IErMin= 5 ErrMin= 3.57D-04
+ ErrMax= 3.57D-04  0.00D+00 EMaxC= 1.00D+00 BMatC= 6.45D-06 BMatP= 5.76D-05
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.118D-03-0.867D-03 0.317D-01 0.299D+00 0.671D+00
+ Coeff:     -0.118D-03-0.867D-03 0.317D-01 0.299D+00 0.671D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=2.81D-05 MaxDP=4.29D-04 DE=-3.21D-05 OVMax= 3.96D-04
+
+ Cycle   6  Pass 1  IDiag  1:
+ E= -606.651887895866     Delta-E=       -0.000003576268 Rises=F Damp=F
+ DIIS: error= 3.78D-05 at cycle   6 NSaved=   6.
+ NSaved= 6 IEnMin= 6 EnMin= -606.651887895866     IErMin= 6 ErrMin= 3.78D-05
+ ErrMax= 3.78D-05  0.00D+00 EMaxC= 1.00D+00 BMatC= 8.91D-08 BMatP= 6.45D-06
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.211D-05-0.442D-03 0.265D-02 0.322D-02 0.399D-01 0.955D+00
+ Coeff:      0.211D-05-0.442D-03 0.265D-02 0.322D-02 0.399D-01 0.955D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=1.08D-05 MaxDP=2.39D-04 DE=-3.58D-06 OVMax= 4.05D-04
+
+ Cycle   7  Pass 1  IDiag  1:
+ E= -606.651888069015     Delta-E=       -0.000000173149 Rises=F Damp=F
+ DIIS: error= 9.89D-06 at cycle   7 NSaved=   7.
+ NSaved= 7 IEnMin= 7 EnMin= -606.651888069015     IErMin= 7 ErrMin= 9.89D-06
+ ErrMax= 9.89D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.13D-08 BMatP= 8.91D-08
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.302D-04-0.943D-04-0.986D-03-0.147D-01-0.295D-01 0.254D+00
+ Coeff-Com:  0.792D+00
+ Coeff:      0.302D-04-0.943D-04-0.986D-03-0.147D-01-0.295D-01 0.254D+00
+ Coeff:      0.792D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=3.71D-06 MaxDP=6.51D-05 DE=-1.73D-07 OVMax= 8.74D-05
+
+ Cycle   8  Pass 1  IDiag  1:
+ E= -606.651888091831     Delta-E=       -0.000000022816 Rises=F Damp=F
+ DIIS: error= 5.56D-06 at cycle   8 NSaved=   8.
+ NSaved= 8 IEnMin= 8 EnMin= -606.651888091831     IErMin= 8 ErrMin= 5.56D-06
+ ErrMax= 5.56D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 2.55D-09 BMatP= 1.13D-08
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.177D-05 0.535D-04-0.111D-02-0.355D-02-0.163D-01-0.102D+00
+ Coeff-Com:  0.268D+00 0.854D+00
+ Coeff:     -0.177D-05 0.535D-04-0.111D-02-0.355D-02-0.163D-01-0.102D+00
+ Coeff:      0.268D+00 0.854D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=2.57D-06 MaxDP=7.33D-05 DE=-2.28D-08 OVMax= 9.34D-05
+
+ Cycle   9  Pass 1  IDiag  1:
+ E= -606.651888097816     Delta-E=       -0.000000005986 Rises=F Damp=F
+ DIIS: error= 1.20D-06 at cycle   9 NSaved=   9.
+ NSaved= 9 IEnMin= 9 EnMin= -606.651888097816     IErMin= 9 ErrMin= 1.20D-06
+ ErrMax= 1.20D-06  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.73D-10 BMatP= 2.55D-09
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.752D-05 0.136D-04-0.249D-03 0.334D-05-0.235D-02-0.241D-01
+ Coeff-Com: -0.329D-01 0.165D+00 0.895D+00
+ Coeff:      0.752D-05 0.136D-04-0.249D-03 0.334D-05-0.235D-02-0.241D-01
+ Coeff:     -0.329D-01 0.165D+00 0.895D+00
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=4.67D-07 MaxDP=8.65D-06 DE=-5.99D-09 OVMax= 1.46D-05
+
+ Cycle  10  Pass 1  IDiag  1:
+ E= -606.651888098178     Delta-E=       -0.000000000361 Rises=F Damp=F
+ DIIS: error= 3.67D-07 at cycle  10 NSaved=  10.
+ NSaved=10 IEnMin=10 EnMin= -606.651888098178     IErMin=10 ErrMin= 3.67D-07
+ ErrMax= 3.67D-07  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.28D-11 BMatP= 1.73D-10
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.639D-06-0.544D-05 0.696D-04 0.387D-03 0.174D-02 0.119D-01
+ Coeff-Com: -0.443D-01-0.740D-01 0.777D-01 0.103D+01
+ Coeff:      0.639D-06-0.544D-05 0.696D-04 0.387D-03 0.174D-02 0.119D-01
+ Coeff:     -0.443D-01-0.740D-01 0.777D-01 0.103D+01
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=1.84D-07 MaxDP=3.81D-06 DE=-3.61D-10 OVMax= 5.42D-06
+
+ Cycle  11  Pass 1  IDiag  1:
+ E= -606.651888098216     Delta-E=       -0.000000000039 Rises=F Damp=F
+ DIIS: error= 7.36D-08 at cycle  11 NSaved=  11.
+ NSaved=11 IEnMin=11 EnMin= -606.651888098216     IErMin=11 ErrMin= 7.36D-08
+ ErrMax= 7.36D-08  0.00D+00 EMaxC= 1.00D+00 BMatC= 3.72D-13 BMatP= 1.28D-11
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.103D-06-0.350D-06 0.601D-05-0.734D-04-0.721D-04 0.674D-03
+ Coeff-Com:  0.789D-02-0.729D-02-0.657D-01-0.754D-01 0.114D+01
+ Coeff:     -0.103D-06-0.350D-06 0.601D-05-0.734D-04-0.721D-04 0.674D-03
+ Coeff:      0.789D-02-0.729D-02-0.657D-01-0.754D-01 0.114D+01
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=4.24D-08 MaxDP=9.51D-07 DE=-3.87D-11 OVMax= 1.44D-06
+
+ Cycle  12  Pass 1  IDiag  1:
+ E= -606.651888098220     Delta-E=       -0.000000000003 Rises=F Damp=F
+ DIIS: error= 1.57D-08 at cycle  12 NSaved=  12.
+ NSaved=12 IEnMin=12 EnMin= -606.651888098220     IErMin=12 ErrMin= 1.57D-08
+ ErrMax= 1.57D-08  0.00D+00 EMaxC= 1.00D+00 BMatC= 1.20D-14 BMatP= 3.72D-13
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.702D-08 0.147D-06-0.381D-05-0.971D-05-0.456D-04-0.272D-03
+ Coeff-Com:  0.877D-03 0.227D-02 0.188D-02-0.312D-01-0.756D-01 0.110D+01
+ Coeff:     -0.702D-08 0.147D-06-0.381D-05-0.971D-05-0.456D-04-0.272D-03
+ Coeff:      0.877D-03 0.227D-02 0.188D-02-0.312D-01-0.756D-01 0.110D+01
+ Gap=     0.209 Goal=   None    Shift=    0.000
+ RMSDP=5.20D-09 MaxDP=1.05D-07 DE=-3.18D-12 OVMax= 1.86D-07
+
+ SCF Done:  E(RMN15) =  -606.651888098     A.U. after   12 cycles
+            NFock= 12  Conv=0.52D-08     -V/T= 2.1784
+ KE= 5.148189119224D+02 PE=-1.562223585891D+03 EE= 3.653038954784D+02
+ Leave Link  502 at Wed May 20 14:12:44 2026, MaxMem= 12079595520 cpu:              28.9 elap:               0.5
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral first derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link  701 at Wed May 20 14:12:44 2026, MaxMem= 12079595520 cpu:              13.1 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:44 2026, MaxMem= 12079595520 cpu:               0.5 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral first derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=      2127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=    2127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      2127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:              25.7 elap:               0.4
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 2.01431960D+00
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47           0.003626787   -0.000000000   -0.000000000
+      2       17          -0.003626787   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.003626787 RMS     0.002093927
+ Leave Link  716 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               0.9 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Using GEDIIS/GDIIS optimizer.
+ Red2BG is reusing G-inverse.
+ Internal  Forces:  Max     0.003626787 RMS     0.003626787
+ Search for a local minimum.
+ Step number   4 out of a maximum of   20
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ RMS Force = .36268D-02 SwitMx=.10000D-02 MixMth= 1
+ Mixed Optimization -- RFO/linear search
+ Update second derivatives using D2CorX and points    3    4
+ DE= -3.19D-03 DEPred=-3.34D-03 R= 9.55D-01
+ TightC=F SS=  1.41D+00  RLast= 2.76D-01 DXNew= 8.4853D-01 8.2715D-01
+ Trust test= 9.55D-01 RLast= 2.76D-01 DXMaxT set to 8.27D-01
+ The second derivative matrix:
+                          R1
+           R1           0.09965
+ ITU=  1  0
+ Use linear search instead of GDIIS.
+     Eigenvalues ---    0.09965
+ RFO step:  Lambda= 0.00000000D+00 EMin= 9.96487305D-02
+ Quartic linear search produced a step of -0.10179.
+ Iteration  1 RMS(Cart)=  0.01984559 RMS(Int)=  0.00000000
+ Iteration  2 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 1.40D-02 DCOld= 1.00D+10 DXMaxT= 8.27D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 0.00D+00 for atom     0.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        4.28104   0.00363   0.02807  -0.00000   0.02807   4.30911
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.003627     0.000450     NO 
+ RMS     Force            0.003627     0.000300     NO 
+ Maximum Displacement     0.014033     0.001800     NO 
+ RMS     Displacement     0.019846     0.001200     NO 
+ Predicted change in Energy=-6.254266D-05
+ Lowest energy point so far.  Saving SCF results.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               0.7 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        1.140141    0.000000    0.000000
+      2         17           0       -1.140141    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.605700
+      2         17           0        0.000000    0.000000   -1.674583
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           3.6886098           3.6886098
+ Leave Link  202 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               0.2 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ Basis read from rwf:  (5D, 7F)
+ Pseudo-potential data read from rwf file.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        74.9574799845 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ No density basis found on file   724.
+ Leave Link  301 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               1.2 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  1.85D-02  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               5.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               0.8 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ Initial guess from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ B after Tr=     0.000000    0.000000   -0.000000
+         Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ Guess basis will be translated and rotated to current coordinates.
+ JPrj=2 DoOrth=T DoCkMO=T.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (SG) (DLTA) (DLTA)
+                 (PI) (PI) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PI) (PI)
+                 (PHI) (PHI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Leave Link  401 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:               2.1 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.651915693698    
+ DIIS: error= 2.52D-03 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.651915693698     IErMin= 1 ErrMin= 2.52D-03
+ ErrMax= 2.52D-03  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.76D-04 BMatP= 1.76D-04
+ IDIUse=3 WtCom= 9.75D-01 WtEn= 2.52D-02
+ Coeff-Com:  0.100D+01
+ Coeff-En:   0.100D+01
+ Coeff:      0.100D+01
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ GapD=    0.207 DampG=1.000 DampE=1.000 DampFc=1.0000 IDamp=-1.
+ RMSDP=9.41D-05 MaxDP=9.99D-04              OVMax= 2.39D-03
+
+ Cycle   2  Pass 1  IDiag  1:
+ E= -606.651935017234     Delta-E=       -0.000019323536 Rises=F Damp=F
+ DIIS: error= 2.61D-04 at cycle   2 NSaved=   2.
+ NSaved= 2 IEnMin= 2 EnMin= -606.651935017234     IErMin= 2 ErrMin= 2.61D-04
+ ErrMax= 2.61D-04  0.00D+00 EMaxC= 1.00D-01 BMatC= 4.17D-06 BMatP= 1.76D-04
+ IDIUse=3 WtCom= 9.97D-01 WtEn= 2.61D-03
+ Coeff-Com:  0.328D-01 0.967D+00
+ Coeff-En:   0.000D+00 0.100D+01
+ Coeff:      0.328D-01 0.967D+00
+ Gap=     0.208 Goal=   None    Shift=    0.000
+ RMSDP=5.42D-05 MaxDP=1.02D-03 DE=-1.93D-05 OVMax= 1.09D-03
+
+ Cycle   3  Pass 1  IDiag  1:
+ E= -606.651934705345     Delta-E=        0.000000311889 Rises=F Damp=F
+ DIIS: error= 3.15D-04 at cycle   3 NSaved=   3.
+ NSaved= 3 IEnMin= 2 EnMin= -606.651935017234     IErMin= 2 ErrMin= 2.61D-04
+ ErrMax= 3.15D-04  0.00D+00 EMaxC= 1.00D-01 BMatC= 5.54D-06 BMatP= 4.17D-06
+ IDIUse=3 WtCom= 3.60D-01 WtEn= 6.40D-01
+ Coeff-Com: -0.232D-02 0.537D+00 0.466D+00
+ Coeff-En:   0.000D+00 0.526D+00 0.474D+00
+ Coeff:     -0.835D-03 0.530D+00 0.471D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=2.92D-05 MaxDP=4.73D-04 DE= 3.12D-07 OVMax= 6.07D-04
+
+ Cycle   4  Pass 1  IDiag  1:
+ E= -606.651937954285     Delta-E=       -0.000003248941 Rises=F Damp=F
+ DIIS: error= 4.49D-05 at cycle   4 NSaved=   4.
+ NSaved= 4 IEnMin= 4 EnMin= -606.651937954285     IErMin= 4 ErrMin= 4.49D-05
+ ErrMax= 4.49D-05  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.02D-07 BMatP= 4.17D-06
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.201D-02 0.176D+00 0.207D+00 0.619D+00
+ Coeff:     -0.201D-02 0.176D+00 0.207D+00 0.619D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=5.07D-06 MaxDP=1.02D-04 DE=-3.25D-06 OVMax= 1.07D-04
+
+ Cycle   5  Pass 1  IDiag  1:
+ E= -606.651938040654     Delta-E=       -0.000000086368 Rises=F Damp=F
+ DIIS: error= 7.39D-06 at cycle   5 NSaved=   5.
+ NSaved= 5 IEnMin= 5 EnMin= -606.651938040654     IErMin= 5 ErrMin= 7.39D-06
+ ErrMax= 7.39D-06  0.00D+00 EMaxC= 1.00D-01 BMatC= 4.11D-09 BMatP= 1.02D-07
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.170D-03-0.719D-01-0.460D-01 0.156D-01 0.110D+01
+ Coeff:      0.170D-03-0.719D-01-0.460D-01 0.156D-01 0.110D+01
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=3.83D-06 MaxDP=7.89D-05 DE=-8.64D-08 OVMax= 1.19D-04
+
+ Cycle   6  Pass 1  IDiag  1:
+ E= -606.651938057963     Delta-E=       -0.000000017310 Rises=F Damp=F
+ DIIS: error= 2.44D-06 at cycle   6 NSaved=   6.
+ NSaved= 6 IEnMin= 6 EnMin= -606.651938057963     IErMin= 6 ErrMin= 2.44D-06
+ ErrMax= 2.44D-06  0.00D+00 EMaxC= 1.00D-01 BMatC= 6.43D-10 BMatP= 4.11D-09
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.202D-03-0.392D-01-0.332D-01-0.501D-01 0.334D+00 0.788D+00
+ Coeff:      0.202D-03-0.392D-01-0.332D-01-0.501D-01 0.334D+00 0.788D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=9.99D-07 MaxDP=2.07D-05 DE=-1.73D-08 OVMax= 3.43D-05
+
+ Cycle   7  Pass 1  IDiag  1:
+ E= -606.651938059435     Delta-E=       -0.000000001472 Rises=F Damp=F
+ DIIS: error= 8.91D-07 at cycle   7 NSaved=   7.
+ NSaved= 7 IEnMin= 7 EnMin= -606.651938059435     IErMin= 7 ErrMin= 8.91D-07
+ ErrMax= 8.91D-07  0.00D+00 EMaxC= 1.00D-01 BMatC= 5.55D-11 BMatP= 6.43D-10
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.167D-04 0.382D-02 0.157D-02-0.122D-01-0.763D-01 0.150D+00
+ Coeff-Com:  0.933D+00
+ Coeff:      0.167D-04 0.382D-02 0.157D-02-0.122D-01-0.763D-01 0.150D+00
+ Coeff:      0.933D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=4.34D-07 MaxDP=1.08D-05 DE=-1.47D-09 OVMax= 1.54D-05
+
+ Cycle   8  Pass 1  IDiag  1:
+ E= -606.651938059604     Delta-E=       -0.000000000168 Rises=F Damp=F
+ DIIS: error= 4.09D-07 at cycle   8 NSaved=   8.
+ NSaved= 8 IEnMin= 8 EnMin= -606.651938059604     IErMin= 8 ErrMin= 4.09D-07
+ ErrMax= 4.09D-07  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.40D-11 BMatP= 5.55D-11
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com: -0.148D-04 0.525D-02 0.343D-02-0.243D-02-0.666D-01-0.333D-01
+ Coeff-Com:  0.402D+00 0.691D+00
+ Coeff:     -0.148D-04 0.525D-02 0.343D-02-0.243D-02-0.666D-01-0.333D-01
+ Coeff:      0.402D+00 0.691D+00
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=1.09D-07 MaxDP=1.77D-06 DE=-1.68D-10 OVMax= 3.12D-06
+
+ Cycle   9  Pass 1  IDiag  1:
+ E= -606.651938059625     Delta-E=       -0.000000000022 Rises=F Damp=F
+ DIIS: error= 3.70D-08 at cycle   9 NSaved=   9.
+ NSaved= 9 IEnMin= 9 EnMin= -606.651938059625     IErMin= 9 ErrMin= 3.70D-08
+ ErrMax= 3.70D-08  0.00D+00 EMaxC= 1.00D-01 BMatC= 1.29D-13 BMatP= 1.40D-11
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.105D-05-0.812D-03-0.492D-03 0.512D-03 0.137D-01-0.866D-02
+ Coeff-Com: -0.750D-01-0.104D+00 0.117D+01
+ Coeff:      0.105D-05-0.812D-03-0.492D-03 0.512D-03 0.137D-01-0.866D-02
+ Coeff:     -0.750D-01-0.104D+00 0.117D+01
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=1.90D-08 MaxDP=4.08D-07 DE=-2.18D-11 OVMax= 6.30D-07
+
+ Cycle  10  Pass 1  IDiag  1:
+ E= -606.651938059627     Delta-E=       -0.000000000001 Rises=F Damp=F
+ DIIS: error= 4.55D-09 at cycle  10 NSaved=  10.
+ NSaved=10 IEnMin=10 EnMin= -606.651938059627     IErMin=10 ErrMin= 4.55D-09
+ ErrMax= 4.55D-09  0.00D+00 EMaxC= 1.00D-01 BMatC= 2.06D-15 BMatP= 1.29D-13
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.369D-06-0.126D-03-0.832D-04 0.898D-05 0.163D-02 0.228D-03
+ Coeff-Com: -0.957D-02-0.188D-01-0.142D-02 0.103D+01
+ Coeff:      0.369D-06-0.126D-03-0.832D-04 0.898D-05 0.163D-02 0.228D-03
+ Coeff:     -0.957D-02-0.188D-01-0.142D-02 0.103D+01
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=3.32D-09 MaxDP=8.64D-08 DE=-1.36D-12 OVMax= 1.17D-07
+
+ SCF Done:  E(RMN15) =  -606.651938060     A.U. after   10 cycles
+            NFock= 10  Conv=0.33D-08     -V/T= 2.1784
+ KE= 5.148132140172D+02 PE=-1.561256328770D+03 EE= 3.648336967088D+02
+ Leave Link  502 at Wed May 20 14:12:45 2026, MaxMem= 12079595520 cpu:              28.6 elap:               0.5
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral first derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link  701 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:              12.7 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               0.5 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral first derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=      2127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=    2127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      2127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:              25.3 elap:               0.4
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 2.03324894D+00
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47          -0.000029474   -0.000000000   -0.000000000
+      2       17           0.000029474   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.000029474 RMS     0.000017017
+ Leave Link  716 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Using GEDIIS/GDIIS optimizer.
+ Red2BG is reusing G-inverse.
+ Internal  Forces:  Max     0.000029474 RMS     0.000029474
+ Search for a local minimum.
+ Step number   5 out of a maximum of   20
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ RMS Force = .29474D-04 SwitMx=.10000D-02 MixMth= 2
+ Mixed Optimization -- En-DIIS/RFO-DIIS
+ Update second derivatives using D2CorX and points    4    5
+ DE= -5.00D-05 DEPred=-6.25D-05 R= 7.99D-01
+ TightC=F SS=  1.41D+00  RLast= 2.81D-02 DXNew= 1.3911D+00 8.4198D-02
+ Trust test= 7.99D-01 RLast= 2.81D-02 DXMaxT set to 8.27D-01
+ The second derivative matrix:
+                          R1
+           R1           0.13027
+ ITU=  1  1
+ Use linear search instead of GDIIS.
+     Eigenvalues ---    0.13027
+ RFO step:  Lambda= 0.00000000D+00 EMin= 1.30274138D-01
+ Quartic linear search produced a step of -0.00831.
+ Iteration  1 RMS(Cart)=  0.00016493 RMS(Int)=  0.00000000
+ Iteration  2 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 1.17D-04 DCOld= 1.00D+10 DXMaxT= 8.27D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 0.00D+00 for atom     0.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        4.30911  -0.00003  -0.00023   0.00000  -0.00023   4.30888
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.000029     0.000450     YES
+ RMS     Force            0.000029     0.000300     YES
+ Maximum Displacement     0.000117     0.001800     YES
+ RMS     Displacement     0.000165     0.001200     YES
+ Predicted change in Energy=-3.331082D-09
+ Optimization completed.
+    -- Stationary point found.
+                           ----------------------------
+                           !   Optimized Parameters   !
+                           ! (Angstroms and Degrees)  !
+ --------------------------                            --------------------------
+ ! Name  Definition              Value          Derivative Info.                !
+ --------------------------------------------------------------------------------
+ ! R1    R(1,2)                  2.2803         -DE/DX =    0.0                 !
+ --------------------------------------------------------------------------------
+ Lowest energy point so far.  Saving SCF results.
+ Largest change from initial coordinates is atom    2       0.412 Angstoms.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               0.3 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        1.140141    0.000000    0.000000
+      2         17           0       -1.140141    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.605700
+      2         17           0        0.000000    0.000000   -1.674583
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           3.6886098           3.6886098
+ Leave Link  202 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               0.2 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l601.exe)
+ Copying SCF densities to generalized density rwf, IOpCl= 0 IROHF=0.
+
+ **********************************************************************
+
+            Population analysis using the SCF Density.
+
+ **********************************************************************
+
+ Orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (DLTA) (DLTA) (SG)
+                 (PI) (PI) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PI) (PI)
+                 (PHI) (PHI) (SG) (SG) (SG)
+ The electronic state is 1-SG.
+ Alpha  occ. eigenvalues -- -100.26211  -9.10713  -7.13205  -7.12265  -7.12265
+ Alpha  occ. eigenvalues --   -3.68434  -2.33598  -2.33404  -2.33404  -0.76694
+ Alpha  occ. eigenvalues --   -0.43442  -0.42153  -0.42153  -0.40877  -0.40877
+ Alpha  occ. eigenvalues --   -0.31808  -0.29688  -0.29688
+ Alpha virt. eigenvalues --   -0.08981   0.03185   0.03185   0.09331   0.13757
+ Alpha virt. eigenvalues --    0.22317   0.22317   0.28379   0.42481   0.42481
+ Alpha virt. eigenvalues --    0.43533   0.43533   0.54256   0.72988   0.87792
+ Alpha virt. eigenvalues --    0.87792   0.88048   0.89330   0.89330   1.03712
+ Alpha virt. eigenvalues --    1.03712   1.26051   1.60857   1.60857   1.64547
+ Alpha virt. eigenvalues --    1.88637   2.01408   2.01410   2.02421   2.02421
+ Alpha virt. eigenvalues --    2.10473   2.52280   2.52280   2.52331   2.52331
+ Alpha virt. eigenvalues --    2.52585   2.52585   2.58413  32.76337 110.52118
+          Condensed to atoms (all electrons):
+               1          2
+     1  Ag  18.415429   0.292608
+     2  Cl   0.292608  16.999356
+ Mulliken charges:
+               1
+     1  Ag   0.291963
+     2  Cl  -0.291963
+ Sum of Mulliken charges =  -0.00000
+ Mulliken charges with hydrogens summed into heavy atoms:
+               1
+     1  Ag   0.291963
+     2  Cl  -0.291963
+ Electronic spatial extent (au):  <R**2>=            265.5703
+ Charge=             -0.0000 electrons
+ Dipole moment (field-independent basis, Debye):
+    X=              0.0000    Y=              0.0000    Z=              5.1680  Tot=              5.1680
+ Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=            -31.4238   YY=            -31.4238   ZZ=            -31.8946
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Traceless Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=              0.1569   YY=              0.1569   ZZ=             -0.3139
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Octapole moment (field-independent basis, Debye-Ang**2):
+  XXX=              0.0000  YYY=              0.0000  ZZZ=             41.0714  XYY=              0.0000
+  XXY=              0.0000  XXZ=             11.9002  XZZ=              0.0000  YZZ=              0.0000
+  YYZ=             11.9002  XYZ=              0.0000
+ Hexadecapole moment (field-independent basis, Debye-Ang**3):
+ XXXX=            -33.6127 YYYY=            -33.6127 ZZZZ=           -274.6866 XXXY=              0.0000
+ XXXZ=              0.0000 YYYX=              0.0000 YYYZ=              0.0000 ZZZX=              0.0000
+ ZZZY=              0.0000 XXYY=            -11.2042 XXZZ=            -52.6347 YYZZ=            -52.6347
+ XXYZ=              0.0000 YYXZ=              0.0000 ZZXY=              0.0000
+ N-N= 7.495747998450D+01 E-N=-1.561256328565D+03  KE= 5.148132140172D+02
+ Symmetry A1   KE= 3.915245135627D+02
+ Symmetry A2   KE= 6.746651353672D+00
+ Symmetry B1   KE= 5.827102455041D+01
+ Symmetry B2   KE= 5.827102455041D+01
+ No NMR shielding tensors so no spin-rotation constants.
+ Leave Link  601 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               4.4 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l9999.exe)
+ 1\1\GINC-CHPC-CN072\FOpt\RMN15\GenECP\Ag1Cl1\S1155246975\20-May-2026\0
+ \\#p opt freq mn15 genecp\\Gaussian job with default settings\\0,1\Ag,
+ 1.1401413119,0.,0.\Cl,-1.1401413119,0.,0.\\Version=ES64L-G16RevB.01\St
+ ate=1-SG\HF=-606.6519381\RMSD=3.316e-09\RMSF=1.702e-05\Dipole=2.033248
+ 9,0.,0.\Quadrupole=-0.2333531,0.1166766,0.1166766,0.,0.,0.\PG=C*V [C*(
+ Cl1Ag1)]\\@
+
+
+ EVERYTHING'S GOT A MORAL, IF ONLY YOU CAN FIND IT.
+
+                                    -- LEWIS CARROL, ALICE IN WONDERLAND
+ Leave Link 9999 at Wed May 20 14:12:46 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.0
+ Job cpu time:       0 days  0 hours 25 minutes 24.0 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes 33.2 seconds.
+ File lengths (MBytes):  RWF=     17 Int=      0 D2E=      0 Chk=      2 Scr=      2
+ Normal termination of Gaussian 16 at Wed May 20 14:12:47 2026.
+ (Enter /project/xlzhang/shared/bin/g16/l1.exe)
+ Link1:  Proceeding to internal job step number  2.
+ -----------------------------------------------------------------
+ #P Geom=AllCheck Guess=TCheck SCRF=Check GenChk RMN15/GenECP Freq
+ -----------------------------------------------------------------
+ 1/10=4,29=7,30=1,38=1,40=1/1,3;
+ 2/12=2,40=1/2;
+ 3/5=7,6=2,11=2,14=-4,16=1,17=8,25=1,30=1,70=2,71=2,74=-73,82=7,116=1,140=1/1,2,3;
+ 4/5=101/1;
+ 5/5=2,38=6,98=1/2;
+ 8/6=4,10=90,11=11/1;
+ 11/6=1,8=1,9=11,15=111,16=1/1,2,10;
+ 10/6=1/2;
+ 6/7=2,8=2,9=2,10=2,28=1/1;
+ 7/8=1,10=1,25=1/1,2,3,16;
+ 1/10=4,30=1/3;
+ 99//99;
+ Leave Link    1 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               2.4 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l101.exe)
+ Structure from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ ----------------------------------
+ Gaussian job with default settings
+ ----------------------------------
+ Charge =  0 Multiplicity = 1
+ Redundant internal coordinates found in file.  (old form).
+ Ag,0,1.1401413119,0.,0.
+ Cl,0,-1.1401413119,0.,0.
+ Recover connectivity data from disk.
+ ITRead=  0  0
+ MicOpt= -1 -1
+ NAtoms=      2 NQM=        2 NQMF=       0 NMMI=      0 NMMIF=      0
+                NMic=       0 NMicF=      0.
+                    Isotopes and Nuclear Properties:
+ (Nuclear quadrupole moments (NQMom) in fm**2, nuclear magnetic moments (NMagM)
+  in nuclear magnetons)
+
+  Atom         1           2
+ IAtWgt=         107          35
+ AtmWgt= 106.9050900  34.9688527
+ NucSpn=           1           3
+ AtZEff= 245.3400000  14.2400000
+ NQMom=    0.0000000  -8.1650000
+ NMagM=   -0.1135700   0.8218740
+ AtZNuc=  47.0000000  17.0000000
+ Leave Link  101 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               9.5 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Initialization pass.
+                           ----------------------------
+                           !    Initial Parameters    !
+                           ! (Angstroms and Degrees)  !
+ --------------------------                            --------------------------
+ ! Name  Definition              Value          Derivative Info.                !
+ --------------------------------------------------------------------------------
+ ! R1    R(1,2)                  2.2803         calculate D2E/DX2 analytically  !
+ --------------------------------------------------------------------------------
+ Trust Radius=3.00D-01 FncErr=1.00D-07 GrdErr=1.00D-07 EigMax=2.50D+02 EigMin=1.00D-04
+ Number of steps in this run=      2 maximum allowed number of steps=      2.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               1.1 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l202.exe)
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        1.140141    0.000000    0.000000
+      2         17           0       -1.140141    0.000000    0.000000
+ ---------------------------------------------------------------------
+ Stoichiometry    AgCl
+ Framework group  C*V[C*(ClAg)]
+ Deg. of freedom     1
+ Full point group                 C*V     NOp   4
+ RotChk:  IX=0 Diff= 0.00D+00
+ Largest Abelian subgroup         C2V     NOp   4
+ Largest concise Abelian subgroup C1      NOp   1
+                         Standard orientation:                         
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         47           0        0.000000    0.000000    0.605700
+      2         17           0        0.000000    0.000000   -1.674583
+ ---------------------------------------------------------------------
+ Rotational constants (GHZ):           0.0000000           3.6886098           3.6886098
+ Leave Link  202 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               0.5 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l301.exe)
+ Basis read from chk: "silver_chloride_full_genecp.chk" (5D, 7F)
+ Pseudo-potential data read from chk file.
+ There are    32 symmetry adapted cartesian basis functions of A1  symmetry.
+ There are     5 symmetry adapted cartesian basis functions of A2  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B1  symmetry.
+ There are    14 symmetry adapted cartesian basis functions of B2  symmetry.
+ There are    27 symmetry adapted basis functions of A1  symmetry.
+ There are     5 symmetry adapted basis functions of A2  symmetry.
+ There are    13 symmetry adapted basis functions of B1  symmetry.
+ There are    13 symmetry adapted basis functions of B2  symmetry.
+    58 basis functions,   111 primitive gaussians,    65 cartesian basis functions
+    18 alpha electrons       18 beta electrons
+       nuclear repulsion energy        74.9574799845 Hartrees.
+ IExCor= 7252 DFT=T Ex+Corr=MN15 ExCW=0 ScaHFX=  0.440000
+ ScaDFX=  1.000000  1.000000  1.000000  1.000000 ScalE2=  1.000000  1.000000
+ IRadAn=      5 IRanWt=     -1 IRanGd=            0 ICorTp=0 IEmpDi=  4
+ NAtoms=    2 NActive=    2 NUniq=    2 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned on.
+ No density basis found on file 20724.
+ Leave Link  301 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               1.1 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l302.exe)
+ NPDir=0 NMtPBC=     1 NCelOv=     1 NCel=       1 NClECP=     1 NCelD=      1
+         NCelK=      1 NCelE2=     1 NClLst=     1 CellRange=     0.0.
+ One-electron integrals computed using PRISM.
+ One-electron integral symmetry used in STVInt
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 6 Len=  172
+ NBasis=    58 RedAO= T EigKep=  1.85D-02  NBF=    27     5    13    13
+ NBsUse=    58 1.00D-06 EigRej= -1.00D+00 NBFU=    27     5    13    13
+ Precomputing XC quadrature grid using
+ IXCGrd= 4 IRadAn=           5 IRanWt=          -1 IRanGd=           0 AccXCQ= 0.00D+00.
+ Defaulting to unpruned grid for atomic number  47.
+ Generated NRdTot=       0 NPtTot=           0 NUsed=           0 NTot=          32
+ NSgBfM=    64    64    64    64    64 MxSgAt=     2 MxSgA2=     2.
+ Leave Link  302 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               5.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l303.exe)
+ DipDrv:  MaxL=1.
+ Leave Link  303 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l401.exe)
+ Initial guess from the checkpoint file:  "silver_chloride_full_genecp.chk"
+ B after Tr=     0.000000    0.000000    0.000000
+         Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ Guess basis will be translated and rotated to current coordinates.
+ JPrj=2 DoOrth=T DoCkMO=T.
+ Initial guess orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (DLTA) (DLTA) (SG)
+                 (PI) (PI) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PI) (PI)
+                 (PHI) (PHI) (SG) (SG) (SG)
+ The electronic state of the initial guess is 1-SG.
+ Leave Link  401 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:               1.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l502.exe)
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58427395.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Closed shell SCF:
+ Using DIIS extrapolation, IDIIS=  1040.
+ NGot= 12079595520 LenX= 12079190893 LenY= 12079186227
+ Requested convergence on RMS density matrix=1.00D-08 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-06.
+ Requested convergence on             energy=1.00D-06.
+ No special actions if energy rises.
+
+ Cycle   1  Pass 1  IDiag  1:
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ E= -606.651938059626    
+ DIIS: error= 8.60D-10 at cycle   1 NSaved=   1.
+ NSaved= 1 IEnMin= 1 EnMin= -606.651938059626     IErMin= 1 ErrMin= 8.60D-10
+ ErrMax= 8.60D-10  0.00D+00 EMaxC= 1.00D-01 BMatC= 5.50D-17 BMatP= 5.50D-17
+ IDIUse=1 WtCom= 1.00D+00 WtEn= 0.00D+00
+ Coeff-Com:  0.100D+01
+ Coeff:      0.100D+01
+ Gap=     0.207 Goal=   None    Shift=    0.000
+ RMSDP=3.15D-10 MaxDP=4.00D-09              OVMax= 8.38D-09
+
+ SCF Done:  E(RMN15) =  -606.651938060     A.U. after    1 cycles
+            NFock=  1  Conv=0.31D-09     -V/T= 2.1784
+ KE= 5.148132139695D+02 PE=-1.561256328517D+03 EE= 3.648336965035D+02
+ Leave Link  502 at Wed May 20 14:12:47 2026, MaxMem= 12079595520 cpu:              16.3 elap:               0.3
+ (Enter /project/xlzhang/shared/bin/g16/l801.exe)
+ DoSCS=F DFT=T ScalE2(SS,OS)=  1.000000  1.000000
+ Range of M.O.s used for correlation:     1    58
+ NBasis=    58 NAE=    18 NBE=    18 NFC=     0 NFV=     0
+ NROrb=     58 NOA=    18 NOB=    18 NVA=    40 NVB=    40
+ Leave Link  801 at Wed May 20 14:12:48 2026, MaxMem= 12079595520 cpu:               0.6 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l1101.exe)
+ Using compressed storage, NAtomX=     2.
+ Will process      3 centers per pass.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 7 Len=  274
+ Leave Link 1101 at Wed May 20 14:12:48 2026, MaxMem= 12079595520 cpu:              13.0 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l1102.exe)
+ Symmetrizing basis deriv contribution to polar:
+ IMax=3 JMax=2 DiffMx= 0.00D+00
+ Leave Link 1102 at Wed May 20 14:12:48 2026, MaxMem= 12079595520 cpu:               3.9 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l1110.exe)
+ Forming Gx(P) for the SCF density, NAtomX=     2.
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Do as many integral derivatives as possible in FoFJK.
+ G2DrvN: MDV=   12079595236.
+ G2DrvN: will do     3 centers at a time, making    1 passes.
+ Calling FoFCou, ICntrl=  3107 FMM=F I1Cent=   0 AccDes= 0.00D+00.
+ FoFJK:  IHMeth= 1 ICntrl=    3107 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=      3107 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ End of G2Drv F.D. properties file   721 does not exist.
+ End of G2Drv F.D. properties file   722 does not exist.
+ End of G2Drv F.D. properties file   788 does not exist.
+ Leave Link 1110 at Wed May 20 14:12:49 2026, MaxMem= 12079595520 cpu:              36.4 elap:               0.6
+ (Enter /project/xlzhang/shared/bin/g16/l1002.exe)
+ Minotr:  Closed shell wavefunction.
+          IDoAtm=11
+          Direct CPHF calculation.
+          Differentiating once with respect to electric field.
+                with respect to dipole field.
+          Differentiating once with respect to nuclear coordinates.
+          Using symmetry in CPHF.
+          Requested convergence is 1.0D-08 RMS, and 1.0D-07 maximum.
+          Secondary convergence is 1.0D-12 RMS, and 1.0D-12 maximum.
+          NewPWx=T KeepS1=F KeepF1=F KeepIn=T MapXYZ=F SortEE=F KeepMc=T.
+ Defaulting to unpruned grid for atomic number  47.
+          569 words used for storage of precomputed grid.
+ Keep R1 ints in memory in symmetry-blocked form, NReq=58204810.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=   1711 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+          MDV=   12079595520 using IRadAn=       1.
+          Solving linear equations simultaneously, MaxMat=       0.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+          There are     9 degrees of freedom in the 1st order CPHF.  IDoFFX=6 NUNeed=     3.
+      6 vectors produced by pass  0 Test12= 8.00D-15 1.11D-08 XBig12= 4.85D+01 5.12D+00.
+ AX will form     6 AO Fock derivatives at one time.
+      6 vectors produced by pass  1 Test12= 8.00D-15 1.11D-08 XBig12= 5.27D+00 6.73D-01.
+      6 vectors produced by pass  2 Test12= 8.00D-15 1.11D-08 XBig12= 2.43D-01 1.69D-01.
+      6 vectors produced by pass  3 Test12= 8.00D-15 1.11D-08 XBig12= 3.50D-02 6.12D-02.
+      6 vectors produced by pass  4 Test12= 8.00D-15 1.11D-08 XBig12= 1.35D-03 1.16D-02.
+      6 vectors produced by pass  5 Test12= 8.00D-15 1.11D-08 XBig12= 3.51D-05 2.07D-03.
+      6 vectors produced by pass  6 Test12= 8.00D-15 1.11D-08 XBig12= 3.12D-07 2.55D-04.
+      6 vectors produced by pass  7 Test12= 8.00D-15 1.11D-08 XBig12= 1.71D-09 1.08D-05.
+      4 vectors produced by pass  8 Test12= 8.00D-15 1.11D-08 XBig12= 1.17D-11 9.96D-07.
+      1 vectors produced by pass  9 Test12= 8.00D-15 1.11D-08 XBig12= 1.18D-13 1.15D-07.
+ InvSVY:  IOpt=1 It=  1 EMax= 5.55D-16
+ Solved reduced A of dimension    53 with     6 vectors.
+ FullF1:  Do perturbations      1 to       3.
+ Isotropic polarizability for W=    0.000000       33.12 Bohr**3.
+ End of Minotr F.D. properties file   721 does not exist.
+ End of Minotr F.D. properties file   722 does not exist.
+ End of Minotr F.D. properties file   788 does not exist.
+ Leave Link 1002 at Wed May 20 14:12:50 2026, MaxMem= 12079595520 cpu:              42.4 elap:               0.7
+ (Enter /project/xlzhang/shared/bin/g16/l601.exe)
+ Copying SCF densities to generalized density rwf, IOpCl= 0 IROHF=0.
+
+ **********************************************************************
+
+            Population analysis using the SCF Density.
+
+ **********************************************************************
+
+ Orbital symmetries:
+       Occupied  (SG) (SG) (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG)
+                 (SG) (PI) (PI) (DLTA) (DLTA) (SG) (PI) (PI)
+       Virtual   (SG) (PI) (PI) (SG) (SG) (PI) (PI) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (SG) (DLTA) (DLTA) (SG)
+                 (PI) (PI) (PI) (PI) (SG) (PI) (PI) (SG) (SG) (DLTA)
+                 (DLTA) (PI) (PI) (SG) (DLTA) (DLTA) (PI) (PI)
+                 (PHI) (PHI) (SG) (SG) (SG)
+ The electronic state is 1-SG.
+ Alpha  occ. eigenvalues -- -100.26211  -9.10713  -7.13205  -7.12265  -7.12265
+ Alpha  occ. eigenvalues --   -3.68434  -2.33598  -2.33404  -2.33404  -0.76694
+ Alpha  occ. eigenvalues --   -0.43442  -0.42153  -0.42153  -0.40877  -0.40877
+ Alpha  occ. eigenvalues --   -0.31808  -0.29688  -0.29688
+ Alpha virt. eigenvalues --   -0.08981   0.03185   0.03185   0.09331   0.13757
+ Alpha virt. eigenvalues --    0.22317   0.22317   0.28379   0.42481   0.42481
+ Alpha virt. eigenvalues --    0.43533   0.43533   0.54256   0.72988   0.87792
+ Alpha virt. eigenvalues --    0.87792   0.88048   0.89330   0.89330   1.03712
+ Alpha virt. eigenvalues --    1.03712   1.26051   1.60857   1.60857   1.64547
+ Alpha virt. eigenvalues --    1.88637   2.01408   2.01410   2.02421   2.02421
+ Alpha virt. eigenvalues --    2.10473   2.52280   2.52280   2.52331   2.52331
+ Alpha virt. eigenvalues --    2.52585   2.52585   2.58413  32.76337 110.52118
+          Condensed to atoms (all electrons):
+               1          2
+     1  Ag  18.415429   0.292608
+     2  Cl   0.292608  16.999356
+ Mulliken charges:
+               1
+     1  Ag   0.291963
+     2  Cl  -0.291963
+ Sum of Mulliken charges =  -0.00000
+ Mulliken charges with hydrogens summed into heavy atoms:
+               1
+     1  Ag   0.291963
+     2  Cl  -0.291963
+ APT charges:
+               1
+     1  Ag   0.539191
+     2  Cl  -0.539191
+ Sum of APT charges =  -0.00000
+ APT charges with hydrogens summed into heavy atoms:
+               1
+     1  Ag   0.539191
+     2  Cl  -0.539191
+ Electronic spatial extent (au):  <R**2>=            265.5703
+ Charge=             -0.0000 electrons
+ Dipole moment (field-independent basis, Debye):
+    X=              0.0000    Y=              0.0000    Z=              5.1680  Tot=              5.1680
+ Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=            -31.4238   YY=            -31.4238   ZZ=            -31.8946
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Traceless Quadrupole moment (field-independent basis, Debye-Ang):
+   XX=              0.1569   YY=              0.1569   ZZ=             -0.3139
+   XY=              0.0000   XZ=              0.0000   YZ=              0.0000
+ Octapole moment (field-independent basis, Debye-Ang**2):
+  XXX=              0.0000  YYY=              0.0000  ZZZ=             41.0714  XYY=              0.0000
+  XXY=              0.0000  XXZ=             11.9002  XZZ=              0.0000  YZZ=              0.0000
+  YYZ=             11.9002  XYZ=              0.0000
+ Hexadecapole moment (field-independent basis, Debye-Ang**3):
+ XXXX=            -33.6127 YYYY=            -33.6127 ZZZZ=           -274.6866 XXXY=              0.0000
+ XXXZ=              0.0000 YYYX=              0.0000 YYYZ=              0.0000 ZZZX=              0.0000
+ ZZZY=              0.0000 XXYY=            -11.2042 XXZZ=            -52.6347 YYZZ=            -52.6347
+ XXYZ=              0.0000 YYXZ=              0.0000 ZZXY=              0.0000
+ N-N= 7.495747998450D+01 E-N=-1.561256328439D+03  KE= 5.148132139695D+02
+ Symmetry A1   KE= 3.915245135789D+02
+ Symmetry A2   KE= 6.746651354631D+00
+ Symmetry B1   KE= 5.827102451803D+01
+ Symmetry B2   KE= 5.827102451803D+01
+  Exact polarizability:  26.775   0.000  26.775   0.000   0.000  45.821
+ Approx polarizability:  29.259  -0.000  29.259  -0.000  -0.000  62.201
+ No NMR shielding tensors so no spin-rotation constants.
+ Leave Link  601 at Wed May 20 14:12:50 2026, MaxMem= 12079595520 cpu:               8.8 elap:               0.2
+ (Enter /project/xlzhang/shared/bin/g16/l701.exe)
+ ... and contract with generalized density number  0.
+ Compute integral second derivatives.
+   4 Symmetry operations used in ECPInt.
+ ECPInt:  NShTT=     253 NPrTT=     816 LenC2=     252 LenP2D=     740.
+ LDataN:  DoStor=T MaxTD1= 8 Len=  415
+ Leave Link  701 at Wed May 20 14:12:51 2026, MaxMem= 12079595520 cpu:              39.9 elap:               0.7
+ (Enter /project/xlzhang/shared/bin/g16/l702.exe)
+ L702 exits ... SP integral derivatives will be done elsewhere.
+ Leave Link  702 at Wed May 20 14:12:51 2026, MaxMem= 12079595520 cpu:               0.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l703.exe)
+ Integral derivatives from FoFJK, PRISM(SPDF).
+ Compute integral second derivatives, UseDBF=F ICtDFT=           0.
+ Calling FoFJK, ICntrl=    100127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ FoFJK:  IHMeth= 1 ICntrl=  100127 DoSepK=F KAlg= 0 I1Cent=           0 FoldK=F
+ IRaf=         0 NMat=       1 IRICut=       1 DoRegI=T DoRafI=F ISym2E= 1 IDoP0=0 IntGTp=1.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=      100000 FMFlg1=         800
+         NFxFlg=           0 DoJE=F BraDBF=F KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=    100127 IOpCl=  0 I1Cent=           0 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Petite list used in FoFCou.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Defaulting to unpruned grid for atomic number  47.
+ Leave Link  703 at Wed May 20 14:12:52 2026, MaxMem= 12079595520 cpu:              81.6 elap:               1.4
+ (Enter /project/xlzhang/shared/bin/g16/l716.exe)
+ Dipole        = 0.00000000D+00 0.00000000D+00 2.03324891D+00
+ Polarizability= 2.67746151D+01 0.00000000D+00 2.67746151D+01
+                 0.00000000D+00 0.00000000D+00 4.58213504D+01
+ Full mass-weighted force constant matrix:
+ Low frequencies ---   -0.0022   -0.0022   -0.0012   19.1589   19.1589  355.9345
+ Diagonal vibrational polarizability:
+        0.0000000       0.0000000       3.5695683
+ Harmonic frequencies (cm**-1), IR intensities (KM/Mole), Raman scattering
+ activities (A**4/AMU), depolarization ratios for plane and unpolarized
+ incident light, reduced masses (AMU), force constants (mDyne/A),
+ and normal coordinates:
+                      1
+                     SG
+ Frequencies --    355.9345
+ Red. masses --     41.9218
+ Frc consts  --      3.1292
+ IR Inten    --     16.8044
+  Atom  AN      X      Y      Z
+     1  47    -0.00  -0.00  -0.31
+     2  17    -0.00  -0.00   0.95
+
+ -------------------
+ - Thermochemistry -
+ -------------------
+ Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
+ Atom     1 has atomic number 47 and mass 106.90509
+ Atom     2 has atomic number 17 and mass  34.96885
+ Molecular mass:   141.87394 amu.
+ Principal axes and moments of inertia in atomic units:
+                           1         2         3
+     Eigenvalues --     0.00000 489.27409 489.27409
+           X            0.00000  -0.00000   1.00000
+           Y            0.00000   1.00000   0.00000
+           Z            1.00000   0.00000   0.00000
+ This molecule is a prolate symmetric top.
+ Rotational symmetry number  1.
+ Warning -- assumption of classical behavior for rotation
+           may cause significant error
+ Rotational temperature (Kelvin)      0.17703
+ Rotational constant (GHZ):           3.688610
+ Zero-point vibrational energy       2129.0 (Joules/Mol)
+                                    0.50883 (Kcal/Mol)
+ Warning -- explicit consideration of   1 degrees of freedom as
+           vibrations may cause significant error
+ Vibrational temperatures:    512.11
+          (Kelvin)
+ 
+ Zero-point correction=                           0.000811 (Hartree/Particle)
+ Thermal correction to Energy=                    0.003526
+ Thermal correction to Enthalpy=                  0.004470
+ Thermal correction to Gibbs Free Energy=        -0.023397
+ Sum of electronic and zero-point Energies=           -606.651127
+ Sum of electronic and thermal Energies=              -606.648412
+ Sum of electronic and thermal Enthalpies=            -606.647468
+ Sum of electronic and thermal Free Energies=         -606.675335
+ 
+                     E (Thermal)             CV                S
+                      KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+ Total                    2.213              6.531             58.651
+ Electronic               0.000              0.000              0.000
+ Translational            0.889              2.981             40.761
+ Rotational               0.592              1.987             16.750
+ Vibrational              0.731              1.563              1.140
+ Vibration     1          0.731              1.563              1.140
+                       Q            Log10(Q)             Ln(Q)
+ Total Bot       0.577625D+11         10.761646         24.779606
+ Total V=0       0.136340D+12         11.134624         25.638420
+ Vib (Bot)       0.516344D+00         -0.287061         -0.660982
+ Vib (Bot)    1  0.516344D+00         -0.287061         -0.660982
+ Vib (V=0)       0.121876D+01          0.085917          0.197831
+ Vib (V=0)    1  0.121876D+01          0.085917          0.197831
+ Electronic      0.100000D+01          0.000000          0.000000
+ Translational   0.664214D+08          7.822308         18.011529
+ Rotational      0.168422D+04          3.226399          7.429059
+ ***** Axes restored to original set *****
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       47          -0.000029476   -0.000000000   -0.000000000
+      2       17           0.000029476   -0.000000000   -0.000000000
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.000029476 RMS     0.000017018
+ Force constants in Cartesian coordinates: 
+                1             2             3             4             5 
+      1  0.126331D+00
+      2  0.000000D+00  0.366024D-03
+      3  0.000000D+00  0.000000D+00  0.366024D-03
+      4 -0.126331D+00  0.000000D+00  0.000000D+00  0.126331D+00
+      5  0.000000D+00 -0.366024D-03  0.000000D+00  0.000000D+00  0.366024D-03
+      6  0.000000D+00  0.000000D+00 -0.366024D-03  0.000000D+00  0.000000D+00
+                6 
+      6  0.366024D-03
+ FormGI is forming the generalized inverse of G from B-inverse, IUseBI=4.
+ Force constants in internal coordinates: 
+                1 
+      1  0.126331D+00
+ Leave Link  716 at Wed May 20 14:12:52 2026, MaxMem= 12079595520 cpu:               0.9 elap:               0.0
+ (Enter /project/xlzhang/shared/bin/g16/l103.exe)
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Red2BG is reusing G-inverse.
+ Internal  Forces:  Max     0.000029476 RMS     0.000029476
+ Search for a local minimum.
+ Step number   1 out of a maximum of    2
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ Second derivative matrix not updated -- analytic derivatives used.
+ The second derivative matrix:
+                          R1
+           R1           0.12633
+ ITU=  0
+     Eigenvalues ---    0.12633
+ Angle between quadratic step and forces=   0.00 degrees.
+ Linear search not attempted -- first point.
+ Iteration  1 RMS(Cart)=  0.00016498 RMS(Int)=  0.00000000
+ Iteration  2 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
+ ITry= 1 IFail=0 DXMaxC= 1.17D-04 DCOld= 1.00D+10 DXMaxT= 3.00D-01 DXLimC= 3.00D+00 Rises=F
+ ClnCor:  largest displacement from symmetrization is 0.00D+00 for atom     0.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    R1        4.30911  -0.00003   0.00000  -0.00023  -0.00023   4.30888
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.000029     0.000450     YES
+ RMS     Force            0.000029     0.000300     YES
+ Maximum Displacement     0.000117     0.001800     YES
+ RMS     Displacement     0.000165     0.001200     YES
+ Predicted change in Energy=-3.438628D-09
+ Optimization completed.
+    -- Stationary point found.
+                           ----------------------------
+                           !   Optimized Parameters   !
+                           ! (Angstroms and Degrees)  !
+ --------------------------                            --------------------------
+ ! Name  Definition              Value          Derivative Info.                !
+ --------------------------------------------------------------------------------
+ ! R1    R(1,2)                  2.2803         -DE/DX =    0.0                 !
+ --------------------------------------------------------------------------------
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ Leave Link  103 at Wed May 20 14:12:52 2026, MaxMem= 12079595520 cpu:               2.7 elap:               0.1
+ (Enter /project/xlzhang/shared/bin/g16/l9999.exe)
+
+ ----------------------------------------------------------------------
+
+ Electric dipole moment (input orientation):
+ (Debye = 10**-18 statcoulomb cm , SI units = C m)
+                  (au)            (Debye)         (10**-30 SI)
+   Tot        0.203325D+01      0.516800D+01      0.172386D+02
+   x          0.203325D+01      0.516800D+01      0.172386D+02
+   y          0.000000D+00      0.000000D+00      0.000000D+00
+   z          0.000000D+00      0.000000D+00      0.000000D+00
+
+ Dipole polarizability, Alpha (input orientation).
+ (esu units = cm**3 , SI units = C**2 m**2 J**-1)
+ Alpha(0;0):
+               (au)            (10**-24 esu)      (10**-40 SI)
+   iso        0.331235D+02      0.490840D+01      0.546133D+01
+   aniso      0.190467D+02      0.282243D+01      0.314038D+01
+   xx         0.458214D+02      0.679002D+01      0.755492D+01
+   yx         0.000000D+00      0.000000D+00      0.000000D+00
+   yy         0.267746D+02      0.396759D+01      0.441454D+01
+   zx         0.000000D+00      0.000000D+00      0.000000D+00
+   zy         0.000000D+00      0.000000D+00      0.000000D+00
+   zz         0.267746D+02      0.396759D+01      0.441454D+01
+
+ ----------------------------------------------------------------------
+
+ Dipole orientation:
+    47          0.00000000          0.00000000          2.15455482
+    17         -0.00000000          0.00000000         -2.15455482
+
+ Electric dipole moment (dipole orientation):
+ (Debye = 10**-18 statcoulomb cm , SI units = C m)
+                  (au)            (Debye)         (10**-30 SI)
+   Tot        0.203325D+01      0.516800D+01      0.172386D+02
+   x          0.000000D+00      0.000000D+00      0.000000D+00
+   y          0.000000D+00      0.000000D+00      0.000000D+00
+   z          0.203325D+01      0.516800D+01      0.172386D+02
+
+ Dipole polarizability, Alpha (dipole orientation).
+ (esu units = cm**3 , SI units = C**2 m**2 J**-1)
+ Alpha(0;0):
+               (au)            (10**-24 esu)      (10**-40 SI)
+   iso        0.331235D+02      0.490840D+01      0.546133D+01
+   aniso      0.190467D+02      0.282243D+01      0.314038D+01
+   xx         0.267746D+02      0.396759D+01      0.441454D+01
+   yx         0.000000D+00      0.000000D+00      0.000000D+00
+   yy         0.267746D+02      0.396759D+01      0.441454D+01
+   zx         0.000000D+00      0.000000D+00      0.000000D+00
+   zy         0.000000D+00      0.000000D+00      0.000000D+00
+   zz         0.458214D+02      0.679002D+01      0.755492D+01
+
+ ----------------------------------------------------------------------
+ 1\1\GINC-CHPC-CN072\Freq\RMN15\GenECP\Ag1Cl1\S1155246975\20-May-2026\0
+ \\#P Geom=AllCheck Guess=TCheck SCRF=Check GenChk RMN15/GenECP Freq\\G
+ aussian job with default settings\\0,1\Ag,1.1401413119,0.,0.\Cl,-1.140
+ 1413119,0.,0.\\Version=ES64L-G16RevB.01\State=1-SG\HF=-606.6519381\RMS
+ D=3.150e-10\RMSF=1.702e-05\Thermal=0.0035261\Dipole=2.0332489,0.,0.\Di
+ poleDeriv=0.6739447,0.,0.,0.,0.4718137,0.,0.,0.,0.4718137,-0.6739447,0
+ .,0.,0.,-0.4718137,0.,0.,0.,-0.4718137\Polar=45.8213504,0.,26.7746151,
+ 0.,0.,26.7746151\Quadrupole=-0.233353,0.1166765,0.1166765,0.,0.,0.\PG=
+ C*V [C*(Cl1Ag1)]\NImag=0\\0.12633063,0.,0.00036602,0.,0.,0.00036602,-0
+ .12633063,0.,0.,0.12633063,0.,-0.00036602,0.,0.,0.00036602,0.,0.,-0.00
+ 036602,0.,0.,0.00036602\\0.00002948,0.,0.,-0.00002948,0.,0.\\\@
+
+
+ MY DESCRIPTION OF EXPERIENCE IS NOT WHAT HAPPENS
+ TO A MAN.  EXPERIENCE IS WHAT A MAN DOES WITH WHAT
+ HAPPENS TO HIM.
+                         - CHUCK KNOX, SEATTLE SEAHAWKS, 1985
+ Job cpu time:       0 days  0 hours  4 minutes 30.9 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes  4.9 seconds.
+ File lengths (MBytes):  RWF=     82 Int=      0 D2E=      0 Chk=      2 Scr=      2
+ Normal termination of Gaussian 16 at Wed May 20 14:12:53 2026.

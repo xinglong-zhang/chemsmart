@@ -2,7 +2,7 @@
  Installation for Windows Using WSL/Ubuntu
 ###########################################
 
-This guide covers installing Chemsmart on Windows using the Windows Subsystem for Linux (WSL) with Ubuntu. This is the
+This guide covers installing CHEMSMART on Windows using the Windows Subsystem for Linux (WSL) with Ubuntu. This is the
 preferred way of installation, as WSL provides similar terminal environment to Linux/Unix OS.
 
 ***************
@@ -26,4 +26,4 @@ preferred way of installation, as WSL provides similar terminal environment to L
 **************
 
 Since Ubuntu on WSL uses the Linux kernel, follow the instructions in :doc:`installation-linux-macos` to complete the
-Chemsmart setup.
+CHEMSMART setup.

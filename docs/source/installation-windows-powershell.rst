@@ -2,7 +2,7 @@
  Installation for Windows Using Anaconda PowerShell
 ####################################################
 
-This guide covers installing Chemsmart on Windows using the Anaconda or Miniconda PowerShell prompt.
+This guide covers installing CHEMSMART on Windows using the Anaconda or Miniconda PowerShell prompt.
 
 ********************
  Create Environment
@@ -69,7 +69,7 @@ This guide covers installing Chemsmart on Windows using the Anaconda or Minicond
       make install-dev
 
 *********************
- Configure Chemsmart
+ Configure CHEMSMART
 *********************
 
 Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in

@@ -123,6 +123,14 @@ orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
 # filename matches with reactant r1 or r2
 orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
+xtb_date_pattern = (
+    r"\* finished run on (\d{4}/\d{2}/\d{2}) at (\d{2}:\d{2}:\d{2})"
+)
+
 
 # filename pattern for gaussian output files
 
@@ -154,6 +162,10 @@ gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
 # we'd want to avoid erroneous partial matches, eg.,
 # freqency (spelling error eg)
 gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
+
+# Pattern to find multiple consecutive spaces in strings
 element_partition_split_pattern = r"[\s:_-]+"
 element_non_alpha_pattern = r"[^A-Za-z]"
 multiple_spaces_pattern = r"\s+"
@@ -171,3 +183,41 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
 safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"
+
+
+# Route string sub-token splitter: splits on whitespace, '/', '=', '(', ')', ','
+route_split_pattern = r"[/=(),\s]+"
+
+# Database query patterns
+# Matches a single condition: field  operator  value
+# value is either a quoted string ('…' or "…") or a bare numeric token.
+query_condition_pattern = (
+    r"(\w+)"  # field name
+    r"\s*(==|<=|>=|!=|~|<|>|=)\s*"  # operator
+    r"('(?:[^'\\]|\\.)*'"  # single-quoted string value
+    r'|"(?:[^"\\]|\\.)*"'  # double-quoted string value
+    r"|[\w.+\-]+)"  # bare numeric / identifier value
+)
+
+# Split on AND / OR while keeping the keyword
+query_logic_split_pattern = r"\s+(AND|OR)\s+"
+
+
+# Gaussian gen/genecp explicit basis patterns
+# Matches a shell header line, e.g. "S 8 1.00" or "P 4 1.00"
+# Group 1: angular-momentum letter (S/P/D/F/G/H)
+basis_shell_header_pattern = r"^([SPDFGH])\s+\d+\s+[\d.]+$"
+
+# Matches an exponent/coefficient line printed by Gaussian in verbose mode
+# e.g. "Exponent=  5.6507325256D+05 Coefficients=  2.3660314690D-04"
+# Group 1: exponent string (Fortran D-notation); Group 2: coefficient string
+basis_primitive_line_pattern = r"Exponent=\s*(\S+)\s+Coefficients=\s*(\S+)"
+
+# Gaussian Pseudopotential Parameters section (genecp)
+# Matches a center-header line, e.g. "1   47   19" or "2   17"
+# (2–3 pure integer tokens: center_num, atomic_num[, n_valence_electrons])
+ecp_center_header_pattern = r"^\d+(?:\s+\d+){1,2}\s*$"
+
+# Matches an ECP term line, e.g. "2   14.2200000  -33.68992012   0.00000000"
+# (r_power  exponent  coefficient  so_coefficient, with floats in D-notation)
+ecp_term_pattern = r"^\d+\s+\S+\s+\S+\s+\S+\s*$"

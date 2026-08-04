@@ -10,7 +10,13 @@ class TestYAMLFile:
         server_yaml = YAMLFile(filename=server_yaml_file)
         assert len(server_yaml.yaml_contents_dict) == 3
         assert server_yaml.yaml_contents_dict["SERVER"]["SCHEDULER"] == "PBS"
-        assert len(server_yaml.yaml_contents_dict["SERVER"].keys()) == 12
+        assert len(server_yaml.yaml_contents_dict["SERVER"].keys()) == 13
+        assert (
+            server_yaml.yaml_contents_dict["SERVER"][
+                "EXTRA_SCHEDULER_DIRECTIVES"
+            ]
+            == "#PBS -m abe\n"
+        )
         assert list(server_yaml.yaml_contents_dict.keys())[0] == "SERVER"
         assert list(server_yaml.yaml_contents_dict.keys())[1] == "GAUSSIAN"
         assert list(server_yaml.yaml_contents_dict.keys())[2] == "ORCA"

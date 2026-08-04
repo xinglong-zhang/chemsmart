@@ -44,7 +44,8 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``-l, --label``
       -  string
-      -  Custom output filename
+      -  Custom output filename. For ``mo``/``spin``/``nci``, this controls output naming only; processing input files
+         still use the source filename basename.
 
    -  -  ``-a, --append-label``
       -  string
@@ -57,6 +58,22 @@ This page documents the CLI options for molecular visualization and analysis usi
    -  -  ``--pubchem``
       -  string
       -  Query structure from PubChem
+
+   -  -  ``--ri, --record-index``
+      -  int
+      -  Select a record from a chemsmart database by its 1-based index
+
+   -  -  ``--rid, --record-id``
+      -  string
+      -  Select a record from a chemsmart database by its ID
+
+   -  -  ``--sid, --structure-id``
+      -  string
+      -  Select a structure from a chemsmart database by its ID
+
+   -  -  ``--mid, --molecule-id``
+      -  string
+      -  Select all structures belonging to a molecule by its ID
 
    -  -  ``-o, --overwrite``
       -  bool

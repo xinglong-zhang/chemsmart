@@ -1,6 +1,6 @@
 %chk=gaussian_opt.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt freq b3lyp empiricaldispersion=gd3bj def2svp
 
 Gaussian job

@@ -1,11 +1,16 @@
 import os
 from filecmp import cmp
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
+from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
@@ -132,6 +137,57 @@ class TestGaussianJobs:
                 index="0",
                 jobrunner=gaussian_jobrunner_no_scratch,
             )
+
+
+class TestGaussianQRCJobs:
+    @pytest.fixture
+    def mock_molecule(self):
+        mol = MagicMock(spec=Molecule)
+        mol.has_vibrations = True
+        mol.copy.return_value = mol
+        mol.vibrationally_displaced.return_value = mol
+        mol.get_chemical_formula.return_value = "C1H4"
+        return mol
+
+    @pytest.fixture
+    def real_settings(self):
+        # Use a real settings object to pass isinstance checks
+        settings = GaussianJobSettings()
+        settings.jobtype = "qrc"
+        return settings
+
+    @pytest.fixture
+    def mock_jobrunner(self):
+        runner = MagicMock(spec=JobRunner)
+        return runner
+
+    def test_init_raises_if_no_vibrations(self, mock_molecule, real_settings):
+        mock_molecule.has_vibrations = False
+        with pytest.raises(ValueError, match="no vibrational modes"):
+            GaussianQRCJob(molecule=mock_molecule, settings=real_settings)
+
+    def test_run_both_jobs_runs_forward_and_reverse_jobs(
+        self, mock_molecule, real_settings, mock_jobrunner
+    ):
+        job = GaussianQRCJob(
+            molecule=mock_molecule,
+            settings=real_settings,
+            jobrunner=mock_jobrunner,
+            label="test_qrc",
+        )
+
+        with patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianGeneralJob"
+        ) as mock_general_job:
+            forward_job = MagicMock()
+            reverse_job = MagicMock()
+            mock_general_job.side_effect = [forward_job, reverse_job]
+
+            job._run_both_jobs()
+
+            assert mock_general_job.call_count == 2
+            forward_job.run.assert_called_once()
+            reverse_job.run.assert_called_once()
 
 
 class TestGaussianlinkIRCJobs:
@@ -389,6 +445,64 @@ class TestGaussianlinkIRCJobs:
         jobtypes = [j.settings.jobtype for j in irc_jobs]
         assert "ircf" in jobtypes
         assert "ircr" in jobtypes
+
+
+class TestGaussianIRCJobs:
+    def test_gaussian_irc_job_flat_naming(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Test correct naming of IRC sub-job labels with flat_irc option.
+
+        For a flat IRC job with no direction specified (both forward and
+        reverse), the sub-job labels should be ``{label}_ircf_flat`` and
+        ``{label}_ircr_flat``.
+
+        - Auto-generated label (``file_irc``, already ends with ``_irc``):
+          sub-jobs become ``file_ircf_flat`` / ``file_ircr_flat``.
+        - Custom label via ``-l label`` (no ``_irc`` suffix):
+          sub-jobs become ``label_ircf_flat`` / ``label_ircr_flat``.
+        """
+        from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+
+        # set scratch directory for jobrunner
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.irc_settings()
+        settings.charge = -2
+        settings.multiplicity = 1
+        settings.jobtype = "irc"
+        settings.flat_irc = True
+
+        # --- auto-generated label case (label ends with _irc) ---
+        # simulates `gaussian -f file.xyz irc --flat`
+        # where the gaussian group sets label="file_irc"
+        job_auto = GaussianIRCJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="job_label_irc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert job_auto._ircf_job().label == "job_label_ircf_flat"
+        assert job_auto._ircr_job().label == "job_label_ircr_flat"
+
+        # --- custom label case (label does NOT end with _irc) ---
+        # simulates `gaussian -l label irc --flat`
+        job_custom = GaussianIRCJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="label",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert job_custom._ircf_job().label == "label_ircf_flat"
+        assert job_custom._ircr_job().label == "label_ircr_flat"
 
 
 class TestGaussianCrestJobs:

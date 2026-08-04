@@ -1,6 +1,6 @@
 %chk=gaussian_scan_multiple_degrees_of_freedom_with_constraints.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt=modredundant b3lyp empiricaldispersion=gd3bj def2svp
 
 Gaussian job

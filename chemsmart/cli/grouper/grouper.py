@@ -635,10 +635,7 @@ def _load_molecules_from_directory(
 
                 mol.energy = energy_value  # using setter
                 logger.debug(
-                    "Loaded %s with %s energy: %.8f Hartree",
-                    conf_id,
-                    energy_type,
-                    energy_value,
+                    f"Loaded {conf_id} with {energy_type} energy: {energy_value:.8f} Hartree"
                 )
 
                 molecules.append(mol)
@@ -666,11 +663,8 @@ def _load_molecules_from_directory(
     )
 
     logger.info(
-        "Loaded %d valid molecules from %d output files using energy_type=%s (%d skipped)",
-        len(molecules),
-        len(file_info),
-        energy_type,
-        len(skipped_ids),
+        f"Loaded {len(molecules)} valid molecules from {len(file_info)} "
+        f"output files using energy_type={energy_type} ({len(skipped_ids)} skipped)"
     )
 
     return molecules, conformer_ids, skipped_ids, common_label

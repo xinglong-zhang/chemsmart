@@ -2,7 +2,7 @@
  Test Installation and Configuration
 #####################################
 
-Verify that Chemsmart is installed and configured correctly.
+Verify that CHEMSMART is installed and configured correctly.
 
 *********************
  Verify Installation
@@ -14,7 +14,7 @@ Installation and configuration are successful if:
 
 #. The ``~/.chemsmart`` directory exists with the required configuration files.
 
-#. The Chemsmart paths are added to your ``~/.bashrc`` or ``~/.zshrc`` file.
+#. The CHEMSMART paths are added to your ``~/.bashrc`` or ``~/.zshrc`` file.
 
 #. The ``chemsmart`` command is available:
 

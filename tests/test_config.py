@@ -719,16 +719,18 @@ class TestConfigurePathsInteractively:
                 "/path/to/g16",
                 "/path/to/orca",
                 "/path/to/nci",
+                "/path/to/scratch",
                 "/path/to/gromacs",
             ]
             cfg.configure_paths_interactively()
 
-        assert mock_update.call_count == 4
+        assert mock_update.call_count == 5
         mock_update.assert_any_call(tmp_path, "~/bin/g16", "/path/to/g16")
         mock_update.assert_any_call(
             tmp_path, "~/bin/orca_6_0_0", "/path/to/orca"
         )
         mock_update.assert_any_call(tmp_path, "~/bin/nciplot", "/path/to/nci")
+        mock_update.assert_any_call(tmp_path, "~/scratch", "/path/to/scratch")
         mock_update.assert_any_call(
             tmp_path, "~/bin/gromacs", "/path/to/gromacs"
         )

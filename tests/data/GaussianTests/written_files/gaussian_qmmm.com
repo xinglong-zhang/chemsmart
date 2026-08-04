@@ -1,6 +1,6 @@
 %chk=gaussian_qmmm.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # freq oniom(MN15/def2svp:PBE/6-31g(d,p)/auto:AMBER=HardFirst)
 
 Gaussian QM/MM job

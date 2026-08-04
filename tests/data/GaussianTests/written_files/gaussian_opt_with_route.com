@@ -1,6 +1,6 @@
 %chk=gaussian_opt.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 #p pbepbe/6-31g(d) opt
 
 Optimisation job with supplied route

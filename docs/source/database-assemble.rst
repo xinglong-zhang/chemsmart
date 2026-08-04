@@ -1,0 +1,105 @@
+####################
+ Assembling Records
+####################
+
+The ``assemble`` subcommand scans a project directory for supported quantum chemistry output files and calculation
+folders, parses the available calculation data, and stores the results as records in a CHEMSMART database.
+
+Each record is uniquely identified by its ``record_id``. If a newly parsed calculation generates a ``record_id`` that
+already exists in the database, the existing record is updated with the newly parsed data rather than duplicated. This
+allows ``assemble`` to be safely re-run on the same project directory after additional calculations have finished or
+existing outputs have been updated.
+
+*******
+ Usage
+*******
+
+.. code:: text
+
+   chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca|xtb]
+                                   [-i index] [-o outfile.db] [--include-failed]
+
+*********
+ Options
+*********
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 12 70
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-d, --directory``
+      -  string
+      -  Root directory to scan recursively for supported output files and folders. Defaults to the current working
+         directory.
+
+   -  -  ``-p, --program``
+      -  string
+      -  Restrict parsing to output files/folders from a specific program. Supported values are ``gaussian``, ``orca``,
+         and ``xtb``. If omitted, outputs from all supported programs are scanned.
+
+   -  -  ``-i, --index``
+      -  string
+      -  1-based index or slice used to select structures from files containing multiple structures. Defaults to ``:``
+         (all structures).
+
+   -  -  ``-o, --output``
+      -  string
+      -  Output database filename. The ``.db`` extension is appended automatically if it is not provided. Defaults to
+         ``database.db``.
+
+   -  -  ``--include-failed``
+      -  flag
+      -  Include parseable partial data from failed calculations, which are skipped by default and marked by termination
+         status in the database.
+
+**********
+ Examples
+**********
+
+**Assemble all supported calculations under the current directory:**
+
+.. code:: bash
+
+   chemsmart run database assemble
+
+**Assemble only Gaussian outputs from a project directory:**
+
+.. code:: bash
+
+   chemsmart run database assemble -d results/ -p gaussian -o gaussian_results.db
+
+**Assemble only xTB calculation outputs from a project directory:**
+
+For xTB calculations, ``assemble`` recursively scans the root directory to arbitrary depth. Each recognized xTB
+calculation directory is treated as one record.
+
+Example directory layout:
+
+.. code::
+
+   xtb_results/
+   ├── molecule1_ohess/
+   ├── project_a/
+   │   ├── molecule2_hess/
+   │   └── nested/
+   │       └── molecule3_opt/
+   └── project_b/
+       └── molecule4_sp/
+
+.. code:: bash
+
+   chemsmart run database assemble -d xtb_results/ -p xtb -o xtb_results.db
+
+Every xTB calculation directory must contain exactly one xTB main output together with the required auxiliary files.
+Directories containing multiple xTB main outputs are ambiguous: CHEMSMART logs an error, skips that directory, and
+continues assembling other valid calculations.
+
+**Assemble only the final structure from each calculation source:**
+
+.. code:: bash
+
+   chemsmart run database assemble -d results/ -i -1 -o final_geoms.db

@@ -2,13 +2,13 @@
  Installation for Linux and macOS
 ##################################
 
-This guide covers installing Chemsmart on Linux and macOS systems.
+This guide covers installing CHEMSMART on Linux and macOS systems.
 
 ********************
  Create Environment
 ********************
 
-We recommend using conda to manage the packages required by Chemsmart. Either Anaconda3 or Miniconda3 may be installed.
+We recommend using conda to manage the packages required by CHEMSMART. Either Anaconda3 or Miniconda3 may be installed.
 See the `conda installation guide <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_ for
 more information.
 
@@ -68,7 +68,7 @@ more information.
       make install-dev
 
 *********************
- Configure Chemsmart
+ Configure CHEMSMART
 *********************
 
 Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in

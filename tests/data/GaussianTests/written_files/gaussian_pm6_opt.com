@@ -1,6 +1,6 @@
 %chk=gaussian_pm6_opt.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt freq PM6
 
 Gaussian job

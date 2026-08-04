@@ -11,6 +11,9 @@ This page documents file management scripts for organizing and converting comput
 The ``file_organizer.py`` script organizes computational chemistry output files based on an Excel spreadsheet. It
 creates folders, renames files, and moves them to their corresponding directories.
 
+For this script, ``-t/--filetype`` is only a filename-suffix filter. It matches extensions such as ``.log`` or ``.out``
+and does not inspect file contents or detect whether a file came from Gaussian, ORCA, or another program.
+
 Usage
 =====
 
@@ -41,7 +44,7 @@ Options
 
    -  -  ``-t, --filetype``
       -  string
-      -  File extension to organize (default: log)
+      -  File extension to organize (default: log). This is suffix-based only; the script does not parse file content.
 
    -  -  ``-n, --name``
       -  string
@@ -78,6 +81,9 @@ This skips the first 2 rows and processes up to 45 rows. The script:
 #. Copies files with new names to the target folders
 #. Preserves original files
 
+If you set ``-t out``, the script will organize every ``.out`` file that matches the spreadsheet mapping, regardless of
+whether the file was created by Gaussian, ORCA, or another tool.
+
 .. image:: _static/file_organizer_example.png
    :width: 700
    :align: center
@@ -87,6 +93,9 @@ This skips the first 2 rows and processes up to 45 rows. The script:
 ************************
 
 The ``file_converter.py`` script converts structure files between formats.
+
+For directory-based conversion, ``-t/--filetype`` selects files by extension, while ``-p/--program`` is only needed when
+chemsmart must know which program-specific parser to use.
 
 Usage
 =====
@@ -113,12 +122,12 @@ Options
 
    -  -  ``-t, --filetype``
       -  string
-      -  Input file type: log, com, gjf, out, inp, xyz, sdf
+      -  Input file type: log, com, gjf, out, inp, xyz, sdf. This filters files by extension.
 
    -  -  ``-p, --program``
       -  choice
-      -  Program that produced the files: ``gaussian`` or ``orca``. Required when ``-t out`` is used, since both
-         Gaussian and ORCA share the ``.out`` extension
+      -  Program that produced the files: ``gaussian`` or ``orca``. Use this when conversion depends on program
+         identity, such as ``.out`` files where Gaussian and ORCA share the same extension.
 
    -  -  ``-f, --filename``
       -  string

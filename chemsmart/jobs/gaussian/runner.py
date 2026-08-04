@@ -87,6 +87,9 @@ class GaussianJobRunner(JobRunner):
         "g16com",
         "g16link",
         "g16qmmm",
+        "g16pka",
+        "g16pka_analyze",
+        "g16pka_thermo",
     ]
 
     PROGRAM = "gaussian"
@@ -109,13 +112,14 @@ class GaussianJobRunner(JobRunner):
 
         Args:
             server: Server configuration object for job execution.
-            scratch (bool, optional): Whether to use scratch directories.
-                Defaults to class SCRATCH setting.
+            scratch (bool or None, optional): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``GAUSSIAN.SCRATCH`` may
+                apply there).
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -398,7 +402,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
-            scratch: Whether to use scratch directories (default: None).
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.
@@ -449,9 +454,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        # assign label with fake to differentiate from real job
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
 
         job_inputfile = job.label + ".com"
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
@@ -477,8 +480,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         """
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)
@@ -832,11 +834,26 @@ class FakeGaussian:
                 )
             g.write(" Mulliken charges:\n")
             g.write("               1\n")
+            total_charge = self.charge
+            running_charge = 0.0
             for i in range(self.num_atoms):
+                if i < self.num_atoms - 1:
+                    charge = round(
+                        random() * 0.2 - 0.1, 6
+                    )  # small random charge
+                    running_charge += charge
+                else:
+                    charge = round(
+                        total_charge - running_charge, 6
+                    )  # balance charge
                 g.write(
-                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n"
+                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {charge:>12.6f}\n"
                 )  # not real values
-            g.write(" Elapsed time: xx\n")
+            g.write(f" Sum of Mulliken charges =  {total_charge:.5f}\n")
             g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
+                " Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.\n"
+            )
+            g.write(
+                f" Normal termination of Gaussian 16 (fake executable) at "
+                f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')}."
             )

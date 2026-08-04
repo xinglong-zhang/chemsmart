@@ -1,6 +1,6 @@
 %chk=gaussian_sp_from_log_with_custom_solvent.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # b3lyp empiricaldispersion=gd3bj def2tzvp scrf=(smd,solvent=toluene)
 
 Job prepared from Gaussian file nhc_neutral_singlet.log

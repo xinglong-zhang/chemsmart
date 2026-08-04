@@ -2,7 +2,7 @@
  Configuration Overview
 ########################
 
-After installation, run simple commands to configure Chemsmart on your local machine or cluster.
+After installation, run simple commands to configure CHEMSMART on your local machine or cluster.
 
 ****************************************
  For Linux, macOS, Ubuntu, and Clusters
@@ -17,7 +17,8 @@ Run the configuration command:
 This command:
 
 -  Sets up the user-specific directory ``~/.chemsmart`` automatically.
--  Prompts for paths to Gaussian (g16) and ORCA software.
+-  Prompts for paths to Gaussian (g16), ORCA and NCIPLOT software.
+-  Prompts for paths to scratch folder.
 -  Updates the correct conda path for your user.
 -  Adds environment variables to your ``~/.bashrc`` file.
 

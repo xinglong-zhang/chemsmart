@@ -6,7 +6,7 @@
    :width: 400
    :align: center
 
-Chemsmart is a Python-based toolkit for the automatic creation of input files, submission scripts, and analysis of
+CHEMSMART is a Python-based toolkit for the automatic creation of input files, submission scripts, and analysis of
 quantum chemistry simulation jobs.
 
 It uses the same submission command regardless of the queueing system (SLURM, Torque, or PBS) used by any High
@@ -19,7 +19,7 @@ source code.
  Citation
 **********
 
-If you use Chemsmart in your work, please follow good scholarly practice and cite our work:
+If you use CHEMSMART in your work, please follow good scholarly practice and cite our work:
 
 📄 **Paper URL**: https://arxiv.org/abs/2508.20042
 
@@ -53,7 +53,7 @@ BibTeX
 ASE (Atomic Simulation Environment)
 ===================================
 
-If you use ASE Atoms objects in Chemsmart, please cite:
+If you use ASE Atoms objects in CHEMSMART, please cite:
 
 Ask Hjorth Larsen et al. The atomic simulation environment—a Python library for working with atoms. *J. Phys.: Condens.
 Matter*, 2017, 29, 273002.
@@ -77,7 +77,7 @@ Matter*, 2017, 29, 273002.
 RDKit
 =====
 
-If you use RDKit functionalities in Chemsmart, please cite:
+If you use RDKit functionalities in CHEMSMART, please cite:
 
 RDKit: Open-source cheminformatics. https://www.rdkit.org
 
@@ -93,7 +93,7 @@ RDKit: Open-source cheminformatics. https://www.rdkit.org
 Pymatgen
 ========
 
-If you convert Chemsmart molecules into pymatgen ``AseAtomsAdaptor``, please cite:
+If you convert CHEMSMART molecules into pymatgen ``AseAtomsAdaptor``, please cite:
 
 A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek, S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A.
 Persson. The Materials Project: A materials genome approach to accelerating materials innovation. *APL Materials*, 2013,

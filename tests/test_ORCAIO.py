@@ -13,6 +13,7 @@ from chemsmart.io.orca.output import (
     ORCAEngradFile,
     ORCANEBOutput,
     ORCAOutput,
+    ORCApKaOutput,
     ORCAQMMMOutput,
 )
 from chemsmart.io.orca.route import ORCARoute
@@ -463,6 +464,8 @@ END
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.version == "5.0.3"
+        assert orca_out.file_date is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
@@ -808,13 +811,19 @@ class TestORCAOutput:
             np.array([0.0, 0.0, -0.99386]),
             rtol=1e-4,
         )
+        assert orca_out.has_dipole_moment
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([0.0, 0.0, -0.8092]),
             rtol=1e-4,
         )
-        assert orca_out.dipole_moment_in_au == 0.80920
-        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert np.allclose(
+            orca_out.dipole_moment_in_debye,
+            np.array([0.0, 0.0, -2.05678]),
+            rtol=1e-4,
+        )
+        assert orca_out.dipole_moment_magnitude_in_au == 0.80920
+        assert orca_out.dipole_moment_magnitude_in_debye == 2.05682
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([0.0, -0.809197, 0.0]),
@@ -825,6 +834,8 @@ class TestORCAOutput:
             np.array([0.0, -2.056815, 0.0]),
             rtol=1e-4,
         )
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.point_group == "C2V"
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,
@@ -835,6 +846,21 @@ class TestORCAOutput:
             439538.666271,
             282661.493198,
         ]
+        assert orca_out.rotational_constants_in_Hz == [
+            791961336970,
+            439538666271,
+            282661493198,
+        ]
+        # k_B = 1.380649 * 10^-23 J/K
+        # h = 6.62606957 * 10^-34 J s
+        assert np.allclose(
+            orca_out.rotational_temperatures,
+            [
+                6.62606957 * 1e-34 * 791961336970 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 439538666271 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 282661493198 / (1.380649 * 1e-23),
+            ],
+        )
         assert orca_out.vibrational_frequencies == [
             1625.35,
             3875.61,
@@ -931,10 +957,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.02441621,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -76.29795059, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.02441621,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -953,7 +984,9 @@ class TestORCAOutput:
             144.8035920,
             rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.02143089, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.02143089, rel_tol=1e-4
+        )
 
         assert orca_out.mulliken_atomic_charges == {
             "O1": -0.32926,
@@ -1006,12 +1039,12 @@ class TestORCAOutput:
             rtol=1e-4,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([0.0, 0.0, -0.8092]),
             rtol=1e-4,
         )
-        assert orca_out.dipole_moment_in_au == 0.80920
-        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert orca_out.dipole_moment_magnitude_in_au == 0.80920
+        assert orca_out.dipole_moment_magnitude_in_debye == 2.05682
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([0.0, -0.809197, 0.0]),
@@ -1084,6 +1117,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -76.31938148, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.00392953,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
@@ -1899,7 +1937,7 @@ class TestORCAOutput:
         )
         assert all(
             np.isclose(
-                orca_out.total_dipole_moment,
+                orca_out.dipole_moment_in_au,
                 np.array([-1.19793, -1.03921, -1.07725]),
                 rtol=1e-4,
             )
@@ -1911,8 +1949,8 @@ class TestORCAOutput:
                 rtol=1e-4,
             )
         )
-        assert orca_out.dipole_moment_in_au == 1.91715
-        assert orca_out.dipole_moment_in_debye == 4.87300
+        assert orca_out.dipole_moment_magnitude_in_au == 1.91715
+        assert orca_out.dipole_moment_magnitude_in_debye == 4.87300
         assert all(
             np.isclose(
                 orca_out.dipole_moment_along_axis_in_au,
@@ -2148,6 +2186,7 @@ class TestORCAOutput:
 
     def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
         orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.route_string == "! m062x def2-svp optts freq"
         assert orca_out.spin == "restricted"
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
@@ -2354,12 +2393,12 @@ class TestORCAOutput:
             rtol=1e-9,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([-0.000000481, -0.004700712, 1.814008700]),
             rtol=1e-9,
         )
-        assert orca_out.dipole_moment_in_au == 1.814014790
-        assert orca_out.dipole_moment_in_debye == 4.610859166
+        assert orca_out.dipole_moment_magnitude_in_au == 1.814014790
+        assert orca_out.dipole_moment_magnitude_in_debye == 4.610859166
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([1.814011, -0.003782, 0.000001]),
@@ -2525,10 +2564,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.04160714,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -599.55646959, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.04160714,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -2547,7 +2591,9 @@ class TestORCAOutput:
             0.01835566 * units.Hartree / (units.J / units.mol),
             rel_tol=1,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.03229008, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.03229008, rel_tol=1e-4
+        )
 
         entropy_TS_in_J_per_mol = (
             0.03229008 * units.Hartree / (units.J / units.mol)
@@ -2577,6 +2623,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -599.58875967, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.01026126,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
@@ -3162,3 +3213,146 @@ class TestORCANEBJobSettings:
             assert (
                 settings1 != settings2
             ), f"Equality failed for attribute: {attr}"
+
+
+class TestORCApKaOutput:
+    """Tests for ORCApKaOutput using ORCATests pKa fixtures from outputs/."""
+
+    # Reference values from tests/data/ORCATests/outputs/combined.dat
+    L2_HA_E = -1101.598928
+    L2_HA_QH_G = -1101.324870
+    L2_A_E = -1101.075761
+    L2_A_QH_G = -1100.815285
+
+    PHENOL_HB_E = -307.111134
+    PHENOL_HB_QH_G = -307.031069
+    PHENOL_B_E = -306.533586
+    PHENOL_B_QH_G = -306.467527
+
+    L2_HA_SP_E = -1101.625867
+    L2_A_SP_E = -1101.157126
+    PHENOL_HB_SP_E = -307.121330
+    PHENOL_B_SP_E = -306.628244
+
+    EXPECTED_DG_AU = -0.02392099999997299
+    EXPECTED_DG_KCAL = -15.010654129046468
+
+    @staticmethod
+    def _p(*parts):
+        return os.path.join(*parts)
+
+    def _files(self, orca_outputs_directory):
+        return {
+            "ha_gas": self._p(orca_outputs_directory, "L2_ts1_opt_pka_HA.out"),
+            "a_gas": self._p(orca_outputs_directory, "L2_ts1_opt_pka_A.out"),
+            "hb_gas": self._p(orca_outputs_directory, "phenol_pka_HB.out"),
+            "b_gas": self._p(orca_outputs_directory, "phenol_pka_B.out"),
+            "ha_solv": self._p(
+                orca_outputs_directory, "L2_ts1_opt_pka_HA_sp.out"
+            ),
+            "a_solv": self._p(
+                orca_outputs_directory, "L2_ts1_opt_pka_A_sp.out"
+            ),
+            "hb_solv": self._p(orca_outputs_directory, "phenol_pka_HB_sp.out"),
+            "b_solv": self._p(orca_outputs_directory, "phenol_pka_B_sp.out"),
+        }
+
+    def test_init_with_default_settings(self, orca_outputs_directory):
+        files = self._files(orca_outputs_directory)
+        output = ORCApKaOutput(filename=files["ha_gas"])
+        assert output.filename == files["ha_gas"]
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy_and_qh_gibbs_match_combined_dat(
+        self, orca_outputs_directory
+    ):
+        files = self._files(orca_outputs_directory)
+
+        ha = ORCApKaOutput(filename=files["ha_gas"])
+        a = ORCApKaOutput(filename=files["a_gas"])
+        hb = ORCApKaOutput(filename=files["hb_gas"])
+        b = ORCApKaOutput(filename=files["b_gas"])
+
+        assert np.isclose(
+            ha.electronic_energy_in_units, self.L2_HA_E, rtol=1e-8
+        )
+        assert np.isclose(ha.qh_gibbs_free_energy, self.L2_HA_QH_G, rtol=1e-8)
+
+        assert np.isclose(a.electronic_energy_in_units, self.L2_A_E, rtol=1e-8)
+        assert np.isclose(a.qh_gibbs_free_energy, self.L2_A_QH_G, rtol=1e-8)
+
+        assert np.isclose(
+            hb.electronic_energy_in_units, self.PHENOL_HB_E, rtol=1e-8
+        )
+        assert np.isclose(
+            hb.qh_gibbs_free_energy, self.PHENOL_HB_QH_G, rtol=1e-8
+        )
+
+        assert np.isclose(
+            b.electronic_energy_in_units, self.PHENOL_B_E, rtol=1e-8
+        )
+        assert np.isclose(
+            b.qh_gibbs_free_energy, self.PHENOL_B_QH_G, rtol=1e-8
+        )
+
+    def test_compute_pka_thermochemistry_ha_and_a(
+        self, orca_outputs_directory
+    ):
+        """Test compute_pka_thermochemistry with HA and A- only."""
+        files = self._files(orca_outputs_directory)
+        results = ORCApKaOutput.compute_pka_thermochemistry(
+            ha_file=files["ha_gas"],
+            a_file=files["a_gas"],
+            temperature=298.15,
+            energy_units="hartree",
+        )
+
+        assert results["HA"]["name"] == "HA"
+        assert results["A"]["name"] == "A-"
+        assert np.isclose(results["HA"]["E"], self.L2_HA_E, rtol=1e-8)
+        assert np.isclose(results["HA"]["qh_G"], self.L2_HA_QH_G, rtol=1e-8)
+        assert np.isclose(results["A"]["E"], self.L2_A_E, rtol=1e-8)
+        assert np.isclose(results["A"]["qh_G"], self.L2_A_QH_G, rtol=1e-8)
+
+    def test_compute_pka_uses_requested_files(self, orca_outputs_directory):
+        files = self._files(orca_outputs_directory)
+
+        result = ORCApKaOutput.compute_pka(
+            ha_gas_file=files["ha_gas"],
+            a_gas_file=files["a_gas"],
+            href_gas_file=files["hb_gas"],
+            ref_gas_file=files["b_gas"],
+            ha_solv_file=files["ha_solv"],
+            a_solv_file=files["a_solv"],
+            href_solv_file=files["hb_solv"],
+            ref_solv_file=files["b_solv"],
+            pka_reference=6.75,
+            temperature=298.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        # Solvent SP energies should match values in combined.dat
+        assert np.isclose(result["E_solv_HA_au"], self.L2_HA_SP_E, rtol=1e-8)
+        assert np.isclose(result["E_solv_A_au"], self.L2_A_SP_E, rtol=1e-8)
+        assert np.isclose(
+            result["E_solv_HRef_au"], self.PHENOL_HB_SP_E, rtol=1e-8
+        )
+        assert np.isclose(
+            result["E_solv_Ref_au"], self.PHENOL_B_SP_E, rtol=1e-8
+        )
+
+        # Thermodynamic-cycle energy from combined.dat-derived constants
+        # (combined.dat stores rounded values, so allow a small tolerance)
+        assert np.isclose(
+            result["delta_G_soln_au"], self.EXPECTED_DG_AU, atol=5e-7
+        )
+        assert np.isclose(
+            result["delta_G_soln_kcal_mol"], self.EXPECTED_DG_KCAL, atol=5e-4
+        )
+
+        # Sanity: pKa field is finite and reflects reference + delta
+        assert np.isfinite(result["pKa"])

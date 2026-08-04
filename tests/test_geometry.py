@@ -9,8 +9,14 @@ from chemsmart.utils.geometry import (
     calculate_molecular_volume_vdp,
     calculate_moments_of_inertia,
     calculate_vdw_volume,
+    canonicalize_positions,
+    clean_rotational_constants_by_geometry,
+    get_coordinating_atoms,
     is_collinear,
 )
+from chemsmart.utils.periodictable import PeriodicTable
+
+_pt = PeriodicTable()
 
 
 class TestIsCollinear:
@@ -123,6 +129,76 @@ class TestCalculateMomentsOfInertia:
         moi_tensor, evals, evecs = calculate_moments_of_inertia(mass, coords)
 
         assert all(e >= -1e-10 for e in evals)
+
+
+class TestCleanRotationalConstantsByGeometry:
+    def test_gaussian_mode_preserves_values(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10.0, 2.0, 1.5],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [10.0, 2.0, 1.5])
+        assert status == "gaussian"
+
+    def test_gaussian_mode_preserves_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.isinf(cleaned[0])
+        assert np.allclose(cleaned[1:], [8.30647, 8.30647])
+        assert status == "gaussian_overflow"
+
+    def test_physical_mode_exact_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_near_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.306470, 8.306471],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [0.5 * (8.306470 + 8.306471)])
+        assert status == "linear"
+
+    def test_physical_mode_huge_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10919209500.9483, 8.3064670, 8.3064670],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.3064670])
+        assert status == "quasi_linear"
+
+    def test_physical_mode_zero_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [0.0, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_nonlinear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [609.8308225, 5.8331025, 5.7778368],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [609.8308225, 5.8331025, 5.7778368])
+        assert status == "nonlinear"
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError):
+            clean_rotational_constants_by_geometry([1.0, 2.0, 3.0], mode="bad")
 
 
 class TestCalculateCrudeOccupiedVolume:
@@ -271,3 +347,173 @@ class TestCalculateMolecularVolumeVDP:
         )
         # Volume can be 0 for some configurations depending on tessellation
         assert volume >= 0
+
+
+class TestCanonicalizePositions:
+    """Tests for the canonicalize_positions function."""
+
+    def test_center_of_mass_at_origin(self):
+        """Centre of mass of canonical positions must be at the origin."""
+        masses = [12.0, 16.0, 16.0]
+        coords = np.array(
+            [
+                [-2.184891, -0.000000, -0.000000],
+                [2.184891, -0.000000, -0.000000],
+                [0.000000, 0.000000, 0.000000],
+            ]
+        )
+        result = canonicalize_positions(masses, coords)
+        com = np.average(result, axis=0, weights=masses)
+        assert np.allclose(com, 0.0, atol=1e-6)
+
+    def test_single_atom_returns_origin(self):
+        """A single atom must be placed at the origin."""
+        masses = [12.0]
+        coords = [[5.0, 3.0, -1.0]]
+        result = canonicalize_positions(masses, coords)
+        assert np.allclose(result, [[0.0, 0.0, 0.0]])
+
+    def test_diatomic_aligned_along_z(self):
+        """A diatomic molecule must be aligned along the z-axis."""
+        masses = [14.0, 14.0]
+        coords = [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        result = canonicalize_positions(masses, coords)
+        # bond length = ||r2 - r1|| = sqrt(1^2 + 2^2 + 2^2) = 3
+        # canonical positions = (0,0,±|v|/2) = (0,0,±1.5)
+        assert np.allclose(result, [[0.0, 0.0, -1.5], [0.0, 0.0, 1.5]])
+
+    def test_translation_invariance(self):
+        """Translating all atoms by a constant vector must not change the result."""
+        masses = [12.0, 1.0, 1.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [0, 0, 0],
+                [1.09, 0, 0],
+                [-1.09, 0, 0],
+                [0, 1.09, 0],
+                [0, -1.09, 0],
+            ]
+        )
+        shifted = coords + np.array([10.0, -20.0, 30.0])
+        canon_shifted = canonicalize_positions(masses, shifted)
+        canon_original = canonicalize_positions(masses, coords)
+        assert np.allclose(canon_original, canon_shifted, atol=1e-6)
+
+    def test_rotation_invariance(self):
+        """Rotating all atoms must not change the canonical positions."""
+        masses = [12.0, 16.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [-0.6123, 0.0000, 0.0000],
+                [0.6123, 0.0000, 0.0000],
+                [-1.2000, 0.2426, -0.8998],
+                [-1.2000, -0.2424, 0.8998],
+            ]
+        )
+        # Apply a rotation matrix (90° around z-axis)
+        theta = np.pi / 2
+        R = np.array(
+            [
+                [np.cos(theta), -np.sin(theta), 0],
+                [np.sin(theta), np.cos(theta), 0],
+                [0, 0, 1],
+            ]
+        )
+        rotated = coords @ R.T
+        canon_original = canonicalize_positions(masses, coords)
+        canon_rotated = canonicalize_positions(masses, rotated)
+        assert np.allclose(canon_original, canon_rotated, atol=1e-6)
+
+
+class TestGetCoordinatingAtoms:
+    """Tests for covalent-radius-ratio coordination spheres."""
+
+    def test_primary_donor_and_secondary_ligand(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_n = _pt.covalent_radius("N")
+        r_c = _pt.covalent_radius("C")
+        primary_dist = 1.05 * (r_mn + r_n)
+        secondary_dist = 1.25 * (r_mn + r_c)
+        elements = ["Mn", "N", "C"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [primary_dist, 0.0, 0.0],
+                [secondary_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_hydride_within_cutoff_is_primary(self):
+        elements = ["Mn", "H"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == []
+
+    def test_distant_atom_excluded(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        far_dist = 1.50 * (r_mn + r_c)
+        elements = ["Mn", "C"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [far_dist, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == []
+        assert secondary == []
+
+    def test_geometric_expansion_captures_terminal_co_oxygen(self):
+        """XYZ-safe expansion: CO oxygen near primary C, even if far from Mn."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        co_bond = 1.15
+        o_dist = c_dist + co_bond
+        # Terminal O should sit outside the secondary radius-ratio shell.
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_can_be_disabled(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(
+            0, elements, coordinates, expand_cutoff=0
+        )
+
+        assert primary == [1]
+        assert secondary == []
