@@ -147,6 +147,10 @@ from chemsmart.analysis.result_quantities import (
     quantity_extraction_receipt_from_record,
     thermochemistry_receipt_from_record,
 )
+from chemsmart.agent.workflow_context import (
+    project_workflow_context,
+    workflow_context_enabled,
+)
 from chemsmart.agent.workflows import (
     ArtifactInputIntentV1,
     ArtifactOutputIntentV1,
@@ -1786,13 +1790,32 @@ class CommandCompiledToolHostV1:
                 canonical_data(scientific_plan) if scientific_plan else {}
             ),
         )
-        return {
+        result = {
             "workflow_draft": draft,
             "scientific_workflow_plan": scientific_plan,
             "actionable_node_ids": actionable,
             "unresolved_node_ids": unresolved,
             "findings": tuple(findings),
         }
+        context = self._workflow_context(draft)
+        if context is not None:
+            result["workflow_context"] = context
+        return result
+
+    def _workflow_context(self, draft: CommandWorkflowDraftV1) -> Any:
+        """Derive the dependency context the model would otherwise reconstruct.
+
+        Host-derived and read-only: the model is told which nodes are runnable
+        and what each waiting node is waiting for, and can never assert it.
+        """
+
+        if not workflow_context_enabled():
+            return None
+        return project_workflow_context(
+            workflow_id=draft.workflow_id,
+            nodes=draft.nodes,
+            materialized_artifact_ids=self.artifacts,
+        )
 
     def _scientific_plan_from_draft(
         self,

@@ -108,6 +108,7 @@ from chemsmart.agent.identity import (
     validate_identity_for_geometry,
 )
 from chemsmart.agent.specialists import READ_ONLY_CRITIC
+from chemsmart.agent.workflow_context import workflow_context_enabled
 from chemsmart.agent.workflows import HarnessExperimentConfigV1
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
@@ -2529,6 +2530,21 @@ def _approved_execution_context(
     }
 
 
+def _workflow_context_sentence() -> str:
+    """State dependency structure so the model need not recall it."""
+
+    if not workflow_context_enabled():
+        return ""
+    return (
+        "plan_command_workflow returns a host-derived workflow_context: per "
+        "node it says whether that node is ready, waiting, or blocked, which "
+        "upstream node and output each waiting input needs, and which nodes "
+        "depend on it. Read it instead of reconstructing the DAG from memory, "
+        "and re-read it after each artifact appears. It is an observation, "
+        "not a claim you can make: never assert a node is ready. "
+    )
+
+
 def _system_prompt(
     approved_workflow: Mapping[str, Any] | None,
     *,
@@ -2588,6 +2604,7 @@ def _system_prompt(
         "stage-specific project YAML, validate it, build a command DAG, compile safe "
         "commands, and preview every currently resolvable node. Keep every future "
         "producer input unresolved until its validated upstream artifact exists. "
+        f"{_workflow_context_sentence()}"
         "Never author native "
         "Gaussian, ORCA, xTB, or PySCF input/script text. Never invent coordinates, "
         "paths, shell syntax, evidence, readiness, or terminal state. "

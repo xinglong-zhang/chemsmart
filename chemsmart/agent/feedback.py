@@ -203,7 +203,12 @@ _PROJECTION_CONTRACTS = {
         ),
         _ToolProjectionContractV1(
             "plan_command_workflow",
-            whole_branches=frozenset({"findings"}),
+            # ``workflow_context`` is retained whole: it is host-derived, and
+            # every field of it -- what a node waits for, which upstream output
+            # feeds it, what depends on it -- is exactly what the next typed
+            # action needs. Projecting it field-by-field would deliver the
+            # readiness verdict without the reason for it.
+            whole_branches=frozenset({"findings", "workflow_context"}),
             dropped_branches=frozenset({"nodes"}),
         ),
         _ToolProjectionContractV1("synthesize_command"),
@@ -539,9 +544,13 @@ def _project_mapping(
         key = str(raw_key)
         normalized_key = key.lower()
         child_path = f"{path}.{key}"
-        if (
-            normalized_key in _FORBIDDEN_CAUSAL_KEYS
-            or normalized_key in contract.dropped_branches
+        # A forbidden key is unsafe to send at any depth, and stays so.  A
+        # dropped branch only suppresses a redundant echo, and it does not
+        # apply inside a branch the contract consciously retains whole:
+        # otherwise a common name such as ``nodes`` would strip an unrelated
+        # nested structure the model has never seen.
+        if normalized_key in _FORBIDDEN_CAUSAL_KEYS or (
+            not preserve_all and normalized_key in contract.dropped_branches
         ):
             omitted.append(child_path)
             continue
