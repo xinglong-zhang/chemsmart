@@ -228,9 +228,7 @@ class CRESTJobSettings:
 
         if keywords is not None:
             other_dict = {
-                key: other_dict[key]
-                for key in keywords
-                if key in other_dict and other_dict[key] is not None
+                key: other_dict[key] for key in keywords if key in other_dict
             }
         merged_dict = self.__dict__.copy()
         merged_dict.update(other_dict)
