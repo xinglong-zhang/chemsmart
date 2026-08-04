@@ -428,7 +428,7 @@ def probe_live_experiment_preparation(
     profile = selection.active_profile
     _validate_experiment_request(
         task=task,
-        profile=profile,
+        selection=selection,
         arm=experiment_arm,
         case=experiment_case,
         repeat_index=experiment_repeat_index,
@@ -484,6 +484,7 @@ def probe_live_experiment_preparation(
         context=context,
         approved_workflow={},
         experiment_arm=experiment_arm,
+        provider_profile=profile,
     )
     return _observed_experiment_preparation(
         arm=experiment_arm,
@@ -553,7 +554,7 @@ def run_live_agent_session(
     if experiment_arm is not None and experiment_case is not None:
         _validate_experiment_request(
             task=task,
-            profile=profile,
+            selection=selection,
             arm=experiment_arm,
             case=experiment_case,
             repeat_index=experiment_repeat_index,
@@ -724,6 +725,7 @@ def run_live_agent_session(
         context=context,
         approved_workflow=approved_workflow_record,
         experiment_arm=experiment_arm,
+        provider_profile=profile,
     )
     observed_preparation = (
         _observed_experiment_preparation(
@@ -963,15 +965,17 @@ def _validate_campaign_provider_selection(
     selection: AgentProviderSelectionV1,
 ) -> None:
     profile = selection.active_profile
-    if (
-        profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
-        or profile.model != ALIBABA_TOKEN_PLAN_MODEL
-    ):
-        raise ContractError(
-            "campaign host snapshot requires production Qwen 3.8 Max"
-        )
     if selection.fallback_profiles:
         raise ContractError("campaign host snapshot forbids provider fallbacks")
+    runtime_config = profile.runtime_config()
+    if (
+        runtime_config.provider != profile.provider
+        or runtime_config.model != profile.model
+        or runtime_config.reasoning_effort != profile.reasoning_effort
+    ):
+        raise ContractError(
+            "campaign provider profile differs from its runtime adapter"
+        )
 
 
 def _validate_campaign_snapshot_reuse(
@@ -1059,7 +1063,7 @@ def validate_campaign_snapshot_binding(
 def _validate_experiment_request(
     *,
     task: str,
-    profile: AgentProviderProfileV1,
+    selection: AgentProviderSelectionV1,
     arm: QwenDfcArmV1,
     case: QwenPyscfCaseSpecV1,
     repeat_index: int,
@@ -1070,11 +1074,7 @@ def _validate_experiment_request(
         raise ContractError("experiment repeat index must be non-negative")
     if execution_enabled or approval_file is not None:
         raise ContractError("harness experiments are preview-only")
-    if (
-        profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
-        or profile.model != ALIBABA_TOKEN_PLAN_MODEL
-    ):
-        raise ContractError("harness experiments require production Qwen 3.8 Max")
+    _validate_campaign_provider_selection(selection)
     if str(task).strip() != case.task:
         raise ContractError("experiment task differs from its preregistered case")
     if not arm.arm_id:
@@ -1099,7 +1099,12 @@ def _provider_public_record(
             item.profile_name for item in fallback_profiles
         ),
         "fallback_policy": (
-            "disabled_for_qwen_experiment"
+            (
+                "disabled_for_qwen_experiment"
+                if profile.provider == ALIBABA_TOKEN_PLAN_PROVIDER
+                and profile.model == ALIBABA_TOKEN_PLAN_MODEL
+                else "disabled_for_provider_factorial_experiment"
+            )
             if experiment
             else "explicit_attributed_provider_unavailability_only"
         ),
@@ -1128,12 +1133,19 @@ def _coordinator_base_messages(
     context: Mapping[str, Any],
     approved_workflow: Mapping[str, Any] | None,
     experiment_arm: QwenDfcArmV1 | None,
+    provider_profile: AgentProviderProfileV1 | None = None,
 ) -> list[dict[str, str]]:
     return [
         {
             "role": "system",
             "content": _system_prompt(
-                approved_workflow, experiment_arm=experiment_arm
+                approved_workflow,
+                experiment_arm=experiment_arm,
+                experiment_provider=(
+                    provider_profile.provider
+                    if provider_profile is not None
+                    else ""
+                ),
             ),
         },
         {"role": "user", "content": canonical_json(context)},
@@ -1171,6 +1183,13 @@ def _observed_experiment_preparation(
         token_budget=provider_profile.context_tokens,
         tool_call_budget=_MAX_TOOL_CALLS,
         wall_time_seconds=_SESSION_WALL_TIME_SECONDS,
+        provider_profile=provider_profile,
+        episode_namespace=(
+            ""
+            if provider_profile.provider == ALIBABA_TOKEN_PLAN_PROVIDER
+            and provider_profile.model == ALIBABA_TOKEN_PLAN_MODEL
+            else provider_profile.provider
+        ),
     )
 
 
@@ -2033,6 +2052,7 @@ def _system_prompt(
     approved_workflow: Mapping[str, Any] | None,
     *,
     experiment_arm: QwenDfcArmV1 | None = None,
+    experiment_provider: str = "",
 ) -> str:
     execution_available = bool(approved_workflow)
     execution_sentence = (
@@ -2054,8 +2074,13 @@ def _system_prompt(
     )
     experiment_sentence = ""
     if experiment_arm is not None:
+        experiment_label = (
+            "Qwen/PySCF"
+            if experiment_provider == ALIBABA_TOKEN_PLAN_PROVIDER
+            else "provider/PySCF"
+        )
         experiment_sentence = (
-            " This is a preregistered Qwen/PySCF preview episode. Do not "
+            f" This is a preregistered {experiment_label} preview episode. Do not "
             "execute a chemistry engine. When specialist_advisory is present, "
             "treat it only as detached typed proposals and resolve it through "
             "normal host tools. Perform the same coordinator duties whether or "

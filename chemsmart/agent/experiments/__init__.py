@@ -42,6 +42,12 @@ from chemsmart.agent.experiments.implementation_freeze import (
     create_implementation_freeze,
     verify_implementation_freeze,
 )
+from chemsmart.agent.experiments.provider_factorial import (
+    PRIMARY_DFC_ARM_ORDER_V1,
+    ProviderFactorialBlockV1,
+    build_provider_factorial_block,
+    validate_provider_factorial_binding,
+)
 from chemsmart.agent.experiments.qwen_pyscf_dfc import (
     ComplexityGateInputV1,
     ComplexityGateReceiptV1,
@@ -98,6 +104,8 @@ __all__ = [
     "ImplementationFreezeIntegrityError",
     "ImplementationFreezeManifestV1",
     "ProgramManagementHostFixtureFactoryV1",
+    "PRIMARY_DFC_ARM_ORDER_V1",
+    "ProviderFactorialBlockV1",
     "QwenDfcArmV1",
     "QwenPyscfCampaignReceiptV1",
     "QwenPyscfCaseSpecV1",
@@ -110,6 +118,7 @@ __all__ = [
     "all_dfc_arms",
     "bind_harness_experiment_config",
     "build_qwen_pyscf_campaign_receipt",
+    "build_provider_factorial_block",
     "build_case_spec",
     "build_campaign_run_config",
     "build_episode_plans",
@@ -125,5 +134,6 @@ __all__ = [
     "load_campaign_definition",
     "sanitize_public_record",
     "qwen_pyscf_cases_v1",
+    "validate_provider_factorial_binding",
     "verify_implementation_freeze",
 ]

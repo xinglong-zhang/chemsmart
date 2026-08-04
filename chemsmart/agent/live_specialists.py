@@ -1,8 +1,8 @@
-"""Live Qwen specialist composition for preregistered D/F/C episodes.
+"""Live provider specialist composition for preregistered D/F/C episodes.
 
 The generic contracts and deterministic merge live in ``specialists.py``.
 This module supplies the provider-facing composition boundary: every worker
-gets a fresh Qwen 3.8 Max Runtime V2 session, a private event stream, an
+gets a fresh provider-native Runtime V2 session, a private event stream, an
 immutable packet, and a read-only projection of the normal ChemSmart host.
 
 Worker results are advisory.  They can add typed proposals to coordinator
@@ -42,12 +42,7 @@ from chemsmart.agent.experiments.qwen_pyscf_dfc import (
     QwenPyscfCaseSpecV1,
     evaluate_complexity_gate,
 )
-from chemsmart.agent.provider_config import (
-    ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS,
-    ALIBABA_TOKEN_PLAN_MODEL,
-    ALIBABA_TOKEN_PLAN_PROVIDER,
-    AgentProviderProfileV1,
-)
+from chemsmart.agent.provider_config import AgentProviderProfileV1
 from chemsmart.agent.runtime.contracts import (
     ResourceBudgetV1,
     TaskEnvelopeV1,
@@ -267,7 +262,7 @@ def _dispatch_pre_coordinator_specialists(
     max_concurrency: int,
     orchestrator: BoundedSpecialistOrchestratorV1,
     base_tool_surface: AgentToolSurfaceV1,
-    session_factory: "LiveQwenSpecialistSessionFactoryV1",
+    session_factory: "LiveProviderSpecialistSessionFactoryV1",
     plan: ScientificWorkflowPlanV2,
     coordinator_session_id: str,
     public_context: Mapping[str, Any],
@@ -360,7 +355,7 @@ class LiveSpecialistCampaignV1:
     gate: ComplexityGateReceiptV1
     budget: SpecialistBudgetV1
     orchestrator: BoundedSpecialistOrchestratorV1
-    session_factory: "LiveQwenSpecialistSessionFactoryV1"
+    session_factory: "LiveProviderSpecialistSessionFactoryV1"
     outcomes: tuple[SpecialistSessionOutcomeV1, ...] = ()
     merge: CoordinatorMergeReceiptV1 | None = None
     critic_candidate: FInvariantCriticCandidateV1 | None = None
@@ -393,13 +388,20 @@ class LiveSpecialistCampaignV1:
         runner_factory: Callable[..., Any] = UnifiedSessionRunner,
         lease_loader: Callable[..., Any] = load_secret_lease,
     ) -> "LiveSpecialistCampaignV1":
+        runtime_config = provider_profile.runtime_config()
         if (
-            experiment_config.provider_id != ALIBABA_TOKEN_PLAN_PROVIDER
-            or experiment_config.model_id != ALIBABA_TOKEN_PLAN_MODEL
-            or provider_profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
-            or provider_profile.model != ALIBABA_TOKEN_PLAN_MODEL
+            experiment_config.provider_id != provider_profile.provider
+            or experiment_config.model_id != provider_profile.model
+            or experiment_config.reasoning_effort
+            != provider_profile.reasoning_effort
+            or runtime_config.provider != provider_profile.provider
+            or runtime_config.model != provider_profile.model
+            or runtime_config.reasoning_effort
+            != provider_profile.reasoning_effort
         ):
-            raise ContractError("live specialists require production Qwen 3.8 Max")
+            raise ContractError(
+                "specialist campaign differs from its provider profile"
+            )
         if (
             experiment_config.decomposition != arm.decomposition
             or experiment_config.feedback_projection != arm.feedback_projection
@@ -420,7 +422,7 @@ class LiveSpecialistCampaignV1:
             experiment_config=experiment_config,
             participant_slots=_FROZEN_SPECIALIST_BUDGET_SLOTS,
         )
-        session_factory = LiveQwenSpecialistSessionFactoryV1(
+        session_factory = LiveProviderSpecialistSessionFactoryV1(
             provider_profile=provider_profile,
             feedback_projection=arm.feedback_projection,
             secret_file=secret_file,
@@ -850,7 +852,7 @@ class LiveSpecialistCampaignV1:
         return {**body, "record_sha256": canonical_sha256(body)}
 
 
-class LiveQwenSpecialistSessionFactoryV1:
+class LiveProviderSpecialistSessionFactoryV1:
     """Create one fresh UnifiedSessionRunner session for every worker."""
 
     def __init__(
@@ -867,12 +869,16 @@ class LiveQwenSpecialistSessionFactoryV1:
         lease_loader: Callable[..., Any] = load_secret_lease,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        runtime_config = provider_profile.runtime_config()
         if (
-            provider_profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
-            or provider_profile.model != ALIBABA_TOKEN_PLAN_MODEL
-            or provider_profile.reasoning_effort != "xhigh"
+            runtime_config.provider != provider_profile.provider
+            or runtime_config.model != provider_profile.model
+            or runtime_config.reasoning_effort
+            != provider_profile.reasoning_effort
         ):
-            raise ContractError("specialist factory requires Qwen 3.8 Max xhigh")
+            raise ContractError(
+                "specialist provider differs from its runtime adapter"
+            )
         self.provider_profile = provider_profile
         if feedback_projection not in {"full-v1", "causal-v1"}:
             raise ContractError("invalid specialist feedback projection")
@@ -890,8 +896,8 @@ class LiveQwenSpecialistSessionFactoryV1:
 
     def __call__(
         self, request: SpecialistSessionRequestV1
-    ) -> "_LiveQwenSpecialistSessionV1":
-        return _LiveQwenSpecialistSessionV1(factory=self, request=request)
+    ) -> "_LiveProviderSpecialistSessionV1":
+        return _LiveProviderSpecialistSessionV1(factory=self, request=request)
 
     def public_observations(
         self,
@@ -953,7 +959,11 @@ class LiveQwenSpecialistSessionFactoryV1:
             surface=surface,
         )
         messages = _specialist_messages(request)
-        envelope = _specialist_envelope(request, messages=messages)
+        envelope = _specialist_envelope(
+            request,
+            messages=messages,
+            provider_profile=self.provider_profile,
+        )
         network_budget = _specialist_network_budget(
             request, profile=self.provider_profile
         )
@@ -1072,11 +1082,11 @@ class LiveQwenSpecialistSessionFactoryV1:
             raise
 
 
-class _LiveQwenSpecialistSessionV1:
+class _LiveProviderSpecialistSessionV1:
     def __init__(
         self,
         *,
-        factory: LiveQwenSpecialistSessionFactoryV1,
+        factory: LiveProviderSpecialistSessionFactoryV1,
         request: SpecialistSessionRequestV1,
     ) -> None:
         self.factory = factory
@@ -1300,14 +1310,14 @@ def _specialist_envelope(
     request: SpecialistSessionRequestV1,
     *,
     messages: Sequence[Mapping[str, Any]],
+    provider_profile: AgentProviderProfileV1,
 ) -> TaskEnvelopeV1:
     context = request.context_manifest
     resource = ResourceBudgetV1(
         max_input_tokens_per_request=context.token_budget,
-        # Qwen omits an explicit wire ceiling.  This is the provider-supported
-        # per-turn maximum; the stricter combined worker budget is checked on
-        # the typed response by the bounded orchestrator.
-        max_output_tokens_per_request=ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS,
+        # The provider adapter owns its wire maximum; the stricter combined
+        # worker budget is checked on the typed response by the orchestrator.
+        max_output_tokens_per_request=provider_profile.max_output_tokens,
         max_tool_calls=context.tool_call_budget,
         wall_time_seconds=float(context.wall_time_seconds),
         chemistry_engine_calls=0,
@@ -1573,8 +1583,13 @@ def _event_attempt_count(event_store: RuntimeEventStore) -> int:
     )
 
 
+# Backward-compatible Python alias; historical Qwen schemas remain unchanged.
+LiveQwenSpecialistSessionFactoryV1 = LiveProviderSpecialistSessionFactoryV1
+
+
 __all__ = [
     "FInvariantCriticCandidateV1",
+    "LiveProviderSpecialistSessionFactoryV1",
     "LiveQwenSpecialistSessionFactoryV1",
     "LiveSpecialistCampaignV1",
     "LiveSpecialistProviderObservationV1",

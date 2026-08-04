@@ -15,6 +15,7 @@ from typing import Any, Iterable, Protocol
 from chemsmart.agent._contracts import (
     ContractError,
     canonical_sha256,
+    require_identifier,
     require_sha256,
 )
 from chemsmart.agent.adaptive_api_campaign import AdaptiveHypothesisV1
@@ -22,6 +23,7 @@ from chemsmart.agent.feedback import FEEDBACK_MODES, FULL_FEEDBACK_V1
 from chemsmart.agent.provider_config import (
     ALIBABA_TOKEN_PLAN_MODEL,
     ALIBABA_TOKEN_PLAN_PROVIDER,
+    AgentProviderProfileV1,
 )
 from chemsmart.agent.workflows import HarnessExperimentConfigV1
 
@@ -135,8 +137,28 @@ def bind_harness_experiment_config(
     token_budget: int,
     tool_call_budget: int,
     wall_time_seconds: int,
+    provider_profile: AgentProviderProfileV1 | None = None,
 ) -> HarnessExperimentConfigV1:
-    """Bind one arm to the canonical Runtime V2 experiment contract."""
+    """Bind one arm to Runtime V2, retaining Qwen as the legacy default."""
+
+    if provider_profile is None:
+        provider_id = ALIBABA_TOKEN_PLAN_PROVIDER
+        model_id = ALIBABA_TOKEN_PLAN_MODEL
+        reasoning_effort = "xhigh"
+    else:
+        runtime_config = provider_profile.runtime_config()
+        if (
+            runtime_config.provider != provider_profile.provider
+            or runtime_config.model != provider_profile.model
+            or runtime_config.reasoning_effort
+            != provider_profile.reasoning_effort
+        ):
+            raise ContractError(
+                "provider profile differs from its runtime adapter"
+            )
+        provider_id = provider_profile.provider
+        model_id = provider_profile.model
+        reasoning_effort = provider_profile.reasoning_effort
 
     body = {
         "schema_version": "chemsmart.harness-experiment-config.v1",
@@ -144,9 +166,9 @@ def bind_harness_experiment_config(
         "decomposition": arm.decomposition,
         "feedback_projection": arm.feedback_projection,
         "critic": arm.critic,
-        "provider_id": ALIBABA_TOKEN_PLAN_PROVIDER,
-        "model_id": ALIBABA_TOKEN_PLAN_MODEL,
-        "reasoning_effort": "xhigh",
+        "provider_id": provider_id,
+        "model_id": model_id,
+        "reasoning_effort": reasoning_effort,
         "max_concurrency": arm.max_concurrency,
         "prompt_sha256": prompt_sha256,
         "tool_schema_sha256": tool_schema_sha256,
@@ -249,8 +271,18 @@ def build_qwen_experiment_preparation(
     tool_call_budget: int,
     wall_time_seconds: int,
     host_snapshot_sha256: str = "",
+    provider_profile: AgentProviderProfileV1 | None = None,
+    episode_namespace: str = "",
 ) -> QwenExperimentPreparationV1:
-    episode_id = f"{case.case_id}.{arm.arm_id}.r{int(repeat_index)}"
+    namespace = str(episode_namespace).strip().lower()
+    if namespace:
+        require_identifier(namespace, "episode_namespace")
+    legacy_episode_id = f"{case.case_id}.{arm.arm_id}.r{int(repeat_index)}"
+    episode_id = (
+        f"{namespace}.{legacy_episode_id}"
+        if namespace
+        else legacy_episode_id
+    )
     config = bind_harness_experiment_config(
         arm=arm,
         experiment_id=episode_id,
@@ -260,6 +292,7 @@ def build_qwen_experiment_preparation(
         token_budget=token_budget,
         tool_call_budget=tool_call_budget,
         wall_time_seconds=wall_time_seconds,
+        provider_profile=provider_profile,
     )
     body = {
         "schema_version": "chemsmart.qwen-experiment-preparation.v1",
