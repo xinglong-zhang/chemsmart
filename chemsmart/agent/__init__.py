@@ -16,6 +16,21 @@ from chemsmart.agent.preflight import (
     ProgramNodePreflightReceiptV1,
     ProgramNodePreflightRequestV1,
 )
+from chemsmart.agent.execution import (
+    FrozenMaterializedNodePreviewV1,
+    FrozenProducerEdgeRuleV1,
+    FrozenWorkflowApprovalV1,
+    ProgramResultValidationReceiptV1,
+    WorkflowRunStateV1,
+    ValidatedDataEdgeBindingV1,
+)
+from chemsmart.agent.specialists import (
+    BoundedSpecialistOrchestratorV1,
+    CoordinatorMergeReceiptV1,
+    CriticSessionOutcomeV1,
+    SpecialistBudgetV1,
+    SpecialistSessionOutcomeV1,
+)
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.workflows import (
     ArtifactInputIntentV1,
@@ -25,6 +40,15 @@ from chemsmart.agent.workflows import (
     CommandNodeV1,
     CommandWorkflowDraftV1,
     CommandWorkflowSpecV1,
+    CausalToolFeedbackV1,
+    ContextManifestV1,
+    HarnessExperimentConfigV1,
+    MaterializedWorkflowV1,
+    ScientificReviewFindingV1,
+    ScientificWorkflowPlanV2,
+    SpecialistResultPacketV1,
+    SpecialistTaskPacketV1,
+    StationaryPointValidationPolicyV1,
 )
 
 __all__ = [
@@ -32,11 +56,21 @@ __all__ = [
     "ArtifactInputIntentV1",
     "ArtifactOutputIntentV1",
     "ArtifactBindingV1",
+    "BoundedSpecialistOrchestratorV1",
     "CommandCompiledToolHostV1",
     "CommandNodeIntentV1",
     "CommandNodeV1",
     "CommandWorkflowDraftV1",
     "CommandWorkflowSpecV1",
+    "CausalToolFeedbackV1",
+    "ContextManifestV1",
+    "CoordinatorMergeReceiptV1",
+    "CriticSessionOutcomeV1",
+    "FrozenWorkflowApprovalV1",
+    "FrozenMaterializedNodePreviewV1",
+    "FrozenProducerEdgeRuleV1",
+    "HarnessExperimentConfigV1",
+    "MaterializedWorkflowV1",
     "ProgramCandidateProposalV1",
     "ProgramCapabilityQueryV1",
     "ProgramCapabilityReceiptV1",
@@ -45,7 +79,17 @@ __all__ = [
     "ProgramComponentConformanceReceiptV1",
     "ProgramNodePreflightReceiptV1",
     "ProgramNodePreflightRequestV1",
+    "ProgramResultValidationReceiptV1",
     "ResolvedEngineBindingV1",
     "ResolvedProgramEngineBindingV1",
     "ResolvedProgramBindingV1",
+    "ScientificReviewFindingV1",
+    "ScientificWorkflowPlanV2",
+    "SpecialistResultPacketV1",
+    "SpecialistBudgetV1",
+    "SpecialistSessionOutcomeV1",
+    "SpecialistTaskPacketV1",
+    "StationaryPointValidationPolicyV1",
+    "WorkflowRunStateV1",
+    "ValidatedDataEdgeBindingV1",
 ]

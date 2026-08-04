@@ -67,6 +67,14 @@ class DeepSeekHttpsTransport:
         self._api_key = api_key
         self._closed = False
 
+    def set_timeout_seconds(self, timeout_seconds: float) -> None:
+        """Tighten the next provider turn to the remaining task allowance."""
+
+        value = float(timeout_seconds)
+        if value <= 0:
+            raise ContractError("DeepSeek timeout must be positive")
+        self.timeout_seconds = value
+
     def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
         if self._closed or not self._api_key:
             raise ContractError("DeepSeek credential lease is closed")
@@ -125,14 +133,18 @@ class ProviderCapabilitiesV1:
 
 @dataclass(frozen=True)
 class DeepSeekV4FlashConfigV1:
+    provider: str = "deepseek"
     model: str = DEEPSEEK_V4_FLASH_MODEL
     endpoint: str = DEEPSEEK_OFFICIAL_ENDPOINT
     thinking_mode: str = "enabled"
     reasoning_effort: str = "max"
     max_output_tokens: int = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
+    context_tokens: int = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
     sdk_max_retries: int = 0
 
     def __post_init__(self) -> None:
+        if self.provider != "deepseek":
+            raise ContractError("DeepSeek provider identity is immutable")
         if self.model != DEEPSEEK_V4_FLASH_MODEL:
             raise ContractError("this adapter is pinned to deepseek-v4-flash")
         if not _is_official_endpoint(self.endpoint):
@@ -216,8 +228,10 @@ class DeepSeekV4ToolSession:
     @property
     def capabilities(self) -> ProviderCapabilitiesV1:
         return ProviderCapabilitiesV1(
+            provider=self.config.provider,
             model=self.config.model,
-            max_output_tokens=DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
+            context_tokens=self.config.context_tokens,
+            max_output_tokens=self.config.max_output_tokens,
         )
 
     @property
@@ -245,6 +259,14 @@ class DeepSeekV4ToolSession:
         if tools:
             payload["tools"] = deepcopy(tools)
         return payload
+
+    def set_turn_timeout_seconds(self, timeout_seconds: float) -> None:
+        """Bind a real transport turn to the loop's remaining wall time."""
+
+        setter = getattr(self._transport, "set_timeout_seconds", None)
+        if setter is None:
+            return
+        setter(float(timeout_seconds))
 
     def turn(
         self, *, tools: list[dict[str, Any]] | None = None
@@ -409,7 +431,7 @@ def _turn_receipt(
     response: dict[str, Any],
     assistant: dict[str, Any],
     tools: list[dict[str, Any]],
-    config: DeepSeekV4FlashConfigV1,
+    config: Any,
 ) -> ProviderTurnReceiptV1:
     choices = response.get("choices") or [{}]
     choice = choices[0] if isinstance(choices[0], Mapping) else {}
@@ -419,7 +441,7 @@ def _turn_receipt(
     details = details if isinstance(details, Mapping) else {}
     body = {
         "schema_version": "chemsmart.provider-turn-receipt.v1",
-        "provider": "deepseek",
+        "provider": str(getattr(config, "provider", "deepseek")),
         "requested_model": config.model,
         "observed_model": str(response.get("model") or ""),
         "request_sha256": canonical_sha256(public_payload(request)),

@@ -5,7 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_data,
+    canonical_sha256,
+)
+from chemsmart.agent.runtime.records import (
+    frozen_workflow_approval_from_record,
+    materialized_workflow_from_record,
+    program_execution_invocation_from_record,
+    program_execution_receipt_from_record,
+    scientific_workflow_plan_from_record,
+    validated_data_edge_binding_from_record,
+    workflow_node_launch_reservation_from_record,
+    workflow_run_state_from_record,
+)
 from chemsmart.agent.runtime.events import (
     CAPABILITY_QUERIED,
     COMMAND_COMPILED,
@@ -22,11 +36,17 @@ from chemsmart.agent.runtime.events import (
     PROVIDER_TURN_OBSERVED,
     RESULT_VERIFIED,
     SCIENTIFIC_DECISION_RECORDED,
+    SCIENTIFIC_WORKFLOW_MATERIALIZED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
     SUBSTITUTION_ASSESSED,
     VALIDATOR_OBSERVED,
     WORKFLOW_PLANNED,
+    WORKFLOW_APPROVAL_CONSUMED,
+    WORKFLOW_EXECUTION_STARTED,
+    WORKFLOW_LAUNCH_RESERVED,
+    WORKFLOW_DATA_EDGE_BOUND,
+    WORKFLOW_NODE_STATE_CHANGED,
     RuntimeEvent,
 )
 
@@ -63,6 +83,30 @@ class RuntimeState:
     legacy_permission_events: int = 0
     provider_turn_receipts: list[str] = field(default_factory=list)
     api_attempt_receipts: list[str] = field(default_factory=list)
+    materialized_workflow_receipts: list[str] = field(default_factory=list)
+    workflow_approval_receipts: list[str] = field(default_factory=list)
+    workflow_execution_start_receipts: list[str] = field(default_factory=list)
+    workflow_launch_reservation_receipts: list[str] = field(default_factory=list)
+    workflow_data_edge_binding_receipts: list[str] = field(default_factory=list)
+    workflow_node_state_receipts: list[str] = field(default_factory=list)
+    consumed_workflow_approval_ids: list[str] = field(default_factory=list)
+    scientific_workflow_plan_records: dict[str, dict] = field(default_factory=dict)
+    materialized_workflow_records: dict[str, dict] = field(default_factory=dict)
+    frozen_workflow_approval_records: dict[str, dict] = field(default_factory=dict)
+    workflow_launch_reservation_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    program_execution_invocation_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    program_execution_receipt_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    validated_data_edge_binding_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    legacy_incomplete_execution_node_ids: list[str] = field(default_factory=list)
+    workflow_run_records: dict[str, dict] = field(default_factory=dict)
     unknown_event_kinds: list[str] = field(default_factory=list)
     seen_idempotency_keys: dict[str, str] = field(default_factory=dict)
     cwd: str = ""
@@ -136,11 +180,113 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         PERMISSION_RESOLVED: state.permission_receipts,
         PROVIDER_TURN_OBSERVED: state.provider_turn_receipts,
         "api_attempt_observed": state.api_attempt_receipts,
+        SCIENTIFIC_WORKFLOW_MATERIALIZED: (
+            state.materialized_workflow_receipts
+        ),
+        WORKFLOW_APPROVAL_CONSUMED: state.workflow_approval_receipts,
+        WORKFLOW_EXECUTION_STARTED: state.workflow_execution_start_receipts,
+        WORKFLOW_LAUNCH_RESERVED: state.workflow_launch_reservation_receipts,
+        WORKFLOW_DATA_EDGE_BOUND: state.workflow_data_edge_binding_receipts,
+        WORKFLOW_NODE_STATE_CHANGED: state.workflow_node_state_receipts,
     }
     if event.kind == PERMISSION_RESOLVED and event.schema_version == 1:
         state.legacy_permission_events += 1
     elif event.kind in targets:
         targets[event.kind].append(digest)
+        if event.kind == WORKFLOW_PLANNED:
+            plan_record = event.payload.get("scientific_plan_record")
+            if isinstance(plan_record, dict) and plan_record:
+                plan = scientific_workflow_plan_from_record(plan_record)
+                state.scientific_workflow_plan_records[
+                    plan.plan_sha256
+                ] = canonical_data(plan)
+        elif event.kind == SCIENTIFIC_WORKFLOW_MATERIALIZED:
+            workflow = materialized_workflow_from_record(event.payload["record"])
+            state.materialized_workflow_records[
+                workflow.materialized_sha256
+            ] = canonical_data(workflow)
+        elif event.kind == WORKFLOW_APPROVAL_CONSUMED:
+            approval = frozen_workflow_approval_from_record(
+                event.payload["record"]
+            )
+            state.frozen_workflow_approval_records[
+                approval.approval_sha256
+            ] = canonical_data(approval)
+            approval_id = str(event.payload.get("approval_id") or "")
+            if approval_id and approval_id not in state.consumed_workflow_approval_ids:
+                state.consumed_workflow_approval_ids.append(approval_id)
+        elif event.kind == WORKFLOW_LAUNCH_RESERVED:
+            reservation = workflow_node_launch_reservation_from_record(
+                event.payload["record"]
+            )
+            plan = scientific_workflow_plan_from_record(
+                event.payload["scientific_plan_record"]
+            )
+            materialized = materialized_workflow_from_record(
+                event.payload["materialized_workflow_record"]
+            )
+            approval = frozen_workflow_approval_from_record(
+                event.payload["frozen_approval_record"]
+            )
+            invocation = program_execution_invocation_from_record(
+                event.payload["invocation_record"]
+            )
+            run_state = workflow_run_state_from_record(
+                event.payload["run_state_record"]
+            )
+            state.scientific_workflow_plan_records[
+                plan.plan_sha256
+            ] = canonical_data(plan)
+            state.materialized_workflow_records[
+                materialized.materialized_sha256
+            ] = canonical_data(materialized)
+            state.frozen_workflow_approval_records[
+                approval.approval_sha256
+            ] = canonical_data(approval)
+            state.workflow_launch_reservation_records[
+                reservation.run_id + ":" + reservation.node_id
+            ] = canonical_data(reservation)
+            state.program_execution_invocation_records[
+                invocation.invocation_sha256
+            ] = canonical_data(invocation)
+            state.workflow_run_records[run_state.run_id] = canonical_data(
+                run_state
+            )
+            if approval.approval_id not in state.consumed_workflow_approval_ids:
+                state.consumed_workflow_approval_ids.append(
+                    approval.approval_id
+                )
+        elif event.kind == WORKFLOW_DATA_EDGE_BOUND:
+            binding = validated_data_edge_binding_from_record(
+                event.payload["record"]
+            )
+            state.validated_data_edge_binding_records[
+                binding.run_id + ":" + binding.scientific_edge_sha256
+            ] = canonical_data(binding)
+        elif event.kind in {
+            WORKFLOW_EXECUTION_STARTED,
+            WORKFLOW_NODE_STATE_CHANGED,
+        }:
+            run_id = str(event.payload.get("run_id") or "")
+            record = event.payload.get("record")
+            if run_id and isinstance(record, dict):
+                run_state = workflow_run_state_from_record(record)
+                state.workflow_run_records[run_id] = canonical_data(run_state)
+        elif event.kind == PROGRAM_EXECUTED:
+            record = event.payload.get("record")
+            if isinstance(record, dict) and record:
+                receipt = program_execution_receipt_from_record(record)
+                state.program_execution_receipt_records[
+                    receipt.receipt_sha256
+                ] = canonical_data(receipt)
+            else:
+                node_id = str(event.payload.get("node_id") or "")
+                if (
+                    node_id
+                    and node_id
+                    not in state.legacy_incomplete_execution_node_ids
+                ):
+                    state.legacy_incomplete_execution_node_ids.append(node_id)
     elif event.kind == RUNTIME_TERMINATED:
         state.terminal_state = str(event.payload["terminal_state"])
         state.blocked_reason = str(event.payload.get("reason", ""))

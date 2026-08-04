@@ -13,6 +13,7 @@ from uuid import uuid4
 from chemsmart.agent._contracts import (
     ContractError,
     canonical_data,
+    canonical_sha256,
     require_sha256,
 )
 
@@ -52,6 +53,12 @@ class EventKind(str, Enum):
     OPTIMIZED_GEOMETRY_HANDED_OFF = "optimized_geometry_handed_off"
     PROVIDER_TURN_OBSERVED = "provider_turn_observed"
     API_ATTEMPT_OBSERVED = "api_attempt_observed"
+    SCIENTIFIC_WORKFLOW_MATERIALIZED = "scientific_workflow_materialized"
+    WORKFLOW_APPROVAL_CONSUMED = "workflow_approval_consumed"
+    WORKFLOW_EXECUTION_STARTED = "workflow_execution_started"
+    WORKFLOW_LAUNCH_RESERVED = "workflow_node_launch_reserved"
+    WORKFLOW_DATA_EDGE_BOUND = "workflow_data_edge_bound"
+    WORKFLOW_NODE_STATE_CHANGED = "workflow_node_state_changed"
     RUNTIME_TERMINATED = "runtime_terminated"
 
 
@@ -75,6 +82,14 @@ OPTIMIZED_GEOMETRY_HANDED_OFF = EventKind.OPTIMIZED_GEOMETRY_HANDED_OFF.value
 PERMISSION_RESOLVED = EventKind.PERMISSION_RESOLVED.value
 PROVIDER_TURN_OBSERVED = EventKind.PROVIDER_TURN_OBSERVED.value
 API_ATTEMPT_OBSERVED = EventKind.API_ATTEMPT_OBSERVED.value
+SCIENTIFIC_WORKFLOW_MATERIALIZED = (
+    EventKind.SCIENTIFIC_WORKFLOW_MATERIALIZED.value
+)
+WORKFLOW_APPROVAL_CONSUMED = EventKind.WORKFLOW_APPROVAL_CONSUMED.value
+WORKFLOW_EXECUTION_STARTED = EventKind.WORKFLOW_EXECUTION_STARTED.value
+WORKFLOW_LAUNCH_RESERVED = EventKind.WORKFLOW_LAUNCH_RESERVED.value
+WORKFLOW_DATA_EDGE_BOUND = EventKind.WORKFLOW_DATA_EDGE_BOUND.value
+WORKFLOW_NODE_STATE_CHANGED = EventKind.WORKFLOW_NODE_STATE_CHANGED.value
 RUNTIME_TERMINATED = EventKind.RUNTIME_TERMINATED.value
 
 _RECEIPT_EVENTS = frozenset(
@@ -99,6 +114,12 @@ _RECEIPT_EVENTS = frozenset(
         PERMISSION_RESOLVED,
         PROVIDER_TURN_OBSERVED,
         API_ATTEMPT_OBSERVED,
+        SCIENTIFIC_WORKFLOW_MATERIALIZED,
+        WORKFLOW_APPROVAL_CONSUMED,
+        WORKFLOW_EXECUTION_STARTED,
+        WORKFLOW_LAUNCH_RESERVED,
+        WORKFLOW_DATA_EDGE_BOUND,
+        WORKFLOW_NODE_STATE_CHANGED,
     }
 )
 
@@ -284,7 +305,14 @@ def _validate_typed_receipt_payload(
         ),
         PROGRAM_EXECUTED: (
             "execution_state",
-            {"not_started", "running", "engine_complete", "failed", "ambiguous"},
+            {
+                "not_started",
+                "running",
+                "engine_complete",
+                "validated",
+                "failed",
+                "ambiguous",
+            },
         ),
         OPTIMIZED_GEOMETRY_HANDED_OFF: (
             "status",
@@ -293,6 +321,30 @@ def _validate_typed_receipt_payload(
         PERMISSION_RESOLVED: (
             "decision",
             {"auto_allow", "allow_once", "deny", "needs_user"},
+        ),
+        SCIENTIFIC_WORKFLOW_MATERIALIZED: (
+            "status",
+            {
+                "partial",
+                "materialized",
+                "previewed",
+                "ready_for_approval",
+            },
+        ),
+        WORKFLOW_APPROVAL_CONSUMED: ("status", {"consumed"}),
+        WORKFLOW_EXECUTION_STARTED: ("state", {"running"}),
+        WORKFLOW_LAUNCH_RESERVED: ("state", {"running"}),
+        WORKFLOW_DATA_EDGE_BOUND: ("status", {"validated"}),
+        WORKFLOW_NODE_STATE_CHANGED: (
+            "node_state",
+            {
+                "running",
+                "engine_complete",
+                "validated",
+                "failed",
+                "blocked",
+                "ambiguous",
+            },
         ),
     }
     field_and_values = enum_fields.get(kind)
@@ -311,6 +363,27 @@ def _validate_typed_receipt_payload(
             payload, "critical_finding_count"
         ) != 0:
             raise ContractError("valid validator event cannot carry findings")
+    if kind == RESULT_VERIFIED and "record" in payload:
+        record = payload.get("record")
+        if not isinstance(record, Mapping):
+            raise ContractError("result verification record must be canonical")
+        record_body = dict(record)
+        embedded_sha256 = str(record_body.pop("receipt_sha256", "") or "")
+        if embedded_sha256 != str(payload.get("receipt_sha256") or ""):
+            raise ContractError(
+                "result verification embedded receipt digest mismatch"
+            )
+        if canonical_sha256(record_body) != str(
+            payload.get("receipt_sha256") or ""
+        ):
+            raise ContractError("result verification record digest mismatch")
+        finding_count = _nonnegative_int(
+            payload, "critical_finding_count"
+        )
+        if payload.get("status") == "valid" and finding_count != 0:
+            raise ContractError(
+                "valid result verification cannot carry findings"
+            )
     if kind == PROGRAM_PREFLIGHTED:
         critical_count = _nonnegative_int(payload, "critical_finding_count")
         if payload.get("plan_state") == "previewed":
@@ -320,6 +393,110 @@ def _validate_typed_receipt_payload(
             )
             if critical_count:
                 raise ContractError("previewed preflight cannot carry findings")
+    if kind in {
+        SCIENTIFIC_WORKFLOW_MATERIALIZED,
+        WORKFLOW_APPROVAL_CONSUMED,
+        WORKFLOW_EXECUTION_STARTED,
+        WORKFLOW_NODE_STATE_CHANGED,
+    }:
+        record = payload.get("record")
+        if not isinstance(record, Mapping):
+            raise ContractError(f"{kind} requires an embedded canonical record")
+        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+            raise ContractError(f"{kind} record digest mismatch")
+    _validate_canonical_execution_record(kind, payload)
+
+
+def _validate_canonical_execution_record(
+    kind: str, payload: Mapping[str, Any]
+) -> None:
+    """Strictly reconstruct execution-grade records when they are present."""
+
+    from chemsmart.agent.runtime.records import (
+        frozen_workflow_approval_from_record,
+        materialized_workflow_from_record,
+        program_execution_invocation_from_record,
+        program_execution_receipt_from_record,
+        scientific_workflow_plan_from_record,
+        validated_data_edge_binding_from_record,
+        workflow_node_launch_reservation_from_record,
+        workflow_run_state_from_record,
+    )
+
+    if kind == WORKFLOW_PLANNED and payload.get("scientific_plan_record"):
+        plan = scientific_workflow_plan_from_record(
+            payload["scientific_plan_record"]
+        )
+        if plan.plan_sha256 != str(
+            payload.get("scientific_plan_sha256") or ""
+        ):
+            raise ContractError("scientific plan event digest mismatch")
+    if kind == SCIENTIFIC_WORKFLOW_MATERIALIZED:
+        materialized_workflow_from_record(payload["record"])
+    if kind == WORKFLOW_APPROVAL_CONSUMED:
+        frozen_workflow_approval_from_record(payload["record"])
+    if kind in {WORKFLOW_EXECUTION_STARTED, WORKFLOW_NODE_STATE_CHANGED}:
+        workflow_run_state_from_record(payload["record"])
+    if kind == PROGRAM_EXECUTED and payload.get("record"):
+        receipt = program_execution_receipt_from_record(payload["record"])
+        if receipt.receipt_sha256 != str(payload.get("receipt_sha256") or ""):
+            raise ContractError("program execution record digest mismatch")
+    if kind == WORKFLOW_DATA_EDGE_BOUND:
+        binding = validated_data_edge_binding_from_record(payload["record"])
+        if binding.receipt_sha256 != str(payload.get("receipt_sha256") or ""):
+            raise ContractError("validated data edge event digest mismatch")
+    if kind != WORKFLOW_LAUNCH_RESERVED:
+        return
+    required_records = {
+        "record",
+        "scientific_plan_record",
+        "materialized_workflow_record",
+        "frozen_approval_record",
+        "invocation_record",
+        "run_state_record",
+    }
+    if not required_records.issubset(payload):
+        raise ContractError("launch reservation lacks canonical frontier records")
+    reservation = workflow_node_launch_reservation_from_record(payload["record"])
+    if canonical_sha256(payload["record"]) != str(
+        payload.get("receipt_sha256") or ""
+    ):
+        raise ContractError("launch reservation event digest mismatch")
+    plan = scientific_workflow_plan_from_record(payload["scientific_plan_record"])
+    materialized = materialized_workflow_from_record(
+        payload["materialized_workflow_record"]
+    )
+    approval = frozen_workflow_approval_from_record(
+        payload["frozen_approval_record"]
+    )
+    invocation = program_execution_invocation_from_record(
+        payload["invocation_record"]
+    )
+    run_state = workflow_run_state_from_record(payload["run_state_record"])
+    if (
+        reservation.workflow_id != plan.workflow_id
+        or reservation.plan_sha256 != plan.plan_sha256
+        or reservation.materialized_workflow_sha256
+        != materialized.materialized_sha256
+        or reservation.approval_sha256 != approval.approval_sha256
+        or reservation.admission_sha256 != approval.admission_sha256
+        or reservation.invocation_sha256 != invocation.invocation_sha256
+        or reservation.run_id != run_state.run_id
+        or reservation.node_id != invocation.node_id
+    ):
+        raise ContractError("launch reservation frontier bindings differ")
+    if not run_state.approval_consumed or run_state.state != "running":
+        raise ContractError("launch reservation requires a running run state")
+    node_state = next(
+        (item for item in run_state.nodes if item.node_id == reservation.node_id),
+        None,
+    )
+    if (
+        node_state is None
+        or node_state.state != "running"
+        or node_state.invocation_sha256 != reservation.invocation_sha256
+    ):
+        raise ContractError("launch reservation node is not durably running")
 
 
 def _nonnegative_int(payload: Mapping[str, Any], field: str) -> int:
@@ -358,6 +535,7 @@ __all__ = [
     "PROJECT_VALIDATED",
     "PROJECT_PROMOTED",
     "SCIENTIFIC_DECISION_RECORDED",
+    "SCIENTIFIC_WORKFLOW_MATERIALIZED",
     "PROVIDER_TURN_OBSERVED",
     "RESULT_VERIFIED",
     "OPTIMIZED_GEOMETRY_HANDED_OFF",
@@ -365,6 +543,11 @@ __all__ = [
     "SAFE_PREVIEWED",
     "VALIDATOR_OBSERVED",
     "WORKFLOW_PLANNED",
+    "WORKFLOW_APPROVAL_CONSUMED",
+    "WORKFLOW_EXECUTION_STARTED",
+    "WORKFLOW_LAUNCH_RESERVED",
+    "WORKFLOW_DATA_EDGE_BOUND",
+    "WORKFLOW_NODE_STATE_CHANGED",
     "RuntimeEvent",
     "SUBSTITUTION_ASSESSED",
     "EventKind",

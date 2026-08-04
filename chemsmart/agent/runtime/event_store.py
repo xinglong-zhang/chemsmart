@@ -31,6 +31,21 @@ from chemsmart.agent.permissions import (
     PermissionRequestV1,
     _evaluate_permission,
 )
+from chemsmart.agent.execution import (
+    FrozenWorkflowApprovalV1,
+    ProgramExecutionInvocationV1,
+    ProgramExecutionReceiptV1,
+    ProgramResultValidationReceiptV1,
+    ValidatedDataEdgeBindingV1,
+    WorkflowRunStateV1,
+    build_workflow_run_state,
+    derive_ready_node_ids,
+    transition_workflow_node,
+)
+from chemsmart.agent.workflows import (
+    MaterializedWorkflowV1,
+    ScientificWorkflowPlanV2,
+)
 from chemsmart.agent.runtime.events import (
     CAPABILITY_QUERIED,
     COMMAND_COMPILED,
@@ -46,11 +61,25 @@ from chemsmart.agent.runtime.events import (
     PROJECT_PROMOTED,
     RESULT_VERIFIED,
     SCIENTIFIC_DECISION_RECORDED,
+    SCIENTIFIC_WORKFLOW_MATERIALIZED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
     SUBSTITUTION_ASSESSED,
     VALIDATOR_OBSERVED,
+    WORKFLOW_APPROVAL_CONSUMED,
+    WORKFLOW_EXECUTION_STARTED,
+    WORKFLOW_LAUNCH_RESERVED,
+    WORKFLOW_DATA_EDGE_BOUND,
+    WORKFLOW_NODE_STATE_CHANGED,
     RuntimeEvent,
+)
+from chemsmart.agent.runtime.records import (
+    LaunchFenceResultV1,
+    ReconstructedWorkflowFrontierV1,
+    build_workflow_node_launch_reservation,
+    canonical_record,
+    reconstruct_workflow_frontier,
+    workflow_run_state_from_record,
 )
 from chemsmart.agent.runtime.reducer import RuntimeState, replay_events
 
@@ -74,6 +103,15 @@ class RuntimeEventStore:
 
     def state(self) -> RuntimeState:
         return replay_events(self.read_events())
+
+    def workflow_frontier(
+        self, *, workflow_id: str, run_id: str
+    ) -> ReconstructedWorkflowFrontierV1:
+        """Return the strict typed frontier reconstructed from this stream."""
+
+        return reconstruct_workflow_frontier(
+            self.state(), workflow_id=workflow_id, run_id=run_id
+        )
 
     def append(
         self,
@@ -127,7 +165,7 @@ class RuntimeEventStore:
                 "decision": receipt.decision.value,
                 "reason": receipt.reason,
             }
-            event = self._append_locked(
+            self._append_locked(
                 handle,
                 turn_id=turn_id,
                 kind=PERMISSION_RESOLVED,
@@ -138,6 +176,540 @@ class RuntimeEventStore:
                 existing_events=events,
             )
             return receipt, event
+
+    def record_materialized_workflow(
+        self,
+        *,
+        turn_id: str,
+        workflow: MaterializedWorkflowV1,
+    ) -> RuntimeEvent:
+        """Persist the canonical grounded workflow, not only its digest."""
+
+        record = canonical_data(workflow)
+        receipt_sha256 = canonical_sha256(record)
+        return self.append(
+            turn_id=turn_id,
+            kind=SCIENTIFIC_WORKFLOW_MATERIALIZED,
+            payload={
+                "receipt_sha256": receipt_sha256,
+                "workflow_id": workflow.workflow_id,
+                "plan_sha256": workflow.plan_sha256,
+                "status": workflow.status,
+                "record": record,
+            },
+            idempotency_key=(
+                "materialized-workflow:" + workflow.materialized_sha256
+            ),
+        )
+
+    def consume_and_start_workflow(
+        self,
+        *,
+        turn_id: str,
+        plan: ScientificWorkflowPlanV2,
+        approval: FrozenWorkflowApprovalV1,
+        run_id: str,
+        node_id: str,
+        invocation_sha256: str,
+        timestamp: str,
+    ) -> tuple[RuntimeEvent, RuntimeEvent, WorkflowRunStateV1]:
+        """Consume one frozen approval and durably start one ready node.
+
+        Both events are appended while holding the same exclusive stream lock.
+        A second caller therefore cannot consume the approval or start the same
+        run concurrently.  The host still records this transition before it
+        invokes an engine.
+        """
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            state = replay_events(events)
+            if approval.approval_id in state.consumed_workflow_approval_ids:
+                raise ContractError("workflow approval has already been consumed")
+            normalized_run_id = str(run_id).strip().lower()
+            if not normalized_run_id:
+                raise ContractError("run_id must not be empty")
+            if normalized_run_id in state.workflow_run_records:
+                raise ContractError("workflow run has already started")
+            initial = build_workflow_run_state(
+                run_id=normalized_run_id,
+                plan=plan,
+                approval=approval,
+                approval_consumed=True,
+            )
+            if node_id not in derive_ready_node_ids(plan, initial):
+                raise ContractError("node is not ready in the frozen workflow")
+            started = transition_workflow_node(
+                initial,
+                node_id=node_id,
+                new_state="running",
+                invocation_sha256=invocation_sha256,
+                timestamp=timestamp,
+            )
+            approval_record = canonical_data(approval)
+            approval_receipt = canonical_sha256(approval_record)
+            approval_event = self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=WORKFLOW_APPROVAL_CONSUMED,
+                payload={
+                    "receipt_sha256": approval_receipt,
+                    "approval_id": approval.approval_id,
+                    "approval_sha256": approval.approval_sha256,
+                    "workflow_id": approval.workflow_id,
+                    "status": "consumed",
+                    "record": approval_record,
+                },
+                idempotency_key=(
+                    "workflow-approval:" + approval.approval_id
+                ),
+                existing_events=events,
+            )
+            run_record = canonical_data(started)
+            start_event = self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=WORKFLOW_EXECUTION_STARTED,
+                payload={
+                    "receipt_sha256": canonical_sha256(run_record),
+                    "run_id": started.run_id,
+                    "workflow_id": started.workflow_id,
+                    "approval_id": started.approval_id,
+                    "node_id": node_id,
+                    "state": "running",
+                    "record": run_record,
+                },
+                idempotency_key="workflow-run-started:" + started.run_id,
+                existing_events=events + (approval_event,),
+            )
+            return approval_event, start_event, started
+
+    def replayed_execution_receipt(
+        self,
+        *,
+        workflow_id: str,
+        run_id: str,
+        node_id: str,
+    ) -> ProgramExecutionReceiptV1 | None:
+        """Return a durable terminal receipt or reject an unsafe replay.
+
+        A running reservation is deliberately not interpreted as a retryable
+        failure.  The caller must reconcile the original process/output state
+        rather than launching the same node again.
+        """
+
+        frontier = reconstruct_workflow_frontier(
+            self.state(), workflow_id=workflow_id, run_id=run_id
+        )
+        receipt = frontier.receipt_for_node(node_id)
+        reservation = frontier.reservation_for_node(node_id)
+        if receipt is not None:
+            if reservation is None:
+                raise ContractError(
+                    "execution receipt lacks a durable launch reservation"
+                )
+            if receipt.invocation_sha256 != reservation.invocation_sha256:
+                raise ContractError(
+                    "execution receipt differs from its launch reservation"
+                )
+            return receipt
+        if reservation is not None:
+            raise ContractError(
+                "launch reservation remains unresolved; relaunch is forbidden"
+            )
+        if frontier.legacy_incomplete:
+            raise ContractError(
+                "legacy-incomplete workflow stream is inspectable but cannot launch"
+            )
+        return None
+
+    def reserve_workflow_node_launch(
+        self,
+        *,
+        turn_id: str,
+        plan: ScientificWorkflowPlanV2,
+        materialized_workflow: MaterializedWorkflowV1,
+        approval: FrozenWorkflowApprovalV1,
+        invocation: ProgramExecutionInvocationV1,
+        run_id: str,
+        timestamp: str,
+    ) -> LaunchFenceResultV1:
+        """Atomically consume approval and reserve one node before launch."""
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            state = replay_events(events)
+            frontier = reconstruct_workflow_frontier(
+                state, workflow_id=plan.workflow_id, run_id=run_id
+            )
+            receipt = frontier.receipt_for_node(invocation.node_id)
+            if receipt is not None:
+                reservation = frontier.reservation_for_node(invocation.node_id)
+                if reservation is None or (
+                    receipt.invocation_sha256 != invocation.invocation_sha256
+                    or reservation.invocation_sha256
+                    != invocation.invocation_sha256
+                ):
+                    raise ContractError(
+                        "replayed execution differs from requested invocation"
+                    )
+                return LaunchFenceResultV1(
+                    status="terminal_replay",
+                    reservation=None,
+                    execution_receipt=receipt,
+                    run_state=frontier.run_state,
+                )
+            prior_reservation = frontier.reservation_for_node(invocation.node_id)
+            if prior_reservation is not None:
+                raise ContractError(
+                    "launch reservation remains unresolved; relaunch is forbidden"
+                )
+            if frontier.legacy_incomplete:
+                raise ContractError(
+                    "legacy-incomplete workflow stream is inspectable but cannot launch"
+                )
+            for persisted, supplied, label in (
+                (frontier.plan, plan, "scientific plan"),
+                (
+                    frontier.materialized_workflow,
+                    materialized_workflow,
+                    "materialized workflow",
+                ),
+                (frontier.approval, approval, "frozen approval"),
+            ):
+                if persisted is not None and canonical_data(persisted) != canonical_data(
+                    supplied
+                ):
+                    raise ContractError(f"persisted {label} differs from launch")
+
+            consumes_approval = frontier.run_state is None
+            if consumes_approval:
+                if approval.approval_id in state.consumed_workflow_approval_ids:
+                    raise ContractError(
+                        "workflow approval has already been consumed"
+                    )
+                current = build_workflow_run_state(
+                    run_id=run_id,
+                    plan=plan,
+                    approval=approval,
+                    approval_consumed=True,
+                )
+            else:
+                current = frontier.run_state
+                if current is None:  # pragma: no cover - narrowed above
+                    raise ContractError("workflow run reconstruction failed")
+                if (
+                    current.plan_sha256 != plan.plan_sha256
+                    or current.approval_sha256 != approval.approval_sha256
+                ):
+                    raise ContractError(
+                        "persisted workflow run differs from launch approval"
+                    )
+            if invocation.node_id not in derive_ready_node_ids(
+                plan, current, frontier.data_edge_bindings
+            ):
+                raise ContractError("node is not ready in the replayed workflow")
+            started = transition_workflow_node(
+                current,
+                node_id=invocation.node_id,
+                new_state="running",
+                invocation_sha256=invocation.invocation_sha256,
+                timestamp=timestamp,
+            )
+            reservation = build_workflow_node_launch_reservation(
+                run_id=run_id,
+                plan=plan,
+                materialized_workflow=materialized_workflow,
+                approval=approval,
+                invocation=invocation,
+                data_edge_bindings=frontier.data_edge_bindings,
+                consumes_approval=consumes_approval,
+                reserved_at=timestamp,
+            )
+            reservation_record = canonical_record(reservation)
+            event = self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=WORKFLOW_LAUNCH_RESERVED,
+                payload={
+                    "receipt_sha256": canonical_sha256(reservation_record),
+                    "workflow_id": plan.workflow_id,
+                    "run_id": started.run_id,
+                    "node_id": invocation.node_id,
+                    "approval_id": approval.approval_id,
+                    "state": "running",
+                    "record": reservation_record,
+                    "scientific_plan_record": canonical_record(plan),
+                    "materialized_workflow_record": canonical_record(
+                        materialized_workflow
+                    ),
+                    "frozen_approval_record": canonical_record(approval),
+                    "invocation_record": canonical_record(invocation),
+                    "run_state_record": canonical_record(started),
+                },
+                idempotency_key=(
+                    "workflow-launch-reservation:"
+                    + run_id
+                    + ":"
+                    + invocation.node_id
+                ),
+                existing_events=events,
+            )
+            return LaunchFenceResultV1(
+                status="reserved",
+                reservation=reservation,
+                execution_receipt=None,
+                run_state=started,
+            )
+
+    def record_validated_data_edge_binding(
+        self,
+        *,
+        turn_id: str,
+        binding: ValidatedDataEdgeBindingV1,
+    ) -> RuntimeEvent:
+        """Persist one exact producer-output selection after validation."""
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            state = replay_events(events)
+            record = state.workflow_run_records.get(binding.run_id)
+            if record is None:
+                raise ContractError("data edge binding requires a workflow run")
+            run_state = workflow_run_state_from_record(record)
+            source = next(
+                (
+                    item
+                    for item in run_state.nodes
+                    if item.node_id == binding.source_node_id
+                ),
+                None,
+            )
+            if source is None or source.state != "validated":
+                raise ContractError("data edge producer is not durably validated")
+            if (
+                source.execution_receipt_sha256
+                != binding.producer_execution_receipt_sha256
+                or source.validator_receipt_sha256s
+                != binding.producer_validator_receipt_sha256s
+                or binding.source_artifact_sha256
+                not in source.output_artifact_sha256s
+                or binding.selected_artifact_sha256
+                not in source.output_artifact_sha256s
+            ):
+                raise ContractError(
+                    "data edge binding differs from durable producer evidence"
+                )
+            frontier = reconstruct_workflow_frontier(
+                state,
+                workflow_id=binding.workflow_id,
+                run_id=binding.run_id,
+            )
+            if frontier.plan is None or frontier.approval is None:
+                raise ContractError("data edge binding lacks a replayed frontier")
+            edge = next(
+                (
+                    item
+                    for item in frontier.plan.edges
+                    if canonical_sha256(item) == binding.scientific_edge_sha256
+                ),
+                None,
+            )
+            if edge is None:
+                raise ContractError("data edge binding is absent from the plan")
+            rules = tuple(
+                item
+                for item in frontier.approval.producer_edge_rules
+                if item.rule_sha256 == binding.producer_rule_sha256
+            )
+            if len(rules) != 1:
+                raise ContractError("data edge binding lacks a frozen rule")
+            existing = tuple(
+                item
+                for item in frontier.data_edge_bindings
+                if item.scientific_edge_sha256
+                == binding.scientific_edge_sha256
+            )
+            if existing:
+                if existing != (binding,):
+                    raise ContractError("data edge binding conflicts with replay")
+                return next(
+                    event
+                    for event in events
+                    if event.kind == WORKFLOW_DATA_EDGE_BOUND
+                    and event.payload.get("receipt_sha256")
+                    == binding.receipt_sha256
+                )
+            return self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=WORKFLOW_DATA_EDGE_BOUND,
+                payload={
+                    "receipt_sha256": binding.receipt_sha256,
+                    "run_id": binding.run_id,
+                    "workflow_id": binding.workflow_id,
+                    "source_node_id": binding.source_node_id,
+                    "target_node_id": binding.target_node_id,
+                    "status": binding.status,
+                    "record": canonical_record(binding),
+                },
+                idempotency_key=(
+                    "workflow-data-edge:"
+                    + binding.run_id
+                    + ":"
+                    + binding.scientific_edge_sha256
+                ),
+                existing_events=events,
+            )
+
+    def record_program_execution_receipt(
+        self,
+        *,
+        turn_id: str,
+        workflow_id: str,
+        run_id: str,
+        receipt: ProgramExecutionReceiptV1,
+    ) -> RuntimeEvent:
+        """Persist the full terminal receipt against its exact reservation."""
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            frontier = reconstruct_workflow_frontier(
+                replay_events(events), workflow_id=workflow_id, run_id=run_id
+            )
+            reservation = frontier.reservation_for_node(receipt.node_id)
+            if reservation is None:
+                raise ContractError(
+                    "execution receipt requires a durable launch reservation"
+                )
+            if reservation.invocation_sha256 != receipt.invocation_sha256:
+                raise ContractError(
+                    "execution receipt differs from launch reservation"
+                )
+            existing = frontier.receipt_for_node(receipt.node_id)
+            if existing is not None and existing != receipt:
+                raise ContractError("execution receipt conflicts with replay")
+            return self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=PROGRAM_EXECUTED,
+                payload={
+                    "receipt_sha256": receipt.receipt_sha256,
+                    "execution_state": receipt.execution_state,
+                    "wrapper_exit_status": receipt.wrapper_exit_status,
+                    "child_exit_status": receipt.child_exit_status,
+                    "engine_receipt_sha256": receipt.engine_receipt_sha256,
+                    "engine_complete": receipt.engine_complete,
+                    "validated": receipt.validated,
+                    "result_validation_receipt_sha256": (
+                        receipt.result_validation_receipt_sha256
+                    ),
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                    "node_id": receipt.node_id,
+                    "record": canonical_record(receipt),
+                },
+                idempotency_key=(
+                    "program-execution-receipt:" + receipt.idempotency_key
+                ),
+                existing_events=events,
+            )
+
+    def transition_workflow_run_node(
+        self,
+        *,
+        turn_id: str,
+        run_id: str,
+        node_id: str,
+        new_state: str,
+        timestamp: str,
+        plan: ScientificWorkflowPlanV2 | None = None,
+        invocation_sha256: str = "",
+        execution_receipt_sha256: str = "",
+        validator_receipt_sha256s: Iterable[str] = (),
+        result_validation_receipt: (
+            ProgramResultValidationReceiptV1 | None
+        ) = None,
+        output_artifact_sha256s: Iterable[str] = (),
+        failure_rule_ids: Iterable[str] = (),
+    ) -> tuple[RuntimeEvent, WorkflowRunStateV1]:
+        """Apply and persist one host-validated node-state transition."""
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            state = replay_events(events)
+            record = state.workflow_run_records.get(str(run_id))
+            if record is None:
+                raise ContractError("workflow run has not started")
+            current = _workflow_run_state_from_record(record)
+            if new_state == "running":
+                if plan is None:
+                    raise ContractError(
+                        "starting another node requires the scientific plan"
+                    )
+                frontier = reconstruct_workflow_frontier(
+                    state, workflow_id=plan.workflow_id, run_id=run_id
+                )
+                if node_id not in derive_ready_node_ids(
+                    plan, current, frontier.data_edge_bindings
+                ):
+                    raise ContractError("node is not ready in the scientific DAG")
+            if new_state == "validated":
+                if result_validation_receipt is None:
+                    raise ContractError(
+                        "validated transition requires a typed result validation receipt"
+                    )
+                expected_record = canonical_data(result_validation_receipt)
+                durable_records = tuple(
+                    event.payload.get("record")
+                    for event in events
+                    if event.kind == RESULT_VERIFIED
+                    and event.payload.get("receipt_sha256")
+                    == result_validation_receipt.receipt_sha256
+                )
+                if durable_records != (expected_record,):
+                    raise ContractError(
+                        "result validation receipt is not durably resolved"
+                    )
+            updated = transition_workflow_node(
+                current,
+                node_id=node_id,
+                new_state=new_state,
+                invocation_sha256=invocation_sha256,
+                execution_receipt_sha256=execution_receipt_sha256,
+                validator_receipt_sha256s=tuple(validator_receipt_sha256s),
+                result_validation_receipt=result_validation_receipt,
+                output_artifact_sha256s=tuple(output_artifact_sha256s),
+                failure_rule_ids=tuple(failure_rule_ids),
+                timestamp=timestamp,
+            )
+            updated_record = canonical_data(updated)
+            event = self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=WORKFLOW_NODE_STATE_CHANGED,
+                payload={
+                    "receipt_sha256": canonical_sha256(updated_record),
+                    "run_id": updated.run_id,
+                    "workflow_id": updated.workflow_id,
+                    "node_id": node_id,
+                    "node_state": new_state,
+                    "workflow_state": updated.state,
+                    "record": updated_record,
+                },
+                idempotency_key=(
+                    "workflow-node-state:"
+                    + updated.run_id
+                    + ":"
+                    + node_id
+                    + ":"
+                    + new_state
+                    + ":"
+                    + updated.run_state_sha256
+                ),
+                existing_events=events,
+            )
+            return event, updated
 
     def terminate(
         self,
@@ -485,16 +1057,24 @@ def _receipt_is_green(
         return value.get("status") == "valid"
     if event.kind == PROGRAM_EXECUTED:
         return (
-            value.get("execution_state") == "engine_complete"
+            value.get("execution_state") == "validated"
             and value.get("engine_complete") is True
             and value.get("validated") is True
         )
     if event.kind == OPTIMIZED_GEOMETRY_HANDED_OFF:
         return value.get("status") == "validated_handoff"
+    if event.kind == WORKFLOW_DATA_EDGE_BOUND:
+        return value.get("status") == "validated"
     if event.kind == SUBSTITUTION_ASSESSED:
         return value.get("decision") in {"exact", "approved"}
     if event.kind == PERMISSION_RESOLVED:
         return value.get("decision") in {"auto_allow", "allow_once"}
+    if event.kind == SCIENTIFIC_WORKFLOW_MATERIALIZED:
+        return value.get("status") in {"previewed", "ready_for_approval"}
+    if event.kind == WORKFLOW_APPROVAL_CONSUMED:
+        return value.get("status") == "consumed"
+    if event.kind == WORKFLOW_NODE_STATE_CHANGED:
+        return value.get("node_state") == "validated"
     return False
 
 
@@ -525,8 +1105,20 @@ def _observed_receipts(state: RuntimeState) -> set[str]:
         state.permission_receipts,
         state.provider_turn_receipts,
         state.api_attempt_receipts,
+        state.materialized_workflow_receipts,
+        state.workflow_approval_receipts,
+        state.workflow_execution_start_receipts,
+        state.workflow_launch_reservation_receipts,
+        state.workflow_data_edge_binding_receipts,
+        state.workflow_node_state_receipts,
     )
     return {digest for collection in collections for digest in collection if digest}
+
+
+def _workflow_run_state_from_record(
+    record: Mapping[str, Any],
+) -> WorkflowRunStateV1:
+    return workflow_run_state_from_record(record)
 
 
 __all__ = ["RuntimeEventStore"]

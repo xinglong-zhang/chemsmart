@@ -71,6 +71,10 @@ def build_scientific_identity_binding(
     """Bind explicit task state to the exact current geometry bytes."""
 
     _require_current_artifact(geometry_artifact, "geometry")
+    if geometry_artifact.kind not in {"geometry_xyz", "xyz"}:
+        raise ContractError(
+            "scientific identity requires an exact geometry artifact"
+        )
     body = {
         "schema_version": "chemsmart.scientific-identity-binding.v1",
         "task_spec_sha256": require_sha256(

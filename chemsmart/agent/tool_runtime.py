@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -33,6 +32,7 @@ from chemsmart.agent.capabilities import (
     TrustedComputeEnvironmentReceiptV1,
     build_approved_execution_overlay,
     build_command_compiled_preview_overlay,
+    consume_pyscf_compute_environment_receipt,
     load_program_capabilities,
     query_capability,
     query_environment,
@@ -54,17 +54,25 @@ from chemsmart.agent.inspection import (
     GeneratedArtifactInspectionReceiptV1,
     inspect_generated_artifact,
 )
+from chemsmart.agent.identity import ApprovedMolecularIdentityV1
 from chemsmart.agent.execution import (
     ExecutionResourceSpecV1,
+    FrozenWorkflowApprovalV1,
     OptimizedGeometryHandoffV1,
     ProgramExecutionReceiptV1,
+    ProgramResultValidationReceiptV1,
     ProjectArtifactPromotionV1,
     ScientificDecisionRecordV1,
     WorkflowExecutionApprovalV1,
+    WorkflowNodeRunStateV1,
+    WorkflowRunStateV1,
     bind_project_promotion_validation,
     build_program_execution_invocation,
     build_program_execution_receipt,
+    build_program_result_validation_receipt,
     build_scientific_decision_record,
+    build_validated_data_edge_binding,
+    derive_ready_node_ids,
     handoff_optimized_pyscf_geometry,
     promote_project_candidate,
 )
@@ -89,7 +97,9 @@ from chemsmart.agent.projects import (
     ProjectDocumentV1,
     ProjectRenderReceiptV1,
     ProjectValidationReceiptV1,
+    PySCFFunctionalResolutionReceiptV1,
     project_document,
+    project_scientific_materializations,
     read_project_yaml,
     render_project_yaml,
     validate_project_yaml,
@@ -107,7 +117,20 @@ from chemsmart.agent.workflows import (
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
     CommandWorkflowDraftV1,
+    MaterializedNodeV1,
+    MaterializedWorkflowV1,
+    ScientificWorkflowEdgeV2,
+    ScientificWorkflowNodeV2,
+    ScientificWorkflowPlanV2,
+    StationaryPointValidationPolicyV1,
     build_command_workflow_draft,
+    build_materialized_workflow,
+    build_scientific_workflow_plan,
+)
+from chemsmart.utils.process_observation import (
+    ProcessObservationV1,
+    launch_failure_observation,
+    observe_process,
 )
 
 
@@ -123,6 +146,558 @@ class _CommandContext:
     scientific_identity: ScientificIdentityBindingV1
 
 
+@dataclass(frozen=True)
+class _PySCFEngineObservation:
+    """Digest-bound child-engine evidence independent of wrapper status."""
+
+    child_exit_status: int | None
+    engine_complete: bool
+    run_receipt_sha256: str
+    run_receipt: Mapping[str, Any] | None
+    result_artifact: TrustedArtifactRefV1 | None
+    findings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ExecutionValidationEvaluation:
+    """Complete deterministic observation before receipt materialization."""
+
+    validator_id: str
+    validator_schema_version: str
+    validator_version: str
+    observations: Mapping[str, Any]
+    findings: tuple[str, ...]
+    run_environment_receipt_sha256: str = ""
+    environment_validation_sha256: str = ""
+
+    @property
+    def validated(self) -> bool:
+        return not self.findings
+
+
+def _scientific_decision_binding_requirement(
+    materializations: tuple[PySCFFunctionalResolutionReceiptV1, ...],
+) -> dict[str, Any]:
+    """Expose the exact durable action needed before rendering XC semantics.
+
+    Project validation is the first point at which a PySCF functional literal
+    has a host-owned applied-XC interpretation.  A model may have recorded a
+    useful task-level decision earlier, but that record cannot ground a later
+    implementation-specific alias or correlation-convention claim.  This
+    small typed action keeps the evidence requirement visible in both full and
+    causal feedback without making the host author the scientific rationale.
+    """
+
+    evidence_refs = tuple(
+        sorted(
+            item.evidence_ref
+            for item in materializations
+            if item.evidence_ref
+        )
+    )
+    body = {
+        "schema_version": "chemsmart.scientific-decision-binding.v1",
+        "status": "required_if_rendering_implementation_semantics",
+        "rule_id": "scientific.functional_resolution.decision_binding",
+        "next_tool": "record_scientific_decision",
+        "evidence_refs": evidence_refs,
+        "message": (
+            "After project validation, record a final scientific decision "
+            "citing these exact evidence_refs before rendering an applied XC "
+            "alias or correlation convention. An earlier task-level decision "
+            "does not satisfy this evidence binding."
+            if evidence_refs
+            else "No functional materialization requires a decision binding."
+        ),
+    }
+    return {**body, "receipt_sha256": canonical_sha256(body)}
+
+
+def _current_artifact_path(
+    artifact: TrustedArtifactRefV1,
+    *,
+    field_name: str,
+) -> Path:
+    """Rehash an artifact immediately before a validator opens it."""
+
+    path = Path(artifact.path)
+    if not path.is_file() or path.is_symlink():
+        raise ContractError(f"{field_name} is not a current regular file")
+    before = path.stat()
+    if before.st_size != artifact.size_bytes:
+        raise ContractError(f"{field_name} size differs from its binding")
+    observed_sha256 = file_sha256(path)
+    after = path.stat()
+    if (
+        after.st_size != before.st_size
+        or after.st_mtime_ns != before.st_mtime_ns
+        or observed_sha256 != artifact.sha256
+    ):
+        raise ContractError(f"{field_name} digest differs from its binding")
+    return path.resolve()
+
+
+def _environment_semantic_facts(
+    receipt: EnvironmentCapabilityReceiptV1 | TrustedComputeEnvironmentReceiptV1,
+) -> Mapping[str, Any]:
+    """Return only stable facts shared by capability and per-run probes."""
+
+    return {
+        "program": receipt.program,
+        "engine": receipt.engine,
+        "compute_interpreter_sha256": receipt.compute_interpreter_sha256,
+        "dependency_versions": receipt.dependency_versions,
+        "solver_evidence": receipt.solver_evidence,
+        "gpu_evidence": receipt.gpu_evidence,
+    }
+
+
+def _pyscf_environment_evidence(
+    *,
+    output_artifacts: tuple[TrustedArtifactRefV1, ...],
+    run_receipt: Mapping[str, Any] | None,
+    capability_environment: EnvironmentCapabilityReceiptV1 | None,
+) -> tuple[Mapping[str, Any], tuple[str, ...]]:
+    """Compare different environment receipt types by stable semantics."""
+
+    findings: list[str] = []
+    candidates: list[tuple[TrustedArtifactRefV1, Mapping[str, Any] | None]] = []
+    for artifact in output_artifacts:
+        if artifact.kind != "json":
+            continue
+        try:
+            path = _current_artifact_path(
+                artifact, field_name="PySCF environment receipt"
+            )
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (ContractError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(raw, dict) and raw.get("schema_version") == (
+            "chemsmart.pyscf-environment.v1"
+        ):
+            candidates.append((artifact, _digest_valid_json_receipt(path)))
+
+    observation: dict[str, Any] = {
+        "capability_environment_receipt_sha256": (
+            capability_environment.receipt_sha256
+            if capability_environment is not None
+            else ""
+        ),
+        "run_environment_receipt_sha256": "",
+        "approved_semantic_fingerprint_sha256": "",
+        "observed_semantic_fingerprint_sha256": "",
+    }
+    if capability_environment is None:
+        findings.append("pyscf.environment.capability_receipt_unavailable")
+    elif capability_environment.status.value != "available":
+        findings.append("pyscf.environment.capability_not_available")
+    if len(candidates) != 1:
+        findings.append("pyscf.environment.run_receipt_count")
+        observation["state"] = "invalid"
+        observation["validation_sha256"] = canonical_sha256(observation)
+        return observation, tuple(sorted(set(findings)))
+    _artifact, raw_receipt = candidates[0]
+    if raw_receipt is None:
+        findings.append("pyscf.environment.run_receipt_digest_invalid")
+        observation["state"] = "invalid"
+        observation["validation_sha256"] = canonical_sha256(observation)
+        return observation, tuple(sorted(set(findings)))
+
+    run_environment_sha256 = str(raw_receipt["receipt_sha256"])
+    observation["run_environment_receipt_sha256"] = run_environment_sha256
+    if run_receipt is None or run_receipt.get(
+        "environment_receipt_sha256"
+    ) != run_environment_sha256:
+        findings.append("pyscf.environment.run_receipt_link_mismatch")
+    if capability_environment is not None:
+        try:
+            adapted = consume_pyscf_compute_environment_receipt(
+                raw_receipt, engine=capability_environment.engine
+            )
+        except ContractError:
+            findings.append("pyscf.environment.semantic_adaptation_failed")
+        else:
+            approved_facts = _environment_semantic_facts(
+                capability_environment
+            )
+            observed_facts = _environment_semantic_facts(adapted)
+            approved_fingerprint = canonical_sha256(approved_facts)
+            observed_fingerprint = canonical_sha256(observed_facts)
+            observation.update(
+                {
+                    "approved_semantic_fingerprint_sha256": (
+                        approved_fingerprint
+                    ),
+                    "observed_semantic_fingerprint_sha256": (
+                        observed_fingerprint
+                    ),
+                    "program": adapted.program,
+                    "engine": adapted.engine,
+                }
+            )
+            if approved_fingerprint != observed_fingerprint:
+                findings.append("pyscf.environment.semantic_mismatch")
+    observation["state"] = "valid" if not findings else "invalid"
+    observation["validation_sha256"] = canonical_sha256(observation)
+    return observation, tuple(sorted(set(findings)))
+
+
+def _digest_valid_json_receipt(path: str | Path) -> Mapping[str, Any] | None:
+    """Load a JSON receipt only when its embedded digest is exact."""
+
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return None
+        observed = payload.get("receipt_sha256")
+        body = dict(payload)
+        body.pop("receipt_sha256", None)
+        if observed and observed == canonical_sha256(body):
+            return payload
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def _inspect_pyscf_engine_observation(
+    output_artifacts: tuple[TrustedArtifactRefV1, ...],
+    *,
+    launch_ambiguous: bool,
+) -> _PySCFEngineObservation:
+    """Resolve PySCF child completion from its exact run receipt.
+
+    The outer ChemSmart process may return non-zero after writing a complete
+    child receipt because post-run scientific validation intentionally raises.
+    A timeout remains ambiguous even if partial artifacts happen to exist.
+    """
+
+    if launch_ambiguous:
+        return _PySCFEngineObservation(
+            child_exit_status=None,
+            engine_complete=False,
+            run_receipt_sha256="",
+            run_receipt=None,
+            result_artifact=None,
+            findings=("execution.process.ambiguous",),
+        )
+
+    schema_candidates: list[
+        tuple[TrustedArtifactRefV1, Mapping[str, Any] | None]
+    ] = []
+    for artifact in output_artifacts:
+        if artifact.kind != "json":
+            continue
+        try:
+            path = _current_artifact_path(
+                artifact, field_name="PySCF run receipt"
+            )
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (
+            ContractError,
+            OSError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
+            continue
+        if isinstance(raw, dict) and raw.get("schema_version") == (
+            "chemsmart.pyscf-run.v1"
+        ):
+            schema_candidates.append(
+                (artifact, _digest_valid_json_receipt(path))
+            )
+
+    findings: list[str] = []
+    if len(schema_candidates) != 1:
+        findings.append("pyscf.run_receipt.count")
+        return _PySCFEngineObservation(
+            child_exit_status=None,
+            engine_complete=False,
+            run_receipt_sha256="",
+            run_receipt=None,
+            result_artifact=None,
+            findings=tuple(findings),
+        )
+    _artifact, run_receipt = schema_candidates[0]
+    if run_receipt is None:
+        findings.append("pyscf.run_receipt.digest_invalid")
+        return _PySCFEngineObservation(
+            child_exit_status=None,
+            engine_complete=False,
+            run_receipt_sha256="",
+            run_receipt=None,
+            result_artifact=None,
+            findings=tuple(findings),
+        )
+
+    child_exit_status = run_receipt.get("child_returncode")
+    if isinstance(child_exit_status, bool) or not isinstance(
+        child_exit_status, int
+    ):
+        findings.append("pyscf.run_receipt.child_status_invalid")
+        child_exit_status = None
+    if run_receipt.get("fake") is not False:
+        findings.append("pyscf.run_receipt.not_real_execution")
+
+    results = tuple(
+        artifact
+        for artifact in output_artifacts
+        if artifact.kind == "pyscf_hdf5"
+    )
+    result_artifact = results[0] if len(results) == 1 else None
+    if result_artifact is None:
+        findings.append("pyscf.result.hdf5_count")
+    else:
+        try:
+            _current_artifact_path(
+                result_artifact, field_name="PySCF result artifact"
+            )
+        except ContractError:
+            findings.append("pyscf.result.artifact_binding_mismatch")
+            result_artifact = None
+        if result_artifact is not None and run_receipt.get(
+            "result_sha256"
+        ) != result_artifact.sha256:
+            findings.append("pyscf.run_receipt.result_digest_mismatch")
+
+    receipt_declares_complete = run_receipt.get("engine_complete") is True
+    if not receipt_declares_complete:
+        findings.append("pyscf.run_receipt.engine_incomplete")
+    engine_complete = bool(
+        receipt_declares_complete
+        and child_exit_status == 0
+        and result_artifact is not None
+        and run_receipt.get("result_sha256") == result_artifact.sha256
+        and run_receipt.get("fake") is False
+    )
+    return _PySCFEngineObservation(
+        child_exit_status=child_exit_status,
+        engine_complete=engine_complete,
+        run_receipt_sha256=str(run_receipt["receipt_sha256"]),
+        run_receipt=run_receipt,
+        result_artifact=result_artifact,
+        findings=tuple(findings),
+    )
+
+
+def _pyscf_input_geometry(
+    artifact: TrustedArtifactRefV1 | None,
+) -> tuple[tuple[str, ...], tuple[tuple[float, float, float], ...]]:
+    """Read exact atom order and positions from the approved input artifact."""
+
+    if artifact is None:
+        return (), ()
+    try:
+        path = _current_artifact_path(
+            artifact, field_name="PySCF approved input artifact"
+        )
+        if artifact.kind == "pyscf_hdf5":
+            from chemsmart.io.pyscf.output import read_pyscf_h5
+
+            spec, _provenance, _status, results = read_pyscf_h5(path)
+            symbols = tuple(str(value) for value in spec.get("symbols") or ())
+            raw_positions = results.get("positions")
+            positions = tuple(
+                tuple(float(component) for component in row)
+                for row in raw_positions
+            )
+            if len(symbols) != len(positions) or any(
+                len(row) != 3 for row in positions
+            ):
+                return (), ()
+            return symbols, positions
+        lines = path.read_text(encoding="utf-8").splitlines()
+        atom_count = int(lines[0].strip())
+        atom_lines = lines[2 : atom_count + 2]
+        if atom_count < 1 or len(atom_lines) != atom_count:
+            return (), ()
+        columns = tuple(line.split() for line in atom_lines)
+        if any(len(row) < 4 for row in columns):
+            return (), ()
+        symbols = tuple(row[0] for row in columns)
+        positions = tuple(
+            (float(row[1]), float(row[2]), float(row[3])) for row in columns
+        )
+        return symbols, positions
+    except (
+        ContractError,
+        OSError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+        IndexError,
+        KeyError,
+    ):
+        return (), ()
+
+
+def _pyscf_input_symbols(
+    artifact: TrustedArtifactRefV1 | None,
+) -> tuple[str, ...]:
+    """Compatibility projection of the exact approved input geometry."""
+
+    symbols, _positions = _pyscf_input_geometry(artifact)
+    return symbols
+
+
+def _pyscf_result_receipt_expectation(
+    run_receipt: Mapping[str, Any] | None,
+) -> Mapping[str, Any] | None:
+    """Translate the digest-valid outer run receipt to HDF5 bindings."""
+
+    if run_receipt is None:
+        return None
+    expected = {
+        field: run_receipt.get(field)
+        for field in (
+            "run_id",
+            "run_nonce",
+            "script_sha256",
+            "input_receipt_sha256",
+            "environment_receipt_sha256",
+            "input_geometry_sha256",
+            "input_artifact_kind",
+            "input_artifact_sha256",
+            "requested_settings_sha256",
+            "applied_settings_sha256",
+        )
+    }
+    expected.update(
+        {
+            "project_yaml_digest": run_receipt.get("project_yaml_sha256"),
+            "require_applied_settings_sha256": True,
+            "require_engine_complete": True,
+        }
+    )
+    return expected
+
+
+def _validate_stationary_point_policy_binding(
+    frozen_approval: FrozenWorkflowApprovalV1 | None,
+    policy: StationaryPointValidationPolicyV1 | None,
+    *,
+    plan: ScientificWorkflowPlanV2 | None = None,
+    hessian_node_id: str = "",
+    require_for_hessian: bool = False,
+) -> None:
+    """Require a task-, plan-, and node-bound Hessian policy."""
+
+    if frozen_approval is not None and not isinstance(
+        frozen_approval, FrozenWorkflowApprovalV1
+    ):
+        raise ContractError("stationary-point binding requires a real approval")
+    if policy is not None and not isinstance(
+        policy, StationaryPointValidationPolicyV1
+    ):
+        raise ContractError("stationary-point binding requires a real policy")
+    if frozen_approval is None:
+        if policy is not None:
+            raise ContractError(
+                "stationary-point policy requires a frozen approval"
+            )
+        if require_for_hessian:
+            raise ContractError(
+                "Hessian execution requires a frozen workflow approval"
+            )
+        return
+    approved_sha256 = frozen_approval.stationary_point_policy_sha256
+    if not approved_sha256:
+        if policy is not None:
+            raise ContractError(
+                "unapproved stationary-point policy was supplied"
+            )
+        if require_for_hessian:
+            raise ContractError(
+                "Hessian execution requires an approved stationary-point policy"
+            )
+        return
+    if policy is None or policy.policy_sha256 != approved_sha256:
+        raise ContractError(
+            "frozen stationary-point policy is unavailable"
+        )
+    if plan is None or not isinstance(plan, ScientificWorkflowPlanV2):
+        raise ContractError(
+            "stationary-point policy requires its exact scientific plan"
+        )
+    if plan.plan_sha256 != frozen_approval.plan_sha256:
+        raise ContractError("stationary-point policy plan differs from approval")
+    if policy.task_spec_sha256 != frozen_approval.task_spec_sha256 or (
+        policy.task_spec_sha256 != plan.task_spec_sha256
+    ):
+        raise ContractError("stationary-point policy task differs from approval")
+    if policy.hessian_node_id not in frozen_approval.approved_node_ids:
+        raise ContractError("stationary-point Hessian node is not approved")
+    matching_nodes = tuple(
+        node for node in plan.nodes if node.node_id == policy.hessian_node_id
+    )
+    if len(matching_nodes) != 1 or matching_nodes[0].stage != "hess":
+        raise ContractError("stationary-point policy must bind a Hessian node")
+    if hessian_node_id and policy.hessian_node_id != hessian_node_id:
+        raise ContractError("stationary-point policy targets another Hessian node")
+    if policy.require_finite_modes is not True:
+        raise ContractError("stationary-point policy must require finite modes")
+    if policy.require_symmetric_hessian is not True:
+        raise ContractError(
+            "stationary-point policy must require a symmetric Hessian"
+        )
+
+
+def _runner_defers_hessian_classification(
+    *,
+    run_receipt: Mapping[str, Any],
+    jobtype: str,
+    hessian_node_id: str,
+    engine_complete: bool,
+    stationary_point_policy: StationaryPointValidationPolicyV1 | None,
+    approved_stationary_point_policy_sha256: str,
+) -> bool:
+    """Admit only an exact policy-bound HESS classification handoff.
+
+    The CLI runner owns engine/artifact invariants but does not own an
+    imaginary-mode expectation.  An approved agent execution may therefore
+    accept its ``engine_complete``/``unclassified`` intermediate receipt only
+    when the exact frozen policy is present.  The parent result validator must
+    still apply that policy and return ``validated`` before the node succeeds.
+    """
+
+    if jobtype != "hess" or not isinstance(
+        stationary_point_policy, StationaryPointValidationPolicyV1
+    ):
+        return False
+    if (
+        not hessian_node_id
+        or stationary_point_policy.hessian_node_id != hessian_node_id
+    ):
+        return False
+    if (
+        not approved_stationary_point_policy_sha256
+        or stationary_point_policy.policy_sha256
+        != approved_stationary_point_policy_sha256
+    ):
+        return False
+    result_validation = run_receipt.get("result_validation")
+    if not isinstance(result_validation, Mapping):
+        return False
+    frequency_validation = result_validation.get("frequency_validation")
+    if not isinstance(frequency_validation, Mapping):
+        return False
+    return bool(
+        engine_complete
+        and run_receipt.get("engine_complete") is True
+        and run_receipt.get("child_returncode") == 0
+        and run_receipt.get("state") == "engine_complete"
+        and run_receipt.get("scientifically_validated") is False
+        and run_receipt.get("scientific_validation_state") == "unclassified"
+        and not (run_receipt.get("findings") or ())
+        and result_validation.get("state") == "unclassified"
+        and not (result_validation.get("findings") or ())
+        and frequency_validation.get("stationary_point_classification")
+        == "unclassified"
+        and stationary_point_policy.require_finite_modes is True
+        and stationary_point_policy.require_symmetric_hessian is True
+    )
+
+
 class CommandCompiledToolHostV1:
     """Resolve every model ID against immutable host-held objects."""
 
@@ -132,6 +707,9 @@ class CommandCompiledToolHostV1:
         event_store: RuntimeEventStore,
         artifacts: Mapping[str, TrustedArtifactRefV1] = {},
         scientific_identities: Mapping[str, ScientificIdentityBindingV1] = {},
+        approved_molecular_identities: Mapping[
+            str, ApprovedMolecularIdentityV1
+        ] = {},
         environment_targets: tuple[EnvironmentTargetV1, ...] = (),
         compute_environment_receipts: tuple[
             TrustedComputeEnvironmentReceiptV1, ...
@@ -171,6 +749,11 @@ class CommandCompiledToolHostV1:
         approved_workspace: str | Path | None = None,
         execution_resources: ExecutionResourceSpecV1 | None = None,
         workflow_execution_approval: WorkflowExecutionApprovalV1 | None = None,
+        frozen_workflow_approval: FrozenWorkflowApprovalV1 | None = None,
+        stationary_point_policy: (
+            StationaryPointValidationPolicyV1 | None
+        ) = None,
+        scientific_workflow_plan: ScientificWorkflowPlanV2 | None = None,
         execution_server: str = "",
         execution_environment: Mapping[str, str] = {},
     ) -> None:
@@ -201,6 +784,13 @@ class CommandCompiledToolHostV1:
         )
         self.execution_resources = execution_resources
         self.workflow_execution_approval = workflow_execution_approval
+        self.frozen_workflow_approval = frozen_workflow_approval
+        self.stationary_point_policy = stationary_point_policy
+        _validate_stationary_point_policy_binding(
+            self.frozen_workflow_approval,
+            self.stationary_point_policy,
+            plan=scientific_workflow_plan,
+        )
         self.execution_server = str(execution_server)
         self.execution_environment = {
             str(key): str(value) for key, value in execution_environment.items()
@@ -212,6 +802,18 @@ class CommandCompiledToolHostV1:
                 raise ContractError("execution profile requires host-owned resources")
             if self.workflow_execution_approval is None:
                 raise ContractError("execution profile requires workflow approval")
+            if self.frozen_workflow_approval is not None:
+                if (
+                    self.frozen_workflow_approval.workflow_id
+                    != self.workflow_execution_approval.workflow_id
+                    or self.frozen_workflow_approval.task_spec_sha256
+                    != self.workflow_execution_approval.task_spec_sha256
+                    or self.frozen_workflow_approval.resource_sha256
+                    != self.workflow_execution_approval.resource_sha256
+                ):
+                    raise ContractError(
+                        "frozen workflow approval differs from V1 approval"
+                    )
             if (
                 Path(self.workflow_execution_approval.workspace).resolve()
                 != self.approved_workspace
@@ -253,6 +855,14 @@ class CommandCompiledToolHostV1:
                 )
         self.overlay = support_overlay or evidence_overlay
         self.scientific_identities = dict(scientific_identities)
+        self.approved_molecular_identities = dict(
+            approved_molecular_identities
+        )
+        if any(
+            key != value.identity_sha256
+            for key, value in self.approved_molecular_identities.items()
+        ):
+            raise ContractError("approved molecular identity registry key mismatch")
         self.environment_targets = tuple(environment_targets)
         self.compute_environment_receipts = tuple(
             compute_environment_receipts
@@ -299,6 +909,14 @@ class CommandCompiledToolHostV1:
         self.project_validations: dict[str, ProjectValidationReceiptV1] = dict(
             project_validation_receipts
         )
+        self.functional_resolutions: dict[
+            str, PySCFFunctionalResolutionReceiptV1
+        ] = {}
+        for validation in self.project_validations.values():
+            for resolution in project_scientific_materializations(validation):
+                self.functional_resolutions[
+                    resolution.receipt_sha256
+                ] = resolution
         self.invocations: dict[str, CanonicalCommandInvocationV1] = {}
         self.command_inspections: dict[str, CommandInspectionReceiptV1] = {}
         self.safe_previews: dict[str, SafePreviewReceiptV1] = {}
@@ -309,15 +927,29 @@ class CommandCompiledToolHostV1:
         ] = {}
         self.counterexamples: dict[str, CommandCounterexampleV1] = {}
         self.workflow_drafts: dict[str, CommandWorkflowDraftV1] = {}
+        self.scientific_workflow_plans: dict[
+            str, ScientificWorkflowPlanV2
+        ] = {}
+        self.materialized_workflows: dict[
+            str, MaterializedWorkflowV1
+        ] = {}
+        if scientific_workflow_plan is not None:
+            self.scientific_workflow_plans[
+                scientific_workflow_plan.plan_sha256
+            ] = scientific_workflow_plan
         self.project_promotions: dict[str, ProjectArtifactPromotionV1] = {}
         self.scientific_decisions: dict[str, ScientificDecisionRecordV1] = {}
         self.execution_receipts: dict[str, ProgramExecutionReceiptV1] = {}
+        self.result_validation_receipts: dict[
+            str, ProgramResultValidationReceiptV1
+        ] = {}
         self.handoffs: dict[str, OptimizedGeometryHandoffV1] = {}
         self._command_contexts: dict[str, _CommandContext] = {}
         self._completion_sets: dict[str, tuple[str, ...]] = {}
         self._latest_environment_by_capability: dict[
             str, EnvironmentCapabilityReceiptV1
         ] = {}
+        self._preflight_by_node: dict[str, ProgramNodePreflightReceiptV1] = {}
         _require_registry_keys(
             self.capabilities, "receipt_sha256", "capability receipt"
         )
@@ -660,6 +1292,11 @@ class CommandCompiledToolHostV1:
         )
         receipt = validate_project_yaml(artifact, capability=capability)
         self.project_validations[receipt.receipt_sha256] = receipt
+        materializations = project_scientific_materializations(receipt)
+        for materialization in materializations:
+            self.functional_resolutions[
+                materialization.receipt_sha256
+            ] = materialization
         promotion = self.project_promotions.get(artifact.artifact_id)
         if promotion is not None and promotion.validation_status == "pending":
             self.project_promotions[artifact.artifact_id] = (
@@ -683,12 +1320,54 @@ class CommandCompiledToolHostV1:
             program=receipt.program,
             jobtype=receipt.jobtype,
         )
-        return receipt
+        return {
+            **canonical_data(receipt),
+            "scientific_materializations": tuple(
+                item.public_record() for item in materializations
+            ),
+            "decision_binding": _scientific_decision_binding_requirement(
+                materializations
+            ),
+        }
 
     def _record_scientific_decision(self, turn_id: str, values: dict) -> Any:
         task_spec_sha256 = values["task_spec_sha256"]
         if task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("scientific decision targets an unknown task spec")
+        functional_resolution_refs = set()
+        for evidence_ref in values["evidence_refs"]:
+            prefix = "molecular_identity:"
+            reference = str(evidence_ref)
+            if reference.startswith(prefix):
+                identity_sha256 = reference[len(prefix) :]
+                if identity_sha256 not in self.approved_molecular_identities:
+                    raise ContractError(
+                        "scientific decision cites an unapproved molecular identity"
+                    )
+                continue
+            prefix = "functional_resolution:"
+            if reference.startswith(prefix):
+                receipt_sha256 = reference[len(prefix) :]
+                if receipt_sha256 not in self.functional_resolutions:
+                    raise ContractError(
+                        "scientific decision cites an unknown functional resolution"
+                    )
+                functional_resolution_refs.add(receipt_sha256)
+        convention_narrative = " ".join(
+            (
+                *values["assumptions"],
+                values["method_rationale"],
+                *values["uncertainties"],
+                *values["diagnostics"],
+            )
+        )
+        if re.search(
+            r"(?i)(?<![a-z0-9])(?:vwn\s*[35]|b3lypg|b3lyp5)(?![a-z0-9])",
+            convention_narrative,
+        ) and not functional_resolution_refs:
+            raise ContractError(
+                "functional-convention claims require a host resolution receipt"
+            )
         record = build_scientific_decision_record(
             decision_id=values["decision_id"],
             task_spec_sha256=task_spec_sha256,
@@ -786,6 +1465,13 @@ class CommandCompiledToolHostV1:
             nodes=tuple(nodes),
         )
         self.workflow_drafts[draft.draft_sha256] = draft
+        scientific_plan = self._scientific_plan_from_draft(
+            draft, findings=findings
+        )
+        if scientific_plan is not None:
+            self.scientific_workflow_plans[
+                scientific_plan.plan_sha256
+            ] = scientific_plan
         unresolved_nodes = {
             item["node_id"] for item in findings
         } | {
@@ -808,13 +1494,161 @@ class CommandCompiledToolHostV1:
             status="planned",
             actionable_node_ids=actionable,
             unresolved_node_ids=unresolved,
+            scientific_plan_sha256=(
+                scientific_plan.plan_sha256 if scientific_plan else ""
+            ),
+            scientific_plan_record=(
+                canonical_data(scientific_plan) if scientific_plan else {}
+            ),
         )
         return {
             "workflow_draft": draft,
+            "scientific_workflow_plan": scientific_plan,
             "actionable_node_ids": actionable,
             "unresolved_node_ids": unresolved,
             "findings": tuple(findings),
         }
+
+    def _scientific_plan_from_draft(
+        self,
+        draft: CommandWorkflowDraftV1,
+        *,
+        findings: list[dict[str, str]],
+    ) -> ScientificWorkflowPlanV2 | None:
+        """Project a V1 model draft into the host-owned scientific DAG."""
+
+        if draft.task_spec_id not in self.task_spec_sha256s:
+            findings.append(
+                {
+                    "node_id": draft.workflow_id,
+                    "rule_id": "workflow.task_spec.unbound",
+                }
+            )
+            return None
+        external_artifact_ids = {
+            item.artifact_id
+            for node in draft.nodes
+            for item in node.inputs
+            if not item.producer_node_id and item.artifact_id
+        }
+        identities = tuple(
+            sorted(
+                {
+                    identity.binding_sha256
+                    for identity in self.scientific_identities.values()
+                    if identity.task_spec_sha256 == draft.task_spec_id
+                    and identity.geometry_artifact_id in external_artifact_ids
+                }
+            )
+        )
+        if not identities:
+            findings.append(
+                {
+                    "node_id": draft.workflow_id,
+                    "rule_id": "workflow.scientific_identity.unbound",
+                }
+            )
+            return None
+        scientific_identity_sha256 = (
+            identities[0]
+            if len(identities) == 1
+            else canonical_sha256(
+                {"scientific_identity_sha256s": identities}
+            )
+        )
+        scientific_nodes = []
+        for node in draft.nodes:
+            matching_capabilities = tuple(
+                receipt
+                for receipt in self.capabilities.values()
+                if receipt.query.program == node.program
+                and receipt.query.jobtype == node.jobtype
+            )
+            engines = tuple(
+                sorted({receipt.query.engine for receipt in matching_capabilities})
+            )
+            engine = engines[0] if len(engines) == 1 else "unresolved"
+            unresolved = set(node.unresolved_fields)
+            if engine == "unresolved":
+                unresolved.add("engine")
+            requested_programs = {
+                binding.requested_program
+                for binding in self.program_bindings.values()
+                if binding.selected_program == node.program
+                and any(
+                    receipt.receipt_sha256
+                    == binding.capability_receipt_sha256
+                    for receipt in matching_capabilities
+                )
+            }
+            requested_program = (
+                next(iter(requested_programs))
+                if len(requested_programs) == 1
+                else node.program
+            )
+            scientific_nodes.append(
+                ScientificWorkflowNodeV2(
+                    node_id=node.node_id,
+                    stage=node.jobtype,
+                    requested_program=requested_program,
+                    program=node.program,
+                    engine=engine,
+                    project_role=node.project_role,
+                    unresolved_fields=tuple(sorted(unresolved)),
+                )
+            )
+        edges = []
+        for node in draft.nodes:
+            data_sources = set()
+            for item in node.inputs:
+                if not item.producer_node_id:
+                    continue
+                data_sources.add(item.producer_node_id)
+                edges.append(
+                    ScientificWorkflowEdgeV2(
+                        edge_id=(
+                            "data."
+                            + item.producer_node_id
+                            + "."
+                            + node.node_id
+                            + "."
+                            + item.binding_id
+                        ),
+                        source_node_id=item.producer_node_id,
+                        target_node_id=node.node_id,
+                        edge_kind="data",
+                        artifact_class=item.artifact_class,
+                        producer_output_id=item.producer_output_id,
+                        consumer_input_id=item.binding_id,
+                    )
+                )
+            for dependency in node.dependencies:
+                if dependency in data_sources:
+                    continue
+                edges.append(
+                    ScientificWorkflowEdgeV2(
+                        edge_id=(
+                            "control." + dependency + "." + node.node_id
+                        ),
+                        source_node_id=dependency,
+                        target_node_id=node.node_id,
+                        edge_kind="control",
+                    )
+                )
+        plan = build_scientific_workflow_plan(
+            workflow_id=draft.workflow_id,
+            task_spec_sha256=draft.task_spec_id,
+            scientific_identity_sha256=scientific_identity_sha256,
+            nodes=tuple(scientific_nodes),
+            edges=tuple(sorted(edges, key=lambda edge: edge.edge_id)),
+        )
+        if self.frozen_workflow_approval is not None and (
+            self.frozen_workflow_approval.plan_sha256 != plan.plan_sha256
+        ):
+            raise ContractError(
+                "planned workflow differs from frozen execution approval"
+            )
+        return plan
 
     def _synthesize_command(self, turn_id: str, values: dict) -> Any:
         capability = self._get(
@@ -850,9 +1684,20 @@ class CommandCompiledToolHostV1:
             if validation_digest
             else None
         )
+        execution_target = (
+            self.execution_resources.execution_target
+            if self.surface.profile == "command_compiled_approved_execution"
+            and self.execution_resources is not None
+            else "run"
+        )
+        supplied_target = str(values.get("execution_target") or "").strip()
+        if supplied_target and supplied_target != execution_target:
+            raise ContractError(
+                "execution target is host-owned and differs from the active profile"
+            )
         proposal = CommandProposalV1(
             node_id=values["node_id"],
-            execution_target=values["execution_target"],
+            execution_target=execution_target,
             program=values["program"],
             jobtype=values["jobtype"],
             project_artifact_id=values["project_artifact_id"],
@@ -1027,10 +1872,6 @@ class CommandCompiledToolHostV1:
             if project_digest
             else None
         )
-        validators = tuple(
-            self._get(self.validators, digest, "program validator receipt")
-            for digest in values["validator_receipt_sha256s"]
-        )
         preview_digest = values.get("safe_preview_receipt_sha256", "")
         safe_preview = (
             self._get(
@@ -1039,6 +1880,39 @@ class CommandCompiledToolHostV1:
             if preview_digest
             else None
         )
+        derived_validators = tuple(
+            sorted(
+                (
+                    receipt
+                    for receipt in self.validators.values()
+                    if safe_preview is not None
+                    and receipt.source_receipt_sha256
+                    == safe_preview.receipt_sha256
+                ),
+                key=lambda receipt: receipt.receipt_sha256,
+            )
+        )
+        supplied_validator_ids = tuple(
+            values.get("validator_receipt_sha256s") or ()
+        )
+        if supplied_validator_ids:
+            supplied_validators = tuple(
+                self._get(
+                    self.validators,
+                    digest,
+                    "program validator receipt",
+                )
+                for digest in supplied_validator_ids
+            )
+            if {
+                item.receipt_sha256 for item in supplied_validators
+            } != {
+                item.receipt_sha256 for item in derived_validators
+            }:
+                raise ContractError(
+                    "validator receipts differ from the selected safe preview"
+                )
+        validators = derived_validators
         request = build_program_node_preflight_request(
             node_id=values["node_id"],
             capability_receipt_sha256=capability.receipt_sha256,
@@ -1069,6 +1943,7 @@ class CommandCompiledToolHostV1:
             safe_preview=safe_preview,
         )
         self.preflights[receipt.receipt_sha256] = receipt
+        self._preflight_by_node[values["node_id"]] = receipt
         completion = {
             capability.receipt_sha256,
             program_binding.binding_sha256,
@@ -1096,7 +1971,104 @@ class CommandCompiledToolHostV1:
             ),
             execution_ready=receipt.execution_ready,
         )
+        self._materialize_scientific_workflow(
+            turn_id=turn_id, node_id=values["node_id"]
+        )
         return receipt
+
+    def _materialize_scientific_workflow(
+        self, *, turn_id: str, node_id: str
+    ) -> MaterializedWorkflowV1 | None:
+        """Ground the latest plan containing ``node_id`` from host receipts."""
+
+        plan = next(
+            (
+                candidate
+                for candidate in reversed(
+                    tuple(self.scientific_workflow_plans.values())
+                )
+                if any(node.node_id == node_id for node in candidate.nodes)
+            ),
+            None,
+        )
+        if plan is None:
+            return None
+        materialized_nodes = []
+        unresolved_node_ids = []
+        for planned_node in plan.nodes:
+            try:
+                invocation, context = self._latest_invocation_for_node(
+                    planned_node.node_id
+                )
+            except ContractError:
+                unresolved_node_ids.append(planned_node.node_id)
+                continue
+            project = context.project_validation
+            project_artifact = context.project_artifact
+            environment_sha256 = (
+                context.engine_binding.environment_receipt_sha256
+            )
+            if (
+                project is None
+                or project.status != "valid"
+                or project_artifact is None
+                or not environment_sha256
+            ):
+                unresolved_node_ids.append(planned_node.node_id)
+                continue
+            preflight = self._preflight_by_node.get(planned_node.node_id)
+            previewed = (
+                preflight is not None
+                and preflight.plan_state == "previewed"
+                and not preflight.critical_finding_sha256s
+            )
+            materialized_nodes.append(
+                MaterializedNodeV1(
+                    node_id=planned_node.node_id,
+                    input_artifact_sha256=context.input_artifact.sha256,
+                    project_artifact_sha256=project_artifact.sha256,
+                    project_validation_receipt_sha256=project.receipt_sha256,
+                    environment_receipt_sha256=environment_sha256,
+                    invocation_sha256=invocation.invocation_sha256,
+                    preflight_receipt_sha256=(
+                        preflight.receipt_sha256 if previewed else ""
+                    ),
+                    state="previewed" if previewed else "compiled",
+                )
+            )
+        if unresolved_node_ids:
+            status = "partial"
+        elif materialized_nodes and all(
+            node.state == "previewed" for node in materialized_nodes
+        ):
+            status = "previewed"
+        else:
+            status = "materialized"
+        resource_sha256 = (
+            self.execution_resources.resource_sha256
+            if self.execution_resources is not None
+            else canonical_sha256(
+                {
+                    "schema_version": "chemsmart.preview-resource.v1",
+                    "chemistry_engine_calls": 0,
+                }
+            )
+        )
+        workflow = build_materialized_workflow(
+            plan=plan,
+            live_cli_schema_sha256=self.live_schema.schema_sha256,
+            resource_sha256=resource_sha256,
+            nodes=tuple(materialized_nodes),
+            unresolved_node_ids=tuple(unresolved_node_ids),
+            status=status,
+        )
+        self.materialized_workflows[
+            workflow.materialized_sha256
+        ] = workflow
+        self.event_store.record_materialized_workflow(
+            turn_id=turn_id, workflow=workflow
+        )
+        return workflow
 
     def completion_receipts_for_latest_preflight(self) -> tuple[str, ...]:
         """Return host-derived gates only for a green previewed preflight."""
@@ -1137,31 +2109,40 @@ class CommandCompiledToolHostV1:
         if self.surface.profile != "command_compiled_approved_execution":
             raise ContractError("execution tool is absent from this profile")
         node_id = values["node_id"]
-        existing = self.execution_receipts.get(node_id)
-        if existing is not None:
-            if existing.execution_state == "ambiguous":
-                raise ContractError(
-                    "prior launch is ambiguous; inspect local process state first"
-                )
+        approval = self.workflow_execution_approval
+        scientific_plan = self._execution_scientific_plan()
+        frozen_approval = getattr(self, "frozen_workflow_approval", None)
+        if frozen_approval is None:
+            raise ContractError(
+                "legacy V1 approval is preview-only; Runtime V2 frozen approval "
+                "is required for execution"
+            )
+        v2_run_id = "run." + approval.approval_id
+        replayed = self.event_store.replayed_execution_receipt(
+            workflow_id=scientific_plan.workflow_id,
+            run_id=v2_run_id,
+            node_id=node_id,
+        )
+        if replayed is not None:
+            self.execution_receipts[node_id] = replayed
             return {
-                "execution": existing,
+                "execution": replayed,
                 "idempotent_replay": True,
                 "handoff": self.handoffs.get(node_id),
             }
-        approval = self.workflow_execution_approval
-        approved_node = approval.node(node_id)
-        ordered_node_ids = tuple(item.node_id for item in approval.node_bindings)
-        node_index = ordered_node_ids.index(node_id)
-        incomplete_predecessors = [
-            predecessor
-            for predecessor in ordered_node_ids[:node_index]
-            if predecessor not in self.execution_receipts
-            or not self.execution_receipts[predecessor].validated
-        ]
-        if incomplete_predecessors:
+        existing = self.execution_receipts.get(node_id)
+        if existing is not None:
             raise ContractError(
-                "approved predecessors are not validated: "
-                + ", ".join(incomplete_predecessors)
+                "process-local execution receipt lacks replay evidence"
+            )
+        approved_node = approval.node(node_id)
+        if approved_node.jobtype == "hess":
+            _validate_stationary_point_policy_binding(
+                self.frozen_workflow_approval,
+                self.stationary_point_policy,
+                plan=scientific_plan,
+                hessian_node_id=node_id,
+                require_for_hessian=True,
             )
         invocation, context = self._latest_invocation_for_node(node_id)
         if context.project_artifact is None or context.project_validation is None:
@@ -1192,9 +2173,63 @@ class CommandCompiledToolHostV1:
             argv=real_argv,
             handoff=handoff,
         )
+        if self.frozen_workflow_approval is not None:
+            future_rules = self.frozen_workflow_approval.producer_rules_for(
+                node_id
+            )
+            expected_environments = (
+                {item.environment_receipt_sha256 for item in future_rules}
+                if future_rules
+                else set(
+                    self.frozen_workflow_approval.environment_receipt_sha256s
+                )
+            )
+            if execution_invocation.environment_receipt_sha256 not in (
+                expected_environments
+            ):
+                raise ContractError(
+                    "execution environment differs from the exact frozen "
+                    "node approval"
+                )
         node_workspace = self.approved_workspace / "nodes" / node_id
         _prepare_execution_node_workspace(node_workspace)
         started = datetime.now(timezone.utc).isoformat()
+        if frozen_approval.plan_sha256 != scientific_plan.plan_sha256:
+            raise ContractError(
+                "execution plan differs from frozen workflow approval"
+            )
+        frontier = self.event_store.workflow_frontier(
+            workflow_id=scientific_plan.workflow_id,
+            run_id=v2_run_id,
+        )
+        materialized = frontier.materialized_workflow
+        if materialized is None:
+            materialized = self.materialized_workflows.get(
+                frozen_approval.materialized_workflow_sha256
+            )
+        if materialized is None:
+            raise ContractError(
+                "frozen workflow approval has no canonical materialization"
+            )
+        fence = self.event_store.reserve_workflow_node_launch(
+            turn_id=turn_id,
+            plan=scientific_plan,
+            materialized_workflow=materialized,
+            approval=frozen_approval,
+            invocation=execution_invocation,
+            run_id=v2_run_id,
+            timestamp=started,
+        )
+        if fence.status == "terminal_replay":
+            replayed = fence.execution_receipt
+            if replayed is None:  # pragma: no cover - contract narrows this
+                raise ContractError("terminal replay lacks an execution receipt")
+            self.execution_receipts[node_id] = replayed
+            return {
+                "execution": replayed,
+                "idempotent_replay": True,
+                "handoff": self.handoffs.get(node_id),
+            }
         command = [sys.executable, "-m", "chemsmart", *real_argv[1:]]
         environment = os.environ.copy()
         environment.update(self.execution_environment)
@@ -1205,37 +2240,71 @@ class CommandCompiledToolHostV1:
             if not current_pythonpath
             else source_root + os.pathsep + current_pythonpath
         )
+        launch_ambiguous = False
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=node_workspace,
                 env=environment,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.execution_resources.node_timeout_seconds,
-                check=False,
+                start_new_session=True,
             )
-            exit_status = int(completed.returncode)
-            (node_workspace / "controller.stdout").write_text(
-                completed.stdout, encoding="utf-8"
+        except OSError as exc:
+            process_observation = launch_failure_observation(
+                timeout_seconds=(
+                    self.execution_resources.node_timeout_seconds
+                ),
+                memory_limit_mb=self.execution_resources.memory_gb * 1024.0,
+                error_type=type(exc).__name__,
             )
-            (node_workspace / "controller.stderr").write_text(
-                completed.stderr, encoding="utf-8"
+            stdout_text = ""
+            stderr_text = type(exc).__name__
+        else:
+            process_result = observe_process(
+                process,
+                timeout_seconds=(
+                    self.execution_resources.node_timeout_seconds
+                ),
+                memory_limit_mb=self.execution_resources.memory_gb * 1024.0,
             )
-            execution_state = (
-                "engine_complete" if exit_status == 0 else "failed"
+            process_observation = process_result.observation
+            stdout_text = _public_process_stream(process_result.stdout)
+            stderr_text = _public_process_stream(process_result.stderr)
+        _write_host_execution_artifact(
+            node_workspace / "controller.stdout", stdout_text
+        )
+        _write_host_execution_artifact(
+            node_workspace / "controller.stderr", stderr_text
+        )
+        _write_host_execution_artifact(
+            node_workspace / "execution-resource.receipt.json",
+            json.dumps(
+                process_observation.as_dict(),
+                sort_keys=True,
+                separators=(",", ":"),
             )
-        except subprocess.TimeoutExpired as exc:
-            (node_workspace / "controller.stdout").write_text(
-                str(exc.stdout or ""), encoding="utf-8"
-            )
-            (node_workspace / "controller.stderr").write_text(
-                str(exc.stderr or ""), encoding="utf-8"
-            )
-            exit_status = None
-            execution_state = "ambiguous"
+            + "\n",
+        )
+        wrapper_exit_status = process_observation.returncode
+        launch_ambiguous = process_observation.state.endswith("_ambiguous")
         outputs = self._execution_output_artifacts(node_id, node_workspace)
-        validated, validator_sha256s, findings = self._validate_execution_outputs(
+        pyscf_engine = (
+            _inspect_pyscf_engine_observation(
+                outputs, launch_ambiguous=launch_ambiguous
+            )
+            if context.proposal.program == "pyscf"
+            else None
+        )
+        capability_environment = self.environments.get(
+            execution_invocation.environment_receipt_sha256
+        )
+        if capability_environment is None:
+            raise ContractError(
+                "execution environment capability receipt is unavailable"
+            )
+        evaluation = self._evaluate_execution_outputs(
             program=context.proposal.program,
             jobtype=context.proposal.jobtype,
             charge=context.scientific_identity.charge,
@@ -1244,32 +2313,136 @@ class CommandCompiledToolHostV1:
             expected_input_artifact=context.input_artifact,
             expected_project_artifact=context.project_artifact,
             output_artifacts=outputs,
-            exit_status=exit_status,
+            exit_status=wrapper_exit_status,
+            expected_environment_receipt_sha256=(
+                execution_invocation.environment_receipt_sha256
+            ),
+            capability_environment_receipt=capability_environment,
+            pyscf_engine_observation=pyscf_engine,
+            stationary_point_policy=(
+                self.stationary_point_policy
+                if self.stationary_point_policy is not None
+                and self.stationary_point_policy.hessian_node_id == node_id
+                else None
+            ),
+            approved_stationary_point_policy_sha256=(
+                frozen_approval.stationary_point_policy_sha256
+                if approved_node.jobtype == "hess"
+                else ""
+            ),
+            approved_hessian_node_id=(
+                node_id if approved_node.jobtype == "hess" else ""
+            ),
+            process_observation=process_observation,
         )
+        result_validation_receipt = build_program_result_validation_receipt(
+            invocation=execution_invocation,
+            validator_id=evaluation.validator_id,
+            validator_schema_version=(
+                evaluation.validator_schema_version
+            ),
+            validator_version=evaluation.validator_version,
+            input_artifact=context.input_artifact,
+            project_artifact=context.project_artifact,
+            capability_environment_receipt_sha256=(
+                capability_environment.receipt_sha256
+            ),
+            output_artifacts=outputs,
+            observations=evaluation.observations,
+            findings=evaluation.findings,
+            run_environment_receipt_sha256=(
+                evaluation.run_environment_receipt_sha256
+            ),
+            environment_validation_sha256=(
+                evaluation.environment_validation_sha256
+            ),
+            stationary_point_policy_sha256=(
+                self.stationary_point_policy.policy_sha256
+                if approved_node.jobtype == "hess"
+                and self.stationary_point_policy is not None
+                else ""
+            ),
+        )
+        self.result_validation_receipts[
+            result_validation_receipt.receipt_sha256
+        ] = result_validation_receipt
+        self._emit(
+            turn_id,
+            EventKind.RESULT_VERIFIED,
+            result_validation_receipt.receipt_sha256,
+            status=result_validation_receipt.state,
+            critical_finding_count=len(result_validation_receipt.findings),
+            node_id=node_id,
+            record=canonical_data(result_validation_receipt),
+        )
+        validated = result_validation_receipt.state == "valid"
+        validator_sha256s = (result_validation_receipt.receipt_sha256,)
+        findings = result_validation_receipt.findings
+        if launch_ambiguous:
+            execution_state = "ambiguous"
+            engine_complete = False
+            child_exit_status = None
+            engine_receipt_sha256 = ""
+        elif pyscf_engine is not None:
+            engine_complete = pyscf_engine.engine_complete
+            child_exit_status = pyscf_engine.child_exit_status
+            engine_receipt_sha256 = pyscf_engine.run_receipt_sha256
+            execution_state = (
+                "failed"
+                if process_observation.state != "exited"
+                else "engine_complete"
+                if engine_complete
+                else "failed"
+            )
+        else:
+            engine_complete = wrapper_exit_status == 0
+            child_exit_status = wrapper_exit_status
+            engine_receipt_sha256 = ""
+            execution_state = (
+                "engine_complete"
+                if engine_complete and process_observation.state == "exited"
+                else "failed"
+            )
+        if validated:
+            if execution_state != "engine_complete" or not engine_complete:
+                validated = False
+                findings = tuple(
+                    sorted(
+                        {
+                            *findings,
+                            "execution.validation_without_engine_completion",
+                        }
+                    )
+                )
+            else:
+                execution_state = "validated"
         finished = datetime.now(timezone.utc).isoformat()
         receipt = build_program_execution_receipt(
             execution_invocation,
             execution_state=execution_state,
-            exit_status=exit_status,
-            engine_complete=execution_state == "engine_complete",
+            exit_status=wrapper_exit_status,
+            child_exit_status=child_exit_status,
+            engine_complete=engine_complete,
             validated=validated,
+            engine_receipt_sha256=engine_receipt_sha256,
+            result_validation_receipt_sha256=(
+                result_validation_receipt.receipt_sha256
+            ),
             output_artifacts=outputs,
             validator_receipt_sha256s=validator_sha256s,
             findings=findings,
             started_at=started,
             finished_at=finished,
         )
-        self.execution_receipts[node_id] = receipt
-        self._emit(
-            turn_id,
-            EventKind.PROGRAM_EXECUTED,
-            receipt.receipt_sha256,
-            execution_state=receipt.execution_state,
-            engine_complete=receipt.engine_complete,
-            validated=receipt.validated,
-            node_id=node_id,
+        self.event_store.record_program_execution_receipt(
+            turn_id=turn_id,
+            workflow_id=scientific_plan.workflow_id,
+            run_id=v2_run_id,
+            receipt=receipt,
         )
+        self.execution_receipts[node_id] = receipt
         produced_handoffs = []
+        pending_data_edges = []
         if receipt.validated and context.proposal.program == "pyscf":
             for edge in approval.producer_edges:
                 if edge.producer_node_id != node_id:
@@ -1300,12 +2473,30 @@ class CommandCompiledToolHostV1:
                 self.artifacts[geometry.artifact_id] = geometry
                 self.scientific_identities[identity.binding_sha256] = identity
                 self.handoffs[edge.consumer_node_id] = observed
+                scientific_edge = next(
+                    (
+                        item
+                        for item in scientific_plan.edges
+                        if item.edge_kind == "data"
+                        and item.source_node_id == edge.producer_node_id
+                        and item.target_node_id == edge.consumer_node_id
+                        and item.artifact_class == edge.artifact_kind
+                    ),
+                    None,
+                )
+                if scientific_edge is None:
+                    raise ContractError(
+                        "optimized handoff lacks an exact scientific data edge"
+                    )
                 produced_handoffs.append(
                     {
                         "handoff": observed,
                         "artifact": geometry,
                         "scientific_identity": identity,
                     }
+                )
+                pending_data_edges.append(
+                    (scientific_edge, edge, observed, identity)
                 )
                 self._emit(
                     turn_id,
@@ -1315,17 +2506,133 @@ class CommandCompiledToolHostV1:
                     producer_node_id=edge.producer_node_id,
                     consumer_node_id=edge.consumer_node_id,
                 )
+        if self.frozen_workflow_approval is not None:
+            output_sha256s = tuple(
+                sorted(
+                    {
+                        *(artifact.sha256 for artifact in outputs),
+                        *(
+                            item["artifact"].sha256
+                            for item in produced_handoffs
+                        ),
+                    }
+                )
+            )
+            if receipt.engine_complete:
+                self.event_store.transition_workflow_run_node(
+                    turn_id=turn_id,
+                    run_id=v2_run_id,
+                    node_id=node_id,
+                    new_state="engine_complete",
+                    execution_receipt_sha256=receipt.receipt_sha256,
+                    output_artifact_sha256s=output_sha256s,
+                    timestamp=finished,
+                )
+                if receipt.validated:
+                    self.event_store.transition_workflow_run_node(
+                        turn_id=turn_id,
+                        run_id=v2_run_id,
+                        node_id=node_id,
+                        new_state="validated",
+                        validator_receipt_sha256s=(
+                            receipt.validator_receipt_sha256s
+                        ),
+                        result_validation_receipt=(
+                            result_validation_receipt
+                        ),
+                        timestamp=finished,
+                    )
+                    for (
+                        scientific_edge,
+                        producer_edge,
+                        observed_handoff,
+                        consumer_identity,
+                    ) in pending_data_edges:
+                        binding = build_validated_data_edge_binding(
+                            run_id=v2_run_id,
+                            plan=scientific_plan,
+                            approval=frozen_approval,
+                            scientific_edge=scientific_edge,
+                            producer_edge=producer_edge,
+                            producer_receipt=receipt,
+                            handoff=observed_handoff,
+                            producer_scientific_identity_sha256=(
+                                context.scientific_identity.binding_sha256
+                            ),
+                            consumer_scientific_identity_sha256=(
+                                consumer_identity.binding_sha256
+                            ),
+                        )
+                        self.event_store.record_validated_data_edge_binding(
+                            turn_id=turn_id,
+                            binding=binding,
+                        )
+                        for item in produced_handoffs:
+                            if item["handoff"] == observed_handoff:
+                                item["data_edge_binding"] = binding
+                else:
+                    self.event_store.transition_workflow_run_node(
+                        turn_id=turn_id,
+                        run_id=v2_run_id,
+                        node_id=node_id,
+                        new_state="failed",
+                        execution_receipt_sha256=receipt.receipt_sha256,
+                        output_artifact_sha256s=output_sha256s,
+                        failure_rule_ids=(
+                            receipt.findings
+                            or ("execution.validation.failed",)
+                        ),
+                        timestamp=finished,
+                    )
+            else:
+                self.event_store.transition_workflow_run_node(
+                    turn_id=turn_id,
+                    run_id=v2_run_id,
+                    node_id=node_id,
+                    new_state=receipt.execution_state,
+                    execution_receipt_sha256=receipt.receipt_sha256,
+                    output_artifact_sha256s=output_sha256s,
+                    failure_rule_ids=(
+                        receipt.findings
+                        or ("execution.state." + receipt.execution_state,)
+                    ),
+                    timestamp=finished,
+                )
         return {
             "execution": receipt,
             "idempotent_replay": False,
             "produced_handoffs": tuple(produced_handoffs),
         }
 
+    def _execution_scientific_plan(self) -> ScientificWorkflowPlanV2:
+        """Resolve the exact execution DAG without inferring tuple order."""
+
+        approval = self.workflow_execution_approval
+        frozen_approval = getattr(self, "frozen_workflow_approval", None)
+        plans = getattr(self, "scientific_workflow_plans", None)
+        if plans is None:
+            plans = {}
+            self.scientific_workflow_plans = plans
+        if frozen_approval is not None:
+            plan = plans.get(
+                frozen_approval.plan_sha256
+            )
+            if plan is None:
+                raise ContractError(
+                    "frozen workflow approval has no registered scientific plan"
+                )
+            return plan
+        plan = _scientific_plan_from_v1_approval(approval)
+        plans.setdefault(plan.plan_sha256, plan)
+        return plan
+
     def _latest_invocation_for_node(
         self, node_id: str
     ) -> tuple[CanonicalCommandInvocationV1, _CommandContext]:
-        for invocation in reversed(tuple(self.invocations.values())):
-            context = self._command_contexts[invocation.invocation_sha256]
+        invocations = getattr(self, "invocations", {})
+        contexts = getattr(self, "_command_contexts", {})
+        for invocation in reversed(tuple(invocations.values())):
+            context = contexts[invocation.invocation_sha256]
             if context.proposal.node_id == node_id:
                 return invocation, context
         raise ContractError("node has no compiled command invocation")
@@ -1386,11 +2693,21 @@ class CommandCompiledToolHostV1:
                 if path.suffix.lower() == ".json"
                 else "program_output"
             )
+            before = path.stat()
+            observed_sha256 = file_sha256(path)
+            after = path.stat()
+            if (
+                before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+            ):
+                raise ContractError(
+                    "execution output changed while it was being bound"
+                )
             artifact = TrustedArtifactRefV1(
                 artifact_id=f"result.{node_id}.{ordinal}",
                 kind=kind,
-                sha256=file_sha256(path),
-                size_bytes=path.stat().st_size,
+                sha256=observed_sha256,
+                size_bytes=after.st_size,
                 path=str(path.resolve()),
                 cli_value=str(path.resolve()),
             )
@@ -1399,7 +2716,7 @@ class CommandCompiledToolHostV1:
         return tuple(artifacts)
 
     @staticmethod
-    def _validate_execution_outputs(
+    def _evaluate_execution_outputs(
         *,
         program: str,
         jobtype: str,
@@ -1410,92 +2727,225 @@ class CommandCompiledToolHostV1:
         expected_project_artifact: TrustedArtifactRefV1 | None = None,
         output_artifacts: tuple[TrustedArtifactRefV1, ...],
         exit_status: int | None,
-    ) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
-        findings = []
+        expected_environment_receipt_sha256: str = "",
+        capability_environment_receipt: (
+            EnvironmentCapabilityReceiptV1 | None
+        ) = None,
+        pyscf_engine_observation: _PySCFEngineObservation | None = None,
+        stationary_point_policy: (
+            StationaryPointValidationPolicyV1 | None
+        ) = None,
+        approved_stationary_point_policy_sha256: str = "",
+        approved_hessian_node_id: str = "",
+        process_observation: ProcessObservationV1 | None = None,
+    ) -> _ExecutionValidationEvaluation:
+        findings: list[str] = []
         observation: dict[str, Any] = {
             "program": program,
             "jobtype": jobtype,
-            "exit_status": exit_status,
+            "wrapper_exit_status": exit_status,
         }
-        if exit_status != 0:
-            findings.append("execution.process.nonzero_or_unknown")
-        if program == "pyscf" and exit_status == 0:
-            results = [item for item in output_artifacts if item.kind == "pyscf_hdf5"]
-            if len(results) != 1:
-                findings.append("pyscf.result.hdf5_count")
-            else:
-                try:
-                    from chemsmart.io.pyscf.output import read_pyscf_h5
-                    from chemsmart.jobs.pyscf.validation import frequency_validation_receipt
-
-                    spec, provenance, status, values = read_pyscf_h5(results[0].path)
-                    stages = tuple(str(item) for item in spec.get("stages") or ())
-                    observation.update(
+        if process_observation is not None:
+            observation["process_observation"] = canonical_data(
+                process_observation.as_dict()
+            )
+            findings.extend(
+                _process_observation_findings(process_observation)
+            )
+        for artifact in output_artifacts:
+            try:
+                _current_artifact_path(
+                    artifact, field_name="execution output artifact"
+                )
+            except ContractError:
+                findings.append("execution.output.artifact_binding_mismatch")
+        if program == "pyscf":
+            engine = pyscf_engine_observation or (
+                _inspect_pyscf_engine_observation(
+                    output_artifacts, launch_ambiguous=exit_status is None
+                )
+            )
+            findings.extend(engine.findings)
+            run_receipt = engine.run_receipt
+            if capability_environment_receipt is not None:
+                if (
+                    expected_environment_receipt_sha256
+                    != capability_environment_receipt.receipt_sha256
+                ):
+                    findings.append(
+                        "pyscf.environment.capability_binding_mismatch"
+                    )
+                if capability_environment_receipt.program != program:
+                    findings.append(
+                        "pyscf.environment.program_binding_mismatch"
+                    )
+            environment_observation, environment_findings = (
+                _pyscf_environment_evidence(
+                    output_artifacts=output_artifacts,
+                    run_receipt=run_receipt,
+                    capability_environment=capability_environment_receipt,
+                )
+                if capability_environment_receipt is not None
+                else ({}, ())
+            )
+            findings.extend(environment_findings)
+            observation.update(
+                {
+                    "child_exit_status": engine.child_exit_status,
+                    "engine_complete": engine.engine_complete,
+                    "engine_receipt_sha256": engine.run_receipt_sha256,
+                    "runner_scientifically_validated": (
+                        run_receipt.get("scientifically_validated")
+                        if run_receipt is not None
+                        else None
+                    ),
+                    "environment_validation": environment_observation,
+                }
+            )
+            if run_receipt is not None:
+                runner_findings = tuple(
+                    sorted(
                         {
-                            "stages": stages,
-                            "normal_termination": bool(status.get("normal_termination")),
-                            "charge": spec.get("charge"),
-                            "multiplicity": spec.get("multiplicity"),
-                            "requested_settings_sha256": spec.get("requested_settings_sha256"),
-                            "applied_settings_sha256": spec.get("applied_settings_sha256"),
-                            "environment_receipt_sha256": provenance.get("environment_receipt_sha256"),
+                            str(item.get("rule_id") or "unknown")
+                            for item in run_receipt.get("findings") or ()
+                            if isinstance(item, Mapping)
                         }
                     )
-                    if not status.get("normal_termination"):
-                        findings.append("pyscf.result.normal_termination")
-                    if (spec.get("charge"), spec.get("multiplicity")) != (
-                        charge,
-                        multiplicity,
-                    ):
-                        findings.append("pyscf.result.electronic_state")
-                    if spec.get("requested_settings_sha256") != spec.get(
-                        "applied_settings_sha256"
-                    ):
-                        findings.append("pyscf.result.settings_provenance")
-                    energies = values.get("energies")
-                    try:
-                        finite_energies = tuple(float(value) for value in energies)
-                    except (TypeError, ValueError):
-                        finite_energies = ()
-                    if not finite_energies or not all(
-                        math.isfinite(value) for value in finite_energies
-                    ):
-                        findings.append("pyscf.result.finite_energy")
-                    if expected_input_artifact is not None:
-                        try:
-                            input_lines = Path(
-                                expected_input_artifact.path
-                            ).read_text(encoding="utf-8").splitlines()
-                            atom_count = int(input_lines[0].strip())
-                            input_symbols = tuple(
-                                line.split()[0]
-                                for line in input_lines[2 : atom_count + 2]
-                            )
-                        except (OSError, UnicodeDecodeError, ValueError, IndexError):
-                            input_symbols = ()
-                        if not input_symbols or tuple(
-                            str(value) for value in spec.get("symbols") or ()
-                        ) != input_symbols:
-                            findings.append("pyscf.result.atom_identity_order")
-                    required_stage = "scf" if jobtype == "sp" else jobtype
-                    stage = (status.get("stages") or {}).get(required_stage) or {}
-                    if stage.get("converged") is not True:
-                        findings.append(f"pyscf.result.{required_stage}_not_converged")
-                    if jobtype == "hess":
-                        frequency = frequency_validation_receipt(
-                            symbols=spec.get("symbols"),
-                            positions=values.get("positions"),
-                            frequencies=values.get("vibrational_frequencies"),
-                            expected_imaginary_modes=0,
-                        )
-                        observation["frequency_validation"] = frequency
-                        if frequency.get("state") != "validated":
-                            findings.append("pyscf.result.frequency_validation")
-                except Exception as exc:
-                    findings.append(
-                        "pyscf.result.unreadable:" + type(exc).__name__
+                )
+                observation["runner_findings"] = runner_findings
+                observation["runner_state"] = run_receipt.get("state")
+                deferred_hessian_classification = (
+                    _runner_defers_hessian_classification(
+                        run_receipt=run_receipt,
+                        jobtype=jobtype,
+                        hessian_node_id=approved_hessian_node_id,
+                        engine_complete=engine.engine_complete,
+                        stationary_point_policy=stationary_point_policy,
+                        approved_stationary_point_policy_sha256=(
+                            approved_stationary_point_policy_sha256
+                        ),
                     )
-        elif program == "xtb" and exit_status == 0:
+                )
+                observation["runner_validation_delegation"] = (
+                    "approved_stationary_point_policy"
+                    if deferred_hessian_classification
+                    else "none"
+                )
+                if not deferred_hessian_classification:
+                    if (
+                        run_receipt.get("scientifically_validated")
+                        is not True
+                    ):
+                        findings.append(
+                            "pyscf.run_receipt.scientific_validation_failed"
+                        )
+                    elif runner_findings:
+                        findings.append(
+                            "pyscf.run_receipt.validation_state_inconsistent"
+                        )
+                    if run_receipt.get("state") != "validated":
+                        findings.append(
+                            "pyscf.run_receipt.state_not_validated"
+                        )
+                if run_receipt.get("state") == "validated" and (
+                    run_receipt.get("scientifically_validated") is not True
+                    or runner_findings
+                ):
+                    findings.append(
+                        "pyscf.run_receipt.validation_state_inconsistent"
+                    )
+                if (
+                    expected_project_artifact is not None
+                    and run_receipt.get("project_yaml_sha256")
+                    != expected_project_artifact.sha256
+                ):
+                    findings.append(
+                        "pyscf.run_receipt.project_digest_mismatch"
+                    )
+                if (
+                    expected_input_artifact is not None
+                    and run_receipt.get("input_artifact_sha256")
+                    != expected_input_artifact.sha256
+                ):
+                    findings.append(
+                        "pyscf.run_receipt.input_digest_mismatch"
+                    )
+
+            result = engine.result_artifact
+            if result is not None:
+                try:
+                    from chemsmart.jobs.pyscf.validation import (
+                        validate_pyscf_result,
+                    )
+
+                    expected_symbols, expected_positions = _pyscf_input_geometry(
+                        expected_input_artifact
+                    )
+                    expected_receipt = _pyscf_result_receipt_expectation(
+                        run_receipt
+                    )
+                    result_validation = validate_pyscf_result(
+                        _current_artifact_path(
+                            result, field_name="PySCF HDF5 result"
+                        ),
+                        settings=expected_settings or {},
+                        expected_jobtype=jobtype,
+                        expected_charge=charge,
+                        expected_multiplicity=multiplicity,
+                        expected_symbols=expected_symbols,
+                        expected_positions=(
+                            expected_positions
+                            if jobtype in {"sp", "hess"}
+                            else None
+                        ),
+                        expected_receipt=expected_receipt,
+                        stationary_point_policy=stationary_point_policy,
+                    )
+                    observation["result_validation"] = canonical_data(
+                        result_validation
+                    )
+                    if stationary_point_policy is not None:
+                        observation["stationary_point_policy_sha256"] = (
+                            stationary_point_policy.policy_sha256
+                        )
+                    findings.extend(
+                        str(item.rule_id)
+                        for item in result_validation["findings"]
+                    )
+                    if result_validation.get("state") != "validated" and not (
+                        result_validation.get("findings")
+                    ):
+                        findings.append(
+                            "pyscf.result.validation_state_inconsistent"
+                        )
+                    from chemsmart.io.pyscf.output import read_pyscf_h5
+
+                    result_spec, _provenance, _status, _results = read_pyscf_h5(
+                        _current_artifact_path(
+                            result, field_name="PySCF HDF5 program binding"
+                        )
+                    )
+                    expected_engine = (
+                        capability_environment_receipt.engine
+                        if capability_environment_receipt is not None
+                        else str((expected_settings or {}).get("engine") or "")
+                    )
+                    if result_spec.get("program") != "pyscf":
+                        findings.append("pyscf.result.program_binding_mismatch")
+                    if expected_engine and result_spec.get("engine") != (
+                        expected_engine
+                    ):
+                        findings.append("pyscf.result.engine_binding_mismatch")
+                except Exception as exc:
+                    observation["pyscf_result_error_type"] = type(exc).__name__
+                    findings.append("pyscf.result.unreadable")
+            elif run_receipt is not None and observation.get(
+                "runner_validation_delegation"
+            ) == "approved_stationary_point_policy":
+                findings.append("pyscf.result.policy_validation_unavailable")
+        elif exit_status != 0:
+            findings.append("execution.process.nonzero_or_unknown")
+        elif program == "xtb":
             receipts: list[Path] = []
             for artifact in output_artifacts:
                 if (
@@ -1505,9 +2955,12 @@ class CommandCompiledToolHostV1:
                 ):
                     continue
                 try:
-                    json.loads(Path(artifact.path).read_text(encoding="utf-8"))
-                    receipts.append(Path(artifact.path))
-                except (OSError, json.JSONDecodeError):
+                    path = _current_artifact_path(
+                        artifact, field_name="xTB result receipt"
+                    )
+                    json.loads(path.read_text(encoding="utf-8"))
+                    receipts.append(path)
+                except (ContractError, OSError, json.JSONDecodeError):
                     pass
             if len(receipts) != 1:
                 findings.append("xtb.result.receipt_count")
@@ -1537,10 +2990,60 @@ class CommandCompiledToolHostV1:
                 findings.extend(xtb_findings)
         elif program not in {"pyscf", "xtb"}:
             findings.append("execution.program.validator_unavailable")
-        validator = canonical_sha256(
-            {"observation": observation, "findings": tuple(findings)}
+        normalized_findings = tuple(sorted(set(findings)))
+        validator_schema_version = str(
+            (
+                observation.get("result_validation") or {}
+            ).get("schema_version")
+            or "chemsmart.generic-result-validation.v1"
         )
-        return not findings, (validator,), tuple(findings)
+        environment_validation = observation.get("environment_validation") or {}
+        return _ExecutionValidationEvaluation(
+            validator_id=(
+                "pyscf-result-validator"
+                if program == "pyscf"
+                else "xtb-result-validator"
+                if program == "xtb"
+                else "program-result-validator"
+            ),
+            validator_schema_version=validator_schema_version,
+            validator_version="1",
+            observations=canonical_data(observation),
+            findings=normalized_findings,
+            run_environment_receipt_sha256=str(
+                environment_validation.get(
+                    "run_environment_receipt_sha256", ""
+                )
+            ),
+            environment_validation_sha256=str(
+                environment_validation.get("validation_sha256", "")
+            ),
+        )
+
+    @staticmethod
+    def _validate_execution_outputs(**values: Any) -> tuple[
+        bool, tuple[str, ...], tuple[str, ...]
+    ]:
+        """Compatibility projection used by focused legacy tests.
+
+        Runtime execution stores the complete ProgramResultValidationReceiptV1
+        produced from ``_evaluate_execution_outputs`` instead of this digest.
+        """
+
+        evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+            **values
+        )
+        digest = canonical_sha256(
+            {
+                "observations": evaluation.observations,
+                "findings": evaluation.findings,
+                "validator_schema_version": (
+                    evaluation.validator_schema_version
+                ),
+                "validator_version": evaluation.validator_version,
+            }
+        )
+        return evaluation.validated, (digest,), evaluation.findings
 
     def latest_workflow_draft_receipt(self) -> str:
         """Return the latest useful plan identity without claiming readiness."""
@@ -1726,6 +3229,56 @@ def _require_registry_keys(
         raise ContractError(f"{label} registry key mismatch")
 
 
+def _public_process_stream(value: str | bytes | None) -> str:
+    """Return process output as bounded public text, never a Python repr."""
+
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _write_host_execution_artifact(path: Path, payload: str) -> None:
+    """Write one host-owned node artifact without replacing child output."""
+
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError as exc:
+        raise ContractError(
+            "execution emitted a reserved host artifact name"
+        ) from exc
+
+
+def _process_observation_findings(
+    observation: ProcessObservationV1,
+) -> tuple[str, ...]:
+    """Map a digest-valid process observation to deterministic findings."""
+
+    findings: set[str] = set()
+    if observation.state == "launch_failed":
+        findings.add("execution.process.launch_failed")
+    if observation.timed_out:
+        findings.add("execution.process.timeout")
+    if observation.memory_limit_exceeded:
+        findings.add("execution.process.memory_limit_exceeded")
+    if observation.termination_requested and not (
+        observation.termination_confirmed
+    ):
+        findings.add("execution.process.termination_ambiguous")
+    if observation.pid is not None and not observation.process_group_owned:
+        findings.add("execution.process.group_not_owned")
+    if (
+        observation.state == "exited"
+        and observation.memory_observation_state != "observed"
+    ):
+        findings.add("execution.process.memory_observation_unavailable")
+    return tuple(sorted(findings))
+
+
 def _prepare_execution_node_workspace(path: Path) -> Path:
     """Create one empty node directory without deleting prior evidence."""
 
@@ -1742,6 +3295,175 @@ def _prepare_execution_node_workspace(path: Path) -> Path:
     else:
         path.mkdir(parents=True)
     return path
+
+
+def _scientific_plan_from_v1_approval(
+    approval: WorkflowExecutionApprovalV1,
+) -> ScientificWorkflowPlanV2:
+    """Compatibility projection that does not turn tuple order into edges."""
+
+    identity_sha256s = tuple(
+        sorted(
+            {
+                node.scientific_identity_sha256
+                for node in approval.node_bindings
+                if node.scientific_identity_sha256
+            }
+        )
+    )
+    if not identity_sha256s:
+        raise ContractError("V1 workflow approval lacks scientific identity")
+    scientific_identity_sha256 = (
+        identity_sha256s[0]
+        if len(identity_sha256s) == 1
+        else canonical_sha256(
+            {"scientific_identity_sha256s": identity_sha256s}
+        )
+    )
+    nodes = tuple(
+        ScientificWorkflowNodeV2(
+            node_id=node.node_id,
+            stage=node.jobtype,
+            requested_program=node.program,
+            program=node.program,
+            engine=node.engine,
+            project_role="approved." + node.program,
+            unresolved_fields=(),
+        )
+        for node in approval.node_bindings
+    )
+    edges = tuple(
+        sorted(
+            (
+                ScientificWorkflowEdgeV2(
+                    edge_id=(
+                        "data."
+                        + edge.producer_node_id
+                        + "."
+                        + edge.consumer_node_id
+                        + "."
+                        + edge.artifact_kind
+                    ),
+                    source_node_id=edge.producer_node_id,
+                    target_node_id=edge.consumer_node_id,
+                    edge_kind="data",
+                    artifact_class=edge.artifact_kind,
+                    producer_output_id=edge.selection_rule,
+                    consumer_input_id="geometry",
+                )
+                for edge in approval.producer_edges
+            ),
+            key=lambda edge: edge.edge_id,
+        )
+    )
+    return build_scientific_workflow_plan(
+        workflow_id=approval.workflow_id,
+        task_spec_sha256=approval.task_spec_sha256,
+        scientific_identity_sha256=scientific_identity_sha256,
+        nodes=nodes,
+        edges=edges,
+    )
+
+
+def _project_v1_execution_run_state(
+    plan: ScientificWorkflowPlanV2,
+    approval: WorkflowExecutionApprovalV1,
+    receipts: Mapping[str, ProgramExecutionReceiptV1],
+) -> WorkflowRunStateV1:
+    """Project legacy receipts into V2 solely for deterministic readiness."""
+
+    node_states = []
+    for planned_node in sorted(plan.nodes, key=lambda node: node.node_id):
+        receipt = receipts.get(planned_node.node_id)
+        if receipt is None:
+            node_states.append(
+                WorkflowNodeRunStateV1(
+                    node_id=planned_node.node_id,
+                    state="pending",
+                    invocation_sha256="",
+                    execution_receipt_sha256="",
+                    validator_receipt_sha256s=(),
+                    output_artifact_sha256s=(),
+                    failure_rule_ids=(),
+                )
+            )
+            continue
+        if receipt.validated:
+            state = "validated"
+        elif receipt.execution_state == "engine_complete":
+            state = "engine_complete"
+        elif receipt.execution_state in {"failed", "ambiguous", "running"}:
+            state = receipt.execution_state
+        else:
+            state = "blocked"
+        failure_rule_ids = ()
+        if state in {"failed", "ambiguous", "blocked"}:
+            failure_rule_ids = tuple(
+                sorted(
+                    set(receipt.findings)
+                    or {"execution.state." + receipt.execution_state}
+                )
+            )
+        node_states.append(
+            WorkflowNodeRunStateV1(
+                node_id=planned_node.node_id,
+                state=state,
+                invocation_sha256=receipt.invocation_sha256,
+                execution_receipt_sha256=receipt.receipt_sha256,
+                validator_receipt_sha256s=(
+                    receipt.validator_receipt_sha256s
+                ),
+                output_artifact_sha256s=tuple(
+                    sorted(
+                        artifact.sha256
+                        for artifact in receipt.output_artifacts
+                    )
+                ),
+                failure_rule_ids=failure_rule_ids,
+            )
+        )
+    observed_states = {node.state for node in node_states}
+    if "ambiguous" in observed_states:
+        workflow_state = "ambiguous"
+    elif "failed" in observed_states:
+        workflow_state = "failed"
+    elif "blocked" in observed_states:
+        workflow_state = "blocked"
+    elif observed_states == {"validated"}:
+        workflow_state = "validated"
+    elif observed_states == {"pending"}:
+        workflow_state = "approved"
+    else:
+        workflow_state = "running"
+    started_values = tuple(
+        receipt.started_at for receipt in receipts.values() if receipt.started_at
+    )
+    finished_values = tuple(
+        receipt.finished_at
+        for receipt in receipts.values()
+        if receipt.finished_at
+    )
+    body = {
+        "schema_version": "chemsmart.workflow-run-state.v1",
+        "run_id": "compat." + approval.approval_id,
+        "workflow_id": plan.workflow_id,
+        "plan_sha256": plan.plan_sha256,
+        "approval_id": approval.approval_id,
+        "approval_sha256": approval.approval_sha256,
+        "approval_consumed": True,
+        "state": workflow_state,
+        "nodes": tuple(node_states),
+        "started_at": min(started_values) if started_values else "",
+        "finished_at": (
+            max(finished_values)
+            if workflow_state in {"validated", "failed"}
+            and finished_values
+            else ""
+        ),
+    }
+    return WorkflowRunStateV1(
+        **body, run_state_sha256=canonical_sha256(body)
+    )
 
 
 def _model_visible_data(value: Any) -> Any:

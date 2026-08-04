@@ -39,6 +39,7 @@ class CapabilityQueryStatus(str, Enum):
     UNKNOWN_PROGRAM = "unknown_program"
     UNSUPPORTED_JOBTYPE = "unsupported_jobtype"
     UNSUPPORTED_ENGINE = "unsupported_engine"
+    UNSUPPORTED_ENGINE_JOB_COMBINATION = "unsupported_engine_job_combination"
     CLI_SCHEMA_MISMATCH = "cli_schema_mismatch"
 
 
@@ -47,6 +48,26 @@ class EnvironmentStatus(str, Enum):
     MISSING = "missing"
     NOT_DECLARED = "not_declared"
     NOT_QUERIED = "not_queried"
+
+
+@dataclass(frozen=True, order=True)
+class EngineJobCapabilityV1:
+    """Exact engine/job support projected from the canonical registry."""
+
+    engine: str
+    jobtype: str
+    preview_supported: bool = True
+    execution_supported: bool = True
+
+    def __post_init__(self) -> None:
+        require_identifier(self.engine, "engine")
+        require_identifier(self.jobtype, "jobtype")
+        if self.execution_supported and not self.preview_supported:
+            raise ContractError("execution support requires preview support")
+
+    @property
+    def pair(self) -> tuple[str, str]:
+        return (self.engine, self.jobtype)
 
 
 @dataclass(frozen=True)
@@ -60,6 +81,7 @@ class ProgramCapabilityV1:
     project_parameter_domains: tuple[
         tuple[str, tuple[str, ...]], ...
     ] = ()
+    engine_job_capabilities: tuple[EngineJobCapabilityV1, ...] = ()
 
     def __post_init__(self) -> None:
         require_identifier(self.program, "program")
@@ -90,6 +112,40 @@ class ProgramCapabilityV1:
                 raise ContractError(
                     "project parameter domain values must be lower-case"
                 )
+        _require_engine_job_capabilities(
+            self.engine_job_capabilities,
+            engines=self.engines,
+            jobtypes=self.jobtypes,
+            allow_empty=True,
+        )
+
+    @property
+    def resolved_engine_job_capabilities(
+        self,
+    ) -> tuple[EngineJobCapabilityV1, ...]:
+        if self.engine_job_capabilities:
+            return self.engine_job_capabilities
+        return tuple(
+            EngineJobCapabilityV1(engine=engine, jobtype=jobtype)
+            for engine in self.engines
+            for jobtype in self.jobtypes
+        )
+
+    @property
+    def preview_engine_job_pairs(self) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            item.pair
+            for item in self.resolved_engine_job_capabilities
+            if item.preview_supported
+        )
+
+    @property
+    def execution_engine_job_pairs(self) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            item.pair
+            for item in self.resolved_engine_job_capabilities
+            if item.execution_supported
+        )
 
 
 @dataclass(frozen=True)
@@ -109,7 +165,34 @@ class ProgramCapabilityRegistryV1:
                 "programs": self.programs,
             }
         )
-        if self.registry_sha256 != expected:
+        legacy_expected = ""
+        if all(not item.engine_job_capabilities for item in self.programs):
+            legacy_expected = canonical_sha256(
+                {
+                    "schema_version": self.schema_version,
+                    "programs": tuple(
+                        {
+                            "program": item.program,
+                            "requires_project_configuration": (
+                                item.requires_project_configuration
+                            ),
+                            "supports_project_configuration": (
+                                item.supports_project_configuration
+                            ),
+                            "jobtypes": item.jobtypes,
+                            "project_owned_parameters": (
+                                item.project_owned_parameters
+                            ),
+                            "engines": item.engines,
+                            "project_parameter_domains": (
+                                item.project_parameter_domains
+                            ),
+                        }
+                        for item in self.programs
+                    ),
+                }
+            )
+        if self.registry_sha256 not in {expected, legacy_expected}:
             raise ContractError("capability registry digest mismatch")
 
     def get(self, program: str) -> ProgramCapabilityV1 | None:
@@ -126,6 +209,7 @@ class ProgramSupportRuleV1:
     support_level: SupportLevel = SupportLevel.AVAILABLE
     allowed_jobtypes: tuple[str, ...] = ()
     allowed_engines: tuple[str, ...] = ()
+    allowed_engine_job_pairs: tuple[tuple[str, str], ...] = ()
     compiler_evidence_sha256: str = ""
     preview_evidence_sha256: str = ""
     preflight_evidence_sha256: str = ""
@@ -137,6 +221,12 @@ class ProgramSupportRuleV1:
         require_identifier(self.program, "program")
         _require_sorted_unique(self.allowed_jobtypes, "allowed_jobtypes")
         _require_sorted_unique(self.allowed_engines, "allowed_engines")
+        _require_engine_job_pairs(
+            self.allowed_engine_job_pairs,
+            engines=self.allowed_engines,
+            jobtypes=self.allowed_jobtypes,
+            allow_empty=True,
+        )
         _require_sorted_unique(self.rule_ids, "rule_ids")
         evidence = (
             self.compiler_evidence_sha256,
@@ -195,7 +285,41 @@ class ProgramSupportOverlayV1:
                 "rules": self.rules,
             }
         )
-        if self.overlay_sha256 != expected:
+        legacy_expected = ""
+        if all(not item.allowed_engine_job_pairs for item in self.rules):
+            legacy_expected = canonical_sha256(
+                {
+                    "schema_version": self.schema_version,
+                    "overlay_id": self.overlay_id,
+                    "base_registry_sha256": self.base_registry_sha256,
+                    "rules": tuple(
+                        {
+                            "program": item.program,
+                            "support_level": item.support_level,
+                            "allowed_jobtypes": item.allowed_jobtypes,
+                            "allowed_engines": item.allowed_engines,
+                            "compiler_evidence_sha256": (
+                                item.compiler_evidence_sha256
+                            ),
+                            "preview_evidence_sha256": (
+                                item.preview_evidence_sha256
+                            ),
+                            "preflight_evidence_sha256": (
+                                item.preflight_evidence_sha256
+                            ),
+                            "verifier_evidence_sha256": (
+                                item.verifier_evidence_sha256
+                            ),
+                            "execution_evidence_sha256": (
+                                item.execution_evidence_sha256
+                            ),
+                            "rule_ids": item.rule_ids,
+                        }
+                        for item in self.rules
+                    ),
+                }
+            )
+        if self.overlay_sha256 not in {expected, legacy_expected}:
             raise ContractError("support overlay digest mismatch")
 
     def get(self, program: str) -> ProgramSupportRuleV1 | None:
@@ -227,6 +351,7 @@ class ProgramComponentConformanceReceiptV1:
     verifier_status: str
     execution_status: str
     receipt_sha256: str
+    covered_engine_job_pairs: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.program-component-conformance.v1":
@@ -240,6 +365,12 @@ class ProgramComponentConformanceReceiptV1:
             require_sha256(digest, field_name)
         _require_sorted_unique(self.covered_jobtypes, "covered jobtypes")
         _require_sorted_unique(self.covered_engines, "covered engines")
+        _require_engine_job_pairs(
+            self.covered_engine_job_pairs,
+            engines=self.covered_engines,
+            jobtypes=self.covered_jobtypes,
+            allow_empty=True,
+        )
         if self.compiler_status == "passed" and (
             not self.covered_jobtypes or not self.covered_engines
         ):
@@ -279,8 +410,20 @@ class ProgramComponentConformanceReceiptV1:
             "verifier_status": self.verifier_status,
             "execution_status": self.execution_status,
         }
+        if self.covered_engine_job_pairs:
+            body["covered_engine_job_pairs"] = self.covered_engine_job_pairs
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("component conformance receipt digest mismatch")
+
+    @property
+    def effective_engine_job_pairs(self) -> tuple[tuple[str, str], ...]:
+        if self.covered_engine_job_pairs:
+            return self.covered_engine_job_pairs
+        return tuple(
+            (engine, jobtype)
+            for engine in self.covered_engines
+            for jobtype in self.covered_jobtypes
+        )
 
 
 @dataclass(frozen=True)
@@ -311,25 +454,35 @@ class CapabilityQueryReceiptV1:
     effective_engines: tuple[str, ...]
     rule_ids: tuple[str, ...]
     receipt_sha256: str
+    effective_engine_job_pairs: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.capability-query-receipt.v1":
             raise ContractError("unsupported capability query receipt schema")
-        expected = canonical_sha256(
-            {
-                "schema_version": self.schema_version,
-                "query": self.query,
-                "registry_sha256": self.registry_sha256,
-                "live_cli_schema_sha256": self.live_cli_schema_sha256,
-                "joined_capability_sha256": self.joined_capability_sha256,
-                "overlay_sha256": self.overlay_sha256,
-                "status": self.status,
-                "capability": self.capability,
-                "effective_jobtypes": self.effective_jobtypes,
-                "effective_engines": self.effective_engines,
-                "rule_ids": self.rule_ids,
-            }
+        _require_engine_job_pairs(
+            self.effective_engine_job_pairs,
+            engines=self.effective_engines,
+            jobtypes=self.effective_jobtypes,
+            allow_empty=True,
         )
+        body = {
+            "schema_version": self.schema_version,
+            "query": self.query,
+            "registry_sha256": self.registry_sha256,
+            "live_cli_schema_sha256": self.live_cli_schema_sha256,
+            "joined_capability_sha256": self.joined_capability_sha256,
+            "overlay_sha256": self.overlay_sha256,
+            "status": self.status,
+            "capability": self.capability,
+            "effective_jobtypes": self.effective_jobtypes,
+            "effective_engines": self.effective_engines,
+            "rule_ids": self.rule_ids,
+        }
+        if self.effective_engine_job_pairs:
+            body["effective_engine_job_pairs"] = (
+                self.effective_engine_job_pairs
+            )
+        expected = canonical_sha256(body)
         if self.receipt_sha256 != expected:
             raise ContractError("capability query receipt digest mismatch")
 
@@ -632,6 +785,40 @@ def load_program_capabilities(
         )
         if declared != program:
             raise ContractError("capability mapping key differs from program")
+        jobtypes = _normalized_tuple(getattr(raw, "jobtypes", ()), "jobtypes")
+        engines = _normalized_tuple(getattr(raw, "engines", ()), "engines")
+        raw_matrix = tuple(
+            getattr(raw, "engine_job_capabilities", ()) or ()
+        )
+        if raw_matrix:
+            engine_job_capabilities = tuple(
+                sorted(
+                    EngineJobCapabilityV1(
+                        engine=require_identifier(
+                            str(getattr(item, "engine", "")), "engine"
+                        ),
+                        jobtype=require_identifier(
+                            str(getattr(item, "jobtype", "")), "jobtype"
+                        ),
+                        preview_supported=bool(
+                            getattr(item, "preview_supported", True)
+                        ),
+                        execution_supported=bool(
+                            getattr(item, "execution_supported", True)
+                        ),
+                    )
+                    for item in raw_matrix
+                )
+            )
+        else:
+            # Legacy settings registries declared independent lists. Project
+            # them once into an explicit matrix so every downstream decision
+            # is pair-aware without changing old registry authorship APIs.
+            engine_job_capabilities = tuple(
+                EngineJobCapabilityV1(engine=engine, jobtype=jobtype)
+                for engine in engines
+                for jobtype in jobtypes
+            )
         programs.append(
             ProgramCapabilityV1(
                 program=program,
@@ -641,16 +828,12 @@ def load_program_capabilities(
                 supports_project_configuration=bool(
                     getattr(raw, "supports_project_configuration", False)
                 ),
-                jobtypes=_normalized_tuple(
-                    getattr(raw, "jobtypes", ()), "jobtypes"
-                ),
+                jobtypes=jobtypes,
                 project_owned_parameters=_normalized_tuple(
                     getattr(raw, "project_owned_parameters", ()),
                     "project_owned_parameters",
                 ),
-                engines=_normalized_tuple(
-                    getattr(raw, "engines", ()), "engines"
-                ),
+                engines=engines,
                 project_parameter_domains=tuple(
                     (
                         require_identifier(
@@ -670,6 +853,7 @@ def load_program_capabilities(
                         raw, "project_parameter_domains", ()
                     )
                 ),
+                engine_job_capabilities=engine_job_capabilities,
             )
         )
     body = {
@@ -702,6 +886,22 @@ def build_support_overlay(
             capability.engines
         ):
             raise ContractError("support overlay broadens declared engines")
+        allowed_pairs = _effective_rule_engine_job_pairs(rule)
+        if not set(allowed_pairs).issubset(
+            capability.preview_engine_job_pairs
+        ):
+            raise ContractError(
+                "support overlay broadens declared engine-job capability"
+            )
+        if (
+            rule.support_level is SupportLevel.AVAILABLE
+            and not set(allowed_pairs).issubset(
+                capability.execution_engine_job_pairs
+            )
+        ):
+            raise ContractError(
+                "execution overlay includes a preview-only engine-job pair"
+            )
     body = {
         "schema_version": "chemsmart.program-support-overlay.v1",
         "overlay_id": require_identifier(overlay_id, "overlay_id"),
@@ -731,15 +931,27 @@ def build_program_component_conformance_receipt(
     verifier_status: str,
     execution_receipt_sha256: str = "",
     execution_status: str = "not_observed",
+    covered_engine_job_pairs: Iterable[tuple[str, str]] | None = None,
 ) -> ProgramComponentConformanceReceiptV1:
+    normalized_jobtypes = tuple(sorted(set(covered_jobtypes)))
+    normalized_engines = tuple(sorted(set(covered_engines)))
+    normalized_pairs = (
+        tuple(
+            (engine, jobtype)
+            for engine in normalized_engines
+            for jobtype in normalized_jobtypes
+        )
+        if covered_engine_job_pairs is None
+        else tuple(sorted(set(covered_engine_job_pairs)))
+    )
     body = {
         "schema_version": "chemsmart.program-component-conformance.v1",
         "program": require_identifier(program, "program"),
         "registry_sha256": registry_sha256,
         "live_cli_schema_sha256": live_cli_schema_sha256,
         "fixture_bundle_sha256": fixture_bundle_sha256,
-        "covered_jobtypes": tuple(sorted(set(covered_jobtypes))),
-        "covered_engines": tuple(sorted(set(covered_engines))),
+        "covered_jobtypes": normalized_jobtypes,
+        "covered_engines": normalized_engines,
         "compiler_receipt_sha256": compiler_receipt_sha256,
         "preview_receipt_sha256": preview_receipt_sha256,
         "preflight_receipt_sha256": preflight_receipt_sha256,
@@ -751,6 +963,8 @@ def build_program_component_conformance_receipt(
         "verifier_status": verifier_status,
         "execution_status": execution_status,
     }
+    if normalized_pairs:
+        body["covered_engine_job_pairs"] = normalized_pairs
     return ProgramComponentConformanceReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )
@@ -793,6 +1007,9 @@ def build_command_compiled_preview_overlay(
         if evidence is not None and (
             not set(evidence.covered_jobtypes).issubset(capability.jobtypes)
             or not set(evidence.covered_engines).issubset(capability.engines)
+            or not set(evidence.effective_engine_job_pairs).issubset(
+                capability.preview_engine_job_pairs
+            )
         ):
             raise ContractError(
                 "program conformance receipt broadens declared capability"
@@ -804,6 +1021,7 @@ def build_command_compiled_preview_overlay(
             and evidence.preview_status == "passed"
             and evidence.preflight_status == "passed"
             and evidence.verifier_status == "passed"
+            and bool(evidence.effective_engine_job_pairs)
         )
         rules.append(
             ProgramSupportRuleV1(
@@ -818,6 +1036,9 @@ def build_command_compiled_preview_overlay(
                 ),
                 allowed_engines=(
                     evidence.covered_engines if operable else ()
+                ),
+                allowed_engine_job_pairs=(
+                    evidence.effective_engine_job_pairs if operable else ()
                 ),
                 compiler_evidence_sha256=(
                     evidence.compiler_receipt_sha256 if operable else ""
@@ -870,7 +1091,7 @@ def build_approved_execution_overlay(
     if preview_overlay.base_registry_sha256 != registry.registry_sha256:
         raise ContractError("preview overlay is stale for this registry")
     require_sha256(execution_evidence_sha256, "execution_evidence_sha256")
-    approved: dict[str, dict[str, set[str]]] = {}
+    approved: dict[str, set[tuple[str, str]]] = {}
     for program, jobtype, engine in approved_nodes:
         normalized_program = require_identifier(program, "program")
         normalized_jobtype = require_identifier(jobtype, "jobtype")
@@ -882,11 +1103,12 @@ def build_approved_execution_overlay(
             raise ContractError("approved execution uses an unknown jobtype")
         if normalized_engine not in capability.engines:
             raise ContractError("approved execution uses an unknown engine")
-        row = approved.setdefault(
-            normalized_program, {"jobtypes": set(), "engines": set()}
-        )
-        row["jobtypes"].add(normalized_jobtype)
-        row["engines"].add(normalized_engine)
+        pair = (normalized_engine, normalized_jobtype)
+        if pair not in capability.execution_engine_job_pairs:
+            raise ContractError(
+                "approved execution uses a preview-only engine-job pair"
+            )
+        approved.setdefault(normalized_program, set()).add(pair)
 
     rules = []
     for preview_rule in preview_overlay.rules:
@@ -898,18 +1120,26 @@ def build_approved_execution_overlay(
             raise ContractError(
                 "approved execution requires prior preview conformance"
             )
-        jobtypes = tuple(sorted(selection["jobtypes"]))
-        engines = tuple(sorted(selection["engines"]))
+        pairs = tuple(sorted(selection))
+        jobtypes = tuple(sorted({jobtype for _engine, jobtype in pairs}))
+        engines = tuple(sorted({engine for engine, _jobtype in pairs}))
         if not set(jobtypes).issubset(preview_rule.allowed_jobtypes):
             raise ContractError("approved jobtype lacks preview conformance")
         if not set(engines).issubset(preview_rule.allowed_engines):
             raise ContractError("approved engine lacks preview conformance")
+        if not set(pairs).issubset(
+            _effective_rule_engine_job_pairs(preview_rule)
+        ):
+            raise ContractError(
+                "approved engine-job pair lacks preview conformance"
+            )
         rules.append(
             ProgramSupportRuleV1(
                 program=preview_rule.program,
                 support_level=SupportLevel.AVAILABLE,
                 allowed_jobtypes=jobtypes,
                 allowed_engines=engines,
+                allowed_engine_job_pairs=pairs,
                 compiler_evidence_sha256=(
                     preview_rule.compiler_evidence_sha256
                 ),
@@ -991,6 +1221,7 @@ def query_capability(
     capability = registry.get(query.program)
     effective_jobtypes: tuple[str, ...] = ()
     effective_engines: tuple[str, ...] = ()
+    effective_engine_job_pairs: tuple[tuple[str, str], ...] = ()
     rule_ids: tuple[str, ...] = ()
     status = CapabilityQueryStatus.UNKNOWN_PROGRAM
     overlay_sha256 = overlay.overlay_sha256 if overlay is not None else ""
@@ -998,6 +1229,7 @@ def query_capability(
     if capability is not None:
         effective_jobtypes = capability.jobtypes
         effective_engines = capability.engines
+        effective_engine_job_pairs = capability.preview_engine_job_pairs
         rule = overlay.get(query.program) if overlay is not None else None
         level = SupportLevel.DISABLED
         if rule is not None:
@@ -1007,17 +1239,51 @@ def query_capability(
                 effective_jobtypes = rule.allowed_jobtypes
             if rule.allowed_engines:
                 effective_engines = rule.allowed_engines
+            rule_pairs = _effective_rule_engine_job_pairs(rule)
+            if (
+                rule_pairs
+                or rule.allowed_jobtypes
+                or rule.allowed_engines
+                or rule.allowed_engine_job_pairs
+            ):
+                effective_engine_job_pairs = rule_pairs
+            if rule_pairs:
+                effective_jobtypes = tuple(
+                    sorted(
+                        {
+                            jobtype
+                            for _engine, jobtype in rule_pairs
+                        }
+                    )
+                )
+                effective_engines = tuple(
+                    sorted(
+                        {
+                            engine
+                            for engine, _jobtype in rule_pairs
+                        }
+                    )
+                )
         if overlay is None or rule is None:
             status = CapabilityQueryStatus.DISABLED
             rule_ids = ("agent.support.overlay_required",)
         elif level is SupportLevel.DISABLED:
             status = CapabilityQueryStatus.DISABLED
-        elif level is SupportLevel.REFERENCE_ONLY:
-            status = CapabilityQueryStatus.REFERENCE_ONLY
         elif query.jobtype and query.jobtype not in effective_jobtypes:
             status = CapabilityQueryStatus.UNSUPPORTED_JOBTYPE
         elif query.engine and query.engine not in effective_engines:
             status = CapabilityQueryStatus.UNSUPPORTED_ENGINE
+        elif (
+            query.jobtype
+            and query.engine
+            and (query.engine, query.jobtype)
+            not in effective_engine_job_pairs
+        ):
+            status = (
+                CapabilityQueryStatus.UNSUPPORTED_ENGINE_JOB_COMBINATION
+            )
+        elif level is SupportLevel.REFERENCE_ONLY:
+            status = CapabilityQueryStatus.REFERENCE_ONLY
         elif query.jobtype and not (
             live_schema.has_path(("run", query.program, query.jobtype))
             and live_schema.has_path(("sub", query.program, query.jobtype))
@@ -1046,6 +1312,8 @@ def query_capability(
         "effective_engines": effective_engines,
         "rule_ids": rule_ids,
     }
+    if effective_engine_job_pairs:
+        body["effective_engine_job_pairs"] = effective_engine_job_pairs
     return CapabilityQueryReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )
@@ -1260,16 +1528,42 @@ def consume_pyscf_compute_environment_receipt(
     packages_raw = raw.get("packages")
     packages_raw = packages_raw if isinstance(packages_raw, Mapping) else {}
     dependency_versions: dict[str, str] = {
-        str(name).lower(): str(version)
+        (
+            "libxc_distribution"
+            if str(name).lower() == "libxc"
+            else str(name).lower()
+        ): str(version)
         for name, version in packages_raw.items()
         if version
     }
     for name, detail in dependencies_raw.items():
         if not isinstance(detail, Mapping) or detail.get("available") is not True:
             continue
+        dependency_name = str(name).lower()
+        if dependency_name == "libxc":
+            dependency_name = "libxc_distribution"
         dependency_versions.setdefault(
-            str(name).lower(), str(detail.get("version") or "available")
+            dependency_name, str(detail.get("version") or "available")
         )
+    observed_pyscf_version = str(raw.get("pyscf_version") or "")
+    declared_pyscf_version = str(dependency_versions.get("pyscf") or "")
+    if (
+        observed_pyscf_version
+        and declared_pyscf_version
+        and observed_pyscf_version != declared_pyscf_version
+    ):
+        raise ContractError(
+            "PySCF runtime version differs from dependency evidence"
+        )
+    if observed_pyscf_version:
+        dependency_versions["pyscf"] = observed_pyscf_version
+    observed_libxc_version = str(raw.get("libxc_version") or "")
+    if observed_libxc_version:
+        # ``pyscf.dft.libxc.libxc_version()`` describes the runtime parser
+        # implementation.  A Python distribution named ``libxc`` is separate
+        # package evidence and must never be overwritten or interpreted as the
+        # runtime functional authority.
+        dependency_versions["libxc_runtime"] = observed_libxc_version
     for logical_name, field in (
         ("gpu4pyscf", "gpu4pyscf_distribution"),
         ("cupy", "cupy_distribution"),
@@ -1532,6 +1826,75 @@ def _environment_receipt(
     )
 
 
+def _require_engine_job_capabilities(
+    values: tuple[EngineJobCapabilityV1, ...],
+    *,
+    engines: tuple[str, ...],
+    jobtypes: tuple[str, ...],
+    allow_empty: bool,
+) -> None:
+    if not values and not allow_empty:
+        raise ContractError("engine-job capability matrix must not be empty")
+    if values != tuple(sorted(set(values))):
+        raise ContractError(
+            "engine-job capabilities must be sorted and unique"
+        )
+    for item in values:
+        if not isinstance(item, EngineJobCapabilityV1):
+            raise ContractError(
+                "engine-job capability matrix contains an invalid row"
+            )
+        if item.engine not in engines:
+            raise ContractError(
+                "engine-job capability uses an undeclared engine"
+            )
+        if item.jobtype not in jobtypes:
+            raise ContractError(
+                "engine-job capability uses an undeclared jobtype"
+            )
+
+
+def _effective_rule_engine_job_pairs(
+    rule: ProgramSupportRuleV1,
+) -> tuple[tuple[str, str], ...]:
+    if rule.allowed_engine_job_pairs:
+        return rule.allowed_engine_job_pairs
+    return tuple(
+        (engine, jobtype)
+        for engine in rule.allowed_engines
+        for jobtype in rule.allowed_jobtypes
+    )
+
+
+def _require_engine_job_pairs(
+    values: tuple[tuple[str, str], ...],
+    *,
+    engines: tuple[str, ...],
+    jobtypes: tuple[str, ...],
+    allow_empty: bool,
+) -> None:
+    if not values and not allow_empty:
+        raise ContractError("engine-job pairs must not be empty")
+    normalized = tuple(
+        sorted(
+            {
+                (
+                    require_identifier(engine, "engine-job engine"),
+                    require_identifier(jobtype, "engine-job jobtype"),
+                )
+                for engine, jobtype in values
+            }
+        )
+    )
+    if values != normalized:
+        raise ContractError("engine-job pairs must be sorted and unique")
+    for engine, jobtype in values:
+        if engine not in engines:
+            raise ContractError("engine-job pair uses an undeclared engine")
+        if jobtype not in jobtypes:
+            raise ContractError("engine-job pair uses an undeclared jobtype")
+
+
 def _normalized_tuple(values: Any, field_name: str) -> tuple[str, ...]:
     if values is None:
         values = ()
@@ -1573,6 +1936,7 @@ __all__ = [
     "EnvironmentCapabilityReceiptV1",
     "EnvironmentStatus",
     "EnvironmentTargetV1",
+    "EngineJobCapabilityV1",
     "ProgramCandidateProposalV1",
     "ProgramComponentConformanceReceiptV1",
     "ProgramCapabilityQueryV1",

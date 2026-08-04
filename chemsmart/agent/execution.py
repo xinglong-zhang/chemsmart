@@ -18,7 +18,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -33,6 +33,12 @@ from chemsmart.agent._contracts import (
 from chemsmart.agent.projects import (
     ProjectRenderReceiptV1,
     ProjectValidationReceiptV1,
+)
+from chemsmart.agent.workflows import (
+    MaterializedWorkflowV1,
+    ScientificWorkflowEdgeV2,
+    ScientificWorkflowPlanV2,
+    StationaryPointValidationPolicyV1,
 )
 
 
@@ -875,6 +881,7 @@ def build_locked_pyscf_sp_opt_hess_approval(
         or resources.memory_gb != 4.0
         or resources.gpu_count != 0
         or resources.scratch_policy != "none"
+        or resources.node_timeout_seconds != 600
     ):
         raise ContractError("resources differ from the locked CPU profile")
 
@@ -1197,18 +1204,285 @@ def build_program_execution_invocation(
 
 
 @dataclass(frozen=True)
+class ProgramResultValidationReceiptV1:
+    """Canonical, resolvable evidence for one post-execution validation.
+
+    This receipt is deliberately separate from the execution envelope.  It
+    records the complete deterministic observation used to decide scientific
+    validity, including the two different environment evidence layers: the
+    capability receipt approved before launch and the per-run receipt emitted
+    by the program runner.  Those source digests are never compared as if they
+    represented the same object.
+    """
+
+    schema_version: str
+    validator_id: str
+    validator_schema_version: str
+    validator_version: str
+    invocation_sha256: str
+    node_id: str
+    program: str
+    engine: str
+    jobtype: str
+    input_artifact_sha256: str
+    project_artifact_sha256: str
+    capability_environment_receipt_sha256: str
+    run_environment_receipt_sha256: str
+    environment_validation_sha256: str
+    stationary_point_policy_sha256: str
+    output_artifacts: tuple[TrustedArtifactRefV1, ...]
+    observations: Mapping[str, Any]
+    findings: tuple[str, ...]
+    state: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != (
+            "chemsmart.program-result-validation-receipt.v1"
+        ):
+            raise ContractError("unsupported program result validation receipt")
+        for name, value in (
+            ("validator_id", self.validator_id),
+            ("node_id", self.node_id),
+            ("program", self.program),
+            ("engine", self.engine),
+            ("jobtype", self.jobtype),
+        ):
+            require_identifier(value, name)
+        if not self.validator_schema_version.strip():
+            raise ContractError("validator schema version must not be empty")
+        if not self.validator_version.strip():
+            raise ContractError("validator version must not be empty")
+        for name, digest in (
+            ("invocation_sha256", self.invocation_sha256),
+            ("input_artifact_sha256", self.input_artifact_sha256),
+            ("project_artifact_sha256", self.project_artifact_sha256),
+            (
+                "capability_environment_receipt_sha256",
+                self.capability_environment_receipt_sha256,
+            ),
+        ):
+            require_sha256(digest, name)
+        for name, digest in (
+            (
+                "run_environment_receipt_sha256",
+                self.run_environment_receipt_sha256,
+            ),
+            ("environment_validation_sha256", self.environment_validation_sha256),
+            (
+                "stationary_point_policy_sha256",
+                self.stationary_point_policy_sha256,
+            ),
+        ):
+            if digest:
+                require_sha256(digest, name)
+        artifact_ids = tuple(item.artifact_id for item in self.output_artifacts)
+        if len(artifact_ids) != len(set(artifact_ids)):
+            raise ContractError("validation output artifact IDs must be unique")
+        if self.findings != tuple(sorted(set(self.findings))):
+            raise ContractError("validation findings must be sorted and unique")
+        _require_nonempty_rows(self.findings, "findings")
+        if self.state not in {"valid", "invalid"}:
+            raise ContractError("result validation state must be valid or invalid")
+        derived_findings = _typed_result_validation_findings(
+            canonical_data(dict(self.observations))
+        )
+        expected_state = (
+            "invalid" if self.findings or derived_findings else "valid"
+        )
+        if self.state != expected_state:
+            raise ContractError(
+                "result validation state differs from deterministic findings"
+            )
+        body = {
+            "schema_version": self.schema_version,
+            "validator_id": self.validator_id,
+            "validator_schema_version": self.validator_schema_version,
+            "validator_version": self.validator_version,
+            "invocation_sha256": self.invocation_sha256,
+            "node_id": self.node_id,
+            "program": self.program,
+            "engine": self.engine,
+            "jobtype": self.jobtype,
+            "input_artifact_sha256": self.input_artifact_sha256,
+            "project_artifact_sha256": self.project_artifact_sha256,
+            "capability_environment_receipt_sha256": (
+                self.capability_environment_receipt_sha256
+            ),
+            "run_environment_receipt_sha256": (
+                self.run_environment_receipt_sha256
+            ),
+            "environment_validation_sha256": (
+                self.environment_validation_sha256
+            ),
+            "stationary_point_policy_sha256": (
+                self.stationary_point_policy_sha256
+            ),
+            "output_artifacts": self.output_artifacts,
+            "observations": canonical_data(dict(self.observations)),
+            "findings": self.findings,
+            "state": self.state,
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("program result validation digest mismatch")
+
+
+def _typed_result_validation_findings(
+    observations: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Derive red findings from an embedded typed validation observation.
+
+    Program-specific validators commonly expose their typed result under
+    ``result_validation``.  A few compatibility callers still supply that
+    object at the observation root.  In both forms an explicit non-green
+    state or an embedded finding is authoritative; a caller cannot erase it
+    by passing an empty top-level ``findings`` sequence.
+    """
+
+    if "result_validation" in observations:
+        result_validation = observations["result_validation"]
+        if not isinstance(result_validation, Mapping):
+            raise ContractError(
+                "result_validation observation must be a typed mapping"
+            )
+    elif "state" in observations:
+        result_validation = observations
+    else:
+        # Some program validators (currently xTB) report a typed observation
+        # and their normalized findings separately.  Do not invent a state
+        # for those records; the caller findings remain authoritative until
+        # that validator gains a nested result-validation contract.
+        return ()
+
+    state = str(result_validation.get("state") or "").strip().lower()
+    derived: list[str] = []
+    if state not in {"valid", "validated"}:
+        derived.append("result_validation.state_not_validated")
+
+    embedded = result_validation.get("findings", ())
+    if embedded is None:
+        embedded = ()
+    if isinstance(embedded, (str, bytes, bytearray)) or not isinstance(
+        embedded, Sequence
+    ):
+        raise ContractError(
+            "result_validation findings must be a canonical sequence"
+        )
+    for item in embedded:
+        if isinstance(item, Mapping):
+            rule_id = str(item.get("rule_id") or "").strip()
+            derived.append(
+                rule_id or "result_validation.finding_missing_rule_id"
+            )
+        else:
+            rule_id = str(getattr(item, "rule_id", item)).strip()
+            derived.append(
+                rule_id or "result_validation.finding_missing_rule_id"
+            )
+    return tuple(sorted(set(derived)))
+
+
+def build_program_result_validation_receipt(
+    *,
+    invocation: ProgramExecutionInvocationV1,
+    validator_id: str,
+    validator_schema_version: str,
+    validator_version: str,
+    input_artifact: TrustedArtifactRefV1,
+    project_artifact: TrustedArtifactRefV1,
+    capability_environment_receipt_sha256: str,
+    output_artifacts: Sequence[TrustedArtifactRefV1],
+    observations: Mapping[str, Any],
+    findings: Sequence[str],
+    run_environment_receipt_sha256: str = "",
+    environment_validation_sha256: str = "",
+    stationary_point_policy_sha256: str = "",
+) -> ProgramResultValidationReceiptV1:
+    """Build exact post-run validation evidence after rechecking artifacts."""
+
+    _require_current_artifact(input_artifact, "validation input artifact")
+    _require_current_artifact(project_artifact, "validation project artifact")
+    if input_artifact.sha256 != invocation.input_sha256:
+        raise ContractError("validation input differs from execution invocation")
+    if project_artifact.sha256 != invocation.project_sha256:
+        raise ContractError("validation project differs from execution invocation")
+    for artifact in output_artifacts:
+        _require_current_artifact(artifact, "validation output artifact")
+    environment_sha256 = require_sha256(
+        capability_environment_receipt_sha256,
+        "capability_environment_receipt_sha256",
+    )
+    if environment_sha256 != invocation.environment_receipt_sha256:
+        raise ContractError(
+            "validation environment differs from execution invocation"
+        )
+    canonical_observations = canonical_data(dict(observations))
+    derived_findings = _typed_result_validation_findings(
+        canonical_observations
+    )
+    normalized_findings = tuple(
+        sorted(
+            {
+                *(str(item).strip() for item in findings),
+                *derived_findings,
+            }
+        )
+    )
+    body = {
+        "schema_version": "chemsmart.program-result-validation-receipt.v1",
+        "validator_id": require_identifier(validator_id, "validator_id"),
+        "validator_schema_version": str(validator_schema_version).strip(),
+        "validator_version": str(validator_version).strip(),
+        "invocation_sha256": invocation.invocation_sha256,
+        "node_id": invocation.node_id,
+        "program": invocation.program,
+        "engine": invocation.engine,
+        "jobtype": invocation.jobtype,
+        "input_artifact_sha256": input_artifact.sha256,
+        "project_artifact_sha256": project_artifact.sha256,
+        "capability_environment_receipt_sha256": environment_sha256,
+        "run_environment_receipt_sha256": str(
+            run_environment_receipt_sha256
+        ).strip(),
+        "environment_validation_sha256": str(
+            environment_validation_sha256
+        ).strip(),
+        "stationary_point_policy_sha256": str(
+            stationary_point_policy_sha256
+        ).strip(),
+        "output_artifacts": tuple(output_artifacts),
+        "observations": canonical_observations,
+        "findings": normalized_findings,
+        "state": "valid" if not normalized_findings else "invalid",
+    }
+    return ProgramResultValidationReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
 class ProgramExecutionReceiptV1:
-    """Observable engine outcome and independent validation state."""
+    """Wrapper, child-engine, and independent validation observations.
+
+    ``wrapper_exit_status`` belongs to the outer ``chemsmart`` CLI process.
+    It can be non-zero after the PySCF child has completed because the wrapper
+    deliberately raises when deterministic scientific validation is red.
+    ``child_exit_status`` and ``engine_complete`` therefore come from the
+    program-specific, digest-valid run receipt rather than the wrapper code.
+    """
 
     schema_version: str
     invocation_sha256: str
     node_id: str
     idempotency_key: str
     execution_state: str
-    exit_status: int | None
+    wrapper_exit_status: int | None
+    child_exit_status: int | None
     engine_complete: bool
     validated: bool
+    engine_receipt_sha256: str
     environment_receipt_sha256: str
+    result_validation_receipt_sha256: str
     output_artifacts: tuple[TrustedArtifactRefV1, ...]
     validator_receipt_sha256s: tuple[str, ...]
     findings: tuple[str, ...]
@@ -1226,16 +1500,36 @@ class ProgramExecutionReceiptV1:
             self.environment_receipt_sha256,
             "environment_receipt_sha256",
         )
+        if self.result_validation_receipt_sha256:
+            require_sha256(
+                self.result_validation_receipt_sha256,
+                "result_validation_receipt_sha256",
+            )
         if self.execution_state not in {
             "not_started",
             "running",
             "engine_complete",
+            "validated",
             "failed",
             "ambiguous",
         }:
             raise ContractError("invalid execution state")
-        if self.engine_complete and self.exit_status != 0:
-            raise ContractError("engine completion requires exit status zero")
+        for name, value in (
+            ("wrapper_exit_status", self.wrapper_exit_status),
+            ("child_exit_status", self.child_exit_status),
+        ):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int)
+            ):
+                raise ContractError(f"{name} must be an integer or null")
+        if self.engine_complete and self.child_exit_status != 0:
+            raise ContractError(
+                "engine completion requires child exit status zero"
+            )
+        if self.engine_receipt_sha256:
+            require_sha256(
+                self.engine_receipt_sha256, "engine_receipt_sha256"
+            )
         if (
             self.execution_state == "engine_complete"
             and not self.engine_complete
@@ -1243,11 +1537,30 @@ class ProgramExecutionReceiptV1:
             raise ContractError(
                 "engine_complete state requires engine completion"
             )
+        if self.validated and self.execution_state != "validated":
+            raise ContractError(
+                "validated execution requires validated execution state"
+            )
+        if self.execution_state == "validated" and not self.validated:
+            raise ContractError(
+                "validated execution state requires validation"
+            )
         if self.validated and not self.engine_complete:
             raise ContractError("validation requires engine completion")
         if self.validated and not self.validator_receipt_sha256s:
             raise ContractError(
                 "validated execution requires validator evidence"
+            )
+        if self.validated and not self.result_validation_receipt_sha256:
+            raise ContractError(
+                "validated execution requires a resolvable result validation receipt"
+            )
+        if self.result_validation_receipt_sha256 and (
+            self.result_validation_receipt_sha256
+            not in self.validator_receipt_sha256s
+        ):
+            raise ContractError(
+                "result validation receipt must be included in validator evidence"
             )
         if self.validated and self.findings:
             raise ContractError(
@@ -1282,10 +1595,15 @@ class ProgramExecutionReceiptV1:
             "node_id": self.node_id,
             "idempotency_key": self.idempotency_key,
             "execution_state": self.execution_state,
-            "exit_status": self.exit_status,
+            "wrapper_exit_status": self.wrapper_exit_status,
+            "child_exit_status": self.child_exit_status,
             "engine_complete": self.engine_complete,
             "validated": self.validated,
+            "engine_receipt_sha256": self.engine_receipt_sha256,
             "environment_receipt_sha256": self.environment_receipt_sha256,
+            "result_validation_receipt_sha256": (
+                self.result_validation_receipt_sha256
+            ),
             "output_artifacts": self.output_artifacts,
             "validator_receipt_sha256s": self.validator_receipt_sha256s,
             "findings": self.findings,
@@ -1295,6 +1613,12 @@ class ProgramExecutionReceiptV1:
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("program execution receipt digest mismatch")
 
+    @property
+    def exit_status(self) -> int | None:
+        """Compatibility alias for the outer ChemSmart wrapper status."""
+
+        return self.wrapper_exit_status
+
 
 def build_program_execution_receipt(
     invocation: ProgramExecutionInvocationV1,
@@ -1303,26 +1627,43 @@ def build_program_execution_receipt(
     exit_status: int | None,
     engine_complete: bool,
     validated: bool,
+    child_exit_status: int | None = None,
+    engine_receipt_sha256: str = "",
+    result_validation_receipt_sha256: str = "",
     output_artifacts: Sequence[TrustedArtifactRefV1] = (),
     validator_receipt_sha256s: Sequence[str] = (),
     findings: Sequence[str] = (),
     started_at: str,
     finished_at: str = "",
 ) -> ProgramExecutionReceiptV1:
-    """Record an observable outcome without conflating validation."""
+    """Record wrapper transport, child completion, and validation separately.
+
+    ``exit_status`` remains the input spelling for source compatibility and
+    is materialized as ``wrapper_exit_status`` in the versioned receipt.
+    Existing non-nested engines default their child status to the wrapper
+    status when completion was independently asserted.
+    """
 
     for artifact in output_artifacts:
         _require_current_artifact(artifact, "execution output")
+    resolved_child_exit_status = child_exit_status
+    if resolved_child_exit_status is None and engine_complete:
+        resolved_child_exit_status = exit_status
     body = {
         "schema_version": "chemsmart.program-execution-receipt.v1",
         "invocation_sha256": invocation.invocation_sha256,
         "node_id": invocation.node_id,
         "idempotency_key": invocation.idempotency_key,
         "execution_state": str(execution_state),
-        "exit_status": exit_status,
+        "wrapper_exit_status": exit_status,
+        "child_exit_status": resolved_child_exit_status,
         "engine_complete": bool(engine_complete),
         "validated": bool(validated),
+        "engine_receipt_sha256": str(engine_receipt_sha256).strip(),
         "environment_receipt_sha256": invocation.environment_receipt_sha256,
+        "result_validation_receipt_sha256": str(
+            result_validation_receipt_sha256
+        ).strip(),
         "output_artifacts": tuple(output_artifacts),
         "validator_receipt_sha256s": tuple(
             sorted(set(validator_receipt_sha256s))
@@ -1531,27 +1872,1112 @@ def handoff_optimized_pyscf_geometry(
     )
 
 
+@dataclass(frozen=True)
+class FrozenMaterializedNodePreviewV1:
+    """Exact green preview admitted for one currently executable node."""
+
+    schema_version: str
+    node_id: str
+    input_artifact_sha256: str
+    project_artifact_sha256: str
+    project_validation_receipt_sha256: str
+    environment_receipt_sha256: str
+    invocation_sha256: str
+    preflight_receipt_sha256: str
+    binding_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.frozen-node-preview.v1":
+            raise ContractError("unsupported frozen node preview schema")
+        require_identifier(self.node_id, "node_id")
+        for name, digest in (
+            ("input_artifact_sha256", self.input_artifact_sha256),
+            ("project_artifact_sha256", self.project_artifact_sha256),
+            (
+                "project_validation_receipt_sha256",
+                self.project_validation_receipt_sha256,
+            ),
+            ("environment_receipt_sha256", self.environment_receipt_sha256),
+            ("invocation_sha256", self.invocation_sha256),
+            ("preflight_receipt_sha256", self.preflight_receipt_sha256),
+        ):
+            require_sha256(digest, name)
+        body = {
+            "schema_version": self.schema_version,
+            "node_id": self.node_id,
+            "input_artifact_sha256": self.input_artifact_sha256,
+            "project_artifact_sha256": self.project_artifact_sha256,
+            "project_validation_receipt_sha256": (
+                self.project_validation_receipt_sha256
+            ),
+            "environment_receipt_sha256": self.environment_receipt_sha256,
+            "invocation_sha256": self.invocation_sha256,
+            "preflight_receipt_sha256": self.preflight_receipt_sha256,
+        }
+        if self.binding_sha256 != canonical_sha256(body):
+            raise ContractError("frozen node preview digest mismatch")
+
+
+@dataclass(frozen=True)
+class FrozenProducerEdgeRuleV1:
+    """Exact future-artifact selection rule admitted before execution."""
+
+    schema_version: str
+    scientific_edge_sha256: str
+    source_node_id: str
+    target_node_id: str
+    artifact_class: str
+    producer_output_id: str
+    consumer_input_id: str
+    selection_rule: str
+    environment_receipt_sha256: str
+    preserve_atom_order: bool
+    preserve_electronic_state: bool
+    rule_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.frozen-producer-edge-rule.v1":
+            raise ContractError("unsupported frozen producer edge rule")
+        require_sha256(self.scientific_edge_sha256, "scientific_edge_sha256")
+        for name, value in (
+            ("source_node_id", self.source_node_id),
+            ("target_node_id", self.target_node_id),
+            ("artifact_class", self.artifact_class),
+            ("producer_output_id", self.producer_output_id),
+            ("consumer_input_id", self.consumer_input_id),
+            ("selection_rule", self.selection_rule),
+        ):
+            require_identifier(value, name)
+        require_sha256(
+            self.environment_receipt_sha256,
+            "environment_receipt_sha256",
+        )
+        if not self.preserve_atom_order or not self.preserve_electronic_state:
+            raise ContractError(
+                "molecular producer edges must preserve atom order and state"
+            )
+        body = {
+            "schema_version": self.schema_version,
+            "scientific_edge_sha256": self.scientific_edge_sha256,
+            "source_node_id": self.source_node_id,
+            "target_node_id": self.target_node_id,
+            "artifact_class": self.artifact_class,
+            "producer_output_id": self.producer_output_id,
+            "consumer_input_id": self.consumer_input_id,
+            "selection_rule": self.selection_rule,
+            "environment_receipt_sha256": self.environment_receipt_sha256,
+            "preserve_atom_order": self.preserve_atom_order,
+            "preserve_electronic_state": self.preserve_electronic_state,
+        }
+        if self.rule_sha256 != canonical_sha256(body):
+            raise ContractError("frozen producer edge rule digest mismatch")
+
+
+def _frozen_preview_binding(node: Any) -> FrozenMaterializedNodePreviewV1:
+    if node.state != "previewed":
+        raise ContractError(
+            "every currently materialized approved node requires exact preview"
+        )
+    body = {
+        "schema_version": "chemsmart.frozen-node-preview.v1",
+        "node_id": node.node_id,
+        "input_artifact_sha256": node.input_artifact_sha256,
+        "project_artifact_sha256": node.project_artifact_sha256,
+        "project_validation_receipt_sha256": (
+            node.project_validation_receipt_sha256
+        ),
+        "environment_receipt_sha256": node.environment_receipt_sha256,
+        "invocation_sha256": node.invocation_sha256,
+        "preflight_receipt_sha256": node.preflight_receipt_sha256,
+    }
+    return FrozenMaterializedNodePreviewV1(
+        **body, binding_sha256=canonical_sha256(body)
+    )
+
+
+def _frozen_producer_edge_rule(
+    plan: ScientificWorkflowPlanV2,
+    edge: ScientificWorkflowEdgeV2,
+    *,
+    environment_receipt_sha256: str,
+) -> FrozenProducerEdgeRuleV1:
+    source = next(node for node in plan.nodes if node.node_id == edge.source_node_id)
+    if edge.artifact_class != "geometry_xyz" or source.stage != "opt":
+        raise ContractError(
+            "future data edge lacks a registered exact artifact selection rule"
+        )
+    body = {
+        "schema_version": "chemsmart.frozen-producer-edge-rule.v1",
+        "scientific_edge_sha256": canonical_sha256(edge),
+        "source_node_id": edge.source_node_id,
+        "target_node_id": edge.target_node_id,
+        "artifact_class": edge.artifact_class,
+        "producer_output_id": edge.producer_output_id,
+        "consumer_input_id": edge.consumer_input_id,
+        "selection_rule": "validated_optimized_geometry",
+        "environment_receipt_sha256": require_sha256(
+            environment_receipt_sha256,
+            "environment_receipt_sha256",
+        ),
+        "preserve_atom_order": True,
+        "preserve_electronic_state": True,
+    }
+    return FrozenProducerEdgeRuleV1(
+        **body, rule_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class FrozenWorkflowApprovalV1:
+    """Exact host-owned approval boundary for a scientific workflow.
+
+    Future inputs are authorized only through the producer data edges already
+    frozen in ``producer_edge_sha256s``.  Consumption is an event-store action;
+    the immutable approval record never rewrites its own state.
+    """
+
+    schema_version: str
+    approval_id: str
+    workflow_id: str
+    plan_sha256: str
+    materialized_workflow_sha256: str
+    task_spec_sha256: str
+    scientific_identity_sha256: str
+    resource_sha256: str
+    environment_receipt_sha256s: tuple[str, ...]
+    approved_node_ids: tuple[str, ...]
+    producer_edge_sha256s: tuple[str, ...]
+    stationary_point_policy_sha256: str
+    status: str
+    approval_sha256: str
+    materialized_preview_bindings: tuple[
+        FrozenMaterializedNodePreviewV1, ...
+    ] = ()
+    producer_edge_rules: tuple[FrozenProducerEdgeRuleV1, ...] = ()
+    admission_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.frozen-workflow-approval.v1":
+            raise ContractError("unsupported frozen workflow approval schema")
+        require_identifier(self.approval_id, "approval_id")
+        require_identifier(self.workflow_id, "workflow_id")
+        for name, digest in (
+            ("plan_sha256", self.plan_sha256),
+            (
+                "materialized_workflow_sha256",
+                self.materialized_workflow_sha256,
+            ),
+            ("task_spec_sha256", self.task_spec_sha256),
+            ("scientific_identity_sha256", self.scientific_identity_sha256),
+            ("resource_sha256", self.resource_sha256),
+        ):
+            require_sha256(digest, name)
+        for name, values in (
+            ("environment_receipt_sha256s", self.environment_receipt_sha256s),
+            ("producer_edge_sha256s", self.producer_edge_sha256s),
+        ):
+            if values != tuple(sorted(set(values))):
+                raise ContractError(f"{name} must be sorted and unique")
+            for digest in values:
+                require_sha256(digest, name)
+        if not self.environment_receipt_sha256s:
+            raise ContractError("approval requires environment evidence")
+        if self.approved_node_ids != tuple(sorted(set(self.approved_node_ids))):
+            raise ContractError("approved_node_ids must be sorted and unique")
+        if not self.approved_node_ids:
+            raise ContractError("approval requires at least one node")
+        for node_id in self.approved_node_ids:
+            require_identifier(node_id, "approved_node_id")
+        if self.stationary_point_policy_sha256:
+            require_sha256(
+                self.stationary_point_policy_sha256,
+                "stationary_point_policy_sha256",
+            )
+        if self.status != "approved":
+            raise ContractError("frozen workflow approval must be approved")
+        legacy_body = {
+            "schema_version": self.schema_version,
+            "approval_id": self.approval_id,
+            "workflow_id": self.workflow_id,
+            "plan_sha256": self.plan_sha256,
+            "materialized_workflow_sha256": self.materialized_workflow_sha256,
+            "task_spec_sha256": self.task_spec_sha256,
+            "scientific_identity_sha256": self.scientific_identity_sha256,
+            "resource_sha256": self.resource_sha256,
+            "environment_receipt_sha256s": self.environment_receipt_sha256s,
+            "approved_node_ids": self.approved_node_ids,
+            "producer_edge_sha256s": self.producer_edge_sha256s,
+            "stationary_point_policy_sha256": (
+                self.stationary_point_policy_sha256
+            ),
+            "status": self.status,
+        }
+        has_admission = bool(
+            self.materialized_preview_bindings
+            or self.producer_edge_rules
+            or self.admission_sha256
+        )
+        if not has_admission:
+            if self.approval_sha256 != canonical_sha256(legacy_body):
+                raise ContractError("frozen workflow approval digest mismatch")
+            return
+        preview_ids = tuple(
+            item.node_id for item in self.materialized_preview_bindings
+        )
+        if preview_ids != tuple(sorted(set(preview_ids))):
+            raise ContractError(
+                "materialized preview bindings must be sorted and unique"
+            )
+        rule_keys = tuple(
+            (item.target_node_id, item.consumer_input_id)
+            for item in self.producer_edge_rules
+        )
+        if rule_keys != tuple(sorted(set(rule_keys))):
+            raise ContractError("producer edge rules must be sorted and unique")
+        edge_digests = tuple(
+            sorted(item.scientific_edge_sha256 for item in self.producer_edge_rules)
+        )
+        if edge_digests != self.producer_edge_sha256s:
+            raise ContractError("producer edge rules differ from approved edges")
+        covered = set(preview_ids).union(
+            item.target_node_id for item in self.producer_edge_rules
+        )
+        if covered != set(self.approved_node_ids):
+            raise ContractError("workflow admission does not cover every node")
+        admission_body = {
+            "schema_version": "chemsmart.frozen-workflow-admission.v1",
+            "plan_sha256": self.plan_sha256,
+            "materialized_workflow_sha256": self.materialized_workflow_sha256,
+            "materialized_preview_bindings": self.materialized_preview_bindings,
+            "producer_edge_rules": self.producer_edge_rules,
+        }
+        if self.admission_sha256 != canonical_sha256(admission_body):
+            raise ContractError("frozen workflow admission digest mismatch")
+        body = {
+            **legacy_body,
+            "materialized_preview_bindings": self.materialized_preview_bindings,
+            "producer_edge_rules": self.producer_edge_rules,
+            "admission_sha256": self.admission_sha256,
+        }
+        if self.approval_sha256 != canonical_sha256(body):
+            raise ContractError("frozen workflow approval digest mismatch")
+
+    @property
+    def execution_admissible(self) -> bool:
+        """Whether this approval carries the complete V2 admission plane."""
+
+        return bool(self.admission_sha256)
+
+    def preview_binding(
+        self, node_id: str
+    ) -> FrozenMaterializedNodePreviewV1 | None:
+        matches = tuple(
+            item
+            for item in self.materialized_preview_bindings
+            if item.node_id == node_id
+        )
+        if len(matches) > 1:  # pragma: no cover - constructor prevents this
+            raise ContractError("multiple frozen previews exist for one node")
+        return matches[0] if matches else None
+
+    def producer_rules_for(
+        self, node_id: str
+    ) -> tuple[FrozenProducerEdgeRuleV1, ...]:
+        return tuple(
+            item for item in self.producer_edge_rules if item.target_node_id == node_id
+        )
+
+
+def build_frozen_workflow_approval(
+    *,
+    approval_id: str,
+    plan: ScientificWorkflowPlanV2,
+    materialized_workflow: MaterializedWorkflowV1,
+    resources: ExecutionResourceSpecV1,
+    environment_receipt_sha256s: Sequence[str],
+    future_node_environment_receipt_sha256s: Mapping[str, str] | None = None,
+    stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
+) -> FrozenWorkflowApprovalV1:
+    """Freeze one plan without pretending future data artifacts exist."""
+
+    if materialized_workflow.workflow_id != plan.workflow_id:
+        raise ContractError("materialized workflow belongs to another plan")
+    if materialized_workflow.plan_sha256 != plan.plan_sha256:
+        raise ContractError("materialized workflow plan digest differs")
+    if materialized_workflow.task_spec_sha256 != plan.task_spec_sha256:
+        raise ContractError("materialized workflow task identity differs")
+    if materialized_workflow.scientific_identity_sha256 != (
+        plan.scientific_identity_sha256
+    ):
+        raise ContractError("materialized workflow scientific identity differs")
+    if materialized_workflow.resource_sha256 != resources.resource_sha256:
+        raise ContractError("materialized workflow resource binding differs")
+    unresolved = set(materialized_workflow.unresolved_node_ids)
+    data_edges = tuple(edge for edge in plan.edges if edge.edge_kind == "data")
+    data_targets = {edge.target_node_id for edge in data_edges}
+    if len(data_targets) != len(data_edges):
+        raise ContractError(
+            "one CLI invocation cannot admit multiple future molecular inputs"
+        )
+    if unresolved != data_targets:
+        raise ContractError(
+            "future producer-dependent nodes must be exactly the unresolved set"
+        )
+    preview_bindings = tuple(
+        sorted(
+            (_frozen_preview_binding(node) for node in materialized_workflow.nodes),
+            key=lambda item: item.node_id,
+        )
+    )
+    normalized_environment_receipts = tuple(
+        sorted(set(environment_receipt_sha256s))
+    )
+    future_environment_bindings = dict(
+        future_node_environment_receipt_sha256s or {}
+    )
+    if data_targets and not future_environment_bindings:
+        if len(normalized_environment_receipts) != 1:
+            raise ContractError(
+                "future nodes require exact node-specific environment evidence"
+            )
+        future_environment_bindings = {
+            node_id: normalized_environment_receipts[0]
+            for node_id in data_targets
+        }
+    if set(future_environment_bindings) != data_targets:
+        raise ContractError(
+            "future environment bindings must cover exactly unresolved nodes"
+        )
+    if set(future_environment_bindings.values()).difference(
+        normalized_environment_receipts
+    ):
+        raise ContractError(
+            "future node environment is absent from approval evidence"
+        )
+    producer_rules = tuple(
+        sorted(
+            (
+                _frozen_producer_edge_rule(
+                    plan,
+                    edge,
+                    environment_receipt_sha256=(
+                        future_environment_bindings[edge.target_node_id]
+                    ),
+                )
+                for edge in data_edges
+            ),
+            key=lambda item: (item.target_node_id, item.consumer_input_id),
+        )
+    )
+    if {
+        item.environment_receipt_sha256 for item in preview_bindings
+    }.difference(normalized_environment_receipts):
+        raise ContractError(
+            "frozen preview environment is absent from approval evidence"
+        )
+    if stationary_point_policy is not None:
+        if stationary_point_policy.task_spec_sha256 != plan.task_spec_sha256:
+            raise ContractError("stationary point policy belongs to another task")
+        if stationary_point_policy.hessian_node_id not in {
+            node.node_id for node in plan.nodes
+        }:
+            raise ContractError("stationary point policy names an unknown node")
+    producer_digests = tuple(
+        sorted(item.scientific_edge_sha256 for item in producer_rules)
+    )
+    admission_body = {
+        "schema_version": "chemsmart.frozen-workflow-admission.v1",
+        "plan_sha256": plan.plan_sha256,
+        "materialized_workflow_sha256": (
+            materialized_workflow.materialized_sha256
+        ),
+        "materialized_preview_bindings": preview_bindings,
+        "producer_edge_rules": producer_rules,
+    }
+    body = {
+        "schema_version": "chemsmart.frozen-workflow-approval.v1",
+        "approval_id": require_identifier(approval_id, "approval_id"),
+        "workflow_id": plan.workflow_id,
+        "plan_sha256": plan.plan_sha256,
+        "materialized_workflow_sha256": (
+            materialized_workflow.materialized_sha256
+        ),
+        "task_spec_sha256": plan.task_spec_sha256,
+        "scientific_identity_sha256": plan.scientific_identity_sha256,
+        "resource_sha256": resources.resource_sha256,
+        "environment_receipt_sha256s": normalized_environment_receipts,
+        "approved_node_ids": tuple(
+            sorted(node.node_id for node in plan.nodes)
+        ),
+        "producer_edge_sha256s": producer_digests,
+        "stationary_point_policy_sha256": (
+            stationary_point_policy.policy_sha256
+            if stationary_point_policy is not None
+            else ""
+        ),
+        "status": "approved",
+        "materialized_preview_bindings": preview_bindings,
+        "producer_edge_rules": producer_rules,
+        "admission_sha256": canonical_sha256(admission_body),
+    }
+    return FrozenWorkflowApprovalV1(
+        **body, approval_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class ValidatedDataEdgeBindingV1:
+    """Exact validated producer output selected for one scientific data edge."""
+
+    schema_version: str
+    run_id: str
+    workflow_id: str
+    plan_sha256: str
+    approval_sha256: str
+    scientific_edge_sha256: str
+    producer_rule_sha256: str
+    source_node_id: str
+    target_node_id: str
+    artifact_class: str
+    producer_output_id: str
+    consumer_input_id: str
+    selection_rule: str
+    producer_execution_receipt_sha256: str
+    producer_validator_receipt_sha256s: tuple[str, ...]
+    source_artifact_id: str
+    source_artifact_sha256: str
+    selected_artifact_id: str
+    selected_artifact_sha256: str
+    producer_scientific_identity_sha256: str
+    consumer_scientific_identity_sha256: str
+    atom_order_sha256: str
+    positions_sha256: str
+    charge: int
+    multiplicity: int
+    handoff_receipt_sha256: str
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.validated-data-edge-binding.v1":
+            raise ContractError("unsupported validated data edge binding")
+        for name, value in (
+            ("run_id", self.run_id),
+            ("workflow_id", self.workflow_id),
+            ("source_node_id", self.source_node_id),
+            ("target_node_id", self.target_node_id),
+            ("artifact_class", self.artifact_class),
+            ("producer_output_id", self.producer_output_id),
+            ("consumer_input_id", self.consumer_input_id),
+            ("selection_rule", self.selection_rule),
+        ):
+            require_identifier(value, name)
+        for name, digest in (
+            ("plan_sha256", self.plan_sha256),
+            ("approval_sha256", self.approval_sha256),
+            ("scientific_edge_sha256", self.scientific_edge_sha256),
+            ("producer_rule_sha256", self.producer_rule_sha256),
+            (
+                "producer_execution_receipt_sha256",
+                self.producer_execution_receipt_sha256,
+            ),
+            ("source_artifact_sha256", self.source_artifact_sha256),
+            ("selected_artifact_sha256", self.selected_artifact_sha256),
+            (
+                "producer_scientific_identity_sha256",
+                self.producer_scientific_identity_sha256,
+            ),
+            (
+                "consumer_scientific_identity_sha256",
+                self.consumer_scientific_identity_sha256,
+            ),
+            ("atom_order_sha256", self.atom_order_sha256),
+            ("positions_sha256", self.positions_sha256),
+            ("handoff_receipt_sha256", self.handoff_receipt_sha256),
+        ):
+            require_sha256(digest, name)
+        if not self.source_artifact_id or not self.selected_artifact_id:
+            raise ContractError("data edge artifacts require stable IDs")
+        if self.producer_validator_receipt_sha256s != tuple(
+            sorted(set(self.producer_validator_receipt_sha256s))
+        ) or not self.producer_validator_receipt_sha256s:
+            raise ContractError(
+                "data edge requires sorted producer validator receipts"
+            )
+        for digest in self.producer_validator_receipt_sha256s:
+            require_sha256(digest, "producer_validator_receipt_sha256")
+        if self.multiplicity < 1:
+            raise ContractError("data edge multiplicity must be positive")
+        if self.status != "validated":
+            raise ContractError("data edge binding must be validated")
+        body = {
+            "schema_version": self.schema_version,
+            "run_id": self.run_id,
+            "workflow_id": self.workflow_id,
+            "plan_sha256": self.plan_sha256,
+            "approval_sha256": self.approval_sha256,
+            "scientific_edge_sha256": self.scientific_edge_sha256,
+            "producer_rule_sha256": self.producer_rule_sha256,
+            "source_node_id": self.source_node_id,
+            "target_node_id": self.target_node_id,
+            "artifact_class": self.artifact_class,
+            "producer_output_id": self.producer_output_id,
+            "consumer_input_id": self.consumer_input_id,
+            "selection_rule": self.selection_rule,
+            "producer_execution_receipt_sha256": (
+                self.producer_execution_receipt_sha256
+            ),
+            "producer_validator_receipt_sha256s": (
+                self.producer_validator_receipt_sha256s
+            ),
+            "source_artifact_id": self.source_artifact_id,
+            "source_artifact_sha256": self.source_artifact_sha256,
+            "selected_artifact_id": self.selected_artifact_id,
+            "selected_artifact_sha256": self.selected_artifact_sha256,
+            "producer_scientific_identity_sha256": (
+                self.producer_scientific_identity_sha256
+            ),
+            "consumer_scientific_identity_sha256": (
+                self.consumer_scientific_identity_sha256
+            ),
+            "atom_order_sha256": self.atom_order_sha256,
+            "positions_sha256": self.positions_sha256,
+            "charge": self.charge,
+            "multiplicity": self.multiplicity,
+            "handoff_receipt_sha256": self.handoff_receipt_sha256,
+            "status": self.status,
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("validated data edge binding digest mismatch")
+
+
+def build_validated_data_edge_binding(
+    *,
+    run_id: str,
+    plan: ScientificWorkflowPlanV2,
+    approval: FrozenWorkflowApprovalV1,
+    scientific_edge: ScientificWorkflowEdgeV2,
+    producer_edge: ProducerEdgeRuleV1,
+    producer_receipt: ProgramExecutionReceiptV1,
+    handoff: OptimizedGeometryHandoffV1,
+    producer_scientific_identity_sha256: str,
+    consumer_scientific_identity_sha256: str,
+) -> ValidatedDataEdgeBindingV1:
+    """Bind one optimized frame to its exact plan edge and validated producer."""
+
+    if not approval.execution_admissible:
+        raise ContractError("legacy frozen approval cannot admit data edges")
+    if approval.plan_sha256 != plan.plan_sha256:
+        raise ContractError("data edge plan differs from frozen approval")
+    if scientific_edge.edge_kind != "data":
+        raise ContractError("validated data binding requires a data edge")
+    edge_sha256 = canonical_sha256(scientific_edge)
+    rules = tuple(
+        item
+        for item in approval.producer_edge_rules
+        if item.scientific_edge_sha256 == edge_sha256
+    )
+    if len(rules) != 1:
+        raise ContractError("data edge lacks one exact frozen selection rule")
+    rule = rules[0]
+    observed_roles = (
+        producer_edge.producer_node_id,
+        producer_edge.consumer_node_id,
+        producer_edge.artifact_kind,
+        producer_edge.selection_rule,
+    )
+    expected_roles = (
+        rule.source_node_id,
+        rule.target_node_id,
+        rule.artifact_class,
+        rule.selection_rule,
+    )
+    if observed_roles != expected_roles:
+        raise ContractError("optimized handoff differs from frozen data edge")
+    if (
+        handoff.producer_edge_sha256 != producer_edge.edge_sha256
+        or handoff.producer_execution_receipt_sha256
+        != producer_receipt.receipt_sha256
+        or handoff.producer_node_id != rule.source_node_id
+        or handoff.consumer_node_id != rule.target_node_id
+    ):
+        raise ContractError("optimized handoff identity differs from producer")
+    if not producer_receipt.validated or (
+        producer_receipt.node_id != rule.source_node_id
+    ):
+        raise ContractError("data edge producer is not validated")
+    if not producer_receipt.validator_receipt_sha256s:
+        raise ContractError("data edge producer lacks validator evidence")
+    if not any(
+        artifact.artifact_id == handoff.result_artifact_id
+        and artifact.sha256 == handoff.result_artifact_sha256
+        for artifact in producer_receipt.output_artifacts
+    ):
+        raise ContractError("data edge source artifact differs from producer")
+    if producer_scientific_identity_sha256 != plan.scientific_identity_sha256:
+        raise ContractError("producer scientific identity differs from plan")
+    atom_order_sha256 = canonical_sha256({"symbols": handoff.symbols})
+    body = {
+        "schema_version": "chemsmart.validated-data-edge-binding.v1",
+        "run_id": require_identifier(run_id, "run_id"),
+        "workflow_id": plan.workflow_id,
+        "plan_sha256": plan.plan_sha256,
+        "approval_sha256": approval.approval_sha256,
+        "scientific_edge_sha256": edge_sha256,
+        "producer_rule_sha256": rule.rule_sha256,
+        "source_node_id": rule.source_node_id,
+        "target_node_id": rule.target_node_id,
+        "artifact_class": rule.artifact_class,
+        "producer_output_id": rule.producer_output_id,
+        "consumer_input_id": rule.consumer_input_id,
+        "selection_rule": rule.selection_rule,
+        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
+        "producer_validator_receipt_sha256s": (
+            producer_receipt.validator_receipt_sha256s
+        ),
+        "source_artifact_id": handoff.result_artifact_id,
+        "source_artifact_sha256": handoff.result_artifact_sha256,
+        "selected_artifact_id": handoff.geometry_artifact_id,
+        "selected_artifact_sha256": handoff.geometry_artifact_sha256,
+        "producer_scientific_identity_sha256": (
+            producer_scientific_identity_sha256
+        ),
+        "consumer_scientific_identity_sha256": require_sha256(
+            consumer_scientific_identity_sha256,
+            "consumer_scientific_identity_sha256",
+        ),
+        "atom_order_sha256": atom_order_sha256,
+        "positions_sha256": handoff.positions_sha256,
+        "charge": handoff.charge,
+        "multiplicity": handoff.multiplicity,
+        "handoff_receipt_sha256": handoff.receipt_sha256,
+        "status": "validated",
+    }
+    return ValidatedDataEdgeBindingV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class WorkflowNodeRunStateV1:
+    node_id: str
+    state: str
+    invocation_sha256: str
+    execution_receipt_sha256: str
+    validator_receipt_sha256s: tuple[str, ...]
+    output_artifact_sha256s: tuple[str, ...]
+    failure_rule_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        require_identifier(self.node_id, "node_id")
+        if self.state not in {
+            "pending",
+            "running",
+            "engine_complete",
+            "validated",
+            "failed",
+            "blocked",
+            "ambiguous",
+        }:
+            raise ContractError("unsupported workflow node run state")
+        for name, digest in (
+            ("invocation_sha256", self.invocation_sha256),
+            ("execution_receipt_sha256", self.execution_receipt_sha256),
+        ):
+            if digest:
+                require_sha256(digest, name)
+        for name, values in (
+            ("validator_receipt_sha256s", self.validator_receipt_sha256s),
+            ("output_artifact_sha256s", self.output_artifact_sha256s),
+        ):
+            if values != tuple(sorted(set(values))):
+                raise ContractError(f"{name} must be sorted and unique")
+            for digest in values:
+                require_sha256(digest, name)
+        if self.failure_rule_ids != tuple(sorted(set(self.failure_rule_ids))):
+            raise ContractError("failure_rule_ids must be sorted and unique")
+        for rule_id in self.failure_rule_ids:
+            require_identifier(rule_id, "failure_rule_id")
+        if self.state == "pending" and any(
+            (
+                self.invocation_sha256,
+                self.execution_receipt_sha256,
+                self.validator_receipt_sha256s,
+                self.output_artifact_sha256s,
+                self.failure_rule_ids,
+            )
+        ):
+            raise ContractError("pending node cannot carry execution evidence")
+        if self.state == "running" and not self.invocation_sha256:
+            raise ContractError("running node requires an invocation")
+        if self.state in {"engine_complete", "validated"}:
+            require_sha256(
+                self.execution_receipt_sha256,
+                "execution_receipt_sha256",
+            )
+        if self.state == "validated" and not self.validator_receipt_sha256s:
+            raise ContractError("validated node requires validator receipts")
+        if self.state in {"failed", "blocked", "ambiguous"} and not (
+            self.failure_rule_ids
+        ):
+            raise ContractError("unsuccessful node requires a failure rule")
+
+
+@dataclass(frozen=True)
+class WorkflowRunStateV1:
+    """Replayable execution snapshot derived only from host events."""
+
+    schema_version: str
+    run_id: str
+    workflow_id: str
+    plan_sha256: str
+    approval_id: str
+    approval_sha256: str
+    approval_consumed: bool
+    state: str
+    nodes: tuple[WorkflowNodeRunStateV1, ...]
+    started_at: str
+    finished_at: str
+    run_state_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-run-state.v1":
+            raise ContractError("unsupported workflow run state schema")
+        for name, value in (
+            ("run_id", self.run_id),
+            ("workflow_id", self.workflow_id),
+            ("approval_id", self.approval_id),
+        ):
+            require_identifier(value, name)
+        require_sha256(self.plan_sha256, "plan_sha256")
+        require_sha256(self.approval_sha256, "approval_sha256")
+        if self.state not in {
+            "waiting_for_approval",
+            "approved",
+            "running",
+            "validated",
+            "failed",
+            "blocked",
+            "ambiguous",
+        }:
+            raise ContractError("unsupported workflow run state")
+        if self.state != "waiting_for_approval" and not self.approval_consumed:
+            raise ContractError("active workflow requires consumed approval")
+        if self.approval_consumed and self.state == "waiting_for_approval":
+            raise ContractError("consumed workflow cannot wait for approval")
+        node_ids = tuple(node.node_id for node in self.nodes)
+        if node_ids != tuple(sorted(set(node_ids))):
+            raise ContractError("workflow run nodes must be sorted and unique")
+        if self.state in {"running", "validated", "failed", "ambiguous"} and not (
+            self.started_at.strip()
+        ):
+            raise ContractError("started workflow requires a timestamp")
+        if self.state in {"validated", "failed"} and not self.finished_at.strip():
+            raise ContractError("terminal workflow requires a finish timestamp")
+        body = {
+            "schema_version": self.schema_version,
+            "run_id": self.run_id,
+            "workflow_id": self.workflow_id,
+            "plan_sha256": self.plan_sha256,
+            "approval_id": self.approval_id,
+            "approval_sha256": self.approval_sha256,
+            "approval_consumed": self.approval_consumed,
+            "state": self.state,
+            "nodes": self.nodes,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+        }
+        if self.run_state_sha256 != canonical_sha256(body):
+            raise ContractError("workflow run state digest mismatch")
+
+
+def build_workflow_run_state(
+    *,
+    run_id: str,
+    plan: ScientificWorkflowPlanV2,
+    approval: FrozenWorkflowApprovalV1,
+    approval_consumed: bool = False,
+) -> WorkflowRunStateV1:
+    if approval.workflow_id != plan.workflow_id:
+        raise ContractError("approval belongs to another workflow")
+    if approval.plan_sha256 != plan.plan_sha256:
+        raise ContractError("approval plan digest differs")
+    node_ids = tuple(sorted(node.node_id for node in plan.nodes))
+    if node_ids != approval.approved_node_ids:
+        raise ContractError("approval does not cover every workflow node")
+    body = {
+        "schema_version": "chemsmart.workflow-run-state.v1",
+        "run_id": require_identifier(run_id, "run_id"),
+        "workflow_id": plan.workflow_id,
+        "plan_sha256": plan.plan_sha256,
+        "approval_id": approval.approval_id,
+        "approval_sha256": approval.approval_sha256,
+        "approval_consumed": bool(approval_consumed),
+        "state": "approved" if approval_consumed else "waiting_for_approval",
+        "nodes": tuple(
+            WorkflowNodeRunStateV1(
+                node_id=node_id,
+                state="pending",
+                invocation_sha256="",
+                execution_receipt_sha256="",
+                validator_receipt_sha256s=(),
+                output_artifact_sha256s=(),
+                failure_rule_ids=(),
+            )
+            for node_id in node_ids
+        ),
+        "started_at": "",
+        "finished_at": "",
+    }
+    return WorkflowRunStateV1(
+        **body, run_state_sha256=canonical_sha256(body)
+    )
+
+
+def derive_ready_node_ids(
+    plan: ScientificWorkflowPlanV2,
+    run_state: WorkflowRunStateV1,
+    data_edge_bindings: Sequence[ValidatedDataEdgeBindingV1] = (),
+) -> tuple[str, ...]:
+    """Derive runnable nodes from validated predecessors and exact data edges."""
+
+    if run_state.workflow_id != plan.workflow_id:
+        raise ContractError("run state belongs to another workflow")
+    if run_state.plan_sha256 != plan.plan_sha256:
+        raise ContractError("run state plan digest differs")
+    if not run_state.approval_consumed or run_state.state not in {
+        "approved",
+        "running",
+    }:
+        return ()
+    state_by_node = {node.node_id: node for node in run_state.nodes}
+    binding_by_edge: dict[str, ValidatedDataEdgeBindingV1] = {}
+    for binding in data_edge_bindings:
+        if (
+            binding.run_id != run_state.run_id
+            or binding.workflow_id != plan.workflow_id
+            or binding.plan_sha256 != plan.plan_sha256
+            or binding.approval_sha256 != run_state.approval_sha256
+        ):
+            raise ContractError("data edge binding belongs to another workflow run")
+        if binding.scientific_edge_sha256 in binding_by_edge:
+            raise ContractError("multiple bindings exist for one scientific edge")
+        binding_by_edge[binding.scientific_edge_sha256] = binding
+    ready: list[str] = []
+    for node in plan.nodes:
+        observed = state_by_node.get(node.node_id)
+        if observed is None:
+            raise ContractError("run state omits a workflow node")
+        if observed.state != "pending":
+            continue
+        incoming = tuple(
+            edge for edge in plan.edges if edge.target_node_id == node.node_id
+        )
+        can_run = True
+        for edge in incoming:
+            source = state_by_node[edge.source_node_id]
+            if source.state != "validated":
+                can_run = False
+                break
+            if edge.edge_kind == "data":
+                binding = binding_by_edge.get(canonical_sha256(edge))
+                if binding is None:
+                    can_run = False
+                    break
+                exact_roles = (
+                    edge.source_node_id,
+                    edge.target_node_id,
+                    edge.artifact_class,
+                    edge.producer_output_id,
+                    edge.consumer_input_id,
+                )
+                observed_roles = (
+                    binding.source_node_id,
+                    binding.target_node_id,
+                    binding.artifact_class,
+                    binding.producer_output_id,
+                    binding.consumer_input_id,
+                )
+                if exact_roles != observed_roles:
+                    raise ContractError("data edge binding roles differ from plan")
+                if (
+                    binding.producer_execution_receipt_sha256
+                    != source.execution_receipt_sha256
+                    or binding.producer_validator_receipt_sha256s
+                    != source.validator_receipt_sha256s
+                    or binding.source_artifact_sha256
+                    not in source.output_artifact_sha256s
+                    or binding.selected_artifact_sha256
+                    not in source.output_artifact_sha256s
+                ):
+                    can_run = False
+                    break
+        if can_run:
+            ready.append(node.node_id)
+    return tuple(ready)
+
+
+def transition_workflow_node(
+    run_state: WorkflowRunStateV1,
+    *,
+    node_id: str,
+    new_state: str,
+    invocation_sha256: str = "",
+    execution_receipt_sha256: str = "",
+    validator_receipt_sha256s: Sequence[str] = (),
+    result_validation_receipt: ProgramResultValidationReceiptV1 | None = None,
+    output_artifact_sha256s: Sequence[str] = (),
+    failure_rule_ids: Sequence[str] = (),
+    timestamp: str,
+) -> WorkflowRunStateV1:
+    """Apply one deterministic host transition to an immutable run snapshot."""
+
+    normalized_id = require_identifier(node_id, "node_id")
+    by_id = {node.node_id: node for node in run_state.nodes}
+    current = by_id.get(normalized_id)
+    if current is None:
+        raise ContractError("workflow run state has no such node")
+    allowed = {
+        "pending": {"running", "blocked"},
+        "running": {"engine_complete", "failed", "ambiguous"},
+        "engine_complete": {"validated", "failed"},
+        "validated": set(),
+        "failed": set(),
+        "blocked": set(),
+        "ambiguous": set(),
+    }
+    if new_state not in allowed[current.state]:
+        raise ContractError("invalid workflow node state transition")
+    if new_state == "validated":
+        if result_validation_receipt is None:
+            raise ContractError(
+                "validated transition requires a typed result validation receipt"
+            )
+        if result_validation_receipt.state != "valid":
+            raise ContractError(
+                "validated transition requires a valid result validation receipt"
+            )
+        if result_validation_receipt.node_id != normalized_id:
+            raise ContractError(
+                "result validation receipt belongs to another workflow node"
+            )
+        if (
+            not current.invocation_sha256
+            or result_validation_receipt.invocation_sha256
+            != current.invocation_sha256
+        ):
+            raise ContractError(
+                "result validation receipt differs from the node invocation"
+            )
+        if (
+            result_validation_receipt.receipt_sha256
+            not in validator_receipt_sha256s
+        ):
+            raise ContractError(
+                "typed result validation receipt must be included in validator evidence"
+            )
+    elif result_validation_receipt is not None:
+        raise ContractError(
+            "result validation receipt is only accepted for validated transitions"
+        )
+    replacement = WorkflowNodeRunStateV1(
+        node_id=normalized_id,
+        state=new_state,
+        invocation_sha256=(
+            invocation_sha256 or current.invocation_sha256
+        ),
+        execution_receipt_sha256=(
+            execution_receipt_sha256 or current.execution_receipt_sha256
+        ),
+        validator_receipt_sha256s=tuple(
+            sorted(
+                set(validator_receipt_sha256s)
+                or set(current.validator_receipt_sha256s)
+            )
+        ),
+        output_artifact_sha256s=tuple(
+            sorted(
+                set(output_artifact_sha256s)
+                or set(current.output_artifact_sha256s)
+            )
+        ),
+        failure_rule_ids=tuple(
+            sorted(set(failure_rule_ids) or set(current.failure_rule_ids))
+        ),
+    )
+    nodes = tuple(
+        replacement if node.node_id == normalized_id else node
+        for node in run_state.nodes
+    )
+    node_states = {node.state for node in nodes}
+    if "ambiguous" in node_states:
+        workflow_state = "ambiguous"
+    elif "failed" in node_states:
+        workflow_state = "failed"
+    elif "blocked" in node_states:
+        workflow_state = "blocked"
+    elif node_states == {"validated"}:
+        workflow_state = "validated"
+    else:
+        workflow_state = "running"
+    started_at = run_state.started_at
+    if not started_at and new_state == "running":
+        started_at = str(timestamp).strip()
+    finished_at = run_state.finished_at
+    if workflow_state in {"validated", "failed"}:
+        finished_at = str(timestamp).strip()
+    body = {
+        "schema_version": run_state.schema_version,
+        "run_id": run_state.run_id,
+        "workflow_id": run_state.workflow_id,
+        "plan_sha256": run_state.plan_sha256,
+        "approval_id": run_state.approval_id,
+        "approval_sha256": run_state.approval_sha256,
+        "approval_consumed": run_state.approval_consumed,
+        "state": workflow_state,
+        "nodes": nodes,
+        "started_at": started_at,
+        "finished_at": finished_at,
+    }
+    return WorkflowRunStateV1(
+        **body, run_state_sha256=canonical_sha256(body)
+    )
+
+
 __all__ = [
     "ApprovedNodeBindingV1",
     "ExecutionResourceSpecV1",
+    "FrozenMaterializedNodePreviewV1",
+    "FrozenProducerEdgeRuleV1",
+    "FrozenWorkflowApprovalV1",
     "OptimizedGeometryHandoffV1",
     "ProducerEdgeRuleV1",
     "ProgramConformanceProbeV1",
     "ProgramExecutionInvocationV1",
     "ProgramExecutionReceiptV1",
+    "ProgramResultValidationReceiptV1",
     "ProjectArtifactPromotionV1",
     "ScientificDecisionRecordV1",
     "WorkflowExecutionApprovalV1",
+    "WorkflowNodeRunStateV1",
+    "WorkflowRunStateV1",
+    "ValidatedDataEdgeBindingV1",
     "bind_project_promotion_validation",
     "build_execution_resource_spec",
+    "build_frozen_workflow_approval",
     "build_locked_pyscf_sp_opt_hess_approval",
     "build_producer_edge_rule",
     "build_program_conformance_probe",
     "build_program_execution_invocation",
     "build_program_execution_receipt",
+    "build_program_result_validation_receipt",
     "build_scientific_decision_record",
+    "build_validated_data_edge_binding",
     "build_workflow_execution_approval",
+    "build_workflow_run_state",
+    "derive_ready_node_ids",
     "handoff_optimized_pyscf_geometry",
     "promote_project_candidate",
+    "transition_workflow_node",
     "workflow_execution_approval_json",
 ]

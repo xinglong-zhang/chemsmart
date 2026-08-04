@@ -20,8 +20,15 @@ def _task_options(function):
         ),
         click.option(
             "--provider",
-            type=click.Choice(("deepseek",), case_sensitive=False),
-            required=True,
+            type=str,
+            default=None,
+            help="Named agent.yaml profile; defaults to its active profile.",
+        ),
+        click.option(
+            "--provider-config",
+            type=click.Path(exists=True, dir_okay=False, path_type=Path),
+            default=None,
+            help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
         ),
         click.option(
             "--secret-file",
@@ -58,14 +65,15 @@ def agent():
 
 @agent.command("plan")
 @_task_options
-def plan(task, task_file, provider, secret_file, workspace):
+def plan(task, task_file, provider, provider_config, secret_file, workspace):
     """Create and safely preview a command-compiled research workflow."""
 
     from chemsmart.agent.live_session import run_live_agent_session
 
     result = run_live_agent_session(
         task=_read_task(task, task_file),
-        provider=provider.lower(),
+        provider=provider.lower() if provider else None,
+        provider_config_file=provider_config,
         secret_file=secret_file,
         workspace=workspace,
         execution_enabled=False,
@@ -82,18 +90,120 @@ def plan(task, task_file, provider, secret_file, workspace):
     default=None,
     help="Host workflow approval. Omission keeps the session preview-only.",
 )
-def run(task, task_file, provider, secret_file, workspace, approval_file):
+def run(
+    task,
+    task_file,
+    provider,
+    provider_config,
+    secret_file,
+    workspace,
+    approval_file,
+):
     """Plan and, when approved, execute host-compiled workflow nodes."""
 
     from chemsmart.agent.live_session import run_live_agent_session
 
     result = run_live_agent_session(
         task=_read_task(task, task_file),
-        provider=provider.lower(),
+        provider=provider.lower() if provider else None,
+        provider_config_file=provider_config,
         secret_file=secret_file,
         workspace=workspace,
         execution_enabled=approval_file is not None,
         approval_file=approval_file,
+    )
+    click.echo(result.public_summary_json())
+
+
+@agent.command("experiment")
+@click.option(
+    "--case-id",
+    required=True,
+    help="Preregistered Qwen/PySCF development or transfer case ID.",
+)
+@click.option("--repeat-index", type=click.IntRange(min=0), default=0)
+@click.option(
+    "--decomposition/--no-decomposition",
+    default=False,
+    help="Enable the bounded specialist factor when its dispatcher is available.",
+)
+@click.option(
+    "--feedback-projection",
+    type=click.Choice(("full-v1", "causal-v1"), case_sensitive=False),
+    default="full-v1",
+    show_default=True,
+)
+@click.option(
+    "--critic/--no-critic",
+    default=False,
+    help="Enable the fresh read-only critic when its dispatcher is available.",
+)
+@click.option(
+    "--max-concurrency",
+    type=click.IntRange(min=1, max=4),
+    default=1,
+    show_default=True,
+)
+@click.option(
+    "--provider-config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
+)
+@click.option(
+    "--secret-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Secret assignment file parsed as data; it is never sourced.",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="Disposable task workspace containing an approved XYZ artifact.",
+)
+def experiment(
+    case_id,
+    repeat_index,
+    decomposition,
+    feedback_projection,
+    critic,
+    max_concurrency,
+    provider_config,
+    secret_file,
+    workspace,
+):
+    """Run one preview-only Qwen/PySCF D/F/C campaign episode."""
+
+    from chemsmart.agent.experiments.qwen_pyscf_dfc import (
+        build_qwen_dfc_arm,
+    )
+    from chemsmart.agent.experiments.qwen_pyscf_fixtures import (
+        qwen_pyscf_cases_v1,
+    )
+    from chemsmart.agent.live_session import run_live_agent_session
+
+    cases = {item.case_id: item for item in qwen_pyscf_cases_v1()}
+    case = cases.get(str(case_id).strip().upper())
+    if case is None:
+        raise click.UsageError("unknown Qwen/PySCF campaign case ID")
+    arm = build_qwen_dfc_arm(
+        decomposition=decomposition,
+        feedback_projection=feedback_projection,
+        critic=critic,
+        max_concurrency=max_concurrency,
+    )
+    result = run_live_agent_session(
+        task=case.task,
+        provider="alibaba-token-plan",
+        provider_config_file=provider_config,
+        secret_file=secret_file,
+        workspace=workspace,
+        execution_enabled=False,
+        approval_file=None,
+        experiment_arm=arm,
+        experiment_case=case,
+        experiment_repeat_index=repeat_index,
     )
     click.echo(result.public_summary_json())
 

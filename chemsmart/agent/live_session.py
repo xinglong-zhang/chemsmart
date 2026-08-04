@@ -14,7 +14,7 @@ pretending that an engine was invoked.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import inspect
 import json
@@ -29,9 +29,11 @@ from typing import Any, Iterable, Mapping
 from chemsmart.agent._contracts import (
     ContractError,
     TrustedArtifactRefV1,
+    canonical_data,
     canonical_json,
     canonical_sha256,
     file_sha256,
+    require_sha256,
 )
 from chemsmart.agent.adaptive_api_campaign import (
     AdaptiveHypothesisV1,
@@ -44,12 +46,13 @@ from chemsmart.agent.bootstrap import (
 )
 from chemsmart.agent.capabilities import (
     EnvironmentTargetV1,
+    ProgramCapabilityRegistryV1,
     ProgramComponentConformanceReceiptV1,
     TrustedComputeEnvironmentReceiptV1,
     build_program_component_conformance_receipt,
     load_program_capabilities,
 )
-from chemsmart.agent.cli_schema import build_live_click_schema
+from chemsmart.agent.cli_schema import LiveClickSchemaV1, build_live_click_schema
 from chemsmart.agent.projects import project_document, render_project_yaml
 from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
@@ -63,22 +66,46 @@ from chemsmart.agent.runtime.contracts import (
     TaskEnvelopeV1,
     TaskPhase,
 )
-from chemsmart.agent.runtime.deepseek import (
-    DEEPSEEK_OFFICIAL_ENDPOINT,
-    DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
-    DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
-    DeepSeekV4FlashConfigV1,
+from chemsmart.agent.provider_config import (
+    ALIBABA_TOKEN_PLAN_MODEL,
+    ALIBABA_TOKEN_PLAN_PROVIDER,
+    AgentProviderProfileV1,
+    AgentProviderSelectionV1,
+    load_agent_provider_selection,
 )
+from chemsmart.agent.experiments.qwen_pyscf_dfc import (
+    QwenExperimentPreparationV1,
+    QwenPyscfCaseSpecV1,
+    QwenDfcArmV1,
+    build_qwen_experiment_preparation,
+)
+from chemsmart.agent.experiments.host_oracle import (
+    HostOracleInputBundleV1,
+    build_host_oracle_input_bundle,
+)
+from chemsmart.agent.live_specialists import (
+    LiveSpecialistCampaignV1,
+    build_experiment_seed_plan,
+    build_f_invariant_critic_candidate,
+)
+from chemsmart.agent.identity import (
+    ApprovedMolecularIdentityV1,
+    validate_identity_for_geometry,
+)
+from chemsmart.agent.specialists import READ_ONLY_CRITIC
+from chemsmart.agent.workflows import HarnessExperimentConfigV1
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.tool_specs import (
+    AgentToolSurfaceV1,
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
 )
 
 
 _SESSION_WALL_TIME_SECONDS = 90 * 60
+_CHEMISTRY_NODE_TIMEOUT_SECONDS = 10 * 60
 _MAX_TOOL_CALLS = 256
 _PYSCF_INTERPRETER = Path(
     os.environ.get("CHEMSMART_PYSCF_INTERPRETER", sys.executable)
@@ -118,6 +145,7 @@ class LiveAgentSessionResultV1:
     artifact_records: tuple[dict[str, Any], ...]
     conformance_records: tuple[dict[str, Any], ...]
     public_transcript: tuple[dict[str, Any], ...]
+    experiment_observations: dict[str, Any]
     successful_tool_calls: int
     failed_tool_calls: int
     event_stream_head_sha256: str
@@ -134,6 +162,9 @@ class LiveAgentSessionResultV1:
             "waiting_for_approval",
         }:
             raise ContractError("invalid live session terminal state")
+        _validate_path_free_experiment_observations(
+            self.experiment_observations
+        )
         body = self._body()
         if self.result_sha256 != canonical_sha256(body):
             raise ContractError("live session result digest mismatch")
@@ -151,16 +182,343 @@ class LiveAgentSessionResultV1:
         return canonical_json({**self._body(), "result_sha256": self.result_sha256})
 
 
+@dataclass(frozen=True)
+class CampaignPreparationHostSnapshotV1:
+    """Provider-free, reusable host observations for one campaign artifact.
+
+    Runtime objects are held explicitly by the campaign controller rather than
+    hidden in a module cache.  The public digest covers their stable identities
+    and every path-free conformance/environment observation.  Per-episode
+    workspaces may use the snapshot only when their exact artifact, approved
+    identity, provider selection, live schema, registry, and tool surface agree.
+    """
+
+    schema_version: str
+    provider_profile_sha256: str
+    provider_selection_sha256: str
+    artifact_sha256s: tuple[str, ...]
+    approved_identity_sha256: str
+    registry_sha256: str
+    live_cli_schema_sha256: str
+    tool_schema_sha256: str
+    component_conformance_receipts: tuple[
+        ProgramComponentConformanceReceiptV1, ...
+    ]
+    environment_targets: tuple[EnvironmentTargetV1, ...]
+    compute_environment_receipts: tuple[
+        TrustedComputeEnvironmentReceiptV1, ...
+    ]
+    conformance_records: tuple[dict[str, Any], ...]
+    provider_calls: int
+    engine_calls: int
+    approval_files: int
+    snapshot_sha256: str
+    registry: ProgramCapabilityRegistryV1 = field(repr=False, compare=False)
+    live_schema: LiveClickSchemaV1 = field(repr=False, compare=False)
+    tool_surface: AgentToolSurfaceV1 = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.campaign-host-snapshot.v1":
+            raise ContractError("unsupported campaign host snapshot")
+        for name in (
+            "provider_profile_sha256",
+            "provider_selection_sha256",
+            "registry_sha256",
+            "live_cli_schema_sha256",
+            "tool_schema_sha256",
+        ):
+            require_sha256(getattr(self, name), name)
+        if self.approved_identity_sha256:
+            require_sha256(
+                self.approved_identity_sha256,
+                "approved_identity_sha256",
+            )
+        if self.artifact_sha256s != tuple(
+            sorted(set(self.artifact_sha256s))
+        ) or not self.artifact_sha256s:
+            raise ContractError("campaign host artifacts must be canonical")
+        for digest in self.artifact_sha256s:
+            require_sha256(digest, "artifact_sha256")
+        if self.provider_calls or self.engine_calls or self.approval_files:
+            raise ContractError("campaign host snapshot must remain provider-free")
+        if self.registry.registry_sha256 != self.registry_sha256:
+            raise ContractError("campaign host registry object mismatch")
+        if self.live_schema.schema_sha256 != self.live_cli_schema_sha256:
+            raise ContractError("campaign host live schema object mismatch")
+        if self.tool_surface.tool_schema_sha256 != self.tool_schema_sha256:
+            raise ContractError("campaign host tool surface mismatch")
+        for receipt in self.component_conformance_receipts:
+            if receipt.registry_sha256 != self.registry_sha256:
+                raise ContractError("campaign conformance registry mismatch")
+            if receipt.live_cli_schema_sha256 != self.live_cli_schema_sha256:
+                raise ContractError("campaign conformance schema mismatch")
+        ordered_records = tuple(
+            sorted(self.conformance_records, key=_record_sort_key)
+        )
+        if self.conformance_records != ordered_records:
+            raise ContractError("campaign host observations are not canonical")
+        _validate_path_free_experiment_observations(
+            {"host_observations": self.conformance_records}
+        )
+        if self.snapshot_sha256 != canonical_sha256(self._body()):
+            raise ContractError("campaign host snapshot digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "provider_profile_sha256": self.provider_profile_sha256,
+            "provider_selection_sha256": self.provider_selection_sha256,
+            "artifact_sha256s": self.artifact_sha256s,
+            "approved_identity_sha256": self.approved_identity_sha256,
+            "registry_sha256": self.registry_sha256,
+            "live_cli_schema_sha256": self.live_cli_schema_sha256,
+            "tool_schema_sha256": self.tool_schema_sha256,
+            "component_conformance_receipt_sha256s": tuple(
+                item.receipt_sha256
+                for item in self.component_conformance_receipts
+            ),
+            "environment_target_sha256s": tuple(
+                canonical_sha256(item) for item in self.environment_targets
+            ),
+            "compute_environment_receipt_sha256s": tuple(
+                item.evidence_sha256
+                for item in self.compute_environment_receipts
+            ),
+            "conformance_records": self.conformance_records,
+            "provider_calls": self.provider_calls,
+            "engine_calls": self.engine_calls,
+            "approval_files": self.approval_files,
+        }
+
+    def public_record(self) -> dict[str, Any]:
+        """Return the path-free, provider-free campaign observation."""
+
+        return {**self._body(), "snapshot_sha256": self.snapshot_sha256}
+
+
+def build_campaign_preparation_host_snapshot(
+    *,
+    provider: str | None,
+    provider_config_file: str | Path | None,
+    workspace: str | Path,
+    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+) -> CampaignPreparationHostSnapshotV1:
+    """Observe schema, fake preview, and environments exactly once.
+
+    This function never loads a credential or creates a provider session.  Its
+    only executable work is ChemSmart's non-running conformance/fake-preview
+    path and registered environment observation.
+    """
+
+    selection = load_agent_provider_selection(
+        provider_config_file,
+        requested_profile=str(provider).strip() if provider else None,
+    )
+    profile = selection.active_profile
+    _validate_campaign_provider_selection(selection)
+    workspace_path = _validated_workspace(workspace)
+    observations = _scan_xyz_artifacts(workspace_path)
+    if len(observations) != 1:
+        raise ContractError(
+            "campaign host snapshot requires exactly one approved XYZ"
+        )
+    _validated_identity_records(observations, approved_molecular_identity)
+    probe_directory = _private_preparation_directory(
+        workspace=workspace_path,
+        episode_id=(
+            "campaign-host-snapshot."
+            f"{profile.profile_sha256[:16]}."
+            f"{observations[0].artifact.sha256[:16]}"
+        ),
+    )
+    registry = load_program_capabilities()
+    live_schema = build_live_click_schema()
+    conformance, conformance_records = _bootstrap_conformance(
+        run_directory=probe_directory,
+        input_artifact=observations[0].artifact,
+        registry_sha256=registry.registry_sha256,
+        live_schema=live_schema,
+    )
+    environment_targets, compute_receipts, environment_records = (
+        _observe_environments()
+    )
+    records = tuple(
+        sorted((*conformance_records, *environment_records), key=_record_sort_key)
+    )
+    surface = build_command_compiled_tool_surface(registry)
+    body = {
+        "schema_version": "chemsmart.campaign-host-snapshot.v1",
+        "provider_profile_sha256": profile.profile_sha256,
+        "provider_selection_sha256": selection.selection_sha256,
+        "artifact_sha256s": tuple(
+            sorted(item.artifact.sha256 for item in observations)
+        ),
+        "approved_identity_sha256": (
+            approved_molecular_identity.identity_sha256
+            if approved_molecular_identity is not None
+            else ""
+        ),
+        "registry_sha256": registry.registry_sha256,
+        "live_cli_schema_sha256": live_schema.schema_sha256,
+        "tool_schema_sha256": surface.tool_schema_sha256,
+        "component_conformance_receipt_sha256s": tuple(
+            item.receipt_sha256 for item in conformance
+        ),
+        "environment_target_sha256s": tuple(
+            canonical_sha256(item) for item in environment_targets
+        ),
+        "compute_environment_receipt_sha256s": tuple(
+            item.evidence_sha256 for item in compute_receipts
+        ),
+        "conformance_records": records,
+        "provider_calls": 0,
+        "engine_calls": 0,
+        "approval_files": 0,
+    }
+    return CampaignPreparationHostSnapshotV1(
+        schema_version=body["schema_version"],
+        provider_profile_sha256=body["provider_profile_sha256"],
+        provider_selection_sha256=body["provider_selection_sha256"],
+        artifact_sha256s=body["artifact_sha256s"],
+        approved_identity_sha256=body["approved_identity_sha256"],
+        registry_sha256=body["registry_sha256"],
+        live_cli_schema_sha256=body["live_cli_schema_sha256"],
+        tool_schema_sha256=body["tool_schema_sha256"],
+        component_conformance_receipts=conformance,
+        environment_targets=environment_targets,
+        compute_environment_receipts=compute_receipts,
+        conformance_records=records,
+        provider_calls=0,
+        engine_calls=0,
+        approval_files=0,
+        snapshot_sha256=canonical_sha256(body),
+        registry=registry,
+        live_schema=live_schema,
+        tool_surface=surface,
+    )
+
+
+def probe_live_experiment_preparation(
+    *,
+    task: str,
+    provider: str | None,
+    provider_config_file: str | Path | None,
+    workspace: str | Path,
+    experiment_arm: QwenDfcArmV1,
+    experiment_case: QwenPyscfCaseSpecV1,
+    experiment_repeat_index: int,
+    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    campaign_preparation_snapshot: (
+        CampaignPreparationHostSnapshotV1 | None
+    ) = None,
+) -> QwenExperimentPreparationV1:
+    """Observe the exact coordinator base contract without provider access.
+
+    Without an explicit campaign snapshot this performs one local snapshot
+    build for backward-compatible standalone use.  Campaign callers pass the
+    same snapshot to every case/arm/repeat, avoiding repeated fake previews and
+    environment probes.  No credential, provider session, approval, or engine
+    launch is involved.
+    """
+
+    selection = load_agent_provider_selection(
+        provider_config_file,
+        requested_profile=str(provider).strip() if provider else None,
+    )
+    profile = selection.active_profile
+    _validate_experiment_request(
+        task=task,
+        profile=profile,
+        arm=experiment_arm,
+        case=experiment_case,
+        repeat_index=experiment_repeat_index,
+        execution_enabled=False,
+        approval_file=None,
+    )
+    workspace_path = _validated_workspace(workspace)
+    observations = _scan_xyz_artifacts(workspace_path)
+    if not observations:
+        raise ContractError("experiment preparation requires an exact XYZ")
+    identity_records = _validated_identity_records(
+        observations, approved_molecular_identity
+    )
+    task_spec_sha256 = _task_spec_sha256(
+        task, observations, approved_molecular_identity
+    )
+    snapshot = campaign_preparation_snapshot
+    if snapshot is None:
+        snapshot = build_campaign_preparation_host_snapshot(
+            provider=provider,
+            provider_config_file=provider_config_file,
+            workspace=workspace_path,
+            approved_molecular_identity=approved_molecular_identity,
+        )
+    _validate_campaign_snapshot_reuse(
+        snapshot=snapshot,
+        selection=selection,
+        observations=observations,
+        approved_molecular_identity=approved_molecular_identity,
+    )
+    context = _public_context(
+        task=task,
+        task_spec_sha256=task_spec_sha256,
+        observations=observations,
+        conformance_records=snapshot.conformance_records,
+        registry_sha256=snapshot.registry_sha256,
+        live_schema_sha256=snapshot.live_cli_schema_sha256,
+        execution_requested=False,
+        execution_available=False,
+        provider_record=_provider_public_record(
+            profile=profile,
+            fallback_profiles=selection.fallback_profiles,
+            experiment=True,
+        ),
+        experiment_record=_experiment_public_record(
+            arm=experiment_arm,
+            case=experiment_case,
+            repeat_index=experiment_repeat_index,
+        ),
+        approved_identity_records=identity_records,
+    )
+    base_messages = _coordinator_base_messages(
+        context=context,
+        approved_workflow={},
+        experiment_arm=experiment_arm,
+    )
+    return _observed_experiment_preparation(
+        arm=experiment_arm,
+        case=experiment_case,
+        repeat_index=experiment_repeat_index,
+        task_spec_sha256=task_spec_sha256,
+        artifact_sha256s=tuple(
+            item.artifact.sha256 for item in observations
+        ),
+        provider_profile=profile,
+        base_messages=base_messages,
+        tool_schema_sha256=snapshot.tool_schema_sha256,
+        host_snapshot_sha256=snapshot.snapshot_sha256,
+    )
+
+
 def run_live_agent_session(
     *,
     task: str,
-    provider: str,
+    provider: str | None,
+    provider_config_file: str | Path | None = None,
     secret_file: str | Path,
     workspace: str | Path,
     execution_enabled: bool,
     approval_file: str | Path | None,
+    experiment_arm: QwenDfcArmV1 | None = None,
+    experiment_case: QwenPyscfCaseSpecV1 | None = None,
+    experiment_repeat_index: int = 0,
+    experiment_config: HarnessExperimentConfigV1 | None = None,
+    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    campaign_preparation_snapshot: (
+        CampaignPreparationHostSnapshotV1 | None
+    ) = None,
 ) -> LiveAgentSessionResultV1:
-    """Run one DeepSeek planning session over exact workspace artifacts.
+    """Run one agent.yaml-selected session over exact workspace artifacts.
 
     A real provider request is made only after the workspace, coordinate
     artifacts, live schema, program previews, and provider budget have been
@@ -169,15 +527,47 @@ def run_live_agent_session(
     tree when the CLI is used as documented.
     """
 
-    normalized_provider = str(provider).strip().lower()
-    if normalized_provider != "deepseek":
-        raise ContractError("the live v1 driver supports only DeepSeek")
+    selection = load_agent_provider_selection(
+        provider_config_file,
+        requested_profile=str(provider).strip() if provider else None,
+    )
+    profile = selection.active_profile
+    normalized_provider = profile.provider
+    if (experiment_arm is None) != (experiment_case is None):
+        raise ContractError(
+            "experiment configuration and case must be supplied together"
+        )
+    if experiment_repeat_index < 0:
+        raise ContractError("experiment repeat index must be non-negative")
+    if experiment_config is not None and experiment_arm is None:
+        raise ContractError(
+            "frozen experiment config requires an experiment arm and case"
+        )
+    if campaign_preparation_snapshot is not None and experiment_arm is None:
+        raise ContractError(
+            "campaign host snapshot requires an experiment arm and case"
+        )
     task = str(task).strip()
     if not task:
         raise ContractError("live agent task must not be empty")
+    if experiment_arm is not None and experiment_case is not None:
+        _validate_experiment_request(
+            task=task,
+            profile=profile,
+            arm=experiment_arm,
+            case=experiment_case,
+            repeat_index=experiment_repeat_index,
+            execution_enabled=execution_enabled,
+            approval_file=approval_file,
+        )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
-    task_spec_sha256 = _task_spec_sha256(task, observations)
+    identity_records = _validated_identity_records(
+        observations, approved_molecular_identity
+    )
+    task_spec_sha256 = _task_spec_sha256(
+        task, observations, approved_molecular_identity
+    )
     session_id = _session_id(task_spec_sha256)
     run_directory = _private_run_directory(workspace_path, session_id)
 
@@ -194,20 +584,43 @@ def run_live_agent_session(
             ),
         )
 
-    registry = load_program_capabilities()
-    live_schema = build_live_click_schema()
-    conformance, conformance_records = _bootstrap_conformance(
-        run_directory=run_directory,
-        input_artifact=observations[0].artifact,
-        registry_sha256=registry.registry_sha256,
-        live_schema=live_schema,
-    )
-    environment_targets, compute_receipts, environment_records = (
-        _observe_environments()
-    )
-    conformance_records = tuple(
-        sorted((*conformance_records, *environment_records), key=_record_sort_key)
-    )
+    if campaign_preparation_snapshot is not None:
+        _validate_campaign_snapshot_reuse(
+            snapshot=campaign_preparation_snapshot,
+            selection=selection,
+            observations=observations,
+            approved_molecular_identity=approved_molecular_identity,
+        )
+        registry = campaign_preparation_snapshot.registry
+        live_schema = campaign_preparation_snapshot.live_schema
+        conformance = (
+            campaign_preparation_snapshot.component_conformance_receipts
+        )
+        environment_targets = campaign_preparation_snapshot.environment_targets
+        compute_receipts = (
+            campaign_preparation_snapshot.compute_environment_receipts
+        )
+        conformance_records = (
+            campaign_preparation_snapshot.conformance_records
+        )
+    else:
+        registry = load_program_capabilities()
+        live_schema = build_live_click_schema()
+        conformance, conformance_records = _bootstrap_conformance(
+            run_directory=run_directory,
+            input_artifact=observations[0].artifact,
+            registry_sha256=registry.registry_sha256,
+            live_schema=live_schema,
+        )
+        environment_targets, compute_receipts, environment_records = (
+            _observe_environments()
+        )
+        conformance_records = tuple(
+            sorted(
+                (*conformance_records, *environment_records),
+                key=_record_sort_key,
+            )
+        )
 
     execution_profile_ready = _execution_composition_available()
     use_execution_surface = bool(
@@ -218,6 +631,8 @@ def run_live_agent_session(
     surface = (
         build_approved_execution_tool_surface(registry)
         if use_execution_surface
+        else campaign_preparation_snapshot.tool_surface
+        if campaign_preparation_snapshot is not None
         else build_command_compiled_tool_surface(registry)
     )
 
@@ -236,6 +651,15 @@ def run_live_agent_session(
         "registry": registry,
         "live_schema": live_schema,
         "task_spec_sha256s": (task_spec_sha256,),
+        "approved_molecular_identities": (
+            {
+                approved_molecular_identity.identity_sha256: (
+                    approved_molecular_identity
+                )
+            }
+            if approved_molecular_identity is not None
+            else {}
+        ),
         # Preview candidates stay inside this session's private workspace.
         # The execution composition below replaces this with the exact
         # user-approved workflow workspace.
@@ -280,15 +704,109 @@ def run_live_agent_session(
         execution_available=use_execution_surface,
         approved_project_records=approved_project_records,
         approved_workflow_record=approved_workflow_record,
+        provider_record=_provider_public_record(
+            profile=profile,
+            fallback_profiles=selection.fallback_profiles,
+            experiment=experiment_arm is not None,
+        ),
+        experiment_record=(
+            _experiment_public_record(
+                arm=experiment_arm,
+                case=experiment_case,
+                repeat_index=experiment_repeat_index,
+            )
+            if experiment_arm is not None and experiment_case is not None
+            else None
+        ),
+        approved_identity_records=identity_records,
     )
+    base_messages = _coordinator_base_messages(
+        context=context,
+        approved_workflow=approved_workflow_record,
+        experiment_arm=experiment_arm,
+    )
+    observed_preparation = (
+        _observed_experiment_preparation(
+            arm=experiment_arm,
+            case=experiment_case,
+            repeat_index=experiment_repeat_index,
+            task_spec_sha256=task_spec_sha256,
+            artifact_sha256s=tuple(
+                item.artifact.sha256 for item in observations
+            ),
+            provider_profile=profile,
+            base_messages=base_messages,
+            tool_schema_sha256=surface.tool_schema_sha256,
+            host_snapshot_sha256=(
+                campaign_preparation_snapshot.snapshot_sha256
+                if campaign_preparation_snapshot is not None
+                else ""
+            ),
+        )
+        if experiment_arm is not None and experiment_case is not None
+        else None
+    )
+    if experiment_config is not None and observed_preparation is not None:
+        _require_exact_experiment_config(
+            frozen=experiment_config,
+            observed=observed_preparation.experiment_config,
+        )
+    experiment_config = (
+        observed_preparation.experiment_config
+        if observed_preparation is not None
+        else None
+    )
+    specialist_campaign: LiveSpecialistCampaignV1 | None = None
+    if (
+        experiment_arm is not None
+        and experiment_case is not None
+        and experiment_config is not None
+    ):
+        seed_plan = build_experiment_seed_plan(
+            case=experiment_case,
+            task_spec_sha256=task_spec_sha256,
+            artifact_sha256s=tuple(
+                item.artifact.sha256 for item in observations
+            ),
+        )
+        specialist_campaign = LiveSpecialistCampaignV1.start(
+            arm=experiment_arm,
+            experiment_config=experiment_config,
+            plan=seed_plan,
+            coordinator_session_id=session_id,
+            public_context=context,
+            source_sha256s=experiment_case.source_sha256s,
+            artifact_sha256s=tuple(
+                item.artifact.sha256 for item in observations
+            ),
+            base_tool_surface=surface,
+            provider_profile=profile,
+            secret_file=secret_file,
+            run_directory=run_directory,
+            host_builder=_live_specialist_host_builder(
+                base_host_kwargs=host_kwargs,
+                coordinator_host=host,
+                coordinator_surface=surface,
+            ),
+        )
+        context = {
+            **context,
+            "specialist_advisory": (
+                specialist_campaign.coordinator_advisory_record()
+            ),
+        }
     messages = [
-        {
-            "role": "system",
-            "content": _system_prompt(approved_workflow_record),
-        },
+        base_messages[0],
         {"role": "user", "content": canonical_json(context)},
     ]
-    network_budget = _network_budget()
+    network_budget = _network_budget(
+        profile,
+        max_concurrency=(
+            experiment_arm.max_concurrency
+            if experiment_arm is not None
+            else 1
+        ),
+    )
     hypothesis = _hypothesis(
         session_id=session_id,
         messages=messages,
@@ -297,6 +815,9 @@ def run_live_agent_session(
         tool_schema_sha256=surface.tool_schema_sha256,
         network_budget=network_budget,
         execution_requested=execution_enabled,
+        experiment_config=experiment_config,
+        experiment_case=experiment_case,
+        experiment_repeat_index=experiment_repeat_index,
     )
     envelope = _task_envelope(
         session_id=session_id,
@@ -305,6 +826,7 @@ def run_live_agent_session(
         workspace_records=tuple(item.public_record() for item in observations),
         tool_schema_sha256=surface.tool_schema_sha256,
         execution_enabled=use_execution_surface,
+        provider_profile=profile,
     )
     lease = load_secret_lease(
         provider=normalized_provider,
@@ -315,15 +837,86 @@ def run_live_agent_session(
         host=host,
         event_store=event_store,
         credential_lease=lease,
-        provider_config=DeepSeekV4FlashConfigV1(
-            max_output_tokens=DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
-        ),
+        provider_config=profile.runtime_config(),
     ).run(
         messages=messages,
         envelope=envelope,
         hypothesis=hypothesis,
         network_budget=network_budget,
+        feedback_projection=(
+            experiment_config.feedback_projection
+            if experiment_config is not None
+            else "full-v1"
+        ),
     )
+
+    experiment_observations: dict[str, Any] = {}
+    if specialist_campaign is not None and experiment_case is not None:
+        # The grading oracle is reconstructed from the complete canonical host
+        # results in Runtime V2, never from the provider-visible F projection.
+        # This must happen after the coordinator loop has terminated and before
+        # its evidence is combined with detached critic observations.
+        coordinator_events = event_store.read_events()
+        host_oracle_bundle = build_host_oracle_input_bundle(
+            events=coordinator_events,
+            session_id=session_id,
+            event_stream_head_sha256=loop_result.event_stream_head_sha256,
+            successful_tool_calls=loop_result.successful_tool_calls,
+            failed_tool_calls=loop_result.failed_tool_calls,
+        )
+        critic_candidate = build_f_invariant_critic_candidate(
+            candidate_id=f"candidate.{session_id}",
+            task_spec_sha256=task_spec_sha256,
+            host_oracle_input_bundle=host_oracle_bundle,
+            coordinator_public_decisions=tuple(
+                sorted(
+                    host.scientific_decisions.values(),
+                    key=lambda item: (
+                        item.decision_id,
+                        item.record_sha256,
+                    ),
+                )
+            ),
+        )
+        specialist_campaign.run_critic(
+            coordinator_session_id=session_id,
+            candidate=critic_candidate,
+            public_context={
+                "task": task,
+                "case_id": experiment_case.case_id,
+                "authority": (
+                    "Review only; do not repair, approve, execute, or set "
+                    "scientific readiness or terminal state."
+                ),
+            },
+            source_sha256s=experiment_case.source_sha256s,
+            artifact_sha256s=tuple(
+                item.artifact.sha256 for item in observations
+            ),
+        )
+        raw_experiment_observations = (
+            specialist_campaign.public_observation_record(
+                coordinator_usage=_coordinator_usage_record(
+                    event_store=event_store,
+                    successful_tool_calls=loop_result.successful_tool_calls,
+                    failed_tool_calls=loop_result.failed_tool_calls,
+                )
+            )
+        )
+        raw_experiment_observations = _bind_feedback_receipts(
+            observations=raw_experiment_observations,
+            events=coordinator_events,
+        )
+        raw_experiment_observations = _bind_host_oracle_bundle(
+            observations=raw_experiment_observations,
+            bundle=host_oracle_bundle,
+        )
+        if observed_preparation is None:
+            raise ContractError("experiment preparation observation is absent")
+        experiment_observations = _bind_preparation_observation(
+            observations=raw_experiment_observations,
+            preparation=observed_preparation,
+        )
 
     execution_status = (
         "approved_profile_active"
@@ -350,9 +943,13 @@ def run_live_agent_session(
         "execution_requested": bool(execution_enabled),
         "execution_profile_status": execution_status,
         "final_text": final_text,
-        "artifact_records": tuple(item.public_record() for item in observations),
+        "artifact_records": (
+            *(item.public_record() for item in observations),
+            *identity_records,
+        ),
         "conformance_records": conformance_records,
         "public_transcript": loop_result.public_transcript,
+        "experiment_observations": experiment_observations,
         "successful_tool_calls": loop_result.successful_tool_calls,
         "failed_tool_calls": loop_result.failed_tool_calls,
         "event_stream_head_sha256": loop_result.event_stream_head_sha256,
@@ -360,6 +957,343 @@ def run_live_agent_session(
     return LiveAgentSessionResultV1(
         **body, result_sha256=canonical_sha256(body)
     )
+
+
+def _validate_campaign_provider_selection(
+    selection: AgentProviderSelectionV1,
+) -> None:
+    profile = selection.active_profile
+    if (
+        profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
+        or profile.model != ALIBABA_TOKEN_PLAN_MODEL
+    ):
+        raise ContractError(
+            "campaign host snapshot requires production Qwen 3.8 Max"
+        )
+    if selection.fallback_profiles:
+        raise ContractError("campaign host snapshot forbids provider fallbacks")
+
+
+def _validate_campaign_snapshot_reuse(
+    *,
+    snapshot: CampaignPreparationHostSnapshotV1,
+    selection: AgentProviderSelectionV1,
+    observations: tuple[_XyzObservation, ...],
+    approved_molecular_identity: ApprovedMolecularIdentityV1 | None,
+) -> None:
+    """Reject cross-artifact, provider, identity, or schema reuse."""
+
+    if not isinstance(snapshot, CampaignPreparationHostSnapshotV1):
+        raise ContractError("campaign host snapshot is not typed")
+    _validate_campaign_snapshot_integrity(snapshot)
+    _validate_campaign_provider_selection(selection)
+    if snapshot.provider_profile_sha256 != (
+        selection.active_profile.profile_sha256
+    ):
+        raise ContractError("campaign host snapshot provider profile mismatch")
+    if snapshot.provider_selection_sha256 != selection.selection_sha256:
+        raise ContractError("campaign host snapshot provider selection mismatch")
+    artifact_sha256s = tuple(
+        sorted(item.artifact.sha256 for item in observations)
+    )
+    if snapshot.artifact_sha256s != artifact_sha256s:
+        raise ContractError("campaign host snapshot artifact mismatch")
+    identity_sha256 = (
+        approved_molecular_identity.identity_sha256
+        if approved_molecular_identity is not None
+        else ""
+    )
+    if snapshot.approved_identity_sha256 != identity_sha256:
+        raise ContractError("campaign host snapshot identity mismatch")
+
+
+def _validate_campaign_snapshot_integrity(
+    snapshot: CampaignPreparationHostSnapshotV1,
+) -> None:
+    if snapshot.registry.registry_sha256 != snapshot.registry_sha256:
+        raise ContractError("campaign host snapshot registry mismatch")
+    if snapshot.live_schema.schema_sha256 != snapshot.live_cli_schema_sha256:
+        raise ContractError("campaign host snapshot live schema mismatch")
+    if snapshot.tool_surface.tool_schema_sha256 != snapshot.tool_schema_sha256:
+        raise ContractError("campaign host snapshot tool schema mismatch")
+    if snapshot.snapshot_sha256 != canonical_sha256(snapshot._body()):
+        raise ContractError("campaign host snapshot digest mismatch")
+
+
+def validate_campaign_snapshot_binding(
+    *,
+    snapshot: CampaignPreparationHostSnapshotV1,
+    provider_config_file: str | Path,
+    provider: str | None,
+    artifact_sha256: str,
+    approved_identity_sha256: str = "",
+) -> None:
+    """Validate a controller's path-free source/provider binding.
+
+    The controller has no episode workspace yet, so this entry point checks the
+    exact approved coordinate digest and provider selection without probing the
+    CLI, environment, or filesystem artifact again.
+    """
+
+    if not isinstance(snapshot, CampaignPreparationHostSnapshotV1):
+        raise ContractError("campaign host snapshot is not typed")
+    _validate_campaign_snapshot_integrity(snapshot)
+    selection = load_agent_provider_selection(
+        provider_config_file,
+        requested_profile=str(provider).strip() if provider else None,
+    )
+    _validate_campaign_provider_selection(selection)
+    require_sha256(artifact_sha256, "artifact_sha256")
+    if snapshot.artifact_sha256s != (artifact_sha256,):
+        raise ContractError("campaign host snapshot artifact mismatch")
+    if snapshot.provider_profile_sha256 != (
+        selection.active_profile.profile_sha256
+    ) or snapshot.provider_selection_sha256 != selection.selection_sha256:
+        raise ContractError("campaign host snapshot provider mismatch")
+    if approved_identity_sha256:
+        require_sha256(approved_identity_sha256, "approved_identity_sha256")
+    if snapshot.approved_identity_sha256 != approved_identity_sha256:
+        raise ContractError("campaign host snapshot identity mismatch")
+
+
+def _validate_experiment_request(
+    *,
+    task: str,
+    profile: AgentProviderProfileV1,
+    arm: QwenDfcArmV1,
+    case: QwenPyscfCaseSpecV1,
+    repeat_index: int,
+    execution_enabled: bool,
+    approval_file: str | Path | None,
+) -> None:
+    if repeat_index < 0:
+        raise ContractError("experiment repeat index must be non-negative")
+    if execution_enabled or approval_file is not None:
+        raise ContractError("harness experiments are preview-only")
+    if (
+        profile.provider != ALIBABA_TOKEN_PLAN_PROVIDER
+        or profile.model != ALIBABA_TOKEN_PLAN_MODEL
+    ):
+        raise ContractError("harness experiments require production Qwen 3.8 Max")
+    if str(task).strip() != case.task:
+        raise ContractError("experiment task differs from its preregistered case")
+    if not arm.arm_id:
+        raise ContractError("experiment arm identity is required")
+
+
+def _provider_public_record(
+    *,
+    profile: AgentProviderProfileV1,
+    fallback_profiles: Iterable[AgentProviderProfileV1],
+    experiment: bool,
+) -> dict[str, Any]:
+    return {
+        "profile_name": profile.profile_name,
+        "provider": profile.provider,
+        "model": profile.model,
+        "endpoint_origin": profile.endpoint,
+        "reasoning_effort": profile.reasoning_effort,
+        "preserve_thinking": profile.preserve_thinking,
+        "profile_sha256": profile.profile_sha256,
+        "fallback_profiles": tuple(
+            item.profile_name for item in fallback_profiles
+        ),
+        "fallback_policy": (
+            "disabled_for_qwen_experiment"
+            if experiment
+            else "explicit_attributed_provider_unavailability_only"
+        ),
+    }
+
+
+def _experiment_public_record(
+    *,
+    arm: QwenDfcArmV1,
+    case: QwenPyscfCaseSpecV1,
+    repeat_index: int,
+) -> dict[str, Any]:
+    del arm, repeat_index
+    return {
+        "schema_version": "chemsmart.factor-blind-experiment-context.v1",
+        "case_id": case.case_id,
+        "case_sha256": case.case_sha256,
+        "split": case.split,
+        "preview_only": True,
+        "engine_calls": 0,
+    }
+
+
+def _coordinator_base_messages(
+    *,
+    context: Mapping[str, Any],
+    approved_workflow: Mapping[str, Any] | None,
+    experiment_arm: QwenDfcArmV1 | None,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": _system_prompt(
+                approved_workflow, experiment_arm=experiment_arm
+            ),
+        },
+        {"role": "user", "content": canonical_json(context)},
+    ]
+
+
+def _observed_experiment_preparation(
+    *,
+    arm: QwenDfcArmV1,
+    case: QwenPyscfCaseSpecV1,
+    repeat_index: int,
+    task_spec_sha256: str,
+    artifact_sha256s: tuple[str, ...],
+    provider_profile: AgentProviderProfileV1,
+    base_messages: list[dict[str, str]],
+    tool_schema_sha256: str,
+    host_snapshot_sha256: str,
+) -> QwenExperimentPreparationV1:
+    return build_qwen_experiment_preparation(
+        case=case,
+        arm=arm,
+        repeat_index=repeat_index,
+        task_spec_sha256=task_spec_sha256,
+        artifact_sha256s=artifact_sha256s,
+        provider_profile_sha256=provider_profile.profile_sha256,
+        host_snapshot_sha256=host_snapshot_sha256,
+        prompt_sha256=canonical_sha256(base_messages),
+        tool_schema_sha256=tool_schema_sha256,
+        task_order_sha256=canonical_sha256(
+            {
+                "case_sha256": case.case_sha256,
+                "repeat_index": int(repeat_index),
+            }
+        ),
+        token_budget=provider_profile.context_tokens,
+        tool_call_budget=_MAX_TOOL_CALLS,
+        wall_time_seconds=_SESSION_WALL_TIME_SECONDS,
+    )
+
+
+def _require_exact_experiment_config(
+    *,
+    frozen: HarnessExperimentConfigV1,
+    observed: HarnessExperimentConfigV1,
+) -> None:
+    fields = (
+        "schema_version",
+        "experiment_id",
+        "decomposition",
+        "feedback_projection",
+        "critic",
+        "provider_id",
+        "model_id",
+        "reasoning_effort",
+        "max_concurrency",
+        "prompt_sha256",
+        "tool_schema_sha256",
+        "task_order_sha256",
+        "token_budget",
+        "tool_call_budget",
+        "wall_time_seconds",
+        "config_sha256",
+    )
+    for field in fields:
+        if getattr(frozen, field) != getattr(observed, field):
+            raise ContractError(
+                f"frozen experiment config mismatch: {field}"
+            )
+
+
+def _bind_preparation_observation(
+    *,
+    observations: Mapping[str, Any],
+    preparation: QwenExperimentPreparationV1,
+) -> dict[str, Any]:
+    record = dict(observations)
+    if record.get("experiment_config_sha256") != (
+        preparation.experiment_config.config_sha256
+    ):
+        raise ContractError(
+            "experiment observations contain another configuration"
+        )
+    record.pop("record_sha256", None)
+    record["preparation_sha256"] = preparation.preparation_sha256
+    if preparation.host_snapshot_sha256:
+        record["host_snapshot_sha256"] = (
+            preparation.host_snapshot_sha256
+        )
+    record["observed_experiment_config_sha256"] = (
+        preparation.experiment_config.config_sha256
+    )
+    return {**record, "record_sha256": canonical_sha256(record)}
+
+
+def _bind_host_oracle_bundle(
+    *,
+    observations: Mapping[str, Any],
+    bundle: HostOracleInputBundleV1,
+) -> dict[str, Any]:
+    """Add the coordinator's F-invariant host evidence to an experiment row."""
+
+    record = dict(observations)
+    record.pop("record_sha256", None)
+    record["host_oracle_input_bundle"] = bundle.public_record()
+    return {**record, "record_sha256": canonical_sha256(record)}
+
+
+def _bind_feedback_receipts(
+    *, observations: Mapping[str, Any], events: Iterable[Any]
+) -> dict[str, Any]:
+    """Persist path-free F-factor receipts in the public experiment record.
+
+    Runtime V2 remains the canonical event source.  The copied receipts let
+    the filesystem-independent campaign analyzer measure full versus causal
+    feedback without reopening a private run directory.  They contain no
+    model reasoning, paths, prompts, or provider-private payloads.
+    """
+
+    receipts: list[dict[str, Any]] = []
+    existing = observations.get("feedback_receipts", ())
+    if not isinstance(existing, (tuple, list)):
+        raise ContractError("worker feedback receipts are not a sequence")
+    for raw in existing:
+        receipts.append(_validated_feedback_receipt(raw))
+    for event in events:
+        if getattr(event, "kind", "") not in {
+            "tool_succeeded",
+            "tool_failed",
+        }:
+            continue
+        payload = getattr(event, "payload", None)
+        if not isinstance(payload, Mapping):
+            raise ContractError("tool event payload is not a mapping")
+        raw = payload.get("feedback_equivalence_receipt")
+        if not isinstance(raw, Mapping):
+            raise ContractError("tool event lacks a feedback receipt")
+        receipts.append(_validated_feedback_receipt(raw))
+    record = dict(observations)
+    record.pop("record_sha256", None)
+    record["feedback_receipts"] = tuple(receipts)
+    return {**record, "record_sha256": canonical_sha256(record)}
+
+
+def _validated_feedback_receipt(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        raise ContractError("tool feedback receipt is not a mapping")
+    receipt = canonical_data(dict(raw))
+    if receipt.get("schema_version") != (
+        "chemsmart.tool-feedback-projection-receipt.v2"
+    ):
+        raise ContractError("tool event has an unsupported feedback receipt")
+    observed_sha256 = str(receipt.get("receipt_sha256") or "")
+    body = {
+        key: value
+        for key, value in receipt.items()
+        if key != "receipt_sha256"
+    }
+    if observed_sha256 != canonical_sha256(body):
+        raise ContractError("tool feedback receipt digest mismatch")
+    return receipt
 
 
 def _validated_workspace(value: str | Path) -> Path:
@@ -387,6 +1321,35 @@ def _private_run_directory(workspace: Path, session_id: str) -> Path:
         raise ContractError("private run root is not a directory")
     root.chmod(0o700)
     target = root / session_id
+    target.mkdir(mode=0o700)
+    target.chmod(0o700)
+    return target
+
+
+def _private_preparation_directory(
+    *, workspace: Path, episode_id: str
+) -> Path:
+    private_root = workspace / _PRIVATE_ROOT_NAME
+    if private_root.is_symlink():
+        raise ContractError("private agent directory cannot be a symbolic link")
+    private_root.mkdir(exist_ok=True, mode=0o700)
+    private_root.chmod(0o700)
+    root = private_root / "preparations"
+    if root.is_symlink():
+        raise ContractError("preparation root cannot be a symbolic link")
+    root.mkdir(exist_ok=True, mode=0o700)
+    root.chmod(0o700)
+    identity = canonical_sha256(
+        {
+            "schema_version": "chemsmart.live-preparation-directory.v1",
+            "episode_id": str(episode_id).lower(),
+        }
+    )
+    episode_root = root / identity
+    if episode_root.is_symlink():
+        raise ContractError("preparation episode root cannot be a symbolic link")
+    episode_root.mkdir(exist_ok=True, mode=0o700)
+    target = episode_root / uuid.uuid4().hex
     target.mkdir(mode=0o700)
     target.chmod(0o700)
     return target
@@ -458,7 +1421,9 @@ def _inspect_xyz(path: Path) -> tuple[int, tuple[str, ...]]:
 
 
 def _task_spec_sha256(
-    task: str, observations: Iterable[_XyzObservation]
+    task: str,
+    observations: Iterable[_XyzObservation],
+    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
 ) -> str:
     return canonical_sha256(
         {
@@ -473,8 +1438,32 @@ def _task_spec_sha256(
                 }
                 for item in observations
             ),
+            "approved_molecular_identity_sha256": (
+                approved_molecular_identity.identity_sha256
+                if approved_molecular_identity is not None
+                else ""
+            ),
         }
     )
+
+
+def _validated_identity_records(
+    observations: tuple[_XyzObservation, ...],
+    identity: ApprovedMolecularIdentityV1 | None,
+) -> tuple[dict[str, Any], ...]:
+    if identity is None:
+        return ()
+    if len(observations) != 1:
+        raise ContractError(
+            "approved molecular identity requires exactly one coordinate artifact"
+        )
+    observation = observations[0]
+    validate_identity_for_geometry(
+        identity,
+        geometry_sha256=observation.artifact.sha256,
+        atom_order=observation.symbols,
+    )
+    return (identity.public_record(),)
 
 
 def _session_id(task_spec_sha256: str) -> str:
@@ -514,7 +1503,11 @@ def _bootstrap_conformance(
             receipt = bootstrap_program_conformance(
                 program="pyscf",
                 engine=engine,
-                jobtypes=("sp", "opt", "hess"),
+                jobtypes=(
+                    ("sp", "opt", "hess", "td")
+                    if engine == "cpu"
+                    else ("sp", "opt", "hess")
+                ),
                 input_path=input_artifact.path,
                 project_path=project_path,
                 server_path=server_path,
@@ -587,12 +1580,22 @@ def _combine_program_conformance(
             )
         )
     )
-    covered_engines = tuple(
-        sorted({engine for item in passed for engine in item.covered_engines})
+    covered_engine_job_pairs = tuple(
+        sorted(
+            {
+                pair
+                for item in passed
+                for pair in item.effective_engine_job_pairs
+            }
+        )
     )
-    job_sets = [set(item.covered_jobtypes) for item in passed]
-    covered_jobtypes = tuple(sorted(set.intersection(*job_sets))) if job_sets else ()
-    status = "passed" if covered_engines and covered_jobtypes else "failed"
+    covered_engines = tuple(
+        sorted({engine for engine, _jobtype in covered_engine_job_pairs})
+    )
+    covered_jobtypes = tuple(
+        sorted({jobtype for _engine, jobtype in covered_engine_job_pairs})
+    )
+    status = "passed" if covered_engine_job_pairs else "failed"
     def aggregate(field: str) -> str:
         return canonical_sha256(tuple(getattr(item, field) for item in rows))
     return build_program_component_conformance_receipt(
@@ -604,6 +1607,7 @@ def _combine_program_conformance(
         ),
         covered_jobtypes=covered_jobtypes,
         covered_engines=covered_engines,
+        covered_engine_job_pairs=covered_engine_job_pairs,
         compiler_receipt_sha256=aggregate("compiler_receipt_sha256"),
         preview_receipt_sha256=aggregate("preview_receipt_sha256"),
         preflight_receipt_sha256=aggregate("preflight_receipt_sha256"),
@@ -628,6 +1632,12 @@ def _locked_pyscf_sections() -> dict[str, dict[str, Any]]:
         "sp": dict(common),
         "opt": {**common, "opt_maxsteps": 100, "opt_solver": "geometric"},
         "hess": dict(common),
+        "td": {
+            **common,
+            "nstates": 5,
+            "response_method": "tda",
+            "state_manifold": "singlet",
+        },
     }
 
 
@@ -789,6 +1799,7 @@ def _conformance_record(
         "engine": engine,
         "status": status,
         "covered_jobtypes": receipt.covered_jobtypes,
+        "covered_engine_job_pairs": receipt.effective_engine_job_pairs,
         "receipt_sha256": receipt.receipt_sha256,
     }
 
@@ -813,6 +1824,9 @@ def _public_context(
     execution_available: bool,
     approved_project_records: tuple[dict[str, Any], ...] = (),
     approved_workflow_record: Mapping[str, Any] | None = None,
+    provider_record: Mapping[str, Any] | None = None,
+    experiment_record: Mapping[str, Any] | None = None,
+    approved_identity_records: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
     public_workflow = dict(approved_workflow_record or {})
     return {
@@ -822,8 +1836,11 @@ def _public_context(
         "registry_sha256": registry_sha256,
         "live_cli_schema_sha256": live_schema_sha256,
         "artifacts": tuple(item.public_record() for item in observations),
+        "approved_molecular_identities": approved_identity_records,
         "approved_project_artifacts": approved_project_records,
         "approved_workflow": public_workflow,
+        "provider": dict(provider_record or {}),
+        "harness_experiment": dict(experiment_record or {}),
         "approved_execution_contract": _approved_execution_context(
             public_workflow
         ),
@@ -833,6 +1850,155 @@ def _public_context(
         "authority": (
             "Use artifact IDs and typed tool fields only. The host owns paths, "
             "CLI argv, project materialization, validation, approval, and execution."
+        ),
+    }
+
+
+def _live_specialist_host_builder(
+    *,
+    base_host_kwargs: Mapping[str, Any],
+    coordinator_host: CommandCompiledToolHostV1,
+    coordinator_surface: Any,
+):
+    """Create fresh read-only-session hosts without sharing mutable state."""
+
+    template = dict(base_host_kwargs)
+
+    def build(
+        event_store: RuntimeEventStore,
+        request: Any,
+    ) -> CommandCompiledToolHostV1:
+        values = dict(template)
+        values["event_store"] = event_store
+        # The live specialist facade exposes the narrow read-only projection;
+        # the underlying normal host still validates the canonical full profile.
+        values["tool_surface"] = coordinator_surface
+        if request.role == READ_ONLY_CRITIC:
+            # The post-coordinator critic receives detached copies of observable
+            # coordinator state.  Its own host and event stream remain fresh.
+            values.update(
+                {
+                    "artifacts": dict(coordinator_host.artifacts),
+                    "scientific_identities": dict(
+                        coordinator_host.scientific_identities
+                    ),
+                    "settings_objects": dict(
+                        coordinator_host.settings_objects
+                    ),
+                    "run_receipts": dict(coordinator_host.run_receipts),
+                    "scientific_claim_evidence": dict(
+                        coordinator_host.scientific_claim_evidence
+                    ),
+                    "functional_equivalence_receipts": dict(
+                        coordinator_host.functional_equivalence_receipts
+                    ),
+                    "substitution_approvals": dict(
+                        coordinator_host.substitution_approvals
+                    ),
+                    "capability_receipts": dict(
+                        coordinator_host.capabilities
+                    ),
+                    "environment_receipts": dict(
+                        coordinator_host.environments
+                    ),
+                    "program_binding_receipts": dict(
+                        coordinator_host.program_bindings
+                    ),
+                    "engine_binding_receipts": dict(
+                        coordinator_host.engine_bindings
+                    ),
+                    "project_validation_receipts": dict(
+                        coordinator_host.project_validations
+                    ),
+                }
+            )
+        return CommandCompiledToolHostV1(**values)
+
+    return build
+
+
+def _validate_path_free_experiment_observations(value: Any) -> None:
+    """Keep local event/artifact locations outside the public result."""
+
+    forbidden_keys = {
+        "cwd",
+        "directory",
+        "event_store_path",
+        "path",
+        "run_directory",
+        "workspace",
+    }
+
+    def visit(item: Any) -> None:
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                normalized = str(key).strip().lower()
+                if normalized in forbidden_keys:
+                    raise ContractError(
+                        "experiment observation contains a local path field"
+                    )
+                visit(child)
+        elif isinstance(item, (tuple, list)):
+            for child in item:
+                visit(child)
+        elif isinstance(item, str) and (
+            item.startswith(("/", "~/"))
+            or any(
+                marker in item
+                for marker in (
+                    "/Users/",
+                    "/home/",
+                    "/private/",
+                    "/tmp/",
+                    "/var/",
+                )
+            )
+            or (
+                len(item) >= 3
+                and item[0].isalpha()
+                and item[1] == ":"
+                and item[2] in {"/", "\\"}
+            )
+        ):
+            raise ContractError(
+                "experiment observation contains an absolute local path"
+            )
+
+    if not isinstance(value, Mapping):
+        raise ContractError("experiment observations must be a mapping")
+    visit(value)
+
+
+def _coordinator_usage_record(
+    *,
+    event_store: RuntimeEventStore,
+    successful_tool_calls: int,
+    failed_tool_calls: int,
+) -> dict[str, int]:
+    attempts = tuple(
+        event
+        for event in event_store.read_events()
+        if event.kind == "api_attempt_observed"
+    )
+    return {
+        "provider_attempts": len(attempts),
+        "successful_tool_calls": int(successful_tool_calls),
+        "failed_tool_calls": int(failed_tool_calls),
+        "input_tokens": sum(
+            int(event.payload.get("input_tokens") or 0)
+            for event in attempts
+        ),
+        "output_tokens": sum(
+            int(event.payload.get("output_tokens") or 0)
+            for event in attempts
+        ),
+        "reasoning_tokens": sum(
+            int(event.payload.get("reasoning_tokens") or 0)
+            for event in attempts
+        ),
+        "wall_time_millis": sum(
+            int(event.payload.get("latency_ms") or 0)
+            for event in attempts
         ),
     }
 
@@ -863,7 +2029,11 @@ def _approved_execution_context(
     }
 
 
-def _system_prompt(approved_workflow: Mapping[str, Any] | None) -> str:
+def _system_prompt(
+    approved_workflow: Mapping[str, Any] | None,
+    *,
+    experiment_arm: QwenDfcArmV1 | None = None,
+) -> str:
     execution_available = bool(approved_workflow)
     execution_sentence = (
         "Execution is exposed only as execute_approved_program_node(node_id). "
@@ -882,6 +2052,15 @@ def _system_prompt(approved_workflow: Mapping[str, Any] | None) -> str:
             "previewed state."
         )
     )
+    experiment_sentence = ""
+    if experiment_arm is not None:
+        experiment_sentence = (
+            " This is a preregistered Qwen/PySCF preview episode. Do not "
+            "execute a chemistry engine. When specialist_advisory is present, "
+            "treat it only as detached typed proposals and resolve it through "
+            "normal host tools. Perform the same coordinator duties whether or "
+            "not an advisory is present."
+        )
     return (
         "You are a professional computational-chemistry planning agent operating "
         "ChemSmart 3.1.4. Work plan-first through typed tools. Inspect program "
@@ -891,21 +2070,55 @@ def _system_prompt(approved_workflow: Mapping[str, Any] | None) -> str:
         "producer input unresolved until its validated upstream artifact exists. "
         "Never author native "
         "Gaussian, ORCA, xTB, or PySCF input/script text. Never invent coordinates, "
-        "paths, shell syntax, evidence, readiness, or terminal state. Explain method "
-        "rationale, alternatives, uncertainty, and diagnostics in concise public "
-        "English. Preserve every user-declared stage order as command-DAG control "
-        "dependencies, including stages that independently reuse the initial "
-        "geometry. Present a method as runnable only when the current project "
-        "schema and loader support it; label other scientifically relevant methods "
-        "as unsupported architecture alternatives rather than promising preview or "
-        "execution. PySCF and xTB project stage keys are exactly sp, opt, and hess; "
+        "paths, shell syntax, evidence, readiness, or terminal state. "
+        "The execution target is host policy: preview planning compiles local run, "
+        "and an approved execution profile uses its frozen resource target. Never "
+        "choose or infer run versus scheduler submission. "
+        "Explain method rationale, alternatives, uncertainty, and diagnostics in "
+        "concise public "
+        "English. A molecular name is authorized only when public context contains "
+        "an approved_molecular_identity record. Use only one of its approved_names "
+        "and cite its exact evidence_ref in the scientific decision. File names, "
+        "XYZ comments, element lists, project settings, and preview artifacts do "
+        "not establish molecular identity. An approved molecular identity never "
+        "establishes charge or multiplicity. "
+        "Preserve explicit scientific dependencies, but do not convert a "
+        "presentation sequence into a control edge. SP(initial geometry) and "
+        "OPT(initial geometry) are siblings unless the request supplies a separate "
+        "control dependency; only a producer output consumed downstream creates a "
+        "data edge. Distinguish loader-supported, preview-conformant, "
+        "environment-ready, and scientifically suitable. Never infer one status "
+        "from another. Do not assert quantitative accuracy, cost, or "
+        "density-fitting effects without typed evidence, and do not claim an RI/DF "
+        "path unless the exact project explicitly enables density_fit. A project "
+        "functional literal is the requested value, not proof of the applied XC "
+        "interpretation. Use only the functional-resolution record returned by "
+        "project validation for an alias or correlation-convention claim, cite "
+        "its exact functional_resolution evidence_ref, and treat exact LibXC "
+        "components as unknown until target-runtime materialization. That host "
+        "resolution is not environment-readiness or scientific-suitability "
+        "evidence. When project validation returns decision_binding, call "
+        "record_scientific_decision after validation with its exact "
+        "evidence_refs before rendering any applied XC alias or correlation "
+        "convention; an earlier task-level decision is insufficient. "
+        "Present an alternative as "
+        "runnable only when the current project loader, command preview, and observed "
+        "environment support it; otherwise label it as a scientifically relevant "
+        "but unmaterialized alternative. PySCF project stage keys are exactly "
+        "sp, opt, hess, and preview-only td; xTB project stage keys are exactly "
+        "sp, opt, and hess. "
         "workflow node IDs may separately express initial or optimized geometry. "
         "For each job, pass the exact receipt_sha256 returned by that job's "
         "inspect_program_capability call into environment inspection and project "
         "validation, then use the engine binding returned by environment inspection. "
         "Do not substitute conformance, joined-capability, or environment receipt "
         "digests for those typed fields. Keep project artifact IDs distinct from "
-        "geometry artifact IDs. In workflow inputs, represent an initial artifact "
+        "geometry artifact IDs. Bind scientific identity only to a geometry_xyz "
+        "artifact, never to a project, and do this before planning the workflow. "
+        "Every workflow node must declare at least one expected output. If "
+        "plan_command_workflow returns findings or a null scientific_workflow_plan, "
+        "repair the binding or DAG and call it again; a workflow_draft alone is "
+        "not the typed scientific DAG. In workflow inputs, represent an initial artifact "
         "with empty producer_node_id and producer_output_id strings; represent a "
         "future optimized input with its producer IDs and no invented artifact ID. "
         "Omit absent optional settings instead of encoding them as the string none. "
@@ -913,18 +2126,23 @@ def _system_prompt(approved_workflow: Mapping[str, Any] | None) -> str:
         "artifact instead of rerendering an equivalent project. "
         "If critical evidence is missing, identify it and block honestly. "
         + execution_sentence
+        + experiment_sentence
     )
 
 
-def _network_budget() -> AdaptiveNetworkBudgetV1:
+def _network_budget(
+    provider_profile: AgentProviderProfileV1,
+    *,
+    max_concurrency: int = 1,
+) -> AdaptiveNetworkBudgetV1:
     body = {
         "schema_version": "chemsmart.adaptive-network-budget.v1",
-        "allowed_provider": "deepseek",
-        "endpoint_origin": DEEPSEEK_OFFICIAL_ENDPOINT,
+        "allowed_provider": provider_profile.provider,
+        "endpoint_origin": provider_profile.endpoint,
         "purpose": "live-command-compiled-computational-chemistry-planning",
-        "max_concurrency": 1,
-        "max_input_tokens_per_request": DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
-        "max_output_tokens_per_request": DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
+        "max_concurrency": int(max_concurrency),
+        "max_input_tokens_per_request": provider_profile.context_tokens,
+        "max_output_tokens_per_request": provider_profile.max_output_tokens,
         "task_wall_time_seconds": float(_SESSION_WALL_TIME_SECONDS),
         "quota_scope": "current_user_account",
         "top_up_allowed": False,
@@ -945,35 +2163,85 @@ def _hypothesis(
     tool_schema_sha256: str,
     network_budget: AdaptiveNetworkBudgetV1,
     execution_requested: bool,
+    experiment_config: HarnessExperimentConfigV1 | None = None,
+    experiment_case: QwenPyscfCaseSpecV1 | None = None,
+    experiment_repeat_index: int = 0,
 ) -> AdaptiveHypothesisV1:
-    body = {
-        "schema_version": "chemsmart.adaptive-hypothesis.v1",
-        "hypothesis_id": session_id,
-        "changed_factor": (
+    if experiment_config is not None and experiment_case is not None:
+        hypothesis_id = (
+            experiment_config.experiment_id
+        )
+        changed_factor = (
+            "D/F/C="
+            f"d{int(experiment_config.decomposition)}-"
+            "f"
+            + (
+                "causal"
+                if experiment_config.feedback_projection == "causal-v1"
+                else "full"
+            )
+            + "-"
+            f"c{int(experiment_config.critic)}"
+        )
+        comparator_id = (
+            f"{experiment_case.case_id}.d0-ffull-c0.r{experiment_repeat_index}"
+        )
+        expected_outcome = experiment_case.expected_observation
+        oracle_id = experiment_case.deterministic_oracle_id
+        distinct = (
+            "Unique preregistered case, D/F/C arm, and repetition tuple."
+        )
+    else:
+        hypothesis_id = session_id
+        changed_factor = (
             "approval_bound_execution_profile"
             if execution_requested
             else "command_compiled_preview_profile"
-        ),
-        "comparator_id": "single-agent-natural-language-baseline",
-        "expected_outcome": (
+        )
+        comparator_id = "single-agent-natural-language-baseline"
+        expected_outcome = (
             "The model uses typed ChemSmart tools, preserves the exact task, "
             "and leaves every future producer artifact unresolved until host "
             "evidence exists."
+        )
+        oracle_id = "live-project-command-preview-gates"
+        distinct = (
+            "Unique live session over an exact task and coordinate-artifact set."
+        )
+    body = {
+        "schema_version": "chemsmart.adaptive-hypothesis.v1",
+        "hypothesis_id": hypothesis_id,
+        "changed_factor": changed_factor,
+        "comparator_id": comparator_id,
+        "expected_outcome": expected_outcome,
+        "deterministic_oracle_id": oracle_id,
+        "source_sha256s": tuple(
+            sorted(
+                {
+                    task_spec_sha256,
+                    *artifact_sha256s,
+                    *(
+                        (experiment_case.case_sha256,)
+                        if experiment_case is not None
+                        else ()
+                    ),
+                }
+            )
         ),
-        "deterministic_oracle_id": "live-project-command-preview-gates",
-        "source_sha256s": tuple(sorted({task_spec_sha256, *artifact_sha256s})),
         "prompt_sha256": canonical_sha256(messages),
         "tool_schema_sha256": tool_schema_sha256,
-        "configuration_sha256": canonical_sha256(
-            {
-                "network_budget": network_budget,
-                "task_spec_sha256": task_spec_sha256,
-                "execution_requested": bool(execution_requested),
-            }
+        "configuration_sha256": (
+            experiment_config.config_sha256
+            if experiment_config is not None
+            else canonical_sha256(
+                {
+                    "network_budget": network_budget,
+                    "task_spec_sha256": task_spec_sha256,
+                    "execution_requested": bool(execution_requested),
+                }
+            )
         ),
-        "distinct_from_prior": (
-            "Unique live session over an exact task and coordinate-artifact set."
-        ),
+        "distinct_from_prior": distinct,
     }
     return AdaptiveHypothesisV1(
         **body, hypothesis_sha256=canonical_sha256(body)
@@ -988,10 +2256,11 @@ def _task_envelope(
     workspace_records: tuple[dict[str, Any], ...],
     tool_schema_sha256: str,
     execution_enabled: bool,
+    provider_profile: AgentProviderProfileV1,
 ) -> TaskEnvelopeV1:
     resource = ResourceBudgetV1(
-        max_input_tokens_per_request=DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
-        max_output_tokens_per_request=DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
+        max_input_tokens_per_request=provider_profile.context_tokens,
+        max_output_tokens_per_request=provider_profile.max_output_tokens,
         max_tool_calls=_MAX_TOOL_CALLS,
         wall_time_seconds=float(_SESSION_WALL_TIME_SECONDS),
         chemistry_engine_calls=4 if execution_enabled else 0,
@@ -1172,7 +2441,7 @@ def _locked_execution_resources() -> ExecutionResourceSpecV1:
         memory_gb=4,
         gpu_count=0,
         scratch_policy="none",
-        node_timeout_seconds=_SESSION_WALL_TIME_SECONDS,
+        node_timeout_seconds=_CHEMISTRY_NODE_TIMEOUT_SECONDS,
     )
 
 
@@ -1244,6 +2513,7 @@ def _local_result(
         "artifact_records": (),
         "conformance_records": (),
         "public_transcript": (),
+        "experiment_observations": {},
         "successful_tool_calls": 0,
         "failed_tool_calls": 0,
         "event_stream_head_sha256": "",
@@ -1253,4 +2523,11 @@ def _local_result(
     )
 
 
-__all__ = ["LiveAgentSessionResultV1", "run_live_agent_session"]
+__all__ = [
+    "CampaignPreparationHostSnapshotV1",
+    "LiveAgentSessionResultV1",
+    "build_campaign_preparation_host_snapshot",
+    "probe_live_experiment_preparation",
+    "run_live_agent_session",
+    "validate_campaign_snapshot_binding",
+]

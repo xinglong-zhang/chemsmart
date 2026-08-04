@@ -1,0 +1,305 @@
+"""Alibaba Token Plan Qwen 3.8 Max streaming reasoning adapter."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+import json
+from typing import Any, Mapping
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+
+from chemsmart.agent._contracts import ContractError
+from chemsmart.agent.provider_config import (
+    ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS,
+    ALIBABA_TOKEN_PLAN_ENDPOINT,
+    ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS,
+    ALIBABA_TOKEN_PLAN_MODEL,
+    ALIBABA_TOKEN_PLAN_PROVIDER,
+)
+from chemsmart.agent.runtime.deepseek import (
+    DeepSeekProtocolError,
+    DeepSeekTransportError,
+    DeepSeekV4ToolSession,
+    ProviderCapabilitiesV1,
+)
+
+
+@dataclass(frozen=True)
+class Qwen38MaxConfigV1:
+    """Exact production Qwen 3.8 Max Token Plan wire contract."""
+
+    provider: str = ALIBABA_TOKEN_PLAN_PROVIDER
+    model: str = ALIBABA_TOKEN_PLAN_MODEL
+    endpoint: str = ALIBABA_TOKEN_PLAN_ENDPOINT
+    reasoning_effort: str = "xhigh"
+    preserve_thinking: bool = True
+    max_output_tokens: int = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
+    context_tokens: int = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
+    sdk_max_retries: int = 0
+
+    def __post_init__(self) -> None:
+        if self.provider != ALIBABA_TOKEN_PLAN_PROVIDER:
+            raise ContractError("Qwen adapter provider identity is immutable")
+        if self.model != ALIBABA_TOKEN_PLAN_MODEL:
+            raise ContractError("Qwen adapter requires production qwen3.8-max")
+        if not _is_token_plan_endpoint(self.endpoint):
+            raise ContractError("Qwen adapter requires the Token Plan endpoint")
+        if self.reasoning_effort != "xhigh":
+            raise ContractError("Qwen 3.8 Max reasoning effort must be xhigh")
+        if not self.preserve_thinking:
+            raise ContractError("Qwen tool continuation must preserve thinking")
+        if self.max_output_tokens != ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS:
+            raise ContractError("Qwen provider maximum must remain uncapped on wire")
+        if self.sdk_max_retries < 0:
+            raise ContractError("provider retries must be non-negative")
+
+
+class AlibabaTokenPlanHttpsTransport:
+    """Streaming Token Plan transport with sanitized failure classes."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        endpoint: str = ALIBABA_TOKEN_PLAN_ENDPOINT,
+        timeout_seconds: float = 120.0,
+    ) -> None:
+        if not _is_token_plan_endpoint(endpoint):
+            raise ContractError("Alibaba transport requires the Token Plan endpoint")
+        if not api_key.startswith("sk-sp-"):
+            raise ContractError("Alibaba transport requires a Token Plan lease")
+        if timeout_seconds <= 0:
+            raise ContractError("Alibaba timeout must be positive")
+        self.endpoint = endpoint.rstrip("/")
+        self.timeout_seconds = float(timeout_seconds)
+        self._api_key = api_key
+        self._closed = False
+
+    def set_timeout_seconds(self, timeout_seconds: float) -> None:
+        """Tighten the next Qwen turn to the remaining task allowance."""
+
+        value = float(timeout_seconds)
+        if value <= 0:
+            raise ContractError("Alibaba timeout must be positive")
+        self.timeout_seconds = value
+
+    def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
+        if self._closed or not self._api_key:
+            raise ContractError("Alibaba credential lease is closed")
+        encoded = json.dumps(
+            payload, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        request = Request(
+            self.endpoint + "/chat/completions",
+            data=encoded,
+            method="POST",
+            headers={
+                "Authorization": "Bearer " + self._api_key,
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "User-Agent": "chemsmart-agent/1",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return _assemble_sse_response(response)
+        except HTTPError as exc:
+            raise DeepSeekTransportError(
+                _http_error_class(exc), http_status=exc.code
+            ) from None
+        except TimeoutError:
+            raise DeepSeekTransportError("timeout") from None
+        except URLError as exc:
+            reason = getattr(exc, "reason", None)
+            error_class = "timeout" if isinstance(reason, TimeoutError) else "transport"
+            raise DeepSeekTransportError(error_class) from None
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DeepSeekTransportError("invalid_json") from exc
+
+    def close(self) -> None:
+        self._api_key = ""
+        self._closed = True
+
+
+class Qwen38MaxToolSession(DeepSeekV4ToolSession):
+    """Provider-native Qwen continuation with private reasoning held in RAM."""
+
+    def __init__(
+        self,
+        *,
+        transport,
+        messages: list[dict[str, Any]],
+        config: Qwen38MaxConfigV1 | None = None,
+    ) -> None:
+        super().__init__(
+            transport=transport,
+            messages=messages,
+            config=config or Qwen38MaxConfigV1(),
+        )
+
+    @property
+    def capabilities(self) -> ProviderCapabilitiesV1:
+        return ProviderCapabilitiesV1(
+            provider=self.config.provider,
+            model=self.config.model,
+            context_tokens=self.config.context_tokens,
+            max_output_tokens=self.config.max_output_tokens,
+        )
+
+    def request_payload(
+        self, *, tools: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": deepcopy(self._history),
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "reasoning_effort": self.config.reasoning_effort,
+            "preserve_thinking": self.config.preserve_thinking,
+        }
+        if tools:
+            payload["tools"] = deepcopy(tools)
+        return payload
+
+
+def _assemble_sse_response(response) -> dict[str, Any]:
+    response_id = ""
+    observed_model = ""
+    finish_reason = ""
+    usage: dict[str, Any] = {}
+    role = "assistant"
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    tool_calls: dict[int, dict[str, Any]] = {}
+    saw_event = False
+
+    for raw_line in response:
+        line = raw_line.decode("utf-8").strip()
+        if not line or line.startswith(":"):
+            continue
+        if not line.startswith("data:"):
+            raise DeepSeekProtocolError("Alibaba stream contains a non-SSE event")
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        chunk = json.loads(data)
+        if not isinstance(chunk, Mapping):
+            raise DeepSeekProtocolError("Alibaba stream chunk must be an object")
+        saw_event = True
+        response_id = response_id or str(chunk.get("id") or "")
+        observed_model = observed_model or str(chunk.get("model") or "")
+        if isinstance(chunk.get("usage"), Mapping):
+            usage = deepcopy(dict(chunk["usage"]))
+        choices = chunk.get("choices") or []
+        if not isinstance(choices, list):
+            raise DeepSeekProtocolError("Alibaba stream choices must be a list")
+        for choice in choices:
+            if not isinstance(choice, Mapping):
+                raise DeepSeekProtocolError("Alibaba stream choice must be an object")
+            finish_reason = str(choice.get("finish_reason") or finish_reason)
+            delta = choice.get("delta") or {}
+            if not isinstance(delta, Mapping):
+                raise DeepSeekProtocolError("Alibaba stream delta must be an object")
+            role = str(delta.get("role") or role)
+            if delta.get("content"):
+                content_parts.append(str(delta["content"]))
+            if delta.get("reasoning_content"):
+                reasoning_parts.append(str(delta["reasoning_content"]))
+            _merge_tool_call_deltas(tool_calls, delta.get("tool_calls") or [])
+
+    if not saw_event:
+        raise DeepSeekProtocolError("Alibaba stream returned no events")
+    if observed_model != ALIBABA_TOKEN_PLAN_MODEL:
+        raise DeepSeekProtocolError(
+            "Alibaba stream did not confirm production qwen3.8-max"
+        )
+    message: dict[str, Any] = {
+        "role": role,
+        "content": "".join(content_parts),
+    }
+    if reasoning_parts or tool_calls:
+        message["reasoning_content"] = "".join(reasoning_parts)
+    if tool_calls:
+        message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
+    return {
+        "id": response_id,
+        "model": observed_model,
+        "choices": [{"finish_reason": finish_reason, "message": message}],
+        "usage": usage,
+    }
+
+
+def _merge_tool_call_deltas(
+    assembled: dict[int, dict[str, Any]], raw_calls: Any
+) -> None:
+    if not isinstance(raw_calls, list):
+        raise DeepSeekProtocolError("Alibaba tool-call delta must be a list")
+    for raw in raw_calls:
+        if not isinstance(raw, Mapping):
+            raise DeepSeekProtocolError("Alibaba tool-call fragment must be an object")
+        index = int(raw.get("index", 0))
+        target = assembled.setdefault(
+            index,
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            },
+        )
+        if raw.get("id"):
+            target["id"] += str(raw["id"])
+        if raw.get("type"):
+            target["type"] = str(raw["type"])
+        function = raw.get("function") or {}
+        if not isinstance(function, Mapping):
+            raise DeepSeekProtocolError("Alibaba tool function must be an object")
+        if function.get("name"):
+            target["function"]["name"] += str(function["name"])
+        if function.get("arguments"):
+            target["function"]["arguments"] += str(function["arguments"])
+
+
+def _is_token_plan_endpoint(endpoint: str) -> bool:
+    try:
+        parsed = urlsplit(str(endpoint).strip())
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == "https"
+        and parsed.hostname == "token-plan.ap-southeast-1.maas.aliyuncs.com"
+        and parsed.port in {None, 443}
+        and parsed.path.rstrip("/") == "/compatible-mode/v1"
+        and not parsed.username
+        and not parsed.password
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def _http_error_class(exc: HTTPError) -> str:
+    if exc.code == 401:
+        return "credential_invalid"
+    if exc.code == 404:
+        return "model_unavailable"
+    if exc.code == 429:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+            error = payload.get("error", payload)
+            detail = " ".join(
+                str(error.get(key) or "") for key in ("code", "message", "type")
+            ).lower()
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            detail = ""
+        return "quota_exhausted" if "quota" in detail else "rate_limited"
+    if 500 <= exc.code < 600:
+        return "provider_5xx"
+    return "http_error"
+
+
+__all__ = [
+    "AlibabaTokenPlanHttpsTransport",
+    "Qwen38MaxConfigV1",
+    "Qwen38MaxToolSession",
+]

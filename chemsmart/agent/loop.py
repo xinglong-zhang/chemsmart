@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping
 
 from chemsmart.agent._contracts import (
     ContractError,
+    canonical_data,
     canonical_sha256,
     canonical_json,
 )
@@ -22,13 +23,17 @@ from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekProtocolError,
     DeepSeekTransportError,
-    DeepSeekV4ToolSession,
     ProviderTurnReceiptV1,
     public_payload,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+from chemsmart.agent.feedback import (
+    FEEDBACK_MODES,
+    FULL_FEEDBACK_V1,
+    project_tool_feedback,
+)
 
 
 @dataclass(frozen=True)
@@ -101,15 +106,19 @@ class ToolLoopRunner:
         host: CommandCompiledToolHostV1,
         event_store: RuntimeEventStore,
         clock: Callable[[], float] = time.monotonic,
+        feedback_projection: str = FULL_FEEDBACK_V1,
     ) -> None:
         self.host = host
         self.event_store = event_store
         self.clock = clock
+        self.feedback_projection = str(feedback_projection).strip().lower()
+        if self.feedback_projection not in FEEDBACK_MODES:
+            raise ContractError("unsupported tool-feedback projection")
 
     def run(
         self,
         *,
-        session: DeepSeekV4ToolSession,
+        session: Any,
         envelope: TaskEnvelopeV1,
         hypothesis: AdaptiveHypothesisV1,
         network_budget: AdaptiveNetworkBudgetV1,
@@ -118,6 +127,7 @@ class ToolLoopRunner:
             envelope=envelope,
             hypothesis=hypothesis,
             network_budget=network_budget,
+            provider=str(session.config.provider),
         )
         approved_output_limit = min(
             envelope.budget.max_output_tokens_per_request,
@@ -168,11 +178,20 @@ class ToolLoopRunner:
         completion_required: tuple[str, ...] = ()
         transport_ordinal = 0
         while True:
-            if self.clock() - start >= network_budget.task_wall_time_seconds:
+            elapsed = self.clock() - start
+            remaining_wall_time = (
+                network_budget.task_wall_time_seconds - elapsed
+            )
+            if remaining_wall_time <= 0:
                 terminal_state = "failed"
                 final_text = "provider wall-time budget exhausted"
                 terminal_reason = final_text
                 break
+            timeout_setter = getattr(
+                session, "set_turn_timeout_seconds", None
+            )
+            if timeout_setter is not None:
+                timeout_setter(remaining_wall_time)
             transport_ordinal += 1
             request = session.request_payload(
                 tools=list(self.host.surface.tool_definitions)
@@ -194,6 +213,7 @@ class ToolLoopRunner:
                     request_sha256=request_sha256,
                     started=attempt_start,
                     error=exc,
+                    provider=session.config.provider,
                 )
                 attempts.append(attempt)
                 self._emit_attempt(envelope.turn_id, attempt)
@@ -204,7 +224,7 @@ class ToolLoopRunner:
             provider_receipts.append(provider_receipt)
             attempt = build_api_attempt_receipt(
                 attempt_id=f"{envelope.turn_id}.provider.{transport_ordinal}",
-                provider="deepseek",
+                provider=session.config.provider,
                 endpoint_origin=network_budget.endpoint_origin,
                 hypothesis_sha256=hypothesis.hypothesis_sha256,
                 budget_sha256=network_budget.budget_sha256,
@@ -228,6 +248,9 @@ class ToolLoopRunner:
                 kind=EventKind.PROVIDER_TURN_OBSERVED.value,
                 payload={
                     "receipt_sha256": provider_receipt.receipt_sha256,
+                    "provider": provider_receipt.provider,
+                    "requested_model": provider_receipt.requested_model,
+                    "observed_model": provider_receipt.observed_model,
                     "finish_reason": provider_receipt.finish_reason,
                     "tool_calls_present": (
                         provider_receipt.tool_calls_present
@@ -319,18 +342,15 @@ class ToolLoopRunner:
                         arguments=arguments,
                     )
                     successful_tools += 1
-                    self.event_store.append(
-                        turn_id=envelope.turn_id,
-                        kind=EventKind.TOOL_SUCCEEDED.value,
-                        payload={
-                            "request_id": call_id,
-                            "tool": tool_name,
-                            "result_sha256": canonical_sha256(result),
-                            "verdict": "host_observed",
-                            "typed_receipt_status": "present",
-                        },
-                        idempotency_key="tool-succeeded:" + call_id,
-                    )
+                    tool_event_kind = EventKind.TOOL_SUCCEEDED.value
+                    tool_event_payload = {
+                        "request_id": call_id,
+                        "tool": tool_name,
+                        "result_sha256": canonical_sha256(result),
+                        "verdict": "host_observed",
+                        "typed_receipt_status": "present",
+                    }
+                    tool_event_key = "tool-succeeded:" + call_id
                 except Exception as exc:
                     failed_tools += 1
                     public_message = (
@@ -354,22 +374,41 @@ class ToolLoopRunner:
                         "error_class": type(exc).__name__,
                         "message": public_message,
                     }
-                    self.event_store.append(
-                        turn_id=envelope.turn_id,
-                        kind=EventKind.TOOL_FAILED.value,
-                        payload={
-                            "request_id": call_id,
-                            "tool": tool_name,
-                            "rule_ids": ("tool.dispatch.rejected",),
-                            "error_class": type(exc).__name__,
-                        },
-                        idempotency_key="tool-failed:" + call_id,
-                    )
+                    tool_event_kind = EventKind.TOOL_FAILED.value
+                    tool_event_payload = {
+                        "request_id": call_id,
+                        "tool": tool_name,
+                        "rule_ids": ("tool.dispatch.rejected",),
+                        "error_class": type(exc).__name__,
+                    }
+                    tool_event_key = "tool-failed:" + call_id
+                projected = project_tool_feedback(
+                    tool=tool_name,
+                    result=result,
+                    mode=self.feedback_projection,
+                )
+                # The complete public result remains evidence even when the
+                # provider receives only the compact causal projection.
+                tool_event_payload.update(
+                    {
+                        "canonical_result": canonical_data(result),
+                        "feedback_projection": self.feedback_projection,
+                        "feedback_equivalence_receipt": canonical_data(
+                            projected.receipt
+                        ),
+                    }
+                )
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=tool_event_kind,
+                    payload=tool_event_payload,
+                    idempotency_key=tool_event_key,
+                )
                 tool_results.append(
                     {
                         "role": "tool",
                         "tool_call_id": call_id,
-                        "content": canonical_json(result),
+                        "content": canonical_json(projected.content),
                     }
                 )
             session.append_tool_results(tool_results)
@@ -432,6 +471,7 @@ class ToolLoopRunner:
         envelope: TaskEnvelopeV1,
         hypothesis: AdaptiveHypothesisV1,
         network_budget: AdaptiveNetworkBudgetV1,
+        provider: str,
     ) -> None:
         if envelope.session_id != self.event_store.session_id:
             raise ContractError("task envelope belongs to another event stream")
@@ -439,8 +479,10 @@ class ToolLoopRunner:
             raise ContractError("task envelope uses another tool schema")
         if hypothesis.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
             raise ContractError("hypothesis uses another tool schema")
-        if network_budget.allowed_provider != "deepseek":
-            raise ContractError("active tool loop is pinned to DeepSeek")
+        if provider not in {"deepseek", "alibaba-token-plan"}:
+            raise ContractError("active tool loop provider is not registered")
+        if network_budget.allowed_provider != provider:
+            raise ContractError("network budget belongs to another provider")
         if network_budget.engine_calls or network_budget.hpc_calls:
             raise ContractError("active planning loop cannot run chemistry")
         execution_profile = (
@@ -464,6 +506,8 @@ class ToolLoopRunner:
             kind=EventKind.API_ATTEMPT_OBSERVED.value,
             payload={
                 "receipt_sha256": attempt.receipt_sha256,
+                "provider": attempt.provider,
+                "endpoint_origin": attempt.endpoint_origin,
                 "status": attempt.status,
                 "hypothesis_sha256": attempt.hypothesis_sha256,
                 "budget_sha256": attempt.budget_sha256,
@@ -486,6 +530,7 @@ class ToolLoopRunner:
         request_sha256: str,
         started: float,
         error: Exception,
+        provider: str,
     ) -> ApiAttemptReceiptV1:
         error_class = getattr(error, "error_class", type(error).__name__)
         status = {
@@ -501,7 +546,7 @@ class ToolLoopRunner:
         )
         return build_api_attempt_receipt(
             attempt_id=f"{envelope.turn_id}.provider.{ordinal}",
-            provider="deepseek",
+            provider=provider,
             endpoint_origin=network_budget.endpoint_origin,
             hypothesis_sha256=hypothesis.hypothesis_sha256,
             budget_sha256=network_budget.budget_sha256,

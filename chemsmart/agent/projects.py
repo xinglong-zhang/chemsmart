@@ -142,6 +142,59 @@ class ProjectValidationReceiptV1:
             raise ContractError("project validation receipt digest mismatch")
 
 
+@dataclass(frozen=True)
+class PySCFFunctionalResolutionReceiptV1:
+    """Host-side XC alias resolution, distinct from target LibXC parsing."""
+
+    schema_version: str
+    project_validation_receipt_sha256: str
+    project_sha256: str
+    jobtype: str
+    setting_path: str
+    requested_method_kind: str
+    requested_literal: str | None
+    normalized_requested_literal: str
+    applied_xc: str | None
+    normalized_applied_xc: str
+    status: str
+    functional_family: str
+    correlation_convention: str
+    source: str
+    rule_id: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.pyscf-functional-resolution.v1":
+            raise ContractError("unsupported PySCF functional resolution schema")
+        if self.requested_method_kind not in {"hf", "dft"}:
+            raise ContractError("invalid PySCF functional method kind")
+        if self.status not in {
+            "not_applicable",
+            "registered_alias",
+            "explicit_variant",
+            "literal_preserved",
+        }:
+            raise ContractError("invalid PySCF functional resolution status")
+        body = {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "receipt_sha256"
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("PySCF functional resolution digest mismatch")
+
+    @property
+    def evidence_ref(self) -> str:
+        return f"functional_resolution:{self.receipt_sha256}"
+
+    def public_record(self) -> dict[str, Any]:
+        return {
+            **canonical_data(self),
+            "evidence_ref": self.evidence_ref,
+            "evidence_scope": "host_xc_resolution_only",
+        }
+
+
 def project_document(
     *, program: str, sections: Mapping[str, Mapping[str, Any]]
 ) -> ProjectDocumentV1:
@@ -212,6 +265,22 @@ def render_project_yaml(
     payload = {
         section.name: dict(section.settings) for section in document.sections
     }
+    rule_ids = ["project.render.candidate_only"]
+    if document.program == "pyscf":
+        settings_module = importlib.import_module("chemsmart.settings.pyscf")
+        materializer = getattr(
+            settings_module, "materialize_canonical_project_sections"
+        )
+        materialized = materializer(payload)
+        if not isinstance(materialized, Mapping) or not materialized:
+            raise ContractError(
+                "project materializer must return a non-empty mapping"
+            )
+        payload = {
+            str(section): dict(settings)
+            for section, settings in materialized.items()
+        }
+        rule_ids.append("project.render.host_effective_settings")
     rendered = yaml.safe_dump(
         payload,
         sort_keys=True,
@@ -227,7 +296,7 @@ def render_project_yaml(
         "rendered_yaml": rendered,
         "rendered_sha256": rendered_sha256,
         "status": "candidate_rendered",
-        "rule_ids": ("project.render.candidate_only",),
+        "rule_ids": tuple(sorted(rule_ids)),
     }
     return ProjectRenderReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
@@ -320,6 +389,47 @@ def validate_project_yaml(
     )
 
 
+def project_scientific_materializations(
+    receipt: ProjectValidationReceiptV1,
+) -> tuple[PySCFFunctionalResolutionReceiptV1, ...]:
+    """Derive preview-safe scientific resolution evidence from one loader receipt."""
+
+    if receipt.status != "valid" or receipt.program != "pyscf":
+        return ()
+    from chemsmart.jobs.pyscf.settings import describe_functional_resolution
+
+    values = dict(receipt.settings)
+    resolution = describe_functional_resolution(
+        values.get("functional"), ab_initio=values.get("ab_initio")
+    )
+    if resolution["status"] == "missing":
+        return ()
+    body = {
+        "schema_version": resolution["schema_version"],
+        "project_validation_receipt_sha256": receipt.receipt_sha256,
+        "project_sha256": receipt.project_sha256,
+        "jobtype": receipt.jobtype,
+        "setting_path": f"{receipt.jobtype}.functional",
+        "requested_method_kind": resolution["requested_method_kind"],
+        "requested_literal": resolution["requested_literal"],
+        "normalized_requested_literal": resolution[
+            "normalized_requested_literal"
+        ],
+        "applied_xc": resolution["applied_xc"],
+        "normalized_applied_xc": resolution["normalized_applied_xc"],
+        "status": resolution["status"],
+        "functional_family": resolution["functional_family"],
+        "correlation_convention": resolution["correlation_convention"],
+        "source": resolution["source"],
+        "rule_id": resolution["rule_id"],
+    }
+    return (
+        PySCFFunctionalResolutionReceiptV1(
+            **body, receipt_sha256=canonical_sha256(body)
+        ),
+    )
+
+
 def _yaml_project_loader(module: Any) -> type:
     candidates = []
     for name, value in vars(module).items():
@@ -349,7 +459,9 @@ __all__ = [
     "ProjectRenderReceiptV1",
     "ProjectSectionV1",
     "ProjectValidationReceiptV1",
+    "PySCFFunctionalResolutionReceiptV1",
     "project_document",
+    "project_scientific_materializations",
     "read_project_yaml",
     "render_project_yaml",
     "validate_project_yaml",

@@ -15,6 +15,7 @@ _LABEL = re.compile(r"^[A-Za-z0-9_-]+$")
 _T = TypeVar("_T")
 
 DEFAULT_KEY_LABELS = {
+    "alibaba-token-plan": ("ALIBABA_TOKEN_PLAN_KEY",),
     "deepseek": (
         "DEEPSEEK-api-key",
         "DEEPSEEK_API_KEY",
@@ -128,10 +129,12 @@ def load_secret_lease(
     if not labels:
         raise ContractError("provider has no approved secret labels")
     values = parse_secret_file(path)
-    normalized = {
-        _normalize_label(label): (label, value)
-        for label, value in values.items()
-    }
+    normalized = {}
+    for label, value in values.items():
+        normalized_label = _normalize_label(label)
+        if normalized_label in normalized:
+            raise ContractError("secret file contains ambiguous key labels")
+        normalized[normalized_label] = (label, value)
     selected = next(
         (
             normalized[_normalize_label(label)]

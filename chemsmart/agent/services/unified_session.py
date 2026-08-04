@@ -1,4 +1,4 @@
-"""Credential-scoped active DeepSeek session runner."""
+"""Credential-scoped provider-neutral Runtime V2 session runner."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from chemsmart.agent.adaptive_api_campaign import (
     AdaptiveNetworkBudgetV1,
 )
 from chemsmart.agent.api_access import SecretLease
+from chemsmart.agent.feedback import FULL_FEEDBACK_V1
 from chemsmart.agent.loop import ToolLoopResultV1, ToolLoopRunner
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
@@ -31,14 +32,14 @@ class UnifiedSessionRunner:
         host: CommandCompiledToolHostV1,
         event_store: RuntimeEventStore,
         credential_lease: SecretLease,
-        provider_config: DeepSeekV4FlashConfigV1 | None = None,
+        provider_config: Any | None = None,
     ) -> None:
-        if credential_lease.provider != "deepseek":
-            raise ContractError("active runner requires a DeepSeek lease")
         self.host = host
         self.event_store = event_store
         self.credential_lease = credential_lease
         self.provider_config = provider_config or DeepSeekV4FlashConfigV1()
+        if credential_lease.provider != self.provider_config.provider:
+            raise ContractError("credential lease belongs to another provider")
 
     def run(
         self,
@@ -47,6 +48,7 @@ class UnifiedSessionRunner:
         envelope: TaskEnvelopeV1,
         hypothesis: AdaptiveHypothesisV1,
         network_budget: AdaptiveNetworkBudgetV1,
+        feedback_projection: str = FULL_FEEDBACK_V1,
     ) -> ToolLoopResultV1:
         if not messages or not all(
             isinstance(item, dict) and item.get("role") in {
@@ -68,19 +70,40 @@ class UnifiedSessionRunner:
                 self.provider_config,
                 max_output_tokens=approved_output_limit,
             )
-            transport = DeepSeekHttpsTransport(
-                api_key=secret,
-                endpoint=bound_config.endpoint,
-                timeout_seconds=network_budget.task_wall_time_seconds,
-            )
-            session = DeepSeekV4ToolSession(
-                transport=transport,
-                messages=messages,
-                config=bound_config,
-            )
+            if bound_config.provider == "deepseek":
+                transport = DeepSeekHttpsTransport(
+                    api_key=secret,
+                    endpoint=bound_config.endpoint,
+                    timeout_seconds=network_budget.task_wall_time_seconds,
+                )
+                session = DeepSeekV4ToolSession(
+                    transport=transport,
+                    messages=messages,
+                    config=bound_config,
+                )
+            elif bound_config.provider == "alibaba-token-plan":
+                from chemsmart.agent.runtime.alibaba import (
+                    AlibabaTokenPlanHttpsTransport,
+                    Qwen38MaxToolSession,
+                )
+
+                transport = AlibabaTokenPlanHttpsTransport(
+                    api_key=secret,
+                    endpoint=bound_config.endpoint,
+                    timeout_seconds=network_budget.task_wall_time_seconds,
+                )
+                session = Qwen38MaxToolSession(
+                    transport=transport,
+                    messages=messages,
+                    config=bound_config,
+                )
+            else:
+                raise ContractError("active provider has no registered runner")
             try:
                 return ToolLoopRunner(
-                    host=self.host, event_store=self.event_store
+                    host=self.host,
+                    event_store=self.event_store,
+                    feedback_projection=feedback_projection,
                 ).run(
                     session=session,
                     envelope=envelope,

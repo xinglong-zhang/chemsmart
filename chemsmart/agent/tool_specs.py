@@ -112,7 +112,11 @@ def build_command_compiled_tool_surface(
         ),
         _tool(
             "bind_scientific_identity",
-            "Bind an explicit charge and multiplicity to an exact host artifact.",
+            (
+                "Bind an explicit charge and multiplicity to the exact host "
+                "geometry artifact. input_artifact_id must identify a "
+                "geometry_xyz artifact, never a project YAML or result."
+            ),
             {
                 "input_artifact_id": _string(),
                 "task_spec_sha256": digest,
@@ -143,7 +147,13 @@ def build_command_compiled_tool_surface(
         ),
         _tool(
             "plan_command_workflow",
-            "Build a typed command DAG; future producer outputs remain unresolved.",
+            (
+                "Build a typed command DAG after binding scientific identity "
+                "to every initial geometry. Every node needs at least one "
+                "expected output. Future producer outputs remain unresolved. "
+                "A null scientific_workflow_plan means the binding must be "
+                "repaired and this tool called again."
+            ),
             {
                 "workflow_id": _string(),
                 "task_spec_id": _string(),
@@ -159,10 +169,6 @@ def build_command_compiled_tool_surface(
             "Compile scientific intent to canonical argv through live Click.",
             {
                 "node_id": _string(),
-                "execution_target": {
-                    "type": "string",
-                    "enum": ["run", "sub"],
-                },
                 "program": program,
                 "jobtype": _string(),
                 "project_artifact_id": _string(),
@@ -176,7 +182,6 @@ def build_command_compiled_tool_surface(
             },
             (
                 "node_id",
-                "execution_target",
                 "program",
                 "jobtype",
                 "project_artifact_id",
@@ -218,10 +223,6 @@ def build_command_compiled_tool_surface(
                 "project_validation_receipt_sha256": digest,
                 "invocation_sha256": digest,
                 "command_inspection_receipt_sha256": digest,
-                "validator_receipt_sha256s": {
-                    "type": "array",
-                    "items": digest,
-                },
                 "safe_preview_receipt_sha256": digest,
             },
             (
@@ -235,7 +236,6 @@ def build_command_compiled_tool_surface(
                 "multiplicity",
                 "invocation_sha256",
                 "command_inspection_receipt_sha256",
-                "validator_receipt_sha256s",
             ),
         ),
         _tool(
@@ -346,6 +346,17 @@ def _string() -> dict:
     return {"type": "string"}
 
 
+def _public_identifier() -> dict:
+    return {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": (
+            "Lower-case public identifier; use dots or dashes instead of "
+            "spaces, parentheses, or placeholder syntax."
+        ),
+    }
+
+
 def _workflow_node_schema() -> dict:
     return {
         "type": "object",
@@ -387,7 +398,10 @@ def _workflow_node_schema() -> dict:
                     "additionalProperties": False,
                 },
             },
-            "unresolved_fields": {"type": "array", "items": _string()},
+            "unresolved_fields": {
+                "type": "array",
+                "items": _public_identifier(),
+            },
         },
         "required": [
             "node_id",
