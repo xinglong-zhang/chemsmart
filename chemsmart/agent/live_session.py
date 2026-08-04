@@ -1943,11 +1943,80 @@ def _locked_pyscf_sections() -> dict[str, dict[str, Any]]:
     }
 
 
+#: Keys in a server YAML that describe the scheduler rather than a program.
+_NON_PROGRAM_SERVER_KEYS = frozenset({"SERVER"})
+
+
+def _declared_server_programs() -> tuple[tuple[str, str], ...]:
+    """Return ``(program, executable_folder)`` for every declared program.
+
+    ChemSmart's server YAML is the canonical statement of which programs this
+    installation controls.  Deriving the agent's view from it -- instead of
+    hard-coding a list here -- is what keeps the agent's environment the same
+    environment ChemSmart itself uses.  Adding a program to the server YAML is
+    then sufficient to make the agent see it.
+
+    A declared program whose folder is absent is still returned: the agent
+    should be able to tell "ChemSmart knows about this program and it is not
+    installed" apart from "this program does not exist".
+    """
+
+    from chemsmart.io.yaml import YAMLFile
+    from chemsmart.settings.user import CHEMSMARTUserSettings
+
+    settings = CHEMSMARTUserSettings()
+    available = list(settings.all_available_servers or ())
+    preferred = os.environ.get("CHEMSMART_AGENT_SERVER") or "local"
+    name = preferred if preferred in available else (
+        available[0] if available else ""
+    )
+    if not name:
+        return ()
+    path = Path(settings.user_server_dir) / f"{name}.yaml"
+    if not path.is_file():
+        return ()
+    try:
+        content = YAMLFile(filename=str(path)).yaml_contents_dict
+    except Exception:  # A malformed server file must not break planning.
+        return ()
+    rows = []
+    for key, value in (content or {}).items():
+        if key in _NON_PROGRAM_SERVER_KEYS or not isinstance(value, dict):
+            continue
+        folder = value.get("EXEFOLDER")
+        if not folder:
+            continue
+        rows.append(
+            (str(key).lower(), str(Path(str(folder)).expanduser()))
+        )
+    return tuple(sorted(set(rows)))
+
+
 def _preview_server_profile() -> str:
     """Scheduler-shaped profile for non-submitting run/sub conformance."""
 
+    declared = dict(_declared_server_programs())
     xtb = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which("xtb")
-    xtb_folder = Path(xtb).expanduser().parent if xtb else Path(".")
+    if "xtb" not in declared and xtb:
+        declared["xtb"] = str(Path(xtb).expanduser().parent)
+    # PySCF is a library backend whose executable is a Python interpreter, so
+    # it needs no server declaration to be real; the rest come from the server
+    # YAML with preview-safe values layered on top.
+    blocks = [
+        "PYSCF:\n"
+        f"  EXEFOLDER: {str(_PYSCF_INTERPRETER.parent)!r}\n"
+        "  LOCAL_RUN: true\n"
+        "  SCRATCH: false\n"
+    ]
+    for program, folder in sorted(declared.items()):
+        if program == "pyscf":
+            continue
+        blocks.append(
+            f"{program.upper()}:\n"
+            f"  EXEFOLDER: {folder!r}\n"
+            "  LOCAL_RUN: true\n"
+            "  SCRATCH: false\n"
+        )
     return (
         "SERVER:\n"
         "  SCHEDULER: PBS\n"
@@ -1961,14 +2030,7 @@ def _preview_server_profile() -> str:
         "  SCRATCH_DIR: null\n"
         "  PROJECT: preview\n"
         "  USE_HOSTS: false\n"
-        "PYSCF:\n"
-        f"  EXEFOLDER: {str(_PYSCF_INTERPRETER.parent)!r}\n"
-        "  LOCAL_RUN: true\n"
-        "  SCRATCH: false\n"
-        "XTB:\n"
-        f"  EXEFOLDER: {str(xtb_folder)!r}\n"
-        "  LOCAL_RUN: true\n"
-        "  SCRATCH: false\n"
+        + "".join(blocks)
     )
 
 
@@ -2022,13 +2084,30 @@ def _observe_environments() -> tuple[
             ),
             required_gpu_facts=("device_available", "gpu4pyscf_distribution"),
         ),
-        EnvironmentTargetV1(
-            program="xtb",
-            engine="cpu",
-            target_kind="executable",
-            locator="xtb",
-        ),
     ]
+    # Every program ChemSmart declares becomes a discovery target, so the agent
+    # observes the same installation ChemSmart controls rather than a list
+    # maintained here.
+    for program, _folder in _declared_server_programs():
+        if program == "pyscf":
+            continue
+        targets.append(
+            EnvironmentTargetV1(
+                program=program,
+                engine="cpu",
+                target_kind="executable",
+                locator=program,
+            )
+        )
+    if not any(item.program == "xtb" for item in targets):
+        targets.append(
+            EnvironmentTargetV1(
+                program="xtb",
+                engine="cpu",
+                target_kind="executable",
+                locator="xtb",
+            )
+        )
     receipts = []
     records = []
     for engine in ("cpu", "gpu"):
@@ -2066,6 +2145,25 @@ def _observe_environments() -> tuple[
                     "error_class": type(exc).__name__,
                 }
             )
+    for program, folder in _declared_server_programs():
+        if program == "pyscf":
+            continue
+        candidate = Path(folder) / program
+        located = (
+            str(candidate)
+            if candidate.exists()
+            else (shutil.which(program) or "")
+        )
+        records.append(
+            {
+                "record_kind": "program_environment",
+                "program": program,
+                "engine": "cpu",
+                "status": "available" if located else "missing",
+                "declared_folder": folder,
+                "observation_method": "declared_server_exefolder",
+            }
+        )
     xtb_location = shutil.which("xtb")
     records.append(
         {
