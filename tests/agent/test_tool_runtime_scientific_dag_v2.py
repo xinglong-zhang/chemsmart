@@ -104,4 +104,3 @@ def test_v1_approval_projection_does_not_invent_tuple_order_dependencies():
     assert tuple(
         (edge.source_node_id, edge.target_node_id) for edge in plan.edges
     ) == (("opt-initial", "hess-optimized"),)
-
