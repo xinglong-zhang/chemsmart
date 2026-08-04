@@ -88,10 +88,12 @@ class GromacsJob(Job):
 
         self.top_file = Path(top_file) if top_file else None
         self.index_file = Path(index_file) if index_file else None
-        self.itp_files = [Path(f) for f in itp_files] if itp_files else []
         self.checkpoint_file = (
-            Path(checkpoint_file) if checkpoint_file else None
+            Path(checkpoint_file)
+            if checkpoint_file is not None
+            else None
         )
+        self.itp_files = [Path(f) for f in itp_files] if itp_files else []
         self.restraint_reference_file = (
             Path(restraint_reference_file)
             if restraint_reference_file
