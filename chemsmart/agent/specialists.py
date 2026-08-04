@@ -1253,11 +1253,8 @@ def _result_packet(
 def _role_instruction(role: str) -> str:
     common = (
         "Return exactly one JSON object without Markdown or surrounding prose. "
-        "Propose typed scientific fields; never provide native input, shell, "
-        "paths, approval, readiness, execution, or terminal state. In proposal "
-        "field paths and nested value-object keys, describe evidence only with "
-        "advisory names such as loader_observation, preview_conformance, "
-        "environment_observation, suitability_assessment, and unresolved_fields. "
+        "Never provide native input, shell, paths, approval, readiness, "
+        "execution, or terminal state. "
         "Never use authority-bearing segments such as approval, approved, "
         "readiness, execution, execute, executable, success, terminal, command, "
         "argv, cwd, path, shell, script, or execution_ready. Distinguish loader observations, "
@@ -1272,10 +1269,16 @@ def _role_instruction(role: str) -> str:
         "contains a host functional-resolution receipt; otherwise report the "
         "requested literal and leave applied semantics unresolved. Functional "
         "resolution is not environment-observation or scientific-suitability "
-        "evidence. "
+        "evidence."
+    )
+    proposal_common = (
+        " Propose typed scientific fields. In proposal field paths and nested "
+        "value-object keys, describe evidence only with advisory names such as "
+        "loader_observation, preview_conformance, environment_observation, "
+        "suitability_assessment, and unresolved_fields. "
         "unresolved_fields must be a JSON array of lower-case field-path strings "
         "only, for example [\"workflow.nodes.hess.geometry_input\"]; never put "
-        "objects there. Put explanations in public_summary or proposal uncertainty."
+        "objects there. Put explanations in public_summary or proposal uncertainty. "
     )
     if role == READ_ONLY_CRITIC:
         return (
@@ -1284,9 +1287,14 @@ def _role_instruction(role: str) -> str:
             "Do not repair, approve, execute, or set readiness. Return exactly "
             "these keys: status, public_summary, findings. status is complete, "
             "blocked, or failed and describes only this review packet, not workflow "
-            "readiness. Each finding has rule_id, severity, expected, "
+            "readiness. Each finding has exactly rule_id, severity, expected, "
             "observed, optional evidence_sha256s, optional target_id, and "
-            "disposition=open. " + common
+            "optional disposition=open. severity must be exactly info, warning, "
+            "or critical. Omit target_id unless it is exactly the detached "
+            "candidate_id; describe a narrower subtarget in observed instead. "
+            "Never add proposal, repair, recommendation, or any other finding "
+            "key. Before returning, verify that the entire response is one valid "
+            "JSON object. " + common
         )
     ownership = {
         SCIENTIFIC_SPECIALIST: "identity., project., or scientific.",
@@ -1299,8 +1307,12 @@ def _role_instruction(role: str) -> str:
         "and unresolved_fields. status is complete, blocked, or failed and "
         "describes only this advisory packet, not workflow readiness. Each "
         "field_proposal has field_path, value, optional evidence_sha256s, and "
-        "optional uncertainty. Field paths for this role start with "
+        "optional uncertainty, with no other keys. Consolidate related facts "
+        "instead of repeating one proposal per receipt. Before returning, parse "
+        "the entire response mentally as one valid JSON object and check that "
+        "every array and object is closed exactly once. Field paths for this role start with "
         f"{ownership} "
+        + proposal_common
         + common
     )
 
