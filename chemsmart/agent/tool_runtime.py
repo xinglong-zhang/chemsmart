@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -18,6 +19,18 @@ from chemsmart.agent._contracts import (
     canonical_data,
     canonical_sha256,
     file_sha256,
+    require_sha256,
+)
+from chemsmart.agent.analysis_completion import (
+    AnalysisIncompleteError,
+    AnalysisCompletionReceiptV1,
+    AnalysisCompletionPolicyV1,
+    build_analysis_completion_receipt,
+)
+from chemsmart.agent.analysis_claims import (
+    AnalysisReportedQuantityV1,
+    analysis_claim_record_from_record,
+    build_analysis_claim_record,
 )
 from chemsmart.agent.capabilities import (
     CapabilityQueryReceiptV1,
@@ -91,6 +104,11 @@ from chemsmart.agent.preflight import (
     evaluate_program_node_preflight,
     validator_receipt_from_safe_preview,
 )
+from chemsmart.agent.postprocessing import (
+    derive_trusted_thermochemistry,
+    evaluate_typed_quantity_expression,
+    extract_trusted_result_quantities,
+)
 from chemsmart.agent.preview import SafePreviewReceiptV1, execute_safe_preview
 from chemsmart.agent.program_verifiers import build_preview_expectation
 from chemsmart.agent.projects import (
@@ -111,6 +129,21 @@ from chemsmart.agent.tool_specs import (
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
     build_single_agent_baseline_tool_surface,
+)
+from chemsmart.analysis.quantity_expressions import (
+    QuantityExpressionNodeV1,
+    QuantityExpressionRequestV1,
+    convert_normalized_value,
+    quantity_expression_receipt_from_record,
+)
+from chemsmart.analysis.result_quantities import (
+    QuantityExtractionReceiptV1,
+    QuantitySelectorV1,
+    QuantityValueV1,
+    ThermochemistryReceiptV1,
+    make_quantity_value,
+    quantity_extraction_receipt_from_record,
+    thermochemistry_receipt_from_record,
 )
 from chemsmart.agent.workflows import (
     ArtifactInputIntentV1,
@@ -211,6 +244,36 @@ def _scientific_decision_binding_requirement(
         ),
     }
     return {**body, "receipt_sha256": canonical_sha256(body)}
+
+
+def _postprocessing_evidence_reference(
+    value: str,
+) -> tuple[str, str] | None:
+    """Parse canonical or hyphenated typed postprocessing references.
+
+    Provider prose frequently varies ``-`` and ``_`` in public labels.  The
+    reference grammar therefore normalizes only the type prefix, while the
+    exact receipt digest remains unchanged and must still resolve in host
+    state.  This is a presentation normalization, not evidence relaxation.
+    """
+
+    reference = str(value).strip()
+    if ":" not in reference:
+        return None
+    raw_kind, digest = reference.split(":", 1)
+    normalized_kind = raw_kind.strip().lower().replace("-", "_")
+    aliases = {
+        "quantity_extraction_receipt": "quantity_extraction",
+        "thermochemistry_receipt": "thermochemistry",
+        "quantity_expression_receipt": "quantity_expression",
+        "analysis_claim_receipt": "analysis_claim",
+        "receipt": "generic",
+    }
+    kind = aliases.get(normalized_kind)
+    if kind is None:
+        return None
+    require_sha256(digest, "postprocessing evidence receipt")
+    return kind, digest
 
 
 def _current_artifact_path(
@@ -743,6 +806,8 @@ class CommandCompiledToolHostV1:
         project_validation_receipts: Mapping[
             str, ProjectValidationReceiptV1
         ] = {},
+        result_functional_evidence: Mapping[str, Mapping[str, Any]] = {},
+        analysis_completion_policy: AnalysisCompletionPolicyV1 | None = None,
         registry: ProgramCapabilityRegistryV1 | None = None,
         live_schema: LiveClickSchemaV1 | None = None,
         task_spec_sha256s: tuple[str, ...] = (),
@@ -917,6 +982,21 @@ class CommandCompiledToolHostV1:
                 self.functional_resolutions[
                     resolution.receipt_sha256
                 ] = resolution
+        self.result_functional_evidence = {
+            str(key): dict(value)
+            for key, value in result_functional_evidence.items()
+        }
+        for key in self.result_functional_evidence:
+            require_sha256(key, "result functional evidence receipt")
+        self.analysis_completion_policy = analysis_completion_policy
+        if (
+            self.analysis_completion_policy is not None
+            and self.analysis_completion_policy.task_spec_sha256
+            not in self.task_spec_sha256s
+        ):
+            raise ContractError(
+                "analysis completion policy targets another task spec"
+            )
         self.invocations: dict[str, CanonicalCommandInvocationV1] = {}
         self.command_inspections: dict[str, CommandInspectionReceiptV1] = {}
         self.safe_previews: dict[str, SafePreviewReceiptV1] = {}
@@ -925,6 +1005,20 @@ class CommandCompiledToolHostV1:
         self.result_inspections: dict[
             str, GeneratedArtifactInspectionReceiptV1
         ] = {}
+        self.quantity_extractions: dict[
+            str, QuantityExtractionReceiptV1
+        ] = {}
+        self.quantity_extraction_selectors: dict[str, tuple[str, ...]] = {}
+        self.quantity_extraction_bindings: dict[str, dict[str, str]] = {}
+        self.thermochemistry_receipts: dict[
+            str, ThermochemistryReceiptV1
+        ] = {}
+        self.quantity_expression_receipts: dict[str, Any] = {}
+        self.quantity_expression_requests: dict[
+            str, QuantityExpressionRequestV1
+        ] = {}
+        self.analysis_claim_records: dict[str, Any] = {}
+        self.analysis_completion_receipts: dict[str, Any] = {}
         self.counterexamples: dict[str, CommandCounterexampleV1] = {}
         self.workflow_drafts: dict[str, CommandWorkflowDraftV1] = {}
         self.scientific_workflow_plans: dict[
@@ -978,6 +1072,82 @@ class CommandCompiledToolHostV1:
             self._latest_environment_by_capability[
                 environment.capability_receipt_sha256
             ] = environment
+        self._rehydrate_analysis_event_records()
+
+    def _rehydrate_analysis_event_records(self) -> None:
+        """Restore typed postprocessing state from canonical Runtime V2 events.
+
+        Historical lightweight events remain replayable but cannot be resumed
+        as typed analysis state.  New events carry canonical records and are
+        reconstructed through the same validating dataclasses used at write
+        time; malformed or substituted records fail closed during host startup.
+        """
+
+        for event in self.event_store.read_events():
+            record = event.payload.get("record")
+            if not isinstance(record, Mapping):
+                continue
+            receipt_sha256 = str(event.payload.get("receipt_sha256") or "")
+            if event.kind == EventKind.RESULT_QUANTITIES_EXTRACTED.value:
+                receipt = quantity_extraction_receipt_from_record(
+                    record, receipt_sha256=receipt_sha256
+                )
+                self.quantity_extractions[receipt_sha256] = receipt
+                bindings = event.payload.get("selector_bindings") or {}
+                if not isinstance(bindings, Mapping):
+                    raise ContractError(
+                        "persisted extraction selector bindings are invalid"
+                    )
+                normalized_bindings = {
+                    str(quantity_id): str(selector)
+                    for quantity_id, selector in bindings.items()
+                }
+                self.quantity_extraction_bindings[receipt_sha256] = (
+                    normalized_bindings
+                )
+                self.quantity_extraction_selectors[receipt_sha256] = tuple(
+                    sorted(set(normalized_bindings.values()))
+                )
+            elif event.kind == EventKind.THERMOCHEMISTRY_DERIVED.value:
+                receipt = thermochemistry_receipt_from_record(
+                    record, receipt_sha256=receipt_sha256
+                )
+                self.thermochemistry_receipts[receipt_sha256] = receipt
+            elif event.kind == EventKind.QUANTITY_EXPRESSION_EVALUATED.value:
+                receipt = quantity_expression_receipt_from_record(
+                    record, receipt_sha256=receipt_sha256
+                )
+                self.quantity_expression_receipts[receipt_sha256] = receipt
+            elif event.kind == EventKind.ANALYSIS_CLAIMS_RECORDED.value:
+                receipt = analysis_claim_record_from_record(
+                    dict(record), receipt_sha256=receipt_sha256
+                )
+                self.analysis_claim_records[receipt_sha256] = receipt
+            elif event.kind == EventKind.ANALYSIS_COMPLETION_EVALUATED.value:
+                values = dict(record)
+                values["source_receipt_sha256s"] = tuple(
+                    values.get("source_receipt_sha256s") or ()
+                )
+                values["findings"] = tuple(values.get("findings") or ())
+                receipt = AnalysisCompletionReceiptV1(
+                    **values, receipt_sha256=receipt_sha256
+                )
+                self.analysis_completion_receipts[receipt_sha256] = receipt
+            elif event.kind == EventKind.SCIENTIFIC_DECISION_RECORDED.value:
+                values = dict(record)
+                for field in (
+                    "stage_order",
+                    "assumptions",
+                    "alternatives",
+                    "uncertainties",
+                    "diagnostics",
+                    "evidence_refs",
+                ):
+                    values[field] = tuple(values.get(field) or ())
+                decision = ScientificDecisionRecordV1(
+                    **values, record_sha256=receipt_sha256
+                )
+                self.scientific_decisions[receipt_sha256] = decision
 
     def record_seeded_evidence(self, turn_id: str) -> None:
         """Persist host-prebound H0 evidence before any model action."""
@@ -1042,6 +1212,10 @@ class CommandCompiledToolHostV1:
             "preview_command": self._preview_command,
             "preflight_program_node": self._preflight_program_node,
             "inspect_calculation_artifact": self._inspect_calculation_artifact,
+            "extract_result_quantities": self._extract_result_quantities,
+            "derive_thermochemistry": self._derive_thermochemistry,
+            "evaluate_quantity_expression": self._evaluate_quantity_expression,
+            "record_analysis_claims": self._record_analysis_claims,
             "record_scientific_decision": self._record_scientific_decision,
             "execute_approved_program_node": self._execute_approved_program_node,
         }
@@ -1334,8 +1508,34 @@ class CommandCompiledToolHostV1:
         task_spec_sha256 = values["task_spec_sha256"]
         if task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("scientific decision targets an unknown task spec")
+        postprocessing_registries = (
+            self.quantity_extractions,
+            self.thermochemistry_receipts,
+            self.quantity_expression_receipts,
+            self.analysis_claim_records,
+        )
+        postprocessing_receipt_sha256s = tuple(
+            str(item)
+            for item in values.get("postprocessing_receipt_sha256s", ())
+        )
+        for receipt_sha256 in postprocessing_receipt_sha256s:
+            require_sha256(
+                receipt_sha256, "postprocessing_receipt_sha256"
+            )
+            if not any(
+                receipt_sha256 in receipts
+                for receipts in postprocessing_registries
+            ):
+                raise ContractError(
+                    "scientific decision cites an unknown postprocessing receipt"
+                )
+        evidence_refs = tuple(values["evidence_refs"]) + tuple(
+            f"receipt:{receipt_sha256}"
+            for receipt_sha256 in postprocessing_receipt_sha256s
+        )
+        evidence_refs = tuple(dict.fromkeys(evidence_refs))
         functional_resolution_refs = set()
-        for evidence_ref in values["evidence_refs"]:
+        for evidence_ref in evidence_refs:
             prefix = "molecular_identity:"
             reference = str(evidence_ref)
             if reference.startswith(prefix):
@@ -1351,6 +1551,51 @@ class CommandCompiledToolHostV1:
                 if receipt_sha256 not in self.functional_resolutions:
                     raise ContractError(
                         "scientific decision cites an unknown functional resolution"
+                    )
+                functional_resolution_refs.add(receipt_sha256)
+                continue
+            parsed_postprocessing_ref = _postprocessing_evidence_reference(
+                reference
+            )
+            if parsed_postprocessing_ref is not None:
+                receipt_kind, receipt_sha256 = parsed_postprocessing_ref
+                registries = {
+                    "quantity_extraction": self.quantity_extractions,
+                    "thermochemistry": self.thermochemistry_receipts,
+                    "quantity_expression": self.quantity_expression_receipts,
+                    "analysis_claim": self.analysis_claim_records,
+                }
+                if receipt_kind == "generic":
+                    known = any(
+                        receipt_sha256 in receipts
+                        for receipts in registries.values()
+                    )
+                else:
+                    known = receipt_sha256 in registries[receipt_kind]
+                if not known:
+                    raise ContractError(
+                        "scientific decision cites an unknown "
+                        "postprocessing receipt"
+                    )
+                continue
+            prefix = "analysis_completion_policy:"
+            if reference.startswith(prefix):
+                policy_sha256 = reference[len(prefix) :]
+                if (
+                    self.analysis_completion_policy is None
+                    or policy_sha256
+                    != self.analysis_completion_policy.policy_sha256
+                ):
+                    raise ContractError(
+                        "scientific decision cites an unknown analysis policy"
+                    )
+                continue
+            prefix = "result_functional_resolution:"
+            if reference.startswith(prefix):
+                receipt_sha256 = reference[len(prefix) :]
+                if receipt_sha256 not in self.result_functional_evidence:
+                    raise ContractError(
+                        "scientific decision cites unknown result functional evidence"
                     )
                 functional_resolution_refs.add(receipt_sha256)
         convention_narrative = " ".join(
@@ -1377,15 +1622,18 @@ class CommandCompiledToolHostV1:
             alternatives=values["alternatives"],
             uncertainties=values["uncertainties"],
             diagnostics=values["diagnostics"],
-            evidence_refs=values["evidence_refs"],
+            evidence_refs=evidence_refs,
         )
         self.scientific_decisions[record.record_sha256] = record
+        record_body = canonical_data(record)
+        record_body.pop("record_sha256")
         self._emit(
             turn_id,
             EventKind.SCIENTIFIC_DECISION_RECORDED,
             record.record_sha256,
             status="recorded",
             decision_id=record.decision_id,
+            record=record_body,
         )
         return record
 
@@ -2102,6 +2350,460 @@ class CommandCompiledToolHostV1:
                 for node_id in required_nodes
             )
         return tuple(sorted(set(completion)))
+
+    def completion_receipts_for_analysis(
+        self, *, turn_id: str
+    ) -> tuple[str, ...]:
+        """Return receipts only when the task-owned analysis policy is met."""
+
+        policy = self.analysis_completion_policy
+        if policy is None:
+            raise ContractError("no analysis completion policy is active")
+        selected: list[str] = []
+        evidence_receipts: list[str] = []
+        downstream_source_receipts = {
+            claim.source_receipt_sha256
+            for record in self.analysis_claim_records.values()
+            for claim in record.claims
+        }
+        downstream_source_receipts.update(
+            digest
+            for receipt in self.quantity_expression_receipts.values()
+            for dependency in receipt.output_dependencies
+            for digest in dependency.source_receipt_sha256s
+        )
+        downstream_expression_receipts = {
+            claim.source_receipt_sha256
+            for record in self.analysis_claim_records.values()
+            for claim in record.claims
+            if claim.source_kind == "quantity_expression"
+        }
+        decision_receipts = {
+            parsed[1]
+            for decision in self.scientific_decisions.values()
+            for reference in decision.evidence_refs
+            if (parsed := _postprocessing_evidence_reference(reference))
+            is not None
+        }
+        target_artifacts = set(policy.target_artifact_sha256s)
+        stage_receipts: dict[str, dict[str, str]] = {
+            "quantity_extraction": {},
+            "thermochemistry": {},
+        }
+
+        if "quantity_extraction" in policy.required_stages:
+            for artifact_sha256 in sorted(target_artifacts):
+                matches = tuple(
+                    receipt
+                    for receipt in self.quantity_extractions.values()
+                    if (
+                        receipt.status == "extracted"
+                        and receipt.artifact_sha256 == artifact_sha256
+                        and set(policy.required_extraction_selectors).issubset(
+                            self.quantity_extraction_selectors.get(
+                                receipt.receipt_sha256, ()
+                            )
+                        )
+                    )
+                )
+                if not matches:
+                    raise AnalysisIncompleteError(
+                        "required quantity extraction has not been observed "
+                        f"for artifact {artifact_sha256}"
+                    )
+                preferred = tuple(
+                    receipt
+                    for receipt in matches
+                    if receipt.receipt_sha256 in downstream_source_receipts
+                ) or matches
+                receipt = sorted(
+                    preferred, key=lambda item: item.receipt_sha256
+                )[-1]
+                stage_receipts["quantity_extraction"][artifact_sha256] = (
+                    receipt.receipt_sha256
+                )
+                selected.append(receipt.receipt_sha256)
+                evidence_receipts.append(receipt.receipt_sha256)
+
+        if "thermochemistry" in policy.required_stages:
+            required_ids = set(
+                policy.required_thermochemistry_quantity_ids
+            )
+            for artifact_sha256 in sorted(target_artifacts):
+                matches = []
+                for receipt in self.thermochemistry_receipts.values():
+                    observed_ids = {
+                        quantity.quantity_id for quantity in receipt.quantities
+                    }
+                    if (
+                        receipt.status == "derived"
+                        and receipt.artifact_sha256 == artifact_sha256
+                        and required_ids.issubset(observed_ids)
+                        and (
+                            policy.temperature_k is None
+                            or math.isclose(
+                                receipt.temperature_k,
+                                policy.temperature_k,
+                                rel_tol=0.0,
+                                abs_tol=1.0e-12,
+                            )
+                        )
+                        and (
+                            policy.pressure_atm is None
+                            or math.isclose(
+                                receipt.pressure_atm,
+                                policy.pressure_atm,
+                                rel_tol=0.0,
+                                abs_tol=1.0e-12,
+                            )
+                        )
+                    ):
+                        matches.append(receipt)
+                if not matches:
+                    raise AnalysisIncompleteError(
+                        "required thermochemistry receipt has not been observed "
+                        f"for artifact {artifact_sha256}"
+                    )
+                preferred = tuple(
+                    receipt
+                    for receipt in matches
+                    if receipt.receipt_sha256 in downstream_source_receipts
+                ) or tuple(matches)
+                receipt = sorted(
+                    preferred, key=lambda item: item.receipt_sha256
+                )[-1]
+                stage_receipts["thermochemistry"][artifact_sha256] = (
+                    receipt.receipt_sha256
+                )
+                selected.append(receipt.receipt_sha256)
+                evidence_receipts.append(receipt.receipt_sha256)
+
+        if "quantity_expression" in policy.required_stages:
+            matches: list[Any] = []
+            expression_stage_receipts: dict[str, str] = {}
+            selected_source_refs = tuple(
+                f"receipt:{receipt_sha256}"
+                for receipt_sha256 in evidence_receipts
+            )
+            for requirement in policy.required_expressions:
+                requirement_matches = []
+                for receipt in self.quantity_expression_receipts.values():
+                    observed_output_ids = {
+                        quantity.quantity_id for quantity in receipt.outputs
+                    }
+                    output_dependencies = {
+                        dependency.output_id: set(
+                            dependency.source_receipt_sha256s
+                        )
+                        for dependency in receipt.output_dependencies
+                    }
+                    required_sources_by_output: dict[str, set[str]] = {
+                        output_id: set()
+                        for output_id in requirement.required_output_ids
+                    }
+                    for source in requirement.required_sources:
+                        source_artifacts = (
+                            set(source.artifact_sha256s)
+                            if source.artifact_sha256s
+                            else target_artifacts
+                        )
+                        source_receipts = {
+                            stage_receipts[source.stage].get(
+                                artifact_sha256, ""
+                            )
+                            for artifact_sha256 in source_artifacts
+                        }
+                        source_receipts.discard("")
+                        target_outputs = (
+                            source.output_ids
+                            or requirement.required_output_ids
+                        )
+                        for output_id in target_outputs:
+                            required_sources_by_output[output_id].update(
+                                source_receipts
+                            )
+                    if any(required_sources_by_output.values()):
+                        dependency_ok = all(
+                            required_sources_by_output[output_id].issubset(
+                                output_dependencies.get(output_id, set())
+                            )
+                            for output_id in requirement.required_output_ids
+                        )
+                    elif selected_source_refs:
+                        selected_source_receipts = {
+                            reference.removeprefix("receipt:")
+                            for reference in selected_source_refs
+                        }
+                        dependency_ok = all(
+                            bool(
+                                selected_source_receipts.intersection(
+                                    output_dependencies.get(output_id, set())
+                                )
+                            )
+                            for output_id in requirement.required_output_ids
+                        )
+                    else:
+                        dependency_ok = True
+                    if (
+                        receipt.status == "derived"
+                        and receipt.expression_id == requirement.expression_id
+                        and set(requirement.required_output_ids).issubset(
+                            observed_output_ids
+                        )
+                        and dependency_ok
+                        and (
+                            not requirement.semantic_signature_sha256
+                            or receipt.semantic_signature_sha256
+                            == requirement.semantic_signature_sha256
+                        )
+                    ):
+                        requirement_matches.append(receipt)
+                if not requirement_matches:
+                    raise AnalysisIncompleteError(
+                        "required named quantity expression has not been observed: "
+                        + requirement.expression_id
+                    )
+                preferred = tuple(
+                    receipt
+                    for receipt in requirement_matches
+                    if receipt.receipt_sha256
+                    in downstream_expression_receipts | decision_receipts
+                ) or tuple(requirement_matches)
+                chosen_expression = sorted(
+                    preferred, key=lambda item: item.receipt_sha256
+                )[-1]
+                matches.append(chosen_expression)
+                expression_stage_receipts[requirement.expression_id] = (
+                    chosen_expression.receipt_sha256
+                )
+            if len(matches) < policy.minimum_expression_receipts:
+                raise AnalysisIncompleteError(
+                    "required quantity expressions have not been observed"
+                )
+            selected.extend(receipt.receipt_sha256 for receipt in matches)
+            evidence_receipts.extend(
+                receipt.receipt_sha256 for receipt in matches
+            )
+
+        if "analysis_claims" in policy.required_stages:
+            matching_records = []
+            for record in self.analysis_claim_records.values():
+                if record.task_spec_sha256 != policy.task_spec_sha256:
+                    continue
+                claims = {claim.claim_id: claim for claim in record.claims}
+                if all(
+                    requirement.claim_id in claims
+                    and claims[requirement.claim_id].source_kind
+                    == requirement.source_kind
+                    and claims[requirement.claim_id].quantity_id
+                    == requirement.quantity_id
+                    and claims[requirement.claim_id].display_unit
+                    == requirement.display_unit
+                    and claims[requirement.claim_id].source_receipt_sha256
+                    in evidence_receipts
+                    and (
+                        not requirement.source_artifact_sha256s
+                        or claims[
+                            requirement.claim_id
+                        ].source_receipt_sha256
+                        in {
+                            stage_receipts[requirement.source_kind][artifact]
+                            for artifact in requirement.source_artifact_sha256s
+                        }
+                    )
+                    and (
+                        not requirement.source_expression_id
+                        or claims[
+                            requirement.claim_id
+                        ].source_receipt_sha256
+                        == expression_stage_receipts.get(
+                            requirement.source_expression_id
+                        )
+                    )
+                    and (
+                        not requirement.source_selector
+                        or self.quantity_extraction_bindings.get(
+                            claims[
+                                requirement.claim_id
+                            ].source_receipt_sha256,
+                            {},
+                        ).get(requirement.quantity_id)
+                        == requirement.source_selector
+                    )
+                    for requirement in policy.required_claims
+                ):
+                    matching_records.append(record)
+            if not matching_records:
+                raise AnalysisIncompleteError(
+                    "required host-rendered analysis claims have not been observed"
+                )
+            preferred_records = tuple(
+                record
+                for record in matching_records
+                if record.receipt_sha256 in decision_receipts
+            ) or tuple(matching_records)
+            record = sorted(
+                preferred_records, key=lambda item: item.receipt_sha256
+            )[-1]
+            selected.append(record.receipt_sha256)
+            evidence_receipts.append(record.receipt_sha256)
+
+        if "scientific_decision" in policy.required_stages:
+            matches = tuple(
+                decision
+                for decision in self.scientific_decisions.values()
+                if decision.task_spec_sha256 == policy.task_spec_sha256
+                and (
+                    not policy.require_decision_evidence_binding
+                    or set(evidence_receipts).issubset(
+                        {
+                            parsed[1]
+                            for reference in decision.evidence_refs
+                            if (
+                                parsed := _postprocessing_evidence_reference(
+                                    reference
+                                )
+                            )
+                            is not None
+                        }
+                    )
+                )
+            )
+            if not matches:
+                raise AnalysisIncompleteError(
+                    "required evidence-bound scientific decision is absent"
+                )
+            selected.append(
+                sorted(matches, key=lambda item: item.record_sha256)[-1]
+                .record_sha256
+            )
+
+        completion = build_analysis_completion_receipt(
+            policy=policy,
+            source_receipt_sha256s=tuple(sorted(set(selected))),
+        )
+        self.analysis_completion_receipts[
+            completion.receipt_sha256
+        ] = completion
+        completion_record = canonical_data(completion)
+        completion_record.pop("receipt_sha256")
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.ANALYSIS_COMPLETION_EVALUATED.value,
+            payload={
+                "receipt_sha256": completion.receipt_sha256,
+                "policy_sha256": completion.policy_sha256,
+                "task_spec_sha256": completion.task_spec_sha256,
+                "source_receipt_sha256s": (
+                    completion.source_receipt_sha256s
+                ),
+                "status": completion.status,
+                "critical_finding_count": 0,
+                "completion_kind": "numerical_analysis",
+                "record": completion_record,
+                "policy_record": policy.public_record(),
+            },
+            idempotency_key=(
+                "analysis-completion:" + completion.receipt_sha256
+            ),
+        )
+        return (completion.receipt_sha256,)
+
+    def render_completed_analysis_report(
+        self, completion_receipt_sha256: str
+    ) -> str:
+        """Render the authoritative result from host-owned typed records.
+
+        Provider prose remains visible in the public transcript, but it is not
+        allowed to become the numerical answer.  This renderer copies values
+        from the exact claim record admitted by the completion receipt and
+        uses only the corresponding structured scientific decision for
+        interpretation.
+        """
+
+        try:
+            completion = self.analysis_completion_receipts[
+                completion_receipt_sha256
+            ]
+        except KeyError as exc:
+            raise ContractError("unknown analysis completion receipt") from exc
+        source_receipts = set(completion.source_receipt_sha256s)
+        claim_records = tuple(
+            record
+            for digest, record in self.analysis_claim_records.items()
+            if digest in source_receipts
+        )
+        decisions = tuple(
+            decision
+            for decision in self.scientific_decisions.values()
+            if decision.record_sha256 in source_receipts
+        )
+        if len(claim_records) != 1 or len(decisions) != 1:
+            raise ContractError(
+                "completed analysis must bind one claim record and one decision"
+            )
+        claims = claim_records[0]
+        decision = decisions[0]
+        policy = self.analysis_completion_policy
+        if policy is None or policy.policy_sha256 != completion.policy_sha256:
+            raise ContractError(
+                "completed analysis policy is absent or differs from the receipt"
+            )
+        lines = [
+            "# Host-validated structured analysis",
+            "",
+            f"Completion receipt: `{completion.receipt_sha256}`",
+            f"Claim record: `{claims.receipt_sha256}`",
+        ]
+        if policy.required_conditions:
+            lines.extend(
+                (
+                    "",
+                    "## Task-owned conditions",
+                    "",
+                    "| Condition | Value | Unit | Origin | Evidence |",
+                    "|---|---:|---|---|---|",
+                )
+            )
+            for condition in policy.required_conditions:
+                lines.append(
+                    f"| {condition.condition_id} | `{condition.value}` | "
+                    f"{condition.unit} | {condition.origin} | "
+                    f"`{condition.evidence_ref}` |"
+                )
+        lines.extend(
+            (
+                "",
+                "## Host-rendered numerical claims",
+                "",
+                "| Claim | Value | Unit | Source receipt |",
+                "|---|---:|---|---|",
+            )
+        )
+        for claim in claims.claims:
+            display = json.dumps(
+                canonical_data(claim.display_value),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            lines.append(
+                f"| {claim.claim_id} | `{display}` | {claim.display_unit} | "
+                f"`{claim.source_receipt_sha256}` |"
+            )
+        sections = (
+            ("Method rationale", (decision.method_rationale,)),
+            ("Assumptions", decision.assumptions),
+            ("Diagnostics", decision.diagnostics),
+            ("Uncertainties", decision.uncertainties),
+            ("Alternatives", decision.alternatives),
+        )
+        for title, values in sections:
+            entries = tuple(value for value in values if value)
+            if not entries:
+                continue
+            lines.extend(("", f"## {title}", ""))
+            lines.extend(f"- {value}" for value in entries)
+        return "\n".join(lines)
 
     def _execute_approved_program_node(self, turn_id: str, values: dict) -> Any:
         """Resolve and execute one approved node without model-authored argv."""
@@ -3079,6 +3781,236 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
+    def _extract_result_quantities(self, turn_id: str, values: dict) -> Any:
+        artifact = self._artifact(values["artifact_id"])
+        selectors = tuple(
+            QuantitySelectorV1(
+                quantity_id=str(item["quantity_id"]),
+                selector=str(item["selector"]),
+            )
+            for item in values["selectors"]
+        )
+        receipt = extract_trusted_result_quantities(
+            artifact=artifact,
+            program=values["program"],
+            selectors=selectors,
+        )
+        self.quantity_extractions[receipt.receipt_sha256] = receipt
+        self.quantity_extraction_selectors[receipt.receipt_sha256] = tuple(
+            sorted({selector.selector for selector in selectors})
+        )
+        self.quantity_extraction_bindings[receipt.receipt_sha256] = {
+            selector.quantity_id: selector.selector for selector in selectors
+        }
+        record = canonical_data(receipt)
+        record.pop("receipt_sha256")
+        self._emit(
+            turn_id,
+            EventKind.RESULT_QUANTITIES_EXTRACTED,
+            receipt.receipt_sha256,
+            status=receipt.status,
+            artifact_sha256=receipt.artifact_sha256,
+            quantity_ids=tuple(item.quantity_id for item in receipt.quantities),
+            selector_bindings=self.quantity_extraction_bindings[
+                receipt.receipt_sha256
+            ],
+            record=record,
+        )
+        return receipt
+
+    def _derive_thermochemistry(self, turn_id: str, values: dict) -> Any:
+        artifact = self._artifact(values["artifact_id"])
+        receipt = derive_trusted_thermochemistry(
+            artifact=artifact,
+            program=values["program"],
+            temperature_k=float(values["temperature_k"]),
+            pressure_atm=float(values["pressure_atm"]),
+        )
+        self.thermochemistry_receipts[receipt.receipt_sha256] = receipt
+        record = canonical_data(receipt)
+        record.pop("receipt_sha256")
+        self._emit(
+            turn_id,
+            EventKind.THERMOCHEMISTRY_DERIVED,
+            receipt.receipt_sha256,
+            status=receipt.status,
+            artifact_sha256=receipt.artifact_sha256,
+            temperature_k=receipt.temperature_k,
+            pressure_atm=receipt.pressure_atm,
+            record=record,
+        )
+        return receipt
+
+    def _evaluate_quantity_expression(self, turn_id: str, values: dict) -> Any:
+        inputs: list[QuantityValueV1] = []
+        for item in values["inputs"]:
+            input_id = str(item["input_id"])
+            receipt_sha256 = str(item["receipt_sha256"])
+            receipt = self.quantity_extractions.get(receipt_sha256)
+            if receipt is None:
+                receipt = self.thermochemistry_receipts.get(receipt_sha256)
+            if receipt is None:
+                raise ContractError("quantity expression references an unknown receipt")
+            quantity_id = str(item["quantity_id"])
+            matches = tuple(
+                quantity
+                for quantity in receipt.quantities
+                if quantity.quantity_id == quantity_id
+            )
+            if len(matches) != 1:
+                raise ContractError(
+                    "quantity expression input is absent or ambiguous in its receipt"
+                )
+            source = matches[0]
+            semantic_role = str(item.get("semantic_role", "")).strip()
+            semantic_role_ref = (
+                f";semantic-role:{semantic_role}" if semantic_role else ""
+            )
+            inputs.append(
+                make_quantity_value(
+                    quantity_id=input_id,
+                    source_value=source.source_value,
+                    source_unit=source.source_unit,
+                    value=source.value,
+                    unit=source.unit,
+                    dimension=source.dimension,
+                    evidence_ref=(
+                        f"{source.evidence_ref};receipt:{receipt_sha256};"
+                        f"quantity:{source.quantity_id}{semantic_role_ref}"
+                    ),
+                    data_kind=source.data_kind,
+                )
+            )
+        nodes = tuple(
+            QuantityExpressionNodeV1(
+                node_id=str(item["node_id"]),
+                operation=str(item["operation"]),
+                input_ids=tuple(str(value) for value in item.get("input_ids", ())),
+                reference=str(item.get("reference", "")),
+                indices=tuple(int(value) for value in item.get("indices", ())),
+                literal_value=item.get("literal_value"),
+                literal_unit=str(item.get("literal_unit", "1")),
+                scale_factor=(
+                    float(item["scale_factor"])
+                    if "scale_factor" in item
+                    else None
+                ),
+                target_unit=str(item.get("target_unit", "")),
+            )
+            for item in values["nodes"]
+        )
+        request = QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id=str(values["expression_id"]),
+            inputs=tuple(inputs),
+            nodes=nodes,
+            output_node_ids=tuple(str(item) for item in values["output_node_ids"]),
+        )
+        receipt = evaluate_typed_quantity_expression(request)
+        self.quantity_expression_receipts[receipt.receipt_sha256] = receipt
+        self.quantity_expression_requests[receipt.receipt_sha256] = request
+        record = canonical_data(receipt)
+        record.pop("receipt_sha256")
+        self._emit(
+            turn_id,
+            EventKind.QUANTITY_EXPRESSION_EVALUATED,
+            receipt.receipt_sha256,
+            status=receipt.status,
+            output_ids=tuple(item.quantity_id for item in receipt.outputs),
+            semantic_signature_sha256=receipt.semantic_signature_sha256,
+            record=record,
+        )
+        return receipt
+
+    def _record_analysis_claims(self, turn_id: str, values: dict) -> Any:
+        """Render reportable values from exact typed receipt outputs."""
+
+        task_spec_sha256 = str(values["task_spec_sha256"])
+        if task_spec_sha256 not in self.task_spec_sha256s:
+            raise ContractError("analysis claims target an unknown task spec")
+        registries = (
+            ("quantity_extraction", self.quantity_extractions, "quantities"),
+            ("thermochemistry", self.thermochemistry_receipts, "quantities"),
+            ("quantity_expression", self.quantity_expression_receipts, "outputs"),
+        )
+        claims = []
+        for item in values["claims"]:
+            receipt_sha256 = str(item["receipt_sha256"])
+            require_sha256(receipt_sha256, "analysis claim receipt_sha256")
+            source_kind = ""
+            source_receipt = None
+            quantity_collection = ""
+            for kind, registry, collection in registries:
+                if receipt_sha256 in registry:
+                    source_kind = kind
+                    source_receipt = registry[receipt_sha256]
+                    quantity_collection = collection
+                    break
+            if source_receipt is None:
+                raise ContractError("analysis claim cites an unknown receipt")
+            quantity_id = str(item["quantity_id"])
+            quantities = getattr(source_receipt, quantity_collection)
+            matches = tuple(
+                quantity
+                for quantity in quantities
+                if quantity.quantity_id == quantity_id
+            )
+            if len(matches) != 1:
+                raise ContractError(
+                    "analysis claim quantity is absent or ambiguous"
+                )
+            quantity = matches[0]
+            if quantity.data_kind in {"text", "text_vector"}:
+                raise ContractError("analysis claims must be numerical")
+            display_unit = str(item["display_unit"])
+            display_value = convert_normalized_value(
+                quantity.value, quantity.dimension, display_unit
+            )
+            claims.append(
+                AnalysisReportedQuantityV1(
+                    claim_id=str(item["claim_id"]),
+                    source_kind=source_kind,
+                    source_receipt_sha256=receipt_sha256,
+                    quantity_id=quantity.quantity_id,
+                    quantity_value_sha256=quantity.value_sha256,
+                    display_value=display_value,
+                    display_unit=display_unit,
+                    canonical_value=quantity.value,
+                    canonical_unit=quantity.unit,
+                    dimension=quantity.dimension,
+                    data_kind=quantity.data_kind,
+                )
+            )
+        record = build_analysis_claim_record(
+            task_spec_sha256=task_spec_sha256,
+            claims=tuple(claims),
+        )
+        self.analysis_claim_records[record.receipt_sha256] = record
+        record_body = canonical_data(record)
+        record_body.pop("receipt_sha256")
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.ANALYSIS_CLAIMS_RECORDED.value,
+            payload={
+                "receipt_sha256": record.receipt_sha256,
+                "task_spec_sha256": record.task_spec_sha256,
+                "status": record.status,
+                "source_receipt_sha256s": tuple(
+                    sorted(
+                        {
+                            claim.source_receipt_sha256
+                            for claim in record.claims
+                        }
+                    )
+                ),
+                "claim_ids": tuple(claim.claim_id for claim in record.claims),
+                "critical_finding_count": 0,
+                "record": record_body,
+            },
+            idempotency_key="analysis-claims:" + record.receipt_sha256,
+        )
+        return record
+
     def _record_compiled_command(
         self,
         turn_id: str,
@@ -3176,10 +4108,31 @@ def _validate_tool_arguments(
 
 
 def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> None:
+    alternatives = schema.get("oneOf")
+    if isinstance(alternatives, list):
+        matches = 0
+        for alternative in alternatives:
+            if not isinstance(alternative, Mapping):
+                continue
+            try:
+                _validate_json_value(name, value, alternative)
+            except ContractError:
+                continue
+            matches += 1
+        if matches != 1:
+            raise ContractError(
+                f"tool argument {name} must match exactly one allowed shape"
+            )
+        return
     expected = schema.get("type")
     type_ok = {
         "string": isinstance(value, str),
         "integer": isinstance(value, int) and not isinstance(value, bool),
+        "number": (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        ),
         "boolean": isinstance(value, bool),
         "array": isinstance(value, list),
         "object": isinstance(value, dict),
@@ -3191,9 +4144,28 @@ def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> No
     if isinstance(value, str) and schema.get("pattern"):
         if re.fullmatch(str(schema["pattern"]), value) is None:
             raise ContractError(f"tool argument {name} does not match its pattern")
-    if isinstance(value, int) and "minimum" in schema:
-        if value < int(schema["minimum"]):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "minimum" in schema and value < float(schema["minimum"]):
             raise ContractError(f"tool argument {name} is below its minimum")
+        if "maximum" in schema and value > float(schema["maximum"]):
+            raise ContractError(f"tool argument {name} is above its maximum")
+        if "exclusiveMinimum" in schema and value <= float(
+            schema["exclusiveMinimum"]
+        ):
+            raise ContractError(
+                f"tool argument {name} is not above its exclusive minimum"
+            )
+        if "exclusiveMaximum" in schema and value >= float(
+            schema["exclusiveMaximum"]
+        ):
+            raise ContractError(
+                f"tool argument {name} is not below its exclusive maximum"
+            )
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < int(schema["minItems"]):
+            raise ContractError(f"tool argument {name} has too few items")
+        if "maxItems" in schema and len(value) > int(schema["maxItems"]):
+            raise ContractError(f"tool argument {name} has too many items")
     if isinstance(value, list) and isinstance(schema.get("items"), Mapping):
         for item in value:
             _validate_json_value(name + "[]", item, schema["items"])

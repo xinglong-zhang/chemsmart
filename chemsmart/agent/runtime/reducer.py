@@ -21,6 +21,8 @@ from chemsmart.agent.runtime.records import (
     workflow_run_state_from_record,
 )
 from chemsmart.agent.runtime.events import (
+    ANALYSIS_CLAIMS_RECORDED,
+    ANALYSIS_COMPLETION_EVALUATED,
     CAPABILITY_QUERIED,
     COMMAND_COMPILED,
     COMMAND_INSPECTED,
@@ -35,6 +37,9 @@ from chemsmart.agent.runtime.events import (
     PROJECT_PROMOTED,
     PROVIDER_TURN_OBSERVED,
     RESULT_VERIFIED,
+    RESULT_QUANTITIES_EXTRACTED,
+    THERMOCHEMISTRY_DERIVED,
+    QUANTITY_EXPRESSION_EVALUATED,
     SCIENTIFIC_DECISION_RECORDED,
     SCIENTIFIC_WORKFLOW_MATERIALIZED,
     RUNTIME_TERMINATED,
@@ -77,6 +82,11 @@ class RuntimeState:
     preflight_receipts: list[str] = field(default_factory=list)
     substitution_receipts: list[str] = field(default_factory=list)
     result_verification_receipts: list[str] = field(default_factory=list)
+    result_quantity_receipts: list[str] = field(default_factory=list)
+    thermochemistry_receipts: list[str] = field(default_factory=list)
+    quantity_expression_receipts: list[str] = field(default_factory=list)
+    analysis_claim_receipts: list[str] = field(default_factory=list)
+    analysis_completion_receipts: list[str] = field(default_factory=list)
     execution_receipts: list[str] = field(default_factory=list)
     optimized_geometry_handoff_receipts: list[str] = field(default_factory=list)
     permission_receipts: list[str] = field(default_factory=list)
@@ -173,6 +183,11 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         PROGRAM_PREFLIGHTED: state.preflight_receipts,
         SUBSTITUTION_ASSESSED: state.substitution_receipts,
         RESULT_VERIFIED: state.result_verification_receipts,
+        RESULT_QUANTITIES_EXTRACTED: state.result_quantity_receipts,
+        THERMOCHEMISTRY_DERIVED: state.thermochemistry_receipts,
+        QUANTITY_EXPRESSION_EVALUATED: state.quantity_expression_receipts,
+        ANALYSIS_CLAIMS_RECORDED: state.analysis_claim_receipts,
+        ANALYSIS_COMPLETION_EVALUATED: state.analysis_completion_receipts,
         PROGRAM_EXECUTED: state.execution_receipts,
         OPTIMIZED_GEOMETRY_HANDED_OFF: (
             state.optimized_geometry_handoff_receipts

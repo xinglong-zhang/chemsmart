@@ -30,6 +30,9 @@ _READ_ONLY_ACTIONS = frozenset(
         "command_compile",
         "command_inspect",
         "artifact_inspect",
+        "result_extract",
+        "thermochemistry_derive",
+        "quantity_evaluate",
         "fixture_safe_preview",
     }
 )

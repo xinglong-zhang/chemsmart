@@ -42,6 +42,15 @@ def _task_options(function):
             required=True,
             help="Disposable task workspace containing user-approved artifacts.",
         ),
+        click.option(
+            "--analysis-completion-file",
+            type=click.Path(exists=True, dir_okay=False, path_type=Path),
+            default=None,
+            help=(
+                "Host-owned JSON policy for receipt-based numerical-analysis "
+                "completion."
+            ),
+        ),
     )
     for option in reversed(options):
         function = option(function)
@@ -65,7 +74,15 @@ def agent():
 
 @agent.command("plan")
 @_task_options
-def plan(task, task_file, provider, provider_config, secret_file, workspace):
+def plan(
+    task,
+    task_file,
+    provider,
+    provider_config,
+    secret_file,
+    workspace,
+    analysis_completion_file,
+):
     """Create and safely preview a command-compiled research workflow."""
 
     from chemsmart.agent.live_session import run_live_agent_session
@@ -78,6 +95,7 @@ def plan(task, task_file, provider, provider_config, secret_file, workspace):
         workspace=workspace,
         execution_enabled=False,
         approval_file=None,
+        analysis_completion_file=analysis_completion_file,
     )
     click.echo(result.public_summary_json())
 
@@ -97,6 +115,7 @@ def run(
     provider_config,
     secret_file,
     workspace,
+    analysis_completion_file,
     approval_file,
 ):
     """Plan and, when approved, execute host-compiled workflow nodes."""
@@ -111,6 +130,7 @@ def run(
         workspace=workspace,
         execution_enabled=approval_file is not None,
         approval_file=approval_file,
+        analysis_completion_file=analysis_completion_file,
     )
     click.echo(result.public_summary_json())
 

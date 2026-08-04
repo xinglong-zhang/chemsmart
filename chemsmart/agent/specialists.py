@@ -60,6 +60,9 @@ _READ_ONLY_TOOLS = frozenset(
         "read_project_yaml",
         "validate_project_yaml",
         "inspect_calculation_artifact",
+        "extract_result_quantities",
+        "derive_thermochemistry",
+        "evaluate_quantity_expression",
     }
 )
 _ROLE_TOOLS = {
@@ -70,6 +73,9 @@ _ROLE_TOOLS = {
             "read_project_yaml",
             "validate_project_yaml",
             "inspect_calculation_artifact",
+            "extract_result_quantities",
+            "derive_thermochemistry",
+            "evaluate_quantity_expression",
         }
     ),
     PYSCF_SPECIALIST: frozenset(
@@ -79,6 +85,9 @@ _ROLE_TOOLS = {
             "read_project_yaml",
             "validate_project_yaml",
             "inspect_calculation_artifact",
+            "extract_result_quantities",
+            "derive_thermochemistry",
+            "evaluate_quantity_expression",
         }
     ),
     DAG_SPECIALIST: frozenset(

@@ -19,6 +19,7 @@ from chemsmart.agent.adaptive_api_campaign import (
     ApiAttemptReceiptV1,
     build_api_attempt_receipt,
 )
+from chemsmart.agent.analysis_completion import AnalysisIncompleteError
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekProtocolError,
@@ -294,26 +295,65 @@ class ToolLoopRunner:
             tool_calls = assistant.get("tool_calls") or []
             if not tool_calls:
                 final_text = str(assistant.get("content") or "")
-                try:
-                    completion_required = (
-                        self.host.completion_receipts_for_latest_preflight()
-                    )
-                    terminal_state = "complete"
-                    terminal_reason = "host readiness gates passed"
-                except ContractError:
+                analysis_policy = self.host.analysis_completion_policy
+                if analysis_policy is not None:
                     try:
                         completion_required = (
-                            self.host.latest_workflow_draft_receipt(),
+                            self.host.completion_receipts_for_analysis(
+                                turn_id=envelope.turn_id
+                            )
                         )
-                        terminal_state = "planned"
+                        final_text = self.host.render_completed_analysis_report(
+                            completion_required[0]
+                        )
+                        terminal_state = "complete"
                         terminal_reason = (
-                            "workflow draft recorded; action-grade gates remain"
+                            "task-owned analysis completion policy passed"
                         )
+                    except AnalysisIncompleteError:
+                        try:
+                            completion_required = (
+                                self.host.latest_workflow_draft_receipt(),
+                            )
+                            terminal_state = "planned"
+                            terminal_reason = (
+                                "workflow draft recorded; required analysis "
+                                "stages remain incomplete"
+                            )
+                        except ContractError:
+                            terminal_state = "blocked"
+                            terminal_reason = (
+                                "model stopped before the required analysis "
+                                "completion policy passed"
+                            )
+                    except ContractError as exc:
+                        final_text = (
+                            "analysis completion evaluator failed: " + str(exc)
+                        )
+                        terminal_state = "failed"
+                        terminal_reason = final_text
+                else:
+                    try:
+                        completion_required = (
+                            self.host.completion_receipts_for_latest_preflight()
+                        )
+                        terminal_state = "complete"
+                        terminal_reason = "host readiness gates passed"
                     except ContractError:
-                        terminal_state = "blocked"
-                        terminal_reason = (
-                            "model stopped before a workflow or readiness gate"
-                        )
+                        try:
+                            completion_required = (
+                                self.host.latest_workflow_draft_receipt(),
+                            )
+                            terminal_state = "planned"
+                            terminal_reason = (
+                                "workflow draft recorded; action-grade gates "
+                                "remain"
+                            )
+                        except ContractError:
+                            terminal_state = "blocked"
+                            terminal_reason = (
+                                "model stopped before a workflow or readiness gate"
+                            )
                 break
             if successful_tools + failed_tools + len(tool_calls) > (
                 envelope.budget.max_tool_calls

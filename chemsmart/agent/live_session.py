@@ -26,6 +26,10 @@ import sys
 import uuid
 from typing import Any, Iterable, Mapping
 
+from chemsmart.analysis.result_quantities import (
+    QuantityExtractionError,
+    validate_pyscf_analysis_artifact,
+)
 from chemsmart.agent._contracts import (
     ContractError,
     TrustedArtifactRefV1,
@@ -39,6 +43,7 @@ from chemsmart.agent.adaptive_api_campaign import (
     AdaptiveHypothesisV1,
     AdaptiveNetworkBudgetV1,
 )
+from chemsmart.agent.analysis_completion import load_analysis_completion_policy
 from chemsmart.agent.api_access import load_secret_lease
 from chemsmart.agent.bootstrap import (
     bootstrap_program_conformance,
@@ -128,6 +133,47 @@ class _XyzObservation:
             "atom_count": self.atom_count,
             "symbols": self.symbols,
             "provenance_status": "workspace_exact_user_approved",
+        }
+
+
+@dataclass(frozen=True)
+class _PySCFResultObservation:
+    artifact: TrustedArtifactRefV1
+    jobtype: str
+    method: str
+    applied_method: str
+    basis: str
+    engine: str
+    charge: int
+    multiplicity: int
+    project_yaml_sha256: str
+    input_artifact_sha256: str
+    validation_receipt_sha256: str
+    scientific_validation_state: str
+
+    def public_record(self) -> dict[str, Any]:
+        return {
+            "artifact_id": self.artifact.artifact_id,
+            "artifact_class": self.artifact.kind,
+            "sha256": self.artifact.sha256,
+            "size_bytes": self.artifact.size_bytes,
+            "program": "pyscf",
+            "jobtype": self.jobtype,
+            "requested_method": self.method,
+            "applied_method": self.applied_method,
+            "basis": self.basis,
+            "engine": self.engine,
+            "charge": self.charge,
+            "multiplicity": self.multiplicity,
+            "project_yaml_sha256": self.project_yaml_sha256,
+            "input_artifact_sha256": self.input_artifact_sha256,
+            "validation_receipt_sha256": self.validation_receipt_sha256,
+            "scientific_validation_state": self.scientific_validation_state,
+            "functional_evidence_ref": (
+                "result_functional_resolution:"
+                f"{self.validation_receipt_sha256}"
+            ),
+            "provenance_status": "workspace_exact_structured_result",
         }
 
 
@@ -437,13 +483,17 @@ def probe_live_experiment_preparation(
     )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
+    result_observations = _scan_pyscf_result_artifacts(workspace_path)
     if not observations:
         raise ContractError("experiment preparation requires an exact XYZ")
     identity_records = _validated_identity_records(
         observations, approved_molecular_identity
     )
     task_spec_sha256 = _task_spec_sha256(
-        task, observations, approved_molecular_identity
+        task,
+        observations,
+        approved_molecular_identity,
+        result_observations=result_observations,
     )
     snapshot = campaign_preparation_snapshot
     if snapshot is None:
@@ -463,6 +513,7 @@ def probe_live_experiment_preparation(
         task=task,
         task_spec_sha256=task_spec_sha256,
         observations=observations,
+        result_observations=result_observations,
         conformance_records=snapshot.conformance_records,
         registry_sha256=snapshot.registry_sha256,
         live_schema_sha256=snapshot.live_cli_schema_sha256,
@@ -510,6 +561,7 @@ def run_live_agent_session(
     workspace: str | Path,
     execution_enabled: bool,
     approval_file: str | Path | None,
+    analysis_completion_file: str | Path | None = None,
     experiment_arm: QwenDfcArmV1 | None = None,
     experiment_case: QwenPyscfCaseSpecV1 | None = None,
     experiment_repeat_index: int = 0,
@@ -563,16 +615,36 @@ def run_live_agent_session(
         )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
+    result_observations = _scan_pyscf_result_artifacts(workspace_path)
     identity_records = _validated_identity_records(
         observations, approved_molecular_identity
     )
     task_spec_sha256 = _task_spec_sha256(
-        task, observations, approved_molecular_identity
+        task,
+        observations,
+        approved_molecular_identity,
+        result_observations=result_observations,
+    )
+    analysis_completion_policy = (
+        load_analysis_completion_policy(
+            analysis_completion_file,
+            task_spec_sha256=task_spec_sha256,
+        )
+        if analysis_completion_file is not None
+        else None
+    )
+    analysis_only_session = bool(
+        not observations
+        and result_observations
+        and analysis_completion_policy is not None
+        and not execution_enabled
+        and experiment_arm is None
+        and campaign_preparation_snapshot is None
     )
     session_id = _session_id(task_spec_sha256)
     run_directory = _private_run_directory(workspace_path, session_id)
 
-    if not observations:
+    if not observations and not analysis_only_session:
         return _local_result(
             session_id=session_id,
             task_spec_sha256=task_spec_sha256,
@@ -603,6 +675,16 @@ def run_live_agent_session(
         )
         conformance_records = (
             campaign_preparation_snapshot.conformance_records
+        )
+    elif analysis_only_session:
+        registry = load_program_capabilities()
+        live_schema = build_live_click_schema()
+        conformance = ()
+        environment_targets, compute_receipts, environment_records = (
+            _observe_environments()
+        )
+        conformance_records = tuple(
+            sorted(environment_records, key=_record_sort_key)
         )
     else:
         registry = load_program_capabilities()
@@ -643,7 +725,8 @@ def run_live_agent_session(
     host_kwargs: dict[str, Any] = {
         "event_store": event_store,
         "artifacts": {
-            item.artifact.artifact_id: item.artifact for item in observations
+            item.artifact.artifact_id: item.artifact
+            for item in (*observations, *result_observations)
         },
         "environment_targets": environment_targets,
         "compute_environment_receipts": compute_receipts,
@@ -665,6 +748,11 @@ def run_live_agent_session(
         # The execution composition below replaces this with the exact
         # user-approved workflow workspace.
         "approved_workspace": run_directory,
+        "result_functional_evidence": {
+            item.validation_receipt_sha256: item.public_record()
+            for item in result_observations
+        },
+        "analysis_completion_policy": analysis_completion_policy,
     }
     if use_execution_surface:
         execution_inputs = _execution_composition_inputs(
@@ -698,6 +786,7 @@ def run_live_agent_session(
         task=task,
         task_spec_sha256=task_spec_sha256,
         observations=observations,
+        result_observations=result_observations,
         conformance_records=conformance_records,
         registry_sha256=registry.registry_sha256,
         live_schema_sha256=live_schema.schema_sha256,
@@ -720,6 +809,11 @@ def run_live_agent_session(
             else None
         ),
         approved_identity_records=identity_records,
+        analysis_completion_record=(
+            analysis_completion_policy.public_record()
+            if analysis_completion_policy is not None
+            else None
+        ),
     )
     base_messages = _coordinator_base_messages(
         context=context,
@@ -813,7 +907,10 @@ def run_live_agent_session(
         session_id=session_id,
         messages=messages,
         task_spec_sha256=task_spec_sha256,
-        artifact_sha256s=tuple(item.artifact.sha256 for item in observations),
+        artifact_sha256s=tuple(
+            item.artifact.sha256
+            for item in (*observations, *result_observations)
+        ),
         tool_schema_sha256=surface.tool_schema_sha256,
         network_budget=network_budget,
         execution_requested=execution_enabled,
@@ -825,7 +922,10 @@ def run_live_agent_session(
         session_id=session_id,
         messages=messages,
         task_spec_sha256=task_spec_sha256,
-        workspace_records=tuple(item.public_record() for item in observations),
+        workspace_records=tuple(
+            item.public_record()
+            for item in (*observations, *result_observations)
+        ),
         tool_schema_sha256=surface.tool_schema_sha256,
         execution_enabled=use_execution_surface,
         provider_profile=profile,
@@ -947,6 +1047,7 @@ def run_live_agent_session(
         "final_text": final_text,
         "artifact_records": (
             *(item.public_record() for item in observations),
+            *(item.public_record() for item in result_observations),
             *identity_records,
         ),
         "conformance_records": conformance_records,
@@ -1416,6 +1517,103 @@ def _scan_xyz_artifacts(workspace: Path) -> tuple[_XyzObservation, ...]:
     )
 
 
+def _scan_pyscf_result_artifacts(
+    workspace: Path,
+) -> tuple[_PySCFResultObservation, ...]:
+    """Bind user-placed structured results without exposing model paths.
+
+    Only normally terminated PySCF HDF5 artifacts with finite, typed metadata
+    enter the tool host. Invalid or legacy result files are ignored rather than
+    being misrepresented as analysis-ready evidence.
+    """
+
+    observations: dict[str, _PySCFResultObservation] = {}
+    private_root = workspace / _PRIVATE_ROOT_NAME
+    host_artifact_root = workspace / "artifacts"
+    host_node_root = workspace / "nodes"
+    for candidate in sorted(workspace.rglob("*.h5")):
+        if any(
+            root in candidate.parents
+            for root in (private_root, host_artifact_root, host_node_root)
+        ):
+            continue
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(workspace)
+        except ValueError as exc:
+            raise ContractError("result artifact escapes the approved workspace") from exc
+        digest = file_sha256(resolved)
+        try:
+            output, receipt = validate_pyscf_analysis_artifact(
+                resolved, expected_sha256=digest
+            )
+            receipt_sha256 = str(receipt["receipt_sha256"])
+            jobtype = str(output.jobtype or "").strip().lower()
+            method = str(output.method or "").strip()
+            applied_method = str(output.spec.get("xc") or method).strip()
+            basis = str(output.basis or "").strip()
+            engine = str(output.engine or "").strip().lower()
+            charge = output.charge
+            multiplicity = output.multiplicity
+            project_yaml_sha256 = str(output.project_yaml_digest or "").strip()
+            input_artifact_sha256 = str(
+                output.spec.get("input_artifact_sha256") or ""
+            ).strip()
+            if (
+                jobtype not in {"sp", "opt", "hess"}
+                or not method
+                or not applied_method
+                or not basis
+                or engine not in {"cpu", "gpu"}
+                or not isinstance(charge, int)
+                or not isinstance(multiplicity, int)
+                or multiplicity < 1
+            ):
+                continue
+        except (
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            ValueError,
+            KeyError,
+            TypeError,
+            QuantityExtractionError,
+        ):
+            continue
+        artifact = TrustedArtifactRefV1(
+            artifact_id=f"pyscf-result-{digest[:16]}",
+            kind="pyscf_hdf5",
+            sha256=digest,
+            size_bytes=resolved.stat().st_size,
+            path=str(resolved),
+            cli_value=str(resolved),
+        )
+        observations.setdefault(
+            digest,
+            _PySCFResultObservation(
+                artifact=artifact,
+                jobtype=jobtype,
+                method=method,
+                applied_method=applied_method,
+                basis=basis,
+                engine=engine,
+                charge=charge,
+                multiplicity=multiplicity,
+                project_yaml_sha256=project_yaml_sha256,
+                input_artifact_sha256=input_artifact_sha256,
+                validation_receipt_sha256=receipt_sha256,
+                scientific_validation_state=str(
+                    receipt["scientific_validation_state"]
+                ),
+            ),
+        )
+    return tuple(
+        sorted(observations.values(), key=lambda item: item.artifact.artifact_id)
+    )
+
+
 def _inspect_xyz(path: Path) -> tuple[int, tuple[str, ...]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -1443,6 +1641,8 @@ def _task_spec_sha256(
     task: str,
     observations: Iterable[_XyzObservation],
     approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    *,
+    result_observations: Iterable[_PySCFResultObservation] = (),
 ) -> str:
     return canonical_sha256(
         {
@@ -1456,6 +1656,15 @@ def _task_spec_sha256(
                     "symbols": item.symbols,
                 }
                 for item in observations
+            ),
+            "result_artifacts": tuple(
+                {
+                    "artifact_id": item.artifact.artifact_id,
+                    "sha256": item.artifact.sha256,
+                    "program": "pyscf",
+                    "jobtype": item.jobtype,
+                }
+                for item in result_observations
             ),
             "approved_molecular_identity_sha256": (
                 approved_molecular_identity.identity_sha256
@@ -1502,7 +1711,7 @@ def _bootstrap_conformance(
 ]:
     bootstrap_directory = run_directory / "bootstrap"
     bootstrap_directory.mkdir(mode=0o700)
-    project_path = bootstrap_directory / "pyscf-water.yaml"
+    project_path = bootstrap_directory / "pyscf-conformance.yaml"
     document = project_document(
         program="pyscf", sections=_locked_pyscf_sections()
     )
@@ -1836,6 +2045,7 @@ def _public_context(
     task: str,
     task_spec_sha256: str,
     observations: tuple[_XyzObservation, ...],
+    result_observations: tuple[_PySCFResultObservation, ...] = (),
     conformance_records: tuple[dict[str, Any], ...],
     registry_sha256: str,
     live_schema_sha256: str,
@@ -1846,6 +2056,7 @@ def _public_context(
     provider_record: Mapping[str, Any] | None = None,
     experiment_record: Mapping[str, Any] | None = None,
     approved_identity_records: tuple[dict[str, Any], ...] = (),
+    analysis_completion_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     public_workflow = dict(approved_workflow_record or {})
     return {
@@ -1854,12 +2065,18 @@ def _public_context(
         "task_spec_sha256": task_spec_sha256,
         "registry_sha256": registry_sha256,
         "live_cli_schema_sha256": live_schema_sha256,
-        "artifacts": tuple(item.public_record() for item in observations),
+        "artifacts": tuple(
+            item.public_record()
+            for item in (*observations, *result_observations)
+        ),
         "approved_molecular_identities": approved_identity_records,
         "approved_project_artifacts": approved_project_records,
         "approved_workflow": public_workflow,
         "provider": dict(provider_record or {}),
         "harness_experiment": dict(experiment_record or {}),
+        "analysis_completion_policy": dict(
+            analysis_completion_record or {}
+        ),
         "approved_execution_contract": _approved_execution_context(
             public_workflow
         ),
@@ -2150,6 +2367,34 @@ def _system_prompt(
         "When an approved project artifact is supplied, read and validate that exact "
         "artifact instead of rerendering an equivalent project. "
         "If critical evidence is missing, identify it and block honestly. "
+        "When public context contains a host-bound structured result, finish the "
+        "scientific data path rather than stopping at a calculation plan: use "
+        "extract_result_quantities for raw observables, derive_thermochemistry "
+        "with explicit temperature and pressure for RRHO quantities, and "
+        "evaluate_quantity_expression for requested arithmetic or geometric "
+        "derivations. Local input and intermediate node IDs are presentation-only; "
+        "the host grades an identifier-independent symbolic DAG. When two inputs "
+        "carry the same source quantity ID, give them distinct task-semantic roles "
+        "such as reactant, product, conformer-a, or basis-cardinal-3; never use a "
+        "receipt hash as a semantic role. Use record_analysis_claims to bind each requested reported "
+        "number and display unit to an exact receipt quantity; the host, not the "
+        "model, supplies the value. The host renders the authoritative final numeric "
+        "section from that claim record. Report only those host-rendered claim values. "
+        "Never copy a "
+        "paper's hidden target value into a tool call, and never replace a required "
+        "target-producing calculation or postprocessing step by deleting it from "
+        "the plan. If a result artifact is absent, leave postprocessing planned and "
+        "state exactly which producer artifact is required. A structured result's "
+        "requested/applied functional distinction may be cited only through its "
+        "exact result_functional_resolution evidence_ref from public context; do "
+        "not require a new project-validation receipt merely to analyze an existing "
+        "result. When public context contains analysis_completion_policy, complete "
+        "every listed stage and cite each extraction, thermochemistry, expression, "
+        "and analysis-claim "
+        "receipt in the final scientific decision by passing its exact digest in "
+        "postprocessing_receipt_sha256s rather than constructing a free-form receipt "
+        "label; the host, not the model, decides "
+        "whether that task-owned policy passed. "
         + execution_sentence
         + experiment_sentence
     )

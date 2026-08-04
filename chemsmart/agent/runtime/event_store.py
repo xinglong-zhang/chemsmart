@@ -47,6 +47,8 @@ from chemsmart.agent.workflows import (
     ScientificWorkflowPlanV2,
 )
 from chemsmart.agent.runtime.events import (
+    ANALYSIS_CLAIMS_RECORDED,
+    ANALYSIS_COMPLETION_EVALUATED,
     CAPABILITY_QUERIED,
     COMMAND_COMPILED,
     COMMAND_INSPECTED,
@@ -60,11 +62,14 @@ from chemsmart.agent.runtime.events import (
     PROJECT_VALIDATED,
     PROJECT_PROMOTED,
     RESULT_VERIFIED,
+    RESULT_QUANTITIES_EXTRACTED,
     SCIENTIFIC_DECISION_RECORDED,
     SCIENTIFIC_WORKFLOW_MATERIALIZED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
     SUBSTITUTION_ASSESSED,
+    THERMOCHEMISTRY_DERIVED,
+    QUANTITY_EXPRESSION_EVALUATED,
     VALIDATOR_OBSERVED,
     WORKFLOW_APPROVAL_CONSUMED,
     WORKFLOW_EXECUTION_STARTED,
@@ -744,11 +749,21 @@ class RuntimeEventStore:
                 )
                 if green != required:
                     raise ContractError("a required completion gate is red")
-                if not state.preflight_receipts or (
-                    state.preflight_receipts[-1] not in required
+                latest_preflight_is_required = bool(
+                    state.preflight_receipts
+                    and state.preflight_receipts[-1] in required
+                )
+                latest_analysis_is_required = bool(
+                    state.analysis_completion_receipts
+                    and state.analysis_completion_receipts[-1] in required
+                )
+                if not (
+                    latest_preflight_is_required
+                    or latest_analysis_is_required
                 ):
                     raise ContractError(
-                        "completion requires the latest node preflight"
+                        "completion requires the latest command preflight or "
+                        "analysis completion receipt"
                     )
                 gate = canonical_sha256(
                     {
@@ -1055,6 +1070,42 @@ def _receipt_is_green(
         )
     if event.kind == RESULT_VERIFIED:
         return value.get("status") == "valid"
+    if event.kind == RESULT_QUANTITIES_EXTRACTED:
+        return value.get("status") == "extracted"
+    if event.kind == THERMOCHEMISTRY_DERIVED:
+        return value.get("status") == "derived"
+    if event.kind == QUANTITY_EXPRESSION_EVALUATED:
+        return value.get("status") == "derived"
+    if event.kind == ANALYSIS_CLAIMS_RECORDED:
+        source_receipts = tuple(value.get("source_receipt_sha256s") or ())
+        return bool(
+            value.get("status") == "recorded"
+            and _finding_count(value) == 0
+            and source_receipts
+            and all(
+                _receipt_is_green(
+                    events, source, _seen | frozenset({digest})
+                )
+                for source in source_receipts
+            )
+        )
+    if event.kind == ANALYSIS_COMPLETION_EVALUATED:
+        source_receipts = tuple(
+            value.get("source_receipt_sha256s") or ()
+        )
+        return bool(
+            value.get("status") == "passed"
+            and _finding_count(value) == 0
+            and source_receipts
+            and all(
+                _receipt_is_green(
+                    events,
+                    source,
+                    _seen | frozenset({digest}),
+                )
+                for source in source_receipts
+            )
+        )
     if event.kind == PROGRAM_EXECUTED:
         return (
             value.get("execution_state") == "validated"
@@ -1100,6 +1151,11 @@ def _observed_receipts(state: RuntimeState) -> set[str]:
         state.preflight_receipts,
         state.substitution_receipts,
         state.result_verification_receipts,
+        state.result_quantity_receipts,
+        state.thermochemistry_receipts,
+        state.quantity_expression_receipts,
+        state.analysis_claim_receipts,
+        state.analysis_completion_receipts,
         state.execution_receipts,
         state.optimized_geometry_handoff_receipts,
         state.permission_receipts,

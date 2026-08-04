@@ -49,6 +49,11 @@ class EventKind(str, Enum):
     PROGRAM_PREFLIGHTED = "program_node_preflighted"
     SUBSTITUTION_ASSESSED = "program_substitution_assessed"
     RESULT_VERIFIED = "program_result_verified"
+    RESULT_QUANTITIES_EXTRACTED = "result_quantities_extracted"
+    THERMOCHEMISTRY_DERIVED = "thermochemistry_derived"
+    QUANTITY_EXPRESSION_EVALUATED = "quantity_expression_evaluated"
+    ANALYSIS_CLAIMS_RECORDED = "analysis_claims_recorded"
+    ANALYSIS_COMPLETION_EVALUATED = "analysis_completion_evaluated"
     PROGRAM_EXECUTED = "program_execution_observed"
     OPTIMIZED_GEOMETRY_HANDED_OFF = "optimized_geometry_handed_off"
     PROVIDER_TURN_OBSERVED = "provider_turn_observed"
@@ -77,6 +82,11 @@ VALIDATOR_OBSERVED = EventKind.VALIDATOR_OBSERVED.value
 PROGRAM_PREFLIGHTED = EventKind.PROGRAM_PREFLIGHTED.value
 SUBSTITUTION_ASSESSED = EventKind.SUBSTITUTION_ASSESSED.value
 RESULT_VERIFIED = EventKind.RESULT_VERIFIED.value
+RESULT_QUANTITIES_EXTRACTED = EventKind.RESULT_QUANTITIES_EXTRACTED.value
+THERMOCHEMISTRY_DERIVED = EventKind.THERMOCHEMISTRY_DERIVED.value
+QUANTITY_EXPRESSION_EVALUATED = EventKind.QUANTITY_EXPRESSION_EVALUATED.value
+ANALYSIS_CLAIMS_RECORDED = EventKind.ANALYSIS_CLAIMS_RECORDED.value
+ANALYSIS_COMPLETION_EVALUATED = EventKind.ANALYSIS_COMPLETION_EVALUATED.value
 PROGRAM_EXECUTED = EventKind.PROGRAM_EXECUTED.value
 OPTIMIZED_GEOMETRY_HANDED_OFF = EventKind.OPTIMIZED_GEOMETRY_HANDED_OFF.value
 PERMISSION_RESOLVED = EventKind.PERMISSION_RESOLVED.value
@@ -109,6 +119,11 @@ _RECEIPT_EVENTS = frozenset(
         PROGRAM_PREFLIGHTED,
         SUBSTITUTION_ASSESSED,
         RESULT_VERIFIED,
+        RESULT_QUANTITIES_EXTRACTED,
+        THERMOCHEMISTRY_DERIVED,
+        QUANTITY_EXPRESSION_EVALUATED,
+        ANALYSIS_CLAIMS_RECORDED,
+        ANALYSIS_COMPLETION_EVALUATED,
         PROGRAM_EXECUTED,
         OPTIMIZED_GEOMETRY_HANDED_OFF,
         PERMISSION_RESOLVED,
@@ -290,6 +305,11 @@ def _validate_typed_receipt_payload(
             {"materialized", "validated", "rejected"},
         ),
         SCIENTIFIC_DECISION_RECORDED: ("status", {"recorded"}),
+        ANALYSIS_COMPLETION_EVALUATED: (
+            "status",
+            {"passed", "blocked"},
+        ),
+        ANALYSIS_CLAIMS_RECORDED: ("status", {"recorded"}),
         WORKFLOW_PLANNED: ("status", {"planned"}),
         COMMAND_COMPILED: ("status", {"compiled"}),
         COMMAND_INSPECTED: ("status", {"valid", "invalid"}),
@@ -394,6 +414,8 @@ def _validate_typed_receipt_payload(
             if critical_count:
                 raise ContractError("previewed preflight cannot carry findings")
     if kind in {
+        ANALYSIS_COMPLETION_EVALUATED,
+        ANALYSIS_CLAIMS_RECORDED,
         SCIENTIFIC_WORKFLOW_MATERIALIZED,
         WORKFLOW_APPROVAL_CONSUMED,
         WORKFLOW_EXECUTION_STARTED,
@@ -404,6 +426,124 @@ def _validate_typed_receipt_payload(
             raise ContractError(f"{kind} requires an embedded canonical record")
         if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
             raise ContractError(f"{kind} record digest mismatch")
+    if kind == ANALYSIS_COMPLETION_EVALUATED:
+        record = payload["record"]
+        if (
+            record.get("policy_sha256") != payload.get("policy_sha256")
+            or record.get("task_spec_sha256")
+            != payload.get("task_spec_sha256")
+            or tuple(record.get("source_receipt_sha256s") or ())
+            != tuple(payload.get("source_receipt_sha256s") or ())
+            or record.get("status") != payload.get("status")
+        ):
+            raise ContractError(
+                "analysis completion envelope differs from its canonical record"
+            )
+        findings = tuple(record.get("findings") or ())
+        if len(findings) != _nonnegative_int(
+            payload, "critical_finding_count"
+        ):
+            raise ContractError(
+                "analysis completion finding count differs from its record"
+            )
+        policy_record = payload.get("policy_record")
+        if policy_record is not None:
+            if not isinstance(policy_record, Mapping):
+                raise ContractError(
+                    "analysis completion policy record must be canonical"
+                )
+            policy_body = dict(policy_record)
+            embedded_policy_sha256 = str(
+                policy_body.pop("policy_sha256", "") or ""
+            )
+            if (
+                embedded_policy_sha256
+                != str(payload.get("policy_sha256") or "")
+                or canonical_sha256(policy_body) != embedded_policy_sha256
+            ):
+                raise ContractError("analysis completion policy digest mismatch")
+        source_receipts = tuple(payload.get("source_receipt_sha256s") or ())
+        if not source_receipts or source_receipts != tuple(
+            sorted(set(source_receipts))
+        ):
+            raise ContractError(
+                "analysis completion requires sorted source receipts"
+            )
+        for digest in source_receipts:
+            require_sha256(str(digest), "source_receipt_sha256")
+        if payload.get("status") == "passed" and (
+            _nonnegative_int(payload, "critical_finding_count") != 0
+        ):
+            raise ContractError(
+                "passed analysis completion cannot carry critical findings"
+            )
+    if kind == ANALYSIS_CLAIMS_RECORDED:
+        record = payload["record"]
+        claims = tuple(record.get("claims") or ())
+        if not claims or not all(isinstance(claim, Mapping) for claim in claims):
+            raise ContractError("analysis claim record requires typed claims")
+        record_sources = tuple(
+            sorted(
+                {
+                    str(claim.get("source_receipt_sha256") or "")
+                    for claim in claims
+                }
+            )
+        )
+        record_claim_ids = tuple(
+            sorted(str(claim.get("claim_id") or "") for claim in claims)
+        )
+        if (
+            record.get("task_spec_sha256")
+            != payload.get("task_spec_sha256")
+            or record.get("status") != payload.get("status")
+            or record_sources
+            != tuple(payload.get("source_receipt_sha256s") or ())
+            or record_claim_ids != tuple(payload.get("claim_ids") or ())
+        ):
+            raise ContractError(
+                "analysis claim envelope differs from its canonical record"
+            )
+        source_receipts = tuple(payload.get("source_receipt_sha256s") or ())
+        if not source_receipts or source_receipts != tuple(
+            sorted(set(source_receipts))
+        ):
+            raise ContractError("analysis claims require sorted source receipts")
+        for digest in source_receipts:
+            require_sha256(str(digest), "analysis claim source receipt")
+    if kind in {
+        RESULT_QUANTITIES_EXTRACTED,
+        THERMOCHEMISTRY_DERIVED,
+        QUANTITY_EXPRESSION_EVALUATED,
+    } and "record" in payload:
+        record = payload.get("record")
+        if not isinstance(record, Mapping):
+            raise ContractError(f"{kind} record must be canonical")
+        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+            raise ContractError(f"{kind} record digest mismatch")
+        if record.get("status") != payload.get("status"):
+            raise ContractError(f"{kind} status differs from its record")
+        if kind in {RESULT_QUANTITIES_EXTRACTED, THERMOCHEMISTRY_DERIVED} and (
+            record.get("artifact_sha256") != payload.get("artifact_sha256")
+        ):
+            raise ContractError(f"{kind} artifact differs from its record")
+        if kind == QUANTITY_EXPRESSION_EVALUATED and (
+            record.get("semantic_signature_sha256")
+            != payload.get("semantic_signature_sha256")
+        ):
+            raise ContractError(
+                "quantity expression signature differs from its record"
+            )
+    if kind == SCIENTIFIC_DECISION_RECORDED and "record" in payload:
+        record = payload.get("record")
+        if not isinstance(record, Mapping):
+            raise ContractError("scientific decision record must be canonical")
+        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+            raise ContractError("scientific decision record digest mismatch")
+        if record.get("decision_id") != payload.get("decision_id"):
+            raise ContractError(
+                "scientific decision identity differs from its record"
+            )
     _validate_canonical_execution_record(kind, payload)
 
 
@@ -522,6 +662,8 @@ def _event_hash(body: Mapping[str, Any], *, schema_version: int) -> str:
 
 
 __all__ = [
+    "ANALYSIS_COMPLETION_EVALUATED",
+    "ANALYSIS_CLAIMS_RECORDED",
     "CAPABILITY_QUERIED",
     "API_ATTEMPT_OBSERVED",
     "COMMAND_COMPILED",
@@ -538,6 +680,9 @@ __all__ = [
     "SCIENTIFIC_WORKFLOW_MATERIALIZED",
     "PROVIDER_TURN_OBSERVED",
     "RESULT_VERIFIED",
+    "RESULT_QUANTITIES_EXTRACTED",
+    "THERMOCHEMISTRY_DERIVED",
+    "QUANTITY_EXPRESSION_EVALUATED",
     "OPTIMIZED_GEOMETRY_HANDED_OFF",
     "RUNTIME_TERMINATED",
     "SAFE_PREVIEWED",

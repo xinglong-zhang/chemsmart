@@ -31,6 +31,7 @@ def build_command_compiled_tool_surface(
     registry = registry or load_program_capabilities()
     programs = [item.program for item in registry.programs]
     program = {"type": "string", "enum": programs}
+    structured_result_program = {"type": "string", "enum": ["pyscf"]}
     digest = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
     tools = (
         _tool(
@@ -251,6 +252,17 @@ def build_command_compiled_tool_surface(
                 "diagnostics": {"type": "array", "items": _string()},
                 "stage_order": {"type": "array", "items": _string()},
                 "evidence_refs": {"type": "array", "items": _string()},
+                "postprocessing_receipt_sha256s": {
+                    "type": "array",
+                    "items": digest,
+                    "maxItems": 64,
+                    "description": (
+                        "Exact receipt_sha256 values returned by quantity "
+                        "extraction, thermochemistry, or quantity-expression "
+                        "tools. The host validates and canonicalizes them; do "
+                        "not embed receipt IDs in free-form evidence strings."
+                    ),
+                },
             },
             (
                 "decision_id",
@@ -281,6 +293,143 @@ def build_command_compiled_tool_surface(
                 "settings_id",
                 "run_receipt_id",
             ),
+        ),
+        _tool(
+            "extract_result_quantities",
+            (
+                "Parse selected numerical or scientific fields from a trusted "
+                "host-bound result artifact. The model supplies semantic selectors, "
+                "never a file path."
+            ),
+            {
+                "program": structured_result_program,
+                "artifact_id": _string(),
+                "selectors": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "quantity_id": _public_identifier(),
+                            "selector": {
+                                "type": "string",
+                                "enum": [
+                                    "energy",
+                                    "energies",
+                                    "positions",
+                                    "symbols",
+                                    "vibrational_frequencies",
+                                    "homo",
+                                    "lumo",
+                                    "gap",
+                                    "charge",
+                                    "multiplicity",
+                                    "method",
+                                    "basis",
+                                ],
+                            },
+                        },
+                        "required": ["quantity_id", "selector"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ("program", "artifact_id", "selectors"),
+        ),
+        _tool(
+            "derive_thermochemistry",
+            (
+                "Derive RRHO thermochemistry from a trusted Hessian result at "
+                "an explicit temperature and pressure using ChemSmart's common engine."
+            ),
+            {
+                "program": structured_result_program,
+                "artifact_id": _string(),
+                "temperature_k": {"type": "number", "exclusiveMinimum": 0},
+                "pressure_atm": {"type": "number", "exclusiveMinimum": 0},
+            },
+            ("program", "artifact_id", "temperature_k", "pressure_atm"),
+        ),
+        _tool(
+            "evaluate_quantity_expression",
+            (
+                "Evaluate a bounded dimension-aware expression DAG over prior "
+                "extraction or thermochemistry receipts, or over typed literal "
+                "nodes when inputs is empty; Python and formula strings are not "
+                "accepted. Expression inputs use local input_id aliases. "
+                "For converted outputs, source_value/source_unit are the requested "
+                "display pair; value/unit remain the canonical arithmetic pair."
+            ),
+            {
+                "expression_id": _public_identifier(),
+                "inputs": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "input_id": _public_identifier(),
+                            "semantic_role": _public_identifier(),
+                            "receipt_sha256": digest,
+                            "quantity_id": _public_identifier(),
+                        },
+                        "required": [
+                            "input_id",
+                            "receipt_sha256",
+                            "quantity_id",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "nodes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": _quantity_expression_node_schema(),
+                },
+                "output_node_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": _public_identifier(),
+                },
+            },
+            ("expression_id", "inputs", "nodes", "output_node_ids"),
+        ),
+        _tool(
+            "record_analysis_claims",
+            (
+                "Bind reportable numerical claims to exact typed receipt "
+                "quantities. Supply identifiers and display units only; the "
+                "host copies and converts the values."
+            ),
+            {
+                "task_spec_sha256": digest,
+                "claims": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "claim_id": _public_identifier(),
+                            "receipt_sha256": digest,
+                            "quantity_id": _public_identifier(),
+                            "display_unit": _string(),
+                        },
+                        "required": [
+                            "claim_id",
+                            "receipt_sha256",
+                            "quantity_id",
+                            "display_unit",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ("task_spec_sha256", "claims"),
         ),
     )
     return AgentToolSurfaceV1(
@@ -413,6 +562,85 @@ def _workflow_node_schema() -> dict:
             "expected_outputs",
             "unresolved_fields",
         ],
+        "additionalProperties": False,
+    }
+
+
+def _quantity_expression_node_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "node_id": _public_identifier(),
+            "operation": {
+                "type": "string",
+                "enum": [
+                    "ref",
+                    "literal",
+                    "add",
+                    "subtract",
+                    "multiply",
+                    "divide",
+                    "scale",
+                    "abs",
+                    "sqrt",
+                    "power",
+                    "exp",
+                    "log",
+                    "sum",
+                    "mean",
+                    "min",
+                    "max",
+                    "distance",
+                    "angle",
+                    "convert",
+                    "linear_fit_slope",
+                    "linear_fit_intercept",
+                ],
+            },
+            "input_ids": {
+                "type": "array",
+                "items": _public_identifier(),
+                "description": (
+                    "Inputs for arithmetic, bounded transforms, reductions, "
+                    "linear fits, distance, angle, and conversion. For ref, "
+                    "prefer reference instead."
+                ),
+            },
+            "reference": {
+                "type": "string",
+                "description": (
+                    "For ref, identify one expression input alias or earlier node; "
+                    "omit input_ids. Other operations use input_ids and omit reference."
+                ),
+            },
+            "indices": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 0},
+                "description": (
+                    "For ref, select nested zero-based indices. Create one indexed "
+                    "ref node per coordinate vector before distance or angle."
+                ),
+            },
+            "literal_value": {
+                "oneOf": [
+                    {"type": "number"},
+                    {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 1,
+                        "maxItems": 64,
+                    },
+                ],
+                "description": (
+                    "Finite scalar/vector for literal, or finite scalar exponent "
+                    "for power."
+                ),
+            },
+            "literal_unit": _string(),
+            "scale_factor": {"type": "number"},
+            "target_unit": _string(),
+        },
+        "required": ["node_id", "operation"],
         "additionalProperties": False,
     }
 

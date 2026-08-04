@@ -1656,6 +1656,9 @@ def validate_pyscf_result(
         "symmetric": None,
         "symmetry_relative_tolerance": _HESSIAN_SYMMETRY_RTOL,
         "symmetry_absolute_tolerance": _HESSIAN_SYMMETRY_ATOL,
+        "raw_max_abs_antisymmetry_eh_per_bohr2": None,
+        "raw_antisymmetry_limit_eh_per_bohr2": None,
+        "raw_symmetrization_admissible": None,
         "consistency": {
             "state": "not_applicable" if jobtype != "hess" else "pending",
             "algorithm": "independent-mass-weighted-projection-v1",
@@ -2175,6 +2178,44 @@ def validate_pyscf_result(
                 )
             )
         else:
+            hessian_stage = status.get("stages", {}).get("hess", {})
+            raw_antisymmetry = hessian_stage.get(
+                "raw_max_abs_antisymmetry_eh_per_bohr2"
+            )
+            matrix_scale = float(np.max(np.abs(matrix)))
+            raw_limit = float(
+                _HESSIAN_SYMMETRY_ATOL
+                + _HESSIAN_SYMMETRY_RTOL * matrix_scale
+            )
+            raw_admissible = bool(
+                isinstance(raw_antisymmetry, (int, float))
+                and not isinstance(raw_antisymmetry, bool)
+                and np.isfinite(raw_antisymmetry)
+                and 0.0 <= float(raw_antisymmetry) <= raw_limit
+            )
+            hessian_observation[
+                "raw_max_abs_antisymmetry_eh_per_bohr2"
+            ] = raw_antisymmetry
+            hessian_observation[
+                "raw_antisymmetry_limit_eh_per_bohr2"
+            ] = raw_limit
+            hessian_observation[
+                "raw_symmetrization_admissible"
+            ] = raw_admissible
+            if not raw_admissible:
+                findings.append(
+                    _result_finding(
+                        RULE_RESULT_HESSIAN,
+                        "status.stages.hess.raw_max_abs_antisymmetry_eh_per_bohr2",
+                        {
+                            "finite_nonnegative": True,
+                            "maximum": raw_limit,
+                            "scale": matrix_scale,
+                        },
+                        raw_antisymmetry,
+                        "h5:/status/stages/hess/raw_max_abs_antisymmetry_eh_per_bohr2",
+                    )
+                )
             symmetric = bool(
                 np.allclose(
                     matrix,

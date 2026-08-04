@@ -1047,6 +1047,38 @@ def _to_host_array(array):
     return np.asarray(getter() if callable(getter) else array)
 
 
+def _symmetrize_cartesian_hessian(hessian):
+    """Return a symmetric Cartesian Hessian and the raw antisymmetry.
+
+    PySCF stores analytic Hessians as ``(atom, atom, xyz, xyz)``.  Finite
+    integration grids can leave the two mixed-derivative evaluations different
+    at roundoff-to-quadrature scale.  ``numpy.linalg.eigh`` assumes a symmetric
+    matrix and otherwise consumes only one triangle, so make that assumption
+    explicit and preserve the size of the correction in the stage status.
+    """
+
+    values = np.asarray(hessian, dtype=float)
+    if values.ndim == 4:
+        natm = values.shape[0]
+        expected = (natm, natm, 3, 3)
+        if values.shape != expected:
+            raise ValueError(
+                "PySCF Cartesian Hessian has unexpected shape %r" %
+                (values.shape,)
+            )
+        matrix = values.transpose(0, 2, 1, 3).reshape(3 * natm, 3 * natm)
+        maximum_antisymmetry = float(np.max(np.abs(matrix - matrix.T)))
+        symmetric = 0.5 * (matrix + matrix.T)
+        restored = symmetric.reshape(natm, 3, natm, 3).transpose(0, 2, 1, 3)
+        return restored, maximum_antisymmetry
+    if values.ndim == 2 and values.shape[0] == values.shape[1]:
+        maximum_antisymmetry = float(np.max(np.abs(values - values.T)))
+        return 0.5 * (values + values.T), maximum_antisymmetry
+    raise ValueError(
+        "PySCF Cartesian Hessian must be square or atom-blocked"
+    )
+
+
 def _spin_diagnostic(mf):
     """Return PySCF's final-state ``(<S^2>, effective multiplicity)``."""
     evaluator = getattr(mf, "spin_square", None)
@@ -1145,7 +1177,10 @@ def main():
             elif stage == "hess":
                 # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
                 # helper and HDF5 writer must never receive that device array.
-                hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+                raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+                hessian, raw_hessian_antisymmetry = (
+                    _symmetrize_cartesian_hessian(raw_hessian)
+                )
                 from pyscf.hessian import thermo
 
                 # Preserve imaginary modes as negative real wavenumbers.
@@ -1167,7 +1202,13 @@ def main():
                 results["force_constants"] = np.asarray(
                     analysis["force_const_dyne"], dtype=float
                 )
-                status["stages"]["hess"] = {"converged": True}
+                status["stages"]["hess"] = {
+                    "converged": True,
+                    "cartesian_symmetrization_applied": True,
+                    "raw_max_abs_antisymmetry_eh_per_bohr2": (
+                        raw_hessian_antisymmetry
+                    ),
+                }
             elif stage == "td":
                 raise RuntimeError(
                     "PySCF TD/TDA is a ChemSmart preview-only capability."

@@ -1,0 +1,1013 @@
+"""Typed, hash-bound extraction of scientific quantities from result files.
+
+This module is deliberately smaller than a general file-query language.  A
+caller selects from a finite semantic vocabulary and supplies an artifact path
+that has already been resolved by the host.  The path is never interpreted as
+model-authored input, and the exact bytes are checked before and after parsing.
+
+PySCF is the first registered reader because ChemSmart controls its structured
+HDF5 schema.  The contracts are program-neutral so that Gaussian, ORCA, and xTB
+readers can be registered later without changing the expression evaluator.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import re
+from dataclasses import asdict, dataclass, is_dataclass
+from pathlib import Path
+from typing import Any, Iterable, Mapping
+
+import numpy as np
+
+from chemsmart.analysis.thermochemistry import Thermochemistry
+from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.jobs.pyscf.environment import canonical_sha256
+from chemsmart.utils.constants import energy_conversion
+
+# Dimension order: energy, length, temperature, angle, frequency, pressure.
+Dimension = tuple[int, int, int, int, int, int]
+DIMENSIONLESS: Dimension = (0, 0, 0, 0, 0, 0)
+ENERGY: Dimension = (1, 0, 0, 0, 0, 0)
+LENGTH: Dimension = (0, 1, 0, 0, 0, 0)
+TEMPERATURE: Dimension = (0, 0, 1, 0, 0, 0)
+ANGLE: Dimension = (0, 0, 0, 1, 0, 0)
+FREQUENCY: Dimension = (0, 0, 0, 0, 1, 0)
+PRESSURE: Dimension = (0, 0, 0, 0, 0, 1)
+ENTROPY: Dimension = (1, 0, -1, 0, 0, 0)
+
+SUPPORTED_PYSCF_SELECTORS = frozenset(
+    {
+        "energy",
+        "energies",
+        "positions",
+        "symbols",
+        "vibrational_frequencies",
+        "homo",
+        "lumo",
+        "gap",
+        "charge",
+        "multiplicity",
+        "method",
+        "basis",
+    }
+)
+
+_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
+_CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
+_SELECTOR_RESULT_UNITS = {
+    "energy": {"results/energies": "Eh"},
+    "energies": {"results/energies": "Eh"},
+    "positions": {"results/positions": "Angstrom"},
+    "vibrational_frequencies": {
+        "results/vibrational_frequencies": "cm^-1"
+    },
+    "homo": {"results/mo_energy": "Eh"},
+    "lumo": {"results/mo_energy": "Eh"},
+    "gap": {"results/mo_energy": "Eh"},
+}
+
+
+class QuantityContractError(ValueError):
+    """Raised when a quantity request or result violates its typed contract."""
+
+
+class QuantityExtractionError(QuantityContractError):
+    """Raised when trusted result evidence cannot be extracted safely."""
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return _freeze(value.tolist())
+    if isinstance(value, np.generic):
+        return _freeze(value.item())
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, dict):
+        return tuple(
+            (str(key), _freeze(item))
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        )
+    if isinstance(value, float) and not math.isfinite(value):
+        raise QuantityContractError("quantity values must be finite")
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise QuantityContractError(
+        f"unsupported immutable quantity value: {type(value).__name__}"
+    )
+
+
+def _canonical_data(value: Any) -> Any:
+    if is_dataclass(value):
+        return _canonical_data(asdict(value))
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_data(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (tuple, list)):
+        return [_canonical_data(item) for item in value]
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise QuantityContractError("canonical records must be finite")
+        return value
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    raise QuantityContractError(
+        f"unsupported canonical value: {type(value).__name__}"
+    )
+
+
+def canonical_quantity_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        _canonical_data(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def result_file_sha256(path: str | os.PathLike[str]) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _require_identifier(value: str, field: str) -> str:
+    normalized = str(value).strip()
+    if not _IDENTIFIER.fullmatch(normalized):
+        raise QuantityContractError(f"{field} is not a stable identifier")
+    return normalized
+
+
+def _require_sha256(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if len(normalized) != 64:
+        raise QuantityContractError("artifact_sha256 must contain 64 hex digits")
+    try:
+        int(normalized, 16)
+    except ValueError as exc:
+        raise QuantityContractError(
+            "artifact_sha256 must contain 64 hex digits"
+        ) from exc
+    return normalized
+
+
+@dataclass(frozen=True)
+class QuantitySelectorV1:
+    """Select one semantic quantity without exposing a file-query language."""
+
+    quantity_id: str
+    selector: str
+
+    def __post_init__(self) -> None:
+        _require_identifier(self.quantity_id, "quantity_id")
+        if self.selector not in SUPPORTED_PYSCF_SELECTORS:
+            raise QuantityContractError(
+                f"unsupported PySCF quantity selector: {self.selector!r}"
+            )
+
+
+@dataclass(frozen=True)
+class ResultQuantityExtractionRequestV1:
+    schema_version: str
+    artifact_id: str
+    artifact_sha256: str
+    program: str
+    selectors: tuple[QuantitySelectorV1, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "selectors", tuple(self.selectors))
+        if self.schema_version != "chemsmart.quantity-extraction-request.v1":
+            raise QuantityContractError("unsupported extraction request schema")
+        _require_identifier(self.artifact_id, "artifact_id")
+        _require_sha256(self.artifact_sha256)
+        if self.program != "pyscf":
+            raise QuantityContractError("only the PySCF result reader is registered")
+        if not self.selectors:
+            raise QuantityContractError("at least one quantity selector is required")
+        quantity_ids = [selector.quantity_id for selector in self.selectors]
+        if len(quantity_ids) != len(set(quantity_ids)):
+            raise QuantityContractError("quantity_id values must be unique")
+
+
+@dataclass(frozen=True)
+class QuantityValueV1:
+    """An immutable value with its parser unit and canonical arithmetic unit."""
+
+    schema_version: str
+    quantity_id: str
+    data_kind: str
+    source_value: Any
+    source_unit: str
+    value: Any
+    unit: str
+    dimension: Dimension
+    evidence_ref: str
+    value_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.quantity-value.v1":
+            raise QuantityContractError("unsupported quantity value schema")
+        _require_identifier(self.quantity_id, "quantity_id")
+        if self.data_kind not in {
+            "scalar",
+            "vector",
+            "matrix",
+            "integer",
+            "text",
+            "text_vector",
+        }:
+            raise QuantityContractError("unsupported quantity data kind")
+        if len(self.dimension) != 6 or not all(
+            isinstance(exponent, int) for exponent in self.dimension
+        ):
+            raise QuantityContractError("dimension must contain six integers")
+        object.__setattr__(self, "source_value", _freeze(self.source_value))
+        object.__setattr__(self, "value", _freeze(self.value))
+        body = {
+            "schema_version": self.schema_version,
+            "quantity_id": self.quantity_id,
+            "data_kind": self.data_kind,
+            "source_value": self.source_value,
+            "source_unit": self.source_unit,
+            "value": self.value,
+            "unit": self.unit,
+            "dimension": self.dimension,
+            "evidence_ref": self.evidence_ref,
+        }
+        if self.value_sha256 != canonical_quantity_sha256(body):
+            raise QuantityContractError("quantity value digest mismatch")
+
+
+@dataclass(frozen=True)
+class QuantityExtractionReceiptV1:
+    schema_version: str
+    artifact_id: str
+    artifact_sha256: str
+    program: str
+    parser_id: str
+    quantities: tuple[QuantityValueV1, ...]
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "quantities", tuple(self.quantities))
+        if self.schema_version != "chemsmart.quantity-extraction-receipt.v1":
+            raise QuantityContractError("unsupported extraction receipt schema")
+        if self.status != "extracted":
+            raise QuantityContractError("invalid extraction receipt status")
+        body = {
+            "schema_version": self.schema_version,
+            "artifact_id": self.artifact_id,
+            "artifact_sha256": self.artifact_sha256,
+            "program": self.program,
+            "parser_id": self.parser_id,
+            "quantities": self.quantities,
+            "status": self.status,
+        }
+        if self.receipt_sha256 != canonical_quantity_sha256(body):
+            raise QuantityContractError("quantity extraction receipt digest mismatch")
+
+
+@dataclass(frozen=True)
+class ThermochemistryRequestV1:
+    schema_version: str
+    artifact_id: str
+    artifact_sha256: str
+    program: str
+    temperature_k: float
+    pressure_atm: float
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.thermochemistry-request.v1":
+            raise QuantityContractError("unsupported thermochemistry request schema")
+        _require_identifier(self.artifact_id, "artifact_id")
+        _require_sha256(self.artifact_sha256)
+        if self.program != "pyscf":
+            raise QuantityContractError("only PySCF thermochemistry is registered")
+        if not math.isfinite(self.temperature_k) or self.temperature_k <= 0.0:
+            raise QuantityContractError("temperature_k must be finite and positive")
+        if not math.isfinite(self.pressure_atm) or self.pressure_atm <= 0.0:
+            raise QuantityContractError("pressure_atm must be finite and positive")
+
+
+@dataclass(frozen=True)
+class ThermochemistryReceiptV1:
+    schema_version: str
+    artifact_id: str
+    artifact_sha256: str
+    program: str
+    engine_id: str
+    temperature_k: float
+    pressure_atm: float
+    quantities: tuple[QuantityValueV1, ...]
+    assumptions: tuple[str, ...]
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "quantities", tuple(self.quantities))
+        object.__setattr__(self, "assumptions", tuple(self.assumptions))
+        if self.schema_version != "chemsmart.thermochemistry-receipt.v1":
+            raise QuantityContractError("unsupported thermochemistry receipt schema")
+        if self.status != "derived":
+            raise QuantityContractError("invalid thermochemistry receipt status")
+        body = {
+            "schema_version": self.schema_version,
+            "artifact_id": self.artifact_id,
+            "artifact_sha256": self.artifact_sha256,
+            "program": self.program,
+            "engine_id": self.engine_id,
+            "temperature_k": self.temperature_k,
+            "pressure_atm": self.pressure_atm,
+            "quantities": self.quantities,
+            "assumptions": self.assumptions,
+            "status": self.status,
+        }
+        if self.receipt_sha256 != canonical_quantity_sha256(body):
+            raise QuantityContractError("thermochemistry receipt digest mismatch")
+
+
+def _numeric_kind(value: Any) -> str:
+    array = np.asarray(value)
+    if array.ndim == 0:
+        return "scalar"
+    if array.ndim == 1:
+        return "vector"
+    if array.ndim == 2:
+        return "matrix"
+    raise QuantityExtractionError("quantities with rank greater than two are unsupported")
+
+
+def _make_quantity(
+    *,
+    quantity_id: str,
+    source_value: Any,
+    source_unit: str,
+    value: Any,
+    unit: str,
+    dimension: Dimension,
+    evidence_ref: str,
+    data_kind: str | None = None,
+) -> QuantityValueV1:
+    frozen_source = _freeze(source_value)
+    frozen_value = _freeze(value)
+    kind = data_kind or _numeric_kind(frozen_value)
+    body = {
+        "schema_version": "chemsmart.quantity-value.v1",
+        "quantity_id": quantity_id,
+        "data_kind": kind,
+        "source_value": frozen_source,
+        "source_unit": source_unit,
+        "value": frozen_value,
+        "unit": unit,
+        "dimension": dimension,
+        "evidence_ref": evidence_ref,
+    }
+    return QuantityValueV1(
+        **body, value_sha256=canonical_quantity_sha256(body)
+    )
+
+
+def make_quantity_value(
+    *,
+    quantity_id: str,
+    source_value: Any,
+    source_unit: str,
+    value: Any,
+    unit: str,
+    dimension: Dimension,
+    evidence_ref: str,
+    data_kind: str | None = None,
+) -> QuantityValueV1:
+    """Build a validated immutable quantity for a deterministic derivation."""
+
+    return _make_quantity(
+        quantity_id=quantity_id,
+        source_value=source_value,
+        source_unit=source_unit,
+        value=value,
+        unit=unit,
+        dimension=dimension,
+        evidence_ref=evidence_ref,
+        data_kind=data_kind,
+    )
+
+
+def _verify_artifact(path: str | os.PathLike[str], expected_sha256: str) -> Path:
+    artifact = Path(path).expanduser().resolve()
+    if not artifact.is_file():
+        raise QuantityExtractionError("trusted result artifact does not exist")
+    expected = _require_sha256(expected_sha256)
+    observed = result_file_sha256(artifact)
+    if observed != expected:
+        raise QuantityExtractionError(
+            "trusted result artifact digest differs from the requested digest"
+        )
+    return artifact
+
+
+def _require_analysis_ready_pyscf_result(
+    *,
+    artifact: Path,
+    expected_sha256: str,
+    output: PySCFOutput,
+    required_units: dict[str, str],
+) -> dict[str, Any]:
+    """Require current, executed, receipt-bound result evidence.
+
+    Fake-preview HDF5 files intentionally resemble real results so downstream
+    readers can be exercised.  They are not numerical evidence.  Admission
+    therefore requires both the machine contract inside HDF5 and the sibling
+    ChemSmart run receipt that binds deterministic checks to these bytes.  A
+    Hessian may remain ``unclassified`` until a minimum/transition-state policy
+    is supplied; it is still analysis-ready when every invariant is green.
+    """
+
+    if (
+        not output.normal_termination
+        or not output.engine_complete
+        or output.failure is not None
+        or output.spec.get("preview_only") is not False
+        or output.spec.get("result_contract_version")
+        != _CURRENT_PYSCF_RESULT_CONTRACT
+    ):
+        raise QuantityExtractionError(
+            "scientific quantities require a current executed PySCF result"
+        )
+    receipt_path = artifact.with_suffix(".receipt.json")
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise QuantityExtractionError(
+            "scientific quantities require a readable sibling run receipt"
+        ) from exc
+    if not isinstance(receipt, dict):
+        raise QuantityExtractionError("PySCF run receipt must be a JSON object")
+    embedded_receipt_sha256 = receipt.get("receipt_sha256")
+    receipt_body = dict(receipt)
+    receipt_body.pop("receipt_sha256", None)
+    if (
+        not isinstance(embedded_receipt_sha256, str)
+        or embedded_receipt_sha256 != canonical_sha256(receipt_body)
+    ):
+        raise QuantityExtractionError(
+            "PySCF run receipt digest is absent or invalid"
+        )
+    receipt_state = receipt.get("state")
+    scientific_state = receipt.get("scientific_validation_state")
+    if (
+        receipt.get("fake") is not False
+        or receipt.get("engine_complete") is not True
+        or receipt.get("child_returncode") != 0
+        or receipt.get("findings") not in ([], ())
+        or receipt_state not in {"validated", "engine_complete"}
+        or scientific_state not in {"validated", "unclassified"}
+        or receipt.get("result_sha256") != expected_sha256
+    ):
+        raise QuantityExtractionError(
+            "PySCF run receipt does not admit this exact result for analysis"
+        )
+    spec = output.spec
+    provenance = output.provenance
+    digest_bindings = {
+        "script_sha256": (receipt, provenance, "script_sha256"),
+        "input_receipt_sha256": (
+            receipt,
+            provenance,
+            "input_receipt_sha256",
+        ),
+        "environment_receipt_sha256": (
+            receipt,
+            provenance,
+            "environment_receipt_sha256",
+        ),
+        "input_geometry_sha256": (
+            receipt,
+            spec,
+            "input_geometry_sha256",
+        ),
+        "requested_settings_sha256": (
+            receipt,
+            spec,
+            "requested_settings_sha256",
+        ),
+        "project_yaml_sha256": (
+            receipt,
+            provenance,
+            "project_yaml_digest",
+        ),
+        "input_artifact_sha256": (
+            receipt,
+            spec,
+            "input_artifact_sha256",
+        ),
+        "applied_settings_sha256": (
+            receipt,
+            spec,
+            "applied_settings_sha256",
+        ),
+    }
+    for field, (receipt_source, hdf5_source, hdf5_field) in (
+        digest_bindings.items()
+    ):
+        expected = receipt_source.get(field)
+        observed = hdf5_source.get(hdf5_field)
+        try:
+            valid_digest = (
+                isinstance(expected, str)
+                and len(expected) == 64
+                and int(expected, 16) >= 0
+            )
+        except ValueError:
+            valid_digest = False
+        if not valid_digest or observed != expected:
+            raise QuantityExtractionError(
+                "PySCF run receipt ancestry differs from structured result: "
+                + field
+            )
+    for field in ("run_id", "run_nonce"):
+        expected = receipt.get(field)
+        if (
+            not isinstance(expected, str)
+            or not expected
+            or spec.get(field) != expected
+            or provenance.get(field) != expected
+        ):
+            raise QuantityExtractionError(
+                "PySCF run identity differs from structured result: " + field
+            )
+    input_artifact_kind = receipt.get("input_artifact_kind")
+    if (
+        not isinstance(input_artifact_kind, str)
+        or not input_artifact_kind
+        or spec.get("input_artifact_kind") != input_artifact_kind
+        or provenance.get("input_artifact_kind") != input_artifact_kind
+    ):
+        raise QuantityExtractionError(
+            "PySCF input artifact kind is absent or inconsistent"
+        )
+    if provenance.get("applied_settings_sha256") != receipt.get(
+        "applied_settings_sha256"
+    ):
+        raise QuantityExtractionError(
+            "PySCF applied settings digest differs across result provenance"
+        )
+    observed_units = output.result_units
+    mismatches = {
+        path: {"expected": unit, "observed": observed_units.get(path)}
+        for path, unit in required_units.items()
+        if observed_units.get(path) != unit
+    }
+    if mismatches:
+        raise QuantityExtractionError(
+            f"PySCF result units are absent or incompatible: {mismatches}"
+        )
+    return receipt
+
+
+def validate_pyscf_analysis_artifact(
+    artifact_path: str | os.PathLike[str],
+    *,
+    expected_sha256: str,
+    required_units: dict[str, str] | None = None,
+) -> tuple[PySCFOutput, dict[str, Any]]:
+    """Validate a current structured result and its immutable run ancestry."""
+
+    artifact = _verify_artifact(artifact_path, expected_sha256)
+    output = PySCFOutput(artifact)
+    receipt = _require_analysis_ready_pyscf_result(
+        artifact=artifact,
+        expected_sha256=expected_sha256,
+        output=output,
+        required_units=dict(required_units or {}),
+    )
+    return output, receipt
+
+
+def _require_finite_numeric(value: Any, selector: str) -> Any:
+    array = np.asarray(value, dtype=float)
+    if array.size == 0 or not np.all(np.isfinite(array)):
+        raise QuantityExtractionError(
+            f"selector {selector!r} did not produce finite numeric data"
+        )
+    return value
+
+
+def _extract_selector(
+    output: PySCFOutput,
+    selector: QuantitySelectorV1,
+    evidence_ref: str,
+) -> QuantityValueV1:
+    name = selector.selector
+    value: Any
+    if name == "energy":
+        if not output.energies:
+            raise QuantityExtractionError("PySCF artifact has no energy")
+        value = _require_finite_numeric(output.energies[-1], name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="hartree",
+            value=value,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+    if name == "energies":
+        value = _require_finite_numeric(output.energies, name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="hartree",
+            value=value,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+    if name == "positions":
+        if output.positions is None:
+            raise QuantityExtractionError("PySCF artifact has no positions")
+        value = _require_finite_numeric(output.positions, name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="angstrom",
+            value=value,
+            unit="angstrom",
+            dimension=LENGTH,
+            evidence_ref=evidence_ref,
+        )
+    if name == "symbols":
+        value = tuple(str(symbol) for symbol in output.chemical_symbols)
+        if not value:
+            raise QuantityExtractionError("PySCF artifact has no atom symbols")
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+            data_kind="text_vector",
+        )
+    if name == "vibrational_frequencies":
+        if output.vibrational_frequencies is None:
+            raise QuantityExtractionError(
+                "PySCF artifact has no vibrational frequencies"
+            )
+        value = _require_finite_numeric(output.vibrational_frequencies, name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="cm^-1",
+            value=value,
+            unit="cm^-1",
+            dimension=FREQUENCY,
+            evidence_ref=evidence_ref,
+        )
+    if name in {"homo", "lumo", "gap"}:
+        attribute = {"homo": "homo_energy", "lumo": "lumo_energy", "gap": "fmo_gap"}[name]
+        value = getattr(output, attribute)
+        if value is None:
+            raise QuantityExtractionError(
+                f"PySCF artifact cannot define the requested {name} value"
+            )
+        value = float(_require_finite_numeric(value, name))
+        normalized = energy_conversion("eV", "hartree", value)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="eV",
+            value=normalized,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+    if name in {"charge", "multiplicity"}:
+        value = getattr(output, name)
+        if not isinstance(value, int):
+            raise QuantityExtractionError(
+                f"PySCF artifact has no integer {name} value"
+            )
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+            data_kind="integer",
+        )
+    if name in {"method", "basis"}:
+        value = getattr(output, name)
+        if not isinstance(value, str) or not value.strip():
+            raise QuantityExtractionError(
+                f"PySCF artifact has no {name} metadata"
+            )
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+            data_kind="text",
+        )
+    raise QuantityContractError(f"unsupported selector: {name!r}")
+
+
+def extract_pyscf_quantities(
+    *,
+    request: ResultQuantityExtractionRequestV1,
+    artifact_path: str | os.PathLike[str],
+) -> QuantityExtractionReceiptV1:
+    """Extract selected values from a host-resolved structured PySCF result."""
+
+    artifact = _verify_artifact(artifact_path, request.artifact_sha256)
+    output = PySCFOutput(artifact)
+    required_units: dict[str, str] = {}
+    for selector in request.selectors:
+        required_units.update(_SELECTOR_RESULT_UNITS.get(selector.selector, {}))
+    _require_analysis_ready_pyscf_result(
+        artifact=artifact,
+        expected_sha256=request.artifact_sha256,
+        output=output,
+        required_units=required_units,
+    )
+    if output.result_sha256 != request.artifact_sha256:
+        raise QuantityExtractionError("PySCF parser observed substituted bytes")
+    evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
+    quantities = tuple(
+        _extract_selector(output, selector, evidence_ref)
+        for selector in request.selectors
+    )
+    if result_file_sha256(artifact) != request.artifact_sha256:
+        raise QuantityExtractionError("result artifact changed during extraction")
+    body = {
+        "schema_version": "chemsmart.quantity-extraction-receipt.v1",
+        "artifact_id": request.artifact_id,
+        "artifact_sha256": request.artifact_sha256,
+        "program": request.program,
+        "parser_id": "chemsmart.io.pyscf.output.PySCFOutput",
+        "quantities": quantities,
+        "status": "extracted",
+    }
+    return QuantityExtractionReceiptV1(
+        **body, receipt_sha256=canonical_quantity_sha256(body)
+    )
+
+
+def _thermo_quantity(
+    *,
+    quantity_id: str,
+    value: float,
+    source_unit: str,
+    normalized_unit: str,
+    dimension: Dimension,
+    evidence_ref: str,
+) -> QuantityValueV1:
+    finite_value = float(_require_finite_numeric(value, quantity_id))
+    if dimension == ENERGY:
+        normalized = energy_conversion("J/mol", "hartree", finite_value)
+    elif dimension == ENTROPY:
+        normalized = energy_conversion("J/mol", "hartree", finite_value)
+    else:
+        normalized = finite_value
+    return _make_quantity(
+        quantity_id=quantity_id,
+        source_value=finite_value,
+        source_unit=source_unit,
+        value=normalized,
+        unit=normalized_unit,
+        dimension=dimension,
+        evidence_ref=evidence_ref,
+    )
+
+
+def derive_pyscf_thermochemistry(
+    *,
+    request: ThermochemistryRequestV1,
+    artifact_path: str | os.PathLike[str],
+) -> ThermochemistryReceiptV1:
+    """Derive RRHO thermochemistry at an explicit temperature and pressure.
+
+    The formulas and molecular conventions remain owned by ChemSmart's common
+    :class:`Thermochemistry` engine.  This function only binds conditions and
+    serializes the resulting values with explicit units and provenance.
+    """
+
+    artifact = _verify_artifact(artifact_path, request.artifact_sha256)
+    output = PySCFOutput(artifact)
+    _require_analysis_ready_pyscf_result(
+        artifact=artifact,
+        expected_sha256=request.artifact_sha256,
+        output=output,
+        required_units={
+            "results/energies": "Eh",
+            "results/positions": "Angstrom",
+            "results/hessian": "Eh/Bohr^2",
+            "results/vibrational_frequencies": "cm^-1",
+        },
+    )
+    if not output.freq:
+        raise QuantityExtractionError(
+            "thermochemistry requires a validated PySCF Hessian result"
+        )
+    if output.result_sha256 != request.artifact_sha256:
+        raise QuantityExtractionError("PySCF parser observed substituted bytes")
+    engine = Thermochemistry(
+        filename=str(artifact),
+        temperature=request.temperature_k,
+        pressure=request.pressure_atm,
+        check_imaginary_frequencies=True,
+    )
+    engine.check_frequencies()
+    evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
+    energy_values = {
+        "electronic_energy": engine.electronic_energy,
+        "zero_point_energy": engine.zero_point_energy,
+        "internal_energy": engine.electronic_energy + engine.total_internal_energy,
+        "enthalpy": engine.enthalpy,
+        "entropy_times_temperature": engine.entropy_times_temperature,
+        "gibbs_free_energy": engine.gibbs_free_energy,
+        "thermal_internal_energy_correction": engine.total_internal_energy,
+        "thermal_enthalpy_correction": engine.enthalpy - engine.electronic_energy,
+        "thermal_gibbs_correction": (
+            engine.gibbs_free_energy - engine.electronic_energy
+        ),
+    }
+    quantities = [
+        _thermo_quantity(
+            quantity_id=name,
+            value=value,
+            source_unit="J mol^-1",
+            normalized_unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+        for name, value in energy_values.items()
+    ]
+    quantities.extend(
+        [
+            _thermo_quantity(
+                quantity_id="entropy",
+                value=engine.total_entropy,
+                source_unit="J mol^-1 K^-1",
+                normalized_unit="hartree K^-1",
+                dimension=ENTROPY,
+                evidence_ref=evidence_ref,
+            ),
+            _make_quantity(
+                quantity_id="temperature",
+                source_value=request.temperature_k,
+                source_unit="K",
+                value=request.temperature_k,
+                unit="K",
+                dimension=TEMPERATURE,
+                evidence_ref=evidence_ref,
+            ),
+            _make_quantity(
+                quantity_id="pressure",
+                source_value=request.pressure_atm,
+                source_unit="atm",
+                value=request.pressure_atm,
+                unit="atm",
+                dimension=PRESSURE,
+                evidence_ref=evidence_ref,
+            ),
+            _thermo_quantity(
+                quantity_id="heat_capacity_cv",
+                value=engine.total_heat_capacity,
+                source_unit="J mol^-1 K^-1",
+                normalized_unit="hartree K^-1",
+                dimension=ENTROPY,
+                evidence_ref=evidence_ref,
+            ),
+        ]
+    )
+    if result_file_sha256(artifact) != request.artifact_sha256:
+        raise QuantityExtractionError(
+            "result artifact changed during thermochemistry derivation"
+        )
+    assumptions = (
+        "ideal-gas translational partition function",
+        "rigid-rotor harmonic-oscillator thermochemistry",
+        "ground-state electronic degeneracy equals spin multiplicity",
+        "most-abundant isotopic masses",
+        "rotational symmetry derived by the shared ChemSmart engine",
+    )
+    body = {
+        "schema_version": "chemsmart.thermochemistry-receipt.v1",
+        "artifact_id": request.artifact_id,
+        "artifact_sha256": request.artifact_sha256,
+        "program": request.program,
+        "engine_id": "chemsmart.analysis.thermochemistry.Thermochemistry",
+        "temperature_k": request.temperature_k,
+        "pressure_atm": request.pressure_atm,
+        "quantities": tuple(quantities),
+        "assumptions": assumptions,
+        "status": "derived",
+    }
+    return ThermochemistryReceiptV1(
+        **body, receipt_sha256=canonical_quantity_sha256(body)
+    )
+
+
+def quantity_map(
+    receipts: Iterable[QuantityExtractionReceiptV1 | ThermochemistryReceiptV1],
+) -> dict[str, QuantityValueV1]:
+    """Return a unique ID-to-value mapping for expression evaluation."""
+
+    values: dict[str, QuantityValueV1] = {}
+    for receipt in receipts:
+        for quantity in receipt.quantities:
+            if quantity.quantity_id in values:
+                raise QuantityContractError(
+                    f"duplicate quantity_id across receipts: {quantity.quantity_id}"
+                )
+            values[quantity.quantity_id] = quantity
+    return values
+
+
+def quantity_value_from_record(record: Mapping[str, Any]) -> QuantityValueV1:
+    """Reconstruct and revalidate one canonical quantity event record."""
+
+    values = dict(record)
+    values["dimension"] = tuple(values.get("dimension") or ())
+    return QuantityValueV1(**values)
+
+
+def quantity_extraction_receipt_from_record(
+    record: Mapping[str, Any], *, receipt_sha256: str
+) -> QuantityExtractionReceiptV1:
+    """Rehydrate an extraction receipt persisted by Runtime V2."""
+
+    values = dict(record)
+    values["quantities"] = tuple(
+        quantity_value_from_record(item)
+        for item in values.get("quantities") or ()
+    )
+    return QuantityExtractionReceiptV1(
+        **values, receipt_sha256=receipt_sha256
+    )
+
+
+def thermochemistry_receipt_from_record(
+    record: Mapping[str, Any], *, receipt_sha256: str
+) -> ThermochemistryReceiptV1:
+    """Rehydrate a thermochemistry receipt persisted by Runtime V2."""
+
+    values = dict(record)
+    values["quantities"] = tuple(
+        quantity_value_from_record(item)
+        for item in values.get("quantities") or ()
+    )
+    values["assumptions"] = tuple(values.get("assumptions") or ())
+    return ThermochemistryReceiptV1(
+        **values, receipt_sha256=receipt_sha256
+    )
+
+
+__all__ = [
+    "ANGLE",
+    "DIMENSIONLESS",
+    "ENERGY",
+    "ENTROPY",
+    "FREQUENCY",
+    "LENGTH",
+    "PRESSURE",
+    "SUPPORTED_PYSCF_SELECTORS",
+    "TEMPERATURE",
+    "Dimension",
+    "QuantityContractError",
+    "QuantityExtractionError",
+    "QuantityExtractionReceiptV1",
+    "QuantitySelectorV1",
+    "QuantityValueV1",
+    "ResultQuantityExtractionRequestV1",
+    "ThermochemistryReceiptV1",
+    "ThermochemistryRequestV1",
+    "canonical_quantity_sha256",
+    "derive_pyscf_thermochemistry",
+    "extract_pyscf_quantities",
+    "make_quantity_value",
+    "quantity_map",
+    "quantity_value_from_record",
+    "quantity_extraction_receipt_from_record",
+    "result_file_sha256",
+    "thermochemistry_receipt_from_record",
+    "validate_pyscf_analysis_artifact",
+]

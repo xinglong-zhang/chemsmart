@@ -221,6 +221,24 @@ _PROJECTION_CONTRACTS = {
             whole_branches=frozenset({"findings", "properties"}),
         ),
         _ToolProjectionContractV1(
+            "extract_result_quantities",
+            whole_branches=frozenset({"quantities"}),
+        ),
+        _ToolProjectionContractV1(
+            "derive_thermochemistry",
+            whole_branches=frozenset({"quantities", "assumptions"}),
+        ),
+        _ToolProjectionContractV1(
+            "evaluate_quantity_expression",
+            whole_branches=frozenset(
+                {"outputs", "node_values", "output_dependencies"}
+            ),
+        ),
+        _ToolProjectionContractV1(
+            "record_analysis_claims",
+            whole_branches=frozenset({"claims"}),
+        ),
+        _ToolProjectionContractV1(
             "execute_approved_program_node",
             whole_branches=frozenset({"findings"}),
         ),
