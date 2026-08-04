@@ -34,6 +34,8 @@ class GromacsJob(Job):
         tpr_file=None,
         itp_files=None,
         index_file=None,
+        checkpoint_file=None,
+        restraint_reference_file=None,
         workflow="prepared",
         processed_structure_file=None,
         boxed_structure_file=None,
@@ -86,6 +88,14 @@ class GromacsJob(Job):
         self.top_file = Path(top_file) if top_file else None
         self.index_file = Path(index_file) if index_file else None
         self.itp_files = [Path(f) for f in itp_files] if itp_files else []
+        self.checkpoint_file = (
+            Path(checkpoint_file) if checkpoint_file else None
+        )
+        self.restraint_reference_file = (
+            Path(restraint_reference_file)
+            if restraint_reference_file
+            else None
+        )
 
         self.workflow = workflow
 
@@ -191,6 +201,33 @@ class GromacsJob(Job):
         return SimpleNamespace(
             normal_termination="Finished mdrun" in text,
         )
+
+    @property
+    def output_structure_file(self):
+        """
+        Return the final structure produced by this stage.
+        """
+        if self.tpr_file is None:
+            return None
+        return Path(self.tpr_file).with_suffix(".gro")
+
+    @property
+    def output_checkpoint_file(self):
+        """
+        Return the checkpoint produced by this stage.
+        """
+        if self.tpr_file is None:
+            return None
+        return Path(self.tpr_file).with_suffix(".cpt")
+
+    @property
+    def output_log_file(self):
+        """
+        Return the GROMACS log produced by this stage.
+        """
+        if self.tpr_file is None:
+            return None
+        return Path(self.tpr_file).with_suffix(".log")
 
     def has_tpr(self):
         """
@@ -333,6 +370,44 @@ class GromacsNPTJob(GromacsJob):
         self,
         molecule=None,
         label="gromacs_npt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=None,
+        input_pdb=None,
+        top_file=None,
+        tpr_file=None,
+        itp_files=None,
+        index_file=None,
+        workflow="prepared",
+        **kwargs,
+    ):
+        super().__init__(
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            mdp_file=mdp_file,
+            structure_file=structure_file,
+            input_pdb=input_pdb,
+            top_file=top_file,
+            tpr_file=tpr_file,
+            itp_files=itp_files,
+            index_file=index_file,
+            workflow=workflow,
+            **kwargs,
+        )
+
+
+class GromacsMDJob(GromacsJob):
+    """
+    Production molecular dynamics job for GROMACS.
+    """
+
+    TYPE = "gmxmd"
+
+    def __init__(
+        self,
+        molecule=None,
+        label="gromacs_md",
         jobrunner=None,
         mdp_file=None,
         structure_file=None,
