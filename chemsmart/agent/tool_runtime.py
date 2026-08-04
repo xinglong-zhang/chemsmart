@@ -1026,6 +1026,9 @@ class CommandCompiledToolHostV1:
         self.analysis_completion_receipts: dict[str, Any] = {}
         self.counterexamples: dict[str, CommandCounterexampleV1] = {}
         self.workflow_drafts: dict[str, CommandWorkflowDraftV1] = {}
+        #: Last accepted scientific plan per workflow, so a later repair can be
+        #: checked against the question and not only against its own findings.
+        self.scientific_plans: dict[str, Any] = {}
         self.scientific_workflow_plans: dict[
             str, ScientificWorkflowPlanV2
         ] = {}
@@ -1930,7 +1933,36 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 "planned workflow differs from frozen execution approval"
             )
+        self._refuse_observable_regression(plan)
+        self.scientific_plans[plan.workflow_id] = plan
         return plan
+
+    def _refuse_observable_regression(self, plan) -> None:
+        """Refuse a replan that drops a stage the previous plan carried.
+
+        Repair is scored on whether findings clear, and deleting the node that
+        carries the findings is the cheapest way to clear them -- which silently
+        discards the stage the task asked for.  A stage that cannot be
+        materialized has to stay in the plan as ``blocked_unsupported`` with a
+        reason, so an honest plan and a complete plan are the same plan.
+        """
+
+        previous = self.scientific_plans.get(plan.workflow_id)
+        if previous is None:
+            return
+        current_ids = {node.node_id for node in plan.nodes}
+        dropped = sorted(
+            node.node_id
+            for node in previous.nodes
+            if node.node_id not in current_ids
+        )
+        if dropped:
+            raise ContractError(
+                f"replanning removed workflow stage(s) {dropped} that the "
+                "previous plan carried; a stage that cannot be materialized "
+                "must be kept with support_state='blocked_unsupported' and a "
+                "blocked_reason instead of being deleted"
+            )
 
     def _synthesize_command(self, turn_id: str, values: dict) -> Any:
         capability = self._get(

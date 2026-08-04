@@ -8,7 +8,7 @@ loaders reject missing and extra fields instead of silently defaulting them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import MISSING, dataclass, fields
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import (
@@ -45,16 +45,27 @@ def _strict_record(
         raise ContractError(f"{label} must be a canonical mapping")
     record = dict(value)
     expected = {item.name for item in fields(contract)}
+    # A field carrying a default is optional by construction, so an older
+    # record that predates an additive schema extension still loads.  Unknown
+    # fields stay refused: forward compatibility is not permission to invent.
+    optional = {
+        item.name
+        for item in fields(contract)
+        if item.default is not MISSING or item.default_factory is not MISSING
+    }
     observed = set(record)
     if observed != expected:
-        missing = sorted(expected.difference(observed))
+        missing = sorted(expected.difference(observed).difference(optional))
         extra = sorted(observed.difference(expected))
         detail = []
         if missing:
             detail.append("missing=" + ",".join(missing))
         if extra:
             detail.append("extra=" + ",".join(extra))
-        raise ContractError(f"{label} fields differ ({'; '.join(detail)})")
+        if detail:
+            raise ContractError(
+                f"{label} fields differ ({'; '.join(detail)})"
+            )
     return record
 
 

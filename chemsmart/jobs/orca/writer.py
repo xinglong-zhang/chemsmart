@@ -11,6 +11,8 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca.settings import (
+    ORCA_FROZEN_CORE_POLICIES,
+    ORCA_REFERENCE_DETERMINANTS,
     ORCAIRCJobSettings,
     ORCANEBJobSettings,
     ORCAQMMMJobSettings,
@@ -110,6 +112,8 @@ class ORCAInputWriter(InputWriter):
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
+        self._write_basis_block(f)
+        self._write_method_block(f)
         self._write_scf_block(f)
         self._write_solvent_block(f)
         self._write_mdci_block(f)
@@ -199,11 +203,59 @@ class ORCAInputWriter(InputWriter):
         """
         logger.debug("Writing SCF block")
 
-        if self.settings.scf_convergence or self.settings.scf_maxiter:
+        reference = getattr(self.settings, "reference", None)
+        if (
+            self.settings.scf_convergence
+            or self.settings.scf_maxiter
+            or reference is not None
+        ):
             f.write("%scf\n")
+            if reference is not None:
+                # The reference determinant is an electronic-structure choice,
+                # not a convergence knob: ROHF/UHF describe an open shell that
+                # RHF cannot represent at all.
+                f.write(f"  HFTyp {ORCA_REFERENCE_DETERMINANTS[reference]}\n")
             self._write_scf_maxiter(f)
             self._write_scf_convergence(f)
             f.write("end\n")
+
+    def _write_basis_block(self, f):
+        """Write per-element basis assignments as an ORCA ``%basis`` block.
+
+        The route carries the general basis; elements listed as heavy get an
+        explicit ``NewGTO`` override.  Mixed heavy/light basis sets are routine
+        for transition-metal complexes and for any study that needs a larger
+        set on one centre than on its ligands.
+        """
+
+        heavy_elements = getattr(self.settings, "heavy_elements", None) or ()
+        heavy_basis = getattr(self.settings, "heavy_elements_basis", None)
+        if not heavy_elements or not heavy_basis:
+            return
+        logger.debug("Writing ORCA %basis block")
+        f.write("%basis\n")
+        for element in heavy_elements:
+            f.write(f'  NewGTO {element} "{heavy_basis}" end\n')
+        f.write("end\n")
+
+    def _write_method_block(self, f):
+        """Write the ``%method`` block carrying the frozen-core policy.
+
+        Which orbitals are correlated is part of the method definition; a
+        correlated energy computed with a different core treatment is a
+        different quantity, not a less converged one.
+        """
+
+        frozen_core = getattr(self.settings, "frozen_core", None)
+        if frozen_core is None:
+            return
+        logger.debug("Writing ORCA %method block")
+        f.write("%method\n")
+        f.write(f"  FrozenCore {ORCA_FROZEN_CORE_POLICIES[frozen_core]}\n")
+        electrons = getattr(self.settings, "frozen_core_electrons", None)
+        if electrons is not None:
+            f.write(f"  NCore {int(electrons)}\n")
+        f.write("end\n")
 
     def _write_scf_maxiter(self, f):
         """

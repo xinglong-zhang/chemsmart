@@ -378,6 +378,14 @@ _COMPLEXITY_FACTORS = frozenset(
 )
 
 
+#: Support states a scientific workflow node may declare.
+WORKFLOW_NODE_SUPPORT_STATES = (
+    "blocked_unsupported",
+    "resolvable",
+    "unresolved_future",
+)
+
+
 @dataclass(frozen=True)
 class ScientificWorkflowNodeV2:
     """Scientific stage before command materialization.
@@ -393,8 +401,45 @@ class ScientificWorkflowNodeV2:
     engine: str
     project_role: str
     unresolved_fields: tuple[str, ...]
+    #: Observables this node produces.  A node that carries the answer must say
+    #: so, otherwise nothing can tell that dropping it loses the answer.
+    produces_observables: tuple[str, ...] = ()
+    #: ``resolvable`` -- materializable now; ``unresolved_future`` -- waiting on
+    #: a producer artifact; ``blocked_unsupported`` -- required, expressible as
+    #: intent, but outside the current program surface.  The third state exists
+    #: so an honest plan can be finding-free without silently dropping a stage.
+    support_state: str = "resolvable"
+    blocked_reason: str = ""
 
     def __post_init__(self) -> None:
+        self._validate_identity()
+        if self.support_state not in WORKFLOW_NODE_SUPPORT_STATES:
+            raise ContractError(
+                "support_state must be one of "
+                f"{sorted(WORKFLOW_NODE_SUPPORT_STATES)}"
+            )
+        if self.support_state == "blocked_unsupported":
+            if not str(self.blocked_reason).strip():
+                raise ContractError(
+                    "a blocked node must state why it is unsupported"
+                )
+        elif str(self.blocked_reason).strip():
+            raise ContractError(
+                "blocked_reason applies only to a blocked_unsupported node"
+            )
+        observables = tuple(self.produces_observables)
+        # Canonical JSON renders a tuple as a list, so a replayed record must be
+        # normalized back or an identical plan would compare unequal.
+        object.__setattr__(self, "produces_observables", observables)
+        if observables != tuple(sorted(set(observables))):
+            raise ContractError(
+                "produces_observables must be sorted and unique"
+            )
+        for observable in self.produces_observables:
+            require_identifier(observable, "observable")
+        return
+
+    def _validate_identity(self) -> None:
         for name, value in (
             ("node_id", self.node_id),
             ("stage", self.stage),
@@ -460,6 +505,10 @@ class ScientificWorkflowPlanV2:
     complexity_factors: tuple[str, ...]
     status: str
     plan_sha256: str
+    #: Observables the task asked for.  Recording them on the plan is what lets
+    #: a later repair be checked against the question rather than only against
+    #: its own findings.
+    required_observables: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.scientific-workflow-plan.v2":
@@ -485,6 +534,24 @@ class ScientificWorkflowPlanV2:
             )
         if self.status != "planned":
             raise ContractError("scientific workflow plan can only be planned")
+        required = tuple(self.required_observables)
+        object.__setattr__(self, "required_observables", required)
+        if required != tuple(sorted(set(required))):
+            raise ContractError(
+                "required_observables must be sorted and unique"
+            )
+        produced = {
+            observable
+            for node in self.nodes
+            for observable in node.produces_observables
+        }
+        missing = sorted(set(required) - produced)
+        if missing:
+            raise ContractError(
+                "no node produces the required observable(s) "
+                f"{missing}; a stage that cannot be materialized must stay in "
+                "the plan as blocked_unsupported rather than be removed"
+            )
         body = {
             "schema_version": self.schema_version,
             "workflow_id": self.workflow_id,
@@ -495,6 +562,10 @@ class ScientificWorkflowPlanV2:
             "complexity_factors": self.complexity_factors,
             "status": self.status,
         }
+        if self.required_observables:
+            # An absent field does not participate in identity, so plans that
+            # declare no observable keep their existing digest.
+            body["required_observables"] = self.required_observables
         if self.plan_sha256 != canonical_sha256(body):
             raise ContractError("scientific workflow plan digest mismatch")
 
@@ -507,6 +578,7 @@ def build_scientific_workflow_plan(
     nodes: Sequence[ScientificWorkflowNodeV2],
     edges: Sequence[ScientificWorkflowEdgeV2] = (),
     explicit_complexity_factors: Sequence[str] = (),
+    required_observables: Sequence[str] = (),
 ) -> ScientificWorkflowPlanV2:
     normalized_nodes = tuple(nodes)
     normalized_edges = tuple(edges)
@@ -532,8 +604,14 @@ def build_scientific_workflow_plan(
         ),
         "status": "planned",
     }
+    observables = tuple(sorted(set(str(item) for item in required_observables)))
+    digest_body = dict(body)
+    if observables:
+        digest_body["required_observables"] = observables
     return ScientificWorkflowPlanV2(
-        **body, plan_sha256=canonical_sha256(body)
+        **body,
+        required_observables=observables,
+        plan_sha256=canonical_sha256(digest_body),
     )
 
 

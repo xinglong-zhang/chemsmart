@@ -1805,6 +1805,35 @@ def _bootstrap_conformance(
     if pyscf_parts:
         combined = _combine_program_conformance(pyscf_parts)
         receipts.append(combined)
+    # ORCA conformance uses the same fake-preview path as the others: the
+    # generated .inp is parsed as the conformance artifact, so no ORCA binary
+    # is involved and the receipt enables planning and preview only.
+    try:
+        orca = bootstrap_program_conformance(
+            program="orca",
+            engine="cpu",
+            jobtypes=("sp", "opt"),
+            input_path=input_artifact.path,
+            project_path=None,
+            server_path=server_path,
+            charge=0,
+            multiplicity=1,
+            registry_sha256=registry_sha256,
+            live_schema=live_schema,
+        )
+        receipts.append(orca)
+        records.append(_conformance_record(orca, engine="cpu"))
+    except Exception as exc:
+        records.append(
+            {
+                "record_kind": "program_conformance",
+                "program": "orca",
+                "engine": "cpu",
+                "status": "failed",
+                "error_class": type(exc).__name__,
+                "covered_jobtypes": (),
+            }
+        )
     try:
         xtb = bootstrap_program_conformance(
             program="xtb",
