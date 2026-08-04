@@ -16,6 +16,7 @@ _JOB_CLASS = {
     "sp": "chemsmart.jobs.pyscf.singlepoint.PySCFSinglePointJob",
     "opt": "chemsmart.jobs.pyscf.opt.PySCFOptJob",
     "hess": "chemsmart.jobs.pyscf.hess.PySCFHessJob",
+    "td": "chemsmart.jobs.pyscf.td.PySCFTDJob",
 }
 
 
@@ -36,10 +37,15 @@ def test_only_library_backends_may_omit_exefolder(tmp_path):
 
 
 def _run_and_capture_settings(
-    cli_args, jobtype="sp", num_gpus=0, preflight_violations=None
+    cli_args,
+    jobtype="sp",
+    num_gpus=0,
+    preflight_violations=None,
+    *,
+    fake=False,
 ):
     runner = CliRunner()
-    jobrunner = MagicMock(num_gpus=num_gpus)
+    jobrunner = MagicMock(num_gpus=num_gpus, fake=fake)
 
     patches = [patch(_JOB_CLASS[jobtype])]
     # Stage B adds this symbol to the shared builder. Keeping the test helper
@@ -78,7 +84,7 @@ def _run_and_capture_settings(
             manager.__exit__(None, None, None)
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "td"])
 def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
     runner = CliRunner()
 
@@ -198,8 +204,55 @@ def test_explicit_gpu_rejects_zero_resolved_devices(single_molecule_xyz_file):
         )
 
 
+def test_fake_gpu_preview_preserves_request_without_local_device(
+    single_molecule_xyz_file,
+):
+    result, settings = _run_and_capture_settings(
+        [
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "--gpu",
+            "sp",
+        ],
+        num_gpus=0,
+        fake=True,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert settings.engine == "gpu"
+
+
+def test_explicit_cpu_does_not_require_gpu_inventory(
+    single_molecule_xyz_file,
+):
+    result, settings = _run_and_capture_settings(
+        [
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "--no-gpu",
+            "sp",
+        ],
+        num_gpus=None,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert settings.engine == "cpu"
+
+
 @pytest.mark.parametrize("num_gpus", [0, 1, 4])
-def test_omitted_gpu_flag_always_resolves_cpu(
+def test_omitted_gpu_flag_preserves_cpu_project_engine(
     single_molecule_xyz_file, num_gpus
 ):
     result, settings = _run_and_capture_settings(
@@ -215,6 +268,88 @@ def test_omitted_gpu_flag_always_resolves_cpu(
             "sp",
         ],
         num_gpus=num_gpus,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert settings.engine == "cpu"
+
+
+def _write_gpu_project(path):
+    path.write_text(
+        "sp:\n"
+        "  functional: b3lyp\n"
+        "  basis: def2-svp\n"
+        "  engine: gpu\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_omitted_gpu_flag_preserves_gpu_project_engine(
+    tmp_path, single_molecule_xyz_file
+):
+    project = _write_gpu_project(tmp_path / "gpu-project.yaml")
+
+    result, settings = _run_and_capture_settings(
+        [
+            "-p",
+            str(project),
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "sp",
+        ],
+        num_gpus=1,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert settings.engine == "gpu"
+
+
+def test_gpu_project_blocks_when_allocation_is_unavailable(
+    tmp_path, single_molecule_xyz_file
+):
+    project = _write_gpu_project(tmp_path / "gpu-project.yaml")
+
+    with pytest.raises(ValueError, match="will not fall back to CPU"):
+        _run_and_capture_settings(
+            [
+                "-p",
+                str(project),
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+            num_gpus=0,
+        )
+
+
+def test_explicit_no_gpu_overrides_gpu_project_without_gpu_inventory(
+    tmp_path, single_molecule_xyz_file
+):
+    project = _write_gpu_project(tmp_path / "gpu-project.yaml")
+
+    result, settings = _run_and_capture_settings(
+        [
+            "-p",
+            str(project),
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "--no-gpu",
+            "sp",
+        ],
+        num_gpus=None,
     )
 
     assert result.exit_code == 0, result.output
@@ -243,7 +378,7 @@ def test_remove_solvent_clears_project_single_point_solvent(
     assert (settings.solvent_model, settings.solvent_id) == (None, None)
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "td"])
 def test_leaf_selects_matching_project_settings(
     single_molecule_xyz_file, jobtype
 ):
@@ -265,6 +400,32 @@ def test_leaf_selects_matching_project_settings(
     assert result.exit_code == 0, result.output
     assert settings.jobtype == jobtype
     assert settings.project_yaml_digest is not None
+
+
+@pytest.mark.parametrize(
+    "partial_override", (("-c", "0"), ("-m", "1"))
+)
+def test_cli_rejects_partial_electronic_state_override(
+    single_molecule_xyz_file, partial_override
+):
+    runner = CliRunner()
+
+    result = runner.invoke(
+        pyscf,
+        [
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            *partial_override,
+            "sp",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "charge and multiplicity overrides must be supplied together" in (
+        str(result.exception)
+    )
 
 
 def test_sub_reconstruction_preserves_pyscf_run_settings(

@@ -8,7 +8,10 @@ import yaml
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
-from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.settings import (
+    PySCFJobSettings,
+    describe_functional_resolution,
+)
 from chemsmart.settings.pyscf import PySCFProjectSettings
 
 
@@ -24,6 +27,55 @@ def pyscf_test_project_yaml():
 
 
 class TestPySCFJobSettings:
+    def test_b3lyp_materializes_an_unambiguous_pyscf_alias(self):
+        settings = PySCFJobSettings(
+            functional="b3lyp", basis="def2-svp", jobtype="sp"
+        )
+
+        assert settings.functional == "b3lyp"
+        assert settings.xc == "b3lypg"
+
+    @pytest.mark.parametrize(
+        ("functional", "ab_initio", "applied_xc", "convention", "status"),
+        [
+            ("b3lyp", None, "b3lypg", "vwn3_gaussian", "registered_alias"),
+            ("b3lyp5", None, "b3lyp5", "vwn5", "explicit_variant"),
+            ("PBE0", None, "PBE0", "not_declared", "literal_preserved"),
+            (
+                "0.5*HF+0.5*PBE",
+                None,
+                "0.5*HF+0.5*PBE",
+                "not_declared",
+                "literal_preserved",
+            ),
+            (None, "hf", None, "not_applicable", "not_applicable"),
+        ],
+    )
+    def test_functional_resolution_matches_the_writer_xc_literal(
+        self, functional, ab_initio, applied_xc, convention, status
+    ):
+        settings = PySCFJobSettings(
+            functional=functional,
+            ab_initio=ab_initio,
+            basis="def2-svp",
+            jobtype="sp",
+        )
+
+        resolution = describe_functional_resolution(
+            settings.functional, ab_initio=settings.ab_initio
+        )
+
+        assert resolution["applied_xc"] == settings.xc == applied_xc
+        assert resolution["correlation_convention"] == convention
+        assert resolution["status"] == status
+
+    def test_density_fitting_is_opt_in(self):
+        settings = PySCFJobSettings(
+            functional="pbe0", basis="def2-svp", jobtype="sp"
+        )
+
+        assert settings.density_fit is False
+
     @pytest.mark.parametrize(
         ("multiplicity", "spin", "restricted"),
         [(1, 0, True), (2, 1, False), (3, 2, False)],
@@ -62,6 +114,27 @@ class TestPySCFJobSettings:
         assert merged.charge == 1
         assert merged.multiplicity == 2
         assert merged.project_yaml_digest == "a" * 64
+
+    @pytest.mark.parametrize(
+        ("charge", "multiplicity"),
+        ((0, None), (None, 1)),
+    )
+    def test_validate_rejects_partial_electronic_state_override(
+        self, charge, multiplicity
+    ):
+        settings = PySCFJobSettings(
+            functional="b3lyp",
+            basis="def2-svp",
+            charge=charge,
+            multiplicity=multiplicity,
+            jobtype="sp",
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="charge and multiplicity overrides must be supplied together",
+        ):
+            settings.validate()
 
     def test_unsupported_genecp_request_is_rejected(self):
         settings = PySCFJobSettings(
@@ -166,7 +239,7 @@ class TestPySCFJobSettings:
             PySCFJobSettings(**values).validate()
 
     def test_sp_rejects_frequency_flag(self):
-        with pytest.raises(ValueError, match="sp rejects freq=True"):
+        with pytest.raises(ValueError, match="sp requires freq=False"):
             PySCFJobSettings(
                 functional="b3lyp",
                 basis="def2-svp",
@@ -230,7 +303,7 @@ class TestPySCFJobSettings:
 
 
 class TestPySCFProjectSettings:
-    def test_yaml_loads_three_explicit_stage_sections(
+    def test_yaml_loads_four_explicit_stage_sections(
         self, pyscf_test_project_yaml
     ):
         project = PySCFProjectSettings.from_project("test")
@@ -238,19 +311,25 @@ class TestPySCFProjectSettings:
         sp = project.sp_settings()
         opt = project.opt_settings()
         hess = project.hess_settings()
+        td = project.td_settings()
 
         assert project.PROJECT_NAME == "test"
-        assert (sp.jobtype, opt.jobtype, hess.jobtype) == (
+        assert (sp.jobtype, opt.jobtype, hess.jobtype, td.jobtype) == (
             "sp",
             "opt",
             "hess",
+            "td",
         )
         assert (opt.solvent_model, opt.solvent_id) == (None, None)
         assert (hess.solvent_model, hess.solvent_id) == (None, None)
         assert (sp.solvent_model, sp.solvent_id) == ("smd", "water")
-        assert opt.freq is True
+        assert opt.freq is False
         assert hess.freq is True
         assert sp.freq is False
+        assert td.freq is False
+        assert td.response_method == "tda"
+        assert td.state_manifold == "singlet"
+        assert td.nstates == 10
 
         expected_digest = hashlib.sha256(
             pyscf_test_project_yaml.read_bytes()
@@ -259,6 +338,7 @@ class TestPySCFProjectSettings:
             sp.project_yaml_digest,
             opt.project_yaml_digest,
             hess.project_yaml_digest,
+            td.project_yaml_digest,
         } == {expected_digest}
 
     def test_settings_copies_do_not_mutate_project(self):

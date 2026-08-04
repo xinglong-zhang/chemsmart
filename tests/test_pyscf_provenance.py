@@ -13,6 +13,7 @@ import pytest
 from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
 from chemsmart.jobs.pyscf.writer import (
     H5_NULL_ATTRIBUTE,
+    RESULT_UNITS,
     RESULTS_SCHEMA_VERSION,
     PySCFScriptWriter,
     write_pyscf_h5,
@@ -65,6 +66,7 @@ def _v2_payload():
         "project_yaml_digest": "project-sha256",
     }
     status = {
+        "engine_complete": True,
         "normal_termination": True,
         "stages": {
             "scf": {"converged": True, "iterations": 7},
@@ -114,6 +116,15 @@ def test_v2_groups_round_trip_typed_status_nulls_and_exact_arrays(tmp_path):
         null = handle["provenance/gpu4pyscf_version"]
         assert null.shape == (0,)
         assert bool(null.attrs[H5_NULL_ATTRIBUTE]) is True
+        for name, node in handle["results"].items():
+            if isinstance(node, h5py.Dataset) and node.dtype.kind in {
+                "b",
+                "i",
+                "u",
+                "f",
+                "c",
+            }:
+                assert node.attrs["unit"] == RESULT_UNITS[name]
 
     observed_spec, observed_provenance, observed_status, observed_results = (
         read_pyscf_h5(path)
@@ -130,12 +141,34 @@ def test_v2_groups_round_trip_typed_status_nulls_and_exact_arrays(tmp_path):
 
     output = PySCFOutput(tmp_path / "label.out")
     assert output.normal_termination is True
+    assert output.engine_complete is True
     assert output.failure is None
     assert output.engine == "cpu"
     assert output.settings_digest == "settings-sha256"
     assert output.project_yaml_digest == "project-sha256"
     assert output.point_group == "C2v"
     np.testing.assert_array_equal(output.forces, results["forces"])
+
+
+def test_spin_diagnostic_datasets_have_explicit_dimensionless_units(tmp_path):
+    path = tmp_path / "spin-diagnostic.h5"
+    spec, provenance, status, results = _v2_payload()
+    results["spin_square"] = np.asarray(2.0)
+    results["spin_square_effective_multiplicity"] = np.asarray(3.0)
+
+    write_pyscf_h5(
+        path,
+        spec=spec,
+        provenance=provenance,
+        status=status,
+        results=results,
+    )
+
+    with h5py.File(path, "r") as handle:
+        assert handle["results/spin_square"].attrs["unit"] == "dimensionless"
+        assert handle[
+            "results/spin_square_effective_multiplicity"
+        ].attrs["unit"] == "dimensionless"
 
 
 def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
@@ -158,6 +191,11 @@ def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
         else:
             np.testing.assert_array_equal(observed[3][key], expected)
 
+    output = PySCFOutput(path)
+    assert output.result_units["results/energies"] == "Eh"
+    assert output.result_units["results/positions"] == "Angstrom"
+    assert output.result_units["results/vibrational_frequencies"] == "cm^-1"
+
 
 def test_generated_driver_preserves_imaginary_modes_as_negative_values():
     source = PySCFScriptWriter.render(
@@ -174,7 +212,26 @@ def test_solvent_resolution_is_deferred_to_target_interpreter():
 
     assert "from pyscf.solvent.smd import solvent_db" in source
     assert 'config["solvent_eps"] = eps' in source
+    assert '"source": "pyscf.solvent.smd.solvent_db"' in source
+    assert '"unit": "dimensionless_relative_permittivity"' in source
+    assert '"pyscf_version": pyscf.__version__' in source
+    assert '"environment_receipt_sha256": os.environ.get(' in source
+    assert "CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256" in source
     assert "mf.with_solvent.lebedev_order" in source
+
+
+def test_optimizer_probe_accepts_expected_sentinel_rejection_shapes():
+    from chemsmart.jobs.pyscf.environment import _PROBE_SCRIPT
+
+    # PySCF adapters reject the non-computing sentinel at different API
+    # boundaries: geomeTRIC uses NotImplementedError, Berny commonly reaches
+    # a missing Mole attribute, and ASE raises RuntimeError.  All demonstrate
+    # that the optional dependency and real adapter entry point were reached.
+    assert "AttributeError," in _PROBE_SCRIPT
+    assert "NotImplementedError," in _PROBE_SCRIPT
+    assert "RuntimeError," in _PROBE_SCRIPT
+    assert "TypeError," in _PROBE_SCRIPT
+    assert '"call_probe": "entrypoint_reached"' in _PROBE_SCRIPT
 
 
 def test_gpu_solvent_quadrature_is_explicit_and_receipted():

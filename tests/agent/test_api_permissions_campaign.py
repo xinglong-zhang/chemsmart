@@ -51,6 +51,32 @@ def test_in_memory_permission_ledger_refuses_material_approval_consume():
         ledger.resolve(request, approval=approval)
 
 
+def test_alibaba_token_plan_lease_selects_only_its_exact_label(tmp_path):
+    path = tmp_path / "api.env"
+    path.write_text(
+        "ALIBABA_TOKEN_PLAN_KEY=sk-sp-token-plan\n"
+        "DEEPSEEK-api-key=deepseek-secret\n",
+        encoding="utf-8",
+    )
+
+    lease = load_secret_lease(provider="alibaba-token-plan", path=path)
+
+    assert lease.provider == "alibaba-token-plan"
+    assert "sk-sp-token-plan" not in repr(lease)
+    assert lease.invoke(lambda secret: secret.startswith("sk-sp-")) is True
+
+
+def test_secret_lease_rejects_normalized_label_collision(tmp_path):
+    path = tmp_path / "api.env"
+    path.write_text(
+        "DEEPSEEK-api-key=first\nDEEPSEEK_API_KEY=second\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ContractError, match="ambiguous"):
+        load_secret_lease(provider="deepseek", path=path)
+
+
 def test_adaptive_campaign_has_no_transport_call_cap_or_topup():
     policy = AdaptiveApiCampaignPolicyV1()
 

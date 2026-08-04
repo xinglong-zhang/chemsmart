@@ -84,6 +84,36 @@ def test_model_tool_surface_uses_registry_programs_and_has_no_execution_tools(
     assert "run_local" not in names
     assert "submit_hpc" not in names
     assert "native_input" not in blob
+    synthesize = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "synthesize_command"
+    )
+    preflight = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "preflight_program_node"
+    )
+    assert "execution_target" not in (
+        synthesize["function"]["parameters"]["properties"]
+    )
+    assert "validator_receipt_sha256s" not in (
+        preflight["function"]["parameters"]["properties"]
+    )
+    bind_identity = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "bind_scientific_identity"
+    )
+    plan_workflow = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "plan_command_workflow"
+    )
+    assert "never a project YAML or result" in bind_identity["function"][
+        "description"
+    ]
+    assert "called again" in plan_workflow["function"]["description"]
 
 
 def test_h0_and_h1_have_distinct_frozen_surfaces(fake_capability_registry):

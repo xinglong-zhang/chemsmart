@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -10,6 +11,8 @@ import pytest
 from chemsmart.agent._contracts import (
     ContractError,
     TrustedArtifactRefV1,
+    canonical_data,
+    canonical_sha256,
     file_sha256,
 )
 from chemsmart.agent.execution import (
@@ -17,15 +20,34 @@ from chemsmart.agent.execution import (
     build_locked_pyscf_sp_opt_hess_approval,
     build_program_execution_invocation,
     build_program_execution_receipt,
+    build_program_result_validation_receipt,
     handoff_optimized_pyscf_geometry,
     workflow_execution_approval_json,
 )
+from chemsmart.agent.capabilities import (
+    EnvironmentCapabilityReceiptV1,
+    EnvironmentStatus,
+    ProgramEnvironmentQueryV1,
+    consume_pyscf_compute_environment_receipt,
+)
 from chemsmart.agent.live_session import _scan_xyz_artifacts, _system_prompt
+from chemsmart.agent.runtime.events import EventKind, RuntimeEvent
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
+    _PySCFEngineObservation,
+    _inspect_pyscf_engine_observation,
+    _pyscf_environment_evidence,
     _prepare_execution_node_workspace,
+    _runner_defers_hessian_classification,
+    _validate_stationary_point_policy_binding,
 )
-from chemsmart.jobs.pyscf.writer import write_pyscf_h5
+from chemsmart.agent.workflows import StationaryPointValidationPolicyV1
+from chemsmart.jobs.pyscf.writer import (
+    APPLIED_SPEC_FIELDS,
+    RESULT_CONTRACT_VERSION,
+    PySCFScriptWriter,
+    write_pyscf_h5,
+)
 
 
 def _artifact(path, *, artifact_id, kind):
@@ -39,7 +61,18 @@ def _artifact(path, *, artifact_id, kind):
     )
 
 
-def _locked_approval(tmp_path):
+def _locked_resources(*, node_timeout_seconds=600):
+    return build_execution_resource_spec(
+        execution_target="run",
+        cores=4,
+        memory_gb=4,
+        gpu_count=0,
+        scratch_policy="none",
+        node_timeout_seconds=node_timeout_seconds,
+    )
+
+
+def _locked_approval(tmp_path, *, node_timeout_seconds=600):
     geometry_path = tmp_path / "water.xyz"
     geometry_path.write_text(
         "3\nwater\nO 0.0 0.0 0.1174\n"
@@ -72,13 +105,8 @@ def _locked_approval(tmp_path):
         ),
         encoding="utf-8",
     )
-    resources = build_execution_resource_spec(
-        execution_target="run",
-        cores=4,
-        memory_gb=4,
-        gpu_count=0,
-        scratch_policy="none",
-        node_timeout_seconds=5400,
+    resources = _locked_resources(
+        node_timeout_seconds=node_timeout_seconds
     )
     approval = build_locked_pyscf_sp_opt_hess_approval(
         approval_id="water-approval",
@@ -117,7 +145,14 @@ def test_locked_pyscf_approval_binds_order_and_optimized_handoff(tmp_path):
     )
 
 
-def test_execution_host_rejects_a_node_before_approved_predecessors(tmp_path):
+def test_locked_pyscf_approval_rejects_non_ten_minute_timeout(tmp_path):
+    with pytest.raises(ContractError, match="locked CPU profile"):
+        _locked_approval(tmp_path, node_timeout_seconds=5400)
+
+
+def test_execution_host_rejects_legacy_v1_approval_before_invocation_lookup(
+    tmp_path,
+):
     host = object.__new__(CommandCompiledToolHostV1)
     host.surface = SimpleNamespace(
         profile="command_compiled_approved_execution"
@@ -125,7 +160,10 @@ def test_execution_host_rejects_a_node_before_approved_predecessors(tmp_path):
     host.execution_receipts = {}
     host.workflow_execution_approval = _locked_approval(tmp_path)
 
-    with pytest.raises(ContractError, match="approved predecessors"):
+    with pytest.raises(
+        ContractError,
+        match="legacy V1 approval is preview-only; Runtime V2 frozen approval",
+    ):
         host._execute_approved_program_node(
             "turn-1", {"node_id": "opt-initial"}
         )
@@ -157,14 +195,7 @@ def test_preexisting_node_outputs_block_a_second_launch(tmp_path):
 
 def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
     approval = _locked_approval(tmp_path)
-    resources = build_execution_resource_spec(
-        execution_target="run",
-        cores=4,
-        memory_gb=4,
-        gpu_count=0,
-        scratch_policy="none",
-        node_timeout_seconds=5400,
-    )
+    resources = _locked_resources()
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
         artifact_id="project.water.pyscf",
@@ -230,24 +261,26 @@ def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
     with pytest.raises(ContractError, match="unresolved findings"):
         build_program_execution_receipt(
             invocation,
-            execution_state="engine_complete",
+            execution_state="validated",
             exit_status=0,
             engine_complete=True,
             validated=True,
             output_artifacts=(result,),
             validator_receipt_sha256s=("e" * 64,),
+            result_validation_receipt_sha256="e" * 64,
             findings=("pyscf.result.seeded_failure",),
             started_at="2026-08-03T00:00:00+00:00",
             finished_at="2026-08-03T00:00:01+00:00",
         )
     receipt = build_program_execution_receipt(
         invocation,
-        execution_state="engine_complete",
+        execution_state="validated",
         exit_status=0,
         engine_complete=True,
         validated=True,
         output_artifacts=(result,),
         validator_receipt_sha256s=("e" * 64,),
+        result_validation_receipt_sha256="e" * 64,
         started_at="2026-08-03T00:00:00+00:00",
         finished_at="2026-08-03T00:00:01+00:00",
     )
@@ -270,9 +303,770 @@ def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
     ).read_text(encoding="utf-8")
 
 
-def test_live_prompt_preserves_order_and_loader_bounded_alternatives():
+def test_execution_receipt_separates_wrapper_and_child_status(tmp_path):
+    approval = _locked_approval(tmp_path)
+    node = approval.node("sp-initial")
+    invocation = build_program_execution_invocation(
+        node_id=node.node_id,
+        approval=approval,
+        project_artifact=_artifact(
+            tmp_path / "water-pyscf.yaml",
+            artifact_id="project.water.pyscf",
+            kind="project_yaml",
+        ),
+        input_artifact=_artifact(
+            tmp_path / "water.xyz",
+            artifact_id="geometry.water.initial",
+            kind="geometry_xyz",
+        ),
+        scientific_identity_sha256=node.scientific_identity_sha256,
+        environment_receipt_sha256="b" * 64,
+        resources=_locked_resources(),
+        argv=("chemsmart", "run", "pyscf", "sp"),
+    )
+
+    receipt = build_program_execution_receipt(
+        invocation,
+        execution_state="engine_complete",
+        exit_status=17,
+        child_exit_status=0,
+        engine_complete=True,
+        validated=False,
+        engine_receipt_sha256="c" * 64,
+        findings=("pyscf.result.seeded_failure",),
+        started_at="2026-08-04T00:00:00+00:00",
+        finished_at="2026-08-04T00:00:01+00:00",
+    )
+
+    assert receipt.wrapper_exit_status == 17
+    assert receipt.exit_status == 17
+    assert receipt.child_exit_status == 0
+    assert receipt.engine_complete is True
+    assert receipt.validated is False
+
+    for contradictory_state in ("engine_complete", "failed"):
+        with pytest.raises(
+            ContractError,
+            match="validated execution requires validated execution state",
+        ):
+            build_program_execution_receipt(
+                invocation,
+                execution_state=contradictory_state,
+                exit_status=0,
+                child_exit_status=0,
+                engine_complete=True,
+                validated=True,
+                started_at="2026-08-04T00:00:00+00:00",
+                finished_at="2026-08-04T00:00:01+00:00",
+            )
+
+    with pytest.raises(ContractError, match="child exit status zero"):
+        build_program_execution_receipt(
+            invocation,
+            execution_state="engine_complete",
+            exit_status=0,
+            child_exit_status=2,
+            engine_complete=True,
+            validated=False,
+            started_at="2026-08-04T00:00:00+00:00",
+            finished_at="2026-08-04T00:00:01+00:00",
+        )
+
+
+def test_execution_receipt_binds_resolvable_result_validation(tmp_path):
+    approval = _locked_approval(tmp_path)
+    node = approval.node("sp-initial")
+    project = _artifact(
+        tmp_path / "water-pyscf.yaml",
+        artifact_id="project.water.pyscf",
+        kind="project_yaml",
+    )
+    initial = _artifact(
+        tmp_path / "water.xyz",
+        artifact_id="geometry.water.initial",
+        kind="geometry_xyz",
+    )
+    invocation = build_program_execution_invocation(
+        node_id=node.node_id,
+        approval=approval,
+        project_artifact=project,
+        input_artifact=initial,
+        scientific_identity_sha256=node.scientific_identity_sha256,
+        environment_receipt_sha256="b" * 64,
+        resources=_locked_resources(),
+        argv=("chemsmart", "run", "pyscf", "sp"),
+    )
+    output_path = tmp_path / "observable.json"
+    output_path.write_text("{}", encoding="utf-8")
+    output = _artifact(
+        output_path,
+        artifact_id="result.sp.observation",
+        kind="json",
+    )
+    validation = build_program_result_validation_receipt(
+        invocation=invocation,
+        validator_id="pyscf-result-validator",
+        validator_schema_version="chemsmart.pyscf-result-validation.v1",
+        validator_version="1",
+        input_artifact=initial,
+        project_artifact=project,
+        capability_environment_receipt_sha256="b" * 64,
+        output_artifacts=(output,),
+        observations={"state": "validated", "energy_finite": True},
+        findings=(),
+        run_environment_receipt_sha256="c" * 64,
+        environment_validation_sha256="d" * 64,
+    )
+    failed_validation = build_program_result_validation_receipt(
+        invocation=invocation,
+        validator_id="pyscf-result-validator",
+        validator_schema_version="chemsmart.pyscf-result-validation.v1",
+        validator_version="1",
+        input_artifact=initial,
+        project_artifact=project,
+        capability_environment_receipt_sha256="b" * 64,
+        output_artifacts=(output,),
+        observations={
+            "result_validation": {
+                "state": "failed",
+                "findings": (),
+            }
+        },
+        findings=(),
+    )
+    assert failed_validation.state == "invalid"
+    assert failed_validation.findings == (
+        "result_validation.state_not_validated",
+    )
+    execution = build_program_execution_receipt(
+        invocation,
+        execution_state="validated",
+        exit_status=0,
+        child_exit_status=0,
+        engine_complete=True,
+        validated=True,
+        result_validation_receipt_sha256=validation.receipt_sha256,
+        output_artifacts=(output,),
+        validator_receipt_sha256s=(validation.receipt_sha256,),
+        started_at="2026-08-04T00:00:00+00:00",
+        finished_at="2026-08-04T00:00:01+00:00",
+    )
+
+    assert execution.result_validation_receipt_sha256 == (
+        validation.receipt_sha256
+    )
+
+    event = RuntimeEvent.create(
+        sequence=1,
+        session_id="result-validation-session",
+        turn_id="turn-1",
+        kind=EventKind.RESULT_VERIFIED,
+        payload={
+            "receipt_sha256": validation.receipt_sha256,
+            "status": "valid",
+            "critical_finding_count": 0,
+            "record": canonical_data(validation),
+        },
+    )
+    assert event.payload["record"]["receipt_sha256"] == (
+        validation.receipt_sha256
+    )
+
+    substituted_record = dict(canonical_data(validation))
+    substituted_record["validator_version"] = "substituted"
+    with pytest.raises(ContractError, match="record digest mismatch"):
+        RuntimeEvent.create(
+            sequence=2,
+            session_id="result-validation-session",
+            turn_id="turn-1",
+            kind=EventKind.RESULT_VERIFIED,
+            payload={
+                "receipt_sha256": validation.receipt_sha256,
+                "status": "valid",
+                "critical_finding_count": 0,
+                "record": substituted_record,
+            },
+        )
+
+
+def test_stationary_point_policy_rejects_counterfeit_contracts():
+    frozen = SimpleNamespace(stationary_point_policy_sha256="a" * 64)
+    approved = SimpleNamespace(policy_sha256="a" * 64)
+
+    with pytest.raises(ContractError, match="real approval"):
+        _validate_stationary_point_policy_binding(frozen, approved)
+    with pytest.raises(ContractError, match="real approval"):
+        _validate_stationary_point_policy_binding(
+            frozen, SimpleNamespace(policy_sha256="b" * 64)
+        )
+    with pytest.raises(ContractError, match="real policy"):
+        _validate_stationary_point_policy_binding(None, approved)
+
+
+def _minimum_stationary_point_policy():
+    body = {
+        "schema_version": "chemsmart.stationary-point-policy.v1",
+        "policy_id": "water-minimum",
+        "task_spec_sha256": "a" * 64,
+        "hessian_node_id": "hess-optimized",
+        "stationary_point_kind": "minimum",
+        "expected_imaginary_mode_count": 0,
+        "imaginary_mode_cutoff_cm1": 20.0,
+        "require_finite_modes": True,
+        "require_symmetric_hessian": True,
+    }
+    return StationaryPointValidationPolicyV1(
+        **body, policy_sha256=canonical_sha256(body)
+    )
+
+
+def _unclassified_hessian_run_receipt():
+    return {
+        "state": "engine_complete",
+        "child_returncode": 0,
+        "engine_complete": True,
+        "scientifically_validated": False,
+        "scientific_validation_state": "unclassified",
+        "findings": [],
+        "result_validation": {
+            "state": "unclassified",
+            "findings": [],
+            "frequency_validation": {
+                "stationary_point_classification": "unclassified",
+                "findings": [],
+            },
+        },
+    }
+
+
+def test_agent_admits_unclassified_runner_only_for_exact_approved_hessian_policy():
+    policy = _minimum_stationary_point_policy()
+    run_receipt = _unclassified_hessian_run_receipt()
+
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="hess",
+        hessian_node_id="hess-optimized",
+        engine_complete=True,
+        stationary_point_policy=policy,
+        approved_stationary_point_policy_sha256=policy.policy_sha256,
+    ) is True
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="hess",
+        hessian_node_id="hess-optimized",
+        engine_complete=True,
+        stationary_point_policy=policy,
+        approved_stationary_point_policy_sha256="b" * 64,
+    ) is False
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="hess",
+        hessian_node_id="another-hessian",
+        engine_complete=True,
+        stationary_point_policy=policy,
+        approved_stationary_point_policy_sha256=policy.policy_sha256,
+    ) is False
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="sp",
+        hessian_node_id="hess-optimized",
+        engine_complete=True,
+        stationary_point_policy=policy,
+        approved_stationary_point_policy_sha256=policy.policy_sha256,
+    ) is False
+
+
+def test_agent_rejects_incomplete_unclassified_runner_receipt_even_with_policy():
+    policy = _minimum_stationary_point_policy()
+    run_receipt = _unclassified_hessian_run_receipt()
+    run_receipt["result_validation"] = {
+        **run_receipt["result_validation"],
+        "state": "validated",
+    }
+
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="hess",
+        hessian_node_id="hess-optimized",
+        engine_complete=True,
+        stationary_point_policy=policy,
+        approved_stationary_point_policy_sha256=policy.policy_sha256,
+    ) is False
+
+
+def test_parent_policy_validator_promotes_exact_unclassified_hessian_handoff(
+    tmp_path,
+):
+    policy = _minimum_stationary_point_policy()
+    result_path = tmp_path / "water-hess.h5"
+    result_path.write_bytes(b"host-bound-hessian-result")
+    result = _artifact(
+        result_path,
+        artifact_id="result.hess.hdf5",
+        kind="pyscf_hdf5",
+    )
+    engine = _PySCFEngineObservation(
+        child_exit_status=0,
+        engine_complete=True,
+        run_receipt_sha256="c" * 64,
+        run_receipt=_unclassified_hessian_run_receipt(),
+        result_artifact=result,
+        findings=(),
+    )
+    host_validation = {
+        "schema_version": "chemsmart.pyscf-result-validation.v1",
+        "state": "validated",
+        "findings": [],
+    }
+
+    with (
+        patch(
+            "chemsmart.jobs.pyscf.validation.validate_pyscf_result",
+            return_value=host_validation,
+        ) as validate,
+        patch(
+            "chemsmart.agent.tool_runtime._pyscf_input_geometry",
+            return_value=(("O", "H", "H"), np.zeros((3, 3))),
+        ),
+        patch(
+            "chemsmart.io.pyscf.output.read_pyscf_h5",
+            return_value=(
+                {"program": "pyscf", "engine": "cpu"},
+                {},
+                {},
+                {},
+            ),
+        ),
+    ):
+        evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+            program="pyscf",
+            jobtype="hess",
+            charge=0,
+            multiplicity=1,
+            expected_settings={"engine": "cpu"},
+            output_artifacts=(result,),
+            exit_status=0,
+            pyscf_engine_observation=engine,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256=policy.policy_sha256,
+            approved_hessian_node_id="hess-optimized",
+        )
+
+    assert evaluation.validated is True
+    assert evaluation.findings == ()
+    assert evaluation.observations["runner_validation_delegation"] == (
+        "approved_stationary_point_policy"
+    )
+    assert evaluation.observations["stationary_point_policy_sha256"] == (
+        policy.policy_sha256
+    )
+    assert validate.call_args.kwargs["stationary_point_policy"] is policy
+
+
+def _write_digest_bound_receipt(path, payload):
+    body = dict(payload)
+    body["receipt_sha256"] = canonical_sha256(body)
+    path.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
+    return body
+
+
+def _pyscf_environment_pair(
+    tmp_path, *, pyscf_version="2.14.0", libxc_version="7.0.0"
+):
+    environment_path = tmp_path / "pyscf-environment.receipt.json"
+    raw = _write_digest_bound_receipt(
+        environment_path,
+        {
+            "schema_version": "chemsmart.pyscf-environment.v1",
+            "status": "available",
+            "probe_returncode": 0,
+            "interpreter": "/opt/example/bin/python",
+            "interpreter_observed": "/opt/example/bin/python",
+            "interpreter_sha256": "1" * 64,
+            "pyscf_version": pyscf_version,
+            "libxc_version": libxc_version,
+            "packages": {
+                "h5py": "3.15.1",
+                "numpy": "2.2.6",
+                "pyscf": pyscf_version,
+            },
+            "dependencies": {
+                "h5py": {"available": True, "version": "3.15.1"},
+                "numpy": {"available": True, "version": "2.2.6"},
+                "pyscf": {"available": True, "version": pyscf_version},
+            },
+            "solver_callables": {
+                "geometric": {"callable": True},
+            },
+            "cuda_available": 0,
+            "cuda_driver_version": 0,
+            "cuda_runtime_version": 0,
+            "device_count": 0,
+            "device_name": "",
+            "device_uuid": "",
+            "cutensor_runtime": 0,
+            "cutensor_compatible": False,
+            "cutensor_runtime_available": False,
+        },
+    )
+    compute = consume_pyscf_compute_environment_receipt(raw, engine="cpu")
+    query = ProgramEnvironmentQueryV1(
+        capability_receipt_sha256="2" * 64,
+        program="pyscf",
+        engine="cpu",
+    )
+    body = {
+        "schema_version": "chemsmart.environment-capability-receipt.v1",
+        "query": query,
+        "capability_receipt_sha256": query.capability_receipt_sha256,
+        "program": "pyscf",
+        "engine": "cpu",
+        "status": EnvironmentStatus.AVAILABLE,
+        "target_kind": "compute_receipt",
+        "locator": "pyscf-cpu",
+        "observed_version": pyscf_version,
+        "observed_location_sha256": "",
+        "compute_interpreter_sha256": compute.compute_interpreter_sha256,
+        "compute_evidence_sha256": compute.evidence_sha256,
+        "dependency_versions": compute.dependency_versions,
+        "solver_evidence": compute.solver_evidence,
+        "gpu_evidence": compute.gpu_evidence,
+        "observation_method": "trusted_target_compute_receipt",
+        "rule_ids": ("environment.compute_receipt.complete",),
+    }
+    capability = EnvironmentCapabilityReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+    return environment_path, raw, capability
+
+
+def test_run_environment_is_semantically_compared_not_digest_equal(tmp_path):
+    path, raw, capability = _pyscf_environment_pair(tmp_path)
+    artifact = _artifact(
+        path,
+        artifact_id="result.sp.environment",
+        kind="json",
+    )
+
+    observation, findings = _pyscf_environment_evidence(
+        output_artifacts=(artifact,),
+        run_receipt={"environment_receipt_sha256": raw["receipt_sha256"]},
+        capability_environment=capability,
+    )
+
+    assert capability.receipt_sha256 != raw["receipt_sha256"]
+    assert findings == ()
+    assert observation["state"] == "valid"
+    assert observation["approved_semantic_fingerprint_sha256"] == (
+        observation["observed_semantic_fingerprint_sha256"]
+    )
+
+
+def test_run_environment_substitution_is_rejected_semantically(tmp_path):
+    original_path, _raw, capability = _pyscf_environment_pair(tmp_path)
+    original_path.unlink()
+    substituted_path, substituted, _unused = _pyscf_environment_pair(
+        tmp_path, pyscf_version="2.13.0"
+    )
+    artifact = _artifact(
+        substituted_path,
+        artifact_id="result.sp.environment",
+        kind="json",
+    )
+
+    observation, findings = _pyscf_environment_evidence(
+        output_artifacts=(artifact,),
+        run_receipt={
+            "environment_receipt_sha256": substituted["receipt_sha256"]
+        },
+        capability_environment=capability,
+    )
+
+    assert observation["state"] == "invalid"
+    assert "pyscf.environment.semantic_mismatch" in findings
+
+
+def test_run_environment_libxc_substitution_is_rejected_semantically(tmp_path):
+    original_path, _raw, capability = _pyscf_environment_pair(tmp_path)
+    original_path.unlink()
+    substituted_path, substituted, _unused = _pyscf_environment_pair(
+        tmp_path, libxc_version="6.2.2"
+    )
+    artifact = _artifact(
+        substituted_path,
+        artifact_id="result.sp.environment.libxc",
+        kind="json",
+    )
+
+    observation, findings = _pyscf_environment_evidence(
+        output_artifacts=(artifact,),
+        run_receipt={
+            "environment_receipt_sha256": substituted["receipt_sha256"]
+        },
+        capability_environment=capability,
+    )
+
+    assert observation["state"] == "invalid"
+    assert "pyscf.environment.semantic_mismatch" in findings
+
+
+def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
+    approval = _locked_approval(tmp_path)
+    project = _artifact(
+        tmp_path / "water-pyscf.yaml",
+        artifact_id="project.water.pyscf",
+        kind="project_yaml",
+    )
+    initial = _artifact(
+        tmp_path / "water.xyz",
+        artifact_id="geometry.water.initial",
+        kind="geometry_xyz",
+    )
+    h5_path = tmp_path / "water-sp.h5"
+    spec = {field: None for field in APPLIED_SPEC_FIELDS}
+    spec.update(
+        {
+            "run_id": "agent-run",
+            "run_nonce": "agent-nonce",
+            "program": "pyscf",
+            "result_contract_version": RESULT_CONTRACT_VERSION,
+            "jobtype": "sp",
+            "engine": "cpu",
+            "ab_initio": "hf",
+            "method": "hf",
+            "reference_family": "rhf",
+            "stages": ["scf"],
+            "symbols": ["O", "H", "H"],
+            "positions": [
+                [0.0, 0.0, 0.1174],
+                [-0.757, 0.0, -0.4696],
+                [0.757, 0.0, -0.4696],
+            ],
+            "unit": "Angstrom",
+            "charge": 0,
+            "spin": 0,
+            "multiplicity": 1,
+            "num_electrons": 10,
+            "nelec": [5, 5],
+            "input_geometry_sha256": "3" * 64,
+            "input_artifact_kind": "geometry_xyz",
+            "input_artifact_sha256": initial.sha256,
+            "requested_settings_sha256": "d" * 64,
+            "settings_digest": "4" * 64,
+        }
+    )
+    spec["applied_settings_sha256"] = PySCFScriptWriter.settings_digest(
+        {field: spec.get(field) for field in APPLIED_SPEC_FIELDS}
+    )
+    bound_provenance = {
+        "run_id": spec["run_id"],
+        "run_nonce": spec["run_nonce"],
+        "script_sha256": "5" * 64,
+        "input_receipt_sha256": "6" * 64,
+        "environment_receipt_sha256": "b" * 64,
+        "input_geometry_sha256": spec["input_geometry_sha256"],
+        "input_artifact_kind": spec["input_artifact_kind"],
+        "input_artifact_sha256": spec["input_artifact_sha256"],
+        "requested_settings_sha256": spec[
+            "requested_settings_sha256"
+        ],
+        "applied_settings_sha256": spec["applied_settings_sha256"],
+        "project_yaml_digest": project.sha256,
+        "settings_digest": spec["settings_digest"],
+        "engine": "cpu",
+        "runtime": {
+            "mean_field_class": "pyscf.scf.hf.RHF",
+            "mean_field_mro": ["pyscf.scf.hf.RHF", "object"],
+        },
+    }
+    status_payload = {
+        "engine_complete": True,
+        "normal_termination": True,
+        "stages": {"scf": {"converged": True}},
+        "failure": None,
+        "properties": {"spin_square": {"status": "ok"}},
+    }
+    results_payload = {
+        "energies": np.asarray([-76.3]),
+        "positions": np.asarray(
+            [
+                [0.0, 0.0, 0.1174],
+                [-0.757, 0.0, -0.4696],
+                [0.757, 0.0, -0.4696],
+            ]
+        ),
+        "atomic_numbers": np.asarray([8, 1, 1]),
+        "mo_energy": np.asarray(
+            [-20.0, -1.0, -0.8, -0.6, -0.4, 0.5]
+        ),
+        "mo_occ": np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 0.0]),
+        "spin_square": np.asarray(0.0),
+        "spin_square_effective_multiplicity": np.asarray(1.0),
+    }
+    write_pyscf_h5(
+        h5_path,
+        spec=spec,
+        provenance=bound_provenance,
+        status=status_payload,
+        results=results_payload,
+    )
+    from chemsmart.io.pyscf.output import read_pyscf_h5
+
+    roundtrip_spec, _provenance, _status, _results = read_pyscf_h5(h5_path)
+    spec = dict(roundtrip_spec)
+    spec["applied_settings_sha256"] = PySCFScriptWriter.settings_digest(
+        {field: spec.get(field) for field in APPLIED_SPEC_FIELDS}
+    )
+    bound_provenance["applied_settings_sha256"] = spec[
+        "applied_settings_sha256"
+    ]
+    write_pyscf_h5(
+        h5_path,
+        spec=spec,
+        provenance=bound_provenance,
+        status=status_payload,
+        results=results_payload,
+    )
+    result = _artifact(
+        h5_path,
+        artifact_id="result.sp.hdf5",
+        kind="pyscf_hdf5",
+    )
+    run_path = tmp_path / "water-sp.receipt.json"
+    run_receipt = _write_digest_bound_receipt(
+        run_path,
+        {
+            "schema_version": "chemsmart.pyscf-run.v1",
+            "state": "validated",
+            "fake": False,
+            "child_returncode": 0,
+            "engine_complete": True,
+            "scientifically_validated": True,
+            "run_id": spec["run_id"],
+            "run_nonce": spec["run_nonce"],
+            "script_sha256": bound_provenance["script_sha256"],
+            "input_receipt_sha256": bound_provenance[
+                "input_receipt_sha256"
+            ],
+            "environment_receipt_sha256": "b" * 64,
+            "input_geometry_sha256": spec["input_geometry_sha256"],
+            "input_artifact_kind": spec["input_artifact_kind"],
+            "project_yaml_sha256": project.sha256,
+            "input_artifact_sha256": initial.sha256,
+            "requested_settings_sha256": spec[
+                "requested_settings_sha256"
+            ],
+            "applied_settings_sha256": spec[
+                "applied_settings_sha256"
+            ],
+            "result_sha256": result.sha256,
+            "findings": [],
+        },
+    )
+    run_artifact = _artifact(
+        run_path,
+        artifact_id="result.sp.run-receipt",
+        kind="json",
+    )
+    outputs = (result, run_artifact)
+
+    engine = _inspect_pyscf_engine_observation(
+        outputs, launch_ambiguous=False
+    )
+    evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+        program="pyscf",
+        jobtype="sp",
+            charge=0,
+            multiplicity=1,
+            expected_input_artifact=initial,
+            expected_project_artifact=project,
+        output_artifacts=outputs,
+        exit_status=17,
+        expected_environment_receipt_sha256="b" * 64,
+        pyscf_engine_observation=engine,
+    )
+    validated, findings = evaluation.validated, evaluation.findings
+
+    assert engine.engine_complete is True
+    assert engine.child_exit_status == 0
+    assert engine.run_receipt_sha256 == run_receipt["receipt_sha256"]
+    assert validated is True, json.dumps(
+        evaluation.observations, sort_keys=True
+    )
+    assert findings == ()
+
+
+def test_substituted_pyscf_run_receipt_cannot_prove_engine_completion(
+    tmp_path,
+):
+    h5_path = tmp_path / "result.h5"
+    h5_path.write_bytes(b"not inspected without a valid run receipt")
+    result = _artifact(
+        h5_path,
+        artifact_id="result.sp.hdf5",
+        kind="pyscf_hdf5",
+    )
+    run_path = tmp_path / "result.receipt.json"
+    run_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "chemsmart.pyscf-run.v1",
+                "fake": False,
+                "child_returncode": 0,
+                "engine_complete": True,
+                "result_sha256": result.sha256,
+                "receipt_sha256": "0" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_artifact = _artifact(
+        run_path,
+        artifact_id="result.sp.run-receipt",
+        kind="json",
+    )
+
+    engine = _inspect_pyscf_engine_observation(
+        (result, run_artifact), launch_ambiguous=False
+    )
+
+    assert engine.engine_complete is False
+    assert engine.run_receipt is None
+    assert engine.findings == ("pyscf.run_receipt.digest_invalid",)
+
+
+def test_output_is_rehashed_immediately_before_validation(tmp_path):
+    output_path = tmp_path / "program.out"
+    output_path.write_text("original-bytes", encoding="utf-8")
+    artifact = _artifact(
+        output_path,
+        artifact_id="result.seeded.output",
+        kind="program_output",
+    )
+    output_path.write_text("substitute!!!", encoding="utf-8")
+
+    evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+        program="gaussian",
+        jobtype="sp",
+        charge=0,
+        multiplicity=1,
+        output_artifacts=(artifact,),
+        exit_status=0,
+    )
+
+    assert "execution.output.artifact_binding_mismatch" in (
+        evaluation.findings
+    )
+
+
+def test_live_prompt_preserves_typed_edges_and_evidence_bounded_alternatives():
     prompt = _system_prompt(None)
 
-    assert "Preserve every user-declared stage order" in prompt
-    assert "current project schema and loader support it" in prompt
-    assert "unsupported architecture alternatives" in prompt
+    assert "do not convert a presentation sequence into a control edge" in prompt
+    assert "SP(initial geometry) and OPT(initial geometry) are siblings" in prompt
+    assert "Bind scientific identity only to a geometry_xyz" in prompt
+    assert "a workflow_draft alone is not the typed scientific DAG" in prompt
+    assert "loader-supported, preview-conformant" in prompt
+    assert "do not assert quantitative accuracy, cost" in prompt.lower()
+    assert "unmaterialized alternative" in prompt

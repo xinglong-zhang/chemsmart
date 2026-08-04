@@ -148,12 +148,15 @@ def test_declared_capabilities_preserve_project_ownership_contract():
         "dispersion",
         "freq",
         "functional",
+        "nstates",
         "opt_maxsteps",
         "opt_solver",
+        "response_method",
         "scf_maxiter",
         "scf_tol",
         "solvent_id",
         "solvent_model",
+        "state_manifold",
     )
     assert PROJECT_OWNED_PARAMETERS["xtb"] == (
         "charge",
@@ -191,6 +194,33 @@ def test_registry_internal_invariants(name, capability):
     assert not capability.requires_project_configuration or (
         capability.supports_project_configuration
     )
+
+
+def test_pyscf_engine_job_matrix_separates_cpu_td_from_gpu_and_execution():
+    capability = PROGRAM_CAPABILITIES["pyscf"]
+
+    preview_pairs = {
+        (item.engine, item.jobtype)
+        for item in capability.resolved_engine_job_capabilities
+        if item.preview_supported
+    }
+    execution_pairs = {
+        (item.engine, item.jobtype)
+        for item in capability.resolved_engine_job_capabilities
+        if item.execution_supported
+    }
+
+    assert ("cpu", "td") in preview_pairs
+    assert ("cpu", "td") not in execution_pairs
+    assert ("gpu", "td") not in preview_pairs
+    assert {
+        ("cpu", "sp"),
+        ("cpu", "opt"),
+        ("cpu", "hess"),
+        ("gpu", "sp"),
+        ("gpu", "opt"),
+        ("gpu", "hess"),
+    }.issubset(execution_pairs)
 
 
 def test_program_capability_rejects_incoherent_declarations():

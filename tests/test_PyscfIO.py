@@ -130,8 +130,42 @@ def test_output_boundary_preserves_documented_scientific_units(pyscf_output):
     assert output.alpha_occ_eigenvalues == pytest.approx(
         [-0.50 * units.Hartree, -0.29 * units.Hartree]
     )
+    assert output.beta_occ_eigenvalues == pytest.approx(
+        [-0.50 * units.Hartree, -0.29 * units.Hartree]
+    )
     assert output.alpha_virtual_eigenvalues == pytest.approx(
         [0.047 * units.Hartree]
+    )
+    assert output.beta_virtual_eigenvalues == pytest.approx(
+        [0.047 * units.Hartree]
+    )
+
+
+def test_restricted_single_occupation_is_alpha_only(tmp_path):
+    logfile = tmp_path / "hydrogen_sp.out"
+    logfile.write_text("PySCF version 2.14.0\n", encoding="utf-8")
+    write_pyscf_h5(
+        tmp_path / "hydrogen_sp.h5",
+        spec={},
+        provenance={},
+        status={},
+        results={
+            "mo_energy": np.asarray([-0.5, 0.2], dtype=np.float64),
+            "mo_occ": np.asarray([1.0, 0.0], dtype=np.float64),
+        },
+    )
+
+    output = PySCFOutput(logfile)
+
+    assert output.alpha_occ_eigenvalues == pytest.approx(
+        [-0.5 * units.Hartree]
+    )
+    assert output.beta_occ_eigenvalues == []
+    assert output.alpha_virtual_eigenvalues == pytest.approx(
+        [0.2 * units.Hartree]
+    )
+    assert output.beta_virtual_eigenvalues == pytest.approx(
+        [-0.5 * units.Hartree, 0.2 * units.Hartree]
     )
 
 

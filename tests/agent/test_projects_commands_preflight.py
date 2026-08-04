@@ -4,7 +4,13 @@ import hashlib
 import sys
 from types import ModuleType
 
-from chemsmart.agent._contracts import TrustedArtifactRefV1, canonical_sha256
+import pytest
+
+from chemsmart.agent._contracts import (
+    ContractError,
+    TrustedArtifactRefV1,
+    canonical_sha256,
+)
 from chemsmart.agent.capabilities import (
     EnvironmentTargetV1,
     ProgramCapabilityQueryV1,
@@ -63,6 +69,28 @@ def _install_demo_loader(monkeypatch):
     YamlDemoProjectSettings.__module__ = module.__name__
     module.YamlDemoProjectSettings = YamlDemoProjectSettings
     monkeypatch.setitem(sys.modules, module.__name__, module)
+
+
+def test_scientific_identity_rejects_non_geometry_artifact(tmp_path):
+    project_path = tmp_path / "project.yaml"
+    project_path.write_text("sp:\n  method: rhf\n", encoding="utf-8")
+    project = _artifact(
+        project_path,
+        artifact_id="project.not-a-geometry",
+        kind="project_yaml",
+        cli_value="project",
+    )
+
+    with pytest.raises(
+        ContractError,
+        match="scientific identity requires an exact geometry artifact",
+    ):
+        build_scientific_identity_binding(
+            task_spec_sha256="a" * 64,
+            geometry_artifact=project,
+            charge=0,
+            multiplicity=1,
+        )
 
 
 def test_required_project_command_and_node_preflight_bind_all_scientific_state(
