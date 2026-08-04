@@ -1616,6 +1616,20 @@ def _validate_reference_family(
     return observation, findings
 
 
+def _result_validation_conventions():
+    """Return the convention rules that govern how a result is expressed.
+
+    Imported lazily so the program layer keeps no import-time dependency on the
+    agent package; the program layer stays usable without it.
+    """
+
+    try:
+        from chemsmart.agent.skills.conventions import conventions_for_scope
+    except ImportError:  # pragma: no cover - agent package always ships today
+        return ()
+    return conventions_for_scope("result_validation")
+
+
 def validate_pyscf_result(
     h5_path,
     *,
@@ -1643,7 +1657,14 @@ def validate_pyscf_result(
     required_stages = tuple(_requested_stages({"jobtype": jobtype}))
     expected_symbols = tuple(str(value) for value in expected_symbols or ())
     findings: list[PySCFViolation] = []
-    advisories: list[dict[str, Any]] = []
+    # Convention rules contributed by domain-knowledge skills travel with the
+    # receipt so the expression convention in force is auditable.  They are
+    # disclosure only: they carry no accuracy or readiness authority and never
+    # change ``state`` or ``findings``, so a run with skills disabled produces
+    # an identical verdict.
+    advisories: list[dict[str, Any]] = [
+        item.as_dict() for item in _result_validation_conventions()
+    ]
     frequency = {
         "schema_version": FREQUENCY_VALIDATION_SCHEMA_VERSION,
         "state": "not_applicable",

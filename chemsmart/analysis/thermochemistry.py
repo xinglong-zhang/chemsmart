@@ -177,6 +177,26 @@ class Thermochemistry:
         return output
 
     @property
+    def applied_conventions(self):
+        """Return the convention rules in force for this analysis.
+
+        Domain-knowledge skills declare how a quantity is expressed -- its
+        standard state, its symmetry number, its sign orientation.  Recording
+        them beside the numbers makes the convention in force auditable rather
+        than implicit in whichever default happened to apply.
+
+        These are disclosure only.  They do not alter any computed value and
+        they carry no accuracy or readiness authority, so a run with skills
+        disabled produces identical numbers.
+        """
+
+        from chemsmart.agent.skills.conventions import conventions_for_scope
+
+        return tuple(
+            item.as_dict() for item in conventions_for_scope("thermochemistry")
+        )
+
+    @property
     def jobtype(self):
         return self.file_object.jobtype
 

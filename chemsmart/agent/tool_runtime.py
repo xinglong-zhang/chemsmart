@@ -19,6 +19,7 @@ from chemsmart.agent._contracts import (
     canonical_data,
     canonical_sha256,
     file_sha256,
+    require_identifier,
     require_sha256,
 )
 from chemsmart.agent.analysis_completion import (
@@ -32,6 +33,7 @@ from chemsmart.agent.analysis_claims import (
     analysis_claim_record_from_record,
     build_analysis_claim_record,
 )
+from chemsmart.agent.skills import resolve_skill
 from chemsmart.agent.capabilities import (
     CapabilityQueryReceiptV1,
     CapabilityQueryV1,
@@ -920,6 +922,9 @@ class CommandCompiledToolHostV1:
                 )
         self.overlay = support_overlay or evidence_overlay
         self.scientific_identities = dict(scientific_identities)
+        #: Advisory skill documents the model read this session, keyed by
+        #: document digest so replay can reconstruct the exact text.
+        self.consulted_skills = {}
         self.approved_molecular_identities = dict(
             approved_molecular_identities
         )
@@ -1218,6 +1223,7 @@ class CommandCompiledToolHostV1:
             "record_analysis_claims": self._record_analysis_claims,
             "record_scientific_decision": self._record_scientific_decision,
             "execute_approved_program_node": self._execute_approved_program_node,
+            "consult_domain_skill": self._consult_domain_skill,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -1228,6 +1234,34 @@ class CommandCompiledToolHostV1:
             "tool": tool_name,
             "status": "ok",
             "result": _model_visible_data(canonical_data(result)),
+        }
+
+    def _consult_domain_skill(self, turn_id: str, values: dict) -> Any:
+        """Return one advisory skill body with its digests.
+
+        The body is knowledge, not evidence: it carries no readiness, no
+        approval, no terminal state, and no accuracy claim.  The digests make
+        the exact text the model read reconstructible from replay.
+        """
+
+        del turn_id
+        skill_id = require_identifier(values["skill_id"], "skill_id")
+        document = resolve_skill(skill_id)
+        if document is None:
+            raise ContractError(f"unknown domain skill: {skill_id}")
+        self.consulted_skills[document.document_sha256] = document
+        return {
+            "schema_version": "chemsmart.domain-skill-consultation.v1",
+            "skill_id": document.skill_id,
+            "skill_version": document.skill_version,
+            "origin": document.origin,
+            "description": document.description,
+            "body": document.body,
+            "body_sha256": document.body_sha256,
+            "document_sha256": document.document_sha256,
+            "advisory_only": True,
+            "readiness_authority": False,
+            "accuracy_authority": False,
         }
 
     def _bind_scientific_identity(self, turn_id: str, values: dict) -> Any:

@@ -21,6 +21,14 @@ class AdvisoryProgramKnowledgePackV1:
     reference_only: bool
     readiness_authority: bool
     pack_sha256: str
+    #: Advisory skill documents this pack surfaces.  Bodies stay out of the
+    #: pack: they are resolved through :mod:`chemsmart.agent.skills`, which
+    #: prefers a user overlay over the packaged builtin.
+    skill_ids: tuple[str, ...] = ()
+    #: Digests of the deterministic convention rules this pack contributes.
+    #: Rules themselves are declared in version-controlled Python, never in an
+    #: overlay file, so a user document cannot alter a host verdict.
+    convention_rule_sha256s: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.advisory-program-pack.v1":
@@ -32,6 +40,8 @@ class AdvisoryProgramKnowledgePackV1:
             (self.exclusions, "exclusions"),
             (self.advisory_topics, "advisory_topics"),
             (self.source_ids, "source_ids"),
+            (self.skill_ids, "skill_ids"),
+            (self.convention_rule_sha256s, "convention_rule_sha256s"),
         ):
             if values != tuple(sorted(set(values))):
                 raise ContractError(f"{name} must be sorted and unique")
@@ -47,6 +57,8 @@ class AdvisoryProgramKnowledgePackV1:
             "source_ids": self.source_ids,
             "reference_only": self.reference_only,
             "readiness_authority": self.readiness_authority,
+            "skill_ids": self.skill_ids,
+            "convention_rule_sha256s": self.convention_rule_sha256s,
         }
         if self.pack_sha256 != canonical_sha256(body):
             raise ContractError("advisory knowledge pack digest mismatch")
@@ -89,7 +101,9 @@ def build_pack(**values: object) -> AdvisoryProgramKnowledgePackV1:
         "target_program": str(values["target_program"]),
         "target_engine": str(values.get("target_engine", "")),
         "activation_terms": tuple(
-            sorted(set(str(item).lower() for item in values["activation_terms"]))
+            sorted(
+                set(str(item).lower() for item in values["activation_terms"])
+            )
         ),
         "exclusions": tuple(
             sorted(set(str(item).lower() for item in values["exclusions"]))
@@ -102,6 +116,19 @@ def build_pack(**values: object) -> AdvisoryProgramKnowledgePackV1:
         ),
         "reference_only": bool(values.get("reference_only", False)),
         "readiness_authority": False,
+        "skill_ids": tuple(
+            sorted(
+                set(str(item).lower() for item in values.get("skill_ids", ()))
+            )
+        ),
+        "convention_rule_sha256s": tuple(
+            sorted(
+                set(
+                    str(item).lower()
+                    for item in values.get("convention_rule_sha256s", ())
+                )
+            )
+        ),
     }
     return AdvisoryProgramKnowledgePackV1(
         **body, pack_sha256=canonical_sha256(body)

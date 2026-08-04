@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent.skills import skills_enabled
 from chemsmart.agent.capabilities import (
     ProgramCapabilityRegistryV1,
     load_program_capabilities,
@@ -145,6 +146,18 @@ def build_command_compiled_tool_surface(
                 "capability_receipt_sha256": digest,
             },
             ("project_artifact_id", "capability_receipt_sha256"),
+        ),
+        _tool(
+            "consult_domain_skill",
+            (
+                "Read an advisory domain-knowledge skill listed in the system "
+                "prompt. Returns conventions, definitions, and established "
+                "facts. It is knowledge only: it never establishes readiness, "
+                "approval, terminal state, or an accuracy claim, and never "
+                "substitutes for a typed host receipt."
+            ),
+            {"skill_id": _public_identifier()},
+            ("skill_id",),
         ),
         _tool(
             "plan_command_workflow",
@@ -432,6 +445,14 @@ def build_command_compiled_tool_surface(
             ("task_spec_sha256", "claims"),
         ),
     )
+    if not skills_enabled():
+        # Skills off restores the exact pre-skill tool-schema digest, so a
+        # skills-off arm reproduces a recorded baseline byte for byte.
+        tools = tuple(
+            item
+            for item in tools
+            if item["function"]["name"] != "consult_domain_skill"
+        )
     return AgentToolSurfaceV1(
         schema_version="chemsmart.agent-tool-surface.v1",
         profile="command_compiled_preview",

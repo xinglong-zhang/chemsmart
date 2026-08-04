@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from chemsmart.agent.knowledge_packs.contracts import build_pack
+from chemsmart.agent.skills.conventions import BUILTIN_CONVENTION_RULE_SHA256S
+
+#: Every program pack surfaces the cross-program conventions skill; program
+#: bodies stay resolvable through :mod:`chemsmart.agent.skills`.
+_CONVENTIONS_SKILL = ("scientific-conventions",)
 
 
 BUILTIN_PROGRAM_PACKS = (
@@ -18,6 +23,8 @@ BUILTIN_PROGRAM_PACKS = (
             "route ownership remains in project YAML",
         ),
         source_ids=("gaussian-16-reference",),
+        skill_ids=_CONVENTIONS_SKILL,
+        convention_rule_sha256s=BUILTIN_CONVENTION_RULE_SHA256S,
     ),
     build_pack(
         pack_id="orca-advisory",
@@ -31,6 +38,8 @@ BUILTIN_PROGRAM_PACKS = (
             "structured convergence checks",
         ),
         source_ids=("orca-manual-6.1",),
+        skill_ids=_CONVENTIONS_SKILL,
+        convention_rule_sha256s=BUILTIN_CONVENTION_RULE_SHA256S,
     ),
     build_pack(
         pack_id="xtb-reference-advisory",
@@ -44,6 +53,8 @@ BUILTIN_PROGRAM_PACKS = (
             "no silent substitution for DFT or ab initio intent",
         ),
         source_ids=("xtb-docs-6.7.1",),
+        skill_ids=_CONVENTIONS_SKILL,
+        convention_rule_sha256s=BUILTIN_CONVENTION_RULE_SHA256S,
         reference_only=True,
     ),
     build_pack(
@@ -59,6 +70,8 @@ BUILTIN_PROGRAM_PACKS = (
             "HDF5 provenance verification",
         ),
         source_ids=("pyscf-docs-2.14.0",),
+        skill_ids=_CONVENTIONS_SKILL,
+        convention_rule_sha256s=BUILTIN_CONVENTION_RULE_SHA256S,
     ),
     build_pack(
         pack_id="gpu4pyscf-advisory",
@@ -73,6 +86,8 @@ BUILTIN_PROGRAM_PACKS = (
             "CPU and GPU results are not assumed bit-identical",
         ),
         source_ids=("gpu4pyscf-docs-1.8.0",),
+        skill_ids=_CONVENTIONS_SKILL,
+        convention_rule_sha256s=BUILTIN_CONVENTION_RULE_SHA256S,
     ),
 )
 

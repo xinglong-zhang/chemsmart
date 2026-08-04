@@ -58,7 +58,17 @@ from chemsmart.agent.capabilities import (
     load_program_capabilities,
 )
 from chemsmart.agent.cli_schema import LiveClickSchemaV1, build_live_click_schema
+from chemsmart.agent.knowledge_packs import (
+    BUILTIN_PROGRAM_PACKS,
+    activate_program_knowledge,
+    skills_for_activation,
+)
 from chemsmart.agent.projects import project_document, render_project_yaml
+from chemsmart.agent.skills import (
+    SkillDocumentV1,
+    resolve_skills,
+    skills_enabled,
+)
 from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
     ExecutionResourceSpecV1,
@@ -536,6 +546,7 @@ def probe_live_experiment_preparation(
         approved_workflow={},
         experiment_arm=experiment_arm,
         provider_profile=profile,
+        task=task,
     )
     return _observed_experiment_preparation(
         arm=experiment_arm,
@@ -820,6 +831,7 @@ def run_live_agent_session(
         approved_workflow=approved_workflow_record,
         experiment_arm=experiment_arm,
         provider_profile=profile,
+        task=task,
     )
     observed_preparation = (
         _observed_experiment_preparation(
@@ -1229,13 +1241,45 @@ def _experiment_public_record(
     }
 
 
+def activated_skill_documents(
+    task: str,
+) -> tuple[tuple[str, ...], tuple[SkillDocumentV1, ...]]:
+    """Resolve the advisory skills a task activates.
+
+    Returns the activated pack digests and the resolved documents.  Activation
+    is text-gated by each pack's own ``activation_terms``/``exclusions``; the
+    packs are evaluated for every builtin program/engine target so a
+    cross-program conventions skill is reachable from any request.
+    """
+
+    if not skills_enabled():
+        return (), ()
+    targets = sorted(
+        {
+            (pack.target_program, pack.target_engine)
+            for pack in BUILTIN_PROGRAM_PACKS
+        }
+    )
+    pack_sha256s: set[str] = set()
+    skill_ids: set[str] = set()
+    for program, engine in targets:
+        receipt = activate_program_knowledge(
+            request=task, program=program, engine=engine
+        )
+        pack_sha256s.update(receipt.activated_pack_sha256s)
+        skill_ids.update(skills_for_activation(receipt))
+    return tuple(sorted(pack_sha256s)), resolve_skills(tuple(sorted(skill_ids)))
+
+
 def _coordinator_base_messages(
     *,
     context: Mapping[str, Any],
     approved_workflow: Mapping[str, Any] | None,
     experiment_arm: QwenDfcArmV1 | None,
     provider_profile: AgentProviderProfileV1 | None = None,
+    task: str = "",
 ) -> list[dict[str, str]]:
+    _, documents = activated_skill_documents(task)
     return [
         {
             "role": "system",
@@ -1247,6 +1291,7 @@ def _coordinator_base_messages(
                     if provider_profile is not None
                     else ""
                 ),
+                skill_index=tuple(item.index_entry() for item in documents),
             ),
         },
         {"role": "user", "content": canonical_json(context)},
@@ -2270,6 +2315,7 @@ def _system_prompt(
     *,
     experiment_arm: QwenDfcArmV1 | None = None,
     experiment_provider: str = "",
+    skill_index: tuple[str, ...] = (),
 ) -> str:
     execution_available = bool(approved_workflow)
     execution_sentence = (
@@ -2289,6 +2335,19 @@ def _system_prompt(
             "previewed state."
         )
     )
+    skill_sentence = ""
+    if skill_index:
+        listing = " ".join(f"({item})" for item in skill_index)
+        skill_sentence = (
+            " Domain-knowledge skills are available through "
+            "consult_domain_skill(skill_id). Available now: "
+            f"{listing}. Consult the relevant skill before you commit to a "
+            "reporting convention, an electronic-state assignment, or a "
+            "workflow shape it covers, and say when a stated fact came from a "
+            "skill. A skill is advisory knowledge only: it never establishes "
+            "readiness, approval, terminal state, or an accuracy claim, and it "
+            "never replaces a typed host receipt."
+        )
     experiment_sentence = ""
     if experiment_arm is not None:
         experiment_label = (
@@ -2396,6 +2455,7 @@ def _system_prompt(
         "label; the host, not the model, decides "
         "whether that task-owned policy passed. "
         + execution_sentence
+        + skill_sentence
         + experiment_sentence
     )
 

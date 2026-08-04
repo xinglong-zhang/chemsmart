@@ -46,9 +46,28 @@ def activate_program_knowledge(
     )
 
 
+def skills_for_activation(
+    receipt: KnowledgePackActivationReceiptV1,
+    packs: Iterable[AdvisoryProgramKnowledgePackV1] = BUILTIN_PROGRAM_PACKS,
+) -> tuple[str, ...]:
+    """Return the advisory skill ids surfaced by an activation receipt.
+
+    The receipt stays digest-bound and unchanged; this only reads the packs it
+    already names, so the activated skill set is reconstructible from replay.
+    """
+
+    activated = set(receipt.activated_pack_sha256s)
+    skill_ids: set[str] = set()
+    for pack in packs:
+        if pack.pack_sha256 in activated:
+            skill_ids.update(pack.skill_ids)
+    return tuple(sorted(skill_ids))
+
+
 __all__ = [
     "AdvisoryProgramKnowledgePackV1",
     "BUILTIN_PROGRAM_PACKS",
     "KnowledgePackActivationReceiptV1",
     "activate_program_knowledge",
+    "skills_for_activation",
 ]
