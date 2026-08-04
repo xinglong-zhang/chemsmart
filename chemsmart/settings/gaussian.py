@@ -7,6 +7,7 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
+from chemsmart.settings.project_resolution import project_settings_from_path
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -171,14 +172,16 @@ class GaussianProjectSettings(RegistryMixin):
     @classmethod
     def from_project(cls, project):
         """
-        Create project settings instance based on project name.
+        Create project settings instance from a YAML path or project name.
 
         Searches for project configuration in the following order:
-        1. User-defined project settings directory
-        2. CHEMSMART test project configurations
+        1. An exact project YAML file
+        2. User-defined project settings directory
+        3. CHEMSMART test project configurations
 
         Args:
-            project (str): Name of the project configuration to load.
+            project (str): Path to a project YAML file, or the name of an
+                installed project configuration.
 
         Returns:
             GaussianProjectSettings: Configured settings instance.
@@ -187,7 +190,13 @@ class GaussianProjectSettings(RegistryMixin):
             FileNotFoundError: If no configuration
             is found for the specified project.
         """
-        # First try user-defined project settings
+        explicit_settings = project_settings_from_path(
+            project, GaussianProjectSettingsManager
+        )
+        if explicit_settings is not None:
+            return explicit_settings
+
+        # Then try user-defined project settings
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
@@ -203,7 +212,7 @@ class GaussianProjectSettings(RegistryMixin):
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
+            f"Pass an explicit YAML path, or place a new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
             f"Currently available projects: {user_settings.all_available_gaussian_projects}"
         )

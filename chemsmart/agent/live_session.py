@@ -1744,6 +1744,78 @@ def _session_id(task_spec_sha256: str) -> str:
     return f"live-{timestamp}-{task_spec_sha256[:10]}-{uuid.uuid4().hex[:8]}"
 
 
+#: The core scientific stages a hierarchical workflow is built from.
+#: Conformance covers the intersection of this set with what each program
+#: declares, so bringing a new program to ``preview_only`` needs a ChemSmart
+#: declaration and a project fixture -- not a new branch in this function.
+_CONFORMANCE_CORE_STAGES = frozenset({"hess", "opt", "sp", "td"})
+
+#: Section shape of each program's project YAML.  ChemSmart does not declare
+#: this anywhere, because it is a property of each program's settings loader:
+#: PySCF keys sections by jobtype, while the route-building programs split
+#: ``gas`` from ``solv``.  It is data here rather than an if-ladder so a new
+#: program is one entry.
+_CONFORMANCE_PROJECT_SHAPES = {
+    "gaussian": "route_gas_solv",
+    "orca": "route_gas_solv",
+    "pyscf": "pyscf_stage_keyed",
+}
+
+
+def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
+    """Return the core stages ``program`` previews on ``engine``."""
+
+    from chemsmart.settings.capabilities import ENGINE_CAPABILITIES
+
+    capability = ENGINE_CAPABILITIES.get(program)
+    if capability is None:
+        return ()
+    pairs = capability.engine_job_capabilities
+    if pairs:
+        # A program that declares per-engine capability is authoritative about
+        # it; GPU PySCF, for example, previews no excited-state stage.
+        declared = {
+            item.jobtype
+            for item in pairs
+            if item.engine == engine and item.preview_supported
+        }
+    else:
+        declared = set(capability.jobtypes)
+    return tuple(sorted(declared & _CONFORMANCE_CORE_STAGES))
+
+
+#: Stages of a route-building program that read their own project section
+#: instead of ``gas``/``solv``.  The section carries only ordinary project
+#: keys: stage-specific parameters such as the excited-state count are
+#: CLI-owned, and putting one here makes the whole project fail to load.
+_ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"td"})
+
+
+def _conformance_project_sections(
+    program: str,
+) -> dict[str, dict[str, Any]] | None:
+    """Return locked project sections, or ``None`` when unneeded."""
+
+    shape = _CONFORMANCE_PROJECT_SHAPES.get(program)
+    if shape == "pyscf_stage_keyed":
+        return _locked_pyscf_sections()
+    if shape == "route_gas_solv":
+        # A deliberately plain, cheap method: this fixture exists to exercise
+        # the compile/preview path, and must never look like a scientific
+        # recommendation for any particular system.
+        common = {"basis": "def2-SVP", "functional": "B3LYP"}
+        sections = {"gas": dict(common), "solv": {**common, "freq": False}}
+        # ``gas``/``solv`` feed ordinary stages, but a few jobtypes read
+        # their own section and the loader returns ``None`` when it is absent.
+        # A fixture must therefore declare every stage it claims to cover, or
+        # conformance fails inside the CLI rather than reporting a gap.
+        for stage in _conformance_jobtypes(program, "cpu"):
+            if stage in _ROUTE_PROGRAM_STAGE_SECTIONS:
+                sections[stage] = dict(common)
+        return sections
+    return None
+
+
 def _bootstrap_conformance(
     *,
     run_directory: Path,
@@ -1754,14 +1826,16 @@ def _bootstrap_conformance(
     tuple[ProgramComponentConformanceReceiptV1, ...],
     tuple[dict[str, Any], ...],
 ]:
+    """Bootstrap every declared program through its real fake-preview path.
+
+    Conformance never invokes a program binary: the generated input file is the
+    conformance artifact.  A receipt therefore enables planning and safe
+    preview only, and a program with no installed executable can still reach
+    ``preview_only``.
+    """
+
     bootstrap_directory = run_directory / "bootstrap"
     bootstrap_directory.mkdir(mode=0o700)
-    project_path = bootstrap_directory / "pyscf-conformance.yaml"
-    document = project_document(
-        program="pyscf", sections=_locked_pyscf_sections()
-    )
-    rendered = render_project_yaml(document)
-    _write_private_exact(project_path, rendered.rendered_yaml.encode("utf-8"))
     server_path = bootstrap_directory / "preview-server.yaml"
     _write_private_exact(
         server_path,
@@ -1770,97 +1844,81 @@ def _bootstrap_conformance(
 
     receipts: list[ProgramComponentConformanceReceiptV1] = []
     records: list[dict[str, Any]] = []
-    pyscf_parts = []
-    for engine in ("cpu", "gpu"):
-        try:
-            receipt = bootstrap_program_conformance(
-                program="pyscf",
-                engine=engine,
-                jobtypes=(
-                    ("sp", "opt", "hess", "td")
-                    if engine == "cpu"
-                    else ("sp", "opt", "hess")
-                ),
-                input_path=input_artifact.path,
-                project_path=project_path,
-                server_path=server_path,
-                charge=0,
-                multiplicity=1,
-                registry_sha256=registry_sha256,
-                live_schema=live_schema,
+    for program in _conformance_programs():
+        project_path: Path | None = None
+        sections = _conformance_project_sections(program)
+        if sections is not None:
+            project_path = bootstrap_directory / f"{program}-fixture.yaml"
+            rendered = render_project_yaml(
+                project_document(program=program, sections=sections)
             )
-            pyscf_parts.append(receipt)
+            _write_private_exact(
+                project_path, rendered.rendered_yaml.encode("utf-8")
+            )
+        parts: list[ProgramComponentConformanceReceiptV1] = []
+        for engine in _conformance_engines(program):
+            jobtypes = _conformance_jobtypes(program, engine)
+            if not jobtypes:
+                continue
+            try:
+                receipt = bootstrap_program_conformance(
+                    program=program,
+                    engine=engine,
+                    jobtypes=jobtypes,
+                    input_path=input_artifact.path,
+                    project_path=project_path,
+                    server_path=server_path,
+                    charge=0,
+                    multiplicity=1,
+                    registry_sha256=registry_sha256,
+                    live_schema=live_schema,
+                )
+            except Exception as exc:  # Stays observable, fail-closed.
+                records.append(
+                    {
+                        "record_kind": "program_conformance",
+                        "program": program,
+                        "engine": engine,
+                        "status": "failed",
+                        "error_class": type(exc).__name__,
+                        "covered_jobtypes": (),
+                    }
+                )
+                continue
+            parts.append(receipt)
             records.append(_conformance_record(receipt, engine=engine))
-        except Exception as exc:  # Conformance remains observable and fail-closed.
-            records.append(
-                {
-                    "record_kind": "program_conformance",
-                    "program": "pyscf",
-                    "engine": engine,
-                    "status": "failed",
-                    "error_class": type(exc).__name__,
-                    "covered_jobtypes": (),
-                }
+        if parts:
+            receipts.append(
+                parts[0]
+                if len(parts) == 1
+                else _combine_program_conformance(parts)
             )
-    if pyscf_parts:
-        combined = _combine_program_conformance(pyscf_parts)
-        receipts.append(combined)
-    # ORCA conformance uses the same fake-preview path as the others: the
-    # generated .inp is parsed as the conformance artifact, so no ORCA binary
-    # is involved and the receipt enables planning and preview only.
-    try:
-        orca = bootstrap_program_conformance(
-            program="orca",
-            engine="cpu",
-            jobtypes=("sp", "opt"),
-            input_path=input_artifact.path,
-            project_path=None,
-            server_path=server_path,
-            charge=0,
-            multiplicity=1,
-            registry_sha256=registry_sha256,
-            live_schema=live_schema,
-        )
-        receipts.append(orca)
-        records.append(_conformance_record(orca, engine="cpu"))
-    except Exception as exc:
-        records.append(
-            {
-                "record_kind": "program_conformance",
-                "program": "orca",
-                "engine": "cpu",
-                "status": "failed",
-                "error_class": type(exc).__name__,
-                "covered_jobtypes": (),
-            }
-        )
-    try:
-        xtb = bootstrap_program_conformance(
-            program="xtb",
-            engine="cpu",
-            jobtypes=("sp", "opt", "hess"),
-            input_path=input_artifact.path,
-            project_path=None,
-            server_path=server_path,
-            charge=0,
-            multiplicity=1,
-            registry_sha256=registry_sha256,
-            live_schema=live_schema,
-        )
-        receipts.append(xtb)
-        records.append(_conformance_record(xtb, engine="cpu"))
-    except Exception as exc:
-        records.append(
-            {
-                "record_kind": "program_conformance",
-                "program": "xtb",
-                "engine": "cpu",
-                "status": "failed",
-                "error_class": type(exc).__name__,
-                "covered_jobtypes": (),
-            }
-        )
     return tuple(receipts), tuple(records)
+
+
+def _conformance_engines(program: str) -> tuple[str, ...]:
+    """Return the execution engines ChemSmart declares for ``program``."""
+
+    from chemsmart.settings.capabilities import PROGRAM_EXECUTION_ENGINES
+
+    return tuple(PROGRAM_EXECUTION_ENGINES.get(program, ("cpu",)))
+
+
+def _conformance_programs() -> tuple[str, ...]:
+    """Return the programs ChemSmart declares as executable.
+
+    Deriving this from the declaration rather than a hand-written list is what
+    makes a newly added program visible to the agent without touching the
+    session code.
+    """
+
+    from chemsmart.settings.capabilities import EXECUTABLE_PROGRAMS
+
+    return tuple(
+        program
+        for program in sorted(EXECUTABLE_PROGRAMS)
+        if _conformance_jobtypes(program, "cpu")
+    )
 
 
 def _combine_program_conformance(
@@ -1945,6 +2003,46 @@ def _locked_pyscf_sections() -> dict[str, dict[str, Any]]:
 
 #: Keys in a server YAML that describe the scheduler rather than a program.
 _NON_PROGRAM_SERVER_KEYS = frozenset({"SERVER"})
+
+
+#: A discovery stub announces itself with this marker so the harness can tell a
+#: real program from a placeholder that only satisfies program discovery.
+_DISCOVERY_STUB_MARKER = b"ChemSmart agent-harness DISCOVERY STUB"
+
+
+def _executable_is_discovery_stub(path: str) -> bool:
+    """Return whether ``path`` is a discovery stub, not a real program."""
+
+    if not path:
+        return False
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(2048)
+    except OSError:
+        return False
+    return _DISCOVERY_STUB_MARKER in head
+
+
+def _declared_executable_path(program: str, folder: str) -> str:
+    """Return the executable ChemSmart itself would run from ``folder``.
+
+    The binary is not always named after the program -- Gaussian's is ``g16``.
+    Asking ChemSmart's own executable registry keeps the agent's view of the
+    environment identical to the one a real job would use, instead of a second,
+    guessed convention that silently disagrees with it.
+    """
+
+    from chemsmart.settings.executable import Executable
+
+    for subclass in Executable.subclasses():
+        if str(subclass.PROGRAM or "").lower() != program:
+            continue
+        try:
+            resolved = subclass(executable_folder=folder).get_executable()
+        except Exception:
+            return ""
+        return str(resolved or "")
+    return ""
 
 
 def _declared_server_programs() -> tuple[tuple[str, str], ...]:
@@ -2148,10 +2246,10 @@ def _observe_environments() -> tuple[
     for program, folder in _declared_server_programs():
         if program == "pyscf":
             continue
-        candidate = Path(folder) / program
+        candidate = _declared_executable_path(program, folder)
         located = (
-            str(candidate)
-            if candidate.exists()
+            candidate
+            if candidate and Path(candidate).exists()
             else (shutil.which(program) or "")
         )
         records.append(
@@ -2162,18 +2260,12 @@ def _observe_environments() -> tuple[
                 "status": "available" if located else "missing",
                 "declared_folder": folder,
                 "observation_method": "declared_server_exefolder",
+                # A stub satisfies discovery and planning but cannot compute.
+                # Recording that keeps "a binary was found" distinct from "a
+                # scientific result is obtainable" in the evidence chain.
+                "is_discovery_stub": _executable_is_discovery_stub(located),
             }
         )
-    xtb_location = shutil.which("xtb")
-    records.append(
-        {
-            "record_kind": "program_environment",
-            "program": "xtb",
-            "engine": "cpu",
-            "status": "available" if xtb_location else "missing",
-            "observation_method": "shutil.which",
-        }
-    )
     return tuple(targets), tuple(receipts), tuple(records)
 
 

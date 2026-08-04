@@ -8,6 +8,7 @@ from chemsmart.jobs.orca.settings import (
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
+from chemsmart.settings.project_resolution import project_settings_from_path
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -223,14 +224,15 @@ class ORCAProjectSettings(RegistryMixin):
     @classmethod
     def from_project(cls, project):
         """
-        Get project settings based on project name.
+        Get project settings from an exact YAML path or a project name.
 
-        Loads project settings from various sources including user-defined
-        settings and built-in test projects. Provides detailed error messages
-        if the requested project is not found.
+        Loads project settings from various sources including an explicit
+        file, user-defined settings, and built-in test projects. Provides
+        detailed error messages if the requested project is not found.
 
         Args:
-            project (str): Name of the project to load settings for.
+            project (str): Path to a project YAML file, or the name of an
+                installed project.
 
         Returns:
             YamlORCAProjectSettings: Configured
@@ -240,6 +242,12 @@ class ORCAProjectSettings(RegistryMixin):
             FileNotFoundError: If no project settings are found for the
                 specified project name, with guidance on creating new settings.
         """
+        explicit_settings = project_settings_from_path(
+            project, ORCAProjectSettingsManager
+        )
+        if explicit_settings is not None:
+            return explicit_settings
+
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
@@ -253,7 +261,7 @@ class ORCAProjectSettings(RegistryMixin):
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new ORCA project settings .yaml file in {user_settings.user_orca_settings_dir}.\n\n"
+            f"Pass an explicit YAML path, or place a new ORCA project settings .yaml file in {user_settings.user_orca_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
             f"Currently available projects: {user_settings.all_available_orca_projects}"
         )
