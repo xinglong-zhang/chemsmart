@@ -30,12 +30,12 @@ Optimization Options
       -  choice
       -  Convergence level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``
 
-   -  -  ``--constrain``
+   -  -  ``-c, --constrain``
       -  string
       -  Coordinates to constrain (1-indexed). Distance ``[i,j]``, angle ``[i,j,k]``, dihedral ``[i,j,k,l]``. Example:
          ``[[1,2],[5,7,8],[3,4,1,7]]``
 
-   -  -  ``--force-constant``
+   -  -  ``-f, --force-constant``
       -  float
       -  Force constant for constraints
 
@@ -147,7 +147,7 @@ Basic Usage
 ***************
 
 Each xTB job runs in a dedicated folder named after the job label. CHEMSMART writes ``{label}.xyz`` and redirects
-stdout/stderr to ``{label}.out`` / ``{label}.err``. When ``--constrain`` is used, it also writes ``{label}.inp``.
+stdout/stderr to ``{label}.out`` / ``{label}.err``. When ``-c/--constrain`` is used, it also writes ``{label}.inp``.
 Additional xTB artifacts (``charges``, ``xtbopt.xyz``, ``g98.out``, ``hessian``, etc.) appear in the same folder
 depending on the job type and flags.
 

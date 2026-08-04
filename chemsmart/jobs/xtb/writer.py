@@ -73,6 +73,9 @@ class XTBInputWriter(InputWriter):
             ValueError: If a constraint has invalid length or atom indices.
         """
         constraints = self.settings.constraints
+        if not constraints:
+            return
+
         force_constant = self.settings.force_constant
         molecule = self.job.molecule
         n_atoms = len(molecule)

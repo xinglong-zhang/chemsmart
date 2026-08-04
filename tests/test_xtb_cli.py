@@ -114,9 +114,9 @@ class TestXTBCLISettings:
                 "-m",
                 "1",
                 "opt",
-                "--constrain",
+                "-c",
                 "[[1,2],[1,2,3],[1,2,3,4]]",
-                "--force-constant",
+                "-f",
                 "0.25",
             ],
         )
