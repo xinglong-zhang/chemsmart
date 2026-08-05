@@ -132,12 +132,18 @@ def test_derived_views_are_exact_registry_projections():
 
 
 def test_declared_capabilities_preserve_project_ownership_contract():
-    assert PROJECT_OWNED_PARAMETERS["gaussian"] == (
-        CURRENT_HARNESS_PROJECT_PARAMETERS
-    )
-    assert PROJECT_OWNED_PARAMETERS["orca"] == (
-        CURRENT_HARNESS_PROJECT_PARAMETERS
-    )
+    # Gaussian and ORCA no longer share one union. They diverged deliberately:
+    # ORCA's project YAML carries relativistic, reference-determinant,
+    # frozen-core and DLPNO controls that Gaussian has no equivalent for, and
+    # while the union was shared those settings could not be declared at all --
+    # a live run reported them as capability gaps that were declaration gaps.
+    # The shared names remain a subset of both, so nothing was removed.
+    for program in ("gaussian", "orca"):
+        assert set(CURRENT_HARNESS_PROJECT_PARAMETERS) <= set(
+            PROJECT_OWNED_PARAMETERS[program]
+        )
+    assert "relativistic" in PROJECT_OWNED_PARAMETERS["orca"]
+    assert "relativistic" not in PROJECT_OWNED_PARAMETERS["gaussian"]
     assert PROJECT_OWNED_PARAMETERS["nciplot"] == ()
     assert PROJECT_OWNED_PARAMETERS["pyscf"] == (
         "ab_initio",

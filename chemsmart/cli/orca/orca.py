@@ -115,11 +115,25 @@ def click_orca_settings_options(f):
         "-d",
         "--defgrid",
         type=click.Choice(
-            ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
+            [
+                "defgrid1",
+                "defgrid2",
+                "defgrid3",
+                "grid1",
+                "grid2",
+                "grid3",
+                "grid4",
+                "grid5",
+                "grid6",
+                "grid7",
+            ],
+            case_sensitive=False,
         ),
-        default="defgrid2",  # default used in ORCA is defgrid2
-        help="Grid for numerical integration. Choices are "
-        "['defgrid1', 'defgrid2', 'defgrid3'].",
+        default=None,
+        help=(
+            "Grid for numerical integration. When omitted, preserve the "
+            "project setting or let ORCA use its DEFGRID2 default."
+        ),
     )
     @click.option(
         "--scf-tol",

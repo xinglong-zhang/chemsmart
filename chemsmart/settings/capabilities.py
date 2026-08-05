@@ -65,6 +65,12 @@ class ProgramCapability:
         tuple[str, tuple[str, ...]], ...
     ] = ()
     engine_job_capabilities: tuple[EngineJobCapability, ...] = ()
+    #: Top-level section names this program's project YAML accepts. The
+    #: route-building programs group settings by phase (``gas`` for most job
+    #: types, ``solv`` for ``sp``); PySCF keys sections by job type instead.
+    #: Declaring it makes a wrong shape refusable at authoring time rather
+    #: than surfacing deep inside a loader as an opaque AttributeError.
+    project_section_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -87,6 +93,11 @@ class ProgramCapability:
                 "project_owned_parameters", self.project_owned_parameters
             )
         _validate_names("engines", self.engines)
+        _validate_names(
+            "project_section_names",
+            self.project_section_names,
+            allow_empty=True,
+        )
         domain_names = tuple(
             name for name, _values in self.project_parameter_domains
         )
@@ -171,6 +182,51 @@ _CURRENT_HARNESS_PROJECT_PARAMETERS = (
     "solventfilename",
 )
 
+# ORCA has typed method controls that are scientifically stronger than the
+# generic route-string escape hatch.  Advertising them through the canonical
+# capability registry lets an agent choose explicit scalar-relativistic,
+# reference, RI, frozen-core, and element-specific basis semantics in project
+# YAML instead of hiding those choices in prose.
+_ORCA_PROJECT_PARAMETERS = tuple(
+    sorted(
+        {
+            *_CURRENT_HARNESS_PROJECT_PARAMETERS,
+            "additional_solvent_options",
+            "dipole",
+            "forces",
+            "freq",
+            "frozen_core",
+            "frozen_core_electrons",
+            "gbw",
+            "heavy_elements",
+            "heavy_elements_basis",
+            "light_elements_basis",
+            "mdci_cutoff",
+            "mdci_density",
+            "numfreq",
+            "quadrupole",
+            "reference",
+            "relativistic",
+            "ri_approximation",
+        }
+    )
+)
+
+# Gaussian exposes scientific controls the shared union omitted.
+_GAUSSIAN_PROJECT_PARAMETERS = tuple(
+    sorted(
+        _CURRENT_HARNESS_PROJECT_PARAMETERS
+        + (
+            "additional_opt_options_in_route",
+            "additional_solvent_options",
+            "forces",
+            "freq",
+            "heavy_elements_basis",
+            "numfreq",
+        )
+    )
+)
+
 _PYSCF_PROJECT_PARAMETERS = (
     "ab_initio",
     "aux_basis",
@@ -229,8 +285,9 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 "userjob",
                 "wbi",
             ),
-            project_owned_parameters=_CURRENT_HARNESS_PROJECT_PARAMETERS,
+            project_owned_parameters=_GAUSSIAN_PROJECT_PARAMETERS,
             engines=("cpu",),
+            project_section_names=("gas", "solv"),
         ),
         "nciplot": ProgramCapability(
             program="nciplot",
@@ -256,8 +313,30 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 "sp",
                 "ts",
             ),
-            project_owned_parameters=_CURRENT_HARNESS_PROJECT_PARAMETERS,
+            project_owned_parameters=_ORCA_PROJECT_PARAMETERS,
             engines=("cpu",),
+            project_section_names=("gas", "solv"),
+            project_parameter_domains=(
+                (
+                    "defgrid",
+                    (
+                        "defgrid1",
+                        "defgrid2",
+                        "defgrid3",
+                        "grid1",
+                        "grid2",
+                        "grid3",
+                        "grid4",
+                        "grid5",
+                        "grid6",
+                        "grid7",
+                    ),
+                ),
+                ("frozen_core", ("fc_electrons", "fc_ewin", "fc_none")),
+                ("reference", ("rhf", "rohf", "uhf")),
+                ("relativistic", ("dkh", "dkh2", "zora")),
+                ("ri_approximation", ("none", "ri", "rijcosx", "rijk")),
+            ),
         ),
         "pyscf": ProgramCapability(
             program="pyscf",
@@ -266,6 +345,16 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             jobtypes=("hess", "opt", "sp", "td"),
             project_owned_parameters=_PYSCF_PROJECT_PARAMETERS,
             engines=("cpu", "gpu"),
+            # PySCF keys sections by job type, and its loader also
+            # accepts the legacy gas/solv pair and canonicalises it.
+            project_section_names=(
+                "gas",
+                "hess",
+                "opt",
+                "solv",
+                "sp",
+                "td",
+            ),
             project_parameter_domains=(
                 ("ab_initio", ("hf",)),
                 ("defgrid", ("defgrid1", "defgrid2", "defgrid3")),
@@ -298,6 +387,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             jobtypes=("hess", "opt", "sp"),
             project_owned_parameters=_XTB_PROJECT_PARAMETERS,
             engines=("cpu",),
+            project_section_names=("hess", "opt", "sp"),
             project_parameter_domains=(
                 ("gfn_version", ("gfn0", "gfn1", "gfn2", "gfnff")),
                 (

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 import numpy as np
+from ase import units as ase_units
 
 from chemsmart.analysis.result_quantities import (
     ANGLE,
@@ -64,6 +65,8 @@ _OPERATIONS = frozenset(
         "convert",
         "linear_fit_slope",
         "linear_fit_intercept",
+        "exponential_cbs_limit",
+        "photon_wavelength",
     }
 )
 
@@ -788,6 +791,77 @@ def _node_value(
             value=payload,
             unit="1",
             dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "photon_wavelength":
+        if len(inputs) != 1 or inputs[0].dimension != ENERGY:
+            raise QuantityExpressionError(
+                "photon_wavelength requires one positive energy input"
+            )
+        energy_hartree = _numeric(inputs[0])
+        if np.any(energy_hartree <= 0.0):
+            raise QuantityExpressionError(
+                "photon_wavelength requires strictly positive energies"
+            )
+        energy_ev = energy_hartree * energy_conversion(
+            "hartree", "eV", 1.0
+        )
+        hc_ev_angstrom = (
+            ase_units._hplanck
+            * ase_units._c
+            / ase_units._e
+            * 1.0e10
+        )
+        payload = _payload(hc_ev_angstrom / energy_ev)
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="angstrom",
+            value=payload,
+            unit="angstrom",
+            dimension=LENGTH,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "exponential_cbs_limit":
+        # A Hartree-Fock basis-set series converges exponentially, so the
+        # complete-basis limit is a three-parameter fit rather than a linear
+        # one. Papers state it as "extrapolated with a three-parameter
+        # exponential formula"; without this operation such a limit has no
+        # expressible producer and the workflow stops one step short of the
+        # number it was built to obtain.
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            extrapolate_exponential_three_point,
+        )
+
+        if len(inputs) != 1:
+            raise QuantityExpressionError(
+                "exponential_cbs_limit takes one input: the energies at three "
+                "equally spaced cardinal numbers, ordered by increasing basis"
+            )
+        series = _numeric(inputs[0]).reshape(-1)
+        if series.size != 3:
+            raise QuantityExpressionError(
+                "exponential_cbs_limit needs exactly three energies, got "
+                f"{series.size}"
+            )
+        try:
+            payload = extrapolate_exponential_three_point(
+                (float(series[0]), float(series[1]), float(series[2]))
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        dimension = inputs[0].dimension
+        unit = canonical_unit_for_dimension(dimension)
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=payload,
+            unit=unit,
+            dimension=dimension,
             evidence_ref=evidence_ref,
         )
 

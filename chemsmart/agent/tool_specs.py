@@ -815,6 +815,8 @@ def _quantity_expression_node_schema() -> dict:
                     "convert",
                     "linear_fit_slope",
                     "linear_fit_intercept",
+                    "exponential_cbs_limit",
+                    "photon_wavelength",
                 ],
             },
             "input_ids": {

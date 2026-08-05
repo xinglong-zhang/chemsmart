@@ -242,3 +242,56 @@ def test_the_projection_survives_causal_feedback_with_its_reasons_intact():
         item for item in context["nodes"] if item["node_id"] == "sp_qz"
     )
     assert "opt.opt_geom" in waiting["reason"]
+
+
+def test_a_rejected_node_names_the_node_and_the_offending_value():
+    """A live run hit the old message, retried unchanged, and stalled.
+
+    The runtime sorts these lists before building the node, so duplication was
+    the only reachable cause -- yet the message said only "must be sorted and
+    unique", naming neither the node nor the value.
+    """
+
+    from chemsmart.agent.workflows import (
+        ArtifactInputIntentV1,
+        ArtifactOutputIntentV1,
+        CommandNodeIntentV1,
+    )
+
+    def _input(binding_id):
+        return ArtifactInputIntentV1(
+            binding_id=binding_id,
+            artifact_class="geometry_xyz",
+            artifact_id="start.xyz",
+            producer_node_id="",
+            producer_output_id="",
+        )
+
+    common = dict(
+        node_id="sp_ccpvqz",
+        program="pyscf",
+        jobtype="sp",
+        project_role="sp",
+        dependencies=(),
+        expected_outputs=(
+            ArtifactOutputIntentV1(output_id="e", artifact_class="energy"),
+        ),
+        unresolved_fields=(),
+    )
+
+    with pytest.raises(ContractError) as duplicate:
+        CommandNodeIntentV1(
+            **common, inputs=(_input("geometry"), _input("geometry"))
+        )
+    message = str(duplicate.value)
+    assert "sp_ccpvqz" in message, "the failing node must be named"
+    assert "geometry" in message, "the offending value must be named"
+    assert "repeats" in message
+
+    with pytest.raises(ContractError, match="out of order"):
+        CommandNodeIntentV1(**common, inputs=(_input("zz"), _input("aa")))
+
+    with pytest.raises(ContractError, match="declares no expected output"):
+        CommandNodeIntentV1(
+            **{**common, "expected_outputs": ()}, inputs=(_input("g"),)
+        )

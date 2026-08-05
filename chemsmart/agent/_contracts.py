@@ -31,8 +31,19 @@ def require_identifier(value: str, field_name: str) -> str:
 
     normalized = str(value or "").strip().lower()
     if _IDENTIFIER_RE.fullmatch(normalized) is None:
+        # This validator stands behind every identifier the model supplies, so
+        # its message is the one seen for most malformed IDs. Naming the field
+        # alone leaves the caller guessing which of several values was wrong
+        # and what shape was expected, so quote the value and the rule.
+        detail = (
+            "it is empty"
+            if not normalized
+            else f"got {value!r}"
+        )
         raise ContractError(
-            f"{field_name} must be a lower-case public identifier"
+            f"{field_name} must be a lower-case public identifier "
+            "(start with a letter, then letters, digits, '_', '.' or '-'); "
+            f"{detail}"
         )
     return normalized
 

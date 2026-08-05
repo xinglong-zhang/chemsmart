@@ -239,7 +239,13 @@ def _validate_native_input(expectation, paths):
     matches = []
     for path in candidates:
         parsed = settings_cls.from_filepath(str(path))
-        matches.append(_settings_match(parsed, expected_settings))
+        matches.append(
+            _settings_match(
+                parsed,
+                expected_settings,
+                native_input=path if expectation.program == "orca" else None,
+            )
+        )
     findings = [] if any(not item for item in matches) else matches[0]
     if findings:
         return findings
@@ -450,11 +456,25 @@ def _settings_class(program):
     return ORCAJobSettings
 
 
-def _settings_match(parsed, expected):
+def _settings_match(parsed, expected, *, native_input=None):
     findings = []
+    route_tokens: set[str] = set()
+    if native_input is not None:
+        from chemsmart.io.orca.input import ORCAInput
+
+        route_tokens = set(ORCAInput(str(native_input)).route_object.route_keywords)
     for field, value in sorted(expected.items()):
         if value is None:
             continue
+        if native_input is not None and field == "basis":
+            if str(value).strip().lower() in route_tokens:
+                continue
+        if native_input is not None and field == "additional_route_parameters":
+            required = {
+                item.lower() for item in str(value).split() if item.strip()
+            }
+            if required.issubset(route_tokens):
+                continue
         if not hasattr(parsed, field):
             findings.append(
                 _mismatch(
@@ -466,6 +486,14 @@ def _settings_match(parsed, expected):
             )
             continue
         observed = getattr(parsed, field)
+        if native_input is not None:
+            # ORCA simple-input keywords are case-insensitive, and an absent
+            # opt-in boolean is the native representation of ``false``.
+            if isinstance(value, str) and isinstance(observed, str):
+                if value.strip().casefold() == observed.strip().casefold():
+                    continue
+            if value is False and observed in {None, False}:
+                continue
         if canonical_data(observed) != canonical_data(value):
             findings.append(_mismatch(field, value, observed, "generated:native_input"))
     return findings

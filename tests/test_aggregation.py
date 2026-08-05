@@ -58,7 +58,9 @@ def test_components_are_extrapolated_separately_and_reported_separately():
     )
     assert result.scf_energy == pytest.approx(scf_limit, abs=1e-9)
     assert result.correlation_energy == pytest.approx(corr_limit, abs=1e-12)
-    assert result.total_energy == pytest.approx(scf_limit + corr_limit, abs=1e-9)
+    assert result.total_energy == pytest.approx(
+        scf_limit + corr_limit, abs=1e-9
+    )
     assert (result.smaller_cardinal, result.larger_cardinal) == (4, 5)
 
 
@@ -95,7 +97,9 @@ def test_state_difference_is_signed_and_states_its_direction():
 
 
 def test_energy_unit_conversion_round_trips_known_factors():
-    assert convert_energy(1.0, "kcal/mol") == pytest.approx(627.509474, abs=1e-6)
+    assert convert_energy(1.0, "kcal/mol") == pytest.approx(
+        627.509474, abs=1e-6
+    )
     assert convert_energy(1.0, "eV") == pytest.approx(27.211386, abs=1e-6)
     with pytest.raises(AggregationError, match="unsupported energy unit"):
         convert_energy(1.0, "furlongs")
@@ -121,3 +125,76 @@ def test_boltzmann_average_weights_values_by_population():
     )
     with pytest.raises(AggregationError, match="same length"):
         boltzmann_average((1.0,), (0.0, 1.0))
+
+
+def test_three_point_exponential_recovers_an_exact_series():
+    """A live run reported this gap: HF CBS is a three-parameter fit.
+
+    The engine exposed only linear fits, so a paper stating "extrapolated with
+    a three-parameter exponential formula" had no expressible producer for its
+    complete-basis limit.
+    """
+
+    from chemsmart.analysis.aggregation import (
+        extrapolate_exponential_three_point,
+    )
+
+    limit, amplitude, ratio = -76.06, 0.85, 0.28
+    series = tuple(limit + amplitude * ratio**n for n in (2, 3, 4))
+    assert extrapolate_exponential_three_point(series) == pytest.approx(
+        limit, abs=1e-10
+    )
+
+
+def test_a_series_without_exponential_curvature_is_refused():
+    from chemsmart.analysis.aggregation import (
+        extrapolate_exponential_three_point,
+    )
+
+    with pytest.raises(AggregationError, match="no exponential curvature"):
+        extrapolate_exponential_three_point((1.0, 1.0, 1.0))
+    with pytest.raises(AggregationError, match="shrink monotonically"):
+        extrapolate_exponential_three_point((0.0, 1.0, 3.0))
+    with pytest.raises(AggregationError, match="exactly three"):
+        extrapolate_exponential_three_point((0.0, 1.0))
+
+
+def test_the_expression_engine_exposes_the_exponential_limit():
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionNodeV1,
+        QuantityExpressionRequestV1,
+        evaluate_quantity_expression,
+    )
+    from chemsmart.analysis.result_quantities import (
+        ENERGY,
+        make_quantity_value,
+    )
+
+    limit, amplitude, ratio = -76.06, 0.85, 0.28
+    series = [limit + amplitude * ratio**n for n in (2, 3, 4)]
+    quantity = make_quantity_value(
+        quantity_id="hf_series",
+        source_value=series,
+        source_unit="hartree",
+        value=series,
+        unit="hartree",
+        dimension=ENERGY,
+        evidence_ref="artifact:x#" + "0" * 64,
+    )
+    receipt = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="hf.cbs",
+            inputs=(quantity,),
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="e_cbs",
+                    operation="exponential_cbs_limit",
+                    input_ids=("hf_series",),
+                ),
+            ),
+            output_node_ids=("e_cbs",),
+        )
+    )
+    assert receipt.outputs[0].value == pytest.approx(limit, abs=1e-10)
+    assert receipt.outputs[0].unit == "hartree"

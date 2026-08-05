@@ -32,10 +32,24 @@ def extract_trusted_result_quantities(
 ) -> QuantityExtractionReceiptV1:
     """Extract quantities after resolving the artifact through host state."""
 
-    if program != "pyscf":
-        raise ContractError("no structured quantity reader is registered for program")
-    if artifact.kind != "pyscf_hdf5":
-        raise ContractError("PySCF quantity extraction requires a bound pyscf_hdf5 artifact")
+    from chemsmart.analysis.result_readers import (
+        extract_logged_quantities,
+        reader_for,
+        registered_reader_programs,
+    )
+
+    reader = reader_for(program)
+    if program != "pyscf" and reader is None:
+        raise ContractError(
+            "no quantity reader is registered for program; registered: "
+            f"{('pyscf',) + registered_reader_programs()}"
+        )
+    expected_kind = "pyscf_hdf5" if program == "pyscf" else reader.artifact_kind
+    if artifact.kind != expected_kind:
+        raise ContractError(
+            f"{program} quantity extraction requires a bound "
+            f"{expected_kind} artifact, not {artifact.kind!r}"
+        )
     request = ResultQuantityExtractionRequestV1(
         schema_version="chemsmart.quantity-extraction-request.v1",
         artifact_id=artifact.artifact_id,
@@ -43,7 +57,13 @@ def extract_trusted_result_quantities(
         program=program,
         selectors=selectors,
     )
-    return extract_pyscf_quantities(request=request, artifact_path=artifact.path)
+    if program == "pyscf":
+        return extract_pyscf_quantities(
+            request=request, artifact_path=artifact.path
+        )
+    return extract_logged_quantities(
+        request=request, artifact_path=artifact.path
+    )
 
 
 def derive_trusted_thermochemistry(

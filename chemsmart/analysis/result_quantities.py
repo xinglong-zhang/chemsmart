@@ -56,6 +56,19 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
     }
 )
 
+#: Selectors the log-parsing readers add on top of the structured PySCF set.
+#: A selector being in this union does not mean every program answers it: each
+#: reader declares what it provides, and a run that produced no such value is
+#: refused as absent rather than guessed at.
+SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
+    {
+        "absorption_wavelengths",
+        "excitation_energies",
+        "gibbs_free_energy",
+        "oscillator_strengths",
+    }
+)
+
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
 _CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
 _SELECTOR_RESULT_UNITS = {
@@ -170,9 +183,9 @@ class QuantitySelectorV1:
 
     def __post_init__(self) -> None:
         _require_identifier(self.quantity_id, "quantity_id")
-        if self.selector not in SUPPORTED_PYSCF_SELECTORS:
+        if self.selector not in SUPPORTED_SELECTORS:
             raise QuantityContractError(
-                f"unsupported PySCF quantity selector: {self.selector!r}"
+                f"unsupported quantity selector: {self.selector!r}"
             )
 
 
@@ -191,7 +204,12 @@ class ResultQuantityExtractionRequestV1:
         _require_identifier(self.artifact_id, "artifact_id")
         _require_sha256(self.artifact_sha256)
         if self.program != "pyscf":
-            raise QuantityContractError("only the PySCF result reader is registered")
+            from chemsmart.analysis.result_readers import reader_for
+
+            if reader_for(self.program) is None:
+                raise QuantityContractError(
+                    f"no result reader is registered for {self.program!r}"
+                )
         if not self.selectors:
             raise QuantityContractError("at least one quantity selector is required")
         quantity_ids = [selector.quantity_id for selector in self.selectors]

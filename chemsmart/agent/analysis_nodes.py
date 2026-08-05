@@ -33,6 +33,11 @@ from chemsmart.analysis.result_quantities import (
     ResultQuantityExtractionRequestV1,
     extract_pyscf_quantities,
 )
+from chemsmart.analysis.result_readers import (
+    extract_logged_quantities,
+    reader_for,
+    registered_reader_programs,
+)
 
 
 _SYMBOL_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
@@ -585,6 +590,91 @@ class PySCFResultParserAdapterV1:
         return receipt
 
 
+@dataclass(frozen=True)
+class LoggedResultParserAdapterV1:
+    """Adapter over an existing Gaussian, ORCA, or xTB result reader."""
+
+    parser_id: str
+    program: str
+    artifact_kinds: tuple[str, ...]
+    supported_selectors: tuple[str, ...]
+
+    def extract(
+        self,
+        *,
+        artifact: TrustedArtifactRefV1,
+        selectors: tuple[ResultQuantitySelectorV1, ...],
+    ) -> QuantityExtractionReceiptV1:
+        if artifact.kind not in self.artifact_kinds:
+            raise UnsupportedResultParserError(
+                f"{self.program} parser does not support artifact kind "
+                f"{artifact.kind!r}",
+                rule_id="result-parser.artifact-kind-unsupported",
+            )
+        unsupported = sorted(
+            {item.selector for item in selectors}
+            - set(self.supported_selectors)
+        )
+        if unsupported:
+            raise UnsupportedResultParserError(
+                f"{self.program} parser does not support selectors "
+                f"{unsupported}",
+                rule_id="result-parser.selector-unsupported",
+            )
+        request = ResultQuantityExtractionRequestV1(
+            schema_version="chemsmart.quantity-extraction-request.v1",
+            artifact_id=artifact.artifact_id,
+            artifact_sha256=artifact.sha256,
+            program=self.program,
+            selectors=tuple(
+                QuantitySelectorV1(
+                    quantity_id=item.quantity_id,
+                    selector=item.selector,
+                )
+                for item in selectors
+            ),
+        )
+        receipt = extract_logged_quantities(
+            request=request,
+            artifact_path=artifact.path,
+        )
+        if (
+            receipt.program != self.program
+            or receipt.parser_id != self.parser_id
+            or receipt.artifact_id != artifact.artifact_id
+            or receipt.artifact_sha256 != artifact.sha256
+        ):
+            raise QuantityExtractionError(
+                "logged-result parser receipt differs from its adapter binding"
+            )
+        observed = tuple(
+            sorted(quantity.quantity_id for quantity in receipt.quantities)
+        )
+        expected = tuple(sorted(item.quantity_id for item in selectors))
+        if observed != expected:
+            raise QuantityExtractionError(
+                "logged-result parser omitted a requested selector"
+            )
+        return receipt
+
+
+def _logged_result_parser_adapters() -> tuple[LoggedResultParserAdapterV1, ...]:
+    adapters = []
+    for program in registered_reader_programs():
+        reader = reader_for(program)
+        if reader is None:  # pragma: no cover - registry changed mid-iteration
+            continue
+        adapters.append(
+            LoggedResultParserAdapterV1(
+                parser_id=reader.parser_id,
+                program=reader.program,
+                artifact_kinds=(reader.artifact_kind,),
+                supported_selectors=tuple(sorted(reader.selectors)),
+            )
+        )
+    return tuple(adapters)
+
+
 class ResultParserRegistryV1:
     """Host-owned registry of result parser adapters."""
 
@@ -674,7 +764,9 @@ class ResultParserRegistryV1:
 
 
 def build_default_result_parser_registry() -> ResultParserRegistryV1:
-    return ResultParserRegistryV1((PySCFResultParserAdapterV1(),))
+    return ResultParserRegistryV1(
+        (PySCFResultParserAdapterV1(),) + _logged_result_parser_adapters()
+    )
 
 
 @dataclass(frozen=True)
@@ -1047,6 +1139,7 @@ __all__ = [
     "AnalysisNodeSpecV1",
     "AnalysisOutputQuantityRefV1",
     "AnalysisOutputSpecV1",
+    "LoggedResultParserAdapterV1",
     "PySCFResultParserAdapterV1",
     "ResultParserAdapterV1",
     "ResultParserRegistryV1",

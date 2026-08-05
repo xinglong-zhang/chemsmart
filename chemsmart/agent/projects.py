@@ -251,6 +251,44 @@ def read_project_yaml(
     return project_document(program=program, sections=sections)
 
 
+def _require_declared_section_shape(
+    program: str, payload: Mapping[str, Any]
+) -> None:
+    """Refuse a project whose top-level sections the program cannot read.
+
+    The section vocabulary differs by program: the route-building programs
+    group settings by phase (``gas``/``solv``) while PySCF and xTB key them by
+    job type.  A document with the wrong shape used to render and promote
+    cleanly, then fail deep inside the loader as ``'NoneType' object has no
+    attribute 'items'`` -- a message that names neither the file nor the
+    mistake.  Refusing here states the expected sections while the author can
+    still act on it.
+    """
+
+    from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
+
+    capability = PROGRAM_CAPABILITIES.get(program)
+    declared = set(capability.project_section_names if capability else ())
+    if not declared:
+        return
+    # A phase-keyed program also reads a per-jobtype section for the job types
+    # that carry their own settings (td, irc, qmmm). Admitting the declared job
+    # types keeps this gate aligned with the loader instead of maintaining a
+    # second list that drifts from it.
+    declared |= set(capability.jobtypes)
+    unknown = sorted(set(payload) - declared)
+    if unknown:
+        raise ContractError(
+            f"{program} project YAML has no section(s) "
+            f"{unknown}; it accepts {sorted(declared)}"
+        )
+    if not payload:
+        raise ContractError(
+            f"{program} project YAML declares no section; it accepts "
+            f"{sorted(declared)}"
+        )
+
+
 def render_project_yaml(
     document: ProjectDocumentV1,
     *,
@@ -265,6 +303,7 @@ def render_project_yaml(
     payload = {
         section.name: dict(section.settings) for section in document.sections
     }
+    _require_declared_section_shape(document.program, payload)
     rule_ids = ["project.render.candidate_only"]
     if document.program == "pyscf":
         settings_module = importlib.import_module("chemsmart.settings.pyscf")
