@@ -531,6 +531,18 @@ class PySCFOutput(FileMixin):
         return [float(v) for v in values] if values is not None else []
 
     @cached_property
+    def excitation_energies(self):
+        """Return vertical excitation energies in Hartree, if present."""
+        values = self.results.get("excitation_energies")
+        return [float(value) for value in values] if values is not None else None
+
+    @cached_property
+    def oscillator_strengths(self):
+        """Return dimensionless oscillator strengths, if present."""
+        values = self.results.get("oscillator_strengths")
+        return [float(value) for value in values] if values is not None else None
+
+    @cached_property
     def _eigenvalues(self):
         """Split MO energies into occupied/virtual, per spin channel.
 

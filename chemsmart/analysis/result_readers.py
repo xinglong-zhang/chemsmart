@@ -45,9 +45,12 @@ class MissingQuantityError(LookupError):
 #: cannot produce a quantity in its declared unit must fail rather than guess:
 #: a silently mis-scaled energy is worse than an absent one.
 SELECTOR_UNITS = {
+    "absorption_wavelengths": "nm",
     "energy": "Eh",
     "energies": "Eh",
+    "excitation_energies": "eV",
     "gibbs_free_energy": "Eh",
+    "oscillator_strengths": "",
     "vibrational_frequencies": "cm^-1",
     "positions": "Angstrom",
     "symbols": "",
@@ -162,6 +165,24 @@ def _gaussian_output(path: Path) -> Any:
     return Gaussian16Output(filename=str(path))
 
 
+def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
+    accessors = _text_output_accessors()
+    accessors.update(
+        {
+            "absorption_wavelengths": lambda output: [
+                float(item) for item in output.absorptions_in_nm
+            ],
+            "excitation_energies": lambda output: [
+                float(item) for item in output.excitation_energies_eV
+            ],
+            "oscillator_strengths": lambda output: [
+                float(item) for item in output.oscillatory_strengths
+            ],
+        }
+    )
+    return accessors
+
+
 def _xtb_output(path: Path) -> Any:
     from chemsmart.io.xtb.output import XTBOutput
 
@@ -197,7 +218,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         artifact_kind="gaussian_output",
         parser_id="chemsmart.io.gaussian.output.Gaussian16Output",
         open_output=_gaussian_output,
-        accessors=_text_output_accessors(),
+        accessors=_gaussian_accessors(),
     ),
     "xtb": ResultReaderV1(
         program="xtb",
@@ -211,9 +232,12 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
 
 #: Physical dimension of each selector, in the shared quantity vocabulary.
 _SELECTOR_DIMENSIONS = {
+    "absorption_wavelengths": "LENGTH",
     "energy": "ENERGY",
     "energies": "ENERGY",
+    "excitation_energies": "ENERGY",
     "gibbs_free_energy": "ENERGY",
+    "oscillator_strengths": "DIMENSIONLESS",
     "vibrational_frequencies": "FREQUENCY",
     "positions": "LENGTH",
     "symbols": "DIMENSIONLESS",
@@ -248,15 +272,33 @@ def extract_logged_quantities(
     quantities = []
     for selector in request.selectors:
         try:
-            value, unit = reader.read(output, selector.selector)
+            source_value, source_unit = reader.read(
+                output, selector.selector
+            )
         except MissingQuantityError as exc:
             raise rq.QuantityExtractionError(str(exc)) from exc
         dimension = getattr(rq, _SELECTOR_DIMENSIONS[selector.selector])
+        if selector.selector == "symbols":
+            value = source_value
+            unit = source_unit
+        else:
+            from chemsmart.analysis.quantity_expressions import (
+                normalize_numeric_value,
+            )
+
+            value, unit, observed_dimension = normalize_numeric_value(
+                source_value, source_unit
+            )
+            if observed_dimension != dimension:
+                raise rq.QuantityExtractionError(
+                    f"selector {selector.selector!r} produced an "
+                    "incompatible unit"
+                )
         quantities.append(
             rq.make_quantity_value(
                 quantity_id=selector.quantity_id,
-                source_value=value,
-                source_unit=unit,
+                source_value=source_value,
+                source_unit=source_unit,
                 value=value,
                 unit=unit,
                 dimension=dimension,

@@ -44,6 +44,48 @@ def _normalize_choice(value, allowed, field_name):
     return normalized
 
 
+def _normalize_orca_grid(value):
+    """Normalize modern DEFGRID and legacy GridN project literals.
+
+    Published ORCA protocols often report the pre-5.0 ``Grid4``--``Grid7``
+    vocabulary, while current protocols use ``DEFGRID1``--``DEFGRID3``.  A
+    YAML number such as ``6`` therefore has an unambiguous program-relative
+    meaning and is materialized as ``Grid6`` rather than emitted as an invalid
+    bare token.
+
+    Validation is case-insensitive but emission is not: ORCA reads its route
+    case-insensitively, so rewriting a project's own casing would change every
+    generated input file for no scientific reason.  A token that is already a
+    member of the vocabulary is therefore returned unchanged.
+    """
+
+    if value is None:
+        return None
+    literal = str(value).strip()
+    normalized = literal.lower()
+    if normalized.isdigit() and 1 <= int(normalized) <= 7:
+        # A bare integer is not an ORCA keyword, so this form has no casing
+        # of its own to preserve; use the vocabulary the manual prints.
+        return f"Grid{normalized}"
+    allowed = {
+        "defgrid1",
+        "defgrid2",
+        "defgrid3",
+        "grid1",
+        "grid2",
+        "grid3",
+        "grid4",
+        "grid5",
+        "grid6",
+        "grid7",
+    }
+    if normalized not in allowed:
+        raise ValueError(
+            f"Unsupported defgrid {value!r}; expected one of {sorted(allowed)}."
+        )
+    return literal
+
+
 #: Scalar-relativistic Hamiltonians ORCA accepts as simple route keywords.
 #: The value is the keyword written to the ``!`` line.
 ORCA_RELATIVISTIC_KEYWORDS = {
@@ -246,7 +288,7 @@ class ORCAJobSettings(MolecularJobSettings):
             functional=functional,
             dispersion=dispersion,
             basis=basis,
-            defgrid=defgrid,
+            defgrid=_normalize_orca_grid(defgrid),
             charge=charge,
             multiplicity=multiplicity,
             freq=freq,
@@ -741,6 +783,16 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" CPCM({self.solvent_id})"
         else:
             pass
+
+        # Keep the long-standing project-YAML escape hatch effective.  These
+        # tokens are configuration owned by the validated project, not shell
+        # text or a model-authored native input.  Previously the loader stored
+        # ``additional_route_parameters`` but the ORCA writer silently dropped
+        # it, so a project could validate while omitting method-defining
+        # keywords from the generated input.
+        additional = str(self.additional_route_parameters or "").strip()
+        if additional:
+            route_string += f" {additional}"
 
         # Deduplication: if solvent model appears twice,
         # the first time it appears is removed

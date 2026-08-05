@@ -125,6 +125,15 @@ from chemsmart.agent.projects import (
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.scientific_toolchain import (
+    AnalysisInputIntentV1,
+    AnalysisNodeIntentV1,
+    AnalysisOutputIntentV1,
+    AnalysisSelectorIntentV1,
+    ScientificToolchainPlanV1,
+    build_scientific_toolchain_plan,
+    project_scientific_toolchain_frontier,
+)
 from chemsmart.agent.tool_specs import (
     AgentToolSurfaceV1,
     build_approved_execution_tool_surface,
@@ -148,7 +157,10 @@ from chemsmart.analysis.result_quantities import (
 )
 from chemsmart.agent.workflow_context import (
     project_workflow_context,
-    workflow_context_enabled,
+)
+from chemsmart.agent.dependency_context import (
+    ContextSelectionReceiptV1,
+    TaskDependencyContextV1,
 )
 from chemsmart.agent.workflows import (
     AGGREGATE_NODE_PROGRAM,
@@ -825,8 +837,13 @@ class CommandCompiledToolHostV1:
             StationaryPointValidationPolicyV1 | None
         ) = None,
         scientific_workflow_plan: ScientificWorkflowPlanV2 | None = None,
+        preview_server: str = "",
         execution_server: str = "",
         execution_environment: Mapping[str, str] = {},
+        dependency_context: TaskDependencyContextV1 | None = None,
+        dependency_context_selection_receipt: (
+            ContextSelectionReceiptV1 | None
+        ) = None,
     ) -> None:
         self.event_store = event_store
         self.registry = registry or load_program_capabilities()
@@ -862,10 +879,33 @@ class CommandCompiledToolHostV1:
             self.stationary_point_policy,
             plan=scientific_workflow_plan,
         )
+        self.preview_server = str(preview_server)
         self.execution_server = str(execution_server)
         self.execution_environment = {
             str(key): str(value) for key, value in execution_environment.items()
         }
+        if (dependency_context is None) != (
+            dependency_context_selection_receipt is None
+        ):
+            raise ContractError(
+                "dependency context and selection receipt must be supplied together"
+            )
+        if dependency_context is not None:
+            if (
+                dependency_context.context_sha256
+                != dependency_context_selection_receipt.context_sha256
+                or dependency_context.policy_sha256
+                != dependency_context_selection_receipt.policy_sha256
+                or dependency_context.plan_sha256
+                != dependency_context_selection_receipt.plan_sha256
+            ):
+                raise ContractError(
+                    "dependency context differs from its selection receipt"
+                )
+        self.dependency_context = dependency_context
+        self.dependency_context_selection_receipt = (
+            dependency_context_selection_receipt
+        )
         if self.surface.profile == "command_compiled_approved_execution":
             if self.approved_workspace is None:
                 raise ContractError("execution profile requires an approved workspace")
@@ -1030,6 +1070,12 @@ class CommandCompiledToolHostV1:
         self.analysis_completion_receipts: dict[str, Any] = {}
         self.counterexamples: dict[str, CommandCounterexampleV1] = {}
         self.workflow_drafts: dict[str, CommandWorkflowDraftV1] = {}
+        self.scientific_toolchain_plans: dict[
+            str, ScientificToolchainPlanV1
+        ] = {}
+        self._scientific_toolchain_command_results: dict[
+            str, dict[str, Any]
+        ] = {}
         #: Last accepted scientific plan per workflow, so a later repair can be
         #: checked against the question and not only against its own findings.
         self.scientific_plans: dict[str, Any] = {}
@@ -1196,6 +1242,18 @@ class CommandCompiledToolHostV1:
                 program=receipt.program,
                 jobtype=receipt.jobtype,
             )
+        if self.dependency_context_selection_receipt is not None:
+            receipt = self.dependency_context_selection_receipt
+            self._emit(
+                turn_id,
+                EventKind.TASK_DEPENDENCY_CONTEXT_SELECTED,
+                receipt.receipt_sha256,
+                status=receipt.status,
+                workflow_id=receipt.workflow_id,
+                target_node_id=receipt.target_node_id,
+                policy_sha256=receipt.policy_sha256,
+                context_sha256=receipt.context_sha256,
+            )
 
     def register_counterexample(self, value: CommandCounterexampleV1) -> None:
         """Register a deterministic counterexample; never model-authored here."""
@@ -1219,6 +1277,9 @@ class CommandCompiledToolHostV1:
             "read_project_yaml": self._read_project_yaml,
             "validate_project_yaml": self._validate_project_yaml,
             "plan_command_workflow": self._plan_command_workflow,
+            "plan_scientific_workflow": self._plan_scientific_workflow,
+            "inspect_workflow_frontier": self._inspect_workflow_frontier,
+            "prepare_program_node": self._prepare_program_node,
             "synthesize_command": self._synthesize_command,
             "repair_command": self._repair_command,
             "preview_command": self._preview_command,
@@ -1684,7 +1745,13 @@ class CommandCompiledToolHostV1:
         )
         return record
 
-    def _plan_command_workflow(self, turn_id: str, values: dict) -> Any:
+    def _plan_command_workflow(
+        self,
+        turn_id: str,
+        values: dict,
+        *,
+        node_annotations: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Any:
         """Record a broad DAG before execution-grade evidence is available."""
 
         nodes = []
@@ -1768,7 +1835,9 @@ class CommandCompiledToolHostV1:
         )
         self.workflow_drafts[draft.draft_sha256] = draft
         scientific_plan = self._scientific_plan_from_draft(
-            draft, findings=findings
+            draft,
+            findings=findings,
+            node_annotations=node_annotations,
         )
         if scientific_plan is not None:
             self.scientific_workflow_plans[
@@ -1815,6 +1884,407 @@ class CommandCompiledToolHostV1:
             result["workflow_context"] = context
         return result
 
+    def _plan_scientific_workflow(
+        self, turn_id: str, values: dict
+    ) -> Any:
+        """Plan calculations and their downstream scientific analysis together.
+
+        The existing command planner remains the authority for calculation
+        nodes.  Analysis intent is layered on its producer outputs without
+        asking the model to invent future artifact or receipt hashes.
+        """
+
+        calculation_nodes = values["calculation_nodes"]
+        node_annotations = {
+            item["node_id"]: {
+                "produces_observables": tuple(item["produces_observables"]),
+                "support_state": item["support_state"],
+                "blocked_reason": item["blocked_reason"],
+            }
+            for item in calculation_nodes
+        }
+        command_result = self._plan_command_workflow(
+            turn_id,
+            {
+                "workflow_id": values["workflow_id"],
+                "task_spec_id": values["task_spec_id"],
+                "nodes": calculation_nodes,
+            },
+            node_annotations=node_annotations,
+        )
+        draft = command_result["workflow_draft"]
+        analysis_nodes = []
+        for raw_node in values["analysis_nodes"]:
+            analysis_nodes.append(
+                AnalysisNodeIntentV1(
+                    node_id=raw_node["node_id"],
+                    analysis_kind=raw_node["analysis_kind"],
+                    dependencies=tuple(
+                        sorted(set(raw_node["dependencies"]))
+                    ),
+                    inputs=tuple(
+                        sorted(
+                            (
+                                AnalysisInputIntentV1(
+                                    input_id=item["input_id"],
+                                    source_kind=item["source_kind"],
+                                    producer_node_id=item["producer_node_id"],
+                                    producer_output_id=item[
+                                        "producer_output_id"
+                                    ],
+                                )
+                                for item in raw_node["inputs"]
+                            ),
+                            key=lambda item: item.input_id,
+                        )
+                    ),
+                    selectors=tuple(
+                        sorted(
+                            (
+                                AnalysisSelectorIntentV1(
+                                    quantity_id=item["quantity_id"],
+                                    selector=item["selector"],
+                                )
+                                for item in raw_node["selectors"]
+                            ),
+                            key=lambda item: item.quantity_id,
+                        )
+                    ),
+                    outputs=tuple(
+                        sorted(
+                            (
+                                AnalysisOutputIntentV1(
+                                    output_id=item["output_id"],
+                                    quantity_kind=item["quantity_kind"],
+                                    unit=item["unit"],
+                                )
+                                for item in raw_node["outputs"]
+                            ),
+                            key=lambda item: item.output_id,
+                        )
+                    ),
+                    expression_nodes=tuple(raw_node["expression_nodes"]),
+                    expression_output_node_ids=tuple(
+                        raw_node["expression_output_node_ids"]
+                    ),
+                    temperature_k=raw_node.get("temperature_k"),
+                    pressure_atm=raw_node.get("pressure_atm"),
+                    support_state=raw_node["support_state"],
+                    blocked_reason=raw_node["blocked_reason"],
+                )
+            )
+        observables = {
+            item["node_id"]: tuple(item["produces_observables"])
+            for item in calculation_nodes
+        }
+        plan = build_scientific_toolchain_plan(
+            plan_id=values["plan_id"],
+            workflow_id=values["workflow_id"],
+            command_workflow_draft_sha256=draft.draft_sha256,
+            calculation_nodes=draft.nodes,
+            calculation_observables=observables,
+            analysis_nodes=analysis_nodes,
+            required_output_ids=values["required_output_ids"],
+        )
+        self.scientific_toolchain_plans[plan.plan_sha256] = plan
+        self._scientific_toolchain_command_results[
+            plan.plan_sha256
+        ] = command_result
+        frontier = project_scientific_toolchain_frontier(
+            plan,
+            actionable_calculation_node_ids=command_result[
+                "actionable_node_ids"
+            ],
+            unresolved_calculation_node_ids=command_result[
+                "unresolved_node_ids"
+            ],
+        )
+        return {
+            "scientific_toolchain_plan": plan,
+            "calculation_plan": command_result,
+            "workflow_frontier": frontier,
+        }
+
+    def _inspect_workflow_frontier(
+        self, turn_id: str, values: dict
+    ) -> Any:
+        """Return the latest connected frontier for a named workflow."""
+
+        del turn_id
+        candidates = tuple(
+            plan
+            for plan in self.scientific_toolchain_plans.values()
+            if plan.workflow_id == values["workflow_id"]
+        )
+        if not candidates:
+            raise ContractError("unknown scientific workflow ID")
+        plan = candidates[-1]
+        command_result = self._scientific_toolchain_command_results[
+            plan.plan_sha256
+        ]
+        return {
+            "scientific_toolchain_plan": plan,
+            "workflow_frontier": project_scientific_toolchain_frontier(
+                plan,
+                actionable_calculation_node_ids=command_result[
+                    "actionable_node_ids"
+                ],
+                unresolved_calculation_node_ids=command_result[
+                    "unresolved_node_ids"
+                ],
+            ),
+        }
+
+    def _prepare_program_node(self, turn_id: str, values: dict) -> Any:
+        """Resolve and safe-preview a planned node without model-carried hashes.
+
+        The model chooses the scientific workflow and node.  The host performs
+        the relational join across the already observed capability,
+        environment, project, identity, and artifact records.  Ambiguity is a
+        semantic next action, never an invitation to guess a receipt digest.
+        """
+
+        workflow_id = values["workflow_id"]
+        node_id = values["node_id"]
+        plans = tuple(
+            plan
+            for plan in self.scientific_toolchain_plans.values()
+            if plan.workflow_id == workflow_id
+        )
+        if not plans:
+            raise ContractError("unknown scientific workflow ID")
+        plan = plans[-1]
+        command_result = self._scientific_toolchain_command_results[
+            plan.plan_sha256
+        ]
+        draft = command_result["workflow_draft"]
+        nodes = tuple(node for node in draft.nodes if node.node_id == node_id)
+        if len(nodes) != 1:
+            raise ContractError("workflow has no unique calculation node ID")
+        node = nodes[0]
+
+        if node.unresolved_fields:
+            return {
+                "status": "needs_clarification",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "unresolved_fields": node.unresolved_fields,
+                "next_action": "resolve the node's scientific settings",
+            }
+        producer_inputs = tuple(
+            item for item in node.inputs if item.producer_node_id
+        )
+        if producer_inputs:
+            return {
+                "status": "waiting_for_artifact",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "producer_inputs": tuple(
+                    {
+                        "binding_id": item.binding_id,
+                        "producer_node_id": item.producer_node_id,
+                        "producer_output_id": item.producer_output_id,
+                    }
+                    for item in producer_inputs
+                ),
+                "next_action": "materialize the declared producer outputs",
+            }
+        external_inputs = tuple(
+            item for item in node.inputs if item.artifact_id
+        )
+        if len(external_inputs) != 1:
+            return {
+                "status": "needs_clarification",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "finding": "program node needs one unambiguous external input",
+                "next_action": "repair the workflow input binding",
+            }
+        input_artifact = self.artifacts.get(external_inputs[0].artifact_id)
+        if input_artifact is None:
+            return {
+                "status": "waiting_for_artifact",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "artifact_id": external_inputs[0].artifact_id,
+                "next_action": "make the declared input artifact available",
+            }
+
+        identities = tuple(
+            identity
+            for identity in self.scientific_identities.values()
+            if identity.task_spec_sha256 == draft.task_spec_id
+            and identity.geometry_artifact_id == input_artifact.artifact_id
+            and identity.geometry_artifact_sha256 == input_artifact.sha256
+        )
+        if len(identities) != 1:
+            return {
+                "status": "needs_clarification",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "finding": "input has no unique task-bound electronic state",
+                "candidate_states": tuple(
+                    {
+                        "charge": item.charge,
+                        "multiplicity": item.multiplicity,
+                    }
+                    for item in identities
+                ),
+                "next_action": "bind one charge and multiplicity to this input",
+            }
+        identity = identities[0]
+
+        capabilities = tuple(
+            receipt
+            for receipt in self.capabilities.values()
+            if receipt.query.program == node.program
+            and receipt.query.jobtype == node.jobtype
+            and str(receipt.status.value) in {"supported", "preview_only"}
+        )
+        if len(capabilities) != 1:
+            return {
+                "status": "needs_capability_selection",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "program": node.program,
+                "jobtype": node.jobtype,
+                "candidate_engines": tuple(
+                    sorted({item.query.engine for item in capabilities})
+                ),
+                "next_action": "inspect one explicit program engine",
+            }
+        capability = capabilities[0]
+        engine_bindings = tuple(
+            binding
+            for binding in self.engine_bindings.values()
+            if binding.program == node.program
+            and binding.capability_receipt_sha256 == capability.receipt_sha256
+            and binding.state != "blocked"
+        )
+        if len(engine_bindings) != 1:
+            return {
+                "status": "needs_engine_selection",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "candidate_engines": tuple(
+                    sorted({item.engine for item in engine_bindings})
+                ),
+                "next_action": "resolve one observed program engine",
+            }
+        engine_binding = engine_bindings[0]
+        program_binding = self.program_bindings.get(
+            engine_binding.program_binding_sha256
+        )
+        if program_binding is None:
+            raise ContractError("engine binding lacks its program binding")
+
+        project = self.artifacts.get(node.project_role)
+        if project is None:
+            return {
+                "status": "needs_project",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "project_role": node.project_role,
+                "next_action": "render, promote, and validate this project role",
+            }
+        validations = tuple(
+            receipt
+            for receipt in self.project_validations.values()
+            if receipt.project_artifact_id == project.artifact_id
+            and receipt.project_sha256 == project.sha256
+            and receipt.capability_receipt_sha256 == capability.receipt_sha256
+            and receipt.program == node.program
+            and receipt.jobtype == node.jobtype
+            and receipt.status == "valid"
+        )
+        if len(validations) != 1:
+            return {
+                "status": "needs_project_validation",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "project_artifact_id": project.artifact_id,
+                "next_action": "validate the project for this program stage",
+            }
+        validation = validations[0]
+        execution_target = (
+            self.execution_resources.execution_target
+            if self.surface.profile == "command_compiled_approved_execution"
+            and self.execution_resources is not None
+            else "run"
+        )
+        proposal = CommandProposalV1(
+            node_id=node.node_id,
+            execution_target=execution_target,
+            program=node.program,
+            jobtype=node.jobtype,
+            project_artifact_id=project.artifact_id,
+            input_artifact_id=input_artifact.artifact_id,
+            scientific_identity_sha256=identity.binding_sha256,
+            charge=identity.charge,
+            multiplicity=identity.multiplicity,
+        )
+        invocation = compile_command(
+            proposal,
+            capability=capability,
+            binding=engine_binding,
+            project=project,
+            project_validation=validation,
+            input_artifact=input_artifact,
+            scientific_identity=identity,
+            live_schema=self.live_schema,
+            server=(
+                self.execution_server
+                if self.surface.profile
+                == "command_compiled_approved_execution"
+                else self.preview_server
+            ),
+        )
+        context = _CommandContext(
+            proposal=proposal,
+            capability=capability,
+            program_binding=program_binding,
+            engine_binding=engine_binding,
+            project_artifact=project,
+            project_validation=validation,
+            input_artifact=input_artifact,
+            scientific_identity=identity,
+        )
+        compiled = self._record_compiled_command(turn_id, invocation, context)
+        if compiled["inspection"].status != "valid":
+            return {
+                "status": "blocked",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "command": compiled,
+                "next_action": "repair the command inspection finding",
+            }
+        preview = self._preview_command(
+            turn_id, {"invocation_sha256": invocation.invocation_sha256}
+        )
+        preview_status = preview["safe_preview"].status
+        return {
+            "status": (
+                "previewed" if preview_status == "previewed" else "preview_failed"
+            ),
+            "workflow_id": workflow_id,
+            "node_id": node_id,
+            "program": node.program,
+            "jobtype": node.jobtype,
+            "project_artifact_id": project.artifact_id,
+            "input_artifact_id": input_artifact.artifact_id,
+            "electronic_state": {
+                "charge": identity.charge,
+                "multiplicity": identity.multiplicity,
+            },
+            "command": compiled,
+            "preview": preview,
+            "next_action": (
+                "inspect the workflow frontier"
+                if preview_status == "previewed"
+                else "inspect the generated-input validation findings"
+            ),
+        }
+
     def _workflow_context(self, draft: CommandWorkflowDraftV1) -> Any:
         """Derive the dependency context the model would otherwise reconstruct.
 
@@ -1822,8 +2292,6 @@ class CommandCompiledToolHostV1:
         and what each waiting node is waiting for, and can never assert it.
         """
 
-        if not workflow_context_enabled():
-            return None
         return project_workflow_context(
             workflow_id=draft.workflow_id,
             nodes=draft.nodes,
@@ -1835,6 +2303,7 @@ class CommandCompiledToolHostV1:
         draft: CommandWorkflowDraftV1,
         *,
         findings: list[dict[str, str]],
+        node_annotations: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> ScientificWorkflowPlanV2 | None:
         """Project a V1 model draft into the host-owned scientific DAG."""
 
@@ -1877,6 +2346,7 @@ class CommandCompiledToolHostV1:
                 {"scientific_identity_sha256s": identities}
             )
         )
+        annotations = dict(node_annotations or {})
         scientific_nodes = []
         for node in draft.nodes:
             matching_capabilities = tuple(
@@ -1912,6 +2382,22 @@ class CommandCompiledToolHostV1:
                 if len(requested_programs) == 1
                 else node.program
             )
+            annotation = dict(annotations.get(node.node_id) or {})
+            declared_support = str(
+                annotation.get("support_state") or "planned"
+            )
+            support_state = (
+                "blocked_unsupported"
+                if declared_support == "blocked_unsupported"
+                else "unresolved_future"
+                if unresolved
+                else "resolvable"
+            )
+            blocked_reason = (
+                str(annotation.get("blocked_reason") or "")
+                if support_state == "blocked_unsupported"
+                else ""
+            )
             scientific_nodes.append(
                 ScientificWorkflowNodeV2(
                     node_id=node.node_id,
@@ -1921,6 +2407,13 @@ class CommandCompiledToolHostV1:
                     engine=engine,
                     project_role=node.project_role,
                     unresolved_fields=tuple(sorted(unresolved)),
+                    produces_observables=tuple(
+                        sorted(
+                            set(annotation.get("produces_observables") or ())
+                        )
+                    ),
+                    support_state=support_state,
+                    blocked_reason=blocked_reason,
                 )
             )
         edges = []
@@ -1967,6 +2460,15 @@ class CommandCompiledToolHostV1:
             scientific_identity_sha256=scientific_identity_sha256,
             nodes=tuple(scientific_nodes),
             edges=tuple(sorted(edges, key=lambda edge: edge.edge_id)),
+            required_observables=tuple(
+                sorted(
+                    {
+                        observable
+                        for node in scientific_nodes
+                        for observable in node.produces_observables
+                    }
+                )
+            ),
         )
         if self.frozen_workflow_approval is not None and (
             self.frozen_workflow_approval.plan_sha256 != plan.plan_sha256
@@ -2072,6 +2574,12 @@ class CommandCompiledToolHostV1:
             input_artifact=input_artifact,
             scientific_identity=identity,
             live_schema=self.live_schema,
+            server=(
+                self.execution_server
+                if self.surface.profile
+                == "command_compiled_approved_execution"
+                else self.preview_server
+            ),
         )
         program_binding = self._get(
             self.program_bindings,
@@ -2122,6 +2630,12 @@ class CommandCompiledToolHostV1:
             input_artifact=context.input_artifact,
             scientific_identity=context.scientific_identity,
             live_schema=self.live_schema,
+            server=(
+                self.execution_server
+                if self.surface.profile
+                == "command_compiled_approved_execution"
+                else self.preview_server
+            ),
             repair_parent_sha256=parent.invocation_sha256,
             counterexample_sha256=counterexample.counterexample_sha256,
             repair_attempt=parent.repair_attempt + 1,
@@ -4003,6 +4517,14 @@ class CommandCompiledToolHostV1:
                     else None
                 ),
                 target_unit=str(item.get("target_unit", "")),
+                cardinal_numbers=tuple(
+                    int(value) for value in item.get("cardinal_numbers", ())
+                ),
+                extrapolation_exponent=(
+                    float(item["extrapolation_exponent"])
+                    if "extrapolation_exponent" in item
+                    else None
+                ),
             )
             for item in values["nodes"]
         )

@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Mapping
 
 import numpy as np
+from ase import units as ase_units
 
 from chemsmart.analysis.result_quantities import (
     ANGLE,
@@ -64,6 +66,9 @@ _OPERATIONS = frozenset(
         "linear_fit_slope",
         "linear_fit_intercept",
         "exponential_cbs_limit",
+        "scf_exponential_cbs_limit",
+        "correlation_inverse_power_cbs_limit",
+        "photon_wavelength",
     }
 )
 
@@ -227,10 +232,15 @@ class QuantityExpressionNodeV1:
     literal_unit: str = "1"
     scale_factor: float | None = None
     target_unit: str = ""
+    cardinal_numbers: tuple[int, ...] = ()
+    extrapolation_exponent: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "input_ids", tuple(self.input_ids))
         object.__setattr__(self, "indices", tuple(self.indices))
+        object.__setattr__(
+            self, "cardinal_numbers", tuple(self.cardinal_numbers)
+        )
         if not self.node_id or len(self.node_id) > 128:
             raise QuantityContractError("expression node_id is invalid")
         if self.operation not in _OPERATIONS:
@@ -243,6 +253,37 @@ class QuantityExpressionNodeV1:
             raise QuantityContractError("reference indices must be non-negative")
         if self.scale_factor is not None and not math.isfinite(self.scale_factor):
             raise QuantityContractError("scale_factor must be finite")
+        cbs_operations = {
+            "scf_exponential_cbs_limit",
+            "correlation_inverse_power_cbs_limit",
+        }
+        if self.operation in cbs_operations:
+            if (
+                len(self.cardinal_numbers) != 2
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or value < 2
+                    for value in self.cardinal_numbers
+                )
+                or self.cardinal_numbers[0] >= self.cardinal_numbers[1]
+            ):
+                raise QuantityContractError(
+                    "two-point CBS operations require increasing integer "
+                    "cardinal_numbers >= 2"
+                )
+            if (
+                self.extrapolation_exponent is None
+                or not math.isfinite(self.extrapolation_exponent)
+                or self.extrapolation_exponent <= 0.0
+            ):
+                raise QuantityContractError(
+                    "two-point CBS operations require a positive explicit exponent"
+                )
+        elif self.cardinal_numbers or self.extrapolation_exponent is not None:
+            raise QuantityContractError(
+                "CBS cardinal numbers and exponent apply only to CBS operations"
+            )
 
 
 @dataclass(frozen=True)
@@ -384,15 +425,28 @@ def quantity_expression_semantic_signature(
     """
 
     values: dict[str, dict[str, Any]] = {}
+    source_quantity_ids = {
+        quantity.quantity_id: (
+            matches[-1]
+            if (matches := _QUANTITY_REF.findall(quantity.evidence_ref))
+            else ""
+        )
+        for quantity in request.inputs
+    }
+    source_quantity_counts = Counter(source_quantity_ids.values())
+    source_quantity_counts.pop("", None)
     role_owners: dict[str, str] = {}
     for quantity in request.inputs:
         role_matches = _SEMANTIC_ROLE_REF.findall(quantity.evidence_ref)
-        quantity_matches = _QUANTITY_REF.findall(quantity.evidence_ref)
+        source_quantity_id = source_quantity_ids[quantity.quantity_id]
         semantic_role = (
-            role_matches[-1]
+            source_quantity_id
+            if source_quantity_id
+            and source_quantity_counts[source_quantity_id] == 1
+            else role_matches[-1]
             if role_matches
-            else quantity_matches[-1]
-            if quantity_matches
+            else source_quantity_id
+            if source_quantity_id
             else quantity.quantity_id
         )
         owner = role_owners.setdefault(semantic_role, quantity.quantity_id)
@@ -479,6 +533,10 @@ def quantity_expression_semantic_signature(
                 result["target_dimension"] = target_dimension
             if node.indices:
                 result["indices"] = node.indices
+            if node.cardinal_numbers:
+                result["cardinal_numbers"] = node.cardinal_numbers
+            if node.extrapolation_exponent is not None:
+                result["extrapolation_exponent"] = node.extrapolation_exponent
         visiting.remove(value_id)
         values[value_id] = result
         return result
@@ -778,6 +836,36 @@ def _node_value(
             evidence_ref=evidence_ref,
         )
 
+    if operation == "photon_wavelength":
+        if len(inputs) != 1 or inputs[0].dimension != ENERGY:
+            raise QuantityExpressionError(
+                "photon_wavelength requires one positive energy input"
+            )
+        energy_hartree = _numeric(inputs[0])
+        if np.any(energy_hartree <= 0.0):
+            raise QuantityExpressionError(
+                "photon_wavelength requires strictly positive energies"
+            )
+        energy_ev = energy_hartree * energy_conversion(
+            "hartree", "eV", 1.0
+        )
+        hc_ev_angstrom = (
+            ase_units._hplanck
+            * ase_units._c
+            / ase_units._e
+            * 1.0e10
+        )
+        payload = _payload(hc_ev_angstrom / energy_ev)
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="angstrom",
+            value=payload,
+            unit="angstrom",
+            dimension=LENGTH,
+            evidence_ref=evidence_ref,
+        )
+
     if operation == "exponential_cbs_limit":
         # A Hartree-Fock basis-set series converges exponentially, so the
         # complete-basis limit is a three-parameter fit rather than a linear
@@ -816,6 +904,57 @@ def _node_value(
             value=payload,
             unit=unit,
             dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation in {
+        "scf_exponential_cbs_limit",
+        "correlation_inverse_power_cbs_limit",
+    }:
+        if (
+            len(inputs) != 2
+            or any(item.dimension != ENERGY for item in inputs)
+            or any(_numeric(item).ndim != 0 for item in inputs)
+        ):
+            raise QuantityExpressionError(
+                f"{operation} requires two scalar energy inputs ordered by "
+                "increasing basis cardinal"
+            )
+        smaller_cardinal, larger_cardinal = node.cardinal_numbers
+        smaller_energy = float(_numeric(inputs[0]))
+        larger_energy = float(_numeric(inputs[1]))
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            extrapolate_correlation_inverse_power,
+            extrapolate_scf_exponential,
+        )
+
+        try:
+            if operation == "scf_exponential_cbs_limit":
+                payload = extrapolate_scf_exponential(
+                    smaller_cardinal=smaller_cardinal,
+                    larger_cardinal=larger_cardinal,
+                    smaller_scf_energy=smaller_energy,
+                    larger_scf_energy=larger_energy,
+                    alpha=float(node.extrapolation_exponent),
+                )
+            else:
+                payload = extrapolate_correlation_inverse_power(
+                    smaller_cardinal=smaller_cardinal,
+                    larger_cardinal=larger_cardinal,
+                    smaller_correlation_energy=smaller_energy,
+                    larger_correlation_energy=larger_energy,
+                    exponent=float(node.extrapolation_exponent),
+                )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="hartree",
+            value=payload,
+            unit="hartree",
+            dimension=ENERGY,
             evidence_ref=evidence_ref,
         )
 

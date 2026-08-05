@@ -53,6 +53,8 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "multiplicity",
         "method",
         "basis",
+        "excitation_energies",
+        "oscillator_strengths",
     }
 )
 
@@ -61,7 +63,12 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
 #: reader declares what it provides, and a run that produced no such value is
 #: refused as absent rather than guessed at.
 SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
-    {"gibbs_free_energy"}
+    {
+        "absorption_wavelengths",
+        "excitation_energies",
+        "gibbs_free_energy",
+        "oscillator_strengths",
+    }
 )
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
@@ -69,6 +76,10 @@ _CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
 _SELECTOR_RESULT_UNITS = {
     "energy": {"results/energies": "Eh"},
     "energies": {"results/energies": "Eh"},
+    "excitation_energies": {"results/excitation_energies": "Eh"},
+    "oscillator_strengths": {
+        "results/oscillator_strengths": "dimensionless"
+    },
     "positions": {"results/positions": "Angstrom"},
     "vibrational_frequencies": {
         "results/vibrational_frequencies": "cm^-1"
@@ -645,6 +656,36 @@ def _extract_selector(
             value=value,
             unit="hartree",
             dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+    if name == "excitation_energies":
+        if output.excitation_energies is None:
+            raise QuantityExtractionError(
+                "PySCF artifact has no excitation energies"
+            )
+        value = _require_finite_numeric(output.excitation_energies, name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="hartree",
+            value=value,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=evidence_ref,
+        )
+    if name == "oscillator_strengths":
+        if output.oscillator_strengths is None:
+            raise QuantityExtractionError(
+                "PySCF artifact has no oscillator strengths"
+            )
+        value = _require_finite_numeric(output.oscillator_strengths, name)
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
             evidence_ref=evidence_ref,
         )
     if name == "positions":

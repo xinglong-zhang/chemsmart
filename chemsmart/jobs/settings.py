@@ -315,13 +315,14 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         # no settings for gas phase; using
         # implicit solvation model for all jobs
         # (except td and qmmm, which will use their own configurations)
+        shared_config = solv_config or {}
         for job in all_jobs:
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], solv_config
+                all_project_configs[job], shared_config
             )
     else:
         # settings for gas phase exist - also solv settings exist
@@ -355,7 +356,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], solv_config
+                all_project_configs[job], solv_config or {}
             )
 
     # check if td settings exist (optional)
@@ -384,5 +385,24 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             for k, v in qmmm_config.items():
                 logger.debug(f"Updating qmmm job settings: {k} with {v}")
                 all_project_configs[job][k] = v
+
+    # Canonical ChemSmart projects may describe a stage directly (``opt:``,
+    # ``sp:``, and so on) instead of routing every job through the historical
+    # ``gas:``/``solv:`` pair.  Build the legacy defaults first, then let an
+    # explicit stage override only that stage.  This keeps old projects
+    # readable while allowing a model to express a paper workflow without
+    # inventing settings for unrelated jobs.
+    for job in all_jobs + qmmm_job:
+        stage_config = project_config.get(job)
+        if stage_config is None:
+            continue
+        if not isinstance(stage_config, dict):
+            raise TypeError(f"Project section `{job}` must be a mapping")
+        if job not in all_project_configs:
+            all_project_configs[job] = default_config.copy()
+            all_project_configs[job]["jobtype"] = job
+        all_project_configs[job] = update_dict_with_existing_keys(
+            all_project_configs[job], stage_config
+        )
 
     return all_project_configs

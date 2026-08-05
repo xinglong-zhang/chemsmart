@@ -88,6 +88,31 @@ def extrapolate_correlation_helgaker(
         ``E_inf = (X**3 * E_X - Y**3 * E_Y) / (X**3 - Y**3)``
     """
 
+    return extrapolate_correlation_inverse_power(
+        smaller_cardinal=smaller_cardinal,
+        larger_cardinal=larger_cardinal,
+        smaller_correlation_energy=smaller_correlation_energy,
+        larger_correlation_energy=larger_correlation_energy,
+        exponent=3.0,
+    )
+
+
+def extrapolate_correlation_inverse_power(
+    *,
+    smaller_cardinal,
+    larger_cardinal,
+    smaller_correlation_energy: float,
+    larger_correlation_energy: float,
+    exponent: float,
+) -> float:
+    """Two-point inverse-power CBS extrapolation with an explicit exponent.
+
+    This is the reusable form of the Helgaker correlation expression,
+    ``E(X) = E_inf + B X**(-p)``.  The exponent is deliberately an explicit
+    method/protocol input: the host must not silently assume that every
+    correlated method uses the conventional ``p=3`` value.
+    """
+
     x = _cardinal(smaller_cardinal)
     y = _cardinal(larger_cardinal)
     if x >= y:
@@ -95,9 +120,12 @@ def extrapolate_correlation_helgaker(
             "the larger cardinal must exceed the smaller one; "
             f"got {x} and {y}"
         )
-    x3, y3 = x**3, y**3
-    return (x3 * float(smaller_correlation_energy) - y3 * float(larger_correlation_energy)) / (
-        x3 - y3
+    power = float(exponent)
+    if not math.isfinite(power) or power <= 0.0:
+        raise AggregationError("inverse-power CBS exponent must be positive")
+    xp, yp = x**power, y**power
+    return (yp * float(larger_correlation_energy) - xp * float(smaller_correlation_energy)) / (
+        yp - xp
     )
 
 

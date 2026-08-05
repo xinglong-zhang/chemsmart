@@ -182,22 +182,22 @@ _CURRENT_HARNESS_PROJECT_PARAMETERS = (
     "solventfilename",
 )
 
-# ORCA's project YAML carries scientific controls Gaussian has no equivalent
-# for, so it no longer shares Gaussian's union.  Several of these already
-# appear in ChemSmart's own shipped ORCA project (``freq``, ``mdci_cutoff``,
-# ``mdci_density``, ``dipole``) and the rest express relativistic, open-shell,
-# and correlated chemistry.  Undeclared, they are unreachable by any caller
-# that reads this registry to learn what a project may set.
+# ORCA has typed method controls that are scientifically stronger than the
+# generic route-string escape hatch.  Advertising them through the canonical
+# capability registry lets an agent choose explicit scalar-relativistic,
+# reference, RI, frozen-core, and element-specific basis semantics in project
+# YAML instead of hiding those choices in prose.
 _ORCA_PROJECT_PARAMETERS = tuple(
     sorted(
-        _CURRENT_HARNESS_PROJECT_PARAMETERS
-        + (
+        {
+            *_CURRENT_HARNESS_PROJECT_PARAMETERS,
             "additional_solvent_options",
             "dipole",
             "forces",
             "freq",
             "frozen_core",
             "frozen_core_electrons",
+            "gbw",
             "heavy_elements",
             "heavy_elements_basis",
             "light_elements_basis",
@@ -208,7 +208,7 @@ _ORCA_PROJECT_PARAMETERS = tuple(
             "reference",
             "relativistic",
             "ri_approximation",
-        )
+        }
     )
 )
 
@@ -316,6 +316,27 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             project_owned_parameters=_ORCA_PROJECT_PARAMETERS,
             engines=("cpu",),
             project_section_names=("gas", "solv"),
+            project_parameter_domains=(
+                (
+                    "defgrid",
+                    (
+                        "defgrid1",
+                        "defgrid2",
+                        "defgrid3",
+                        "grid1",
+                        "grid2",
+                        "grid3",
+                        "grid4",
+                        "grid5",
+                        "grid6",
+                        "grid7",
+                    ),
+                ),
+                ("frozen_core", ("fc_electrons", "fc_ewin", "fc_none")),
+                ("reference", ("rhf", "rohf", "uhf")),
+                ("relativistic", ("dkh", "dkh2", "zora")),
+                ("ri_approximation", ("none", "ri", "rijcosx", "rijk")),
+            ),
         ),
         "pyscf": ProgramCapability(
             program="pyscf",

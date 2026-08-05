@@ -261,6 +261,7 @@ def compile_command(
     input_artifact: TrustedArtifactRefV1,
     scientific_identity: ScientificIdentityBindingV1,
     live_schema: LiveClickSchemaV1 | None = None,
+    server: str = "",
     repair_parent_sha256: str = "",
     counterexample_sha256: str = "",
     repair_attempt: int = 0,
@@ -293,6 +294,10 @@ def compile_command(
     program_scope = execution_scope + (proposal.program,)
     options: list[ScopedCommandOptionV1] = []
 
+    if server:
+        options.append(
+            _scoped_option(live_schema, execution_scope, "server", server)
+        )
     options.append(
         _scoped_option(live_schema, execution_scope, "fake", True)
     )
@@ -691,6 +696,16 @@ def _observe_click_parse(
         unresolved = list(getattr(context, "protected_args", ())) + list(
             context.args
         )
+        # Some scientifically complete ChemSmart leaves are Click groups so
+        # they can optionally expose a nested variant (for example ORCA
+        # ``opt qmmm``).  Direct ``orca opt`` is nevertheless a valid terminal
+        # command because that group declares ``invoke_without_command``.
+        # Treat that Click-native shape as a leaf instead of asking
+        # ``resolve_command`` to index an empty argument list.
+        if not unresolved:
+            if current.invoke_without_command:
+                break
+            raise ContractError("Click parser expected another command segment")
         command_name, command, remaining = current.resolve_command(
             context, unresolved
         )

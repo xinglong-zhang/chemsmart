@@ -44,9 +44,7 @@ def extract_trusted_result_quantities(
             "no quantity reader is registered for program; registered: "
             f"{('pyscf',) + registered_reader_programs()}"
         )
-    expected_kind = (
-        "pyscf_hdf5" if program == "pyscf" else reader.artifact_kind
-    )
+    expected_kind = "pyscf_hdf5" if program == "pyscf" else reader.artifact_kind
     if artifact.kind != expected_kind:
         raise ContractError(
             f"{program} quantity extraction requires a bound "

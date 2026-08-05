@@ -17,7 +17,12 @@ from pathlib import Path
 import pytest
 
 from chemsmart.agent._contracts import TrustedArtifactRefV1
+from chemsmart.agent.analysis_nodes import (
+    ResultQuantitySelectorV1,
+    build_default_result_parser_registry,
+)
 from chemsmart.agent.postprocessing import extract_trusted_result_quantities
+from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
 from chemsmart.analysis.result_quantities import QuantitySelectorV1
 from chemsmart.analysis.result_readers import (
     RESULT_READERS,
@@ -29,6 +34,9 @@ from chemsmart.analysis.result_readers import (
 _GAUSSIAN_LOG = "tests/data/GaussianTests/boltzmann/udc3_mCF3_monomer_c1.log"
 _GAUSSIAN_LOG_C4 = (
     "tests/data/GaussianTests/boltzmann/udc3_mCF3_monomer_c4.log"
+)
+_GAUSSIAN_TD_LOG = (
+    "tests/data/GaussianTests/tddft/tddft_r1s50_gas_radical_anion.log"
 )
 
 
@@ -58,11 +66,49 @@ def test_the_log_parsing_programs_are_registered():
     assert registered_reader_programs() == ("gaussian", "orca", "xtb")
 
 
+def test_model_tool_surface_exposes_the_registered_result_plane():
+    surface = build_command_compiled_tool_surface()
+    tool = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "extract_result_quantities"
+    )
+    properties = tool["function"]["parameters"]["properties"]
+    assert properties["program"]["enum"] == [
+        "gaussian",
+        "orca",
+        "pyscf",
+        "xtb",
+    ]
+    selectors = properties["selectors"]["items"]["properties"]["selector"][
+        "enum"
+    ]
+    assert "excitation_energies" in selectors
+    assert "oscillator_strengths" in selectors
+
+
+@pytest.mark.parametrize("program", ("gaussian", "orca", "xtb"))
+def test_the_analysis_registry_exposes_every_log_reader(program):
+    reader = reader_for(program)
+    adapter = build_default_result_parser_registry().resolve(
+        program=program,
+        artifact_kind=reader.artifact_kind,
+        selectors=(
+            ResultQuantitySelectorV1(
+                schema_version="chemsmart.result-quantity-selector.v1",
+                quantity_id="energy",
+                selector="energy",
+            ),
+        ),
+    )
+    assert adapter.parser_id == reader.parser_id
+
+
 def test_a_gaussian_energy_becomes_a_hash_bound_quantity():
     receipt = _extract(_GAUSSIAN_LOG, "gaussian", "energy")
     quantity = receipt.quantities[0]
     assert quantity.value == pytest.approx(-2189.63187379)
-    assert quantity.unit == "Eh"
+    assert quantity.unit == "hartree"
     assert receipt.parser_id.endswith("Gaussian16Output")
     # The value carries its own digest, so a later claim cannot quietly
     # substitute a different number for the one that was measured.
@@ -72,6 +118,66 @@ def test_a_gaussian_energy_becomes_a_hash_bound_quantity():
 def test_a_gaussian_free_energy_is_read_from_the_thermochemistry_block():
     receipt = _extract(_GAUSSIAN_LOG, "gaussian", "gibbs_free_energy")
     assert receipt.quantities[0].value == pytest.approx(-2189.409887)
+
+
+def test_gaussian_excited_state_results_enter_the_shared_quantity_plane():
+    energies = _extract(
+        _GAUSSIAN_TD_LOG,
+        "gaussian",
+        "excitation_energies",
+        "excitation_energies",
+    ).quantities[0]
+    strengths = _extract(
+        _GAUSSIAN_TD_LOG,
+        "gaussian",
+        "oscillator_strengths",
+        "oscillator_strengths",
+    ).quantities[0]
+    wavelengths = _extract(
+        _GAUSSIAN_TD_LOG,
+        "gaussian",
+        "absorption_wavelengths",
+        "absorption_wavelengths",
+    ).quantities[0]
+    assert energies.source_value[0] == pytest.approx(0.7744)
+    assert energies.source_unit == "eV"
+    assert energies.unit == "hartree"
+    assert strengths.value[0] == pytest.approx(0.0084)
+    assert strengths.unit == "1"
+    assert wavelengths.source_value[0] == pytest.approx(1601.13)
+    assert wavelengths.unit == "angstrom"
+
+
+def test_excitation_energy_converts_to_wavelength_without_model_math():
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionNodeV1,
+        QuantityExpressionRequestV1,
+        evaluate_quantity_expression,
+    )
+
+    energies = _extract(
+        _GAUSSIAN_TD_LOG,
+        "gaussian",
+        "excitation_energies",
+        "excitation_energies",
+    ).quantities[0]
+    receipt = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="excitation_wavelengths",
+            inputs=(energies,),
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="wavelengths",
+                    operation="photon_wavelength",
+                    input_ids=("excitation_energies",),
+                ),
+            ),
+            output_node_ids=("wavelengths",),
+        )
+    )
+    assert receipt.outputs[0].unit == "angstrom"
+    assert receipt.outputs[0].value[0] == pytest.approx(16011.3, rel=2e-4)
 
 
 def test_extraction_refuses_an_artifact_of_the_wrong_kind():

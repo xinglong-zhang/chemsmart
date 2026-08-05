@@ -39,6 +39,7 @@ from chemsmart.agent.runtime.events import (
     RESULT_VERIFIED,
     RESULT_QUANTITIES_EXTRACTED,
     THERMOCHEMISTRY_DERIVED,
+    TASK_DEPENDENCY_CONTEXT_SELECTED,
     QUANTITY_EXPRESSION_EVALUATED,
     SCIENTIFIC_DECISION_RECORDED,
     SCIENTIFIC_WORKFLOW_MATERIALIZED,
@@ -87,6 +88,7 @@ class RuntimeState:
     quantity_expression_receipts: list[str] = field(default_factory=list)
     analysis_claim_receipts: list[str] = field(default_factory=list)
     analysis_completion_receipts: list[str] = field(default_factory=list)
+    dependency_context_receipts: list[str] = field(default_factory=list)
     execution_receipts: list[str] = field(default_factory=list)
     optimized_geometry_handoff_receipts: list[str] = field(default_factory=list)
     permission_receipts: list[str] = field(default_factory=list)
@@ -188,6 +190,7 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         QUANTITY_EXPRESSION_EVALUATED: state.quantity_expression_receipts,
         ANALYSIS_CLAIMS_RECORDED: state.analysis_claim_receipts,
         ANALYSIS_COMPLETION_EVALUATED: state.analysis_completion_receipts,
+        TASK_DEPENDENCY_CONTEXT_SELECTED: state.dependency_context_receipts,
         PROGRAM_EXECUTED: state.execution_receipts,
         OPTIMIZED_GEOMETRY_HANDED_OFF: (
             state.optimized_geometry_handoff_receipts

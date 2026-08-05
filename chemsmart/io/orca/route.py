@@ -133,7 +133,10 @@ class ORCARoute:
     def defgrid(self):
         """Extract integration grid specification from route keywords."""
         for route_keyword in self.route_keywords:
-            if route_keyword.startswith("defgrid"):
+            if route_keyword.startswith("defgrid") or (
+                route_keyword.startswith("grid")
+                and route_keyword[4:].isdigit()
+            ):
                 return route_keyword
         return None
 

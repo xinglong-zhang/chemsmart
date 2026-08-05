@@ -12,9 +12,23 @@ from chemsmart.agent.capabilities import (
     ResolvedProgramEngineBindingV1,
     ResolvedProgramBindingV1,
 )
+from chemsmart.agent.analysis_nodes import (
+    AnalysisExecutionReceiptV1,
+    AnalysisNodeSpecV1,
+    ResultParserAdapterV1,
+    ResultQuantitySelectorV1,
+    ScientificAnalysisPlanV1,
+)
 from chemsmart.agent.preflight import (
     ProgramNodePreflightReceiptV1,
     ProgramNodePreflightRequestV1,
+)
+from chemsmart.agent.scientific_toolchain import (
+    AnalysisInputIntentV1,
+    AnalysisNodeIntentV1,
+    AnalysisOutputIntentV1,
+    AnalysisSelectorIntentV1,
+    ScientificToolchainPlanV1,
 )
 from chemsmart.agent.execution import (
     FrozenMaterializedNodePreviewV1,
@@ -23,6 +37,17 @@ from chemsmart.agent.execution import (
     ProgramResultValidationReceiptV1,
     WorkflowRunStateV1,
     ValidatedDataEdgeBindingV1,
+)
+from chemsmart.agent.dependency_context import (
+    ContextManifestV2,
+    ContextSelectionReceiptV1,
+    HarnessContextArmV1,
+    PredecessorEvidenceRefV1,
+    SpecialistTaskPacketV2,
+    TaskDependencyContextPolicyV1,
+    TaskDependencyContextV1,
+    bind_selected_public_records,
+    build_dependency_context_public_projection,
 )
 from chemsmart.agent.specialists import (
     BoundedSpecialistOrchestratorV1,
@@ -53,6 +78,12 @@ from chemsmart.agent.workflows import (
 
 __all__ = [
     "AgentProgramSupportOverlayV1",
+    "AnalysisExecutionReceiptV1",
+    "AnalysisInputIntentV1",
+    "AnalysisNodeIntentV1",
+    "AnalysisNodeSpecV1",
+    "AnalysisOutputIntentV1",
+    "AnalysisSelectorIntentV1",
     "ArtifactInputIntentV1",
     "ArtifactOutputIntentV1",
     "ArtifactBindingV1",
@@ -64,12 +95,15 @@ __all__ = [
     "CommandWorkflowSpecV1",
     "CausalToolFeedbackV1",
     "ContextManifestV1",
+    "ContextManifestV2",
+    "ContextSelectionReceiptV1",
     "CoordinatorMergeReceiptV1",
     "CriticSessionOutcomeV1",
     "FrozenWorkflowApprovalV1",
     "FrozenMaterializedNodePreviewV1",
     "FrozenProducerEdgeRuleV1",
     "HarnessExperimentConfigV1",
+    "HarnessContextArmV1",
     "MaterializedWorkflowV1",
     "ProgramCandidateProposalV1",
     "ProgramCapabilityQueryV1",
@@ -79,17 +113,27 @@ __all__ = [
     "ProgramComponentConformanceReceiptV1",
     "ProgramNodePreflightReceiptV1",
     "ProgramNodePreflightRequestV1",
+    "PredecessorEvidenceRefV1",
     "ProgramResultValidationReceiptV1",
     "ResolvedEngineBindingV1",
     "ResolvedProgramEngineBindingV1",
     "ResolvedProgramBindingV1",
+    "ResultParserAdapterV1",
+    "ResultQuantitySelectorV1",
+    "ScientificAnalysisPlanV1",
+    "ScientificToolchainPlanV1",
     "ScientificReviewFindingV1",
     "ScientificWorkflowPlanV2",
     "SpecialistResultPacketV1",
     "SpecialistBudgetV1",
     "SpecialistSessionOutcomeV1",
     "SpecialistTaskPacketV1",
+    "SpecialistTaskPacketV2",
     "StationaryPointValidationPolicyV1",
+    "TaskDependencyContextPolicyV1",
+    "TaskDependencyContextV1",
     "WorkflowRunStateV1",
     "ValidatedDataEdgeBindingV1",
+    "bind_selected_public_records",
+    "build_dependency_context_public_projection",
 ]

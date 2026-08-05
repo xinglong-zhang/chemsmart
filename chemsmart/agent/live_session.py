@@ -108,7 +108,11 @@ from chemsmart.agent.identity import (
     validate_identity_for_geometry,
 )
 from chemsmart.agent.specialists import READ_ONLY_CRITIC
-from chemsmart.agent.workflow_context import workflow_context_enabled
+from chemsmart.agent.dependency_context import (
+    ContextSelectionReceiptV1,
+    TaskDependencyContextV1,
+    build_dependency_context_public_projection,
+)
 from chemsmart.agent.workflows import HarnessExperimentConfigV1
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
@@ -579,8 +583,16 @@ def run_live_agent_session(
     experiment_repeat_index: int = 0,
     experiment_config: HarnessExperimentConfigV1 | None = None,
     approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    approved_molecular_identities: Iterable[ApprovedMolecularIdentityV1] = (),
     campaign_preparation_snapshot: (
         CampaignPreparationHostSnapshotV1 | None
+    ) = None,
+    dependency_context: TaskDependencyContextV1 | None = None,
+    dependency_context_selection_receipt: (
+        ContextSelectionReceiptV1 | None
+    ) = None,
+    dependency_public_records: (
+        Mapping[str, Mapping[str, Any]] | None
     ) = None,
 ) -> LiveAgentSessionResultV1:
     """Run one agent.yaml-selected session over exact workspace artifacts.
@@ -612,6 +624,30 @@ def run_live_agent_session(
         raise ContractError(
             "campaign host snapshot requires an experiment arm and case"
         )
+    if (dependency_context is None) != (
+        dependency_context_selection_receipt is None
+    ):
+        raise ContractError(
+            "dependency context and selection receipt must be supplied together"
+        )
+    if dependency_context is None:
+        if dependency_public_records:
+            raise ContractError(
+                "dependency public records require a selected dependency context"
+            )
+        dependency_context_public_projection: dict[str, Any] = {}
+    else:
+        if dependency_public_records is None:
+            raise ContractError(
+                "selected dependency context requires exact public record payloads"
+            )
+        dependency_context_public_projection = (
+            build_dependency_context_public_projection(
+                context=dependency_context,
+                selection_receipt=dependency_context_selection_receipt,
+                records=dependency_public_records,
+            )
+        )
     task = str(task).strip()
     if not task:
         raise ContractError("live agent task must not be empty")
@@ -628,13 +664,16 @@ def run_live_agent_session(
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
     result_observations = _scan_pyscf_result_artifacts(workspace_path)
+    identities = _coerce_approved_identities(
+        approved_molecular_identity, approved_molecular_identities
+    )
     identity_records = _validated_identity_records(
-        observations, approved_molecular_identity
+        observations, identities
     )
     task_spec_sha256 = _task_spec_sha256(
         task,
         observations,
-        approved_molecular_identity,
+        identities,
         result_observations=result_observations,
     )
     analysis_completion_policy = (
@@ -670,11 +709,16 @@ def run_live_agent_session(
         )
 
     if campaign_preparation_snapshot is not None:
+        if len(identities) > 1:
+            raise ContractError(
+                "campaign host snapshots currently bind one molecular identity; "
+                "run multi-structure paper sessions without a reused snapshot"
+            )
         _validate_campaign_snapshot_reuse(
             snapshot=campaign_preparation_snapshot,
             selection=selection,
             observations=observations,
-            approved_molecular_identity=approved_molecular_identity,
+            approved_molecular_identity=(identities[0] if identities else None),
         )
         registry = campaign_preparation_snapshot.registry
         live_schema = campaign_preparation_snapshot.live_schema
@@ -734,6 +778,7 @@ def run_live_agent_session(
     event_store = RuntimeEventStore(
         run_directory / "events.jsonl", session_id=session_id
     )
+    preview_server_path = _ensure_preview_server(run_directory)
     host_kwargs: dict[str, Any] = {
         "event_store": event_store,
         "artifacts": {
@@ -748,23 +793,22 @@ def run_live_agent_session(
         "live_schema": live_schema,
         "task_spec_sha256s": (task_spec_sha256,),
         "approved_molecular_identities": (
-            {
-                approved_molecular_identity.identity_sha256: (
-                    approved_molecular_identity
-                )
-            }
-            if approved_molecular_identity is not None
-            else {}
+            {identity.identity_sha256: identity for identity in identities}
         ),
         # Preview candidates stay inside this session's private workspace.
         # The execution composition below replaces this with the exact
         # user-approved workflow workspace.
         "approved_workspace": run_directory,
+        "preview_server": str(preview_server_path),
         "result_functional_evidence": {
             item.validation_receipt_sha256: item.public_record()
             for item in result_observations
         },
         "analysis_completion_policy": analysis_completion_policy,
+        "dependency_context": dependency_context,
+        "dependency_context_selection_receipt": (
+            dependency_context_selection_receipt
+        ),
     }
     if use_execution_surface:
         execution_inputs = _execution_composition_inputs(
@@ -827,6 +871,11 @@ def run_live_agent_session(
             else None
         ),
     )
+    if dependency_context is not None:
+        context = {
+            **context,
+            **dependency_context_public_projection,
+        }
     base_messages = _coordinator_base_messages(
         context=context,
         approved_workflow=approved_workflow_record,
@@ -930,6 +979,7 @@ def run_live_agent_session(
         experiment_config=experiment_config,
         experiment_case=experiment_case,
         experiment_repeat_index=experiment_repeat_index,
+        dependency_context=dependency_context,
     )
     envelope = _task_envelope(
         session_id=session_id,
@@ -1686,58 +1736,121 @@ def _inspect_xyz(path: Path) -> tuple[int, tuple[str, ...]]:
 def _task_spec_sha256(
     task: str,
     observations: Iterable[_XyzObservation],
-    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    approved_molecular_identity: (
+        ApprovedMolecularIdentityV1
+        | Iterable[ApprovedMolecularIdentityV1]
+        | None
+    ) = None,
     *,
     result_observations: Iterable[_PySCFResultObservation] = (),
 ) -> str:
-    return canonical_sha256(
-        {
-            "schema_version": "chemsmart.live-scientific-task.v1",
-            "task": task,
-            "coordinate_artifacts": tuple(
-                {
-                    "artifact_id": item.artifact.artifact_id,
-                    "sha256": item.artifact.sha256,
-                    "atom_count": item.atom_count,
-                    "symbols": item.symbols,
-                }
-                for item in observations
-            ),
-            "result_artifacts": tuple(
-                {
-                    "artifact_id": item.artifact.artifact_id,
-                    "sha256": item.artifact.sha256,
-                    "program": "pyscf",
-                    "jobtype": item.jobtype,
-                }
-                for item in result_observations
-            ),
-            "approved_molecular_identity_sha256": (
-                approved_molecular_identity.identity_sha256
-                if approved_molecular_identity is not None
-                else ""
-            ),
-        }
+    identities = _coerce_approved_identities(
+        approved_molecular_identity
+        if isinstance(approved_molecular_identity, ApprovedMolecularIdentityV1)
+        else None,
+        approved_molecular_identity
+        if approved_molecular_identity is not None
+        and not isinstance(approved_molecular_identity, ApprovedMolecularIdentityV1)
+        else (),
     )
+    body = {
+        "schema_version": "chemsmart.live-scientific-task.v1",
+        "task": task,
+        "coordinate_artifacts": tuple(
+            {
+                "artifact_id": item.artifact.artifact_id,
+                "sha256": item.artifact.sha256,
+                "atom_count": item.atom_count,
+                "symbols": item.symbols,
+            }
+            for item in observations
+        ),
+        "result_artifacts": tuple(
+            {
+                "artifact_id": item.artifact.artifact_id,
+                "sha256": item.artifact.sha256,
+                "program": "pyscf",
+                "jobtype": item.jobtype,
+            }
+            for item in result_observations
+        ),
+    }
+    if len(identities) <= 1:
+        # Preserve the existing single-identity task digest contract.
+        body["approved_molecular_identity_sha256"] = (
+            identities[0].identity_sha256 if identities else ""
+        )
+    else:
+        body["approved_molecular_identity_sha256s"] = tuple(
+            identity.identity_sha256 for identity in identities
+        )
+    return canonical_sha256(body)
+
+
+def _coerce_approved_identities(
+    single: ApprovedMolecularIdentityV1 | None,
+    multiple: Iterable[ApprovedMolecularIdentityV1],
+) -> tuple[ApprovedMolecularIdentityV1, ...]:
+    values = tuple(multiple)
+    if single is not None:
+        if values:
+            raise ContractError(
+                "use approved_molecular_identity or approved_molecular_identities, "
+                "not both"
+            )
+        values = (single,)
+    if any(not isinstance(item, ApprovedMolecularIdentityV1) for item in values):
+        raise ContractError("approved molecular identities must be typed records")
+    identity_ids = tuple(item.identity_id for item in values)
+    identity_sha256s = tuple(item.identity_sha256 for item in values)
+    if len(identity_ids) != len(set(identity_ids)) or len(identity_sha256s) != len(
+        set(identity_sha256s)
+    ):
+        raise ContractError("approved molecular identities must be unique")
+    return tuple(sorted(values, key=lambda item: item.identity_id))
 
 
 def _validated_identity_records(
     observations: tuple[_XyzObservation, ...],
-    identity: ApprovedMolecularIdentityV1 | None,
+    identity: (
+        ApprovedMolecularIdentityV1
+        | Iterable[ApprovedMolecularIdentityV1]
+        | None
+    ),
 ) -> tuple[dict[str, Any], ...]:
-    if identity is None:
-        return ()
-    if len(observations) != 1:
-        raise ContractError(
-            "approved molecular identity requires exactly one coordinate artifact"
-        )
-    observation = observations[0]
-    validate_identity_for_geometry(
-        identity,
-        geometry_sha256=observation.artifact.sha256,
-        atom_order=observation.symbols,
+    identities = _coerce_approved_identities(
+        identity if isinstance(identity, ApprovedMolecularIdentityV1) else None,
+        identity
+        if identity is not None
+        and not isinstance(identity, ApprovedMolecularIdentityV1)
+        else (),
     )
-    return (identity.public_record(),)
+    if not identities:
+        return ()
+    observations_by_sha256: dict[str, _XyzObservation] = {}
+    for observation in observations:
+        previous = observations_by_sha256.setdefault(
+            observation.artifact.sha256, observation
+        )
+        if previous.symbols != observation.symbols:
+            raise ContractError(
+                "identical coordinate bytes produced inconsistent atom-order records"
+            )
+    records = []
+    for approved in identities:
+        observation = observations_by_sha256.get(approved.geometry_sha256)
+        if observation is None:
+            raise ContractError(
+                f"approved molecular identity {approved.identity_id!r} has no "
+                "matching coordinate artifact"
+            )
+        validate_identity_for_geometry(
+            approved,
+            geometry_sha256=observation.artifact.sha256,
+            atom_order=observation.symbols,
+        )
+        records.append(approved.public_record())
+    return tuple(records)
 
 
 def _session_id(task_spec_sha256: str) -> str:
@@ -1895,6 +2008,25 @@ def _bootstrap_conformance(
                 else _combine_program_conformance(parts)
             )
     return tuple(receipts), tuple(records)
+
+
+def _ensure_preview_server(run_directory: Path) -> Path:
+    """Materialize the host-selected server used by every safe preview.
+
+    Bootstrap conformance already passes this file explicitly.  Normal model
+    commands must do the same; otherwise Click falls back to a machine-local
+    ``local.yaml`` and the observed program environment silently differs from
+    the one shown to the model.
+    """
+
+    bootstrap_directory = run_directory / "bootstrap"
+    bootstrap_directory.mkdir(mode=0o700, exist_ok=True)
+    server_path = bootstrap_directory / "preview-server.yaml"
+    _write_private_exact(
+        server_path,
+        _preview_server_profile().encode("utf-8"),
+    )
+    return server_path
 
 
 def _conformance_engines(program: str) -> tuple[str, ...]:
@@ -2187,15 +2319,20 @@ def _observe_environments() -> tuple[
     # Every program ChemSmart declares becomes a discovery target, so the agent
     # observes the same installation ChemSmart controls rather than a list
     # maintained here.
-    for program, _folder in _declared_server_programs():
+    for program, folder in _declared_server_programs():
         if program == "pyscf":
             continue
+        executable = _declared_executable_path(program, folder)
         targets.append(
             EnvironmentTargetV1(
                 program=program,
                 engine="cpu",
                 target_kind="executable",
-                locator=program,
+                # Observe the executable ChemSmart itself resolves from the
+                # server profile.  Re-running ``which(program)`` creates a
+                # second environment model and is wrong for names such as
+                # Gaussian, whose executable is ``g16``.
+                locator=executable or program,
             )
         )
     if not any(item.program == "xtb" for item in targets):
@@ -2533,10 +2670,9 @@ def _approved_execution_context(
 def _workflow_context_sentence() -> str:
     """State dependency structure so the model need not recall it."""
 
-    if not workflow_context_enabled():
-        return ""
     return (
-        "plan_command_workflow returns a host-derived workflow_context: per "
+        "The workflow planning tools return a host-derived workflow_context or "
+        "workflow_frontier: per "
         "node it says whether that node is ready, waiting, or blocked, which "
         "upstream node and output each waiting input needs, and which nodes "
         "depend on it. Read it instead of reconstructing the DAG from memory, "
@@ -2601,9 +2737,18 @@ def _system_prompt(
         "You are a professional computational-chemistry planning agent operating "
         "ChemSmart 3.1.4. Work plan-first through typed tools. Inspect program "
         "capability and environment, bind exact artifact identity, render and promote "
-        "stage-specific project YAML, validate it, build a command DAG, compile safe "
+        "stage-specific project YAML, validate it, build a scientific tool-chain DAG, compile safe "
         "commands, and preview every currently resolvable node. Keep every future "
         "producer input unresolved until its validated upstream artifact exists. "
+        "For every request that ends in a calculated or derived value, use "
+        "plan_scientific_workflow to record calculations, result extraction, "
+        "validation, mathematics, and claim rendering in one connected DAG. "
+        "Its analysis inputs name future producer node/output pairs, so do not wait "
+        "for artifact hashes before planning postprocessing. Preserve an unavailable "
+        "parser or external analysis as blocked_unsupported instead of deleting the "
+        "requested observable. Use plan_command_workflow only for a calculation-only "
+        "compatibility task, and use inspect_workflow_frontier for host-derived "
+        "next actions. "
         f"{_workflow_context_sentence()}"
         "Never author native "
         "Gaussian, ORCA, xTB, or PySCF input/script text. Never invent coordinates, "
@@ -2613,9 +2758,11 @@ def _system_prompt(
         "choose or infer run versus scheduler submission. "
         "Explain method rationale, alternatives, uncertainty, and diagnostics in "
         "concise public "
-        "English. A molecular name is authorized only when public context contains "
-        "an approved_molecular_identity record. Use only one of its approved_names "
-        "and cite its exact evidence_ref in the scientific decision. File names, "
+        "English. A molecular or state-specific geometry name is authorized only "
+        "when public context contains its approved_molecular_identity record. "
+        "Use only one of that record's approved_names, bind it to the record's "
+        "exact geometry_sha256, and cite its evidence_ref in the scientific "
+        "decision. File names, "
         "XYZ comments, element lists, project settings, and preview artifacts do "
         "not establish molecular identity. An approved molecular identity never "
         "establishes charge or multiplicity. "
@@ -2653,7 +2800,7 @@ def _system_prompt(
         "geometry artifact IDs. Bind scientific identity only to a geometry_xyz "
         "artifact, never to a project, and do this before planning the workflow. "
         "Every workflow node must declare at least one expected output. If "
-        "plan_command_workflow returns findings or a null scientific_workflow_plan, "
+        "plan_command_workflow or plan_scientific_workflow returns findings or a null scientific_workflow_plan, "
         "repair the binding or DAG and call it again; a workflow_draft alone is "
         "not the typed scientific DAG. In workflow inputs, represent an initial artifact "
         "with empty producer_node_id and producer_output_id strings; represent a "
@@ -2671,7 +2818,10 @@ def _system_prompt(
         "the host grades an identifier-independent symbolic DAG. When two inputs "
         "carry the same source quantity ID, give them distinct task-semantic roles "
         "such as reactant, product, conformer-a, or basis-cardinal-3; never use a "
-        "receipt hash as a semantic role. Use record_analysis_claims to bind each requested reported "
+        "receipt hash as a semantic role. When a numerical condition already exists "
+        "as a quantity on a typed receipt, reference that receipt quantity instead "
+        "of duplicating it as a literal; use a literal only when no typed source "
+        "quantity exists. Use record_analysis_claims to bind each requested reported "
         "number and display unit to an exact receipt quantity; the host, not the "
         "model, supplies the value. The host renders the authoritative final numeric "
         "section from that claim record. Report only those host-rendered claim values. "
@@ -2732,6 +2882,7 @@ def _hypothesis(
     experiment_config: HarnessExperimentConfigV1 | None = None,
     experiment_case: QwenPyscfCaseSpecV1 | None = None,
     experiment_repeat_index: int = 0,
+    dependency_context: TaskDependencyContextV1 | None = None,
 ) -> AdaptiveHypothesisV1:
     if experiment_config is not None and experiment_case is not None:
         hypothesis_id = (
@@ -2756,6 +2907,22 @@ def _hypothesis(
         oracle_id = experiment_case.deterministic_oracle_id
         distinct = (
             "Unique preregistered case, D/F/C arm, and repetition tuple."
+        )
+    elif dependency_context is not None:
+        hypothesis_id = session_id
+        changed_factor = (
+            "task_dependency_context:" + dependency_context.mode
+        )
+        comparator_id = (
+            f"{dependency_context.workflow_id}:no-predecessor-baseline"
+        )
+        expected_outcome = (
+            "The selected predecessor projection preserves every producer "
+            "needed by the target while avoiding unrelated workflow branches."
+        )
+        oracle_id = "paper-workflow-dependency-context-v1"
+        distinct = (
+            "Unique paper task, dependency-context arm, and live session."
         )
     else:
         hypothesis_id = session_id
@@ -2791,6 +2958,11 @@ def _hypothesis(
                         if experiment_case is not None
                         else ()
                     ),
+                    *(
+                        (dependency_context.plan_sha256,)
+                        if dependency_context is not None
+                        else ()
+                    ),
                 }
             )
         ),
@@ -2804,6 +2976,11 @@ def _hypothesis(
                     "network_budget": network_budget,
                     "task_spec_sha256": task_spec_sha256,
                     "execution_requested": bool(execution_requested),
+                    "dependency_context_sha256": (
+                        dependency_context.context_sha256
+                        if dependency_context is not None
+                        else ""
+                    ),
                 }
             )
         ),
