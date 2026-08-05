@@ -48,6 +48,33 @@ class ArtifactOutputIntentV1:
         require_identifier(self.artifact_class, "artifact_class")
 
 
+def _require_sorted_unique_in_node(
+    values: tuple[str, ...], field: str, *, node_id: str
+) -> None:
+    """Refuse a malformed list while naming the node and the exact value.
+
+    A rejection the caller cannot act on is barely better than a crash.  The
+    old message said only "must be sorted and unique" -- no node, no value, and
+    misleading besides, because the runtime sorts these lists before building
+    the node, so duplication is the only reachable cause.  A live run hit it,
+    retried unchanged, and produced the identical rejection.
+    """
+
+    duplicates = sorted(
+        {value for value in values if list(values).count(value) > 1}
+    )
+    if duplicates:
+        raise ContractError(
+            f"node {node_id!r} repeats {field} {duplicates}; each must appear "
+            "once, so give every entry a distinct name"
+        )
+    if tuple(values) != tuple(sorted(values)):
+        raise ContractError(
+            f"node {node_id!r} lists {field} out of order: {list(values)}; "
+            f"expected {sorted(values)}"
+        )
+
+
 @dataclass(frozen=True)
 class CommandNodeIntentV1:
     """Broad scientific command intent before execution-grade grounding."""
@@ -65,18 +92,27 @@ class CommandNodeIntentV1:
         require_identifier(self.node_id, "node_id")
         require_identifier(self.program, "program")
         require_identifier(self.jobtype, "jobtype")
-        if self.dependencies != tuple(sorted(set(self.dependencies))):
-            raise ContractError("draft dependencies must be sorted and unique")
-        binding_ids = tuple(item.binding_id for item in self.inputs)
-        if binding_ids != tuple(sorted(set(binding_ids))):
-            raise ContractError("draft input bindings must be sorted and unique")
-        output_ids = tuple(item.output_id for item in self.expected_outputs)
-        if output_ids != tuple(sorted(set(output_ids))):
-            raise ContractError("draft outputs must be sorted and unique")
+        _require_sorted_unique_in_node(
+            self.dependencies, "dependencies", node_id=self.node_id
+        )
+        _require_sorted_unique_in_node(
+            tuple(item.binding_id for item in self.inputs),
+            "input binding_id",
+            node_id=self.node_id,
+        )
+        _require_sorted_unique_in_node(
+            tuple(item.output_id for item in self.expected_outputs),
+            "expected output_id",
+            node_id=self.node_id,
+        )
         if not self.expected_outputs:
-            raise ContractError("draft command node requires an expected output")
-        if self.unresolved_fields != tuple(sorted(set(self.unresolved_fields))):
-            raise ContractError("unresolved fields must be sorted and unique")
+            raise ContractError(
+                f"node {self.node_id!r} declares no expected output; every "
+                "node must state at least one artifact it produces"
+            )
+        _require_sorted_unique_in_node(
+            self.unresolved_fields, "unresolved field", node_id=self.node_id
+        )
         for field_name in self.unresolved_fields:
             try:
                 require_identifier(field_name, "unresolved field")
