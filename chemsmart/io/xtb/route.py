@@ -111,12 +111,13 @@ class XTBRoute:
         - 'vtight'    : Very tight convergence criteria (verytight in CLI)
         - 'extreme'   : Extremely tight convergence, highest accuracy
 
-        Command line flags: --opt [LEVEL], -o [LEVEL], --optlevel [LEVEL], --metaopt [LEVEL]
+        Command line flags: --opt [LEVEL], -o [LEVEL], --optlevel [LEVEL], --metaopt [LEVEL],
+        --ohess [LEVEL]
 
         Returns:
             str: Optimization level identifier or None if not specified
         """
-        for flag in ("--opt", "-o", "--optlevel", "--metaopt"):
+        for flag in ("--opt", "-o", "--optlevel", "--metaopt", "--ohess"):
             if flag in self.route_inputs:
                 opt_index = self.route_inputs.index(flag)
                 if opt_index + 1 < len(self.route_inputs):
@@ -180,8 +181,8 @@ class XTBRoute:
 
         xTB job types:
         - 'sp'    : Single point calculation (--scc, --sp, or default)
-        - 'opt'   : Geometry optimization (--opt, --omd)
-        - 'hess'  : Hessian/frequency calculation (--hess, --ohess, --bhess)
+        - 'opt'   : Geometry optimization (--opt, --ohess)
+        - 'hess'  : Hessian/frequency calculation (--hess)
         - 'md'    : Molecular dynamics (--md, --metadyn)
         - 'path'  : Reaction path calculation (--path)
         - 'modef' : Mode following (--modef)
@@ -193,7 +194,7 @@ class XTBRoute:
         Extract job type from route specification.
 
         Checks for various job type keywords in order of precedence:
-        1. Optimization: --opt, --omd, --metaopt, --ohess, --bhess
+        1. Optimization: --opt, --metaopt, --ohess
         2. Hessian: --hess
         3. MD: --md, --metadyn
         4. Path: --path
@@ -203,16 +204,14 @@ class XTBRoute:
         Returns:
             str: Job type ('opt', 'hess', 'md', 'path', 'modef', or 'sp')
         """
-        # Check for optimization keywords (including ohess and bhess which do opt first)
+        # Check for optimization keywords (including ohess which do opt first then hess)
         if any(
             flag in self.route_inputs
             for flag in (
                 "--opt",
                 "-o",
-                "--omd",
                 "--metaopt",
                 "--ohess",
-                "--bhess",
             )
         ):
             return "opt"
@@ -236,19 +235,15 @@ class XTBRoute:
         """
         Check if frequency/Hessian calculation is requested.
 
-        xTB frequency keywords: --hess, --ohess, --bhess
+        xTB frequency keywords: --hess, --ohess
 
         - --hess  : Numerical Hessian on input geometry
         - --ohess : Numerical Hessian on optimized geometry
-        - --bhess : Biased numerical Hessian on optimized geometry
 
         Returns:
             bool: True if frequency calculation is requested
         """
-        return any(
-            flag in self.route_inputs
-            for flag in ("--hess", "--ohess", "--bhess")
-        )
+        return any(flag in self.route_inputs for flag in ("--hess", "--ohess"))
 
     @property
     def grad(self):
@@ -381,7 +376,7 @@ class XTBRoute:
         return "--ptb" in self.route_inputs
 
     @property
-    def spinpol(self):
+    def spin_polarization(self):
         """
         Check if spin-polarization is enabled for xTB methods.
 
@@ -395,7 +390,7 @@ class XTBRoute:
         return "--spinpol" in self.route_inputs
 
     @property
-    def ceh(self):
+    def charge_extended_hueckel(self):
         """
         Check if CEH (Charge-Extended Hückel) charges calculation is requested.
 
@@ -409,7 +404,7 @@ class XTBRoute:
         return "--ceh" in self.route_inputs
 
     @property
-    def pop(self):
+    def mulliken_population(self):
         """
         Check if Mulliken population analysis printout is requested.
 
@@ -445,7 +440,7 @@ class XTBRoute:
         return "--dipole" in self.route_inputs
 
     @property
-    def molden(self):
+    def molden_file(self):
         """
         Check if Molden file output is requested.
 
@@ -457,7 +452,7 @@ class XTBRoute:
         return "--molden" in self.route_inputs
 
     @property
-    def lmo(self):
+    def localized_molecular_orbitals(self):
         """
         Check if localized molecular orbitals (LMO) calculation is requested.
 
@@ -469,7 +464,7 @@ class XTBRoute:
         return "--lmo" in self.route_inputs
 
     @property
-    def fod(self):
+    def fractional_occupation_density(self):
         """
         Check if FOD (Fractional Occupation Density) calculation is requested.
 
@@ -481,7 +476,7 @@ class XTBRoute:
         return "--fod" in self.route_inputs
 
     @property
-    def esp(self):
+    def electrostatic_potential(self):
         """
         Check if electrostatic potential on VdW grid calculation is requested.
 
@@ -493,7 +488,7 @@ class XTBRoute:
         return "--esp" in self.route_inputs
 
     @property
-    def stm(self):
+    def stm_image(self):
         """
         Check if STM (Scanning Tunneling Microscopy) image calculation is requested.
 
@@ -505,7 +500,7 @@ class XTBRoute:
         return "--stm" in self.route_inputs
 
     @property
-    def vip(self):
+    def vertical_ionization_potential(self):
         """
         Check if vertical ionization potential calculation is requested.
 
@@ -519,7 +514,7 @@ class XTBRoute:
         return "--vip" in self.route_inputs
 
     @property
-    def vea(self):
+    def vertical_electron_affinity(self):
         """
         Check if vertical electron affinity calculation is requested.
 
@@ -533,7 +528,7 @@ class XTBRoute:
         return "--vea" in self.route_inputs
 
     @property
-    def vipea(self):
+    def vertical_ionization_and_affinity(self):
         """
         Check if both VIP and VEA calculations are requested.
 
@@ -547,7 +542,7 @@ class XTBRoute:
         return "--vipea" in self.route_inputs
 
     @property
-    def vfukui(self):
+    def fukui_indices(self):
         """
         Check if Fukui indices calculation is requested.
 
@@ -559,7 +554,7 @@ class XTBRoute:
         return "--vfukui" in self.route_inputs
 
     @property
-    def vomega(self):
+    def electrophilicity_index(self):
         """
         Check if electrophilicity index calculation is requested.
 
@@ -573,7 +568,7 @@ class XTBRoute:
         return "--vomega" in self.route_inputs
 
     @property
-    def alpha(self):
+    def polarizability(self):
         """
         Check if static molecular dipole polarizability calculation is requested.
 
@@ -585,7 +580,7 @@ class XTBRoute:
         return "--alpha" in self.route_inputs
 
     @property
-    def cma(self):
+    def center_of_mass_transform(self):
         """
         Check if center of mass shift and principal axis transformation is requested.
 
