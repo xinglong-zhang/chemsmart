@@ -293,3 +293,43 @@ __all__ = [
     "extrapolate_scf_exponential",
     "state_energy_difference",
 ]
+
+
+def extrapolate_exponential_three_point(
+    energies: tuple[float, float, float],
+) -> float:
+    """Return the complete-basis-set limit of a three-point exponential series.
+
+    The Hartree-Fock energy converges exponentially, ``E(n) = E_inf + A r**n``
+    with ``r = exp(-alpha)``, so three energies at *equally spaced* cardinal
+    numbers determine all three parameters without a nonlinear solver:
+
+        ``E_inf = E3 - (E3 - E2)**2 / ((E3 - E2) - (E2 - E1))``
+
+    This is the three-parameter form papers mean by "extrapolated with a
+    three-parameter exponential formula".  The two-point
+    :func:`extrapolate_scf_exponential` is the fixed-``alpha`` special case and
+    remains available when only two basis sets exist.
+    """
+
+    if len(energies) != 3:
+        raise AggregationError(
+            "a three-parameter exponential extrapolation needs exactly three "
+            f"energies at equally spaced cardinals, got {len(energies)}"
+        )
+    first, second, third = (float(item) for item in energies)
+    near, far = second - first, third - second
+    curvature = far - near
+    if curvature == 0.0 or not math.isfinite(curvature):
+        raise AggregationError(
+            "the energies show no exponential curvature, so the limit is "
+            "undetermined; check that they are ordered by increasing basis "
+            "and come from equally spaced cardinals"
+        )
+    ratio = far / near if near else 0.0
+    if not 0.0 < ratio < 1.0:
+        raise AggregationError(
+            "successive differences must shrink monotonically for an "
+            f"exponential fit; observed ratio {ratio:.4f} is outside (0, 1)"
+        )
+    return third - (far * far) / curvature

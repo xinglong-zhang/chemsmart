@@ -63,6 +63,7 @@ _OPERATIONS = frozenset(
         "convert",
         "linear_fit_slope",
         "linear_fit_intercept",
+        "exponential_cbs_limit",
     }
 )
 
@@ -774,6 +775,47 @@ def _node_value(
             value=payload,
             unit="1",
             dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "exponential_cbs_limit":
+        # A Hartree-Fock basis-set series converges exponentially, so the
+        # complete-basis limit is a three-parameter fit rather than a linear
+        # one. Papers state it as "extrapolated with a three-parameter
+        # exponential formula"; without this operation such a limit has no
+        # expressible producer and the workflow stops one step short of the
+        # number it was built to obtain.
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            extrapolate_exponential_three_point,
+        )
+
+        if len(inputs) != 1:
+            raise QuantityExpressionError(
+                "exponential_cbs_limit takes one input: the energies at three "
+                "equally spaced cardinal numbers, ordered by increasing basis"
+            )
+        series = _numeric(inputs[0]).reshape(-1)
+        if series.size != 3:
+            raise QuantityExpressionError(
+                "exponential_cbs_limit needs exactly three energies, got "
+                f"{series.size}"
+            )
+        try:
+            payload = extrapolate_exponential_three_point(
+                (float(series[0]), float(series[1]), float(series[2]))
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        dimension = inputs[0].dimension
+        unit = canonical_unit_for_dimension(dimension)
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=payload,
+            unit=unit,
+            dimension=dimension,
             evidence_ref=evidence_ref,
         )
 
