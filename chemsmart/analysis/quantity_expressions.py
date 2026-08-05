@@ -130,6 +130,36 @@ if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
         f"{sorted(set(_OPERATIONS) ^ set(OPERATION_DESCRIPTIONS))}"
     )
 
+#: Operations that carry a computational-chemistry convention ChemSmart owns.
+#: Reaching a reported quantity through one of these means the convention came
+#: from the toolkit.  Reaching it through arithmetic instead means the model
+#: supplied the convention, which is the situation the project exists to avoid
+#: and which no per-paper check would catch in general.
+CONVENTION_OPERATIONS = frozenset(
+    {
+        "angle",
+        "correlation_inverse_power_cbs_limit",
+        "distance",
+        "exponential_cbs_limit",
+        "linear_fit_intercept",
+        "linear_fit_slope",
+        "photon_wavelength",
+        "scf_exponential_cbs_limit",
+    }
+)
+
+#: Operations that move or restate a value without computing anything with it.
+#: They are neither a convention nor arithmetic, so they are counted as
+#: neither.
+_PLUMBING_OPERATIONS = frozenset({"ref", "literal", "convert"})
+
+#: Everything else: general arithmetic and reductions.  A reported quantity
+#: reached through many of these, and through no convention operation, was
+#: assembled rather than computed by the toolkit.
+ARITHMETIC_OPERATIONS = frozenset(_OPERATIONS) - CONVENTION_OPERATIONS - (
+    _PLUMBING_OPERATIONS
+)
+
 
 class QuantityExpressionError(ValueError):
     """Raised when an expression is unsafe, ill-typed, or non-finite."""
@@ -432,6 +462,12 @@ class QuantityExpressionOutputDependencyV1:
     output_id: str
     source_receipt_sha256s: tuple[str, ...]
     model_authored_constants: tuple[ModelAuthoredConstantV1, ...] = ()
+    #: Which conventions ChemSmart supplied on the way to this value.
+    convention_operations: tuple[str, ...] = ()
+    #: How many general-arithmetic nodes reach it.  Read together with the
+    #: field above, this answers one paper-independent question: was this
+    #: number produced by the toolkit's vocabulary, or assembled by the model?
+    arithmetic_node_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.output_id or len(self.output_id) > 128:
@@ -441,6 +477,30 @@ class QuantityExpressionOutputDependencyV1:
             "model_authored_constants",
             tuple(self.model_authored_constants),
         )
+        object.__setattr__(
+            self, "convention_operations", tuple(self.convention_operations)
+        )
+        if self.convention_operations != tuple(
+            sorted(set(self.convention_operations))
+        ):
+            raise QuantityContractError(
+                "convention operations must be sorted and unique"
+            )
+        unknown = sorted(
+            set(self.convention_operations) - CONVENTION_OPERATIONS
+        )
+        if unknown:
+            raise QuantityContractError(
+                f"unregistered convention operations: {unknown}"
+            )
+        if (
+            isinstance(self.arithmetic_node_count, bool)
+            or not isinstance(self.arithmetic_node_count, int)
+            or self.arithmetic_node_count < 0
+        ):
+            raise QuantityContractError(
+                "arithmetic_node_count must be a non-negative integer"
+            )
         keys = tuple(
             item.sort_key() for item in self.model_authored_constants
         )
@@ -1301,6 +1361,12 @@ def evaluate_quantity_expression(
     authored: dict[str, frozenset[ModelAuthoredConstantV1]] = {
         quantity.quantity_id: frozenset() for quantity in request.inputs
     }
+    conventions: dict[str, frozenset[str]] = {
+        quantity.quantity_id: frozenset() for quantity in request.inputs
+    }
+    arithmetic: dict[str, frozenset[str]] = {
+        quantity.quantity_id: frozenset() for quantity in request.inputs
+    }
     derived: list[QuantityValueV1] = []
     evidence_ref = f"expression:{request.expression_id}#{request_sha256}"
     for node in request.nodes:
@@ -1312,20 +1378,36 @@ def evaluate_quantity_expression(
         values[node.node_id] = value
         derived.append(value)
         if node.operation == "literal":
+            sources: tuple[str, ...] = ()
             dependencies[node.node_id] = frozenset()
-            inherited: frozenset[ModelAuthoredConstantV1] = frozenset()
         elif node.operation == "ref":
-            reference = node.reference or node.input_ids[0]
-            dependencies[node.node_id] = dependencies[reference]
-            inherited = authored[reference]
+            sources = (node.reference or node.input_ids[0],)
+            dependencies[node.node_id] = dependencies[sources[0]]
         else:
+            sources = tuple(node.input_ids)
             dependencies[node.node_id] = frozenset().union(
-                *(dependencies[input_id] for input_id in node.input_ids)
+                *(dependencies[input_id] for input_id in sources)
             )
-            inherited = frozenset().union(
-                *(authored[input_id] for input_id in node.input_ids)
-            )
-        authored[node.node_id] = inherited | _node_authored_constants(node)
+        authored[node.node_id] = frozenset().union(
+            *(authored[source] for source in sources), frozenset()
+        ) | _node_authored_constants(node)
+        conventions[node.node_id] = frozenset().union(
+            *(conventions[source] for source in sources), frozenset()
+        ) | (
+            {node.operation}
+            if node.operation in CONVENTION_OPERATIONS
+            else frozenset()
+        )
+        # Count nodes, not operation names: rebuilding a convention shows up
+        # as many arithmetic nodes, and collapsing them by name would hide
+        # exactly the thing worth seeing.
+        arithmetic[node.node_id] = frozenset().union(
+            *(arithmetic[source] for source in sources), frozenset()
+        ) | (
+            {node.node_id}
+            if node.operation in ARITHMETIC_OPERATIONS
+            else frozenset()
+        )
     outputs = tuple(values[node_id] for node_id in request.output_node_ids)
     output_dependencies = tuple(
         QuantityExpressionOutputDependencyV1(
@@ -1334,6 +1416,8 @@ def evaluate_quantity_expression(
             model_authored_constants=tuple(
                 sorted(authored[node_id], key=lambda item: item.sort_key())
             ),
+            convention_operations=tuple(sorted(conventions[node_id])),
+            arithmetic_node_count=len(arithmetic[node_id]),
         )
         for node_id in request.output_node_ids
     )
@@ -1383,6 +1467,10 @@ def quantity_expression_receipt_from_record(
                 )
                 for entry in item.get("model_authored_constants") or ()
             ),
+            convention_operations=tuple(
+                item.get("convention_operations") or ()
+            ),
+            arithmetic_node_count=int(item.get("arithmetic_node_count") or 0),
         )
         for item in values.get("output_dependencies") or ()
     )
@@ -1394,7 +1482,10 @@ def quantity_expression_receipt_from_record(
 __all__ = [
     "MAX_EXPRESSION_NODES",
     "MAX_NODE_INPUTS",
+    "ARITHMETIC_OPERATIONS",
+    "CONVENTION_OPERATIONS",
     "MODEL_AUTHORED_CONSTANT_ROLES",
+    "OPERATION_DESCRIPTIONS",
     "ModelAuthoredConstantV1",
     "QuantityExpressionError",
     "QuantityExpressionNodeV1",

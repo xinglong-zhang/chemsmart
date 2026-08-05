@@ -280,3 +280,114 @@ def test_constants_must_arrive_sorted_and_deduplicated():
                 ),
             ),
         )
+
+
+def test_the_profile_separates_toolkit_computation_from_model_assembly():
+    """The discriminator must not depend on which paper is being reproduced.
+
+    Both requests below return the same number from the same three measured
+    energies.  One reached it through the operation that owns the convention;
+    the other reassembled the closed form.  Nothing about water, Hartree-Fock,
+    or basis sets appears in the check.
+    """
+
+    inputs = tuple(
+        _measured(name, value)
+        for name, value in zip(("e2", "e3", "e4"), _SERIES)
+    )
+    reassembled = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="reassembled",
+            inputs=inputs,
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="p24", operation="multiply", input_ids=("e2", "e4")
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="p33", operation="multiply", input_ids=("e3", "e3")
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="num", operation="subtract", input_ids=("p24", "p33")
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="s24", operation="add", input_ids=("e2", "e4")
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="t3",
+                    operation="scale",
+                    input_ids=("e3",),
+                    scale_factor=2,
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="den", operation="subtract", input_ids=("s24", "t3")
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="limit", operation="divide", input_ids=("num", "den")
+                ),
+            ),
+            output_node_ids=("limit",),
+        )
+    ).output_dependencies[0]
+    computed = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="computed",
+            inputs=inputs,
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="limit",
+                    operation="exponential_cbs_limit",
+                    input_ids=("e2", "e3", "e4"),
+                ),
+            ),
+            output_node_ids=("limit",),
+        )
+    ).output_dependencies[0]
+
+    assert reassembled.convention_operations == ()
+    assert reassembled.arithmetic_node_count == 7
+    assert reassembled.model_authored_constants
+
+    assert computed.convention_operations == ("exponential_cbs_limit",)
+    assert computed.arithmetic_node_count == 0
+    assert computed.model_authored_constants == ()
+
+
+def test_a_convention_reached_through_arithmetic_reports_both():
+    """Mixed derivations are common and must not read as either extreme."""
+
+    dependency = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="mixed",
+            inputs=(
+                _measured("series", _SERIES),
+                _measured("reference", _SERIES[2]),
+            ),
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="limit",
+                    operation="exponential_cbs_limit",
+                    input_ids=("series",),
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="relative",
+                    operation="subtract",
+                    input_ids=("limit", "reference"),
+                ),
+            ),
+            output_node_ids=("relative",),
+        )
+    ).output_dependencies[0]
+    assert dependency.convention_operations == ("exponential_cbs_limit",)
+    assert dependency.arithmetic_node_count == 1
+
+
+def test_an_unregistered_convention_name_is_refused():
+    with pytest.raises(QuantityContractError, match="unregistered convention"):
+        QuantityExpressionOutputDependencyV1(
+            output_id="x",
+            source_receipt_sha256s=(),
+            convention_operations=("multiply",),
+        )
