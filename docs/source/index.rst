@@ -35,6 +35,7 @@ computational chemistry software.
    :caption: CLI Reference
 
    cli-overview
+   plugins
    molecule-input-formats
    chemdraw-organometallic
 
