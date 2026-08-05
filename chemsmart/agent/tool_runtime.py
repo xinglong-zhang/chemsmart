@@ -4742,18 +4742,56 @@ def _validate_tool_arguments(
         raise ContractError("tool is not exposed by this profile")
     schema = definition["parameters"]
     required = set(schema.get("required", ()))
+    properties = schema.get("properties", {})
     missing = sorted(required.difference(arguments))
     if missing:
-        raise ContractError("tool arguments missing: " + ", ".join(missing))
-    properties = schema.get("properties", {})
+        # A caller that is told only the field name has to go back to the
+        # schema; carrying the field's own description makes the rejection
+        # self-contained.
+        described = "; ".join(
+            f"{name} ({properties[name]['description']})"
+            if isinstance(properties.get(name), Mapping)
+            and properties[name].get("description")
+            else name
+            for name in missing
+        )
+        raise ContractError(f"{tool_name} requires {described}")
     unknown = sorted(set(arguments).difference(properties))
     if unknown:
-        raise ContractError("tool arguments not allowed: " + ", ".join(unknown))
+        raise ContractError(
+            f"{tool_name} does not accept {unknown}; it accepts "
+            f"{sorted(properties)}"
+        )
     for name, value in arguments.items():
         _validate_json_value(name, value, properties[name])
 
 
+#: How much of an offending value a rejection may quote back.  Long enough to
+#: identify a wrong identifier or a malformed path, short enough that a large
+#: payload cannot be echoed through a refusal.
+_REJECTED_VALUE_CHARS = 120
+
+
+def _offending_text(value: Any) -> str:
+    """Quote a rejected value compactly, never a whole payload."""
+
+    if isinstance(value, (dict, list)):
+        text = f"a {type(value).__name__} of {len(value)} entries"
+    else:
+        text = repr(value)
+    if len(text) > _REJECTED_VALUE_CHARS:
+        text = text[: _REJECTED_VALUE_CHARS - 3] + "..."
+    return text
+
+
 def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> None:
+    """Reject an argument by naming the path, the value, and the rule.
+
+    A caller that is told only which field is wrong has to guess at the value
+    and the constraint, and a model that guesses generally resubmits the same
+    argument.  Every message here therefore carries all three.
+    """
+
     alternatives = schema.get("oneOf")
     if isinstance(alternatives, list):
         matches = 0
@@ -4766,8 +4804,15 @@ def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> No
                 continue
             matches += 1
         if matches != 1:
+            shapes = ", ".join(
+                str(item.get("type", "?"))
+                for item in alternatives
+                if isinstance(item, Mapping)
+            )
             raise ContractError(
-                f"tool argument {name} must match exactly one allowed shape"
+                f"tool argument {name} is {_offending_text(value)}, which "
+                f"matches {matches} of the allowed shapes; exactly one must "
+                f"match. Allowed shapes: {shapes}"
             )
         return
     expected = schema.get("type")
@@ -4784,37 +4829,64 @@ def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> No
         "object": isinstance(value, dict),
     }.get(expected, True)
     if not type_ok:
-        raise ContractError(f"tool argument {name} has the wrong type")
+        raise ContractError(
+            f"tool argument {name} must be {expected}, but got "
+            f"{type(value).__name__} {_offending_text(value)}"
+        )
     if "enum" in schema and value not in schema["enum"]:
-        raise ContractError(f"tool argument {name} is outside its enum")
+        allowed = list(schema["enum"])
+        raise ContractError(
+            f"tool argument {name} is {_offending_text(value)}, which is not "
+            f"one of {allowed}"
+        )
     if isinstance(value, str) and schema.get("pattern"):
-        if re.fullmatch(str(schema["pattern"]), value) is None:
-            raise ContractError(f"tool argument {name} does not match its pattern")
+        pattern = str(schema["pattern"])
+        if re.fullmatch(pattern, value) is None:
+            raise ContractError(
+                f"tool argument {name} is {_offending_text(value)}, which "
+                f"does not match the required pattern {pattern}"
+            )
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < float(schema["minimum"]):
-            raise ContractError(f"tool argument {name} is below its minimum")
+            raise ContractError(
+                f"tool argument {name} is {value}, below its minimum "
+                f"{schema['minimum']}"
+            )
         if "maximum" in schema and value > float(schema["maximum"]):
-            raise ContractError(f"tool argument {name} is above its maximum")
+            raise ContractError(
+                f"tool argument {name} is {value}, above its maximum "
+                f"{schema['maximum']}"
+            )
         if "exclusiveMinimum" in schema and value <= float(
             schema["exclusiveMinimum"]
         ):
             raise ContractError(
-                f"tool argument {name} is not above its exclusive minimum"
+                f"tool argument {name} is {value}, which must be greater than "
+                f"{schema['exclusiveMinimum']}"
             )
         if "exclusiveMaximum" in schema and value >= float(
             schema["exclusiveMaximum"]
         ):
             raise ContractError(
-                f"tool argument {name} is not below its exclusive maximum"
+                f"tool argument {name} is {value}, which must be less than "
+                f"{schema['exclusiveMaximum']}"
             )
     if isinstance(value, list):
         if "minItems" in schema and len(value) < int(schema["minItems"]):
-            raise ContractError(f"tool argument {name} has too few items")
+            raise ContractError(
+                f"tool argument {name} has {len(value)} items, fewer than the "
+                f"required {schema['minItems']}"
+            )
         if "maxItems" in schema and len(value) > int(schema["maxItems"]):
-            raise ContractError(f"tool argument {name} has too many items")
+            raise ContractError(
+                f"tool argument {name} has {len(value)} items, more than the "
+                f"allowed {schema['maxItems']}"
+            )
     if isinstance(value, list) and isinstance(schema.get("items"), Mapping):
-        for item in value:
-            _validate_json_value(name + "[]", item, schema["items"])
+        for index, item in enumerate(value):
+            # Index the path: "outputs[]" tells a caller with eight outputs
+            # nothing about which one to change.
+            _validate_json_value(f"{name}[{index}]", item, schema["items"])
     if isinstance(value, dict):
         properties = schema.get("properties", {})
         additional = schema.get("additionalProperties")
@@ -4822,13 +4894,15 @@ def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> No
         missing = sorted(required.difference(value))
         if missing:
             raise ContractError(
-                f"tool argument {name} missing: " + ", ".join(missing)
+                f"tool argument {name} is missing {missing}; it supplied "
+                f"{sorted(value)}"
             )
         if schema.get("additionalProperties") is False:
             unknown = sorted(set(value).difference(properties))
             if unknown:
                 raise ContractError(
-                    f"tool argument {name} not allowed: " + ", ".join(unknown)
+                    f"tool argument {name} supplied {unknown}, which this "
+                    f"object does not accept; it accepts {sorted(properties)}"
                 )
         for child_name, child_value in value.items():
             child_schema = properties.get(child_name)
