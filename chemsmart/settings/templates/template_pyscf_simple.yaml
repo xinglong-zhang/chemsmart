@@ -1,0 +1,33 @@
+# Default PySCF settings for calculations.
+#
+# `gas:` feeds the `opt` and `hess` jobtypes; `solv:` feeds `sp`. That is the
+# standard workflow: optimise and take frequencies at one level, then refine
+# the single point in solvent.
+#
+# Basis names follow PySCF/libcint spelling and are hyphenated (`def2-svp`),
+# unlike Gaussian's `def2svp`. Functional names are resolved through libxc,
+# which accepts `m062x` as well as `M06-2X`.
+#
+# A key that does not exist on PySCFJobSettings raises ValueError at load
+# time, listing every valid key -- a typo stops the run instead of silently
+# applying a default.
+gas:
+  functional: b3lyp
+  basis: def2-svp
+  freq: True        # run the Hessian in the same process as the optimisation
+  density_fit: True # resolution-of-the-identity; large speedup, small error
+  aux_basis: null   # null lets PySCF pick the matching auxiliary basis
+  defgrid: defgrid2 # defgrid1/2/3 -> (radial, angular) atom_grid
+  scf_tol: 1.0e-9   # mf.conv_tol
+  scf_maxiter: 100  # mf.max_cycle
+  opt_solver: geometric  # geometric | berny | ase
+  opt_maxsteps: 100
+solv:
+  functional: b3lyp
+  basis: def2-tzvp
+  freq: False
+  density_fit: True
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  solvent_model: smd     # pcm | iefpcm | cpcm | cosmo | ssvpe | smd
+  solvent_id: water      # must exist in pyscf.solvent.smd.solvent_db

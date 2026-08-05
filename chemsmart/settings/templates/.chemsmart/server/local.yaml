@@ -45,6 +45,15 @@ ORCA:
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
 
+PYSCF:
+    # Optional: EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin
+    # It names the bin/ directory whose python owns PySCF/GPU4PySCF.
+    LOCAL_RUN: True
+    SCRATCH: False
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot
     LOCAL_RUN: False  # local run True to use serial_command
