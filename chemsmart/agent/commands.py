@@ -533,7 +533,22 @@ def _validate_compiler_bindings(
         declared is not None and declared.supports_project_configuration
     )
     if requires_project and (project is None or project_validation is None):
-        raise ContractError("program requires a validated project binding")
+        # These are two different mistakes with two different repairs, and one
+        # message for both left a live run retrying the same call three times.
+        # Promoting a project and validating one are separate steps, so say
+        # which is missing and for which program.
+        missing = (
+            "no project artifact is bound to this node; promote one and "
+            "validate it first"
+            if project is None
+            else (
+                f"project {project.artifact_id!r} is bound but has no "
+                "validation receipt; call validate_project_yaml on it first"
+            )
+        )
+        raise ContractError(
+            f"{proposal.program} requires a validated project: {missing}"
+        )
     if not supports_project and project is not None:
         raise ContractError("program does not support project configuration")
     if project is None:

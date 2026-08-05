@@ -52,3 +52,36 @@ def test_a_duplicate_project_id_lists_the_taken_ids():
     message = str(excinfo.value)
     assert "project-a" in message
     assert "project-b" in message, "the caller must see what is already taken"
+
+
+def test_a_malformed_identifier_quotes_the_value_and_the_rule():
+    """This validator backs every identifier the model supplies."""
+
+    from chemsmart.agent._contracts import require_identifier
+
+    with pytest.raises(ContractError) as excinfo:
+        require_identifier("Stage Order!", "stage_order")
+    message = str(excinfo.value)
+    assert "stage_order" in message
+    assert "Stage Order!" in message, "the offending value must be quoted"
+    assert "letters, digits" in message, "the expected shape must be stated"
+
+    with pytest.raises(ContractError, match="it is empty"):
+        require_identifier("", "artifact_id")
+
+
+def test_a_missing_project_is_distinguished_from_an_unvalidated_one():
+    """Two different mistakes with two different repairs, formerly one message."""
+
+    import inspect
+
+    from chemsmart.agent import commands
+
+    source = inspect.getsource(commands)
+    assert "no project artifact is bound to this node" in source
+    assert "validation receipt" in source
+    assert "validate_project_yaml on it first" in source
+    # The old single message must not survive, or the two causes collapse again.
+    assert (
+        '"program requires a validated project binding"' not in source
+    ), "the ambiguous message must be gone"
