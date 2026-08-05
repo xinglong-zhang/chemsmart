@@ -269,7 +269,7 @@ CREST jobs can take geometries from a chemsmart ``.db`` file using the selectors
 From Other Program Outputs
 ==========================
 
-CREST can also start from Gaussian/ORCA outputs:
+CREST can also start from Gaussian, ORCA, or xTB outputs:
 
 .. code:: bash
 
@@ -278,6 +278,9 @@ CREST can also start from Gaussian/ORCA outputs:
 
    # From ORCA output
    chemsmart sub -s server crest -p test -f molecule.out conformers
+
+   # From xTB main output
+   chemsmart sub -s server crest -p test -f water_ohess/water_ohess.out conformers
 
 See :doc:`molecule-input-formats` for the full list of supported geometry sources.
 
