@@ -72,6 +72,9 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
+soap = [
+    "dscribe==2.1.2",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"
