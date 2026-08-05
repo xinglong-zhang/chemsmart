@@ -1066,7 +1066,7 @@ substituents:
     assert all(len(combo.assignments) <= 2 for combo in limited)
 
 
-def test_iterate_shorthand_limit_preserves_per_site_expansion(
+def test_iterate_multi_link_index_forms_one_implicit_group(
     iterate_jobrunner,
     tmp_path: Path,
 ):
@@ -1075,7 +1075,7 @@ def test_iterate_shorthand_limit_preserves_per_site_expansion(
     water = INPUT_DIR / "water.xyz"
     config_path = _write_iterate_config(
         tmp_path,
-        "shorthand_limit.yaml",
+        "link_index_implicit_group.yaml",
         f"""\
 skeletons:
   - file_path: "{benzene}"
@@ -1093,28 +1093,112 @@ substituents:
     groups: [1]
 """,
     )
+    combinations_by_case = {}
+    for case, mode, limit in (
+        ("unlimited", "independent", None),
+        ("independent-limited", "independent", 2),
+        ("global-limited", "global", 2),
+    ):
+        job = _build_job_from_config_path(
+            config_path,
+            iterate_jobrunner,
+            tmp_path,
+            combination_mode=mode,
+            max_substituted_sites=limit,
+        )
+        _, combinations, input_errors, _ = (
+            iterate_jobrunner._generate_combinations(job)
+        )
+        assert input_errors == []
+        combinations_by_case[case] = combinations
+
+    unlimited = combinations_by_case["unlimited"]
+    assert len(unlimited) == 26
+    assert Counter(len(combo.assignments) for combo in unlimited) == {
+        1: 6,
+        2: 12,
+        3: 8,
+    }
+    labels = {combo.label for combo in unlimited}
+    assert {
+        "shorthand_1Me",
+        "shorthand_3OH",
+        "shorthand_1Me_3OH",
+        "shorthand_1OH_5Me",
+        "shorthand_1Me_3OH_5Me",
+    }.issubset(labels)
+
+    limited_by_mode = {
+        case: combinations_by_case[case]
+        for case in ("independent-limited", "global-limited")
+    }
+    for limited in limited_by_mode.values():
+        assert len(limited) == 18
+        assert Counter(len(combo.assignments) for combo in limited) == {
+            1: 6,
+            2: 12,
+        }
+    assert {
+        _assignment_signature(combo)
+        for combo in limited_by_mode["independent-limited"]
+    } == {
+        _assignment_signature(combo)
+        for combo in limited_by_mode["global-limited"]
+    }
+
+
+def test_iterate_multi_link_index_uses_one_implicit_group_number(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    water = INPUT_DIR / "water.xyz"
+    config_path = _write_iterate_config(
+        tmp_path,
+        "link_index_group_numbering.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: first
+    skeleton_indices: "1-6"
+    link_index: "1,3,5"
+  - file_path: "{benzene}"
+    label: second
+    skeleton_indices: "1-6"
+    link_index: 1
+substituents:
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1]
+  - file_path: "{water}"
+    label: OH
+    link_index: 1
+    groups: [2]
+""",
+    )
     job = _build_job_from_config_path(
         config_path,
         iterate_jobrunner,
         tmp_path,
         combination_mode="global",
-        max_substituted_sites=2,
     )
 
     _, combinations, input_errors, _ = (
         iterate_jobrunner._generate_combinations(job)
     )
 
-    labels = {combo.label for combo in combinations}
     assert input_errors == []
-    assert all(len(combo.assignments) == 1 for combo in combinations)
-    assert labels == {
-        "shorthand_1Me",
-        "shorthand_1OH",
-        "shorthand_3Me",
-        "shorthand_3OH",
-        "shorthand_5Me",
-        "shorthand_5OH",
+    assert {combo.label for combo in combinations} == {
+        "first_1Me",
+        "first_3Me",
+        "first_5Me",
+        "first_1Me_3Me",
+        "first_1Me_5Me",
+        "first_3Me_5Me",
+        "first_1Me_3Me_5Me",
+        "second_1OH",
     }
 
 

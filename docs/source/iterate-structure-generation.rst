@@ -77,8 +77,8 @@ Each of the two sites has three choices: keep the original branch, attach ``Me``
 choice is excluded, so this example generates ``3² - 1 = 8`` combinations: four single substitutions and four double
 substitutions.
 
-To cap the number of substituted sites in each generated combination, use the CLI-only
-``-ms/--max-substituted-sites`` option:
+To cap the number of substituted sites in each generated combination, use the CLI-only ``-ms/--max-substituted-sites``
+option:
 
 .. code:: bash
 
@@ -158,7 +158,7 @@ For example, if the first skeleton uses ``link_index`` and the second has two sl
 ``link_index`` shorthand
 ========================
 
-``link_index`` is convenient for a single-site screen, or for screening several sites independently:
+``link_index`` is convenient for a single-site screen or for defining one implicit group of skeleton sites:
 
 .. code:: yaml
 
@@ -177,11 +177,13 @@ For example, if the first skeleton uses ``link_index`` and the second has two sl
        link_index: 1
        groups: [1]
 
-In the current implementation, each shorthand site is expanded separately. This example therefore generates four
-single-site structures (``1Me``, ``1OH``, ``3Me`` and ``3OH``), not double-substituted structures. The
-``--combination-mode`` option does not change shorthand expansion.
+All link atoms in one ``link_index`` field belong to the same automatically assigned implicit group and participate in
+one combination expansion. The example above therefore gives each site three choices: keep the original branch, attach
+``Me`` or attach ``OH``. The all-original choice is excluded, so two sites generate ``3² - 1 = 8`` structures, including
+single- and double-substituted structures.
 
-Use explicit ``slots`` whenever several sites must occur in the same Cartesian product.
+Single-value ``link_index`` is the one-site special case of the same rule. Use explicit ``slots`` when different groups
+of sites need different substituent pools or different ``independent``/``global`` cross-combination behavior.
 
 Explicit slots
 ==============
@@ -218,8 +220,12 @@ Suppose slot ``R1`` has candidates ``A`` and ``B``, and slot ``R2`` has candidat
    Combine all slots in one Cartesian product. This gives five structures: the three single substitutions plus
    ``R1=A/R2=C`` and ``R1=B/R2=C``.
 
-``-ms/--max-substituted-sites`` counts the non-empty assignments in each generated combination. In ``independent``
-mode the count is limited within the current independently expanded slot/group. In ``global`` mode the count is limited
+For skeletons using ``link_index`` instead of explicit ``slots``, all listed link atoms form one implicit group and one
+virtual slot. ``independent`` and ``global`` therefore produce the same combination set for that skeleton, and both
+modes allow multi-site substitutions within the implicit group.
+
+``-ms/--max-substituted-sites`` counts the non-empty assignments in each generated combination. In ``independent`` mode
+the count is limited within the current independently expanded slot/group. In ``global`` mode the count is limited
 across all slots/groups participating in the current skeleton's combination, so with ``-ms 2`` the two assignments may
 come from one group or from two different groups. The limit is evaluated separately for each skeleton in the YAML file.
 
@@ -229,8 +235,8 @@ come from one group or from two different groups. The limit is evaluated separat
 
 .. important::
 
-   ``--combination-mode`` applies to explicit slots. It does not turn a multi-value ``link_index`` shorthand into
-   multi-site combinations. ``-ms/--max-substituted-sites`` preserves the same shorthand behavior.
+   ``--combination-mode`` controls whether different explicit slots are cross-combined. It does not split a multi-value
+   ``link_index`` into several groups; a skeleton with ``link_index`` still occupies one implicit group.
 
 .. note::
 
@@ -296,9 +302,8 @@ JLGO can also be selected in the YAML file:
  Execution and Debugging
 *************************
 
-The top-level ``-n/--num-cores`` option sets both the available core count and
-the maximum number of Iterate worker processes. When omitted, the selected
-server's configured core count is used. ``-t/--timeout`` sets the timeout in
+The top-level ``-n/--num-cores`` option sets both the available core count and the maximum number of Iterate worker
+processes. When omitted, the selected server's configured core count is used. ``-t/--timeout`` sets the timeout in
 seconds for each combination, not for the entire run.
 
 Like other CHEMSMART Jobs, Iterate runs through the generic ``Job.run()`` pathway. Detailed progress and final
@@ -322,9 +327,8 @@ Structure output
 ================
 
 By default, successful structures are written to one multi-structure XYZ file named
-``<configuration_stem>_iterate.xyz``. The name can be overridden with ``-o/--outputfile``. Each structure's XYZ
-comment line contains its combination label, for example
-``benzene_1Me_3OH``.
+``<configuration_stem>_iterate.xyz``. The name can be overridden with ``-o/--outputfile``. Each structure's XYZ comment
+line contains its combination label, for example ``benzene_1Me_3OH``.
 
 With ``--separate-outputs``, each successful combination is written as ``<combination_label>.xyz`` in the directory
 selected by ``-d/--directory``. Existing files with the same names may be overwritten.
@@ -354,9 +358,9 @@ input/execution/timeout/write failures, output paths and final statistics. It en
 Configuration and usage errors (exit code 2) occur before the runner starts and do not produce a run report. Reports for
 an unexpected internal error or SIGINT are best effort, and report writing can itself fail.
 
-******************************
+*******************************
  Report Status and Error Codes
-******************************
+*******************************
 
 A run terminates normally only when every requested combination and output write succeeds. A partially successful run is
 an error termination, but its successfully delivered structures are retained.

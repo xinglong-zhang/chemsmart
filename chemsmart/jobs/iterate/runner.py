@@ -197,9 +197,9 @@ class IterateCombination:
     time.
 
     Each combination has one or more assignments — attaching a substituent
-    at a link position. Single-assignment combinations come from
-    independent-mode expansion (one slot at a time); multi-assignment
-    combinations come from global-mode Cartesian product.
+    at a link position. Multi-assignment combinations can come from one
+    slot/group with several positions, or from global-mode expansion across
+    multiple explicit slots.
 
     Attributes
     ----------
@@ -211,8 +211,8 @@ class IterateCombination:
         1-based atom indices defining the skeleton core. None means all
         atoms are skeleton atoms.
     assignments : list[IterateAssignment]
-        One or more assignments. len=1 for independent mode,
-        >=1 for global mode.
+        One or more assignments for the skeleton sites occupied by this
+        combination.
     algorithm_config : IterateAlgorithmConfig
         Resolved algorithm configuration (name + options) used to build the
         per-combination analyzer (Joint Lagrange or ETKDG).
@@ -1050,9 +1050,9 @@ class IterateJobRunner(JobRunner):
         """Generate all combinations from job settings.
 
         Unified path for all skeletons. Skeletons without explicit slots
-        are converted to virtual single-position slots (one per
-        link_index), with an implicit group number assigned from the
-        global contiguous sequence.
+        are converted to one virtual slot containing all link_index sites,
+        with one implicit group number assigned from the global contiguous
+        sequence.
 
         combination_mode controls how multi-group slots are processed:
         - 'independent': each group generates combinations independently,
@@ -1195,7 +1195,7 @@ class IterateJobRunner(JobRunner):
                             max_substituted_sites,
                         )
             else:
-                # --- No explicit slots: virtual single-position slots ---
+                # --- No explicit slots: one virtual slot with one implicit group ---
                 skel_link_indices = skel_config.get("link_index")
                 if not skel_link_indices:
                     logger.warning(
@@ -1217,25 +1217,24 @@ class IterateJobRunner(JobRunner):
                 virtual_sub_by_group: dict[int, list[tuple[int, str, int]]] = {
                     assigned_group: subs_for_group
                 }
-                for link_idx in skel_link_indices:
-                    virtual_slot = {
-                        "group": assigned_group,
-                        "link_indices": [link_idx],
-                    }
-                    position_options = self._build_position_options(
-                        skel_label,
-                        [virtual_slot],
-                        virtual_sub_by_group,
-                    )
-                    self._expand_position_options(
-                        skel_pool_idx,
-                        skel_label,
-                        skeleton_indices,
-                        position_options,
-                        algorithm_config,
-                        combinations,
-                        max_substituted_sites,
-                    )
+                virtual_slot = {
+                    "group": assigned_group,
+                    "link_indices": skel_link_indices,
+                }
+                position_options = self._build_position_options(
+                    skel_label,
+                    [virtual_slot],
+                    virtual_sub_by_group,
+                )
+                self._expand_position_options(
+                    skel_pool_idx,
+                    skel_label,
+                    skeleton_indices,
+                    position_options,
+                    algorithm_config,
+                    combinations,
+                    max_substituted_sites,
+                )
 
         # Guard: combination labels must be unique so results are not
         # silently overwritten and separate-output files never collide.

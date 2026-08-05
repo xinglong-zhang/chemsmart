@@ -23,9 +23,8 @@ The ``iterate`` command is organized into two independent layers:
 If no algorithm subcommand is given, the algorithm declared in the YAML ``algorithm`` block is used, falling back to the
 built-in default (``etkdg``).
 
-Worker parallelism is controlled by the top-level ``-n/--num-cores`` option.
-The same value determines the number of scheduler cores and Iterate worker
-processes:
+Worker parallelism is controlled by the top-level ``-n/--num-cores`` option. The same value determines the number of
+scheduler cores and Iterate worker processes:
 
 .. code:: bash
 
@@ -76,17 +75,18 @@ These options belong to the ``yaml`` command and are **algorithm-agnostic**.
 
    -  -  ``-S, --skip-completed`` / ``-R, --no-skip-completed``
       -  flag
-      -  Skip an Iterate job when its report has a normal termination marker
-         and all declared XYZ outputs exist (default: ``--skip-completed``).
-         Use ``-R`` to force a rerun.
+      -  Skip an Iterate job when its report has a normal termination marker and all declared XYZ outputs exist
+         (default: ``--skip-completed``). Use ``-R`` to force a rerun.
 
    -  -  ``-cm, --combination-mode``
       -  choice
-      -  Combination strategy for explicit skeleton slots: ``independent`` (default) or ``global``. This option does not
-         change ``link_index`` shorthand expansion.
+      -  Combination strategy for explicit skeleton slots: ``independent`` (default) or ``global``. Skeletons using
+         ``link_index`` have one implicit group, so both modes produce the same combinations for that skeleton.
 
    -  -  ``-ms, --max-substituted-sites``
+
       -  int
+
       -  Maximum number of substituted skeleton attachment sites allowed in one generated combination. When omitted, or
          when set to ``0``, the limit is ``unlimited``. Only positive integers enable the limit. This is a CLI-only
          runtime option and is not accepted in the YAML configuration file.
@@ -99,8 +99,7 @@ These options belong to the ``yaml`` command and are **algorithm-agnostic**.
 Maximum Substituted Sites
 =========================
 
-``-ms/--max-substituted-sites`` limits the number of non-empty skeleton-site assignments in each generated
-combination:
+``-ms/--max-substituted-sites`` limits the number of non-empty skeleton-site assignments in each generated combination:
 
 .. code:: bash
 
@@ -108,17 +107,17 @@ combination:
    chemsmart run iterate yaml -f config.yaml --max-substituted-sites 2
    chemsmart run iterate yaml -f config.yaml -ms 2 jlgo
 
-The default is unlimited. Passing ``-ms 0`` is also treated as unlimited; negative values, floats and non-numeric
-values are rejected as CLI usage errors before generation begins.
+The default is unlimited. Passing ``-ms 0`` is also treated as unlimited; negative values, floats and non-numeric values
+are rejected as CLI usage errors before generation begins.
 
 In ``independent`` mode the limit applies to the current independently expanded slot/group. In ``global`` mode it
 applies to the total assignments in the current skeleton combination across all participating slots/groups. The limit is
 applied per skeleton and does not accumulate across different skeleton entries.
 
-The option does not change ``link_index`` shorthand behavior: multi-value ``link_index`` still expands one site at a
-time rather than becoming a multi-site Cartesian product. ``max_substituted_sites`` is not a YAML key; adding it to
-the top-level file, the ``algorithm`` block, a skeleton entry or a substituent entry is rejected by configuration
-validation.
+For a skeleton using ``link_index`` rather than explicit ``slots``, all listed link atoms belong to one automatically
+assigned implicit group and participate in the same combination expansion. ``max_substituted_sites`` is not a YAML key;
+adding it to the top-level file, the ``algorithm`` block, a skeleton entry or a substituent entry is rejected by
+configuration validation.
 
 Output Options
 ==============
