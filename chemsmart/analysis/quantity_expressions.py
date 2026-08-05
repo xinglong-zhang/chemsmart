@@ -322,16 +322,74 @@ class QuantityExpressionRequestV1:
             raise QuantityContractError("every output must identify an expression node")
 
 
+#: The roles by which a number a model typed can enter an expression result.
+#: Every other input to the arithmetic traces back to a measurement receipt.
+MODEL_AUTHORED_CONSTANT_ROLES = (
+    "extrapolation_exponent",
+    "literal_value",
+    "power_exponent",
+    "scale_factor",
+)
+
+
+@dataclass(frozen=True)
+class ModelAuthoredConstantV1:
+    """One number that entered a result because a model wrote it down.
+
+    The receipt closure already proves which measurements a value depends on.
+    It could not, until now, distinguish a limit computed entirely from
+    executed jobs from one where the model also supplied a decay exponent, a
+    scale factor, or an outright literal -- and those constants move the answer
+    by more than the calculations they are applied to.  Naming them makes the
+    difference auditable instead of leaving it implicit in the request body.
+    """
+
+    node_id: str
+    role: str
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.node_id or len(self.node_id) > 128:
+            raise QuantityContractError(
+                "model-authored constant node ID is invalid"
+            )
+        if self.role not in MODEL_AUTHORED_CONSTANT_ROLES:
+            raise QuantityContractError(
+                f"unsupported model-authored constant role: {self.role!r}; "
+                f"expected one of {list(MODEL_AUTHORED_CONSTANT_ROLES)}"
+            )
+        if not self.value or len(self.value) > 256:
+            raise QuantityContractError(
+                "model-authored constant value must be a short canonical text"
+            )
+
+    def sort_key(self) -> tuple[str, str, str]:
+        return (self.node_id, self.role, self.value)
+
+
 @dataclass(frozen=True)
 class QuantityExpressionOutputDependencyV1:
     """Receipt closure for one expression output."""
 
     output_id: str
     source_receipt_sha256s: tuple[str, ...]
+    model_authored_constants: tuple[ModelAuthoredConstantV1, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.output_id or len(self.output_id) > 128:
             raise QuantityContractError("expression output dependency ID is invalid")
+        object.__setattr__(
+            self,
+            "model_authored_constants",
+            tuple(self.model_authored_constants),
+        )
+        keys = tuple(
+            item.sort_key() for item in self.model_authored_constants
+        )
+        if keys != tuple(sorted(set(keys))):
+            raise QuantityContractError(
+                "model-authored constants must be sorted and unique"
+            )
         if self.source_receipt_sha256s != tuple(
             sorted(set(self.source_receipt_sha256s))
         ):
@@ -1098,6 +1156,53 @@ def _node_value(
     raise QuantityExpressionError(f"operation is not implemented: {operation!r}")
 
 
+def _node_authored_constants(
+    node: QuantityExpressionNodeV1,
+) -> frozenset[ModelAuthoredConstantV1]:
+    """Name every number this node contributes that no measurement produced."""
+
+    found: list[ModelAuthoredConstantV1] = []
+    if node.literal_value is not None:
+        role = (
+            "power_exponent" if node.operation == "power" else "literal_value"
+        )
+        found.append(
+            ModelAuthoredConstantV1(
+                node_id=node.node_id,
+                role=role,
+                value=_constant_text(node.literal_value),
+            )
+        )
+    if node.scale_factor is not None:
+        found.append(
+            ModelAuthoredConstantV1(
+                node_id=node.node_id,
+                role="scale_factor",
+                value=_constant_text(node.scale_factor),
+            )
+        )
+    if node.extrapolation_exponent is not None:
+        found.append(
+            ModelAuthoredConstantV1(
+                node_id=node.node_id,
+                role="extrapolation_exponent",
+                value=_constant_text(node.extrapolation_exponent),
+            )
+        )
+    return frozenset(found)
+
+
+def _constant_text(value: Any) -> str:
+    """Render a model-supplied constant compactly and reproducibly."""
+
+    if isinstance(value, (list, tuple)):
+        rendered = ",".join(_constant_text(item) for item in value)
+        text = f"[{rendered}]"
+    else:
+        text = repr(float(value))
+    return text if len(text) <= 256 else text[:253] + "..."
+
+
 def evaluate_quantity_expression(
     request: QuantityExpressionRequestV1,
 ) -> QuantityExpressionReceiptV1:
@@ -1111,6 +1216,9 @@ def evaluate_quantity_expression(
         quantity.quantity_id: _receipt_dependencies(quantity.evidence_ref)
         for quantity in request.inputs
     }
+    authored: dict[str, frozenset[ModelAuthoredConstantV1]] = {
+        quantity.quantity_id: frozenset() for quantity in request.inputs
+    }
     derived: list[QuantityValueV1] = []
     evidence_ref = f"expression:{request.expression_id}#{request_sha256}"
     for node in request.nodes:
@@ -1123,18 +1231,27 @@ def evaluate_quantity_expression(
         derived.append(value)
         if node.operation == "literal":
             dependencies[node.node_id] = frozenset()
+            inherited: frozenset[ModelAuthoredConstantV1] = frozenset()
         elif node.operation == "ref":
             reference = node.reference or node.input_ids[0]
             dependencies[node.node_id] = dependencies[reference]
+            inherited = authored[reference]
         else:
             dependencies[node.node_id] = frozenset().union(
                 *(dependencies[input_id] for input_id in node.input_ids)
             )
+            inherited = frozenset().union(
+                *(authored[input_id] for input_id in node.input_ids)
+            )
+        authored[node.node_id] = inherited | _node_authored_constants(node)
     outputs = tuple(values[node_id] for node_id in request.output_node_ids)
     output_dependencies = tuple(
         QuantityExpressionOutputDependencyV1(
             output_id=node_id,
             source_receipt_sha256s=tuple(sorted(dependencies[node_id])),
+            model_authored_constants=tuple(
+                sorted(authored[node_id], key=lambda item: item.sort_key())
+            ),
         )
         for node_id in request.output_node_ids
     )
@@ -1176,6 +1293,14 @@ def quantity_expression_receipt_from_record(
             source_receipt_sha256s=tuple(
                 item.get("source_receipt_sha256s") or ()
             ),
+            model_authored_constants=tuple(
+                ModelAuthoredConstantV1(
+                    node_id=str(entry["node_id"]),
+                    role=str(entry["role"]),
+                    value=str(entry["value"]),
+                )
+                for entry in item.get("model_authored_constants") or ()
+            ),
         )
         for item in values.get("output_dependencies") or ()
     )
@@ -1187,6 +1312,8 @@ def quantity_expression_receipt_from_record(
 __all__ = [
     "MAX_EXPRESSION_NODES",
     "MAX_NODE_INPUTS",
+    "MODEL_AUTHORED_CONSTANT_ROLES",
+    "ModelAuthoredConstantV1",
     "QuantityExpressionError",
     "QuantityExpressionNodeV1",
     "QuantityExpressionOutputDependencyV1",

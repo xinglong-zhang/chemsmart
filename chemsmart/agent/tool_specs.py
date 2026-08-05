@@ -905,7 +905,15 @@ def _quantity_expression_node_schema() -> dict:
                 "exclusiveMinimum": 0,
                 "description": (
                     "Method/protocol-derived positive exponent for a two-point "
-                    "SCF exponential or correlation inverse-power CBS limit."
+                    "SCF exponential or correlation inverse-power CBS limit. "
+                    "This is a number you supply, not one the host measured, "
+                    "so the receipt records it as model-authored and it is "
+                    "auditable as such. Supply it only when the protocol you "
+                    "are reproducing states it; when the protocol just says "
+                    "the energy was extrapolated exponentially and you have "
+                    "three successive cardinal numbers, prefer "
+                    "exponential_cbs_limit, which fits the decay from the "
+                    "data and introduces no constant of your own."
                 ),
             },
         },
