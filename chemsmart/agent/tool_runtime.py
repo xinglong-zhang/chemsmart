@@ -1468,8 +1468,14 @@ class CommandCompiledToolHostV1:
         if self.approved_workspace is None:
             raise ContractError("project promotion requires a task workspace")
         if values["artifact_id"] in self.artifacts:
+            # Naming the taken IDs is what makes this actionable. Without them
+            # a caller can only guess, and a live run collided five times in a
+            # row on the same message.
+            taken = sorted(self.artifacts)
+            requested = values["artifact_id"]
             raise ContractError(
-                "artifact ID is already registered; use a distinct project ID"
+                f"artifact ID {requested!r} is already registered; "
+                f"choose one not in {taken}"
             )
         render = self._get(
             self.project_renders,
@@ -4179,7 +4185,24 @@ class CommandCompiledToolHostV1:
         try:
             return values[key]
         except KeyError as exc:
-            raise ContractError(f"unknown {label} ID") from exc
+            # This is the shared lookup behind every host-bound object, so the
+            # message it raises is the one a caller sees for most mistaken IDs.
+            # "unknown X ID" names neither what was asked for nor what exists,
+            # which leaves retrying blind; listing the bound IDs makes the
+            # rejection something the caller can act on.
+            known = sorted(values)
+            if not known:
+                detail = f"no {label} is bound yet"
+            elif len(known) <= 8:
+                detail = f"bound {label} IDs: {known}"
+            else:
+                detail = (
+                    f"bound {label} IDs include {known[:8]} "
+                    f"and {len(known) - 8} more"
+                )
+            raise ContractError(
+                f"unknown {label} ID {key!r}; {detail}"
+            ) from exc
 
 
 def _validate_tool_arguments(
