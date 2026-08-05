@@ -15,6 +15,7 @@ from chemsmart.agent.capabilities import (
     ProgramCapabilityRegistryV1,
     load_program_capabilities,
 )
+from chemsmart.analysis.quantity_expressions import OPERATION_DESCRIPTIONS
 from chemsmart.analysis.result_quantities import SUPPORTED_SELECTORS
 from chemsmart.analysis.result_readers import registered_reader_programs
 
@@ -820,33 +821,20 @@ def _quantity_expression_node_schema() -> dict:
             "node_id": _public_identifier(),
             "operation": {
                 "type": "string",
-                "enum": [
-                    "ref",
-                    "literal",
-                    "add",
-                    "subtract",
-                    "multiply",
-                    "divide",
-                    "scale",
-                    "abs",
-                    "sqrt",
-                    "power",
-                    "exp",
-                    "log",
-                    "sum",
-                    "mean",
-                    "min",
-                    "max",
-                    "distance",
-                    "angle",
-                    "convert",
-                    "linear_fit_slope",
-                    "linear_fit_intercept",
-                    "exponential_cbs_limit",
-                    "scf_exponential_cbs_limit",
-                    "correlation_inverse_power_cbs_limit",
-                    "photon_wavelength",
-                ],
+                "enum": sorted(OPERATION_DESCRIPTIONS),
+                "description": (
+                    "Pick the operation that owns the step. Where a named "
+                    "operation exists for a scientific convention, use it "
+                    "rather than rebuilding the convention from arithmetic "
+                    "primitives: the named one carries the convention, its "
+                    "validity conditions, and its provenance. "
+                    + " | ".join(
+                        f"{name}: {text}"
+                        for name, text in sorted(
+                            OPERATION_DESCRIPTIONS.items()
+                        )
+                    )
+                ),
             },
             "input_ids": {
                 "type": "array",

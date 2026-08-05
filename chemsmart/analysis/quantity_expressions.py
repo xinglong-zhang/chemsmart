@@ -73,6 +73,64 @@ _OPERATIONS = frozenset(
 )
 
 
+#: What each operation computes, and the input shape it expects.
+#:
+#: A bare enum of operation names asks a model to infer both.  Observed live:
+#: a session that needed a three-point exponential basis-set limit rebuilt the
+#: closed form from fifteen multiply/subtract/scale/divide nodes rather than
+#: call the one operation that owns it, because nothing said the operation was
+#: the right instrument or what it wanted.  Reconstructing a domain convention
+#: by hand is the failure mode this vocabulary exists to prevent, so the
+#: descriptions are part of the contract and are pinned to the operation set.
+OPERATION_DESCRIPTIONS: Mapping[str, str] = {
+    "ref": "name an earlier value or expression input; use indices to select",
+    "literal": "a constant you supply; recorded as model-authored",
+    "add": "sum of two values of one dimension",
+    "subtract": "first input minus the second, one dimension",
+    "multiply": "product of two values; dimensions multiply",
+    "divide": "first input over the second; dimensions divide",
+    "scale": "multiply one input by scale_factor; recorded as model-authored",
+    "abs": "absolute value",
+    "sqrt": "square root; the dimension must be an even power",
+    "power": "raise one input to literal_value; recorded as model-authored",
+    "exp": "exponential of a dimensionless input",
+    "log": "natural logarithm of a positive dimensionless input",
+    "sum": "sum over inputs or over one vector input",
+    "mean": "arithmetic mean over inputs or over one vector input",
+    "min": "smallest of the inputs",
+    "max": "largest of the inputs",
+    "distance": "distance between two indexed coordinate vectors",
+    "angle": "angle at the middle of three indexed coordinate vectors",
+    "convert": "restate a value in target_unit; arithmetic stays canonical",
+    "linear_fit_slope": "slope of a least-squares line through x and y",
+    "linear_fit_intercept": "intercept of that same least-squares line",
+    "exponential_cbs_limit": (
+        "complete-basis-set limit of an exponentially convergent series such "
+        "as Hartree-Fock. Takes the energies at three equally spaced cardinal "
+        "numbers ordered by increasing basis, as three scalar inputs or one "
+        "three-element input, and fits the decay from the data. Introduces no "
+        "constant of your own; prefer it whenever a protocol says the energy "
+        "was extrapolated exponentially and you have three points"
+    ),
+    "scf_exponential_cbs_limit": (
+        "two-point SCF exponential limit from two energies at "
+        "cardinal_numbers, using an extrapolation_exponent you supply"
+    ),
+    "correlation_inverse_power_cbs_limit": (
+        "two-point correlation-energy limit in inverse powers of the cardinal "
+        "number, using an extrapolation_exponent you supply. Takes correlation "
+        "energies, not total energies"
+    ),
+    "photon_wavelength": "wavelength of a positive excitation energy",
+}
+
+if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
+    raise RuntimeError(
+        "every expression operation must be described: "
+        f"{sorted(set(_OPERATIONS) ^ set(OPERATION_DESCRIPTIONS))}"
+    )
+
+
 class QuantityExpressionError(ValueError):
     """Raised when an expression is unsafe, ill-typed, or non-finite."""
 
@@ -936,12 +994,36 @@ def _node_value(
             extrapolate_exponential_three_point,
         )
 
-        if len(inputs) != 1:
-            raise QuantityExpressionError(
-                "exponential_cbs_limit takes one input: the energies at three "
-                "equally spaced cardinal numbers, ordered by increasing basis"
+        # Accept either shape the rest of the harness can actually produce.
+        # Extraction yields one scalar energy per calculation, so demanding a
+        # single three-element vector left a model with three separate results
+        # no way to reach this operation -- and a live session responded by
+        # rebuilding the closed form out of multiply, subtract and scale nodes,
+        # reintroducing by hand the convention this operation exists to own.
+        if len(inputs) == 3:
+            if any(_numeric(item).ndim != 0 for item in inputs):
+                raise QuantityExpressionError(
+                    "exponential_cbs_limit takes three scalar energies, "
+                    "ordered by increasing basis cardinal, or one input "
+                    "holding all three"
+                )
+            if len({item.dimension for item in inputs}) != 1:
+                raise QuantityExpressionError(
+                    "exponential_cbs_limit needs three energies of one "
+                    "dimension"
+                )
+            series = np.asarray(
+                [float(_numeric(item)) for item in inputs], dtype=float
             )
-        series = _numeric(inputs[0]).reshape(-1)
+        elif len(inputs) == 1:
+            series = _numeric(inputs[0]).reshape(-1)
+        else:
+            raise QuantityExpressionError(
+                "exponential_cbs_limit takes the energies at three equally "
+                "spaced cardinal numbers, ordered by increasing basis, either "
+                f"as three scalar inputs or as one three-element input; got "
+                f"{len(inputs)} inputs"
+            )
         if series.size != 3:
             raise QuantityExpressionError(
                 "exponential_cbs_limit needs exactly three energies, got "
