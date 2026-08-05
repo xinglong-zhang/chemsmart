@@ -457,6 +457,7 @@ instructions. Formats that Open Babel itself cannot write raise a ``ValueError``
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`
