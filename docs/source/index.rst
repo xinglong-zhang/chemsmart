@@ -26,7 +26,6 @@ computational chemistry software.
    :caption: Configuration
 
    configuration-overview
-   configuration-test
    configuration-user-settings
    configuration-server-settings
    configuration-project-settings
