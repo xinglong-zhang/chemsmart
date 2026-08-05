@@ -3,10 +3,12 @@ import logging
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import (
+from chemsmart.settings.executable import (  # noqa: F401
+    Executable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    PySCFExecutable,
 )
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -247,25 +249,28 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            Executable: Instance of the ``Executable`` subclass whose
+            ``PROGRAM`` matches ``job.PROGRAM``.
 
         Raises:
-            ValueError: If the job's program is not supported.
-        """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
+            ValueError: If no executable is registered for the job's program.
 
-        else:
-            # Need to add programs here to be
-            # supported for other types of programs
-            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        Resolved from the ``Executable`` registry rather than a hardcoded
+        if/elif chain, so a newly registered program works under ``sub`` as
+        soon as it works under ``run``. The previous chain silently limited
+        submission to Gaussian, ORCA and NCIPLOT, which broke run/sub parity
+        for any program added later.
+        """
+        program = str(self.job.PROGRAM or "").upper()
+        for executable_class in Executable.subclasses():
+            if str(executable_class.PROGRAM or "").upper() == program:
+                return executable_class.from_servername(self.server.name)
+        raise ValueError(
+            f"Program {self.job.PROGRAM} not supported: no Executable "
+            f"subclass registered with PROGRAM={program!r}. Registered "
+            f"programs: "
+            f"{sorted(str(c.PROGRAM) for c in Executable.subclasses())}"
+        )
 
     def write(self, cli_args):
         """

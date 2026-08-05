@@ -6,6 +6,7 @@ from chemsmart.cli.mol import mol
 from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
 from chemsmart.cli.pka import pka
+from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.thermochemistry import thermochemistry
 
 subcommands = [
@@ -15,6 +16,7 @@ subcommands = [
     pka,
     mol,
     nciplot,
+    pyscf,
     thermochemistry,
     database,
     iterate,

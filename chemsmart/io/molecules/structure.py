@@ -1125,9 +1125,14 @@ class Molecule:
                 return cls._read_xtb_outfile(filepath, index, **kwargs)
             elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            elif program == "pyscf":
+                return cls._read_pyscf_outfile(
+                    filepath, index, return_list=return_list, **kwargs
+                )
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
-                "Only Gaussian, ORCA, and xTB are currently supported."
+                "Only Gaussian, ORCA, xTB, and PySCF are currently "
+                "supported."
             )
 
         if basename.endswith(".gro"):
@@ -1289,6 +1294,31 @@ class Molecule:
         )
         xtb_output = XTBOutput(folder=folder)
         return xtb_output.get_molecule(index=index)
+
+    @staticmethod
+    @file_cache()
+    def _read_pyscf_outfile(filepath, index, return_list=False, **kwargs):
+        """
+        Read PySCF results.
+
+        The ``.out`` file is PySCF's own log and is never parsed; it only
+        identifies the program. The geometry, energy and vibrational data
+        come from the sibling ``.h5`` results file, which ChemSmart's own
+        generated driver wrote as exact float64.
+
+        Args:
+            filepath (str): Path to the PySCF ``.out`` log file.
+            index (str or int): Accepted for interface parity. A PySCF job
+                stores one final structure, so there is nothing to index.
+            return_list (bool): Wrap the result in a list.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule from the PySCF results.
+        """
+        from chemsmart.io.pyscf.output import PySCFOutput
+
+        pyscf_output = PySCFOutput(filename=filepath)
+        return pyscf_output.get_molecule(index=index, return_list=return_list)
 
     @classmethod
     def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):

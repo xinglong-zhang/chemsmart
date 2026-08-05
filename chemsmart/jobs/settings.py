@@ -226,7 +226,24 @@ class MolecularJobSettings:
         return settings
 
 
-def read_molecular_job_yaml(filename, program="gaussian"):
+def read_molecular_job_yaml(
+    filename, program="gaussian", gas_phase_jobs=None, sp_jobs=None
+):
+    """Read a project YAML into one settings dict per jobtype.
+
+    Args:
+        filename: Path to the project YAML.
+        program: Program whose settings class supplies the default schema.
+        gas_phase_jobs: Jobtypes fed by the ``gas:`` section. ``None`` keeps
+            the historical Gaussian/ORCA list, so existing callers are
+            unaffected.
+        sp_jobs: Jobtypes fed by the ``solv:`` section. ``None`` keeps
+            ``["sp"]``.
+
+    A program that supports only a few jobtypes should pass its own lists
+    rather than inheriting the 15-entry default, which would fabricate
+    configs for jobtypes it cannot run.
+    """
     # read in defaults, if exists
     file_directory = os.path.dirname(filename)
     default_file = os.path.join(file_directory, "defaults.yaml")
@@ -247,6 +264,10 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             from chemsmart.settings.orca import ORCAJobSettings
 
             default_config = ORCAJobSettings.default().__dict__
+        elif program == "pyscf":
+            from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+
+            default_config = PySCFJobSettings.default().__dict__
         else:
             # other programs may be implemented in future
             pass
@@ -255,23 +276,26 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
 
     # job types
-    gas_phase_jobs = [
-        "opt",
-        "modred",
-        "ts",
-        "irc",
-        "scan",
-        "nci",
-        "crest",
-        "dias",
-        "resp",
-        "set",
-        "traj",
-        "uvvis",
-        "wbi",
-        "neb",  # NEB uses gas settings, with NEB-specific options from CLI
-    ]
-    sp_job = ["sp"]
+    if gas_phase_jobs is None:
+        gas_phase_jobs = [
+            "opt",
+            "modred",
+            "ts",
+            "irc",
+            "scan",
+            "nci",
+            "crest",
+            "dias",
+            "resp",
+            "set",
+            "traj",
+            "uvvis",
+            "wbi",
+            "neb",  # NEB uses gas settings, with NEB options from CLI
+        ]
+    else:
+        gas_phase_jobs = list(gas_phase_jobs)
+    sp_job = ["sp"] if sp_jobs is None else list(sp_jobs)
     td_job = ["td"]
     qmmm_job = ["qmmm"]
     all_jobs = gas_phase_jobs + sp_job + td_job
