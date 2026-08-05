@@ -54,6 +54,7 @@ class EventKind(str, Enum):
     QUANTITY_EXPRESSION_EVALUATED = "quantity_expression_evaluated"
     ANALYSIS_CLAIMS_RECORDED = "analysis_claims_recorded"
     ANALYSIS_COMPLETION_EVALUATED = "analysis_completion_evaluated"
+    TASK_DEPENDENCY_CONTEXT_SELECTED = "task_dependency_context_selected"
     PROGRAM_EXECUTED = "program_execution_observed"
     OPTIMIZED_GEOMETRY_HANDED_OFF = "optimized_geometry_handed_off"
     PROVIDER_TURN_OBSERVED = "provider_turn_observed"
@@ -87,6 +88,9 @@ THERMOCHEMISTRY_DERIVED = EventKind.THERMOCHEMISTRY_DERIVED.value
 QUANTITY_EXPRESSION_EVALUATED = EventKind.QUANTITY_EXPRESSION_EVALUATED.value
 ANALYSIS_CLAIMS_RECORDED = EventKind.ANALYSIS_CLAIMS_RECORDED.value
 ANALYSIS_COMPLETION_EVALUATED = EventKind.ANALYSIS_COMPLETION_EVALUATED.value
+TASK_DEPENDENCY_CONTEXT_SELECTED = (
+    EventKind.TASK_DEPENDENCY_CONTEXT_SELECTED.value
+)
 PROGRAM_EXECUTED = EventKind.PROGRAM_EXECUTED.value
 OPTIMIZED_GEOMETRY_HANDED_OFF = EventKind.OPTIMIZED_GEOMETRY_HANDED_OFF.value
 PERMISSION_RESOLVED = EventKind.PERMISSION_RESOLVED.value
@@ -124,6 +128,7 @@ _RECEIPT_EVENTS = frozenset(
         QUANTITY_EXPRESSION_EVALUATED,
         ANALYSIS_CLAIMS_RECORDED,
         ANALYSIS_COMPLETION_EVALUATED,
+        TASK_DEPENDENCY_CONTEXT_SELECTED,
         PROGRAM_EXECUTED,
         OPTIMIZED_GEOMETRY_HANDED_OFF,
         PERMISSION_RESOLVED,
@@ -308,6 +313,10 @@ def _validate_typed_receipt_payload(
         ANALYSIS_COMPLETION_EVALUATED: (
             "status",
             {"passed", "blocked"},
+        ),
+        TASK_DEPENDENCY_CONTEXT_SELECTED: (
+            "status",
+            {"selected", "blocked_context_budget"},
         ),
         ANALYSIS_CLAIMS_RECORDED: ("status", {"recorded"}),
         WORKFLOW_PLANNED: ("status", {"planned"}),
@@ -682,6 +691,7 @@ __all__ = [
     "RESULT_VERIFIED",
     "RESULT_QUANTITIES_EXTRACTED",
     "THERMOCHEMISTRY_DERIVED",
+    "TASK_DEPENDENCY_CONTEXT_SELECTED",
     "QUANTITY_EXPRESSION_EVALUATED",
     "OPTIMIZED_GEOMETRY_HANDED_OFF",
     "RUNTIME_TERMINATED",

@@ -179,6 +179,70 @@ def build_command_compiled_tool_surface(
             ("workflow_id", "task_spec_id", "nodes"),
         ),
         _tool(
+            "plan_scientific_workflow",
+            (
+                "Plan one connected paper-level tool chain containing both "
+                "program calculations and deterministic analysis stages. "
+                "Future analysis inputs name producer node/output pairs; they "
+                "do not require artifact or receipt hashes before execution. "
+                "Keep unsupported requested analyses as blocked_unsupported nodes."
+            ),
+            {
+                "plan_id": _public_identifier(),
+                "workflow_id": _public_identifier(),
+                "task_spec_id": _string(),
+                "calculation_nodes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": _scientific_workflow_node_schema(),
+                },
+                "analysis_nodes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": _analysis_intent_node_schema(),
+                },
+                "required_output_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": _public_identifier(),
+                },
+            },
+            (
+                "plan_id",
+                "workflow_id",
+                "task_spec_id",
+                "calculation_nodes",
+                "analysis_nodes",
+                "required_output_ids",
+            ),
+        ),
+        _tool(
+            "inspect_workflow_frontier",
+            (
+                "Inspect the current calculation-and-analysis frontier for a "
+                "previously planned scientific workflow."
+            ),
+            {"workflow_id": _public_identifier()},
+            ("workflow_id",),
+        ),
+        _tool(
+            "prepare_program_node",
+            (
+                "Prepare and safe-preview one actionable calculation node "
+                "from a scientific workflow. The host resolves its program, "
+                "project, input, electronic state, capability, and engine "
+                "bindings from the typed workflow; do not copy receipt hashes."
+            ),
+            {
+                "workflow_id": _public_identifier(),
+                "node_id": _public_identifier(),
+            },
+            ("workflow_id", "node_id"),
+        ),
+        _tool(
             "synthesize_command",
             "Compile scientific intent to canonical argv through live Click.",
             {
@@ -521,8 +585,8 @@ def _public_identifier() -> dict:
         "type": "string",
         "pattern": "^[a-z][a-z0-9_.-]*$",
         "description": (
-            "Lower-case public identifier; use dots or dashes instead of "
-            "spaces, parentheses, or placeholder syntax."
+            "Lower-case public identifier; use dots, dashes, or underscores "
+            "instead of spaces, parentheses, hashes, or placeholder syntax."
         ),
     }
 
@@ -541,7 +605,7 @@ def _workflow_node_schema() -> dict:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "binding_id": _string(),
+                        "binding_id": _public_identifier(),
                         "artifact_id": _string(),
                         "artifact_class": _string(),
                         "producer_node_id": _string(),
@@ -572,6 +636,15 @@ def _workflow_node_schema() -> dict:
                 "type": "array",
                 "items": _public_identifier(),
             },
+            "produces_observables": {
+                "type": "array",
+                "items": _public_identifier(),
+            },
+            "support_state": {
+                "type": "string",
+                "enum": ["planned", "blocked_unsupported"],
+            },
+            "blocked_reason": _string(),
         },
         "required": [
             "node_id",
@@ -582,6 +655,132 @@ def _workflow_node_schema() -> dict:
             "inputs",
             "expected_outputs",
             "unresolved_fields",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _scientific_workflow_node_schema() -> dict:
+    """Calculation node schema with explicit scientific output semantics."""
+
+    schema = _workflow_node_schema()
+    schema["required"] = list(schema["required"]) + [
+        "produces_observables",
+        "support_state",
+        "blocked_reason",
+    ]
+    return schema
+
+
+def _analysis_intent_node_schema() -> dict:
+    """Planning-only analysis node; artifacts are bound after producers run."""
+
+    return {
+        "type": "object",
+        "properties": {
+            "node_id": _public_identifier(),
+            "analysis_kind": {
+                "type": "string",
+                "enum": [
+                    "claim_rendering",
+                    "quantity_expression",
+                    "result_extraction",
+                    "scientific_validation",
+                    "thermochemistry",
+                    "unsupported_external",
+                ],
+                "description": (
+                    "Only result_extraction carries selectors; only "
+                    "quantity_expression carries expression_nodes. Put a "
+                    "numerical check in a quantity_expression producer and "
+                    "feed its output to a scientific_validation node."
+                ),
+            },
+            "dependencies": {
+                "type": "array",
+                "items": _public_identifier(),
+            },
+            "inputs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "input_id": _public_identifier(),
+                        "source_kind": {
+                            "type": "string",
+                            "enum": ["analysis_output", "program_output"],
+                        },
+                        "producer_node_id": _public_identifier(),
+                        "producer_output_id": _public_identifier(),
+                    },
+                    "required": [
+                        "input_id",
+                        "source_kind",
+                        "producer_node_id",
+                        "producer_output_id",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "selectors": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "quantity_id": _public_identifier(),
+                        "selector": _public_identifier(),
+                    },
+                    "required": ["quantity_id", "selector"],
+                    "additionalProperties": False,
+                },
+            },
+            "outputs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "output_id": _public_identifier(),
+                        "quantity_kind": _public_identifier(),
+                        "unit": _string(),
+                    },
+                    "required": ["output_id", "quantity_kind", "unit"],
+                    "additionalProperties": False,
+                },
+            },
+            "expression_nodes": {
+                "type": "array",
+                "items": _quantity_expression_node_schema(),
+            },
+            "expression_output_node_ids": {
+                "type": "array",
+                "items": _public_identifier(),
+            },
+            "temperature_k": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+            },
+            "pressure_atm": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+            },
+            "support_state": {
+                "type": "string",
+                "enum": ["planned", "blocked_unsupported"],
+            },
+            "blocked_reason": _string(),
+        },
+        "required": [
+            "node_id",
+            "analysis_kind",
+            "dependencies",
+            "inputs",
+            "selectors",
+            "outputs",
+            "expression_nodes",
+            "expression_output_node_ids",
+            "support_state",
+            "blocked_reason",
         ],
         "additionalProperties": False,
     }

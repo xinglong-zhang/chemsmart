@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -383,15 +384,28 @@ def quantity_expression_semantic_signature(
     """
 
     values: dict[str, dict[str, Any]] = {}
+    source_quantity_ids = {
+        quantity.quantity_id: (
+            matches[-1]
+            if (matches := _QUANTITY_REF.findall(quantity.evidence_ref))
+            else ""
+        )
+        for quantity in request.inputs
+    }
+    source_quantity_counts = Counter(source_quantity_ids.values())
+    source_quantity_counts.pop("", None)
     role_owners: dict[str, str] = {}
     for quantity in request.inputs:
         role_matches = _SEMANTIC_ROLE_REF.findall(quantity.evidence_ref)
-        quantity_matches = _QUANTITY_REF.findall(quantity.evidence_ref)
+        source_quantity_id = source_quantity_ids[quantity.quantity_id]
         semantic_role = (
-            role_matches[-1]
+            source_quantity_id
+            if source_quantity_id
+            and source_quantity_counts[source_quantity_id] == 1
+            else role_matches[-1]
             if role_matches
-            else quantity_matches[-1]
-            if quantity_matches
+            else source_quantity_id
+            if source_quantity_id
             else quantity.quantity_id
         )
         owner = role_owners.setdefault(semantic_role, quantity.quantity_id)

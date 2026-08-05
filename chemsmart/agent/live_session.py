@@ -108,7 +108,11 @@ from chemsmart.agent.identity import (
     validate_identity_for_geometry,
 )
 from chemsmart.agent.specialists import READ_ONLY_CRITIC
-from chemsmart.agent.workflow_context import workflow_context_enabled
+from chemsmart.agent.dependency_context import (
+    ContextSelectionReceiptV1,
+    TaskDependencyContextV1,
+    build_dependency_context_public_projection,
+)
 from chemsmart.agent.workflows import HarnessExperimentConfigV1
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
@@ -582,6 +586,13 @@ def run_live_agent_session(
     campaign_preparation_snapshot: (
         CampaignPreparationHostSnapshotV1 | None
     ) = None,
+    dependency_context: TaskDependencyContextV1 | None = None,
+    dependency_context_selection_receipt: (
+        ContextSelectionReceiptV1 | None
+    ) = None,
+    dependency_public_records: (
+        Mapping[str, Mapping[str, Any]] | None
+    ) = None,
 ) -> LiveAgentSessionResultV1:
     """Run one agent.yaml-selected session over exact workspace artifacts.
 
@@ -611,6 +622,30 @@ def run_live_agent_session(
     if campaign_preparation_snapshot is not None and experiment_arm is None:
         raise ContractError(
             "campaign host snapshot requires an experiment arm and case"
+        )
+    if (dependency_context is None) != (
+        dependency_context_selection_receipt is None
+    ):
+        raise ContractError(
+            "dependency context and selection receipt must be supplied together"
+        )
+    if dependency_context is None:
+        if dependency_public_records:
+            raise ContractError(
+                "dependency public records require a selected dependency context"
+            )
+        dependency_context_public_projection: dict[str, Any] = {}
+    else:
+        if dependency_public_records is None:
+            raise ContractError(
+                "selected dependency context requires exact public record payloads"
+            )
+        dependency_context_public_projection = (
+            build_dependency_context_public_projection(
+                context=dependency_context,
+                selection_receipt=dependency_context_selection_receipt,
+                records=dependency_public_records,
+            )
         )
     task = str(task).strip()
     if not task:
@@ -734,6 +769,7 @@ def run_live_agent_session(
     event_store = RuntimeEventStore(
         run_directory / "events.jsonl", session_id=session_id
     )
+    preview_server_path = _ensure_preview_server(run_directory)
     host_kwargs: dict[str, Any] = {
         "event_store": event_store,
         "artifacts": {
@@ -760,11 +796,16 @@ def run_live_agent_session(
         # The execution composition below replaces this with the exact
         # user-approved workflow workspace.
         "approved_workspace": run_directory,
+        "preview_server": str(preview_server_path),
         "result_functional_evidence": {
             item.validation_receipt_sha256: item.public_record()
             for item in result_observations
         },
         "analysis_completion_policy": analysis_completion_policy,
+        "dependency_context": dependency_context,
+        "dependency_context_selection_receipt": (
+            dependency_context_selection_receipt
+        ),
     }
     if use_execution_surface:
         execution_inputs = _execution_composition_inputs(
@@ -827,6 +868,11 @@ def run_live_agent_session(
             else None
         ),
     )
+    if dependency_context is not None:
+        context = {
+            **context,
+            **dependency_context_public_projection,
+        }
     base_messages = _coordinator_base_messages(
         context=context,
         approved_workflow=approved_workflow_record,
@@ -1897,6 +1943,25 @@ def _bootstrap_conformance(
     return tuple(receipts), tuple(records)
 
 
+def _ensure_preview_server(run_directory: Path) -> Path:
+    """Materialize the host-selected server used by every safe preview.
+
+    Bootstrap conformance already passes this file explicitly.  Normal model
+    commands must do the same; otherwise Click falls back to a machine-local
+    ``local.yaml`` and the observed program environment silently differs from
+    the one shown to the model.
+    """
+
+    bootstrap_directory = run_directory / "bootstrap"
+    bootstrap_directory.mkdir(mode=0o700, exist_ok=True)
+    server_path = bootstrap_directory / "preview-server.yaml"
+    _write_private_exact(
+        server_path,
+        _preview_server_profile().encode("utf-8"),
+    )
+    return server_path
+
+
 def _conformance_engines(program: str) -> tuple[str, ...]:
     """Return the execution engines ChemSmart declares for ``program``."""
 
@@ -2187,15 +2252,20 @@ def _observe_environments() -> tuple[
     # Every program ChemSmart declares becomes a discovery target, so the agent
     # observes the same installation ChemSmart controls rather than a list
     # maintained here.
-    for program, _folder in _declared_server_programs():
+    for program, folder in _declared_server_programs():
         if program == "pyscf":
             continue
+        executable = _declared_executable_path(program, folder)
         targets.append(
             EnvironmentTargetV1(
                 program=program,
                 engine="cpu",
                 target_kind="executable",
-                locator=program,
+                # Observe the executable ChemSmart itself resolves from the
+                # server profile.  Re-running ``which(program)`` creates a
+                # second environment model and is wrong for names such as
+                # Gaussian, whose executable is ``g16``.
+                locator=executable or program,
             )
         )
     if not any(item.program == "xtb" for item in targets):
@@ -2533,10 +2603,9 @@ def _approved_execution_context(
 def _workflow_context_sentence() -> str:
     """State dependency structure so the model need not recall it."""
 
-    if not workflow_context_enabled():
-        return ""
     return (
-        "plan_command_workflow returns a host-derived workflow_context: per "
+        "The workflow planning tools return a host-derived workflow_context or "
+        "workflow_frontier: per "
         "node it says whether that node is ready, waiting, or blocked, which "
         "upstream node and output each waiting input needs, and which nodes "
         "depend on it. Read it instead of reconstructing the DAG from memory, "
@@ -2601,9 +2670,18 @@ def _system_prompt(
         "You are a professional computational-chemistry planning agent operating "
         "ChemSmart 3.1.4. Work plan-first through typed tools. Inspect program "
         "capability and environment, bind exact artifact identity, render and promote "
-        "stage-specific project YAML, validate it, build a command DAG, compile safe "
+        "stage-specific project YAML, validate it, build a scientific tool-chain DAG, compile safe "
         "commands, and preview every currently resolvable node. Keep every future "
         "producer input unresolved until its validated upstream artifact exists. "
+        "For every request that ends in a calculated or derived value, use "
+        "plan_scientific_workflow to record calculations, result extraction, "
+        "validation, mathematics, and claim rendering in one connected DAG. "
+        "Its analysis inputs name future producer node/output pairs, so do not wait "
+        "for artifact hashes before planning postprocessing. Preserve an unavailable "
+        "parser or external analysis as blocked_unsupported instead of deleting the "
+        "requested observable. Use plan_command_workflow only for a calculation-only "
+        "compatibility task, and use inspect_workflow_frontier for host-derived "
+        "next actions. "
         f"{_workflow_context_sentence()}"
         "Never author native "
         "Gaussian, ORCA, xTB, or PySCF input/script text. Never invent coordinates, "
@@ -2653,7 +2731,7 @@ def _system_prompt(
         "geometry artifact IDs. Bind scientific identity only to a geometry_xyz "
         "artifact, never to a project, and do this before planning the workflow. "
         "Every workflow node must declare at least one expected output. If "
-        "plan_command_workflow returns findings or a null scientific_workflow_plan, "
+        "plan_command_workflow or plan_scientific_workflow returns findings or a null scientific_workflow_plan, "
         "repair the binding or DAG and call it again; a workflow_draft alone is "
         "not the typed scientific DAG. In workflow inputs, represent an initial artifact "
         "with empty producer_node_id and producer_output_id strings; represent a "
@@ -2671,7 +2749,10 @@ def _system_prompt(
         "the host grades an identifier-independent symbolic DAG. When two inputs "
         "carry the same source quantity ID, give them distinct task-semantic roles "
         "such as reactant, product, conformer-a, or basis-cardinal-3; never use a "
-        "receipt hash as a semantic role. Use record_analysis_claims to bind each requested reported "
+        "receipt hash as a semantic role. When a numerical condition already exists "
+        "as a quantity on a typed receipt, reference that receipt quantity instead "
+        "of duplicating it as a literal; use a literal only when no typed source "
+        "quantity exists. Use record_analysis_claims to bind each requested reported "
         "number and display unit to an exact receipt quantity; the host, not the "
         "model, supplies the value. The host renders the authoritative final numeric "
         "section from that claim record. Report only those host-rendered claim values. "
