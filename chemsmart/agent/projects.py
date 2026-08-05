@@ -271,6 +271,11 @@ def _require_declared_section_shape(
     declared = set(capability.project_section_names if capability else ())
     if not declared:
         return
+    # A phase-keyed program also reads a per-jobtype section for the job types
+    # that carry their own settings (td, irc, qmmm). Admitting the declared job
+    # types keeps this gate aligned with the loader instead of maintaining a
+    # second list that drifts from it.
+    declared |= set(capability.jobtypes)
     unknown = sorted(set(payload) - declared)
     if unknown:
         raise ContractError(
