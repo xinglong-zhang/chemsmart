@@ -303,9 +303,16 @@ class CRESTJobSettings:
                     ORCAOutput(filename=filepath).read_settings(),
                     keywords=("charge", "multiplicity"),
                 )
+            if program == "xtb":
+                from chemsmart.jobs.xtb.settings import XTBJobSettings
+
+                return cls.default().merge(
+                    XTBJobSettings.from_outfile(filepath),
+                    keywords=("charge", "multiplicity"),
+                )
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
-                "Only Gaussian and ORCA outputs are supported."
+                "Only Gaussian, ORCA, and xTB outputs are supported."
             )
         return cls.default()
 
