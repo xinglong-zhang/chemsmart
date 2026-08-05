@@ -293,6 +293,24 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     gas_config = project_config.get("gas", None)
     qmmm_config = project_config.get("qmmm", None)
 
+    if gas_config is None and solv_config is None:
+        # Neither phase section is present, so there is nothing to merge. Say
+        # which sections were expected instead of merging None and failing far
+        # away with "'NoneType' object has no attribute 'items'": a project
+        # YAML is the file a chemist edits, and the error has to name the
+        # mistake in that file.
+        found = (
+            ", ".join(sorted(str(key) for key in project_config))
+            if isinstance(project_config, dict) and project_config
+            else "nothing"
+        )
+        raise ValueError(
+            f"{program} project settings in {filename} define neither a "
+            f"'gas' nor a 'solv' section; found: {found}. Settings must be "
+            "grouped under 'gas' (used by most job types) and/or 'solv' "
+            "(used by sp), not under a job-type name."
+        )
+
     if gas_config is None:
         # no settings for gas phase; using
         # implicit solvation model for all jobs
