@@ -35,6 +35,8 @@ from chemsmart.utils.iterate import (
     validate_yaml_config,
 )
 
+from .options import click_iterate_combination_options
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,7 +118,9 @@ def click_yaml_common_options(f):
 
 def _collect_cli_options(options: dict) -> dict:
     """Drop unset CLI options before merging them over YAML settings."""
-    return {name: value for name, value in options.items() if value is not None}
+    return {
+        name: value for name, value in options.items() if value is not None
+    }
 
 
 def _is_sub_invocation(ctx: click.Context) -> bool:
@@ -162,6 +166,7 @@ def _build_iterate_job(
     directory = data["directory"]
     separate_outputs = data["separate_outputs"]
     combination_mode = data["combination_mode"]
+    max_substituted_sites = data["max_substituted_sites"]
 
     # Validate filename (deferred here so that subcommand '--help' works
     # without requiring '-f').
@@ -233,6 +238,7 @@ def _build_iterate_job(
         config_file=filename,
         algorithm_config=algorithm_config,
         combination_mode=combination_mode,
+        max_substituted_sites=max_substituted_sites,
     )
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]
@@ -256,6 +262,7 @@ def _build_iterate_job(
 
 @click.group(name="yaml", cls=MyGroup, invoke_without_command=True)
 @click_yaml_common_options
+@click_iterate_combination_options
 @click_job_options
 @click_filename_options
 @click.pass_context
@@ -268,6 +275,7 @@ def yaml_cmd(
     directory,
     separate_outputs,
     combination_mode,
+    max_substituted_sites,
     skip_completed,
     **kwargs,
 ):
@@ -341,6 +349,7 @@ def yaml_cmd(
         "directory": directory,
         "separate_outputs": separate_outputs,
         "combination_mode": combination_mode,
+        "max_substituted_sites": max_substituted_sites,
         "skip_completed": skip_completed,
     }
 

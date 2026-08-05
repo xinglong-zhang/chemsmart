@@ -9,12 +9,15 @@ before optimization so traversal rules can be checked exactly and quickly.
 from __future__ import annotations
 
 import ast
+import importlib
 import shlex
 import sys
 from collections import Counter
+from datetime import datetime
 from itertools import product
 from pathlib import Path
 
+import click
 import numpy as np
 import pytest
 import yaml
@@ -23,7 +26,12 @@ from click.testing import CliRunner
 from chemsmart.cli.main import entry_point
 from chemsmart.cli.run import run
 from chemsmart.jobs.iterate.job import IterateExecutionError, IterateJob
-from chemsmart.jobs.iterate.report import ERROR_CODE_INPUT, ERROR_CODE_TIMEOUT
+from chemsmart.jobs.iterate.report import (
+    ERROR_CODE_INPUT,
+    ERROR_CODE_INTERNAL,
+    ERROR_CODE_TIMEOUT,
+    IterateReport,
+)
 from chemsmart.jobs.iterate.settings import (
     IterateJobSettings,
     resolve_algorithm_config,
@@ -41,6 +49,7 @@ CONFIG_DIR = DATA_DIR / "configs"
 INPUT_DIR = DATA_DIR / "input"
 EXPECTED_DIR = DATA_DIR / "expected_output"
 TEMPLATE_GOLDEN = CONFIG_DIR / "iterate_template.yaml"
+run_cli_module = importlib.import_module("chemsmart.cli.run")
 
 GENERATION_LABELS = {
     "benzene_1Me",
@@ -107,22 +116,17 @@ def _assert_structure_maps_equal(
         )
 
 
-def _load_validated_config(name: str) -> tuple[Path, dict]:
-    config_path = CONFIG_DIR / name
-    raw_config = yaml.safe_load(config_path.read_text())
-    return config_path, validate_yaml_config(raw_config, str(config_path))
-
-
-def _build_job(
-    config_name: str,
+def _build_job_from_config_path(
+    config_path: Path,
     jobrunner,
     tmp_path: Path,
     *,
     combination_mode: str = "independent",
     timeout: float = 120,
+    max_substituted_sites: int | None = None,
 ) -> IterateJob:
-    """Build a real IterateJob from one of the small v2 YAML fixtures."""
-    config_path, config = _load_validated_config(config_name)
+    raw_config = yaml.safe_load(config_path.read_text())
+    config = validate_yaml_config(raw_config, str(config_path))
     algorithm_config = resolve_algorithm_config(
         yaml_algorithm=config.get("algorithm")
     )
@@ -130,6 +134,7 @@ def _build_job(
         config_file=str(config_path),
         algorithm_config=algorithm_config,
         combination_mode=combination_mode,
+        max_substituted_sites=max_substituted_sites,
     )
     settings.skeleton_list = config["skeletons"]
     settings.substituent_list = config["substituents"]
@@ -139,6 +144,82 @@ def _build_job(
         nprocs=1,
         timeout=timeout,
         outputfile=str(tmp_path / config_path.stem),
+    )
+
+
+def _build_job(
+    config_name: str,
+    jobrunner,
+    tmp_path: Path,
+    *,
+    combination_mode: str = "independent",
+    timeout: float = 120,
+    max_substituted_sites: int | None = None,
+) -> IterateJob:
+    """Build a real IterateJob from one of the small v2 YAML fixtures."""
+    return _build_job_from_config_path(
+        CONFIG_DIR / config_name,
+        jobrunner,
+        tmp_path,
+        combination_mode=combination_mode,
+        timeout=timeout,
+        max_substituted_sites=max_substituted_sites,
+    )
+
+
+def _write_iterate_config(tmp_path: Path, name: str, content: str) -> Path:
+    config_path = tmp_path / name
+    config_path.write_text(content)
+    return config_path
+
+
+def _assignment_signature(combo) -> tuple[tuple[int, str], ...]:
+    return tuple(
+        sorted(
+            (
+                assignment.skeleton_link_index,
+                assignment.substituent_label,
+            )
+            for assignment in combo.assignments
+        )
+    )
+
+
+def _capture_iterate_cli_jobs(monkeypatch) -> list[IterateJob]:
+    captured_jobs = []
+
+    def fake_run_single_job(job, jobrunner):
+        captured_jobs.append(job)
+
+    monkeypatch.setattr(
+        run_cli_module,
+        "_run_single_job",
+        fake_run_single_job,
+    )
+    return captured_jobs
+
+
+def _minimal_iterate_report(
+    max_substituted_sites: int | None,
+    *,
+    error: bool = False,
+) -> IterateReport:
+    return IterateReport(
+        run_id="test",
+        chemsmart_version="test",
+        rdkit_version="test",
+        started_at=datetime(2026, 1, 1, 0, 0, 0),
+        finished_at=datetime(2026, 1, 1, 0, 0, 1),
+        duration_seconds=1.0,
+        working_directory=".",
+        command_line="chemsmart run iterate yaml -f config.yaml",
+        config_file="config.yaml",
+        algorithm_name="etkdg",
+        algorithm_options={},
+        combination_mode="independent",
+        max_substituted_sites=max_substituted_sites,
+        extra_error_codes=[ERROR_CODE_INTERNAL] if error else [],
+        exit_code_override=1 if error else None,
     )
 
 
@@ -353,6 +434,8 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
             "yaml",
             "-f",
             str(config_path),
+            "-ms",
+            "2",
             "etkdg",
             "--num-conformers",
             "3",
@@ -386,13 +469,17 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
         reconstructed_args[reconstructed_args.index("--num-cores") + 1] == "4"
     )
     assert "--skip-completed" in reconstructed_args
-    assert reconstructed_args[
-        reconstructed_args.index("--num-conformers") + 1
-    ] == "3"
+    max_sites_index = reconstructed_args.index("--max-substituted-sites")
+    assert reconstructed_args[max_sites_index + 1] == "2"
+    assert (
+        reconstructed_args[reconstructed_args.index("--num-conformers") + 1]
+        == "3"
+    )
     assert "sub" not in reconstructed_args
     assert (
         reconstructed_args.index("iterate")
         < reconstructed_args.index("yaml")
+        < max_sites_index
         < reconstructed_args.index("etkdg")
     )
     assert (
@@ -413,8 +500,7 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
 def test_iterate_cli_rejects_link_outside_skeleton_indices(tmp_path: Path):
     """A declared link atom must belong to the retained skeleton atoms."""
     config_path = tmp_path / "invalid_link.yaml"
-    config_path.write_text(
-        """\
+    config_path.write_text("""\
 skeletons:
   - file_path: skeleton.xyz
     label: skeleton
@@ -425,8 +511,7 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-"""
-    )
+""")
 
     result = CliRunner().invoke(
         run, ["iterate", "yaml", "-f", str(config_path)], obj={}
@@ -555,6 +640,78 @@ def test_iterate_cli_rejects_missing_config_file(tmp_path: Path):
     assert "does not exist" in result.output
 
 
+@pytest.mark.parametrize(
+    ("option_args", "expected"),
+    [
+        pytest.param(["-ms", "2"], 2, id="short"),
+        pytest.param(
+            ["--max-substituted-sites", "2"],
+            2,
+            id="long",
+        ),
+        pytest.param([], None, id="unset"),
+        pytest.param(["-ms", "0"], None, id="zero"),
+        pytest.param(["-ms", "2", "jlgo"], 2, id="before-algorithm"),
+    ],
+)
+def test_iterate_cli_max_substituted_sites_option(
+    option_args: list[str],
+    expected: int | None,
+    monkeypatch,
+):
+    """The YAML input command forwards the reusable Iterate limit option."""
+    captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
+
+    result = CliRunner().invoke(
+        run,
+        [
+            "iterate",
+            "yaml",
+            "-f",
+            str(CONFIG_DIR / "combination_traversal.yaml"),
+            *option_args,
+        ],
+        obj={},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured_jobs) == 1
+    assert captured_jobs[0].settings.max_substituted_sites == expected
+
+
+@pytest.mark.parametrize(
+    "option_args",
+    [
+        pytest.param(["-ms", "-1"], id="negative"),
+        pytest.param(["-ms", "1.5"], id="float"),
+        pytest.param(["-ms", "abc"], id="nonnumeric"),
+        pytest.param(["-ms"], id="missing-short-value"),
+    ],
+)
+def test_iterate_cli_rejects_invalid_max_substituted_sites(
+    option_args: list[str],
+    monkeypatch,
+):
+    """Invalid limits fail as Click usage errors before job execution."""
+    captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
+
+    result = CliRunner().invoke(
+        run,
+        [
+            "iterate",
+            "yaml",
+            "-f",
+            str(CONFIG_DIR / "combination_traversal.yaml"),
+            *option_args,
+        ],
+        obj={},
+    )
+
+    assert result.exit_code == 2
+    assert "Error:" in result.output
+    assert captured_jobs == []
+
+
 def test_iterate_cli_missing_molecule_file_is_input_error(tmp_path: Path):
     """Absent molecule files are recorded as an input error.
 
@@ -565,8 +722,7 @@ def test_iterate_cli_missing_molecule_file_is_input_error(tmp_path: Path):
     scheduler can distinguish this failure from a successful calculation.
     """
     config_path = tmp_path / "missing_molecule.yaml"
-    config_path.write_text(
-        """\
+    config_path.write_text("""\
 skeletons:
   - file_path: does_not_exist.xyz
     label: skeleton
@@ -576,8 +732,7 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-"""
-    )
+""")
     output_base = tmp_path / "missing_out"
 
     result = CliRunner().invoke(
@@ -703,6 +858,333 @@ def test_iterate_three_site_combination_traversal(
     }
 
 
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        pytest.param(None, None, id="none"),
+        pytest.param(0, None, id="zero"),
+        pytest.param(2, 2, id="positive"),
+    ],
+)
+def test_iterate_settings_normalizes_max_substituted_sites(
+    raw_value,
+    expected,
+):
+    settings = IterateJobSettings(max_substituted_sites=raw_value)
+
+    assert settings.max_substituted_sites == expected
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        pytest.param(-1, id="negative"),
+        pytest.param(1.0, id="float"),
+        pytest.param("1", id="string"),
+        pytest.param(True, id="true-bool"),
+        pytest.param(False, id="false-bool"),
+    ],
+)
+def test_iterate_settings_rejects_invalid_max_substituted_sites(raw_value):
+    with pytest.raises(ValueError, match="max_substituted_sites"):
+        IterateJobSettings(max_substituted_sites=raw_value)
+
+
+def test_iterate_settings_copy_preserves_max_substituted_sites():
+    limited = IterateJobSettings(max_substituted_sites=2)
+    unlimited = IterateJobSettings(max_substituted_sites=0)
+
+    assert limited.copy().max_substituted_sites == 2
+    assert unlimited.copy().max_substituted_sites is None
+
+
+def test_iterate_independent_max_substituted_sites_limits_current_group(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """A three-position slot is pruned to singles and doubles at K=2."""
+    unlimited_job = _build_job(
+        "combination_traversal.yaml",
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="independent",
+    )
+    limited_job = _build_job(
+        "combination_traversal.yaml",
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="independent",
+        max_substituted_sites=2,
+    )
+
+    _, unlimited, unlimited_errors, _ = (
+        iterate_jobrunner._generate_combinations(unlimited_job)
+    )
+    _, limited, limited_errors, _ = iterate_jobrunner._generate_combinations(
+        limited_job
+    )
+
+    assert unlimited_errors == []
+    assert limited_errors == []
+    assert len(unlimited) == 26
+    assert len(limited) == 18
+    assert Counter(len(combo.assignments) for combo in limited) == {
+        1: 6,
+        2: 12,
+    }
+    assert {_assignment_signature(combo) for combo in limited} == {
+        _assignment_signature(combo)
+        for combo in unlimited
+        if len(combo.assignments) <= 2
+    }
+
+
+def test_iterate_global_max_substituted_sites_spans_groups(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    config_path = _write_iterate_config(
+        tmp_path,
+        "three_group_global.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: tri
+    skeleton_indices: "1-6"
+    slots:
+      - group: 1
+        link_indices: 1
+      - group: 2
+        link_indices: 3
+      - group: 3
+        link_indices: 5
+substituents:
+  - file_path: "{methane}"
+    label: Me1
+    link_index: 1
+    groups: [1]
+  - file_path: "{methane}"
+    label: Me2
+    link_index: 1
+    groups: [2]
+  - file_path: "{methane}"
+    label: Me3
+    link_index: 1
+    groups: [3]
+""",
+    )
+    job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="global",
+        max_substituted_sites=2,
+    )
+
+    _, combinations, input_errors, _ = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+
+    assert input_errors == []
+    assert len(combinations) == 6
+    assert all(len(combo.assignments) <= 2 for combo in combinations)
+    assert any(
+        {assignment.skeleton_link_index for assignment in combo.assignments}
+        == {1, 3}
+        for combo in combinations
+    )
+
+
+def test_iterate_max_substituted_sites_is_per_skeleton(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    water = INPUT_DIR / "water.xyz"
+    config_path = _write_iterate_config(
+        tmp_path,
+        "multi_skeleton_limit.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: two_sites
+    skeleton_indices: "1-6"
+    slots:
+      - group: 1
+        link_indices: "1,3"
+  - file_path: "{benzene}"
+    label: three_sites
+    skeleton_indices: "1-6"
+    slots:
+      - group: 2
+        link_indices: "1,3,5"
+substituents:
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1]
+  - file_path: "{water}"
+    label: OH
+    link_index: 1
+    groups: [2]
+""",
+    )
+    unlimited_job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="global",
+    )
+    limited_job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="global",
+        max_substituted_sites=2,
+    )
+
+    _, unlimited, unlimited_errors, _ = (
+        iterate_jobrunner._generate_combinations(unlimited_job)
+    )
+    _, limited, limited_errors, _ = iterate_jobrunner._generate_combinations(
+        limited_job
+    )
+
+    assert unlimited_errors == []
+    assert limited_errors == []
+    assert Counter(combo.skeleton_label for combo in unlimited) == {
+        "two_sites": 3,
+        "three_sites": 7,
+    }
+    assert Counter(combo.skeleton_label for combo in limited) == {
+        "two_sites": 3,
+        "three_sites": 6,
+    }
+    assert all(len(combo.assignments) <= 2 for combo in limited)
+
+
+def test_iterate_shorthand_limit_preserves_per_site_expansion(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    water = INPUT_DIR / "water.xyz"
+    config_path = _write_iterate_config(
+        tmp_path,
+        "shorthand_limit.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: shorthand
+    skeleton_indices: "1-6"
+    link_index: "1,3,5"
+substituents:
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1]
+  - file_path: "{water}"
+    label: OH
+    link_index: 1
+    groups: [1]
+""",
+    )
+    job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="global",
+        max_substituted_sites=2,
+    )
+
+    _, combinations, input_errors, _ = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+
+    labels = {combo.label for combo in combinations}
+    assert input_errors == []
+    assert all(len(combo.assignments) == 1 for combo in combinations)
+    assert labels == {
+        "shorthand_1Me",
+        "shorthand_1OH",
+        "shorthand_3Me",
+        "shorthand_3OH",
+        "shorthand_5Me",
+        "shorthand_5OH",
+    }
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        pytest.param(
+            """\
+max_substituted_sites: 2
+skeletons: []
+substituents: []
+""",
+            "Unknown top-level key",
+            id="top-level",
+        ),
+        pytest.param(
+            """\
+algorithm:
+  name: etkdg
+  max_substituted_sites: 2
+skeletons: []
+substituents: []
+""",
+            "Unknown key(s) in 'algorithm' block",
+            id="algorithm",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: skel
+    link_index: 1
+    max_substituted_sites: 2
+substituents: []
+""",
+            "Unknown key(s) in skeleton entry",
+            id="skeleton",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: skel
+    link_index: 1
+substituents:
+  - file_path: sub.xyz
+    label: sub
+    link_index: 1
+    groups: [1]
+    max_substituted_sites: 2
+""",
+            "Unknown key(s) in substituent entry",
+            id="substituent",
+        ),
+    ],
+)
+def test_iterate_yaml_rejects_max_substituted_sites_key(
+    content: str,
+    message: str,
+    tmp_path: Path,
+):
+    config_path = tmp_path / "bad.yaml"
+
+    with pytest.raises(click.BadParameter) as exc_info:
+        validate_yaml_config(yaml.safe_load(content), str(config_path))
+
+    assert message in str(exc_info.value)
+    assert "max_substituted_sites" in str(exc_info.value)
+
+
 def test_iterate_independent_and_global_combination_modes(
     iterate_jobrunner,
     tmp_path: Path,
@@ -731,6 +1213,68 @@ def test_iterate_independent_and_global_combination_modes(
         "benzene_3OH",
         "benzene_1Me_3OH",
     }
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected_text"),
+    [
+        pytest.param(None, "Maximum substituted sites: unlimited", id="none"),
+        pytest.param(2, "Maximum substituted sites: 2", id="positive"),
+    ],
+)
+def test_iterate_report_renders_max_substituted_sites(
+    raw_value,
+    expected_text: str,
+):
+    text = _minimal_iterate_report(raw_value).render()
+
+    assert expected_text in text
+    assert "Normal termination of CHEMSMART Iterate" in text
+
+
+def test_iterate_error_report_renders_max_substituted_sites():
+    text = _minimal_iterate_report(2, error=True).render()
+
+    assert "Maximum substituted sites: 2" in text
+    assert ERROR_CODE_INTERNAL in text
+    assert "Error termination of CHEMSMART Iterate" in text
+
+
+@pytest.mark.parametrize(
+    ("report_value", "current_value", "expected"),
+    [
+        pytest.param("unlimited", None, True, id="unlimited-unset"),
+        pytest.param("unlimited", 2, False, id="unlimited-to-two"),
+        pytest.param("2", None, False, id="two-to-unlimited"),
+        pytest.param("2", 3, False, id="two-to-three"),
+        pytest.param("2", 2, True, id="two-to-two"),
+        pytest.param(None, None, True, id="legacy-unset"),
+        pytest.param(None, 2, False, id="legacy-to-two"),
+    ],
+)
+def test_iterate_skip_completed_compares_max_substituted_sites(
+    report_value: str | None,
+    current_value: int | None,
+    expected: bool,
+    tmp_path: Path,
+):
+    settings = IterateJobSettings(
+        config_file=str(tmp_path / "complete.yaml"),
+        max_substituted_sites=current_value,
+    )
+    job = IterateJob(settings=settings)
+    job.folder = str(tmp_path)
+
+    report_lines = ["CHEMSMART ITERATE JOB REPORT\n"]
+    if report_value is not None:
+        report_lines.append(f" Maximum substituted sites: {report_value}\n")
+    report_lines += [
+        " Structures written: 0\n",
+        " Normal termination of CHEMSMART Iterate at 2026-01-01 00:00:00.\n",
+    ]
+    Path(job.reportfile).write_text("".join(report_lines))
+
+    assert job.is_complete() is expected
 
 
 def test_iterate_cli_separate_outputs(tmp_path: Path):

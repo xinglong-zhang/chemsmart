@@ -190,6 +190,16 @@ class IterateJob(Job):
                 output_paths.append(match.group(1).strip())
         return output_paths
 
+    @classmethod
+    def _report_max_substituted_sites(cls, lines) -> Optional[int]:
+        value = cls._report_value(lines, "Maximum substituted sites")
+        if value is None:
+            return None
+        if value.lower() == "unlimited":
+            return None
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+
     def is_complete(self) -> bool:
         """Return whether a matching normal report and outputs exist."""
         try:
@@ -201,6 +211,11 @@ class IterateJob(Job):
             nonempty_lines = [line.strip() for line in lines if line.strip()]
             if not nonempty_lines or not nonempty_lines[-1].startswith(
                 "Normal termination of CHEMSMART Iterate"
+            ):
+                return False
+
+            if self._report_max_substituted_sites(lines) != getattr(
+                self.settings, "max_substituted_sites", None
             ):
                 return False
 
@@ -229,9 +244,7 @@ class IterateJob(Job):
             logger.debug(f"Could not inspect Iterate completion: {error}")
             return False
 
-    def run(
-        self, progress_callback=None
-    ) -> Optional["IterateRunSummary"]:
+    def run(self, progress_callback=None) -> Optional["IterateRunSummary"]:
         """
         Run the iterate job by delegating to IterateJobRunner.
 

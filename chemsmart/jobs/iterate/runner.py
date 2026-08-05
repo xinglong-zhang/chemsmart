@@ -1080,6 +1080,7 @@ class IterateJobRunner(JobRunner):
         substituent_list = job.settings.substituent_list or []
         algorithm_config = job.settings.algorithm_config
         combination_mode = job.settings.combination_mode
+        max_substituted_sites = job.settings.max_substituted_sites
 
         # --- Load substituents into pool ---
         valid_substituents: list[tuple[int, str, dict]] = []
@@ -1176,6 +1177,7 @@ class IterateJobRunner(JobRunner):
                         position_options,
                         algorithm_config,
                         combinations,
+                        max_substituted_sites,
                     )
                 else:
                     # independent: each slot group independently, union results
@@ -1190,6 +1192,7 @@ class IterateJobRunner(JobRunner):
                             position_options,
                             algorithm_config,
                             combinations,
+                            max_substituted_sites,
                         )
             else:
                 # --- No explicit slots: virtual single-position slots ---
@@ -1231,6 +1234,7 @@ class IterateJobRunner(JobRunner):
                         position_options,
                         algorithm_config,
                         combinations,
+                        max_substituted_sites,
                     )
 
         # Guard: combination labels must be unique so results are not
@@ -1314,6 +1318,7 @@ class IterateJobRunner(JobRunner):
         position_options: dict[int, list[IterateAssignment]],
         algorithm_config: IterateAlgorithmConfig,
         combinations: list[IterateCombination],
+        max_substituted_sites: Optional[int] = None,
     ) -> None:
         """Take the Cartesian product of position options and create combinations.
 
@@ -1331,6 +1336,9 @@ class IterateJobRunner(JobRunner):
             Resolved algorithm configuration for the generated combinations.
         combinations : list[IterateCombination]
             Output list to append to.
+        max_substituted_sites : int or None, optional
+            Maximum non-empty assignments per combination. ``None`` means
+            unlimited and preserves the historical Cartesian-product path.
         """
         if not position_options:
             logger.warning(
@@ -1344,9 +1352,21 @@ class IterateJobRunner(JobRunner):
         for pos in sorted_positions:
             per_position_choices.append([None] + position_options[pos])
 
+        if max_substituted_sites is not None and max_substituted_sites < len(
+            sorted_positions
+        ):
+            assignment_lists = self._bounded_assignment_products(
+                per_position_choices,
+                max_substituted_sites,
+            )
+        else:
+            assignment_lists = (
+                [a for a in combo if a is not None]
+                for combo in product(*per_position_choices)
+            )
+
         # Cartesian product across all positions
-        for combo in product(*per_position_choices):
-            assignments = [a for a in combo if a is not None]
+        for assignments in assignment_lists:
             if not assignments:
                 continue  # skip the all-empty case
 
@@ -1359,6 +1379,33 @@ class IterateJobRunner(JobRunner):
             )
             combinations.append(combination)
             logger.debug(f"Created combination: {combination.label}")
+
+    @staticmethod
+    def _bounded_assignment_products(
+        per_position_choices: list[list[Optional[IterateAssignment]]],
+        max_substituted_sites: int,
+    ):
+        """Yield assignment lists without exploring over-limit branches."""
+        assignments: list[IterateAssignment] = []
+
+        def visit(position_index: int, occupied_count: int):
+            if position_index == len(per_position_choices):
+                if assignments:
+                    yield list(assignments)
+                return
+
+            for choice in per_position_choices[position_index]:
+                if choice is None:
+                    yield from visit(position_index + 1, occupied_count)
+                elif occupied_count < max_substituted_sites:
+                    assignments.append(choice)
+                    yield from visit(
+                        position_index + 1,
+                        occupied_count + 1,
+                    )
+                    assignments.pop()
+
+        yield from visit(0, 0)
 
     def run(
         self,
@@ -1567,6 +1614,7 @@ class IterateJobRunner(JobRunner):
             algorithm_name=settings.algorithm_config.name,
             algorithm_options=dict(settings.algorithm_config.options),
             combination_mode=settings.combination_mode,
+            max_substituted_sites=settings.max_substituted_sites,
             nprocs=job.nprocs,
             timeout_seconds=job.timeout,
             output_mode=output_mode,
@@ -1619,6 +1667,7 @@ class IterateJobRunner(JobRunner):
             algorithm_name=settings.algorithm_config.name,
             algorithm_options=dict(settings.algorithm_config.options),
             combination_mode=settings.combination_mode,
+            max_substituted_sites=settings.max_substituted_sites,
             nprocs=job.nprocs,
             timeout_seconds=job.timeout,
             output_mode="separate" if job.separate_outputs else "merged",

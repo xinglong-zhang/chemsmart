@@ -77,6 +77,18 @@ Each of the two sites has three choices: keep the original branch, attach ``Me``
 choice is excluded, so this example generates ``3² - 1 = 8`` combinations: four single substitutions and four double
 substitutions.
 
+To cap the number of substituted sites in each generated combination, use the CLI-only
+``-ms/--max-substituted-sites`` option:
+
+.. code:: bash
+
+   chemsmart run iterate yaml -f config.yaml -ms 2
+   chemsmart run iterate yaml -f config.yaml --max-substituted-sites 2
+
+When this option is omitted, or when it is set to ``0``, Iterate uses the unlimited historical behavior. Positive
+integers enable the limit. The value belongs to the command line only; it is not supported in the YAML manifest or the
+YAML template.
+
 Skeleton entries
 ================
 
@@ -206,10 +218,24 @@ Suppose slot ``R1`` has candidates ``A`` and ``B``, and slot ``R2`` has candidat
    Combine all slots in one Cartesian product. This gives five structures: the three single substitutions plus
    ``R1=A/R2=C`` and ``R1=B/R2=C``.
 
+``-ms/--max-substituted-sites`` counts the non-empty assignments in each generated combination. In ``independent``
+mode the count is limited within the current independently expanded slot/group. In ``global`` mode the count is limited
+across all slots/groups participating in the current skeleton's combination, so with ``-ms 2`` the two assignments may
+come from one group or from two different groups. The limit is evaluated separately for each skeleton in the YAML file.
+
+.. code:: bash
+
+   chemsmart run iterate yaml -f config.yaml -ms 2 jlgo
+
 .. important::
 
    ``--combination-mode`` applies to explicit slots. It does not turn a multi-value ``link_index`` shorthand into
-   multi-site combinations.
+   multi-site combinations. ``-ms/--max-substituted-sites`` preserves the same shorthand behavior.
+
+.. note::
+
+   ``max_substituted_sites`` is intentionally not a YAML field. If it appears at the top level, in ``algorithm``, in a
+   skeleton entry or in a substituent entry, the existing unknown-key validation rejects the configuration.
 
 *********************
  Algorithm Selection

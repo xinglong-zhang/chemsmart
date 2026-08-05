@@ -85,10 +85,40 @@ These options belong to the ``yaml`` command and are **algorithm-agnostic**.
       -  Combination strategy for explicit skeleton slots: ``independent`` (default) or ``global``. This option does not
          change ``link_index`` shorthand expansion.
 
+   -  -  ``-ms, --max-substituted-sites``
+      -  int
+      -  Maximum number of substituted skeleton attachment sites allowed in one generated combination. When omitted, or
+         when set to ``0``, the limit is ``unlimited``. Only positive integers enable the limit. This is a CLI-only
+         runtime option and is not accepted in the YAML configuration file.
+
    -  -  ``-g, --generate-template``
       -  string
       -  Generate a template configuration file (in YAML format) and exit. Defaults to ``iterate_template.yaml`` if not
          specified.
+
+Maximum Substituted Sites
+=========================
+
+``-ms/--max-substituted-sites`` limits the number of non-empty skeleton-site assignments in each generated
+combination:
+
+.. code:: bash
+
+   chemsmart run iterate yaml -f config.yaml -ms 2
+   chemsmart run iterate yaml -f config.yaml --max-substituted-sites 2
+   chemsmart run iterate yaml -f config.yaml -ms 2 jlgo
+
+The default is unlimited. Passing ``-ms 0`` is also treated as unlimited; negative values, floats and non-numeric
+values are rejected as CLI usage errors before generation begins.
+
+In ``independent`` mode the limit applies to the current independently expanded slot/group. In ``global`` mode it
+applies to the total assignments in the current skeleton combination across all participating slots/groups. The limit is
+applied per skeleton and does not accumulate across different skeleton entries.
+
+The option does not change ``link_index`` shorthand behavior: multi-value ``link_index`` still expands one site at a
+time rather than becoming a multi-site Cartesian product. ``max_substituted_sites`` is not a YAML key; adding it to
+the top-level file, the ``algorithm`` block, a skeleton entry or a substituent entry is rejected by configuration
+validation.
 
 Output Options
 ==============

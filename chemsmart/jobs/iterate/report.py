@@ -181,6 +181,7 @@ class IterateReport:
     algorithm_name: str = ""
     algorithm_options: dict = field(default_factory=dict)
     combination_mode: str = ""
+    max_substituted_sites: Optional[int] = None
     nprocs: int = 1
     timeout_seconds: float = 0.0
     output_mode: str = "merged"
@@ -318,6 +319,8 @@ class IterateReport:
         lines += [
             f" Algorithm:               {self.algorithm_name}",
             f" Combination mode:        {self.combination_mode}",
+            f" Maximum substituted sites: "
+            f"{_format_max_substituted_sites(self.max_substituted_sites)}",
             "",
             " Algorithm options:",
             "",
@@ -561,6 +564,12 @@ def _format_sites(entry: dict) -> str:
         ]
         return "; ".join(parts)
     return _format_list(entry.get("link_index"))
+
+
+def _format_max_substituted_sites(value: Optional[int]) -> str:
+    if value is None:
+        return "unlimited"
+    return str(value)
 
 
 def _format_duration(seconds: Optional[float]) -> str:

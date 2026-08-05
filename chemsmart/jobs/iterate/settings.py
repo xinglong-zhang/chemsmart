@@ -144,6 +144,28 @@ def _validate_non_negative_int(value) -> None:
         raise ValueError("expected an integer >= 0")
 
 
+def normalize_max_substituted_sites(value) -> int | None:
+    """Normalize the runtime maximum substituted-site limit.
+
+    ``None`` and ``0`` mean unlimited. Positive integers are retained.
+    Negative values and non-integers, including ``bool``, are rejected.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            "max_substituted_sites must be None or a non-negative integer; "
+            "bool is not accepted."
+        )
+    if value < 0:
+        raise ValueError(
+            "max_substituted_sites must be None or a non-negative integer."
+        )
+    if value == 0:
+        return None
+    return value
+
+
 # RDKit stores the ETKDG random seed in a C++ 32-bit signed int; values
 # outside this range raise OverflowError when handed to RDKit.
 _RANDOM_SEED_MIN = -(2**31)
@@ -479,6 +501,7 @@ class IterateJobSettings:
         config_file=None,
         algorithm_config=None,
         combination_mode="independent",
+        max_substituted_sites=None,
     ):
         """
         Initialize iterate job settings.
@@ -498,6 +521,10 @@ class IterateJobSettings:
             independently, results are merged.
             'global': all groups merge into one pool of position
             options, then a single Cartesian product is taken.
+        max_substituted_sites : int or None, optional
+            Runtime maximum number of substituted skeleton sites per
+            combination. ``None`` and ``0`` mean unlimited; positive integers
+            enable the limit. This is not read from YAML configuration.
         """
         logger.debug("Initialized iterate job settings.")
 
@@ -514,6 +541,9 @@ class IterateJobSettings:
         self.skeleton_list: list[dict] = []
         self.substituent_list: list[dict] = []
         self.combination_mode = combination_mode
+        self.max_substituted_sites = normalize_max_substituted_sites(
+            max_substituted_sites
+        )
 
         # Funnel every construction path (default, YAML, CLI, direct Python)
         # through resolve_algorithm_config so the stored config always has a
