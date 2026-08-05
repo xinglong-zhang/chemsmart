@@ -87,7 +87,6 @@ from chemsmart.agent.execution import (
     build_program_result_validation_receipt,
     build_scientific_decision_record,
     build_validated_data_edge_binding,
-    derive_ready_node_ids,
     handoff_optimized_pyscf_geometry,
     promote_project_candidate,
 )
@@ -152,6 +151,7 @@ from chemsmart.agent.workflow_context import (
     workflow_context_enabled,
 )
 from chemsmart.agent.workflows import (
+    AGGREGATE_NODE_PROGRAM,
     ArtifactInputIntentV1,
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
@@ -1723,7 +1723,14 @@ class CommandCompiledToolHostV1:
                 unresolved_fields=tuple(
                     sorted(set(raw_node["unresolved_fields"]))
                 ),
+                node_kind=raw_node.get("node_kind", "program_call"),
             )
+            if node.node_kind == "aggregate":
+                # ChemSmart performs the arithmetic, so there is no program
+                # capability to check. The contract already restricted the
+                # stage, and the operations live in the expression itself.
+                nodes.append(node)
+                continue
             capability = declared_programs.get(node.program)
             if capability is None:
                 findings.append(
@@ -1877,7 +1884,12 @@ class CommandCompiledToolHostV1:
             )
             engine = engines[0] if len(engines) == 1 else "unresolved"
             unresolved = set(node.unresolved_fields)
-            if engine == "unresolved":
+            if node.node_kind == "aggregate":
+                # The host is the engine and it is always present, so this is
+                # resolved by construction rather than left for discovery.
+                engine = AGGREGATE_NODE_PROGRAM
+                unresolved.discard("engine")
+            elif engine == "unresolved":
                 unresolved.add("engine")
             requested_programs = {
                 binding.requested_program

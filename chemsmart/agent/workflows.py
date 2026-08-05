@@ -7,6 +7,7 @@ from typing import Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
+    canonical_data,
     canonical_sha256,
     require_identifier,
     require_sha256,
@@ -75,6 +76,25 @@ def _require_sorted_unique_in_node(
         )
 
 
+#: A DAG whose only node kind is "invoke a program" cannot express the stage
+#: that turns finished results into the number the question asked for.  Without
+#: the second kind, such an observable has no declared producer, so repairing a
+#: plan to clear its findings also removes the answer.
+WORKFLOW_NODE_KINDS = ("aggregate", "program_call")
+
+#: The engine of an aggregate node.  ChemSmart performs the arithmetic itself,
+#: so this is deliberately not a member of the executable program registry.
+AGGREGATE_NODE_PROGRAM = "chemsmart"
+
+#: The single stage name an aggregate node carries.  A post-processing step is
+#: generally a small DAG of operations -- a complete-basis-set limit is several
+#: -- so naming one operation here would misrepresent it.  The operations
+#: themselves live in the quantity-expression vocabulary, which stays the one
+#: source of truth; this node only declares that such a stage exists and what
+#: it produces.
+AGGREGATE_NODE_STAGE = "quantity_expression"
+
+
 @dataclass(frozen=True)
 class CommandNodeIntentV1:
     """Broad scientific command intent before execution-grade grounding."""
@@ -87,10 +107,16 @@ class CommandNodeIntentV1:
     inputs: tuple[ArtifactInputIntentV1, ...]
     expected_outputs: tuple[ArtifactOutputIntentV1, ...]
     unresolved_fields: tuple[str, ...]
+    #: ``program_call`` invokes a program; ``aggregate`` combines finished
+    #: results into the requested number.  Defaulted, and omitted from the
+    #: draft digest when default, so every already-recorded workflow keeps the
+    #: identity it has and stays replayable.
+    node_kind: str = "program_call"
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
         require_identifier(self.program, "program")
+        self._validate_node_kind()
         require_identifier(self.jobtype, "jobtype")
         _require_sorted_unique_in_node(
             self.dependencies, "dependencies", node_id=self.node_id
@@ -123,6 +149,43 @@ class CommandNodeIntentV1:
                     "as 'input.geometry'"
                 ) from exc
 
+    def _validate_node_kind(self) -> None:
+        if self.node_kind not in WORKFLOW_NODE_KINDS:
+            raise ContractError(
+                f"node {self.node_id!r} has node_kind {self.node_kind!r}; "
+                f"expected one of {sorted(WORKFLOW_NODE_KINDS)}"
+            )
+        if self.node_kind != "aggregate":
+            if self.program == AGGREGATE_NODE_PROGRAM:
+                raise ContractError(
+                    f"node {self.node_id!r} names program "
+                    f"{AGGREGATE_NODE_PROGRAM!r}, which is not an executable "
+                    "program; use node_kind 'aggregate' for a stage that "
+                    "combines finished results"
+                )
+            return
+        # An aggregation is host arithmetic over finished results: it runs no
+        # program, carries one canonical stage name, and must consume the
+        # results it combines.
+        if self.program != AGGREGATE_NODE_PROGRAM:
+            raise ContractError(
+                f"node {self.node_id!r} is an aggregate stage and runs no "
+                f"program; its program must be {AGGREGATE_NODE_PROGRAM!r}, "
+                f"not {self.program!r}"
+            )
+        if self.jobtype != AGGREGATE_NODE_STAGE:
+            raise ContractError(
+                f"node {self.node_id!r} is an aggregate stage; its jobtype "
+                f"must be {AGGREGATE_NODE_STAGE!r}, not {self.jobtype!r}. The "
+                "operations themselves belong to the quantity expression, not "
+                "to the DAG node"
+            )
+        if not self.inputs:
+            raise ContractError(
+                f"node {self.node_id!r} is an aggregate stage but consumes "
+                "nothing; it must declare the results it combines"
+            )
+
 
 @dataclass(frozen=True)
 class CommandWorkflowDraftV1:
@@ -148,7 +211,9 @@ class CommandWorkflowDraftV1:
             "schema_version": self.schema_version,
             "workflow_id": self.workflow_id,
             "task_spec_id": self.task_spec_id,
-            "nodes": self.nodes,
+            "nodes": tuple(
+                _draft_node_digest_body(node) for node in self.nodes
+            ),
             "status": self.status,
         }
         if self.draft_sha256 != canonical_sha256(body):
@@ -168,9 +233,22 @@ def build_command_workflow_draft(
         "nodes": nodes,
         "status": "planned",
     }
+    # ``node_kind`` joins the identity only when it is not the default, so a
+    # workflow of ordinary program calls keeps the digest it has always had.
+    digest_body = {
+        **body,
+        "nodes": tuple(_draft_node_digest_body(node) for node in nodes),
+    }
     return CommandWorkflowDraftV1(
-        **body, draft_sha256=canonical_sha256(body)
+        **body, draft_sha256=canonical_sha256(digest_body)
     )
+
+
+def _draft_node_digest_body(node: CommandNodeIntentV1) -> dict:
+    body = canonical_data(node)
+    if body.get("node_kind") == "program_call":
+        body.pop("node_kind")
+    return body
 
 
 def _validate_draft_dag(nodes: tuple[CommandNodeIntentV1, ...]) -> None:
