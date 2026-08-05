@@ -106,6 +106,40 @@ literal values, scale factors, power exponents and extrapolation exponents
 that actually reach it, attributed to the node that introduced them, following
 the DAG and bound into the receipt digest.
 
+## The paired arms
+
+Identical task, identical workspace, identical provider
+(`deepseek-fallback` / `deepseek-v4-flash`). Arm B differs only by the three
+repairs above. Hypotheses were written down before arm B was dispatched.
+
+| | arm A | arm B |
+|---|---|---|
+| terminal state | `planned` | `complete` |
+| tool calls (ok / rejected) | 40 / 2 | 29 / **0** |
+| provider turns | 14 | 10 |
+| input tokens | 829,712 | 435,932 |
+| output tokens | 46,443 | 28,864 |
+| reasoning tokens | 28,005 | 18,784 |
+| expression nodes for the limit | **15** | **1** |
+| operation used | hand-built closed form | `exponential_cbs_limit` |
+| model-authored constants in `e_hf_cbs` | scale factors 2 and −1 | none |
+| analysis nodes | 9 | 6 |
+
+The guard held: arm B's four project YAML documents are identical in
+scientific content to arm A's and to the sealed reference — `ab_initio: hf`,
+`basis: cc-pvXZ`, `freq: false`, `density_fit: false` — and both arms bound
+the same approved geometry digest `202250f8d1e9a7eb…`. The manipulation moved
+the post-processing route and nothing else.
+
+Honest limits on this pair. One run per arm, so this is an observation, not an
+effect size. Three commits differ rather than one, though only the operation
+vocabulary can plausibly change a plan. The token reduction is confounded with
+the shorter DAG and with two fewer rejection-and-retry cycles, so it should
+not be read as an independent efficiency claim. And arm B's calculation plan
+declares `required_observables: ['energy']` where arm A declared the four
+named energies — a small regression in the calculation half that the
+manipulation did not target and did not fix.
+
 ## What this case does not yet show
 
 - **No number has been graded.** `agent plan` does not execute. The numerical
