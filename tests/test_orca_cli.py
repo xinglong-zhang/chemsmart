@@ -571,6 +571,40 @@ class TestORCACpcmBlockOptions:
 
 
 class TestORCALabelAndAuxBasisOptions:
+    def test_default_label_appends_subcommand_once(
+        self, single_molecule_xyz_file
+    ):
+        from os.path import basename, splitext
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca as orca_cli
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        base = splitext(basename(single_molecule_xyz_file))[0]
+        assert mock.call_args.kwargs["label"] == f"{base}_opt"
+
     def test_short_a_sets_append_label(self, single_molecule_xyz_file):
         from os.path import basename, splitext
         from unittest.mock import MagicMock, patch
