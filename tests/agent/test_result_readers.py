@@ -22,6 +22,7 @@ from chemsmart.agent.analysis_nodes import (
     build_default_result_parser_registry,
 )
 from chemsmart.agent.postprocessing import extract_trusted_result_quantities
+from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
 from chemsmart.analysis.result_quantities import QuantitySelectorV1
 from chemsmart.analysis.result_readers import (
     RESULT_READERS,
@@ -63,6 +64,27 @@ def _extract(path, program, selector, quantity_id="q"):
 
 def test_the_log_parsing_programs_are_registered():
     assert registered_reader_programs() == ("gaussian", "orca", "xtb")
+
+
+def test_model_tool_surface_exposes_the_registered_result_plane():
+    surface = build_command_compiled_tool_surface()
+    tool = next(
+        item
+        for item in surface.tool_definitions
+        if item["function"]["name"] == "extract_result_quantities"
+    )
+    properties = tool["function"]["parameters"]["properties"]
+    assert properties["program"]["enum"] == [
+        "gaussian",
+        "orca",
+        "pyscf",
+        "xtb",
+    ]
+    selectors = properties["selectors"]["items"]["properties"]["selector"][
+        "enum"
+    ]
+    assert "excitation_energies" in selectors
+    assert "oscillator_strengths" in selectors
 
 
 @pytest.mark.parametrize("program", ("gaussian", "orca", "xtb"))

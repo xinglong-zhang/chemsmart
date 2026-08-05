@@ -35,6 +35,10 @@ BUILTIN_PROGRAM_PACKS = (
         advisory_topics=(
             "auxiliary basis evidence",
             "NEB endpoint requirements",
+            (
+                "frequency analysis is freq: true on an optimization project, "
+                "not a hess job"
+            ),
             "structured convergence checks",
         ),
         source_ids=("orca-manual-6.1",),

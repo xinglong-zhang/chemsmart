@@ -105,6 +105,48 @@ def test_nist_coordinate_ledger_builds_path_free_approved_identity(tmp_path):
     assert with_identity != without_identity
 
 
+def test_multiple_state_geometries_keep_distinct_approved_identities(tmp_path):
+    high_spin = tmp_path / "high-spin.xyz"
+    low_spin = tmp_path / "low-spin.xyz"
+    high_spin.write_text(
+        "3\nhigh-spin source frame\nFe 0 0 0\nO 0 0 2.1\nO 0 0 -2.1\n",
+        encoding="utf-8",
+    )
+    low_spin.write_text(
+        "3\nlow-spin source frame\nFe 0 0 0\nO 0 0 1.9\nO 0 0 -1.9\n",
+        encoding="utf-8",
+    )
+    observations = _scan_xyz_artifacts(tmp_path)
+    by_name = {Path(item.artifact.path).name: item for item in observations}
+    identities = tuple(
+        build_approved_molecular_identity(
+            identity_id=identity_id,
+            approved_names=(approved_name,),
+            geometry_sha256=by_name[filename].artifact.sha256,
+            coordinate_units="angstrom",
+            atom_order=("Fe", "O", "O"),
+            source_locator=f"supporting information {approved_name}",
+            source_record_sha256=canonical_sha256(
+                {"source": "supporting information", "state": approved_name}
+            ),
+        )
+        for identity_id, approved_name, filename in (
+            ("fe-aquo-high-spin", "high-spin state", "high-spin.xyz"),
+            ("fe-aquo-low-spin", "low-spin state", "low-spin.xyz"),
+        )
+    )
+
+    records = _validated_identity_records(observations, identities)
+    task_sha256 = _task_spec_sha256("compare spin states", observations, identities)
+
+    assert tuple(record["identity_id"] for record in records) == (
+        "fe-aquo-high-spin",
+        "fe-aquo-low-spin",
+    )
+    assert len({record["geometry_sha256"] for record in records}) == 2
+    assert len(task_sha256) == 64
+
+
 def _decision_message(*, evidence_refs: tuple[str, ...]) -> dict:
     result = {
         "assumptions": (

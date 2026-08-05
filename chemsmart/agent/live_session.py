@@ -583,6 +583,7 @@ def run_live_agent_session(
     experiment_repeat_index: int = 0,
     experiment_config: HarnessExperimentConfigV1 | None = None,
     approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    approved_molecular_identities: Iterable[ApprovedMolecularIdentityV1] = (),
     campaign_preparation_snapshot: (
         CampaignPreparationHostSnapshotV1 | None
     ) = None,
@@ -663,13 +664,16 @@ def run_live_agent_session(
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
     result_observations = _scan_pyscf_result_artifacts(workspace_path)
+    identities = _coerce_approved_identities(
+        approved_molecular_identity, approved_molecular_identities
+    )
     identity_records = _validated_identity_records(
-        observations, approved_molecular_identity
+        observations, identities
     )
     task_spec_sha256 = _task_spec_sha256(
         task,
         observations,
-        approved_molecular_identity,
+        identities,
         result_observations=result_observations,
     )
     analysis_completion_policy = (
@@ -705,11 +709,16 @@ def run_live_agent_session(
         )
 
     if campaign_preparation_snapshot is not None:
+        if len(identities) > 1:
+            raise ContractError(
+                "campaign host snapshots currently bind one molecular identity; "
+                "run multi-structure paper sessions without a reused snapshot"
+            )
         _validate_campaign_snapshot_reuse(
             snapshot=campaign_preparation_snapshot,
             selection=selection,
             observations=observations,
-            approved_molecular_identity=approved_molecular_identity,
+            approved_molecular_identity=(identities[0] if identities else None),
         )
         registry = campaign_preparation_snapshot.registry
         live_schema = campaign_preparation_snapshot.live_schema
@@ -784,13 +793,7 @@ def run_live_agent_session(
         "live_schema": live_schema,
         "task_spec_sha256s": (task_spec_sha256,),
         "approved_molecular_identities": (
-            {
-                approved_molecular_identity.identity_sha256: (
-                    approved_molecular_identity
-                )
-            }
-            if approved_molecular_identity is not None
-            else {}
+            {identity.identity_sha256: identity for identity in identities}
         ),
         # Preview candidates stay inside this session's private workspace.
         # The execution composition below replaces this with the exact
@@ -976,6 +979,7 @@ def run_live_agent_session(
         experiment_config=experiment_config,
         experiment_case=experiment_case,
         experiment_repeat_index=experiment_repeat_index,
+        dependency_context=dependency_context,
     )
     envelope = _task_envelope(
         session_id=session_id,
@@ -1732,58 +1736,121 @@ def _inspect_xyz(path: Path) -> tuple[int, tuple[str, ...]]:
 def _task_spec_sha256(
     task: str,
     observations: Iterable[_XyzObservation],
-    approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
+    approved_molecular_identity: (
+        ApprovedMolecularIdentityV1
+        | Iterable[ApprovedMolecularIdentityV1]
+        | None
+    ) = None,
     *,
     result_observations: Iterable[_PySCFResultObservation] = (),
 ) -> str:
-    return canonical_sha256(
-        {
-            "schema_version": "chemsmart.live-scientific-task.v1",
-            "task": task,
-            "coordinate_artifacts": tuple(
-                {
-                    "artifact_id": item.artifact.artifact_id,
-                    "sha256": item.artifact.sha256,
-                    "atom_count": item.atom_count,
-                    "symbols": item.symbols,
-                }
-                for item in observations
-            ),
-            "result_artifacts": tuple(
-                {
-                    "artifact_id": item.artifact.artifact_id,
-                    "sha256": item.artifact.sha256,
-                    "program": "pyscf",
-                    "jobtype": item.jobtype,
-                }
-                for item in result_observations
-            ),
-            "approved_molecular_identity_sha256": (
-                approved_molecular_identity.identity_sha256
-                if approved_molecular_identity is not None
-                else ""
-            ),
-        }
+    identities = _coerce_approved_identities(
+        approved_molecular_identity
+        if isinstance(approved_molecular_identity, ApprovedMolecularIdentityV1)
+        else None,
+        approved_molecular_identity
+        if approved_molecular_identity is not None
+        and not isinstance(approved_molecular_identity, ApprovedMolecularIdentityV1)
+        else (),
     )
+    body = {
+        "schema_version": "chemsmart.live-scientific-task.v1",
+        "task": task,
+        "coordinate_artifacts": tuple(
+            {
+                "artifact_id": item.artifact.artifact_id,
+                "sha256": item.artifact.sha256,
+                "atom_count": item.atom_count,
+                "symbols": item.symbols,
+            }
+            for item in observations
+        ),
+        "result_artifacts": tuple(
+            {
+                "artifact_id": item.artifact.artifact_id,
+                "sha256": item.artifact.sha256,
+                "program": "pyscf",
+                "jobtype": item.jobtype,
+            }
+            for item in result_observations
+        ),
+    }
+    if len(identities) <= 1:
+        # Preserve the existing single-identity task digest contract.
+        body["approved_molecular_identity_sha256"] = (
+            identities[0].identity_sha256 if identities else ""
+        )
+    else:
+        body["approved_molecular_identity_sha256s"] = tuple(
+            identity.identity_sha256 for identity in identities
+        )
+    return canonical_sha256(body)
+
+
+def _coerce_approved_identities(
+    single: ApprovedMolecularIdentityV1 | None,
+    multiple: Iterable[ApprovedMolecularIdentityV1],
+) -> tuple[ApprovedMolecularIdentityV1, ...]:
+    values = tuple(multiple)
+    if single is not None:
+        if values:
+            raise ContractError(
+                "use approved_molecular_identity or approved_molecular_identities, "
+                "not both"
+            )
+        values = (single,)
+    if any(not isinstance(item, ApprovedMolecularIdentityV1) for item in values):
+        raise ContractError("approved molecular identities must be typed records")
+    identity_ids = tuple(item.identity_id for item in values)
+    identity_sha256s = tuple(item.identity_sha256 for item in values)
+    if len(identity_ids) != len(set(identity_ids)) or len(identity_sha256s) != len(
+        set(identity_sha256s)
+    ):
+        raise ContractError("approved molecular identities must be unique")
+    return tuple(sorted(values, key=lambda item: item.identity_id))
 
 
 def _validated_identity_records(
     observations: tuple[_XyzObservation, ...],
-    identity: ApprovedMolecularIdentityV1 | None,
+    identity: (
+        ApprovedMolecularIdentityV1
+        | Iterable[ApprovedMolecularIdentityV1]
+        | None
+    ),
 ) -> tuple[dict[str, Any], ...]:
-    if identity is None:
-        return ()
-    if len(observations) != 1:
-        raise ContractError(
-            "approved molecular identity requires exactly one coordinate artifact"
-        )
-    observation = observations[0]
-    validate_identity_for_geometry(
-        identity,
-        geometry_sha256=observation.artifact.sha256,
-        atom_order=observation.symbols,
+    identities = _coerce_approved_identities(
+        identity if isinstance(identity, ApprovedMolecularIdentityV1) else None,
+        identity
+        if identity is not None
+        and not isinstance(identity, ApprovedMolecularIdentityV1)
+        else (),
     )
-    return (identity.public_record(),)
+    if not identities:
+        return ()
+    observations_by_sha256: dict[str, _XyzObservation] = {}
+    for observation in observations:
+        previous = observations_by_sha256.setdefault(
+            observation.artifact.sha256, observation
+        )
+        if previous.symbols != observation.symbols:
+            raise ContractError(
+                "identical coordinate bytes produced inconsistent atom-order records"
+            )
+    records = []
+    for approved in identities:
+        observation = observations_by_sha256.get(approved.geometry_sha256)
+        if observation is None:
+            raise ContractError(
+                f"approved molecular identity {approved.identity_id!r} has no "
+                "matching coordinate artifact"
+            )
+        validate_identity_for_geometry(
+            approved,
+            geometry_sha256=observation.artifact.sha256,
+            atom_order=observation.symbols,
+        )
+        records.append(approved.public_record())
+    return tuple(records)
 
 
 def _session_id(task_spec_sha256: str) -> str:
@@ -2691,9 +2758,11 @@ def _system_prompt(
         "choose or infer run versus scheduler submission. "
         "Explain method rationale, alternatives, uncertainty, and diagnostics in "
         "concise public "
-        "English. A molecular name is authorized only when public context contains "
-        "an approved_molecular_identity record. Use only one of its approved_names "
-        "and cite its exact evidence_ref in the scientific decision. File names, "
+        "English. A molecular or state-specific geometry name is authorized only "
+        "when public context contains its approved_molecular_identity record. "
+        "Use only one of that record's approved_names, bind it to the record's "
+        "exact geometry_sha256, and cite its evidence_ref in the scientific "
+        "decision. File names, "
         "XYZ comments, element lists, project settings, and preview artifacts do "
         "not establish molecular identity. An approved molecular identity never "
         "establishes charge or multiplicity. "
@@ -2813,6 +2882,7 @@ def _hypothesis(
     experiment_config: HarnessExperimentConfigV1 | None = None,
     experiment_case: QwenPyscfCaseSpecV1 | None = None,
     experiment_repeat_index: int = 0,
+    dependency_context: TaskDependencyContextV1 | None = None,
 ) -> AdaptiveHypothesisV1:
     if experiment_config is not None and experiment_case is not None:
         hypothesis_id = (
@@ -2837,6 +2907,22 @@ def _hypothesis(
         oracle_id = experiment_case.deterministic_oracle_id
         distinct = (
             "Unique preregistered case, D/F/C arm, and repetition tuple."
+        )
+    elif dependency_context is not None:
+        hypothesis_id = session_id
+        changed_factor = (
+            "task_dependency_context:" + dependency_context.mode
+        )
+        comparator_id = (
+            f"{dependency_context.workflow_id}:no-predecessor-baseline"
+        )
+        expected_outcome = (
+            "The selected predecessor projection preserves every producer "
+            "needed by the target while avoiding unrelated workflow branches."
+        )
+        oracle_id = "paper-workflow-dependency-context-v1"
+        distinct = (
+            "Unique paper task, dependency-context arm, and live session."
         )
     else:
         hypothesis_id = session_id
@@ -2872,6 +2958,11 @@ def _hypothesis(
                         if experiment_case is not None
                         else ()
                     ),
+                    *(
+                        (dependency_context.plan_sha256,)
+                        if dependency_context is not None
+                        else ()
+                    ),
                 }
             )
         ),
@@ -2885,6 +2976,11 @@ def _hypothesis(
                     "network_budget": network_budget,
                     "task_spec_sha256": task_spec_sha256,
                     "execution_requested": bool(execution_requested),
+                    "dependency_context_sha256": (
+                        dependency_context.context_sha256
+                        if dependency_context is not None
+                        else ""
+                    ),
                 }
             )
         ),

@@ -198,3 +198,95 @@ def test_the_expression_engine_exposes_the_exponential_limit():
     )
     assert receipt.outputs[0].value == pytest.approx(limit, abs=1e-10)
     assert receipt.outputs[0].unit == "hartree"
+
+
+def test_expression_engine_exposes_general_two_point_cbs_components():
+    from chemsmart.analysis.aggregation import (
+        extrapolate_correlation_inverse_power,
+        extrapolate_scf_exponential,
+    )
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionNodeV1,
+        QuantityExpressionRequestV1,
+        evaluate_quantity_expression,
+    )
+    from chemsmart.analysis.result_quantities import ENERGY, make_quantity_value
+
+    values = {
+        "scf_tz": -75.98,
+        "scf_qz": -76.01,
+        "corr_tz": -0.21,
+        "corr_qz": -0.24,
+    }
+    inputs = tuple(
+        make_quantity_value(
+            quantity_id=quantity_id,
+            source_value=value,
+            source_unit="hartree",
+            value=value,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=f"artifact:{quantity_id}#" + "0" * 64,
+        )
+        for quantity_id, value in values.items()
+    )
+    receipt = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="component.cbs",
+            inputs=inputs,
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="scf_cbs",
+                    operation="scf_exponential_cbs_limit",
+                    input_ids=("scf_tz", "scf_qz"),
+                    cardinal_numbers=(3, 4),
+                    extrapolation_exponent=3.9,
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="correlation_cbs",
+                    operation="correlation_inverse_power_cbs_limit",
+                    input_ids=("corr_tz", "corr_qz"),
+                    cardinal_numbers=(3, 4),
+                    extrapolation_exponent=3.0,
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="total_cbs",
+                    operation="add",
+                    input_ids=("scf_cbs", "correlation_cbs"),
+                ),
+            ),
+            output_node_ids=("scf_cbs", "correlation_cbs", "total_cbs"),
+        )
+    )
+
+    expected_scf = extrapolate_scf_exponential(
+        smaller_cardinal=3,
+        larger_cardinal=4,
+        smaller_scf_energy=values["scf_tz"],
+        larger_scf_energy=values["scf_qz"],
+        alpha=3.9,
+    )
+    expected_corr = extrapolate_correlation_inverse_power(
+        smaller_cardinal=3,
+        larger_cardinal=4,
+        smaller_correlation_energy=values["corr_tz"],
+        larger_correlation_energy=values["corr_qz"],
+        exponent=3.0,
+    )
+    outputs = {item.quantity_id: item.value for item in receipt.outputs}
+    assert outputs["scf_cbs"] == pytest.approx(expected_scf)
+    assert outputs["correlation_cbs"] == pytest.approx(expected_corr)
+    assert outputs["total_cbs"] == pytest.approx(expected_scf + expected_corr)
+
+
+def test_two_point_cbs_contract_rejects_hidden_default_exponents():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionNodeV1
+    from chemsmart.analysis.result_quantities import QuantityContractError
+
+    with pytest.raises(QuantityContractError, match="positive explicit exponent"):
+        QuantityExpressionNodeV1(
+            node_id="cbs",
+            operation="correlation_inverse_power_cbs_limit",
+            cardinal_numbers=(3, 4),
+        )

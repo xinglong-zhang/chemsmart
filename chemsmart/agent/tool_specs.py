@@ -10,6 +10,8 @@ from chemsmart.agent.capabilities import (
     ProgramCapabilityRegistryV1,
     load_program_capabilities,
 )
+from chemsmart.analysis.result_quantities import SUPPORTED_SELECTORS
+from chemsmart.analysis.result_readers import registered_reader_programs
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,20 @@ def build_command_compiled_tool_surface(
     registry = registry or load_program_capabilities()
     programs = [item.program for item in registry.programs]
     program = {"type": "string", "enum": programs}
-    structured_result_program = {"type": "string", "enum": ["pyscf"]}
+    result_programs = tuple(sorted({"pyscf", *registered_reader_programs()}))
+    structured_result_program = {
+        "type": "string",
+        "enum": list(result_programs),
+    }
+    result_selector = {
+        "type": "string",
+        "enum": sorted(SUPPORTED_SELECTORS),
+        "description": (
+            "Program-neutral semantic selector. Support is resolved by the "
+            "registered parser for the bound program artifact; a selector that "
+            "the program or result does not provide remains explicitly blocked."
+        ),
+    }
     digest = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
     tools = (
         _tool(
@@ -389,23 +404,7 @@ def build_command_compiled_tool_surface(
                         "type": "object",
                         "properties": {
                             "quantity_id": _public_identifier(),
-                            "selector": {
-                                "type": "string",
-                                "enum": [
-                                    "energy",
-                                    "energies",
-                                    "positions",
-                                    "symbols",
-                                    "vibrational_frequencies",
-                                    "homo",
-                                    "lumo",
-                                    "gap",
-                                    "charge",
-                                    "multiplicity",
-                                    "method",
-                                    "basis",
-                                ],
-                            },
+                            "selector": result_selector,
                         },
                         "required": ["quantity_id", "selector"],
                         "additionalProperties": False,
@@ -597,7 +596,16 @@ def _workflow_node_schema() -> dict:
         "properties": {
             "node_id": _string(),
             "program": _string(),
-            "jobtype": _string(),
+            "jobtype": {
+                "type": "string",
+                "description": (
+                    "Use the target program's ChemSmart CLI job form, not a "
+                    "program-neutral conceptual label. In particular, ORCA "
+                    "harmonic frequencies are requested by freq: true in an "
+                    "opt project and remain one opt node; ORCA has no hess CLI "
+                    "jobtype. PySCF uses a separate hess node."
+                ),
+            },
             "project_role": _string(),
             "dependencies": {"type": "array", "items": _string()},
             "inputs": {
@@ -816,6 +824,8 @@ def _quantity_expression_node_schema() -> dict:
                     "linear_fit_slope",
                     "linear_fit_intercept",
                     "exponential_cbs_limit",
+                    "scf_exponential_cbs_limit",
+                    "correlation_inverse_power_cbs_limit",
                     "photon_wavelength",
                 ],
             },
@@ -861,6 +871,24 @@ def _quantity_expression_node_schema() -> dict:
             "literal_unit": _string(),
             "scale_factor": {"type": "number"},
             "target_unit": _string(),
+            "cardinal_numbers": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 2},
+                "minItems": 2,
+                "maxItems": 2,
+                "description": (
+                    "Increasing lower/higher basis cardinal numbers for a "
+                    "two-point CBS operation."
+                ),
+            },
+            "extrapolation_exponent": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": (
+                    "Method/protocol-derived positive exponent for a two-point "
+                    "SCF exponential or correlation inverse-power CBS limit."
+                ),
+            },
         },
         "required": ["node_id", "operation"],
         "additionalProperties": False,

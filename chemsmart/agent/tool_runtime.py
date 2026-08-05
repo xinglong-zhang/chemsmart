@@ -4505,6 +4505,14 @@ class CommandCompiledToolHostV1:
                     else None
                 ),
                 target_unit=str(item.get("target_unit", "")),
+                cardinal_numbers=tuple(
+                    int(value) for value in item.get("cardinal_numbers", ())
+                ),
+                extrapolation_exponent=(
+                    float(item["extrapolation_exponent"])
+                    if "extrapolation_exponent" in item
+                    else None
+                ),
             )
             for item in values["nodes"]
         )
