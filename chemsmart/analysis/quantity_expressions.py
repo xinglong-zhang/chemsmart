@@ -69,6 +69,8 @@ _OPERATIONS = frozenset(
         "scf_exponential_cbs_limit",
         "correlation_inverse_power_cbs_limit",
         "photon_wavelength",
+        "boltzmann_populations",
+        "boltzmann_average",
     }
 )
 
@@ -122,6 +124,16 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "energies, not total energies"
     ),
     "photon_wavelength": "wavelength of a positive excitation energy",
+    "boltzmann_populations": (
+        "normalized Boltzmann populations of a set of states. Takes the state "
+        "energies and a temperature, in that order, and owns the weighting, "
+        "the gas constant and the unit handling. Do not rebuild it from exp, "
+        "divide and sum"
+    ),
+    "boltzmann_average": (
+        "Boltzmann-weighted average of a property. Takes the per-state values, "
+        "the state energies and a temperature, in that order"
+    ),
 }
 
 if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
@@ -138,6 +150,8 @@ if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
 CONVENTION_OPERATIONS = frozenset(
     {
         "angle",
+        "boltzmann_average",
+        "boltzmann_populations",
         "correlation_inverse_power_cbs_limit",
         "distance",
         "exponential_cbs_limit",
@@ -1182,6 +1196,84 @@ def _node_value(
             source_unit=unit,
             value=payload,
             unit=unit,
+            dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation in {"boltzmann_populations", "boltzmann_average"}:
+        # ChemSmart owns this weighting.  Left unexposed, a paper reporting
+        # conformer populations forces a model to rebuild exp(-dG/RT)/sum from
+        # exp, divide and sum, with R, T and the unit conversion entering as
+        # constants it chose -- the same failure the basis-set limit showed.
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            boltzmann_average,
+            boltzmann_populations,
+        )
+
+        wants_values = operation == "boltzmann_average"
+        expected = 3 if wants_values else 2
+        if len(inputs) != expected:
+            raise QuantityExpressionError(
+                f"{operation} requires "
+                + (
+                    "the values, their state energies, and a temperature"
+                    if wants_values
+                    else "the state energies and a temperature"
+                )
+                + f"; got {len(inputs)} inputs"
+            )
+        temperature_value = inputs[-1]
+        if temperature_value.dimension != TEMPERATURE:
+            raise QuantityExpressionError(
+                f"the last input to {operation} must be a temperature"
+            )
+        temperature = float(_numeric(temperature_value))
+        energies = _numeric(inputs[expected - 2]).reshape(-1)
+        if inputs[expected - 2].dimension != ENERGY:
+            raise QuantityExpressionError(
+                f"{operation} weights states by energy"
+            )
+        try:
+            populations = boltzmann_populations(
+                tuple(float(item) for item in energies),
+                temperature=temperature,
+                unit="hartree",
+            )
+            if not wants_values:
+                payload = _payload(np.asarray(populations, dtype=float))
+                return make_quantity_value(
+                    quantity_id=node.node_id,
+                    source_value=payload,
+                    source_unit="1",
+                    value=payload,
+                    unit="1",
+                    dimension=DIMENSIONLESS,
+                    evidence_ref=evidence_ref,
+                )
+            values = _numeric(inputs[0]).reshape(-1)
+            if values.size != energies.size:
+                raise QuantityExpressionError(
+                    f"{operation} needs one value per state; got "
+                    f"{values.size} values and {energies.size} energies"
+                )
+            payload = _payload(
+                boltzmann_average(
+                    tuple(float(item) for item in values),
+                    tuple(float(item) for item in energies),
+                    temperature=temperature,
+                    unit="hartree",
+                )
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        dimension = inputs[0].dimension
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=canonical_unit_for_dimension(dimension),
+            value=payload,
+            unit=canonical_unit_for_dimension(dimension),
             dimension=dimension,
             evidence_ref=evidence_ref,
         )
