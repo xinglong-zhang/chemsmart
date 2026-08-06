@@ -313,3 +313,54 @@ repaired; the cause is not the wording.
 
 204 provider turns, 12.8 M input tokens, 379 k output, 241 k reasoning across
 eight live sessions. No rate-limit or quota error was returned at any point.
+
+# W6: continuum solvation, and the failure that took three attempts
+
+W6 asked for the electrostatic solvation energy of methanol in a CPCM water
+continuum at B3LYP/6-31+G(d), fixed geometry. Sealed first from ChemSmart's own
+two single points: **−5.694 kcal/mol** (experiment −5.1).
+
+The declared solvent surface — a six-member `solvent_model` domain and the gate
+that refuses a model without an explicit `solvent_id` — had never been touched
+by a live run. It worked. The model authored
+
+    solv:
+      basis: 6-31+G(d)
+      functional: b3lyp
+      solvent_id: water
+      solvent_model: cpcm
+
+which is the sealed reference field for field, and put the gas-phase leg in its
+own section. Its `delta-g-solv` node is `{subtract: 1, convert: 1}` — continuum
+minus gas in kcal/mol, the right sign convention — plus a validation node it
+was not asked for.
+
+## The premature-tool-call failure, resolved on the third attempt
+
+Across six sessions the model called a tool whose precondition could not yet be
+satisfied: `repair_command` with no counterexample bound, four times, and
+`assess_program_candidate` with no claim evidence bound.
+
+- **Attempt 1** — describe the argument. Failed; the next session did it again.
+- **Attempt 2** — state the precondition in that tool's own description.
+  Failed; W6 arm A then did it with a *different* tool.
+- **Attempt 3** — stop treating it as a property of one tool. Six tools take an
+  argument indexing a host registry that only something else can fill. The
+  precondition is now derived for all six from the same producers table the
+  rejection path uses, so the sentence before the call and the message after it
+  cannot drift.
+
+| W6 | arm A | arm B |
+|---|---|---|
+| rejections | 3 | **1** |
+| premature-tool calls | 1 (`assess_program_candidate`) | **0** |
+| provider turns | 41 | 30 |
+| input tokens | 2,840,881 | 2,132,637 |
+
+The single arm-B rejection is a content issue in `plan_scientific_workflow`,
+not a precondition violation.
+
+The lesson is about method, not about this tool. The first two attempts were
+aimed at the instance that happened to be visible. Only the third asked what
+class the instance belonged to, and it is the only one that moved the
+behaviour — on one paired run, which is an observation, not an effect size.
