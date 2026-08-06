@@ -151,3 +151,56 @@ manipulation did not target and did not fix.
   campaign has never closed a numerical case, and it is not fixed here.
 - **One run per arm.** The paired arms below are observations, not effect
   sizes.
+
+# W2: does the general repair transfer to a different paper?
+
+W1 could have been repaired locally — teach the harness the one operation that
+case happened to need. The test of whether the repair is general is a second
+case that shares none of W1's specifics.
+
+| | W1 | W2 |
+|---|---|---|
+| observable | basis-set-limit energy | equilibrium mole fractions |
+| DAG shape | 4 siblings → 1 fan-in | 2 optimizations + frequencies → fan-in |
+| convention needed | `exponential_cbs_limit` | `boltzmann_populations` |
+| method | HF, cc-pVXZ series | B3LYP/6-31G(d), thermochemistry |
+| physical input the model must supply | none | the gauche degeneracy of 2 |
+| program the model chose | PySCF | **ORCA** |
+
+The answer key was sealed before dispatch from ChemSmart's own two-stage
+PySCF runs: ΔG(gauche−anti) = 0.906 kcal/mol, x(anti) = 0.697,
+x(gauche) = 0.303, zero imaginary frequencies at both minima.
+
+## What preparing W2 already showed
+
+**The next instance of the same class, found before the model ran.**
+Enumerating the analysis layer for W1 exposed that Boltzmann weighting was
+owned but unreachable. Preparing W2 exposed that even once reachable, it could
+not express state degeneracy — and n-butane's two gauche forms are
+enantiomers. Weighting gauche as one state gives 82% anti; weighting it as two
+gives 70%, against a measured ~68%. The multiplicity is not a refinement, it
+is the difference between right and wrong. `boltzmann_populations` now takes
+optional per-state degeneracies, so ChemSmart owns the formula and the
+protocol supplies the physical numbers.
+
+**A preregistration error of mine, corrected by the model.** T3 predicted the
+model would plan `opt` then a separate `hess` consuming the optimized
+geometry. That is PySCF's canonical shape. The model chose ORCA and wrote one
+`opt` project with `freq: true` — which is the *ORCA-correct* form, and
+exactly what codex's earlier report identified as the right program-relative
+answer. My hypothesis was program-blind; the model was not.
+
+This also means the sealed key is program-specific. A key computed in PySCF
+cannot grade an ORCA route without absorbing the B3LYP variant and grid
+differences between the two programs, so a matched ORCA reference is being
+computed rather than stretching the tolerance to hide the gap.
+
+**Two more general rejection defects.** A `repair_command` call was rejected
+twice, identically, with `no counterexample is bound yet`. The message stated
+the problem and left nothing to do — listing bound IDs, the earlier repair,
+helps only when the registry is non-empty, which is the case where the caller
+is already closest to right. Every host registry now declares what fills it,
+and the hint appears only when the registry is empty. By contrast the
+`promote_project_yaml` collisions were already actionable — they named the
+taken ID and listed what was in use — and the model recovered from both
+without help.
