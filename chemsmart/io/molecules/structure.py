@@ -2608,13 +2608,15 @@ class Molecule:
     ):
         """Compute SOAP descriptors from this molecule's geometry.
 
-        Requires the optional DScribe dependency (``pip install
-        'chemsmart[soap]'``). Only finite (non-periodic) molecules are
-        supported; active PBC flags and non-empty translation vectors
-        are rejected.
+        Uses the built-in NumPy/SciPy SOAP implementation (numerically
+        matching DScribe 2.1.2 GTO SOAP). Only finite (non-periodic)
+        molecules are supported; active PBC flags and non-empty translation
+        vectors are rejected.
 
         Args:
             r_cut (float): Cutoff radius in Å. Must be greater than 1 Å.
+                Matching DScribe 2.1.2, neighbors within
+                ``r_cut + sigma * sqrt(-2 * ln(1e-3))`` also contribute.
                 Default ``6.0``.
             n_max (int): Number of radial basis functions. Default ``8``.
             l_max (int): Maximum angular momentum. Default ``6``.
@@ -2623,7 +2625,8 @@ class Molecule:
             species (sequence of str, optional): Explicit SOAP species
                 basis. When omitted, a sorted unique list of this
                 molecule's elements is used. Pass a shared list for
-                comparable features across a dataset.
+                comparable features across a dataset. Channel order is
+                by atomic number (not list order).
             centers (sequence of int, optional): 1-based atom indices on
                 which to evaluate SOAP. When omitted, all atoms are used.
                 Order is preserved; duplicates overweight aggregations.
@@ -2636,7 +2639,6 @@ class Molecule:
             numpy.ndarray: Dense ``float64`` SOAP feature array.
 
         Raises:
-            ImportError: If DScribe is not installed.
             ValueError: For invalid inputs, active PBC, or translation
                 vectors.
         """

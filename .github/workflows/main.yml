@@ -336,13 +336,12 @@ jobs:
           conda-solver: libmamba
           channel-priority: strict
 
-      - name: Install project with SOAP extra
+      - name: Install project with test extra
         if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[test,soap]
-          python -c "from dscribe.descriptors import SOAP; print('DScribe import OK')"
+          pip install -e .[test]
 
       - name: Run SOAP tests with coverage
         if: steps.changed-files.outputs.only_changed != 'true'

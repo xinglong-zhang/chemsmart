@@ -1,8 +1,11 @@
 """SOAP descriptor calculations from molecular geometry.
 
 Smooth Overlap of Atomic Positions (SOAP) descriptors are computed from
-nuclear coordinates and elemental species via the optional DScribe package.
-No bonding / connectivity information is required.
+nuclear coordinates and elemental species using a built-in NumPy/SciPy
+implementation. No bonding / connectivity information is required.
+
+The GTO SOAP formulation matches DScribe 2.1.2 with ``rbf="gto"``,
+``average="off"``, and default ``compression="off"``.
 
 Standard geometric SOAP does **not** encode charge, spin multiplicity,
 oxidation state, electronic configuration, or molecular chirality.
@@ -14,26 +17,24 @@ import logging
 from typing import Sequence
 
 import numpy as np
+from scipy.linalg import sqrtm
+from scipy.special import factorial, gamma, lpmv
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.periodictable import PeriodicTable
 
 logger = logging.getLogger(__name__)
 
 _VALID_AGGREGATIONS = frozenset({None, "mean", "sum"})
-# DScribe's default GTO radial basis requires r_cut > 1 Å.
+# GTO radial basis requires r_cut > 1 Å (same constraint as DScribe).
 _MIN_RCUT_ANGSTROM = 1.0
-
-
-def _require_dscribe():
-    """Import DScribe lazily and raise a clear error if missing."""
-    try:
-        from dscribe.descriptors import SOAP
-    except ImportError as exc:  # pragma: no cover - exercised via mock
-        raise ImportError(
-            "SOAP calculations require DScribe. "
-            "Install it with: pip install 'chemsmart[soap]'"
-        ) from exc
-    return SOAP
+_GTO_DECAY_THRESHOLD = 1e-3
+# Per-l angular prefactors in DScribe's analytic GTO integral (soapGTO.cpp).
+_RADIAL_ANGULAR_SCALE = {
+    0: np.pi / 2.0,
+    1: np.pi * np.sqrt(3.0) / 2.0,
+}
+_PERIODIC_TABLE = PeriodicTable()
 
 
 def _has_active_pbc(molecule: Molecule) -> bool:
@@ -68,14 +69,17 @@ def _normalize_species(species: Sequence[str] | None, symbols: list[str]):
     """Return the SOAP elemental species basis.
 
     When *species* is ``None``, returns a sorted unique list inferred from
-    *symbols*. When *species* is provided, returns that list unchanged
-    (order and duplicates preserved) after verifying it covers all atoms.
+    *symbols*. When *species* is provided, returns that list after verifying
+    each entry is a recognized element and that the list covers all atoms.
+    Downstream channel indexing deduplicates by atomic number (DScribe
+    convention); user list order does not control feature layout.
     """
     if species is None:
         return sorted(set(symbols))
     if len(species) == 0:
         raise ValueError("species must be a non-empty sequence of symbols.")
     normalized = [str(s) for s in species]
+    _validate_symbols(normalized)
     missing = sorted(set(symbols) - set(normalized))
     if missing:
         raise ValueError(
@@ -88,7 +92,7 @@ def _normalize_species(species: Sequence[str] | None, symbols: list[str]):
 def _normalize_centers(
     centers: Sequence[int] | None, num_atoms: int
 ) -> list[int] | None:
-    """Convert optional 1-based center indices to 0-based DScribe indices."""
+    """Convert optional 1-based center indices to 0-based center indices."""
     if centers is None:
         return None
     if len(centers) == 0:
@@ -114,11 +118,11 @@ def _normalize_centers(
 def _validate_hyperparameters(
     r_cut: float, n_max: int, l_max: int, sigma: float
 ) -> None:
-    """Validate SOAP hyperparameters for DScribe's default GTO basis."""
+    """Validate SOAP hyperparameters for the default GTO basis."""
     if not np.isfinite(r_cut) or r_cut <= _MIN_RCUT_ANGSTROM:
         raise ValueError(
             f"r_cut must be a finite number greater than "
-            f"{_MIN_RCUT_ANGSTROM} Å (DScribe GTO basis requirement); "
+            f"{_MIN_RCUT_ANGSTROM} Å (GTO basis requirement); "
             f"got {r_cut}."
         )
     if isinstance(n_max, bool) or not isinstance(n_max, (int, np.integer)):
@@ -163,6 +167,242 @@ def _live_symbols(molecule: Molecule) -> list[str]:
     return [str(s) for s in list(molecule.symbols)]
 
 
+def _validate_symbols(symbols: Sequence[str]) -> None:
+    """Raise if any symbol is not a standard element in the periodic table."""
+    for symbol in symbols:
+        if symbol not in _PERIODIC_TABLE.PERIODIC_TABLE:
+            raise ValueError(
+                f"Unrecognized elemental symbol for ASE/SOAP: {symbol!r}. "
+                "Use standard chemical element symbols (e.g. 'H' not 'D')."
+            )
+
+
+def _dscribe_species_index_map(species_list: Sequence[str]) -> dict[str, int]:
+    """Map element symbols to SOAP channel indices (DScribe atomic-number order).
+
+    DScribe's ``get_atomic_numbers`` deduplicates and sorts by atomic number,
+    not by the order symbols appear in the user-supplied species list.
+    """
+    atomic_numbers = sorted(
+        {_PERIODIC_TABLE.to_atomic_number(sym) for sym in species_list}
+    )
+    return {
+        _PERIODIC_TABLE.to_symbol(Z): idx
+        for idx, Z in enumerate(atomic_numbers)
+    }
+
+
+def _gto_basis(
+    r_cut: float, n_max: int, l_max: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return GTO radial ``alphas`` and Löwdin ``betas`` (DScribe convention)."""
+    a = np.linspace(1.0, float(r_cut), int(n_max))
+    alphas_full = np.zeros((l_max + 1, n_max), dtype=np.float64)
+    betas_full = np.zeros((l_max + 1, n_max, n_max), dtype=np.float64)
+
+    for ang_l in range(l_max + 1):
+        alphas = -np.log(_GTO_DECAY_THRESHOLD / np.power(a, ang_l)) / a**2
+        m = alphas[:, None] + alphas[None, :]
+        overlap = 0.5 * gamma(ang_l + 1.5) * m ** (-(ang_l + 1.5))
+        betas = sqrtm(np.linalg.inv(overlap))
+        if np.iscomplexobj(betas):
+            raise ValueError(
+                "Could not calculate normalization factors for the radial "
+                "basis in the domain of real numbers. Lowering the number of "
+                "radial basis functions (n_max) or increasing the radial "
+                "cutoff (r_cut) is advised."
+            )
+        alphas_full[ang_l, :] = alphas
+        betas_full[ang_l, :, :] = np.real(betas)
+
+    return alphas_full, betas_full
+
+
+def _solid_harmonics_polynomial(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray, l_max: int
+) -> np.ndarray:
+    """Real solid harmonics ``R_l^m(x, y, z)`` for ``l >= 2``.
+
+    Returns an array of shape ``(n_points, (l_max + 1) ** 2)``. Entries for
+    ``l < 2`` are left zero; callers handle ``l = 0`` and ``l = 1`` directly.
+    """
+    n_pts = x.shape[0]
+    n_harm = (l_max + 1) ** 2
+    result = np.zeros((n_pts, n_harm), dtype=np.float64)
+    if l_max < 2 or n_pts == 0:
+        return result
+
+    r2 = x * x + y * y + z * z
+    r = np.sqrt(r2)
+    safe_r = np.where(r > 0.0, r, 1.0)
+    cos_theta = np.where(r > 0.0, z / safe_r, 0.0)
+    phi = np.arctan2(y, x)
+
+    for ang_l in range(2, l_max + 1):
+        rl = np.power(r, ang_l)
+        for im, m in enumerate(range(-ang_l, ang_l + 1)):
+            idx = ang_l * ang_l + im
+            abs_m = abs(m)
+            norm = np.sqrt(
+                (2 * ang_l + 1)
+                / (4.0 * np.pi)
+                * factorial(ang_l - abs_m, exact=True)
+                / factorial(ang_l + abs_m, exact=True)
+            )
+            plm = lpmv(abs_m, ang_l, cos_theta)
+            if m < 0:
+                trig = np.sin(abs_m * phi)
+            elif m > 0:
+                trig = np.cos(m * phi)
+            else:
+                trig = 1.0
+            if m != 0:
+                trig *= np.sqrt(2.0)
+            result[:, idx] = rl * norm * plm * trig
+
+    return result
+
+
+def _power_spectrum_prefactor(ang_l: int) -> float:
+    """Wigner-D normalization prefactor used by DScribe's ``getPD``."""
+    base = np.pi * np.sqrt(8.0 / (2 * ang_l + 1))
+    if ang_l > 1:
+        return base * np.pi**3
+    return base
+
+
+def _power_spectrum(
+    cnnd: np.ndarray, n_species: int, n_max: int, l_max: int
+) -> np.ndarray:
+    """Flatten SOAP power spectrum in DScribe ``compression='off'`` layout."""
+    n_features = (
+        (n_species * n_max) * (n_species * n_max + 1) // 2 * (l_max + 1)
+    )
+    features = np.zeros(n_features, dtype=np.float64)
+    shift = 0
+    for j in range(n_species):
+        for jd in range(j, n_species):
+            for ang_l in range(l_max + 1):
+                prel = _power_spectrum_prefactor(ang_l)
+                m_start = ang_l * ang_l
+                m_end = (ang_l + 1) ** 2
+                # (n_max, 2l+1) @ (n_max, 2l+1).T -> (n_max, n_max) dots
+                dots = cnnd[j, :, m_start:m_end] @ cnnd[jd, :, m_start:m_end].T
+                if j == jd:
+                    # Upper triangle including diagonal, row-major (k, kd>=k)
+                    for k in range(n_max):
+                        for kd in range(k, n_max):
+                            features[shift] = prel * dots[k, kd]
+                            shift += 1
+                else:
+                    features[shift : shift + n_max * n_max] = (
+                        prel * dots.ravel()
+                    )
+                    shift += n_max * n_max
+    return features
+
+
+def _soap_gto_features(
+    positions: np.ndarray,
+    species_indices: np.ndarray,
+    *,
+    n_species: int,
+    r_cut: float,
+    n_max: int,
+    l_max: int,
+    sigma: float,
+    center_indices: Sequence[int],
+) -> np.ndarray:
+    """Compute per-center SOAP vectors (DScribe 2.1.2 GTO parity)."""
+    n_centers = len(center_indices)
+    n_features = (
+        (n_species * n_max) * (n_species * n_max + 1) // 2 * (l_max + 1)
+    )
+    result = np.zeros((n_centers, n_features), dtype=np.float64)
+
+    alphas, betas = _gto_basis(r_cut, n_max, l_max)
+    two_sigma_sq = 2.0 * sigma**2
+    inv_eta = 2.0 * sigma**2
+    inv_eta_3_2 = np.sqrt(inv_eta**3)
+
+    a_oa = np.zeros((l_max + 1, n_max), dtype=np.float64)
+    b_oa = np.zeros((l_max + 1, n_max, n_max), dtype=np.float64)
+    for ang_l in range(l_max + 1):
+        for k in range(n_max):
+            one_over = 1.0 / (1.0 + two_sigma_sq * alphas[ang_l, k])
+            a_oa[ang_l, k] = -alphas[ang_l, k] * one_over
+            scale = np.sqrt(one_over) * (one_over ** (ang_l + 1))
+            b_oa[ang_l, :, k] = inv_eta_3_2 * betas[ang_l, :, k] * scale
+
+    # DScribe 2.1.2 includes neighbors out to r_cut + cutoff_padding, where
+    # cutoff_padding = sigma * sqrt(-2 ln threshold). Analytic GTO integrals
+    # have no hard r_cut filter; the padded neighbor list is the cutoff.
+    cutoff_padding = float(sigma) * np.sqrt(
+        -2.0 * np.log(_GTO_DECAY_THRESHOLD)
+    )
+    neighbor_cut_sq = (float(r_cut) + cutoff_padding) ** 2
+
+    for ci, center_atom in enumerate(center_indices):
+        center = positions[center_atom]
+        deltas = positions - center
+        r2_all = np.sum(deltas * deltas, axis=1)
+        neighbor_idx = np.flatnonzero(r2_all <= neighbor_cut_sq)
+        if neighbor_idx.size == 0:
+            continue
+
+        x = deltas[neighbor_idx, 0]
+        y = deltas[neighbor_idx, 1]
+        z = deltas[neighbor_idx, 2]
+        r2 = r2_all[neighbor_idx]
+        neigh_species = species_indices[neighbor_idx]
+
+        harmonics = _solid_harmonics_polynomial(x, y, z, l_max)
+        cnnd = np.zeros((n_species, n_max, (l_max + 1) ** 2), dtype=np.float64)
+
+        for type_j in range(n_species):
+            mask = neigh_species == type_j
+            if not np.any(mask):
+                continue
+
+            xj = x[mask]
+            yj = y[mask]
+            zj = z[mask]
+            r2j = r2[mask]
+            harm_j = harmonics[mask]
+
+            for ang_l in range(l_max + 1):
+                k_l = _RADIAL_ANGULAR_SCALE.get(ang_l, 1.0)
+                # pre_exp: (n_max, n_neighbors) — one radial Gaussian per k
+                pre_exp = k_l * np.exp(a_oa[ang_l, :, None] * r2j[None, :])
+
+                if ang_l == 0:
+                    # sums: (n_max, 1)
+                    sums = pre_exp.sum(axis=1, keepdims=True)
+                    m_start, m_end = 0, 1
+                elif ang_l == 1:
+                    # DScribe l=1 m-order: z, x, y -> indices 1, 2, 3
+                    sums = np.column_stack(
+                        (
+                            pre_exp @ zj,
+                            pre_exp @ xj,
+                            pre_exp @ yj,
+                        )
+                    )
+                    m_start, m_end = 1, 4
+                else:
+                    m_start = ang_l * ang_l
+                    m_end = (ang_l + 1) ** 2
+                    # (n_max, n_neigh) @ (n_neigh, 2l+1) -> (n_max, 2l+1)
+                    sums = pre_exp @ harm_j[:, m_start:m_end]
+
+                # b_oa[l]: (n, k); sums: (k, m) -> cnnd n-block += b @ sums
+                cnnd[type_j, :, m_start:m_end] += b_oa[ang_l] @ sums
+
+        result[ci] = _power_spectrum(cnnd, n_species, n_max, l_max)
+
+    return result
+
+
 def calculate_soap(
     molecule: Molecule,
     *,
@@ -179,7 +419,10 @@ def calculate_soap(
     Args:
         molecule: ``Molecule`` instance with symbols and positions (Å).
         r_cut: Cutoff radius in Å for the local atomic environment.
-            Must be greater than 1 Å for DScribe's default GTO basis.
+            Must be greater than 1 Å for the default GTO basis. Matching
+            DScribe 2.1.2, neighbors within
+            ``r_cut + sigma * sqrt(-2 * ln(1e-3))`` also contribute
+            (Gaussian density tails).
         n_max: Number of radial basis functions.
         l_max: Maximum angular momentum (spherical harmonics degree).
         sigma: Gaussian width in Å (standard deviation) used to expand
@@ -195,16 +438,14 @@ def calculate_soap(
             ``"sum"`` aggregations).
         aggregation: ``None`` returns local (per-center) vectors with shape
             ``(n_centers, n_features)``. ``"mean"`` / ``"sum"`` are computed
-            post-hoc over DScribe ``average="off"`` local power spectra
-            (outer-average / extensive-sum equivalent). Mean is preferred
-            for size-comparable fingerprints; sum scales with the number of
-            centers.
+            post-hoc over local power spectra (outer-average / extensive-sum
+            equivalent). Mean is preferred for size-comparable fingerprints;
+            sum scales with the number of centers.
 
     Returns:
         Dense ``float64`` NumPy array of SOAP features.
 
     Raises:
-        ImportError: If DScribe is not installed.
         ValueError: For invalid geometry, hyperparameters, centers, species,
             aggregation, active periodic boundary conditions, non-empty
             translation vectors, or unrecognized elemental symbols.
@@ -232,31 +473,17 @@ def calculate_soap(
     symbols = _live_symbols(molecule)
     if len(symbols) == 0:
         raise ValueError("Cannot compute SOAP for a molecule with no atoms.")
+    _validate_symbols(symbols)
     positions = _validate_positions(molecule.positions, len(symbols))
     species_list = _normalize_species(species, symbols)
     center_indices = _normalize_centers(centers, len(symbols))
+    if center_indices is None:
+        center_indices = list(range(len(symbols)))
 
-    SOAP = _require_dscribe()
-    from ase import Atoms
-
-    try:
-        atoms = Atoms(symbols=symbols, positions=positions)
-    except KeyError as exc:
-        raise ValueError(
-            f"Unrecognized elemental symbol for ASE/SOAP: {exc.args[0]!r}. "
-            "Use standard chemical element symbols (e.g. 'H' not 'D')."
-        ) from exc
-
-    soap = SOAP(
-        species=species_list,
-        periodic=False,
-        r_cut=float(r_cut),
-        n_max=int(n_max),
-        l_max=int(l_max),
-        sigma=float(sigma),
-        average="off",
-        sparse=False,
-        dtype="float64",
+    species_to_index = _dscribe_species_index_map(species_list)
+    n_species = len(species_to_index)
+    species_indices = np.array(
+        [species_to_index[sym] for sym in symbols], dtype=np.int64
     )
 
     logger.debug(
@@ -272,10 +499,17 @@ def calculate_soap(
         aggregation,
     )
 
-    features = soap.create(atoms, centers=center_indices)
-    features = np.asarray(features, dtype=np.float64)
+    features = _soap_gto_features(
+        positions,
+        species_indices,
+        n_species=n_species,
+        r_cut=float(r_cut),
+        n_max=int(n_max),
+        l_max=int(l_max),
+        sigma=float(sigma),
+        center_indices=center_indices,
+    )
 
-    # Defensive: older DScribe versions returned 1-D for a single center.
     if features.ndim == 1:  # pragma: no cover
         features = features.reshape(1, -1)
     if features.ndim != 2:  # pragma: no cover

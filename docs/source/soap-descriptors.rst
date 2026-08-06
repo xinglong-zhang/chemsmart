@@ -6,18 +6,10 @@ CHEMSMART can compute Smooth Overlap of Atomic Positions (SOAP) descriptors from
 :class:`~chemsmart.io.molecules.structure.Molecule` geometry. SOAP is a local atomic environment fingerprint based on
 nuclear coordinates and elemental species. No bonding / connectivity information is required.
 
-**************
- Installation
-**************
-
-SOAP support depends on the optional `DScribe <https://singroup.github.io/dscribe/>`_ package and is **not** installed
-with the default CHEMSMART dependencies:
-
-.. code:: bash
-
-   pip install 'chemsmart[soap]'
-
-Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises an actionable ``ImportError``.
+SOAP is implemented in-tree with NumPy and SciPy (no optional dependencies). The GTO formulation matches DScribe 2.1.2
+with ``rbf="gto"``, ``average="off"``, and default ``compression="off"``. Matching that release, neighbor atoms within
+``r_cut + sigma * sqrt(-2 * ln(1e-3))`` (about ``r_cut + 3.72 * sigma``) contribute through Gaussian density tails;
+there is no hard exclusion at exactly ``r_cut``.
 
 *************
  Basic usage
@@ -33,7 +25,7 @@ Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises
    local = mol.calculate_soap(r_cut=6.0, n_max=8, l_max=6, sigma=1.0)
 
    # Global fingerprint by post-hoc outer averaging / summing of local
-   # power spectra (DScribe average="off", then mean/sum over centers).
+   # power spectra (local per-center vectors, then mean/sum over centers).
    # Prefer "mean" for size-comparable fingerprints; "sum" is extensive.
    global_mean = mol.calculate_soap(aggregation="mean")
    global_sum = mol.calculate_soap(aggregation="sum")
@@ -50,7 +42,8 @@ Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises
 +==================+==========================================================+
 | ``r_cut``        | Cutoff radius of the local atomic environment (Å). Must  |
 |                  | be greater than 1 Å for the default GTO basis. Typical   |
-|                  | values are about 3–8 Å.                                  |
+|                  | values are about 3–8 Å. Matching DScribe 2.1.2, atoms   |
+|                  | out to ``r_cut + ~3.72·sigma`` also contribute.         |
 +------------------+----------------------------------------------------------+
 | ``n_max``        | Number of radial basis functions.                        |
 +------------------+----------------------------------------------------------+
@@ -65,8 +58,8 @@ Without DScribe, importing ``Molecule`` still works; calling SOAP methods raises
 |                  | overweight ``"mean"`` / ``"sum"`` aggregations.          |
 +------------------+----------------------------------------------------------+
 | ``aggregation``  | ``None`` (local), ``"mean"``, or ``"sum"``. Mean/sum     |
-|                  | are post-hoc over ``average="off"`` local power          |
-|                  | spectra (outer-average / extensive-sum equivalent).      |
+|                  | are post-hoc over local power spectra (outer-average /   |
+|                  | extensive-sum equivalent).                               |
 +------------------+----------------------------------------------------------+
 
 ****************************
@@ -84,7 +77,8 @@ species list that covers every element present in the dataset:
    species = ["H", "C", "N", "O", "Fe"]
    features = mol.calculate_soap(species=species, aggregation="mean")
 
-Only standard chemical element symbols recognized by ASE are accepted (for example ``"H"``, not deuterium ``"D"``).
+Only standard chemical element symbols are accepted (for example ``"H"``, not deuterium ``"D"``). Internally, species
+channels are ordered by atomic number (matching DScribe's convention).
 
 ***********************************
  Supported systems and limitations
@@ -96,10 +90,10 @@ frames that are treated as finite molecules.
 This CHEMSMART interface currently supports **finite (non-periodic)** molecules only. Structures with active periodic
 boundary conditions or non-empty translation vectors (cell) are rejected.
 
-Aggregation modes ``"mean"`` and ``"sum"`` are computed **post-hoc** over local power-spectrum vectors from DScribe
-with ``average="off"``. That is equivalent to DScribe's outer averaging / summing over the selected centers. They are
-**not** DScribe's ``average="inner"`` global fingerprint (average expansion coefficients before forming the power
-spectrum). Inner averaging is not exposed by this API.
+Aggregation modes ``"mean"`` and ``"sum"`` are computed **post-hoc** over local power-spectrum vectors from each
+selected center. That is equivalent to outer averaging / summing over the selected centers. They are **not** inner
+averaging (average expansion coefficients before forming the power spectrum). Inner averaging is not exposed by this
+API.
 
 Duplicate ``centers`` entries are allowed and preserved; they overweight ``"mean"`` and ``"sum"`` aggregations.
 
