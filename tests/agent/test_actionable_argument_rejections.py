@@ -138,3 +138,55 @@ def test_a_nested_object_of_the_wrong_shape_is_summarized_not_dumped():
     )
     assert "dict of 2 entries" in message
     assert "must be string" in message
+
+
+def test_an_empty_registry_names_what_would_fill_it():
+    """Observed live: a session asked twice for a counterexample that no
+    failure had produced.  Being told the registry was empty did not say what
+    fills it, so the retry was identical."""
+
+    from chemsmart.agent.tool_runtime import _REGISTRY_PRODUCERS
+
+    class _Host:
+        _get = staticmethod(
+            __import__(
+                "chemsmart.agent.tool_runtime", fromlist=["x"]
+            ).CommandCompiledToolHostV1._get
+        )
+
+    with pytest.raises(ContractError) as failure:
+        _Host._get({}, "2f8a651d", "counterexample")
+    message = str(failure.value)
+    assert "'2f8a651d'" in message
+    assert "no counterexample is bound yet" in message
+    assert "fails inspection, safe preview, or program validation" in message
+
+    # A non-empty registry lists what exists instead; the hint would be noise.
+    with pytest.raises(ContractError) as populated:
+        _Host._get({"abc": 1}, "xyz", "counterexample")
+    assert "bound counterexample IDs: ['abc']" in str(populated.value)
+    assert "one is bound" not in str(populated.value)
+
+    assert "trusted artifact" in _REGISTRY_PRODUCERS
+
+
+def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
+    """A label added later without a hint reopens the unactionable case."""
+
+    import re as _re
+    from pathlib import Path
+
+    from chemsmart.agent.tool_runtime import _REGISTRY_PRODUCERS
+
+    source = Path("chemsmart/agent/tool_runtime.py").read_text()
+    labels = set(
+        _re.findall(r'self\._get\(\s*[^,]+,\s*[^,]+,\s*"([a-z ]+)"', source)
+    )
+    labels |= set(
+        _re.findall(r'_get\(\s*self\.[a-z_]+,\s*[^,]+,\s*\n\s*"([a-z ]+)"', source)
+    )
+    missing = sorted(labels - set(_REGISTRY_PRODUCERS))
+    assert not missing, (
+        f"these host registries have no producer hint: {missing}; a caller "
+        "told one is empty would not know what fills it"
+    )
