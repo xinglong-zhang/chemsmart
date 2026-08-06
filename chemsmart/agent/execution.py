@@ -35,6 +35,7 @@ from chemsmart.agent.projects import (
     ProjectValidationReceiptV1,
 )
 from chemsmart.agent.workflows import (
+    PREVIEW_RESOURCE_SHA256,
     MaterializedWorkflowV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowPlanV2,
@@ -587,9 +588,7 @@ def build_program_conformance_probe(
         "probe_id": require_identifier(probe_id, "probe_id"),
         "program": require_identifier(program, "program"),
         "engine": require_identifier(engine, "engine"),
-        "registry_sha256": require_sha256(
-            registry_sha256, "registry_sha256"
-        ),
+        "registry_sha256": require_sha256(registry_sha256, "registry_sha256"),
         "live_cli_schema_sha256": require_sha256(
             live_cli_schema_sha256, "live_cli_schema_sha256"
         ),
@@ -601,9 +600,7 @@ def build_program_conformance_probe(
             sorted(set(project_validation_receipt_sha256s))
         ),
         "environment_receipt_sha256": str(environment_receipt_sha256),
-        "preview_receipt_sha256s": tuple(
-            sorted(set(preview_receipt_sha256s))
-        ),
+        "preview_receipt_sha256s": tuple(sorted(set(preview_receipt_sha256s))),
         "findings": tuple(str(item).strip() for item in findings),
         "status": status,
     }
@@ -685,9 +682,7 @@ class ApprovedNodeBindingV1:
             ("jobtype", self.jobtype),
         ):
             require_identifier(value, name)
-        require_sha256(
-            self.project_artifact_sha256, "project_artifact_sha256"
-        )
+        require_sha256(self.project_artifact_sha256, "project_artifact_sha256")
         require_sha256(self.settings_sha256, "settings_sha256")
         if self.multiplicity < 1:
             raise ContractError("multiplicity must be positive")
@@ -885,8 +880,8 @@ def build_locked_pyscf_sp_opt_hess_approval(
     ):
         raise ContractError("resources differ from the locked CPU profile")
 
-    from chemsmart.agent.commands import build_scientific_identity_binding
     from chemsmart.agent.capabilities import load_program_capabilities
+    from chemsmart.agent.commands import build_scientific_identity_binding
     from chemsmart.settings.pyscf import YamlPySCFProjectSettings
 
     identity = build_scientific_identity_binding(
@@ -1159,9 +1154,10 @@ def _require_locked_pyscf_settings(settings: object, *, jobtype: str) -> None:
                 f"locked PySCF {jobtype} setting {name} differs: "
                 f"expected {required!r}, observed {observed!r}"
             )
-    if getattr(settings, "charge", None) is not None or getattr(
-        settings, "multiplicity", None
-    ) is not None:
+    if (
+        getattr(settings, "charge", None) is not None
+        or getattr(settings, "multiplicity", None) is not None
+    ):
         raise ContractError(
             "locked project must inherit charge and multiplicity from XYZ"
         )
@@ -1382,7 +1378,9 @@ class ProgramResultValidationReceiptV1:
         if self.schema_version != (
             "chemsmart.program-result-validation-receipt.v1"
         ):
-            raise ContractError("unsupported program result validation receipt")
+            raise ContractError(
+                "unsupported program result validation receipt"
+            )
         for name, value in (
             ("validator_id", self.validator_id),
             ("node_id", self.node_id),
@@ -1410,7 +1408,10 @@ class ProgramResultValidationReceiptV1:
                 "run_environment_receipt_sha256",
                 self.run_environment_receipt_sha256,
             ),
-            ("environment_validation_sha256", self.environment_validation_sha256),
+            (
+                "environment_validation_sha256",
+                self.environment_validation_sha256,
+            ),
             (
                 "stationary_point_policy_sha256",
                 self.stationary_point_policy_sha256,
@@ -1418,14 +1419,22 @@ class ProgramResultValidationReceiptV1:
         ):
             if digest:
                 require_sha256(digest, name)
-        artifact_ids = tuple(item.artifact_id for item in self.output_artifacts)
+        artifact_ids = tuple(
+            item.artifact_id for item in self.output_artifacts
+        )
         if len(artifact_ids) != len(set(artifact_ids)):
-            raise ContractError("validation output artifact IDs must be unique")
+            raise ContractError(
+                "validation output artifact IDs must be unique"
+            )
         if self.findings != tuple(sorted(set(self.findings))):
-            raise ContractError("validation findings must be sorted and unique")
+            raise ContractError(
+                "validation findings must be sorted and unique"
+            )
         _require_nonempty_rows(self.findings, "findings")
         if self.state not in {"valid", "invalid"}:
-            raise ContractError("result validation state must be valid or invalid")
+            raise ContractError(
+                "result validation state must be valid or invalid"
+            )
         derived_findings = _typed_result_validation_findings(
             canonical_data(dict(self.observations))
         )
@@ -1545,9 +1554,13 @@ def build_program_result_validation_receipt(
     _require_current_artifact(input_artifact, "validation input artifact")
     _require_current_artifact(project_artifact, "validation project artifact")
     if input_artifact.sha256 != invocation.input_sha256:
-        raise ContractError("validation input differs from execution invocation")
+        raise ContractError(
+            "validation input differs from execution invocation"
+        )
     if project_artifact.sha256 != invocation.project_sha256:
-        raise ContractError("validation project differs from execution invocation")
+        raise ContractError(
+            "validation project differs from execution invocation"
+        )
     for artifact in output_artifacts:
         _require_current_artifact(artifact, "validation output artifact")
     environment_sha256 = require_sha256(
@@ -1669,9 +1682,7 @@ class ProgramExecutionReceiptV1:
                 "engine completion requires child exit status zero"
             )
         if self.engine_receipt_sha256:
-            require_sha256(
-                self.engine_receipt_sha256, "engine_receipt_sha256"
-            )
+            require_sha256(self.engine_receipt_sha256, "engine_receipt_sha256")
         if (
             self.execution_state == "engine_complete"
             and not self.engine_complete
@@ -2143,7 +2154,9 @@ def _frozen_producer_edge_rule(
     *,
     environment_receipt_sha256: str,
 ) -> FrozenProducerEdgeRuleV1:
-    source = next(node for node in plan.nodes if node.node_id == edge.source_node_id)
+    source = next(
+        node for node in plan.nodes if node.node_id == edge.source_node_id
+    )
     if edge.artifact_class != "geometry_xyz" or source.stage != "opt":
         raise ContractError(
             "future data edge lacks a registered exact artifact selection rule"
@@ -2164,9 +2177,7 @@ def _frozen_producer_edge_rule(
         "preserve_atom_order": True,
         "preserve_electronic_state": True,
     }
-    return FrozenProducerEdgeRuleV1(
-        **body, rule_sha256=canonical_sha256(body)
-    )
+    return FrozenProducerEdgeRuleV1(**body, rule_sha256=canonical_sha256(body))
 
 
 @dataclass(frozen=True)
@@ -2224,7 +2235,9 @@ class FrozenWorkflowApprovalV1:
                 require_sha256(digest, name)
         if not self.environment_receipt_sha256s:
             raise ContractError("approval requires environment evidence")
-        if self.approved_node_ids != tuple(sorted(set(self.approved_node_ids))):
+        if self.approved_node_ids != tuple(
+            sorted(set(self.approved_node_ids))
+        ):
             raise ContractError("approved_node_ids must be sorted and unique")
         if not self.approved_node_ids:
             raise ContractError("approval requires at least one node")
@@ -2275,12 +2288,19 @@ class FrozenWorkflowApprovalV1:
             for item in self.producer_edge_rules
         )
         if rule_keys != tuple(sorted(set(rule_keys))):
-            raise ContractError("producer edge rules must be sorted and unique")
+            raise ContractError(
+                "producer edge rules must be sorted and unique"
+            )
         edge_digests = tuple(
-            sorted(item.scientific_edge_sha256 for item in self.producer_edge_rules)
+            sorted(
+                item.scientific_edge_sha256
+                for item in self.producer_edge_rules
+            )
         )
         if edge_digests != self.producer_edge_sha256s:
-            raise ContractError("producer edge rules differ from approved edges")
+            raise ContractError(
+                "producer edge rules differ from approved edges"
+            )
         covered = set(preview_ids).union(
             item.target_node_id for item in self.producer_edge_rules
         )
@@ -2326,7 +2346,9 @@ class FrozenWorkflowApprovalV1:
         self, node_id: str
     ) -> tuple[FrozenProducerEdgeRuleV1, ...]:
         return tuple(
-            item for item in self.producer_edge_rules if item.target_node_id == node_id
+            item
+            for item in self.producer_edge_rules
+            if item.target_node_id == node_id
         )
 
 
@@ -2351,9 +2373,27 @@ def build_frozen_workflow_approval(
     if materialized_workflow.scientific_identity_sha256 != (
         plan.scientific_identity_sha256
     ):
-        raise ContractError("materialized workflow scientific identity differs")
-    if materialized_workflow.resource_sha256 != resources.resource_sha256:
+        raise ContractError(
+            "materialized workflow scientific identity differs"
+        )
+    if materialized_workflow.resource_sha256 not in (
+        resources.resource_sha256,
+        PREVIEW_RESOURCE_SHA256,
+    ):
         raise ContractError("materialized workflow resource binding differs")
+    # A plan session has no execution resources, so it materializes under the
+    # preview sentinel.  Demanding equality with a run profile therefore made
+    # the documented flow circular: only a workflow materialized by a session
+    # that *already* held execution resources could be frozen, and holding them
+    # requires an approval, which requires a freeze.  Nothing could produce the
+    # first one, which is why no call site ever passed a frozen approval.
+    #
+    # Binding resources is the reviewer's act, so the freeze is where it
+    # belongs.  The safety chain is unchanged: the frozen approval records
+    # ``resources``, the V1 approval records the same profile, and the session
+    # refuses at load time unless both equal the locked run profile.  A
+    # workflow that *was* materialized under a real profile must still match
+    # it, so an approval cannot be moved between resource profiles.
     unresolved = set(materialized_workflow.unresolved_node_ids)
     data_edges = tuple(edge for edge in plan.edges if edge.edge_kind == "data")
     data_targets = {edge.target_node_id for edge in data_edges}
@@ -2367,7 +2407,10 @@ def build_frozen_workflow_approval(
         )
     preview_bindings = tuple(
         sorted(
-            (_frozen_preview_binding(node) for node in materialized_workflow.nodes),
+            (
+                _frozen_preview_binding(node)
+                for node in materialized_workflow.nodes
+            ),
             key=lambda item: item.node_id,
         )
     )
@@ -2419,11 +2462,15 @@ def build_frozen_workflow_approval(
         )
     if stationary_point_policy is not None:
         if stationary_point_policy.task_spec_sha256 != plan.task_spec_sha256:
-            raise ContractError("stationary point policy belongs to another task")
+            raise ContractError(
+                "stationary point policy belongs to another task"
+            )
         if stationary_point_policy.hessian_node_id not in {
             node.node_id for node in plan.nodes
         }:
-            raise ContractError("stationary point policy names an unknown node")
+            raise ContractError(
+                "stationary point policy names an unknown node"
+            )
     producer_digests = tuple(
         sorted(item.scientific_edge_sha256 for item in producer_rules)
     )
@@ -2540,9 +2587,11 @@ class ValidatedDataEdgeBindingV1:
             require_sha256(digest, name)
         if not self.source_artifact_id or not self.selected_artifact_id:
             raise ContractError("data edge artifacts require stable IDs")
-        if self.producer_validator_receipt_sha256s != tuple(
-            sorted(set(self.producer_validator_receipt_sha256s))
-        ) or not self.producer_validator_receipt_sha256s:
+        if (
+            self.producer_validator_receipt_sha256s
+            != tuple(sorted(set(self.producer_validator_receipt_sha256s)))
+            or not self.producer_validator_receipt_sha256s
+        ):
             raise ContractError(
                 "data edge requires sorted producer validator receipts"
             )
@@ -2810,12 +2859,20 @@ class WorkflowRunStateV1:
         node_ids = tuple(node.node_id for node in self.nodes)
         if node_ids != tuple(sorted(set(node_ids))):
             raise ContractError("workflow run nodes must be sorted and unique")
-        if self.state in {"running", "validated", "failed", "ambiguous"} and not (
-            self.started_at.strip()
-        ):
+        if self.state in {
+            "running",
+            "validated",
+            "failed",
+            "ambiguous",
+        } and not (self.started_at.strip()):
             raise ContractError("started workflow requires a timestamp")
-        if self.state in {"validated", "failed"} and not self.finished_at.strip():
-            raise ContractError("terminal workflow requires a finish timestamp")
+        if (
+            self.state in {"validated", "failed"}
+            and not self.finished_at.strip()
+        ):
+            raise ContractError(
+                "terminal workflow requires a finish timestamp"
+            )
         body = {
             "schema_version": self.schema_version,
             "run_id": self.run_id,
@@ -2871,9 +2928,7 @@ def build_workflow_run_state(
         "started_at": "",
         "finished_at": "",
     }
-    return WorkflowRunStateV1(
-        **body, run_state_sha256=canonical_sha256(body)
-    )
+    return WorkflowRunStateV1(**body, run_state_sha256=canonical_sha256(body))
 
 
 def derive_ready_node_ids(
@@ -2901,9 +2956,13 @@ def derive_ready_node_ids(
             or binding.plan_sha256 != plan.plan_sha256
             or binding.approval_sha256 != run_state.approval_sha256
         ):
-            raise ContractError("data edge binding belongs to another workflow run")
+            raise ContractError(
+                "data edge binding belongs to another workflow run"
+            )
         if binding.scientific_edge_sha256 in binding_by_edge:
-            raise ContractError("multiple bindings exist for one scientific edge")
+            raise ContractError(
+                "multiple bindings exist for one scientific edge"
+            )
         binding_by_edge[binding.scientific_edge_sha256] = binding
     ready: list[str] = []
     for node in plan.nodes:
@@ -2941,7 +3000,9 @@ def derive_ready_node_ids(
                     binding.consumer_input_id,
                 )
                 if exact_roles != observed_roles:
-                    raise ContractError("data edge binding roles differ from plan")
+                    raise ContractError(
+                        "data edge binding roles differ from plan"
+                    )
                 if (
                     binding.producer_execution_receipt_sha256
                     != source.execution_receipt_sha256
@@ -3025,9 +3086,7 @@ def transition_workflow_node(
     replacement = WorkflowNodeRunStateV1(
         node_id=normalized_id,
         state=new_state,
-        invocation_sha256=(
-            invocation_sha256 or current.invocation_sha256
-        ),
+        invocation_sha256=(invocation_sha256 or current.invocation_sha256),
         execution_receipt_sha256=(
             execution_receipt_sha256 or current.execution_receipt_sha256
         ),
@@ -3081,9 +3140,7 @@ def transition_workflow_node(
         "started_at": started_at,
         "finished_at": finished_at,
     }
-    return WorkflowRunStateV1(
-        **body, run_state_sha256=canonical_sha256(body)
-    )
+    return WorkflowRunStateV1(**body, run_state_sha256=canonical_sha256(body))
 
 
 __all__ = [

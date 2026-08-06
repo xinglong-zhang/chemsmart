@@ -28,7 +28,9 @@ class ArtifactInputIntentV1:
         require_identifier(self.binding_id, "binding_id")
         require_identifier(self.artifact_class, "artifact_class")
         produced = bool(self.producer_node_id or self.producer_output_id)
-        if produced and not (self.producer_node_id and self.producer_output_id):
+        if produced and not (
+            self.producer_node_id and self.producer_output_id
+        ):
             raise ContractError("producer input needs node and output IDs")
         if produced:
             require_identifier(self.producer_node_id, "producer_node_id")
@@ -299,17 +301,23 @@ class ArtifactBindingV1:
         require_identifier(self.artifact_id, "artifact_id")
         require_identifier(self.artifact_class, "artifact_class")
         produced = bool(self.producer_node_id or self.producer_output_id)
-        if produced and not (self.producer_node_id and self.producer_output_id):
+        if produced and not (
+            self.producer_node_id and self.producer_output_id
+        ):
             raise ContractError("produced artifact needs node and output IDs")
         if produced:
             require_identifier(self.producer_node_id, "producer_node_id")
             require_identifier(self.producer_output_id, "producer_output_id")
-            if bool(self.artifact_sha256) != bool(self.producer_receipt_sha256):
+            if bool(self.artifact_sha256) != bool(
+                self.producer_receipt_sha256
+            ):
                 raise ContractError(
                     "resolved producer artifact needs hash and producer receipt"
                 )
         elif not self.artifact_sha256:
-            raise ContractError("external artifact binding requires an exact hash")
+            raise ContractError(
+                "external artifact binding requires an exact hash"
+            )
         if self.artifact_sha256:
             require_sha256(self.artifact_sha256, "artifact_sha256")
         if self.producer_receipt_sha256:
@@ -378,7 +386,9 @@ class CommandNodeV1:
                 self.preflight_receipt_sha256, "preflight_receipt_sha256"
             )
         elif self.preflight_receipt_sha256:
-            raise ContractError("only previewed node carries preflight evidence")
+            raise ContractError(
+                "only previewed node carries preflight evidence"
+            )
 
 
 @dataclass(frozen=True)
@@ -395,9 +405,7 @@ class CommandWorkflowSpecV1:
             raise ContractError("unsupported command workflow schema")
         require_identifier(self.workflow_id, "workflow_id")
         require_sha256(self.task_spec_sha256, "task_spec_sha256")
-        require_sha256(
-            self.live_cli_schema_sha256, "live_cli_schema_sha256"
-        )
+        require_sha256(self.live_cli_schema_sha256, "live_cli_schema_sha256")
         _validate_dag(self.nodes)
         body = {
             "schema_version": self.schema_version,
@@ -445,7 +453,9 @@ def _validate_dag(nodes: tuple[CommandNodeV1, ...]) -> None:
             )
         for output in node.expected_outputs:
             if output.artifact_id in global_artifact_ids:
-                raise ContractError("two nodes declare the same output artifact")
+                raise ContractError(
+                    "two nodes declare the same output artifact"
+                )
             global_artifact_ids[output.artifact_id] = (
                 node.node_id,
                 output.output_id,
@@ -467,7 +477,9 @@ def _validate_dag(nodes: tuple[CommandNodeV1, ...]) -> None:
                 None,
             )
             if output is None:
-                raise ContractError("artifact binds an undeclared producer output")
+                raise ContractError(
+                    "artifact binds an undeclared producer output"
+                )
             if (
                 binding.artifact_id != output.artifact_id
                 or binding.artifact_class != output.artifact_class
@@ -698,9 +710,7 @@ def build_scientific_workflow_plan(
     normalized_edges = tuple(edges)
     _validate_scientific_dag(normalized_nodes, normalized_edges)
     explicit = tuple(sorted(set(explicit_complexity_factors)))
-    if set(explicit).difference(
-        {"conflicting_evidence", "solvent_semantics"}
-    ):
+    if set(explicit).difference({"conflicting_evidence", "solvent_semantics"}):
         raise ContractError("unsupported explicit complexity factor")
     body = {
         "schema_version": "chemsmart.scientific-workflow-plan.v2",
@@ -718,7 +728,9 @@ def build_scientific_workflow_plan(
         ),
         "status": "planned",
     }
-    observables = tuple(sorted(set(str(item) for item in required_observables)))
+    observables = tuple(
+        sorted(set(str(item) for item in required_observables))
+    )
     digest_body = dict(body)
     if observables:
         digest_body["required_observables"] = observables
@@ -741,18 +753,29 @@ def _validate_scientific_dag(
     if tuple(edge.edge_id for edge in edges) != tuple(
         sorted({edge.edge_id for edge in edges})
     ):
-        raise ContractError("scientific workflow edges must be sorted and unique")
+        raise ContractError(
+            "scientific workflow edges must be sorted and unique"
+        )
     positions = {node_id: index for index, node_id in enumerate(node_ids)}
     data_inputs: set[tuple[str, str]] = set()
     for edge in edges:
-        if edge.source_node_id not in positions or edge.target_node_id not in positions:
-            raise ContractError("scientific workflow edge names an unknown node")
+        if (
+            edge.source_node_id not in positions
+            or edge.target_node_id not in positions
+        ):
+            raise ContractError(
+                "scientific workflow edge names an unknown node"
+            )
         if positions[edge.source_node_id] >= positions[edge.target_node_id]:
-            raise ContractError("scientific workflow must be topologically ordered")
+            raise ContractError(
+                "scientific workflow must be topologically ordered"
+            )
         if edge.edge_kind == "data":
             target_input = (edge.target_node_id, edge.consumer_input_id)
             if target_input in data_inputs:
-                raise ContractError("consumer input has multiple artifact producers")
+                raise ContractError(
+                    "consumer input has multiple artifact producers"
+                )
             data_inputs.add(target_input)
 
 
@@ -842,7 +865,9 @@ class MaterializedNodeV1:
                 self.preflight_receipt_sha256, "preflight_receipt_sha256"
             )
         elif self.preflight_receipt_sha256:
-            raise ContractError("only previewed node carries preflight evidence")
+            raise ContractError(
+                "only previewed node carries preflight evidence"
+            )
 
 
 @dataclass(frozen=True)
@@ -879,7 +904,9 @@ class MaterializedWorkflowV1:
         if self.unresolved_node_ids != tuple(
             sorted(set(self.unresolved_node_ids))
         ):
-            raise ContractError("unresolved node IDs must be sorted and unique")
+            raise ContractError(
+                "unresolved node IDs must be sorted and unique"
+            )
         if set(node_ids).intersection(self.unresolved_node_ids):
             raise ContractError("node cannot be materialized and unresolved")
         for node_id in self.unresolved_node_ids:
@@ -894,11 +921,15 @@ class MaterializedWorkflowV1:
         if self.status == "partial" and not self.unresolved_node_ids:
             raise ContractError("partial workflow requires unresolved nodes")
         if self.status != "partial" and self.unresolved_node_ids:
-            raise ContractError("non-partial workflow cannot have unresolved nodes")
+            raise ContractError(
+                "non-partial workflow cannot have unresolved nodes"
+            )
         if self.status in {"previewed", "ready_for_approval"} and not all(
             node.state == "previewed" for node in self.nodes
         ):
-            raise ContractError("preview-ready workflow requires previewed nodes")
+            raise ContractError(
+                "preview-ready workflow requires previewed nodes"
+            )
         body = {
             "schema_version": self.schema_version,
             "workflow_id": self.workflow_id,
@@ -913,6 +944,18 @@ class MaterializedWorkflowV1:
         }
         if self.materialized_sha256 != canonical_sha256(body):
             raise ContractError("materialized workflow digest mismatch")
+
+
+#: The ``resource_sha256`` a workflow carries when it was materialized without
+#: execution resources -- that is, by ``agent plan``, which makes no engine
+#: call.  It is a sentinel meaning "not resource-bound yet", not a profile, and
+#: the freeze step is what binds real resources to a reviewed plan.
+PREVIEW_RESOURCE_SHA256 = canonical_sha256(
+    {
+        "schema_version": "chemsmart.preview-resource.v1",
+        "chemistry_engine_calls": 0,
+    }
+)
 
 
 def build_materialized_workflow(
@@ -990,7 +1033,14 @@ class ContextManifestV1:
             raise ContractError("allowed_tools must be sorted and unique")
         for tool in self.allowed_tools:
             require_identifier(tool, "allowed_tool")
-        if min(self.token_budget, self.tool_call_budget, self.wall_time_seconds) < 1:
+        if (
+            min(
+                self.token_budget,
+                self.tool_call_budget,
+                self.wall_time_seconds,
+            )
+            < 1
+        ):
             raise ContractError("specialist budgets must be positive")
         body = {
             "schema_version": self.schema_version,
@@ -1035,9 +1085,7 @@ class SpecialistTaskPacketV1:
             ("merge_key", self.merge_key),
         ):
             require_identifier(value, name)
-        require_sha256(
-            self.context_manifest_sha256, "context_manifest_sha256"
-        )
+        require_sha256(self.context_manifest_sha256, "context_manifest_sha256")
         if self.input_record_sha256s != tuple(
             sorted(set(self.input_record_sha256s))
         ):
@@ -1082,9 +1130,7 @@ class SpecialistResultPacketV1:
             ("output_schema", self.output_schema),
         ):
             require_identifier(value, name)
-        require_sha256(
-            self.context_manifest_sha256, "context_manifest_sha256"
-        )
+        require_sha256(self.context_manifest_sha256, "context_manifest_sha256")
         if self.status not in {"complete", "blocked", "failed"}:
             raise ContractError("unsupported specialist result status")
         if self.status == "complete":
@@ -1133,7 +1179,9 @@ class ScientificReviewFindingV1:
         ):
             require_identifier(value, name)
         if self.reviewer_role != "critic":
-            raise ContractError("scientific finding must come from read-only critic")
+            raise ContractError(
+                "scientific finding must come from read-only critic"
+            )
         if self.severity not in {"info", "warning", "critical"}:
             raise ContractError("unsupported review finding severity")
         if self.evidence_sha256s != tuple(sorted(set(self.evidence_sha256s))):
@@ -1141,8 +1189,15 @@ class ScientificReviewFindingV1:
         for digest in self.evidence_sha256s:
             require_sha256(digest, "evidence_sha256")
         if not self.expected.strip() or not self.observed.strip():
-            raise ContractError("review finding requires expected and observed")
-        if self.disposition not in {"open", "accepted", "rejected", "resolved"}:
+            raise ContractError(
+                "review finding requires expected and observed"
+            )
+        if self.disposition not in {
+            "open",
+            "accepted",
+            "rejected",
+            "resolved",
+        }:
             raise ContractError("unsupported review finding disposition")
         body = {
             "schema_version": self.schema_version,
@@ -1224,7 +1279,9 @@ class StationaryPointValidationPolicyV1:
             raise ContractError("unsupported stationary point kind")
         expected = 0 if self.stationary_point_kind == "minimum" else 1
         if self.expected_imaginary_mode_count != expected:
-            raise ContractError("imaginary-mode expectation differs from point kind")
+            raise ContractError(
+                "imaginary-mode expectation differs from point kind"
+            )
         if self.imaginary_mode_cutoff_cm1 <= 0:
             raise ContractError("imaginary-mode cutoff must be positive")
         body = {
@@ -1280,7 +1337,14 @@ class HarnessExperimentConfigV1:
             ("task_order_sha256", self.task_order_sha256),
         ):
             require_sha256(digest, name)
-        if min(self.token_budget, self.tool_call_budget, self.wall_time_seconds) < 1:
+        if (
+            min(
+                self.token_budget,
+                self.tool_call_budget,
+                self.wall_time_seconds,
+            )
+            < 1
+        ):
             raise ContractError("experiment budgets must be positive")
         body = {
             "schema_version": self.schema_version,
