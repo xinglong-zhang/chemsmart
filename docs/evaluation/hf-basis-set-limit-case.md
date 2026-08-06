@@ -254,3 +254,62 @@ Deleting the key is the one edit that lets ORCA's own default density fitting
 back in. The harness argued the model out of the input the protocol specified.
 This is the sharpest form of the failure the project exists to prevent: not a
 model hallucinating a setting, but the harness rejecting a correct one.
+
+# W4 and W5: the loop's remaining observable classes
+
+| case | observable | conventions the plan used |
+|---|---|---|
+| W1 | basis-set-limit energy | `exponential_cbs_limit` (after repair) |
+| W2 | conformer mole fractions | `boltzmann_populations` + degeneracies |
+| W3 | vertical excitation, wavelength | `photon_wavelength` |
+| W4 | equilibrium bond length and angle | `distance`, `angle` |
+| W5 | isodesmic reaction ΔE and ΔG | *none* — and that is correct |
+
+All five convention classes the harness registers have now been exercised by a
+live model, on five different observables, in three programs.
+
+## W4: the conventions were reached without help
+
+`{ref: 4, distance: 3, angle: 3}` — one indexed reference per atom, then all
+three N–H distances and all three H–N–H angles through the registered
+operations, zero arithmetic nodes and zero model constants, plus an equivalence
+check across the three bonds that the task never asked for.
+
+## W5: the control the derivation profile needed
+
+A reaction energy is a signed sum of four measured free energies. There is no
+convention to own that, and the profile correctly reported arithmetic with no
+convention operations without treating it as a finding. A discriminator that
+pushed everything toward conventions would have been useless; this is the case
+that shows it does not.
+
+W5 also exposed the last convention gap. Asked for the total number of
+imaginary frequencies across four species, the model built a **twenty-two node
+arithmetic contraption** to count negative numbers — putting the definition of
+"imaginary" into its own arithmetic. ChemSmart already owned the concept twice
+(`Thermochemistry.imaginary_frequencies`, and the PySCF stationary-point
+policy's `imaginary_mode_cutoff_cm1`) and exposed it nowhere.
+
+Registering it produced the clearest before/after of the loop:
+
+| | before | after |
+|---|---|---|
+| imaginary-mode count | 22 nodes of hand-built comparisons | 5 nodes: `imaginary_mode_count` ×4 + `sum` |
+| reaction energy | 4 nodes, pure arithmetic | 4 nodes, pure arithmetic — unchanged |
+
+The convention was adopted exactly where it belongs, and arithmetic stayed
+where arithmetic is right.
+
+## What did not work
+
+`repair_command` was called with no counterexample bound in four separate
+sessions. Two attempts to prevent it — describing the argument, then stating
+the precondition in the tool description itself — both failed. The rejection
+message is now fully actionable and the precondition is stated in two places,
+and the model still calls it. This is recorded as unresolved rather than
+repaired; the cause is not the wording.
+
+## Loop accounting
+
+204 provider turns, 12.8 M input tokens, 379 k output, 241 k reasoning across
+eight live sessions. No rate-limit or quota error was returned at any point.
