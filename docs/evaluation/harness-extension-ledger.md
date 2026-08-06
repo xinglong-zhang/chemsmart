@@ -245,27 +245,107 @@ checkout.
 
 ---
 
+# W11: the first graded number, and why the gap was not what I said it was
+
+W11 re-ran the W9 protocol as an **execution** arm. Information was controlled
+to the methodology section plus `water.xyz`; the study's results were withheld
+and only its calibrated factor 0.9135 was given, as the protocol states it.
+
+The plan was right. 26 turns, 1,618,784 input tokens, terminal state
+`complete`, two rejections — both of them repairs from this campaign firing
+live, and the model recovered from each without help:
+
+| rejection | family |
+|---|---|
+| `artifact_id must be a lower-case public identifier … it is empty` | A |
+| `analysis output 'n_imaginary' (count) declares no unit; a dimensionless quantity … uses '1'` | A |
+
+It chose HF/6-31G(d) with `density_fit: false`, planned `opt` then `hess`,
+bound the hessian to the optimizer's `optimized_geometry` as a producer edge,
+and used `imaginary_mode_count` — registered after W5 — unprompted for the
+third case running.
+
+**Graded against the sealed key**, executing its own planned nodes with its own
+project YAMLs:
+
+| quantity | agent | sealed | tolerance | |
+|---|---|---|---|---|
+| `zpve_harmonic_kj` | 60.1445 | 60.145 | ±0.5 | **PASS** |
+| `zpve_scaled_kj` | 54.9420 | 54.942 | ±0.5 | **PASS** |
+| `n_imaginary` | 0 | 0 | 0 | **PASS** |
+
+Frequencies 1826.0168, 4055.5119, 4173.8509 cm⁻¹, matching the sealed
+independent reproduction to every printed digit.
+
+**Two honest limits.** This was deterministic host-side execution of the
+agent's own planned nodes, not `agent run --approval-file`; and the sealed key
+came from ChemSmart's own execution of the same protocol, so close agreement is
+expected *given the same level of theory*. What the case tests is that the
+agent chose the level, the two-stage workflow, the geometry handoff and the
+post-processing correctly from method text and an xyz alone. It did.
+
+## The gap was worse than recorded, and is now closed
+
+I had recorded the reason no number was ever graded as "no approval file is
+emitted from a plan session". Reading the execution path end to end shows that
+was wrong. `execute_program_node` refuses when its frozen approval is `None`
+— *"legacy V1 approval is preview-only; Runtime V2 frozen approval is required
+for execution"* — and `frozen_workflow_approval=` was passed at **no call site
+in the package**. No approval file could have driven execution whatever it
+contained.
+
+That is the W7 `repair_command` finding again — a path advertised that the
+runtime cannot let succeed — on the most important capability in the harness.
+Found the same way: by asking whether the thing could work at all before
+theorising about why it did not. The frozen body now travels in the approval
+file beside the V1 approval and the composition threads it through; deriving it
+in-session was rejected because it would make its own `plan_sha256` check
+compare the plan against itself.
+
+## The convention the case earned
+
+The model's ZPVE was `sum → scale 0.5 → convert(cm⁻¹→kJ/mol) → scale 0.9135`.
+The `convert` node **cannot run**: a wavenumber is `FREQUENCY` and a molar
+energy is `ENERGY`, so the unit engine refuses, correctly — `h·c·N_A` is a
+spectroscopic convention, not a unit identity. The session predicted the
+refusal in its own report and proposed hand-multiplying by `h·c·N_A`, which
+would have moved a physical constant into model arithmetic.
+
+`harmonic_zero_point_energy` now owns both the factor of one half and the
+conversion, reproducing the sealed value to eight significant figures.
+Selectable conventions: **13**.
+
+**My own drift gate missed this.** It sweeps `analysis/aggregation.py`; this
+convention was owned in `analysis/thermochemistry.py`. Widening the sweep is
+the next repair, and it is listed below rather than claimed as done.
+
+---
+
 # What is not closed
 
 Stated plainly, because the value of the ledger depends on it.
 
-1. **No number has been graded.** `agent plan` does not execute. Ten sealed
-   numerical answer keys are unused. `WorkflowApprovalRequestV1` now exists but
-   is not yet *emitted* from a completed plan session, so the execution arm has
-   never run. This is the single largest gap.
-2. **Goal 4 is named, not wired.** `select_task_dependency_context()` implements
+1. **`agent run` has not itself executed a case.** The wiring defect is fixed
+   and one case is graded, but the end-to-end CLI path additionally requires a
+   fresh session to reproduce byte-identical project artifacts, which has not
+   been demonstrated. Nine sealed keys remain ungraded.
+2. **The convention drift gate has a known blind spot**: it sweeps
+   `analysis/aggregation.py` only, and `analysis/thermochemistry.py` owns
+   conventions too. That blind spot is exactly what let the zero-point energy
+   stay unexposed through nine cases.
+3. **Goal 4 is named, not wired.** `select_task_dependency_context()` implements
    the dependency-context policy with a budget, and is called only from the
    experiments module — never from the live loop. Family B addresses the
    *frontier*; the preceding-task context itself is still not delivered.
-3. **One run per arm.** Every paired comparison in this ledger is an
+4. **One run per arm.** Every paired comparison in this ledger is an
    observation, not an effect size.
-4. **Gaussian declares zero `project_parameter_domains`** where ORCA declares
+5. **Gaussian declares zero `project_parameter_domains`** where ORCA declares
    five. A declaration gap, not a verified absence.
-5. **An adjacent asymmetry, reported rather than repaired.** A `solv:`-only
+6. **An adjacent asymmetry, reported rather than repaired.** A `solv:`-only
    project gives `sp` `freq: True` from the defaults. Changing it would move
    existing projects, unlike the `gas:` case which was an unconditional
    failure, so it is recorded here and the gate skips it explicitly.
-6. **`project_section_names` remains a half-fact.** It lists which sections are
+7. **`project_section_names` remains a half-fact.** It lists which sections are
    accepted, not which job type reads which. `afc20200` removed the need to
    know for the case that failed; the general question is open.
 
