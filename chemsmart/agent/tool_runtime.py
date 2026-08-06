@@ -4652,13 +4652,29 @@ class CommandCompiledToolHostV1:
         self.invocations[invocation.invocation_sha256] = invocation
         self.command_inspections[inspection.receipt_sha256] = inspection
         self._command_contexts[invocation.invocation_sha256] = context
+        # Carry the node's identity, not only its digests.  An approval binds
+        # exact nodes, so a record that says a command was compiled without
+        # saying which node it was, on which program, at what charge, cannot
+        # be reviewed into one -- the reviewer would have to re-plan and hope
+        # for a byte-identical workflow.
         self._emit(
             turn_id,
             EventKind.COMMAND_COMPILED,
             invocation.invocation_sha256,
             status=invocation.status,
+            node_id=invocation.node_id,
+            program=context.proposal.program,
+            jobtype=context.proposal.jobtype,
+            execution_target=context.proposal.execution_target,
+            charge=context.proposal.charge,
+            multiplicity=context.proposal.multiplicity,
+            display_command=invocation.display_command,
             input_sha256=invocation.input_sha256,
             project_sha256=invocation.project_sha256,
+            project_receipt_sha256=invocation.project_receipt_sha256,
+            program_engine_binding_sha256=(
+                invocation.program_engine_binding_sha256
+            ),
             scientific_identity_sha256=(
                 invocation.scientific_identity_sha256
             ),
