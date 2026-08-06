@@ -364,3 +364,63 @@ The lesson is about method, not about this tool. The first two attempts were
 aimed at the instance that happened to be visible. Only the third asked what
 class the instance belonged to, and it is the only one that moved the
 behaviour — on one paired run, which is an observation, not an effect size.
+
+# W7: the four-session failure, and how three fixes missed it
+
+W7 asked for the ethane rotational barrier from single points at fixed
+staggered and eclipsed geometries, plus the H–C–C–H torsion in each. Sealed
+first: **3.328 kcal/mol** (experiment 2.9; the C–C bond is not relaxed),
+torsions 60.0° and 0.0°.
+
+## A gap closed by prediction rather than by damage
+
+Sealing the case exposed that `distance` and `angle` were registered
+conventions and `dihedral` was not — even though a torsion is the third
+standard internal coordinate and the one a rotational barrier is *defined*
+along. That gap was predictable without running anything, so it was closed
+first. The model then used it immediately: `{ref: 4, dihedral: 1}`, four
+indexed references and one call, zero arithmetic nodes.
+
+The sign matters and is pinned: reversing the fourth atom reverses the torsion,
+which is what distinguishes a P from an M helix. Degenerate geometries are
+refused by name rather than returning a number.
+
+## The failure I got wrong three times
+
+Across four sessions the model called `repair_command` with no counterexample
+bound. I attributed it to wording and tried, in order:
+
+1. describing the argument — failed;
+2. stating the precondition in that tool's description — failed, and the next
+   case did it with a *different* tool;
+3. deriving the precondition for all six tools in that class from one table —
+   appeared to work on one paired arm, then W7 arm A had three such calls.
+
+Each fix was plausible. None held. Reading the code answered it in one grep:
+`CommandCounterexampleV1` is never constructed anywhere in the package and
+`register_counterexample` has no callers. **The registry is empty for the whole
+lifetime of every session, so the tool cannot succeed.** It is an unfinished
+feature that was advertised as a usable repair path, and the model was
+reasonable to reach for it.
+
+| W7 | arm A (advertised) | arm B (withheld) |
+|---|---|---|
+| provider turns | 37 | **27** |
+| input tokens | 2,512,603 | **1,936,831** |
+| rejections | 4 | **1** |
+| `repair_command` calls | 3 | **0** |
+
+The remaining arm-B rejection is an artifact-ID collision, from which the model
+recovered unaided.
+
+The handler, contract, and invocation fields are all kept, so re-exposing the
+tool is a one-line surface change in the same commit that wires a producer —
+and a test fails the moment such a producer appears, which is the signal to do
+it. The general rule is now gated on all three surfaces: no tool may be
+advertised whose required registry nothing in the runtime fills. That is
+exactly what the capability registry already does when it declares PySCF `td`
+as `execution_supported: false` rather than offering it as runnable.
+
+The methodological point is the one worth keeping. Three fixes aimed at the
+symptom looked reasonable and were cheap to write, and the cost of not checking
+whether the tool could work at all was four wasted sessions.
