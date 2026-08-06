@@ -62,6 +62,7 @@ _OPERATIONS = frozenset(
         "max",
         "distance",
         "angle",
+        "dihedral",
         "convert",
         "linear_fit_slope",
         "linear_fit_intercept",
@@ -104,6 +105,11 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
     "max": "largest of the inputs",
     "distance": "distance between two indexed coordinate vectors",
     "angle": "angle at the middle of three indexed coordinate vectors",
+    "dihedral": (
+        "signed torsion about the middle bond of four indexed coordinate "
+        "vectors, in (-180, 180]. The third standard internal coordinate "
+        "alongside distance and angle; do not rebuild it from cross products"
+    ),
     "convert": "restate a value in target_unit; arithmetic stays canonical",
     "linear_fit_slope": "slope of a least-squares line through x and y",
     "linear_fit_intercept": "intercept of that same least-squares line",
@@ -161,6 +167,7 @@ if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
 CONVENTION_OPERATIONS = frozenset(
     {
         "angle",
+        "dihedral",
         "boltzmann_average",
         "boltzmann_populations",
         "correlation_inverse_power_cbs_limit",
@@ -1438,6 +1445,49 @@ def _node_value(
         return make_quantity_value(
             quantity_id=node.node_id,
             source_value=degrees,
+            source_unit="degree",
+            value=radians,
+            unit="radian",
+            dimension=ANGLE,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "dihedral":
+        # The third standard internal coordinate.  distance and angle were
+        # owned and this was not, which leaves a torsion -- the coordinate a
+        # rotational barrier is defined along -- to be rebuilt from cross
+        # products and an atan2 the model would have to get the sign of right.
+        if len(inputs) != 4 or any(item.dimension != LENGTH for item in inputs):
+            raise QuantityExpressionError(
+                "dihedral requires four length-coordinate vectors, in bonded "
+                "order a-b-c-d"
+            )
+        a, b, c, d = (_numeric(item) for item in inputs)
+        if any(vector.ndim != 1 for vector in (a, b, c, d)):
+            raise QuantityExpressionError(
+                "dihedral inputs must be coordinate vectors"
+            )
+        if len({vector.shape for vector in (a, b, c, d)}) != 1:
+            raise QuantityExpressionError(
+                "dihedral coordinate shapes must match"
+            )
+        b1, b2, b3 = b - a, c - b, d - c
+        norm = float(np.linalg.norm(b2))
+        if norm == 0.0:
+            raise QuantityExpressionError(
+                "dihedral is undefined when the central atoms coincide"
+            )
+        n1, n2 = np.cross(b1, b2), np.cross(b2, b3)
+        if float(np.linalg.norm(n1)) == 0.0 or float(np.linalg.norm(n2)) == 0.0:
+            raise QuantityExpressionError(
+                "dihedral is undefined for three collinear atoms"
+            )
+        radians = math.atan2(
+            float(np.dot(np.cross(n1, n2), b2 / norm)), float(np.dot(n1, n2))
+        )
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=math.degrees(radians),
             source_unit="degree",
             value=radians,
             unit="radian",

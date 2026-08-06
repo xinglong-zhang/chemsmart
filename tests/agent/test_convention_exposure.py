@@ -390,3 +390,74 @@ def test_a_non_frequency_input_is_refused_by_name():
             (_quantity("e", (-1.0, 2.0), "hartree", ENERGY),),
             "n",
         )
+
+
+_LEN = (0, 1, 0, 0, 0, 0)
+
+
+def _dihedral(points):
+    inputs = tuple(
+        _quantity(f"p{i}", tuple(p), "angstrom", _LEN)
+        for i, p in enumerate(points)
+    )
+    return _populations(
+        (
+            QuantityExpressionNodeV1(
+                node_id="d",
+                operation="dihedral",
+                input_ids=tuple(f"p{i}" for i in range(len(points))),
+            ),
+        ),
+        inputs,
+        "d",
+    )
+
+
+def test_a_torsion_is_owned_like_the_other_internal_coordinates():
+    """distance and angle were owned; the third coordinate was not.
+
+    A rotational barrier is defined along a torsion, so leaving it unexposed
+    forces a model to rebuild it from cross products and an atan2 whose sign
+    it would have to get right unaided.
+    """
+
+    anti = _dihedral(
+        [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    )
+    assert anti.outputs[0].source_value == pytest.approx(0.0, abs=1e-9)
+    dependency = anti.output_dependencies[0]
+    assert dependency.convention_operations == ("dihedral",)
+    assert dependency.arithmetic_node_count == 0
+
+
+def test_the_torsion_is_signed_and_the_sign_follows_the_bonded_order():
+    """An unsigned torsion cannot tell a P from an M helix."""
+
+    plus = _dihedral(
+        [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 1.0)]
+    ).outputs[0].source_value
+    minus = _dihedral(
+        [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, -1.0)]
+    ).outputs[0].source_value
+    assert plus == pytest.approx(-minus, abs=1e-9)
+    assert abs(plus) == pytest.approx(45.0, abs=1e-6)
+
+
+def test_a_degenerate_torsion_is_refused_rather_than_returning_a_number():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionError
+
+    with pytest.raises(QuantityExpressionError, match="collinear"):
+        _dihedral(
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0)]
+        )
+    with pytest.raises(QuantityExpressionError, match="central atoms coincide"):
+        _dihedral(
+            [(1.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 1.0)]
+        )
+
+
+def test_the_wrong_number_of_atoms_names_the_bonded_order():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionError
+
+    with pytest.raises(QuantityExpressionError, match="a-b-c-d"):
+        _dihedral([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)])
