@@ -141,6 +141,35 @@ class ORCARoute:
         return None
 
     @property
+    def ri_approximation(self):
+        """Extract the resolution-of-the-identity choice from the route.
+
+        The writer emits ``NoRI``, ``RI``, ``RIJCOSX`` or ``RIJK`` from the
+        project's ``ri_approximation``.  Nothing read them back, so a preview
+        validator that parses the generated input and compares it with the
+        requested settings reported a critical finding for a correct project.
+
+        Observed live: an n-butane session reproducing a protocol that calls
+        for conventional four-index integrals wrote ``ri_approximation: none``,
+        was told the generated input was invalid, and cleared the finding by
+        deleting the key -- which is the one edit that lets ORCA's own default
+        density fitting back in.  The harness pushed the model away from the
+        scientifically correct input.
+        """
+
+        from chemsmart.jobs.orca.settings import ORCA_RI_KEYWORDS
+
+        by_keyword = {
+            keyword.lower(): name
+            for name, keyword in ORCA_RI_KEYWORDS.items()
+        }
+        for route_keyword in self.route_keywords:
+            match = by_keyword.get(route_keyword.lower())
+            if match is not None:
+                return match
+        return None
+
+    @property
     def scf_tol(self):
         """Extract SCF convergence tolerance from route keywords."""
         for route_input in self.route_inputs:
