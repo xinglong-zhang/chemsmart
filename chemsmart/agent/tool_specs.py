@@ -294,7 +294,16 @@ def build_command_compiled_tool_surface(
         ),
         _tool(
             "repair_command",
-            "Apply one constrained counterexample patch without changing bindings.",
+            (
+                "Apply one constrained counterexample patch without changing "
+                "bindings. PRECONDITION: a counterexample must already exist, "
+                "and only the host creates one -- when a compiled command "
+                "fails inspection, safe preview, or program validation. There "
+                "is nothing to repair until something has failed, so calling "
+                "this after a successful preview cannot succeed. Fix a "
+                "rejected argument by calling the tool again with it "
+                "corrected, not by repairing it."
+            ),
             {
                 "invocation_sha256": digest,
                 "counterexample_id": _string(),

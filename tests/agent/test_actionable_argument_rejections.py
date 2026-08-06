@@ -228,3 +228,31 @@ def test_a_union_type_is_not_treated_as_an_unknown_type():
     schema = {"type": ["number", "null"]}
     with pytest.raises(ContractError, match="must be one of"):
         _validate_json_value("x", {"not": "a number"}, schema)
+
+
+def test_a_tool_with_a_precondition_states_it_in_its_own_description():
+    """Describing the argument was not enough; measured, not assumed.
+
+    After `counterexample_id` gained a description saying one exists only
+    after a failure, a live session still called `repair_command` twice with
+    no counterexample bound.  A model choosing a tool reads tool descriptions;
+    it may never reach the argument description of a tool it has not yet
+    decided to call.  The precondition belongs in both places.
+    """
+
+    from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
+
+    definition = next(
+        item["function"]
+        for item in build_command_compiled_tool_surface().tool_definitions
+        if item["function"]["name"] == "repair_command"
+    )
+    description = definition["description"]
+    assert "PRECONDITION" in description
+    assert "only the host creates one" in description
+    assert "cannot succeed" in description, (
+        "the description must say the call is futile, not merely discouraged"
+    )
+    # And the argument still says it too, for a caller already inside the tool.
+    counterexample = definition["parameters"]["properties"]["counterexample_id"]
+    assert "only after such a failure" in counterexample["description"]
