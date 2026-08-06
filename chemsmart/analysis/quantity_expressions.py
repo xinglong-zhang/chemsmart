@@ -71,6 +71,7 @@ _OPERATIONS = frozenset(
         "photon_wavelength",
         "boltzmann_populations",
         "boltzmann_average",
+        "imaginary_mode_count",
     }
 )
 
@@ -138,6 +139,12 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "the state energies and a temperature, in that order, optionally "
         "followed by the per-state degeneracies"
     ),
+    "imaginary_mode_count": (
+        "how many harmonic modes are imaginary, from one frequency vector, "
+        "optionally followed by a frequency cutoff below which a near-zero "
+        "mode is ignored. Owns the sign convention: a minimum has zero, a "
+        "transition state exactly one. Do not rebuild it from comparisons"
+    ),
 }
 
 if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
@@ -157,6 +164,7 @@ CONVENTION_OPERATIONS = frozenset(
         "boltzmann_average",
         "boltzmann_populations",
         "correlation_inverse_power_cbs_limit",
+        "imaginary_mode_count",
         "distance",
         "exponential_cbs_limit",
         "linear_fit_intercept",
@@ -1201,6 +1209,49 @@ def _node_value(
             value=payload,
             unit=unit,
             dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "imaginary_mode_count":
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            count_imaginary_modes,
+        )
+
+        if len(inputs) not in (1, 2) or inputs[0].dimension != FREQUENCY:
+            raise QuantityExpressionError(
+                "imaginary_mode_count takes one frequency vector, optionally "
+                f"followed by a frequency cutoff; got {len(inputs)} inputs"
+            )
+        cutoff = 0.0
+        if len(inputs) == 2:
+            if inputs[1].dimension != FREQUENCY:
+                raise QuantityExpressionError(
+                    "the optional cutoff for imaginary_mode_count is a "
+                    "frequency"
+                )
+            cutoff = abs(float(_numeric(inputs[1])))
+        try:
+            payload = _payload(
+                float(
+                    count_imaginary_modes(
+                        tuple(
+                            float(item)
+                            for item in _numeric(inputs[0]).reshape(-1)
+                        ),
+                        cutoff_cm1=cutoff,
+                    )
+                )
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="1",
+            value=payload,
+            unit="1",
+            dimension=DIMENSIONLESS,
             evidence_ref=evidence_ref,
         )
 

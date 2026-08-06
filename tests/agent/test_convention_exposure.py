@@ -35,6 +35,7 @@ from chemsmart.analysis.result_quantities import (
 #: An entry here is a decision, not an oversight; adding one requires a reason
 #: that survives review.
 _NOT_MODEL_SELECTABLE = {
+    "count_imaginary_modes": "exposed as imaginary_mode_count",
     "convert_energy": (
         "unit handling; the evaluator normalizes units itself and the claim "
         "contract enforces display units"
@@ -318,3 +319,74 @@ def test_a_wrong_degeneracy_count_names_both_counts():
             "p",
         )
     assert "2 degeneracies for 3 states" in str(failure.value)
+
+
+_FREQ = (0, 0, 0, 0, 1, 0)
+
+
+def _count(freqs, cutoff=None):
+    inputs = (_quantity("f", freqs, "cm^-1", _FREQ),)
+    ids = ("f",)
+    if cutoff is not None:
+        inputs += (_quantity("c", cutoff, "cm^-1", _FREQ),)
+        ids += ("c",)
+    return _populations(
+        (
+            QuantityExpressionNodeV1(
+                node_id="n", operation="imaginary_mode_count", input_ids=ids
+            ),
+        ),
+        inputs,
+        "n",
+    )
+
+
+def test_counting_imaginary_modes_is_one_node_not_twenty_two():
+    """Observed live: a session built 22 arithmetic nodes to count negatives.
+
+    Every optimization must show zero and every transition state exactly one,
+    so this is among the most universal post-processing steps in the field.
+    Left unexposed, the definition of "imaginary" lived in the model's
+    arithmetic rather than in the toolkit.
+    """
+
+    receipt = _count((121.6, 300.0, 900.0))
+    assert receipt.outputs[0].value == 0.0
+    dependency = receipt.output_dependencies[0]
+    assert dependency.convention_operations == ("imaginary_mode_count",)
+    assert dependency.arithmetic_node_count == 0
+    assert dependency.model_authored_constants == ()
+
+
+def test_a_transition_state_shows_exactly_one():
+    assert _count((-450.0, 300.0, 900.0)).outputs[0].value == 1.0
+
+
+def test_a_cutoff_ignores_a_numerically_noisy_near_zero_mode():
+    """The treatment the PySCF stationary-point policy already applies."""
+
+    noisy = (-3.2, 300.0, 900.0)
+    assert _count(noisy).outputs[0].value == 1.0
+    assert _count(noisy, cutoff=10.0).outputs[0].value == 0.0
+    assert _count((-450.0, 300.0), cutoff=10.0).outputs[0].value == 1.0
+
+
+def test_the_count_is_dimensionless_whatever_the_frequencies_were():
+    assert _count((121.6, 300.0)).outputs[0].unit == "1"
+
+
+def test_a_non_frequency_input_is_refused_by_name():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionError
+
+    with pytest.raises(QuantityExpressionError, match="frequency vector"):
+        _populations(
+            (
+                QuantityExpressionNodeV1(
+                    node_id="n",
+                    operation="imaginary_mode_count",
+                    input_ids=("e",),
+                ),
+            ),
+            (_quantity("e", (-1.0, 2.0), "hartree", ENERGY),),
+            "n",
+        )

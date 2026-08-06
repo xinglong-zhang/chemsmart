@@ -345,6 +345,7 @@ __all__ = [
     "boltzmann_populations",
     "cbs_extrapolation",
     "convert_energy",
+    "count_imaginary_modes",
     "extrapolate_correlation_helgaker",
     "extrapolate_scf_exponential",
     "state_energy_difference",
@@ -389,3 +390,34 @@ def extrapolate_exponential_three_point(
             f"exponential fit; observed ratio {ratio:.4f} is outside (0, 1)"
         )
     return third - (far * far) / curvature
+
+
+def count_imaginary_modes(
+    frequencies: tuple[float, ...],
+    *,
+    cutoff_cm1: float = 0.0,
+) -> int:
+    """Return how many harmonic modes are imaginary.
+
+    A mode is imaginary when its frequency is negative; ChemSmart records those
+    as negative wavenumbers.  ``cutoff_cm1`` ignores modes whose magnitude is
+    at or below it, which is the standard treatment of numerically noisy
+    near-zero modes and is what the PySCF stationary-point policy already
+    applies through ``imaginary_mode_cutoff_cm1``.
+
+    This is one of the most universal post-processing steps in the field: every
+    optimization must show none, every transition state exactly one.  Left
+    unexposed, a live session built a twenty-two node arithmetic contraption to
+    count negative numbers in four frequency vectors, which put the definition
+    of "imaginary" into the model's arithmetic instead of the toolkit's.
+    """
+
+    values = [float(item) for item in frequencies]
+    if not values:
+        raise AggregationError("at least one frequency is required")
+    if any(not math.isfinite(item) for item in values):
+        raise AggregationError("frequencies must be finite")
+    cutoff = float(cutoff_cm1)
+    if not math.isfinite(cutoff) or cutoff < 0:
+        raise AggregationError("cutoff_cm1 must be finite and non-negative")
+    return sum(1 for item in values if item < 0.0 and abs(item) > cutoff)
