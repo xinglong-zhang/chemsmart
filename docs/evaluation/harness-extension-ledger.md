@@ -321,14 +321,84 @@ the next repair, and it is listed below rather than claimed as done.
 
 ---
 
+# W12: walking the approval path, and the three gates behind it
+
+W12 built a real approval from W11's plan session and ran
+`chemsmart agent run --approval-file`. Three defects sat behind that single
+command, each invisible until the previous one was cleared. All three are the
+same shape: **a documented path the runtime could not let succeed.**
+
+### Gate 1 — the frozen approval was never passed
+
+`execute_program_node` refuses when `frozen_workflow_approval` is `None`, and
+`frozen_workflow_approval=` appeared at **no call site in the package**. No
+approval file could execute anything, whatever it contained. Fixed by carrying
+the frozen body in the approval file and threading it through the composition
+(`861f0805`).
+
+### Gate 2 — a plan could not be frozen, so the flow was circular
+
+`build_frozen_workflow_approval` demanded
+
+    materialized_workflow.resource_sha256 == resources.resource_sha256
+
+A plan session holds no execution resources — it makes no engine call — so it
+materializes under a **preview sentinel**,
+`{"schema_version": "chemsmart.preview-resource.v1", "chemistry_engine_calls": 0}`
+= `2c7d801f…`, against a locked run profile of `f28600ac…`. The only
+materialization that satisfied the equality came from a session that already
+held execution resources, and holding those requires an approval, which
+requires a freeze. **Nothing could produce the first one.** That is why gate 1
+existed: not an oversight, an unreachable precondition. Binding resources is
+the reviewer's act, so the freeze now does it (`4a892df4`).
+
+With both cleared, the approval loaded, the workspace projects resolved by
+digest, and **`execute_approved_program_node` appeared on the tool surface for
+the first time** — 23 tools instead of 22.
+
+### Gate 3 — the session is judged on a plan it is never shown
+
+Execution then refused:
+
+    planned workflow differs from frozen execution approval
+
+The gate compares `plan_sha256`. What that digest covers, against what the
+public approval projection disclosed:
+
+| level | fields in the digest | fields disclosed |
+|---|---|---|
+| plan | 9 | **1** |
+| per node | 10 | **4** |
+| per edge | 7 | **2** |
+
+The session had to re-derive `project_role` (`"opt-hf-631gd"`),
+`required_observables`, `complexity_factors`
+(`["multiple_stages", "producer_artifact_edge"]`) and `edge_id`
+(`"data.opt.hess.optimized_geometry"`) — free-form strings chosen by an
+earlier, different session — and was told only that its plan "differs".
+**Reproducing an approved plan was not merely hard, it was unspecified.**
+
+The approval file may now carry the plan body; the projection discloses all of
+it, the target digest, and the rule that reproduction is required. It is
+disclosed only when it hashes to the digest the frozen approval already pins,
+so a reviewer cannot show one plan while approving another (`7330c464`).
+**Not yet validated by a live run** — the observation above is what motivates
+it, and the re-run is the next experiment.
+
+The methodological point repeats W7 exactly: each gate looked like the whole
+problem until it was cleared, and only clearing it revealed the next. Asking
+"can this path work at all?" found all three; theorising about any one of them
+would have found none.
+
+---
+
 # What is not closed
 
 Stated plainly, because the value of the ledger depends on it.
 
-1. **`agent run` has not itself executed a case.** The wiring defect is fixed
-   and one case is graded, but the end-to-end CLI path additionally requires a
-   fresh session to reproduce byte-identical project artifacts, which has not
-   been demonstrated. Nine sealed keys remain ungraded.
+1. **`agent run` has not itself executed a case.** Three structural gates are
+   now cleared and the execution tool is exposed, but the plan-disclosure fix
+   has not been validated by a live re-run. Nine sealed keys remain ungraded.
 2. **The convention drift gate has a known blind spot**: it sweeps
    `analysis/aggregation.py` only, and `analysis/thermochemistry.py` owns
    conventions too. That blind spot is exactly what let the zero-point energy
