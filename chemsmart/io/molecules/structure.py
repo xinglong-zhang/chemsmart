@@ -28,6 +28,26 @@ p = pt()
 
 logger = logging.getLogger(__name__)
 
+# Extensions that must use ASE (Open Babel either cannot read them or
+# silently drops cell / PBC information). Kept as a module-level set so
+# callers and tests can inspect the skip-list.
+ASE_ONLY_EXTENSIONS = frozenset(
+    {
+        "traj",
+        "db",
+        "cif",
+        "cfg",
+        "vasp",
+        "poscar",
+        "contcar",
+        "gen",
+        "cell",
+        "castep",
+        "xsf",
+        "extxyz",
+    }
+)
+
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -1088,6 +1108,25 @@ class Molecule:
         """
         basename = os.path.basename(filepath)
 
+        # Check .extxyz before .xyz: basename.endswith(".xyz") is False for
+        # ".extxyz", but keep an explicit branch so ASE (lattice / properties)
+        # is preferred. If ASE cannot parse the file, fall back to the lenient
+        # XYZ parser. Folder scanners that match filetype "xyz" use a dotted
+        # suffix and no longer pick up *.extxyz.
+        if basename.endswith(".extxyz"):
+            try:
+                return cls._read_other(filepath, index, **kwargs)
+            except Exception as exc:
+                logger.debug(
+                    f"ASE failed to read extxyz {filepath}; "
+                    f"trying XYZ parser. ({exc})"
+                )
+                return cls._read_xyz_file(
+                    filepath=filepath,
+                    index=index,
+                    return_list=return_list,
+                )
+
         if basename.endswith(".xyz"):
             logger.debug(f"Reading xyz file: {filepath}")
             return cls._read_xyz_file(
@@ -1394,13 +1433,157 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
+    @classmethod
+    def _molecule_from_pybel(cls, ob_mol):
+        """
+        Convert an Open Babel ``pybel.Molecule`` to a CHEMSMART ``Molecule``.
+
+        Geometry is obtained by writing the Open Babel molecule to an XYZ
+        string and parsing the coordinate block. Charge and multiplicity are
+        taken from the underlying ``OBMol`` when available.
+        """
+        xyz_string = ob_mol.write("xyz")
+        lines = xyz_string.strip().splitlines()
+        if len(lines) < 3:
+            raise ValueError(
+                "Open Babel produced an empty or incomplete XYZ representation."
+            )
+        try:
+            n_atoms = int(lines[0].split()[0])
+        except (ValueError, IndexError) as exc:
+            raise ValueError(
+                f"Unable to parse atom count from Open Babel XYZ: {lines[0]!r}"
+            ) from exc
+
+        symbols = []
+        positions = []
+        for line in lines[2 : 2 + n_atoms]:
+            parts = line.split()
+            if len(parts) < 4:
+                raise ValueError(
+                    f"Unable to parse Open Babel XYZ coordinate line: {line!r}"
+                )
+            symbols.append(parts[0])
+            positions.append(
+                [float(parts[1]), float(parts[2]), float(parts[3])]
+            )
+
+        if len(symbols) != n_atoms:
+            raise ValueError(
+                f"Open Babel XYZ atom count mismatch: expected {n_atoms}, "
+                f"got {len(symbols)}."
+            )
+
+        charge = None
+        multiplicity = None
+        try:
+            charge_val = int(ob_mol.OBMol.GetTotalCharge())
+            # Propagate charge when non-zero; keep None for neutral so
+            # downstream defaults remain unchanged.
+            if charge_val != 0:
+                charge = charge_val
+            multiplicity = int(ob_mol.OBMol.GetTotalSpinMultiplicity())
+        except Exception:  # pragma: no cover - defensive for stub OBMol
+            pass
+
+        return cls(
+            symbols=symbols,
+            positions=np.asarray(positions, dtype=float),
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+
+    @classmethod
+    def _read_via_openbabel(cls, filepath, index="-1", **kwargs):
+        """
+        Read a molecular structure file via Open Babel (``pybel``).
+
+        Unsupported / empty reads raise so the caller can fall back to ASE.
+        Zero-dimensional inputs (e.g. SMILES) are expanded to 3D with
+        ``make3D()`` when possible.
+
+        Args:
+            filepath (str): Path to the input file.
+            index (str): 1-based structure selector (``'-1'``, ``':'``, ``'1'``).
+            **kwargs: Accepted for API compatibility; unused.
+
+        Returns:
+            Molecule or list[Molecule]: Selected structure(s).
+
+        Raises:
+            ImportError: If Open Babel is not installed.
+            ValueError: If Open Babel cannot read any molecules from the file.
+        """
+        del kwargs  # reserved for _read_other passthrough
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Reading via Open Babel requires openbabel. Install with: "
+                "``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        fmt = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if not fmt:
+            raise ValueError(
+                f"Cannot infer Open Babel format from path: {filepath}"
+            )
+
+        try:
+            ob_mols = list(pybel.readfile(fmt, filepath))
+        except Exception as exc:
+            raise ValueError(
+                f"Open Babel could not read {filepath} as format '{fmt}': {exc}"
+            ) from exc
+
+        if not ob_mols:
+            raise ValueError(
+                f"Open Babel found no molecules in {filepath}"
+            )
+
+        molecules = []
+        for ob_mol in ob_mols:
+            # SMILES / InChI etc. arrive as 0-D; generate 3D coordinates.
+            if getattr(ob_mol, "dim", 3) < 3:
+                try:
+                    ob_mol.make3D()
+                except Exception as exc:
+                    logger.warning(
+                        "Open Babel make3D failed for %s (%s); "
+                        "returning molecule with incomplete 3D coordinates.",
+                        filepath,
+                        exc,
+                    )
+            molecules.append(cls._molecule_from_pybel(ob_mol))
+
+        selected = molecules[string2index_1based(index)]
+        return selected
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
         """
-        Reads a file using ASE and returns a Molecule object.
+        Read an unsupported extension via Open Babel, falling back to ASE.
+
+        Molecular formats try Open Babel first. Periodic / ASE-specific
+        extensions listed in ``ASE_ONLY_EXTENSIONS`` (``.traj``, ``.cif``,
+        ``.cfg``, ``.db``, VASP, etc.) skip Open Babel and go straight to ASE,
+        because Open Babel either cannot read them or silently drops cell /
+        PBC data.
         """
         from .atoms import AtomsChargeMultiplicity
+
+        ext = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if ext not in ASE_ONLY_EXTENSIONS:
+            try:
+                return Molecule._read_via_openbabel(
+                    filepath, index=index, **kwargs
+                )
+            except Exception as exc:
+                logger.debug(
+                    f"Open Babel could not read {filepath}; trying ASE. ({exc})"
+                )
 
         # supplied index is 1-indexed, thus need to convert
         index = string2index_1based(index)

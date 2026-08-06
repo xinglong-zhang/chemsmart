@@ -1,22 +1,14 @@
 import logging
 import os
 
-from chemsmart.io.file import CDXFile, SDFFile
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.folder import (
     GaussianInputFolder,
     GaussianOutputFolder,
 )
-from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.folder import ORCAInputFolder, ORCAOutputFolder
-from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.folder import XYZFolder
-from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -27,6 +19,14 @@ create_logger()
 
 class FileConverter:
     """Class for converting files in different formats.
+
+    Single-file and batch conversions both go through
+    :meth:`convert_file`, which reads via ``Molecule.from_filepath``
+    and writes via ``Molecule.write``. When
+    ``include_intermediate_structures`` is ``True`` and the input
+    contains multiple structures, each structure is written to a
+    separate numbered file (``basename_1.ext``, ``basename_2.ext``, ...).
+
     Args:
         directory (str): Directory in which to convert files.
         type (str): Type of file to be converted, if directory is specified.
@@ -39,6 +39,7 @@ class FileConverter:
             the file is written to this path and the format is inferred from
             the extension. Takes precedence over ``output_filetype``.
         include_intermediate_structures (bool): Include intermediate structures.
+            When ``True``, multi-structure inputs produce numbered output files.
     """
 
     def __init__(
@@ -86,18 +87,20 @@ class FileConverter:
                 # get filetype/extension from filename
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
-                if self.output_filepath is not None:
-                    self.convert_file(
-                        self.filename,
-                        self.output_filepath,
-                        include_intermediate_structures=(
-                            self.include_intermediate_structures
-                        ),
+                output_path = self.output_filepath
+                if output_path is None:
+                    filedir, fname = os.path.split(self.filename)
+                    basename = os.path.splitext(fname)[0]
+                    output_path = os.path.join(
+                        filedir, f"{basename}.{self.output_filetype}"
                     )
-                else:
-                    self._convert_single_file(
-                        self.filename, self.output_filetype
-                    )
+                self.convert_file(
+                    self.filename,
+                    output_path,
+                    include_intermediate_structures=(
+                        self.include_intermediate_structures
+                    ),
+                )
             else:
                 raise ValueError(
                     "Either directory or filename must be specified."
@@ -107,10 +110,13 @@ class FileConverter:
         """
         Convert all files of specified type in the directory.
 
+        Collects matching files then delegates each conversion to
+        :meth:`convert_file`.
+
         Args:
             directory (str): Directory containing files to convert.
             type (str): File type to convert
-            (log, com, gjf, out, inp, xyz, sdf, pdb).
+            (log, com, gjf, out, inp, xyz, sdf, pdb, cdxml, cdx).
             output_filetype (str): Target output format.
         """
         if type == "log":
@@ -165,132 +171,18 @@ class FileConverter:
 
         for file in all_files:
             logger.info(f"Converting file: {file}")
-            if type == "log":
-                outfile = Gaussian16Output(filename=file)
-            elif type == "com" or type == "gjf":
-                outfile = Gaussian16Input(filename=file)
-            elif type == "out":
-                if self.program == "gaussian":
-                    outfile = Gaussian16Output(filename=file)
-                else:
-                    outfile = ORCAOutput(filename=file)
-            elif type == "inp":
-                outfile = ORCAInput(filename=file)
-            elif type == "xyz":
-                outfile = XYZFile(filename=file)
-            elif type == "sdf":
-                outfile = SDFFile(filename=file)
-            elif type == "pdb":
-                outfile = PDBFile(filename=file)
-            elif type in ("cdxml", "cdx"):
-                cdxfile = CDXFile(filename=file)
-                mols = cdxfile.molecules
-                filedir, fname = os.path.split(file)
-                file_basename = os.path.splitext(fname)[0]
-                if len(mols) == 1:
-                    output_path = os.path.join(
-                        filedir, f"{file_basename}.{output_filetype}"
-                    )
-                    mols[0].write(output_path, format=output_filetype)
-                    logger.info(f"Created: {output_path}")
-                else:
-                    for i, m in enumerate(mols, start=1):
-                        output_path = os.path.join(
-                            filedir,
-                            f"{file_basename}_{i}.{output_filetype}",
-                        )
-                        m.write(output_path, format=output_filetype)
-                        logger.info(f"Created: {output_path}")
-                continue
-            else:
-                raise ValueError(f"File type {type} is not supported.")
-            if self.include_intermediate_structures:
-                mol = outfile.all_structures
-            else:
-                mol = (
-                    outfile.molecule
-                )  # for xyz file with multiple mols, only converts the last one
-            filedir, filename = os.path.split(file)
-            file_basename = os.path.splitext(filename)[0]
-            output_filepath = os.path.join(
+            filedir, fname = os.path.split(file)
+            file_basename = os.path.splitext(fname)[0]
+            output_path = os.path.join(
                 filedir, f"{file_basename}.{output_filetype}"
             )
-            if isinstance(mol, list):
-                for i, m in enumerate(mol):
-                    output_filepath = os.path.join(
-                        filedir, f"{file_basename}.{output_filetype}"
-                    )
-                    m.write(output_filepath, format=output_filetype)
-            else:
-                mol.write(output_filepath, format=output_filetype)
-
-    def _convert_single_file(self, filename, output_filetype):
-        """
-        Convert single file to specified format.
-
-        Args:
-            filename (str): Path to the file to convert.
-            output_filetype (str): Target output format.
-        """
-        logger.info(f"Converting file type: {self.type}")
-        if self.type == "log" or self.type == "out":
-            detected = get_program_type_from_file(filename)
-            if detected == "gaussian":
-                outfile = Gaussian16Output(filename=filename)
-            elif detected == "orca":
-                outfile = ORCAOutput(filename=filename)
-            else:
-                raise ValueError(
-                    f"Could not detect program type for '{filename}'. "
-                )
-        elif self.type == "com" or self.type == "gjf":
-            outfile = Gaussian16Input(filename=filename)
-        elif self.type == "inp":
-            outfile = ORCAInput(filename=filename)
-        elif self.type == "xyz":
-            outfile = XYZFile(filename=filename)
-        elif self.type == "sdf":
-            outfile = SDFFile(filename=filename)
-        elif self.type == "pdb":
-            outfile = PDBFile(filename=filename)
-        elif self.type in ("cdxml", "cdx"):
-            cdxfile = CDXFile(filename=filename)
-            mols = cdxfile.molecules
-            filedir, fname = os.path.split(filename)
-            file_basename = os.path.splitext(fname)[0]
-            if len(mols) == 1:
-                output_path = os.path.join(
-                    filedir, f"{file_basename}.{output_filetype}"
-                )
-                mols[0].write(output_path, format=output_filetype)
-                logger.info(f"Created: {output_path}")
-            else:
-                for i, m in enumerate(mols, start=1):
-                    output_path = os.path.join(
-                        filedir, f"{file_basename}_{i}.{output_filetype}"
-                    )
-                    m.write(output_path, format=output_filetype)
-                    logger.info(f"Created: {output_path}")
-            return
-        else:
-            raise ValueError(f"File type {self.type} is not supported.")
-        if self.include_intermediate_structures:
-            mol = outfile.all_structures
-        else:
-            mol = outfile.molecule
-        filedir, filename = os.path.split(filename)
-        file_basename = os.path.splitext(filename)[0]
-        output_filepath = os.path.join(
-            filedir, f"{file_basename}.{output_filetype}"
-        )
-        if isinstance(mol, list):
-            for m in mol:
-                output_filepath = os.path.join(
-                    filedir, f"{file_basename}.{output_filetype}"
-                )
-                m.write(output_filepath, format=output_filetype)
-        else:
-            mol.write(output_filepath, format=output_filetype)
+            self.convert_file(
+                file,
+                output_path,
+                include_intermediate_structures=(
+                    self.include_intermediate_structures
+                ),
+            )
 
     @staticmethod
     def xyz_to_pdb(
@@ -431,6 +323,11 @@ class FileConverter:
                     path = os.path.join(
                         output_dir, f"{output_basename}_{i}.{output_ext}"
                     )
+                    if os.path.exists(path):
+                        logger.warning(
+                            "Overwriting existing numbered output file: %s",
+                            path,
+                        )
                     molecule.write(path, format=output_ext)
                     logger.info(f"Created: {path}")
         else:
