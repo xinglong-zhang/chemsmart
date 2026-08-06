@@ -484,3 +484,45 @@ session that had it was much more expensive. Recorded as it happened.
 Fourteen live sessions, 470 provider turns, 38.2 M input tokens, 777 k output,
 499 k reasoning, 116 minutes of provider latency. No rate-limit or quota error
 was returned at any point.
+
+# W9: a second article-sourced case, and three conventions transferring
+
+Sourced with SerpApi (the Elsevier key returns 401 and is presumably one of the
+rotated ones): *Scaling factors for ab initio vibrational frequencies*
+([arXiv:0901.0489](https://arxiv.org/abs/0901.0489)), PDF fetched and
+text-extracted. Its calibrated factor is quoted, not remembered —
+
+> "one gets ŝ = 0.9135 ± 0.0027 … consistent with the rms obtained by Merrick
+> et al. for the HF/6-31G* theory/basis-set combination"
+
+Sealed before dispatch from ChemSmart's own HF/6-31G(d) run of water: harmonic
+ZPVE 60.145 kJ/mol, scaled 54.942 kJ/mol, zero imaginary modes.
+
+## What the run showed
+
+| | |
+|---|---|
+| turns / input tokens | 18 / 911,604 — the smallest session in the campaign |
+| `n_imag` | `{imaginary_mode_count: 1}` |
+| `thermo_zpve` | `thermochemistry` node, the correct owner |
+| `scaled_zpve` | `{literal: 1, multiply: 1}`, constant `0.9135` recorded |
+
+**Two conventions transferred unprompted.** `imaginary_mode_count`, registered
+after W5 built twenty-two nodes to do it by hand, was used here in one node on
+a different molecule at a different level. `dihedral`, registered before W7,
+was used there the same way. Neither case mentioned the operation.
+
+**The attribution behaved correctly on a constant that is supposed to be
+model-authored.** 0.9135 comes from the protocol, not from a measurement, and
+the receipt records it as model-supplied. That was written into the answer key
+before dispatch precisely as a check that the profile does not over-report a
+paper-given constant as a defect. It does not — a reader can see exactly which
+digit came from the paper and which from the calculation.
+
+## The repair this case earned
+
+`analysis output unit must not be empty` has now appeared in three separate
+cases, always on a count. It named neither the output nor the value a
+dimensionless quantity should carry, so a model that wrote a count with no unit
+had to guess between "", "none", "count" and "1". Both planes that raise it now
+say all three, from one shared hint.
