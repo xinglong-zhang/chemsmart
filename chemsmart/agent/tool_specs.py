@@ -522,6 +522,7 @@ def build_command_compiled_tool_surface(
             for item in tools
             if item["function"]["name"] != "consult_domain_skill"
         )
+    tools = _describe_tool_definitions(tools)
     return AgentToolSurfaceV1(
         schema_version="chemsmart.agent-tool-surface.v1",
         profile="command_compiled_preview",
@@ -549,6 +550,7 @@ def build_approved_execution_tool_surface(
             ("node_id",),
         ),
     )
+    tools = _describe_tool_definitions(tools)
     return AgentToolSurfaceV1(
         schema_version="chemsmart.agent-tool-surface.v1",
         profile="command_compiled_approved_execution",
@@ -579,6 +581,206 @@ def build_single_agent_baseline_tool_surface(
         tool_definitions=tools,
         tool_schema_sha256=canonical_sha256(tools),
     )
+
+
+#: What each recurring argument name means, applied wherever that name appears.
+#:
+#: Measured before this existed: 7 of 93 required arguments across the whole
+#: model-visible surface carried a description, so a model had to infer 86
+#: mandatory fields from their spelling.  Two live sessions failed on
+#: ``record_scientific_decision`` for exactly that reason -- one omitted
+#: ``alternatives``, another wrote a sentence into ``stage_order``.
+#:
+#: Keying by argument name rather than by tool is deliberate: the same field
+#: means the same thing everywhere it appears, and one entry then describes it
+#: in every tool that takes it.
+ARGUMENT_DESCRIPTIONS: dict[str, str] = {
+    "basis_mode": (
+        "How the basis is specified: a single set, or split by element class."
+    ),
+    "claims": (
+        "The reported values, each bound to the extraction or expression "
+        "receipt that produced it and carrying its display unit."
+    ),
+    "command_inspection_receipt_sha256": (
+        "Digest of the inspection receipt for the compiled command."
+    ),
+    "constraint_kinds": "The geometric constraints this request needs.",
+    "counterexample_id": (
+        "ID of a counterexample the host produced when a compiled command "
+        "failed inspection, safe preview or program validation. One exists "
+        "only after such a failure."
+    ),
+    "decision_id": (
+        "Stable identifier for this decision, lower case. Reuse it when you "
+        "revise the same decision so the record supersedes rather than "
+        "duplicates."
+    ),
+    "invocation_sha256": (
+        "Digest of the canonical command invocation this acts on."
+    ),
+    "method_family": (
+        "The broad method class, for example dft, hartree_fock or post_hf."
+    ),
+    "method_name": "The specific functional or method literal.",
+    "render_receipt_sha256": (
+        "Digest of the render receipt for the project document being promoted."
+    ),
+    "requires_double_hybrid": (
+        "Whether the protocol needs a double hybrid, which several programs "
+        "and engines do not support."
+    ),
+    "requires_post_hf": (
+        "Whether the protocol needs a correlated wavefunction method beyond "
+        "Hartree-Fock."
+    ),
+    "sections": (
+        "The project YAML body, keyed by the program's own section names. A "
+        "phase-keyed program uses gas/solv; a stage-keyed program uses its "
+        "job-type names."
+    ),
+    "source_claim_sha256s": (
+        "Digests of the claims this assessment is derived from."
+    ),
+    "alternatives": (
+        "The other scientifically defensible options you considered and did "
+        "not take, each with the reason. Required: a decision with no "
+        "alternatives is a preference, not a decision."
+    ),
+    "analysis_nodes": (
+        "The extraction, validation, mathematics and reporting stages that "
+        "turn finished results into the requested values."
+    ),
+    "artifact_id": "The host-bound ID of an artifact already recorded.",
+    "assumptions": (
+        "What you are taking as given and did not verify, stated so a reader "
+        "can check them independently."
+    ),
+    "calculation_nodes": (
+        "The program invocations of the workflow, each naming its program, "
+        "job type and project role."
+    ),
+    "capability_receipt_sha256": (
+        "Digest of the capability receipt returned by "
+        "inspect_program_capability for this program and engine."
+    ),
+    "charge": "Total molecular charge as an integer.",
+    "diagnostics": (
+        "The checks you will use to tell whether this decision was right, "
+        "stated before the results exist."
+    ),
+    "engine": "Execution engine: 'cpu' or 'gpu'.",
+    "engine_binding_sha256": (
+        "Digest of the engine binding from inspect_program_environment."
+    ),
+    "evidence_refs": (
+        "Digests of the host receipts this decision rests on. Every claim in "
+        "the decision must be traceable to one."
+    ),
+    "geometry_artifact_sha256": (
+        "Digest of the coordinate bytes this node consumes."
+    ),
+    "input_artifact_id": "The host-bound ID of the input geometry artifact.",
+    "inputs": (
+        "The measured quantities the expression consumes, each bound to an "
+        "extraction receipt."
+    ),
+    "job_families": "The job types this request covers.",
+    "jobtype": (
+        "The target program's ChemSmart CLI job form, not a program-neutral "
+        "label."
+    ),
+    "method_rationale": (
+        "Why this method and these settings answer the question, in the terms "
+        "the protocol being reproduced uses."
+    ),
+    "multiplicity": "Spin multiplicity 2S+1 as an integer, not PySCF's spin.",
+    "node_id": "Stable identifier of this node within the workflow.",
+    "nodes": "The workflow's nodes, in the order you intend them to run.",
+    "output_node_ids": (
+        "Which expression nodes are the reported outputs; the rest are "
+        "intermediates."
+    ),
+    "pressure_atm": "Standard-state pressure in atmospheres.",
+    "program": (
+        "The executable program name as ChemSmart registers it, lower case."
+    ),
+    "program_binding_sha256": (
+        "Digest of the program binding from inspect_program_environment."
+    ),
+    "project_artifact_id": (
+        "The host-bound ID of the promoted project YAML this node uses."
+    ),
+    "required_output_ids": (
+        "The observables the task asked for. A workflow that cannot produce "
+        "one of these is incomplete, whatever else it computes."
+    ),
+    "requested_engine": "The engine the task implies, before selection.",
+    "requested_program": "The program the task implies, before selection.",
+    "request_id": "Stable identifier for this request.",
+    "run_receipt_id": "The host-bound ID of the execution receipt.",
+    "scientific_identity_sha256": (
+        "Digest of the approved molecular identity binding this node uses."
+    ),
+    "selected_engine": "The engine you chose, which may differ from requested.",
+    "selected_program": (
+        "The program you chose, which may differ from requested."
+    ),
+    "selectors": (
+        "Which registered quantities to read from the result file, by name."
+    ),
+    "settings_id": "The host-bound ID of the validated settings object.",
+    "stage_order": (
+        "The stages in the order they run, each a lower-case identifier and "
+        "nothing else. Do not put dependency prose here -- the host states "
+        "dependencies itself in the workflow frontier."
+    ),
+    "task_spec_id": "Identifier of the task specification being planned.",
+    "task_spec_sha256": "Digest of the task specification this binds to.",
+    "temperature_k": "Temperature in kelvin.",
+    "uncertainties": (
+        "What could still make this wrong, and what would resolve it."
+    ),
+    "workflow_id": "Stable identifier for this workflow.",
+}
+
+
+def _describe(name: str, schema: dict) -> dict:
+    """Give ``name`` its meaning, keeping any format rule already stated.
+
+    The two are different things and a caller needs both: the shared entry says
+    what the argument is for, while an existing description usually says what
+    shape it must take.  Composing them in a fixed order keeps one argument
+    name reading identically everywhere it appears.
+    """
+
+    meaning = ARGUMENT_DESCRIPTIONS.get(name)
+    if meaning is None:
+        return schema
+    existing = str(schema.get("description") or "").strip()
+    if not existing:
+        return {**schema, "description": meaning}
+    if meaning in existing:
+        return schema
+    return {**schema, "description": f"{meaning} {existing}"}
+
+
+def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...]:
+    """Describe every argument the surface exposes, by argument name."""
+
+    described = []
+    for item in definitions:
+        function = dict(item["function"])
+        parameters = dict(function.get("parameters") or {})
+        properties = parameters.get("properties")
+        if isinstance(properties, dict):
+            parameters["properties"] = {
+                name: _describe(name, schema) if isinstance(schema, dict) else schema
+                for name, schema in properties.items()
+            }
+            function["parameters"] = parameters
+        described.append({**item, "function": function})
+    return tuple(described)
 
 
 def _string() -> dict:
