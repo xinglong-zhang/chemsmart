@@ -73,6 +73,7 @@ _OPERATIONS = frozenset(
         "boltzmann_populations",
         "boltzmann_average",
         "imaginary_mode_count",
+        "harmonic_zero_point_energy",
     }
 )
 
@@ -151,6 +152,13 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "mode is ignored. Owns the sign convention: a minimum has zero, a "
         "transition state exactly one. Do not rebuild it from comparisons"
     ),
+    "harmonic_zero_point_energy": (
+        "harmonic zero-point vibrational energy from one frequency vector in "
+        "cm^-1, returned as a molar energy. Owns both the factor of one half "
+        "and the spectroscopic h*c*N_A conversion, and skips imaginary modes. "
+        "Use this instead of sum -> scale 0.5 -> convert: a wavenumber and a "
+        "molar energy are different dimensions, so convert refuses that step"
+    ),
 }
 
 if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
@@ -171,6 +179,7 @@ CONVENTION_OPERATIONS = frozenset(
         "boltzmann_average",
         "boltzmann_populations",
         "correlation_inverse_power_cbs_limit",
+        "harmonic_zero_point_energy",
         "imaginary_mode_count",
         "distance",
         "exponential_cbs_limit",
@@ -189,8 +198,8 @@ _PLUMBING_OPERATIONS = frozenset({"ref", "literal", "convert"})
 #: Everything else: general arithmetic and reductions.  A reported quantity
 #: reached through many of these, and through no convention operation, was
 #: assembled rather than computed by the toolkit.
-ARITHMETIC_OPERATIONS = frozenset(_OPERATIONS) - CONVENTION_OPERATIONS - (
-    _PLUMBING_OPERATIONS
+ARITHMETIC_OPERATIONS = (
+    frozenset(_OPERATIONS) - CONVENTION_OPERATIONS - (_PLUMBING_OPERATIONS)
 )
 
 
@@ -251,22 +260,78 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
         "ha": (ENERGY, "hartree", 1.0),
         "eh": (ENERGY, "hartree", 1.0),
         "ev": (ENERGY, "hartree", energy_conversion("eV", "hartree", 1.0)),
-        "j/mol": (ENERGY, "hartree", energy_conversion("J/mol", "hartree", 1.0)),
-        "j mol^-1": (ENERGY, "hartree", energy_conversion("J/mol", "hartree", 1.0)),
-        "kj/mol": (ENERGY, "hartree", energy_conversion("kJ/mol", "hartree", 1.0)),
-        "kj mol^-1": (ENERGY, "hartree", energy_conversion("kJ/mol", "hartree", 1.0)),
-        "kcal/mol": (ENERGY, "hartree", energy_conversion("kcal/mol", "hartree", 1.0)),
-        "kcal mol^-1": (ENERGY, "hartree", energy_conversion("kcal/mol", "hartree", 1.0)),
+        "j/mol": (
+            ENERGY,
+            "hartree",
+            energy_conversion("J/mol", "hartree", 1.0),
+        ),
+        "j mol^-1": (
+            ENERGY,
+            "hartree",
+            energy_conversion("J/mol", "hartree", 1.0),
+        ),
+        "kj/mol": (
+            ENERGY,
+            "hartree",
+            energy_conversion("kJ/mol", "hartree", 1.0),
+        ),
+        "kj mol^-1": (
+            ENERGY,
+            "hartree",
+            energy_conversion("kJ/mol", "hartree", 1.0),
+        ),
+        "kcal/mol": (
+            ENERGY,
+            "hartree",
+            energy_conversion("kcal/mol", "hartree", 1.0),
+        ),
+        "kcal mol^-1": (
+            ENERGY,
+            "hartree",
+            energy_conversion("kcal/mol", "hartree", 1.0),
+        ),
         "hartree/k": (ENTROPY, "hartree K^-1", 1.0),
         "hartree k^-1": (ENTROPY, "hartree K^-1", 1.0),
-        "j/mol/k": (ENTROPY, "hartree K^-1", energy_conversion("J/mol", "hartree", 1.0)),
-        "j mol^-1 k^-1": (ENTROPY, "hartree K^-1", energy_conversion("J/mol", "hartree", 1.0)),
-        "kj/mol/k": (ENTROPY, "hartree K^-1", energy_conversion("kJ/mol", "hartree", 1.0)),
-        "kj mol^-1 k^-1": (ENTROPY, "hartree K^-1", energy_conversion("kJ/mol", "hartree", 1.0)),
-        "cal/mol/k": (ENTROPY, "hartree K^-1", energy_conversion("kcal/mol", "hartree", 0.001)),
-        "cal mol^-1 k^-1": (ENTROPY, "hartree K^-1", energy_conversion("kcal/mol", "hartree", 0.001)),
-        "kcal/mol/k": (ENTROPY, "hartree K^-1", energy_conversion("kcal/mol", "hartree", 1.0)),
-        "kcal mol^-1 k^-1": (ENTROPY, "hartree K^-1", energy_conversion("kcal/mol", "hartree", 1.0)),
+        "j/mol/k": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("J/mol", "hartree", 1.0),
+        ),
+        "j mol^-1 k^-1": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("J/mol", "hartree", 1.0),
+        ),
+        "kj/mol/k": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kJ/mol", "hartree", 1.0),
+        ),
+        "kj mol^-1 k^-1": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kJ/mol", "hartree", 1.0),
+        ),
+        "cal/mol/k": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kcal/mol", "hartree", 0.001),
+        ),
+        "cal mol^-1 k^-1": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kcal/mol", "hartree", 0.001),
+        ),
+        "kcal/mol/k": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kcal/mol", "hartree", 1.0),
+        ),
+        "kcal mol^-1 k^-1": (
+            ENTROPY,
+            "hartree K^-1",
+            energy_conversion("kcal/mol", "hartree", 1.0),
+        ),
         "angstrom": (LENGTH, "angstrom", 1.0),
         "ang": (LENGTH, "angstrom", 1.0),
         "bohr": (LENGTH, "angstrom", 0.529177210903),
@@ -293,25 +358,33 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
         raise QuantityExpressionError(f"unsupported unit: {unit!r}") from exc
 
 
-def normalize_numeric_value(value: Any, unit: str) -> tuple[Any, str, Dimension]:
+def normalize_numeric_value(
+    value: Any, unit: str
+) -> tuple[Any, str, Dimension]:
     """Convert a finite numeric value to the canonical unit for its dimension."""
 
     dimension, canonical_unit, factor = _unit_spec(unit)
     array = np.asarray(value, dtype=float)
     if array.size == 0 or not np.all(np.isfinite(array)):
-        raise QuantityExpressionError("numeric values must be finite and non-empty")
+        raise QuantityExpressionError(
+            "numeric values must be finite and non-empty"
+        )
     normalized = array * factor
     if normalized.ndim == 0:
         payload: Any = float(normalized)
     elif normalized.ndim <= 2:
         payload = tuple(
-            tuple(float(value) for value in row)
-            if isinstance(row, np.ndarray)
-            else float(row)
+            (
+                tuple(float(value) for value in row)
+                if isinstance(row, np.ndarray)
+                else float(row)
+            )
             for row in normalized
         )
     else:
-        raise QuantityExpressionError("numeric arrays may have rank at most two")
+        raise QuantityExpressionError(
+            "numeric arrays may have rank at most two"
+        )
     return payload, canonical_unit, dimension
 
 
@@ -324,17 +397,23 @@ def convert_normalized_value(
 
     target_dimension, _, factor = _unit_spec(target_unit)
     if target_dimension != dimension:
-        raise QuantityExpressionError("target unit has an incompatible dimension")
+        raise QuantityExpressionError(
+            "target unit has an incompatible dimension"
+        )
     array = np.asarray(value, dtype=float) / factor
     if not np.all(np.isfinite(array)):
-        raise QuantityExpressionError("unit conversion produced a non-finite value")
+        raise QuantityExpressionError(
+            "unit conversion produced a non-finite value"
+        )
     if array.ndim == 0:
         return float(array)
     if array.ndim <= 2:
         return tuple(
-            tuple(float(value) for value in row)
-            if isinstance(row, np.ndarray)
-            else float(row)
+            (
+                tuple(float(value) for value in row)
+                if isinstance(row, np.ndarray)
+                else float(row)
+            )
             for row in array
         )
     raise QuantityExpressionError("numeric arrays may have rank at most two")
@@ -371,8 +450,12 @@ class QuantityExpressionNodeV1:
         if len(self.input_ids) > MAX_NODE_INPUTS:
             raise QuantityContractError("expression node has too many inputs")
         if any(index < 0 for index in self.indices):
-            raise QuantityContractError("reference indices must be non-negative")
-        if self.scale_factor is not None and not math.isfinite(self.scale_factor):
+            raise QuantityContractError(
+                "reference indices must be non-negative"
+            )
+        if self.scale_factor is not None and not math.isfinite(
+            self.scale_factor
+        ):
             raise QuantityContractError("scale_factor must be finite")
         cbs_operations = {
             "scf_exponential_cbs_limit",
@@ -418,9 +501,13 @@ class QuantityExpressionRequestV1:
     def __post_init__(self) -> None:
         object.__setattr__(self, "inputs", tuple(self.inputs))
         object.__setattr__(self, "nodes", tuple(self.nodes))
-        object.__setattr__(self, "output_node_ids", tuple(self.output_node_ids))
+        object.__setattr__(
+            self, "output_node_ids", tuple(self.output_node_ids)
+        )
         if self.schema_version != "chemsmart.quantity-expression-request.v1":
-            raise QuantityContractError("unsupported expression request schema")
+            raise QuantityContractError(
+                "unsupported expression request schema"
+            )
         if not self.expression_id or len(self.expression_id) > 128:
             raise QuantityContractError("expression_id is invalid")
         if not self.nodes or len(self.nodes) > MAX_EXPRESSION_NODES:
@@ -436,11 +523,15 @@ class QuantityExpressionRequestV1:
         if set(input_ids).intersection(node_ids):
             raise QuantityContractError("input and node IDs must not overlap")
         if not self.output_node_ids:
-            raise QuantityContractError("at least one expression output is required")
+            raise QuantityContractError(
+                "at least one expression output is required"
+            )
         if len(self.output_node_ids) != len(set(self.output_node_ids)):
             raise QuantityContractError("expression output IDs must be unique")
         if not set(self.output_node_ids).issubset(node_ids):
-            raise QuantityContractError("every output must identify an expression node")
+            raise QuantityContractError(
+                "every output must identify an expression node"
+            )
 
 
 #: The roles by which a number a model typed can enter an expression result.
@@ -504,7 +595,9 @@ class QuantityExpressionOutputDependencyV1:
 
     def __post_init__(self) -> None:
         if not self.output_id or len(self.output_id) > 128:
-            raise QuantityContractError("expression output dependency ID is invalid")
+            raise QuantityContractError(
+                "expression output dependency ID is invalid"
+            )
         object.__setattr__(
             self,
             "model_authored_constants",
@@ -534,9 +627,7 @@ class QuantityExpressionOutputDependencyV1:
             raise QuantityContractError(
                 "arithmetic_node_count must be a non-negative integer"
             )
-        keys = tuple(
-            item.sort_key() for item in self.model_authored_constants
-        )
+        keys = tuple(item.sort_key() for item in self.model_authored_constants)
         if keys != tuple(sorted(set(keys))):
             raise QuantityContractError(
                 "model-authored constants must be sorted and unique"
@@ -579,7 +670,9 @@ class QuantityExpressionReceiptV1:
             self, "output_dependencies", tuple(self.output_dependencies)
         )
         if self.schema_version != "chemsmart.quantity-expression-receipt.v1":
-            raise QuantityContractError("unsupported expression receipt schema")
+            raise QuantityContractError(
+                "unsupported expression receipt schema"
+            )
         if self.status != "derived":
             raise QuantityContractError("invalid expression receipt status")
         dependency_ids = tuple(
@@ -595,7 +688,9 @@ class QuantityExpressionReceiptV1:
             (self.semantic_signature_sha256, "semantic_signature_sha256"),
         ):
             if len(digest) != 64:
-                raise QuantityContractError(f"{label} must be a SHA-256 digest")
+                raise QuantityContractError(
+                    f"{label} must be a SHA-256 digest"
+                )
             try:
                 int(digest, 16)
             except ValueError as exc:
@@ -613,7 +708,9 @@ class QuantityExpressionReceiptV1:
             "status": self.status,
         }
         if self.receipt_sha256 != canonical_quantity_sha256(body):
-            raise QuantityContractError("quantity expression receipt digest mismatch")
+            raise QuantityContractError(
+                "quantity expression receipt digest mismatch"
+            )
 
 
 def quantity_expression_semantic_signature(
@@ -652,11 +749,15 @@ def quantity_expression_semantic_signature(
             source_quantity_id
             if source_quantity_id
             and source_quantity_counts[source_quantity_id] == 1
-            else role_matches[-1]
-            if role_matches
-            else source_quantity_id
-            if source_quantity_id
-            else quantity.quantity_id
+            else (
+                role_matches[-1]
+                if role_matches
+                else (
+                    source_quantity_id
+                    if source_quantity_id
+                    else quantity.quantity_id
+                )
+            )
         )
         owner = role_owners.setdefault(semantic_role, quantity.quantity_id)
         if owner != quantity.quantity_id:
@@ -723,12 +824,21 @@ def quantity_expression_semantic_signature(
                 visiting.remove(value_id)
                 values[value_id] = result
                 return result
-            if node.operation in {"add", "multiply", "sum", "mean", "min", "max"}:
+            if node.operation in {
+                "add",
+                "multiply",
+                "sum",
+                "mean",
+                "min",
+                "max",
+            }:
                 inputs = sorted(inputs, key=canonical_quantity_sha256)
             elif node.operation == "distance" and len(inputs) == 2:
                 inputs = sorted(inputs, key=canonical_quantity_sha256)
             elif node.operation == "angle" and len(inputs) == 3:
-                outer = sorted((inputs[0], inputs[2]), key=canonical_quantity_sha256)
+                outer = sorted(
+                    (inputs[0], inputs[2]), key=canonical_quantity_sha256
+                )
                 inputs = [outer[0], inputs[1], outer[1]]
             result = {
                 "operation": node.operation,
@@ -777,7 +887,9 @@ def _numeric(quantity: QuantityValueV1) -> np.ndarray:
         )
     array = np.asarray(quantity.value, dtype=float)
     if array.size == 0 or not np.all(np.isfinite(array)):
-        raise QuantityExpressionError("expression input is non-finite or empty")
+        raise QuantityExpressionError(
+            "expression input is non-finite or empty"
+        )
     return array
 
 
@@ -810,7 +922,9 @@ def _node_value(
                 "ref accepts reference or one input_id, never both"
             )
         if not reference:
-            raise QuantityExpressionError("ref requires one prior value reference")
+            raise QuantityExpressionError(
+                "ref requires one prior value reference"
+            )
         try:
             source = values[reference]
         except KeyError as exc:
@@ -833,7 +947,9 @@ def _node_value(
             for index in node.indices:
                 selected = np.asarray(selected[index])
         except IndexError as exc:
-            raise QuantityExpressionError("reference index is out of range") from exc
+            raise QuantityExpressionError(
+                "reference index is out of range"
+            ) from exc
         payload = _payload(selected)
         return make_quantity_value(
             quantity_id=node.node_id,
@@ -891,7 +1007,11 @@ def _node_value(
             )
             dimension = left.dimension
         elif operation == "multiply":
-            if left_value.ndim and right_value.ndim and left_value.shape != right_value.shape:
+            if (
+                left_value.ndim
+                and right_value.ndim
+                and left_value.shape != right_value.shape
+            ):
                 raise QuantityExpressionError(
                     "multiply accepts scalar broadcasting or identical shapes"
                 )
@@ -900,7 +1020,11 @@ def _node_value(
         else:
             if np.any(right_value == 0.0):
                 raise QuantityExpressionError("division by zero is forbidden")
-            if left_value.ndim and right_value.ndim and left_value.shape != right_value.shape:
+            if (
+                left_value.ndim
+                and right_value.ndim
+                and left_value.shape != right_value.shape
+            ):
                 raise QuantityExpressionError(
                     "divide accepts scalar broadcasting or identical shapes"
                 )
@@ -920,7 +1044,9 @@ def _node_value(
 
     if operation == "scale":
         if len(inputs) != 1 or node.scale_factor is None:
-            raise QuantityExpressionError("scale requires one input and scale_factor")
+            raise QuantityExpressionError(
+                "scale requires one input and scale_factor"
+            )
         source = inputs[0]
         payload = _payload(_numeric(source) * node.scale_factor)
         return make_quantity_value(
@@ -959,9 +1085,7 @@ def _node_value(
         source_value = _numeric(source)
         if np.any(source_value < 0.0):
             raise QuantityExpressionError("sqrt requires non-negative values")
-        dimension = tuple(
-            exponent // 2 for exponent in source.dimension
-        )
+        dimension = tuple(exponent // 2 for exponent in source.dimension)
         payload = _payload(np.sqrt(source_value))
         unit = canonical_unit_for_dimension(dimension)
         return make_quantity_value(
@@ -981,12 +1105,16 @@ def _node_value(
             )
         exponent_array = np.asarray(node.literal_value, dtype=float)
         if exponent_array.ndim != 0 or not np.isfinite(exponent_array):
-            raise QuantityExpressionError("power exponent must be a finite scalar")
+            raise QuantityExpressionError(
+                "power exponent must be a finite scalar"
+            )
         exponent = float(exponent_array)
         source = inputs[0]
         if source.dimension != DIMENSIONLESS:
             rounded = round(exponent)
-            if not math.isclose(exponent, rounded, rel_tol=0.0, abs_tol=1.0e-12):
+            if not math.isclose(
+                exponent, rounded, rel_tol=0.0, abs_tol=1.0e-12
+            ):
                 raise QuantityExpressionError(
                     "dimensioned power requires an integer exponent"
                 )
@@ -1007,7 +1135,9 @@ def _node_value(
                 "fractional power of a negative value is unsupported"
             )
         if exponent < 0.0 and np.any(source_value == 0.0):
-            raise QuantityExpressionError("negative power of zero is forbidden")
+            raise QuantityExpressionError(
+                "negative power of zero is forbidden"
+            )
         payload = _payload(np.power(source_value, exponent))
         unit = canonical_unit_for_dimension(dimension)
         return make_quantity_value(
@@ -1027,7 +1157,9 @@ def _node_value(
             )
         source_value = _numeric(inputs[0])
         if operation == "log" and np.any(source_value <= 0.0):
-            raise QuantityExpressionError("log requires strictly positive values")
+            raise QuantityExpressionError(
+                "log requires strictly positive values"
+            )
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             result = (
                 np.exp(source_value)
@@ -1055,14 +1187,9 @@ def _node_value(
             raise QuantityExpressionError(
                 "photon_wavelength requires strictly positive energies"
             )
-        energy_ev = energy_hartree * energy_conversion(
-            "hartree", "eV", 1.0
-        )
+        energy_ev = energy_hartree * energy_conversion("hartree", "eV", 1.0)
         hc_ev_angstrom = (
-            ase_units._hplanck
-            * ase_units._c
-            / ase_units._e
-            * 1.0e10
+            ase_units._hplanck * ase_units._c / ase_units._e * 1.0e10
         )
         payload = _payload(hc_ev_angstrom / energy_ev)
         return make_quantity_value(
@@ -1216,6 +1343,42 @@ def _node_value(
             value=payload,
             unit=unit,
             dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "harmonic_zero_point_energy":
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            harmonic_zero_point_energy,
+        )
+
+        if len(inputs) != 1 or inputs[0].dimension != FREQUENCY:
+            raise QuantityExpressionError(
+                "harmonic_zero_point_energy takes exactly one frequency "
+                f"vector in cm^-1; got {len(inputs)} inputs"
+            )
+        unit = str(node.target_unit or "kJ/mol")
+        try:
+            payload = _payload(
+                float(
+                    harmonic_zero_point_energy(
+                        tuple(
+                            float(item)
+                            for item in _numeric(inputs[0]).reshape(-1)
+                        ),
+                        unit=unit,
+                    )
+                )
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=payload,
+            unit=unit,
+            dimension=ENERGY,
             evidence_ref=evidence_ref,
         )
 
@@ -1404,7 +1567,9 @@ def _node_value(
         )
 
     if operation == "distance":
-        if len(inputs) != 2 or any(item.dimension != LENGTH for item in inputs):
+        if len(inputs) != 2 or any(
+            item.dimension != LENGTH for item in inputs
+        ):
             raise QuantityExpressionError(
                 "distance requires two length-coordinate vectors"
             )
@@ -1425,20 +1590,26 @@ def _node_value(
         )
 
     if operation == "angle":
-        if len(inputs) != 3 or any(item.dimension != LENGTH for item in inputs):
+        if len(inputs) != 3 or any(
+            item.dimension != LENGTH for item in inputs
+        ):
             raise QuantityExpressionError(
                 "angle requires three length-coordinate vectors"
             )
         first, center, last = (_numeric(item) for item in inputs)
         if any(vector.ndim != 1 for vector in (first, center, last)):
-            raise QuantityExpressionError("angle inputs must be coordinate vectors")
+            raise QuantityExpressionError(
+                "angle inputs must be coordinate vectors"
+            )
         if first.shape != center.shape or center.shape != last.shape:
             raise QuantityExpressionError("angle coordinate shapes must match")
         left = first - center
         right = last - center
         denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
         if denominator == 0.0:
-            raise QuantityExpressionError("angle is undefined for zero-length vectors")
+            raise QuantityExpressionError(
+                "angle is undefined for zero-length vectors"
+            )
         cosine = float(np.dot(left, right) / denominator)
         radians = math.acos(max(-1.0, min(1.0, cosine)))
         degrees = math.degrees(radians)
@@ -1457,7 +1628,9 @@ def _node_value(
         # owned and this was not, which leaves a torsion -- the coordinate a
         # rotational barrier is defined along -- to be rebuilt from cross
         # products and an atan2 the model would have to get the sign of right.
-        if len(inputs) != 4 or any(item.dimension != LENGTH for item in inputs):
+        if len(inputs) != 4 or any(
+            item.dimension != LENGTH for item in inputs
+        ):
             raise QuantityExpressionError(
                 "dihedral requires four length-coordinate vectors, in bonded "
                 "order a-b-c-d"
@@ -1478,7 +1651,10 @@ def _node_value(
                 "dihedral is undefined when the central atoms coincide"
             )
         n1, n2 = np.cross(b1, b2), np.cross(b2, b3)
-        if float(np.linalg.norm(n1)) == 0.0 or float(np.linalg.norm(n2)) == 0.0:
+        if (
+            float(np.linalg.norm(n1)) == 0.0
+            or float(np.linalg.norm(n2)) == 0.0
+        ):
             raise QuantityExpressionError(
                 "dihedral is undefined for three collinear atoms"
             )
@@ -1497,7 +1673,9 @@ def _node_value(
 
     if operation == "convert":
         if len(inputs) != 1 or not node.target_unit:
-            raise QuantityExpressionError("convert requires one input and target_unit")
+            raise QuantityExpressionError(
+                "convert requires one input and target_unit"
+            )
         source = inputs[0]
         display = convert_normalized_value(
             source.value, source.dimension, node.target_unit
@@ -1512,7 +1690,9 @@ def _node_value(
             evidence_ref=evidence_ref,
         )
 
-    raise QuantityExpressionError(f"operation is not implemented: {operation!r}")
+    raise QuantityExpressionError(
+        f"operation is not implemented: {operation!r}"
+    )
 
 
 def _node_authored_constants(
@@ -1591,7 +1771,9 @@ def evaluate_quantity_expression(
             raise QuantityExpressionError(
                 f"expression node ID collides with an existing value: {node.node_id}"
             )
-        value = _node_value(node=node, values=values, evidence_ref=evidence_ref)
+        value = _node_value(
+            node=node, values=values, evidence_ref=evidence_ref
+        )
         values[node.node_id] = value
         derived.append(value)
         if node.operation == "literal":
@@ -1691,9 +1873,7 @@ def quantity_expression_receipt_from_record(
         )
         for item in values.get("output_dependencies") or ()
     )
-    return QuantityExpressionReceiptV1(
-        **values, receipt_sha256=receipt_sha256
-    )
+    return QuantityExpressionReceiptV1(**values, receipt_sha256=receipt_sha256)
 
 
 __all__ = [

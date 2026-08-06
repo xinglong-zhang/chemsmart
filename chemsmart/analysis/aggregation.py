@@ -24,6 +24,11 @@ HARTREE_TO_KJ_PER_MOL = 2625.4996394799
 HARTREE_TO_EV = 27.211386245988
 #: Gas constant in kcal/(mol K), for Boltzmann populations.
 GAS_CONSTANT_KCAL = 1.987204258640832e-3
+#: One wavenumber, as a molar energy: h * c * N_A, in kJ/mol per cm^-1.
+#: This is the spectroscopic conversion, not a unit identity -- a wavenumber
+#: and a molar energy have different dimensions, so the generic unit engine
+#: refuses to relate them and is right to.
+WAVENUMBER_TO_KJ_PER_MOL = 1.1962656362961932e-2
 
 ENERGY_UNIT_FACTORS = {
     "hartree": 1.0,
@@ -124,9 +129,10 @@ def extrapolate_correlation_inverse_power(
     if not math.isfinite(power) or power <= 0.0:
         raise AggregationError("inverse-power CBS exponent must be positive")
     xp, yp = x**power, y**power
-    return (yp * float(larger_correlation_energy) - xp * float(smaller_correlation_energy)) / (
-        yp - xp
-    )
+    return (
+        yp * float(larger_correlation_energy)
+        - xp * float(smaller_correlation_energy)
+    ) / (yp - xp)
 
 
 def extrapolate_scf_exponential(
@@ -159,7 +165,9 @@ def extrapolate_scf_exponential(
         raise AggregationError("alpha must be positive")
     fx = math.exp(-float(alpha) * math.sqrt(x))
     fy = math.exp(-float(alpha) * math.sqrt(y))
-    amplitude = (float(smaller_scf_energy) - float(larger_scf_energy)) / (fx - fy)
+    amplitude = (float(smaller_scf_energy) - float(larger_scf_energy)) / (
+        fx - fy
+    )
     return float(smaller_scf_energy) - amplitude * fx
 
 
@@ -310,9 +318,7 @@ def boltzmann_average(
     """Return the Boltzmann-weighted average of ``values``."""
 
     if len(values) != len(energies):
-        raise AggregationError(
-            "values and energies must have the same length"
-        )
+        raise AggregationError("values and energies must have the same length")
     populations = boltzmann_populations(
         energies,
         temperature=temperature,
@@ -421,3 +427,52 @@ def count_imaginary_modes(
     if not math.isfinite(cutoff) or cutoff < 0:
         raise AggregationError("cutoff_cm1 must be finite and non-negative")
     return sum(1 for item in values if item < 0.0 and abs(item) > cutoff)
+
+
+def harmonic_zero_point_energy(
+    frequencies: tuple[float, ...],
+    *,
+    unit: str = "kj/mol",
+) -> float:
+    """Return the harmonic zero-point vibrational energy of a mode set.
+
+    ``E_ZPVE = 1/2 * sum(h * c * nu_tilde) * N_A`` over the real modes, with
+    frequencies given as wavenumbers in cm^-1.  ChemSmart already owns this as
+    ``Thermochemistry.zero_point_energy``, which reaches it through vibrational
+    temperatures; this is the same quantity taken straight from a frequency
+    vector, which is the form a post-processing DAG holds.
+
+    Exposing it removes two model-authored numbers from every ZPVE plan.  A
+    live session asked for a scaled ZPVE built ``sum -> scale 0.5 -> convert ->
+    scale`` and typed the 1/2 itself, then asked the generic unit engine to
+    turn cm^-1 into kJ/mol.  That request is refused, correctly: a wavenumber
+    and a molar energy are different dimensions, and relating them is a
+    spectroscopic convention rather than a unit conversion.  The session
+    predicted the refusal and proposed to hand-multiply by ``h*c*N_A`` instead,
+    which would have put a physical constant into model arithmetic.
+
+    Imaginary modes are excluded rather than added as negative contributions:
+    an imaginary mode has no zero-point level.  Use
+    :func:`count_imaginary_modes` to decide whether the structure should have
+    been used at all.
+    """
+
+    values = [float(item) for item in frequencies]
+    if not values:
+        raise AggregationError("at least one frequency is required")
+    if any(not math.isfinite(item) for item in values):
+        raise AggregationError("frequencies must be finite")
+    real_modes = [item for item in values if item > 0.0]
+    if not real_modes:
+        raise AggregationError(
+            "a zero-point energy needs at least one real vibrational mode; "
+            "every supplied frequency is imaginary or zero"
+        )
+    total_kj = 0.5 * sum(real_modes) * WAVENUMBER_TO_KJ_PER_MOL
+    key = str(unit).strip().lower()
+    if key not in ENERGY_UNIT_FACTORS:
+        raise AggregationError(
+            f"unsupported energy unit {unit!r}; "
+            f"expected one of {sorted(ENERGY_UNIT_FACTORS)}"
+        )
+    return convert_energy(total_kj / HARTREE_TO_KJ_PER_MOL, key)
