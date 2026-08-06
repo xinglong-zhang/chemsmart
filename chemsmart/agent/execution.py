@@ -988,6 +988,148 @@ def workflow_execution_approval_json(
     return canonical_json({"workflow_approval": approval}) + "\n"
 
 
+@dataclass(frozen=True)
+class WorkflowApprovalRequestV1:
+    """A finished plan presented for approval, carrying no approval itself.
+
+    ``agent run`` consumes an approval that binds exact nodes and an exact
+    workflow digest.  Nothing produced one: the documented flow is "plan, then
+    run with an approval file", and the only route to that file was to re-plan
+    and hope a fresh session emitted a byte-identical workflow.  This is the
+    missing half -- the same body a reviewer must sign, assembled from what a
+    session actually planned, and explicitly not signed.
+
+    The distinction is the safety property, not bookkeeping.  A request is
+    inert: it cannot be passed to ``agent run``, because that reads
+    ``workflow_approval`` and requires ``status == "approved"``.  Turning one
+    into an approval is a separate, explicit act.
+    """
+
+    schema_version: str
+    request_id: str
+    workflow_id: str
+    workflow_sha256: str
+    task_spec_sha256: str
+    workspace: str
+    resource_sha256: str
+    node_bindings: tuple[ApprovedNodeBindingV1, ...]
+    producer_edges: tuple[ProducerEdgeRuleV1, ...]
+    status: str
+    request_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-approval-request.v1":
+            raise ContractError("unsupported workflow approval request schema")
+        if self.status != "unapproved":
+            raise ContractError(
+                "a workflow approval request is never approved; approve it "
+                "explicitly to obtain a workflow execution approval"
+            )
+        require_identifier(self.request_id, "request_id")
+        require_identifier(self.workflow_id, "workflow_id")
+        require_sha256(self.workflow_sha256, "workflow_sha256")
+        require_sha256(self.task_spec_sha256, "task_spec_sha256")
+        require_sha256(self.resource_sha256, "resource_sha256")
+        if not Path(self.workspace).is_absolute():
+            raise ContractError("approval request workspace must be absolute")
+        object.__setattr__(self, "node_bindings", tuple(self.node_bindings))
+        object.__setattr__(self, "producer_edges", tuple(self.producer_edges))
+        if not self.node_bindings:
+            raise ContractError("approval request requires at least one node")
+        node_ids = tuple(item.node_id for item in self.node_bindings)
+        if len(set(node_ids)) != len(node_ids):
+            raise ContractError("approval request node IDs must be unique")
+        if self.request_sha256 != canonical_sha256(self._body()):
+            raise ContractError("approval request digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "request_sha256"
+        }
+
+
+def build_workflow_approval_request(
+    *,
+    request_id: str,
+    workflow_id: str,
+    workflow_sha256: str,
+    task_spec_sha256: str,
+    workspace: str | Path,
+    resources: ExecutionResourceSpecV1,
+    node_bindings: Sequence[ApprovedNodeBindingV1],
+    producer_edges: Sequence[ProducerEdgeRuleV1] = (),
+) -> WorkflowApprovalRequestV1:
+    """Assemble the reviewable body of a plan without approving anything."""
+
+    body = {
+        "schema_version": "chemsmart.workflow-approval-request.v1",
+        "request_id": require_identifier(request_id, "request_id"),
+        "workflow_id": require_identifier(workflow_id, "workflow_id"),
+        "workflow_sha256": require_sha256(workflow_sha256, "workflow_sha256"),
+        "task_spec_sha256": require_sha256(
+            task_spec_sha256, "task_spec_sha256"
+        ),
+        "workspace": str(_absolute_workspace(workspace)),
+        "resource_sha256": resources.resource_sha256,
+        "node_bindings": tuple(node_bindings),
+        "producer_edges": tuple(producer_edges),
+        "status": "unapproved",
+    }
+    return WorkflowApprovalRequestV1(
+        **body, request_sha256=canonical_sha256(body)
+    )
+
+
+def approve_workflow_request(
+    request: WorkflowApprovalRequestV1,
+    *,
+    approval_id: str,
+    approved_request_sha256: str,
+    resources: ExecutionResourceSpecV1,
+) -> WorkflowExecutionApprovalV1:
+    """Convert a reviewed request into an approval, one explicit act.
+
+    ``approved_request_sha256`` is the digest the reviewer saw.  Requiring it
+    means approval cannot be granted to a body that changed after review, and
+    that the caller had to look at something to supply it.  ``resources`` are
+    the host's current locked allocation; if they have moved since the plan,
+    the request is stale and must be re-reviewed rather than re-signed.
+    """
+
+    if approved_request_sha256 != request.request_sha256:
+        raise ContractError(
+            "the approved request digest does not match the request; "
+            f"reviewed {approved_request_sha256[:16]}..., holding "
+            f"{request.request_sha256[:16]}..."
+        )
+    if resources.resource_sha256 != request.resource_sha256:
+        raise ContractError(
+            "the host's execution resources have changed since this plan was "
+            "made; re-plan and review again rather than approving a request "
+            "whose compute allocation no longer exists"
+        )
+    return build_workflow_execution_approval(
+        approval_id=approval_id,
+        workflow_id=request.workflow_id,
+        workflow_sha256=request.workflow_sha256,
+        task_spec_sha256=request.task_spec_sha256,
+        approved_workspace=request.workspace,
+        resources=resources,
+        node_bindings=request.node_bindings,
+        producer_edges=request.producer_edges,
+    )
+
+
+def workflow_approval_request_json(
+    request: WorkflowApprovalRequestV1,
+) -> str:
+    """Return the reviewable envelope, deliberately not the run envelope."""
+
+    return canonical_json({"workflow_approval_request": request}) + "\n"
+
+
 def _require_locked_pyscf_settings(settings: object, *, jobtype: str) -> None:
     expected = {
         "functional": "b3lyp",
@@ -2966,7 +3108,11 @@ __all__ = [
     "build_execution_resource_spec",
     "build_frozen_workflow_approval",
     "build_locked_pyscf_sp_opt_hess_approval",
+    "WorkflowApprovalRequestV1",
+    "approve_workflow_request",
     "build_producer_edge_rule",
+    "build_workflow_approval_request",
+    "workflow_approval_request_json",
     "build_program_conformance_probe",
     "build_program_execution_invocation",
     "build_program_execution_receipt",
