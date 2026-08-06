@@ -348,6 +348,18 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 all_project_configs[job] = update_dict_with_existing_keys(
                     all_project_configs[job], qmmm_config
                 )
+        # ``sp`` reads ``solv:`` because the canonical workflow optimises in
+        # gas phase and takes the single point in solvent.  When a project
+        # describes *only* gas phase, the phase that single point belongs to is
+        # not ambiguous -- it is gas phase, and it inherits ``gas:``.  Without
+        # this the fallback is one-sided: a ``solv:``-only project feeds every
+        # job type, while a ``gas:``-only project feeds ``sp`` nothing, so the
+        # settings reach the writer carrying no level of theory and the run
+        # dies with "neither ab initio nor DFT is specified" and a zero-byte
+        # input.  No working project can depend on that, because a
+        # ``gas:``-only ``sp`` is an unconditional failure today.
+        sp_inherits_gas = solv_config is None
+        sp_config = gas_config if sp_inherits_gas else solv_config
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
@@ -356,8 +368,17 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], solv_config or {}
+                all_project_configs[job], sp_config or {}
             )
+            if sp_inherits_gas:
+                # An explicit ``freq:`` under ``solv:`` overrides sp's default,
+                # because ``solv:`` is sp's own section and an author writing
+                # it there means it.  ``gas:`` is not sp's section -- it is
+                # being borrowed for its level of theory -- and it carries
+                # ``freq: true`` in most projects because it describes the
+                # optimisation.  Inheriting that would turn a requested single
+                # point into an opt+freq, so freq stays off on this path.
+                all_project_configs[job]["freq"] = False
 
     # check if td settings exist (optional)
     if "td" in project_config:
