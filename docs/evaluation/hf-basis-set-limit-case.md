@@ -204,3 +204,53 @@ and the hint appears only when the registry is empty. By contrast the
 `promote_project_yaml` collisions were already actionable — they named the
 taken ID and listed what was in use — and the model recovered from both
 without help.
+
+## W2 result
+
+`terminal_state: complete`, 47 successful tool calls, 4 rejections, 31 provider
+turns, 2,425,120 input tokens.
+
+| hypothesis | outcome |
+|---|---|
+| **T1** population step uses `boltzmann_populations`, not rebuilt | **confirmed** — one node, `{literal: 2, ref: 2, boltzmann_populations: 1}` |
+| **T2** gauche degeneracy enters the declared input | **confirmed** — `degeneracies = [1, 2]`, attributed as model-authored |
+| **T3** `opt` then separate `hess` | **refuted, and the hypothesis was wrong** — see below |
+| **T4** project YAML guard | **held** — `functional: B3LYP`, `basis: 6-31G*`, `freq: true`, `ri_approximation: none` |
+| **T5** no rejections | **refuted** — 4, of which 2 are now repaired and 2 the model recovered from unaided |
+
+T2 is the result that matters. The degeneracy input was added days after the
+schema the model reads was written for W1, is one optional trailing argument
+among many, and nothing in it mentions butane or rotamers. The model used it,
+with the correct multiplicities, and the receipt records `[1, 2]` as a number
+the model supplied rather than one the toolkit measured. That is the intended
+division: **ChemSmart owns the weighting, the protocol supplies the physical
+numbers, and the provenance says which is which.**
+
+### The sealed key is program-robust
+
+The key was computed in PySCF; the model chose ORCA. Rather than widen the
+tolerance, a matched ORCA reference was computed through ChemSmart:
+
+| | ΔG(gauche−anti) / kcal mol⁻¹ | x(anti) | x(gauche) |
+|---|---|---|---|
+| PySCF B3LYP/6-31G(d) | 0.9055 | 0.6974 | 0.3026 |
+| ORCA B3LYP/6-31G(d) | 0.9234 | 0.7038 | 0.2962 |
+| sealed tolerance | ±0.15 | ±0.03 | ±0.03 |
+
+The programs differ by 0.018 kcal/mol and 0.006 in mole fraction — inside
+tolerances that were fixed before the program was known. Both agree with the
+measured ~68 % anti.
+
+### The most consequential defect this case found
+
+The model wrote `ri_approximation: none`, which is the declared way to ask for
+conventional four-index integrals. `ORCARoute` could write `NoRI` but had no
+property to read it back, so the preview validator — which parses the
+generated input and compares it with the requested settings — reported a
+stable critical finding across both rotamers and both basis spellings. The
+model cleared it by deleting the key.
+
+Deleting the key is the one edit that lets ORCA's own default density fitting
+back in. The harness argued the model out of the input the protocol specified.
+This is the sharpest form of the failure the project exists to prevent: not a
+model hallucinating a setting, but the harness rejecting a correct one.
