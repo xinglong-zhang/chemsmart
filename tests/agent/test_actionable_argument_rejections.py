@@ -183,7 +183,9 @@ def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
         _re.findall(r'self\._get\(\s*[^,]+,\s*[^,]+,\s*"([a-z ]+)"', source)
     )
     labels |= set(
-        _re.findall(r'_get\(\s*self\.[a-z_]+,\s*[^,]+,\s*\n\s*"([a-z ]+)"', source)
+        _re.findall(
+            r'_get\(\s*self\.[a-z_]+,\s*[^,]+,\s*\n\s*"([a-z ]+)"', source
+        )
     )
     missing = sorted(labels - set(REGISTRY_PRODUCERS))
     assert not missing, (
@@ -269,9 +271,9 @@ def test_every_late_bound_tool_states_its_precondition():
         if any(name in LATE_BOUND_ARGUMENTS for name in properties):
             if "PRECONDITION" not in function["description"]:
                 silent.append(function["name"])
-    assert not silent, (
-        f"these tools take a late-bound argument and do not say so: {silent}"
-    )
+    assert (
+        not silent
+    ), f"these tools take a late-bound argument and do not say so: {silent}"
 
     # Every late-bound argument must name a registry the producers table knows,
     # so the sentence before the call and the rejection after it agree.
@@ -338,8 +340,22 @@ def test_a_blank_unit_names_the_output_and_the_value_to_use():
         == "1"
     )
 
-    # The other plane must answer the same mistake the same way.
+    # The other plane must answer the same mistake the same way. Both now read
+    # one contract-level constant, so this asserts a shared object rather than
+    # two copies that happen to be equal today.
     from chemsmart.agent import analysis_nodes, scientific_toolchain
+    from chemsmart.agent._contracts import DIMENSIONLESS_UNIT_HINT
 
-    assert analysis_nodes._UNIT_HINT == scientific_toolchain._UNIT_HINT
+    assert analysis_nodes.DIMENSIONLESS_UNIT_HINT is DIMENSIONLESS_UNIT_HINT
+    assert (
+        scientific_toolchain.DIMENSIONLESS_UNIT_HINT is DIMENSIONLESS_UNIT_HINT
+    )
+
+    from chemsmart.agent.analysis_nodes import AnalysisOutputSpecV1
+
+    with pytest.raises(AnalysisContractError) as other_plane:
+        AnalysisOutputSpecV1(
+            quantity_id="n_imaginary", unit="", dimension=(0,) * 6
+        )
+    assert DIMENSIONLESS_UNIT_HINT in str(other_plane.value)
     assert AnalysisContractError is not None

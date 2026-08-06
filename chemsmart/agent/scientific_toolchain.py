@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
+    DIMENSIONLESS_UNIT_HINT,
     ContractError,
     canonical_sha256,
     require_identifier,
 )
 from chemsmart.agent.workflows import CommandNodeIntentV1
-
 
 ANALYSIS_INTENT_KINDS = (
     "claim_rendering",
@@ -29,13 +29,6 @@ ANALYSIS_INTENT_KINDS = (
     "unsupported_external",
 )
 ANALYSIS_INTENT_SUPPORT_STATES = ("blocked_unsupported", "planned")
-
-#: Seen in three separate live cases: an output whose unit was left blank
-#: because the quantity is a count. "must not be empty" named neither the
-#: output nor the value a dimensionless quantity should carry.
-_UNIT_HINT = (
-    "a dimensionless quantity such as a count, a population or an oscillator strength uses '1', not an empty string"
-)
 
 
 class ScientificToolchainContractError(ContractError):
@@ -103,7 +96,8 @@ class AnalysisOutputIntentV1:
         if not str(self.unit).strip():
             raise ScientificToolchainContractError(
                 f"analysis output {self.output_id!r} "
-                f"({self.quantity_kind}) declares no unit; " + _UNIT_HINT
+                f"({self.quantity_kind}) declares no unit; "
+                + DIMENSIONLESS_UNIT_HINT
             )
 
 
@@ -197,7 +191,10 @@ class AnalysisNodeIntentV1:
                 "temperature and pressure apply only to thermochemistry"
             )
         if self.analysis_kind == "quantity_expression":
-            if not self.expression_nodes or not self.expression_output_node_ids:
+            if (
+                not self.expression_nodes
+                or not self.expression_output_node_ids
+            ):
                 raise ScientificToolchainContractError(
                     "quantity expression requires a typed expression DAG"
                 )
@@ -285,7 +282,9 @@ def build_scientific_toolchain_plan(
             "calculation node IDs must be unique"
         )
     if len(analysis_by_id) != len(analyses):
-        raise ScientificToolchainContractError("analysis node IDs must be unique")
+        raise ScientificToolchainContractError(
+            "analysis node IDs must be unique"
+        )
     overlap = set(calculation_by_id).intersection(analysis_by_id)
     if overlap:
         raise ScientificToolchainContractError(
@@ -302,9 +301,7 @@ def build_scientific_toolchain_plan(
             for node in analyses
         }
     )
-    dependencies: dict[str, set[str]] = {
-        node_id: set() for node_id in all_ids
-    }
+    dependencies: dict[str, set[str]] = {node_id: set() for node_id in all_ids}
     for node in calculations:
         for dependency in node.dependencies:
             if dependency not in calculation_by_id:
@@ -361,7 +358,9 @@ def build_scientific_toolchain_plan(
     for node_id, parents in dependencies.items():
         for parent in parents:
             children[parent].add(node_id)
-    ready = sorted(node_id for node_id, parents in dependencies.items() if not parents)
+    ready = sorted(
+        node_id for node_id, parents in dependencies.items() if not parents
+    )
     ordered: list[str] = []
     while ready:
         node_id = ready.pop(0)
@@ -376,7 +375,9 @@ def build_scientific_toolchain_plan(
             "scientific toolchain contains a dependency cycle"
         )
     all_output_ids = {
-        output_id for output_ids in produced.values() for output_id in output_ids
+        output_id
+        for output_ids in produced.values()
+        for output_id in output_ids
     }
     required = tuple(sorted(set(required_output_ids)))
     missing = sorted(set(required).difference(all_output_ids))
@@ -434,7 +435,9 @@ def project_scientific_toolchain_frontier(
     dependents: dict[str, set[str]] = {}
     for node in plan.analysis_nodes:
         for edge in node.inputs:
-            dependents.setdefault(edge.producer_node_id, set()).add(node.node_id)
+            dependents.setdefault(edge.producer_node_id, set()).add(
+                node.node_id
+            )
     for node_id in plan.node_order:
         waiting_on: tuple[str, ...] = ()
         unsatisfied: tuple[dict[str, str], ...] = ()

@@ -17,9 +17,18 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
-
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_.-]*$")
+
+#: Appended wherever a blank analysis unit is refused.  Seen in three separate
+#: live cases, always on a count: "must not be empty" named neither the output
+#: nor the value a dimensionless quantity should carry, leaving a caller to
+#: guess between "", "none", "count" and "1".  Two planes raise this, so the
+#: sentence lives here rather than being duplicated and kept in step by hand.
+DIMENSIONLESS_UNIT_HINT = (
+    "a dimensionless quantity such as a count, a population or an "
+    "oscillator strength uses '1', not an empty string"
+)
 
 
 class ContractError(ValueError):
@@ -35,11 +44,7 @@ def require_identifier(value: str, field_name: str) -> str:
         # its message is the one seen for most malformed IDs. Naming the field
         # alone leaves the caller guessing which of several values was wrong
         # and what shape was expected, so quote the value and the rule.
-        detail = (
-            "it is empty"
-            if not normalized
-            else f"got {value!r}"
-        )
+        detail = "it is empty" if not normalized else f"got {value!r}"
         raise ContractError(
             f"{field_name} must be a lower-case public identifier "
             "(start with a letter, then letters, digits, '_', '.' or '-'); "
@@ -69,7 +74,9 @@ def _canonical_value(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {
             str(key): _canonical_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(
+                value.items(), key=lambda pair: str(pair[0])
+            )
         }
     if isinstance(value, (tuple, list)):
         return [_canonical_value(item) for item in value]
@@ -77,7 +84,9 @@ def _canonical_value(value: Any) -> Any:
         return sorted(_canonical_value(item) for item in value)
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ContractError("canonical records cannot contain NaN or infinity")
+            raise ContractError(
+                "canonical records cannot contain NaN or infinity"
+            )
         return value
     if value is None or isinstance(value, (str, int, bool)):
         return value
@@ -144,6 +153,7 @@ class TrustedArtifactRefV1:
 
 
 __all__ = [
+    "DIMENSIONLESS_UNIT_HINT",
     "ContractError",
     "TrustedArtifactRefV1",
     "canonical_data",

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Iterable, Protocol, Sequence, runtime_checkable
 
 from chemsmart.agent._contracts import (
+    DIMENSIONLESS_UNIT_HINT,
     ContractError,
     TrustedArtifactRefV1,
     canonical_sha256,
@@ -38,7 +39,6 @@ from chemsmart.analysis.result_readers import (
     reader_for,
     registered_reader_programs,
 )
-
 
 _SYMBOL_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
 _DESCRIPTOR_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,255}$")
@@ -82,7 +82,9 @@ def _require_symbol(value: str, field_name: str) -> str:
 
 def _require_descriptor(value: str, field_name: str) -> str:
     candidate = str(value or "")
-    if candidate != candidate.strip() or not _DESCRIPTOR_RE.fullmatch(candidate):
+    if candidate != candidate.strip() or not _DESCRIPTOR_RE.fullmatch(
+        candidate
+    ):
         raise AnalysisContractError(
             f"{field_name} must be a stable parser descriptor"
         )
@@ -92,13 +94,6 @@ def _require_descriptor(value: str, field_name: str) -> str:
 def _require_sorted_unique(values: tuple[str, ...], field_name: str) -> None:
     if values != tuple(sorted(set(values))):
         raise AnalysisContractError(f"{field_name} must be sorted and unique")
-
-
-#: See scientific_toolchain._UNIT_HINT; kept identical so the two planes
-#: give one answer to the same mistake.
-_UNIT_HINT = (
-    "a dimensionless quantity such as a count, a population or an oscillator strength uses '1', not an empty string"
-)
 
 
 @dataclass(frozen=True)
@@ -144,9 +139,7 @@ class AnalysisInputRefV1:
         _require_symbol(self.producer_output_id, "producer_output_id")
         _require_symbol(self.source_id, "source_id")
         require_sha256(self.source_sha256, "source_sha256")
-        require_sha256(
-            self.source_receipt_sha256, "source_receipt_sha256"
-        )
+        require_sha256(self.source_receipt_sha256, "source_receipt_sha256")
         if self.source_kind == "program_artifact":
             _require_symbol(self.program, "program")
         elif self.program:
@@ -169,7 +162,7 @@ class AnalysisOutputSpecV1:
         if not str(self.unit).strip():
             raise AnalysisContractError(
                 f"analysis output {self.quantity_id!r} declares no unit; "
-                + _UNIT_HINT
+                + DIMENSIONLESS_UNIT_HINT
             )
         object.__setattr__(self, "dimension", tuple(self.dimension))
         if len(self.dimension) != 6 or not all(
@@ -186,7 +179,9 @@ class AnalysisOutputSpecV1:
             "text_vector",
             "vector",
         }:
-            raise AnalysisContractError("unsupported analysis output data kind")
+            raise AnalysisContractError(
+                "unsupported analysis output data kind"
+            )
 
 
 @dataclass(frozen=True)
@@ -249,9 +244,7 @@ class AnalysisNodeSpecV1:
         )
         for requirement in self.evidence_requirements:
             _require_symbol(requirement, "evidence requirement")
-        if any(
-            item.producer_node_id == self.node_id for item in self.inputs
-        ):
+        if any(item.producer_node_id == self.node_id for item in self.inputs):
             raise AnalysisContractError("analysis node cannot consume itself")
         if self.analysis_kind == "result_extraction":
             if len(self.inputs) != 1 or self.inputs[0].source_kind != (
@@ -315,9 +308,7 @@ def build_analysis_node_spec(
         "node_id": node_id,
         "task_spec_sha256": task_spec_sha256,
         "workflow_id": workflow_id,
-        "scientific_workflow_plan_sha256": (
-            scientific_workflow_plan_sha256
-        ),
+        "scientific_workflow_plan_sha256": (scientific_workflow_plan_sha256),
         "analysis_kind": analysis_kind,
         "inputs": tuple(sorted(inputs, key=lambda item: item.input_id)),
         "selectors": tuple(
@@ -328,9 +319,7 @@ def build_analysis_node_spec(
         "support_state": support_state,
         "blocked_reason": blocked_reason,
     }
-    return AnalysisNodeSpecV1(
-        **body, spec_sha256=canonical_sha256(body)
-    )
+    return AnalysisNodeSpecV1(**body, spec_sha256=canonical_sha256(body))
 
 
 def _canonical_analysis_node_order(
@@ -340,9 +329,7 @@ def _canonical_analysis_node_order(
     if len(by_id) != len(nodes):
         raise AnalysisContractError("analysis node IDs must be unique")
     produced: dict[str, str] = {}
-    dependencies: dict[str, set[str]] = {
-        node.node_id: set() for node in nodes
-    }
+    dependencies: dict[str, set[str]] = {node.node_id: set() for node in nodes}
     children: dict[str, set[str]] = {node.node_id: set() for node in nodes}
     for node in nodes:
         for output in node.outputs:
@@ -389,7 +376,9 @@ def _canonical_analysis_node_order(
                 ready.append(child)
                 ready.sort()
     if len(ordered) != len(nodes):
-        raise AnalysisContractError("scientific analysis graph contains a cycle")
+        raise AnalysisContractError(
+            "scientific analysis graph contains a cycle"
+        )
     return tuple(ordered)
 
 
@@ -463,7 +452,9 @@ class ScientificAnalysisPlanV1:
         if self.plan_sha256 != canonical_sha256(
             scientific_analysis_plan_body(self)
         ):
-            raise AnalysisContractError("scientific analysis plan digest mismatch")
+            raise AnalysisContractError(
+                "scientific analysis plan digest mismatch"
+            )
 
 
 def scientific_analysis_plan_body(
@@ -500,18 +491,14 @@ def build_scientific_analysis_plan(
         "analysis_plan_id": analysis_plan_id,
         "task_spec_sha256": task_spec_sha256,
         "workflow_id": workflow_id,
-        "scientific_workflow_plan_sha256": (
-            scientific_workflow_plan_sha256
-        ),
+        "scientific_workflow_plan_sha256": (scientific_workflow_plan_sha256),
         "nodes": tuple(by_id[node_id] for node_id in order),
         "required_output_quantity_ids": tuple(
             sorted(set(required_output_quantity_ids))
         ),
         "status": "planned",
     }
-    return ScientificAnalysisPlanV1(
-        **body, plan_sha256=canonical_sha256(body)
-    )
+    return ScientificAnalysisPlanV1(**body, plan_sha256=canonical_sha256(body))
 
 
 @runtime_checkable
@@ -668,7 +655,9 @@ class LoggedResultParserAdapterV1:
         return receipt
 
 
-def _logged_result_parser_adapters() -> tuple[LoggedResultParserAdapterV1, ...]:
+def _logged_result_parser_adapters() -> (
+    tuple[LoggedResultParserAdapterV1, ...]
+):
     adapters = []
     for program in registered_reader_programs():
         reader = reader_for(program)
@@ -688,12 +677,8 @@ def _logged_result_parser_adapters() -> tuple[LoggedResultParserAdapterV1, ...]:
 class ResultParserRegistryV1:
     """Host-owned registry of result parser adapters."""
 
-    def __init__(
-        self, adapters: Iterable[ResultParserAdapterV1] = ()
-    ) -> None:
-        self._adapters: dict[
-            tuple[str, str], ResultParserAdapterV1
-        ] = {}
+    def __init__(self, adapters: Iterable[ResultParserAdapterV1] = ()) -> None:
+        self._adapters: dict[tuple[str, str], ResultParserAdapterV1] = {}
         for adapter in adapters:
             self.register(adapter)
 
@@ -793,13 +778,11 @@ class AnalysisOutputQuantityRefV1:
     def __post_init__(self) -> None:
         _require_symbol(self.quantity_id, "quantity_id")
         require_sha256(self.value_sha256, "value_sha256")
-        require_sha256(
-            self.source_receipt_sha256, "source_receipt_sha256"
-        )
+        require_sha256(self.source_receipt_sha256, "source_receipt_sha256")
         if not str(self.unit).strip():
             raise AnalysisContractError(
                 f"analysis output {self.quantity_id!r} declares no unit; "
-                + _UNIT_HINT
+                + DIMENSIONLESS_UNIT_HINT
             )
         object.__setattr__(self, "dimension", tuple(self.dimension))
         if len(self.dimension) != 6 or not all(
@@ -816,7 +799,9 @@ class AnalysisOutputQuantityRefV1:
             "text_vector",
             "vector",
         }:
-            raise AnalysisContractError("unsupported analysis output data kind")
+            raise AnalysisContractError(
+                "unsupported analysis output data kind"
+            )
 
 
 @dataclass(frozen=True)
@@ -828,7 +813,9 @@ class AnalysisExecutionFindingV1:
     def __post_init__(self) -> None:
         _require_symbol(self.rule_id, "rule_id")
         if self.severity not in {"error", "info", "warning"}:
-            raise AnalysisContractError("unsupported analysis finding severity")
+            raise AnalysisContractError(
+                "unsupported analysis finding severity"
+            )
         if not str(self.message).strip():
             raise AnalysisContractError("analysis finding message is required")
 
@@ -862,7 +849,9 @@ class AnalysisExecutionReceiptV1:
         object.__setattr__(self, "outputs", tuple(self.outputs))
         object.__setattr__(self, "findings", tuple(self.findings))
         if self.schema_version != "chemsmart.analysis-execution-receipt.v1":
-            raise AnalysisContractError("unsupported analysis execution receipt")
+            raise AnalysisContractError(
+                "unsupported analysis execution receipt"
+            )
         for value, name in (
             (self.task_spec_sha256, "task_spec_sha256"),
             (
@@ -895,7 +884,9 @@ class AnalysisExecutionReceiptV1:
                 "analysis findings must be sorted and unique"
             )
         if self.status not in ANALYSIS_EXECUTION_STATES:
-            raise AnalysisContractError("unsupported analysis execution status")
+            raise AnalysisContractError(
+                "unsupported analysis execution status"
+            )
         error_findings = tuple(
             item for item in self.findings if item.severity == "error"
         )
@@ -936,9 +927,7 @@ def analysis_execution_receipt_body(
         "node_id": receipt.node_id,
         "analysis_node_spec_sha256": receipt.analysis_node_spec_sha256,
         "input_source_sha256s": receipt.input_source_sha256s,
-        "component_receipt_sha256s": (
-            receipt.component_receipt_sha256s
-        ),
+        "component_receipt_sha256s": (receipt.component_receipt_sha256s),
         "outputs": receipt.outputs,
         "findings": receipt.findings,
         "status": receipt.status,

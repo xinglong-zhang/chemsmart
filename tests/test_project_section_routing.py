@@ -1,4 +1,9 @@
-"""A gas-phase single point must be expressible in a gas-phase project.
+"""Which project section reaches which job type, pinned and swept.
+
+Two halves. The first pins one repaired chemistry rule: a gas-phase single
+point must be expressible in a gas-phase project. The second is the general
+instrument that would have found it -- a sweep that derives section-to-job-type
+routing from the loader and asserts it over the whole capability registry.
 
 ``sp`` reads ``solv:`` because ChemSmart's canonical workflow optimises in gas
 phase and takes the single point in solvent.  The fallback around that rule used
@@ -33,6 +38,7 @@ import tempfile
 import pytest
 
 from chemsmart.jobs.settings import read_molecular_job_yaml
+from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
 PHASE_KEYED_PROGRAMS = ("orca", "gaussian")
 
@@ -134,3 +140,99 @@ def test_a_project_with_neither_phase_section_says_so(program):
     message = str(excinfo.value)
     assert "'gas'" in message and "'solv'" in message
     assert "basis, functional" in message
+
+
+#: Sections that group settings by phase rather than by job type.
+PHASE_SECTIONS = ("gas", "solv")
+
+#: Job types the loader deliberately routes to their own section, so a
+#: phase-only project is not expected to feed them.
+SECTION_OWNING_JOBTYPES = frozenset({"td", "qmmm"})
+
+#: Job types with no settings of their own to merge.
+NON_MOLECULAR_JOBTYPES = frozenset({"inp", "userjob"})
+
+
+def _phase_keyed_programs():
+    """Yield the programs whose project YAML groups settings by phase."""
+    for name, capability in sorted(PROGRAM_CAPABILITIES.items()):
+        sections = set(capability.project_section_names)
+        if sections.issuperset(PHASE_SECTIONS):
+            # PySCF declares the phase pair only as legacy migration input; it
+            # keys its real sections by stage and is covered by its own tests.
+            if sections - set(PHASE_SECTIONS) - set(capability.jobtypes):
+                continue
+            if set(capability.jobtypes) & sections:
+                continue
+            yield name, capability
+
+
+def _configs_from_single_section(section, program):
+    """Load a project whose only content is one phase section."""
+    body = f"{section}:\n  functional: b3lyp\n  basis: aug-cc-pVTZ\n"
+    with tempfile.TemporaryDirectory() as directory:
+        path = os.path.join(directory, "project.yaml")
+        with open(path, "w") as handle:
+            handle.write(body)
+        return read_molecular_job_yaml(path, program=program)
+
+
+def test_the_registry_declares_at_least_one_phase_keyed_program():
+    """Guard the gate itself: a silently empty sweep would prove nothing."""
+    assert dict(_phase_keyed_programs())
+
+
+@pytest.mark.parametrize("section", PHASE_SECTIONS)
+def test_every_declared_phase_section_feeds_every_jobtype_that_reads_it(
+    section,
+):
+    """The regression this gate exists for, swept over the whole registry."""
+    starved = []
+    for program, capability in _phase_keyed_programs():
+        configs = _configs_from_single_section(section, program)
+        for jobtype in sorted(capability.jobtypes):
+            if jobtype in SECTION_OWNING_JOBTYPES:
+                continue
+            if jobtype in NON_MOLECULAR_JOBTYPES:
+                continue
+            settings = configs.get(jobtype)
+            if settings is None:
+                # A job type the loader does not build from project YAML at
+                # all is a different question, answered by its own accessor.
+                continue
+            if settings.get("functional") is None and (
+                settings.get("ab_initio") is None
+            ):
+                starved.append(f"{program}.{jobtype} from '{section}:'")
+
+    assert not starved, (
+        "these job types accept a declared section and then receive no level "
+        f"of theory from it: {starved}. A project that passes every gate must "
+        "not reach the input writer with nothing to write."
+    )
+
+
+@pytest.mark.parametrize("section", PHASE_SECTIONS)
+def test_a_single_phase_section_never_leaves_a_single_point_doing_frequencies(
+    section,
+):
+    """``sp`` means one energy; inheriting an optimisation's ``freq`` is wrong.
+
+    Recorded rather than asserted for ``solv:``: that branch predates this gate
+    and changing it would move existing projects, so the asymmetry is reported
+    in the campaign notes instead of silently repaired here.
+    """
+    if section != "gas":
+        pytest.skip("the solv-only branch is pre-existing behaviour")
+
+    for program, _capability in _phase_keyed_programs():
+        body = (
+            "gas:\n  functional: b3lyp\n  basis: aug-cc-pVTZ\n  freq: true\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "project.yaml")
+            with open(path, "w") as handle:
+                handle.write(body)
+            configs = read_molecular_job_yaml(path, program=program)
+
+        assert configs["sp"]["freq"] is False, program
