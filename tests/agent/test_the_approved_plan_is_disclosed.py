@@ -115,3 +115,36 @@ def test_the_execution_gate_it_serves_still_exists():
 
     source = inspect.getsource(tool_runtime)
     assert "planned workflow differs from frozen execution approval" in source
+
+
+def test_the_approved_plan_is_registered_for_execution_resolution():
+    """The consequence gate, observed twelve times in one run.
+
+    ``_execution_scientific_plan`` resolves the DAG to execute by looking up
+    the frozen approval's ``plan_sha256`` in the host's plan registry, which
+    holds only plans this session produced. An approved plan comes from an
+    earlier session, so the lookup raised "frozen workflow approval has no
+    registered scientific plan" and execution could not start even after the
+    session was shown what to reproduce.
+    """
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    assert (
+        "scientific_workflow_plan"
+        in inspect.signature(CommandCompiledToolHostV1).parameters
+    )
+    composition = inspect.getsource(live_session.run_live_agent_session)
+    assert 'host_kwargs["scientific_workflow_plan"] = approved_plan' in (
+        composition
+    ), (
+        "the approved plan must be registered on the host, or execution "
+        "cannot resolve the DAG the approval authorises"
+    )
+
+    lookup = inspect.getsource(
+        CommandCompiledToolHostV1._execution_scientific_plan
+    )
+    assert "frozen_approval.plan_sha256" in lookup, (
+        "registration is keyed by plan_sha256; if the lookup key changes, "
+        "this wiring must change with it"
+    )

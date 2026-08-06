@@ -833,10 +833,21 @@ def run_live_agent_session(
             approval_file=Path(approval_file),
             task_spec_sha256=task_spec_sha256,
         )
+        approved_plan = execution_inputs.pop("approved_scientific_plan")
         approved_workflow_record = _public_workflow_approval(
             execution_inputs["workflow_execution_approval"],
-            approved_plan=execution_inputs.pop("approved_scientific_plan"),
+            approved_plan=approved_plan,
         )
+        if approved_plan is not None:
+            # ``_execution_scientific_plan`` resolves the DAG to execute by
+            # looking up the frozen approval's ``plan_sha256`` in the host's
+            # plan registry, which only holds plans this session produced. The
+            # approved plan came from an earlier session, so the lookup failed
+            # with "frozen workflow approval has no registered scientific
+            # plan" -- observed twelve times in one run. Registering it here
+            # means execution can resolve the approved DAG directly instead of
+            # waiting for the model to re-derive it byte for byte.
+            host_kwargs["scientific_workflow_plan"] = approved_plan
         approved_projects = execution_inputs.pop("approved_project_artifacts")
         host_kwargs["artifacts"].update(
             {item.artifact_id: item for item in approved_projects}
