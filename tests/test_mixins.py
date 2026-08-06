@@ -247,6 +247,27 @@ class TestFolderMixin:
         txt_files = dummy.get_all_files_in_current_folder_by_suffix(".txt")
         assert file1 in txt_files
 
+    def test_suffix_without_dot_excludes_compound_extensions(self, tmpdir):
+        """filetype='xyz' must match .xyz but not .extxyz."""
+        xyz = os.path.join(str(tmpdir), "water.xyz")
+        extxyz = os.path.join(str(tmpdir), "crystal.extxyz")
+        for path, content in (
+            (xyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+            (extxyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+        ):
+            with open(path, "w") as f:
+                f.write(content)
+
+        dummy = DummyFolder(str(tmpdir))
+        files = dummy.get_all_files_in_current_folder_by_suffix("xyz")
+        assert xyz in files
+        assert extxyz not in files
+
+        # Leading-dot form remains supported.
+        files_dotted = dummy.get_all_files_in_current_folder_by_suffix(".xyz")
+        assert xyz in files_dotted
+        assert extxyz not in files_dotted
+
     def test_get_all_files_by_regex(self, temp_folder_with_files):
         folder, file1, file2 = temp_folder_with_files
         dummy = DummyFolder(folder)
