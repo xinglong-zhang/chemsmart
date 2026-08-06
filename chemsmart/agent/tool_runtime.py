@@ -4915,19 +4915,35 @@ def _validate_json_value(name: str, value: Any, schema: Mapping[str, Any]) -> No
             )
         return
     expected = schema.get("type")
-    type_ok = {
-        "string": isinstance(value, str),
-        "integer": isinstance(value, int) and not isinstance(value, bool),
-        "number": (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-        ),
-        "boolean": isinstance(value, bool),
-        "array": isinstance(value, list),
-        "object": isinstance(value, dict),
-    }.get(expected, True)
-    if not type_ok:
+
+    def _matches(kind: str) -> bool:
+        return {
+            "string": isinstance(value, str),
+            "integer": isinstance(value, int) and not isinstance(value, bool),
+            "number": (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+            ),
+            "boolean": isinstance(value, bool),
+            "array": isinstance(value, list),
+            "object": isinstance(value, dict),
+            "null": value is None,
+        }.get(kind, True)
+
+    # A union type such as ["number", "null"] is how a field says the concept
+    # may not apply here.  Treating it as an unknown type accepted anything.
+    if isinstance(expected, list):
+        allowed = [str(item) for item in expected]
+        if not any(_matches(kind) for kind in allowed):
+            raise ContractError(
+                f"tool argument {name} must be one of {allowed}, but got "
+                f"{type(value).__name__} {_offending_text(value)}"
+            )
+        if value is None:
+            # No further keyword applies to an explicit null.
+            return
+    elif not _matches(expected):
         raise ContractError(
             f"tool argument {name} must be {expected}, but got "
             f"{type(value).__name__} {_offending_text(value)}"

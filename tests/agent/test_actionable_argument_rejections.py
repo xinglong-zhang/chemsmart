@@ -190,3 +190,41 @@ def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
         f"these host registries have no producer hint: {missing}; a caller "
         "told one is empty would not know what fills it"
     )
+
+
+def test_a_field_that_may_not_apply_accepts_an_explicit_null():
+    """Observed live: a result-extraction node has no temperature.
+
+    The node contract types temperature_k as ``float | None``, but the schema
+    said ``number``, so omitting the key succeeded and saying null failed --
+    the explicit statement was the rejected one.
+    """
+
+    from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
+
+    definition = next(
+        item["function"]
+        for item in build_command_compiled_tool_surface().tool_definitions
+        if item["function"]["name"] == "plan_scientific_workflow"
+    )
+    node = definition["parameters"]["properties"]["analysis_nodes"]["items"]
+    schema = node["properties"]["temperature_k"]
+    assert schema["type"] == ["number", "null"]
+
+    _validate_json_value("analysis_nodes[0].temperature_k", None, schema)
+    _validate_json_value("analysis_nodes[0].temperature_k", 298.15, schema)
+
+    with pytest.raises(ContractError, match="must be greater than 0"):
+        _validate_json_value("analysis_nodes[0].temperature_k", 0, schema)
+    with pytest.raises(ContractError) as wrong:
+        _validate_json_value("analysis_nodes[0].temperature_k", "warm", schema)
+    assert "['number', 'null']" in str(wrong.value)
+    assert "'warm'" in str(wrong.value)
+
+
+def test_a_union_type_is_not_treated_as_an_unknown_type():
+    """Before the union was handled, a list type accepted anything at all."""
+
+    schema = {"type": ["number", "null"]}
+    with pytest.raises(ContractError, match="must be one of"):
+        _validate_json_value("x", {"not": "a number"}, schema)

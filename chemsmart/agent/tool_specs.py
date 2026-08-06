@@ -787,6 +787,24 @@ def _string() -> dict:
     return {"type": "string"}
 
 
+def _nullable_positive_number() -> dict:
+    """A positive number, or an explicit null where the concept does not apply.
+
+    A field the node contract types as ``float | None`` must accept null on the
+    wire.  Otherwise omitting the key succeeds and saying null fails, which
+    makes the explicit statement the rejected one.
+    """
+
+    return {
+        "type": ["number", "null"],
+        "exclusiveMinimum": 0,
+        "description": (
+            "Positive value, or null when this stage has no thermodynamic "
+            "state."
+        ),
+    }
+
+
 def _public_identifier() -> dict:
     return {
         "type": "string",
@@ -986,14 +1004,13 @@ def _analysis_intent_node_schema() -> dict:
                 "type": "array",
                 "items": _public_identifier(),
             },
-            "temperature_k": {
-                "type": "number",
-                "exclusiveMinimum": 0,
-            },
-            "pressure_atm": {
-                "type": "number",
-                "exclusiveMinimum": 0,
-            },
+            # Most analysis kinds have no thermodynamic state, and the node
+            # contract accepts None for them.  Refusing an explicit null while
+            # accepting an omitted key made the honest way to say "this stage
+            # has no temperature" the one the schema rejected -- a live session
+            # sent null on a result-extraction node and was refused for it.
+            "temperature_k": _nullable_positive_number(),
+            "pressure_atm": _nullable_positive_number(),
             "support_state": {
                 "type": "string",
                 "enum": ["planned", "blocked_unsupported"],
