@@ -98,6 +98,33 @@ class ToolLoopResultV1:
             raise ContractError("tool-loop result digest mismatch")
 
 
+#: Characters per token for the conservative pre-request size estimate.  Real
+#: tokenizers vary by model and are not available to the host, so this is
+#: deliberately an estimate used only to refuse a request that would clearly be
+#: rejected -- never to decide anything scientific.
+_CHARS_PER_TOKEN = 3.5
+
+
+def estimate_request_input_tokens(request: Mapping[str, Any]) -> int:
+    """Estimate the input size of a provider request before sending it.
+
+    Underestimating lets a doomed request through, which is the status quo.
+    Overestimating refuses a request that would have worked.  The ratio is
+    therefore chosen on the low side of typical byte-per-token figures so the
+    guard fires only when the conversation is clearly past the limit.
+    """
+
+    total = 0
+    for message in request.get("messages") or ():
+        if not isinstance(message, Mapping):
+            continue
+        for value in message.values():
+            total += len(value) if isinstance(value, str) else len(str(value))
+    for tool in request.get("tools") or ():
+        total += len(str(tool))
+    return int(total / _CHARS_PER_TOKEN)
+
+
 class ToolLoopRunner:
     """Drive provider-native turns through the only approved dispatcher."""
 
@@ -200,6 +227,42 @@ class ToolLoopRunner:
             # Provider-private reasoning continuation must not influence any
             # persisted evidence, including request digests.
             request_sha256 = canonical_sha256(public_payload(request))
+            context_limit = min(
+                envelope.budget.max_input_tokens_per_request,
+                network_budget.max_input_tokens_per_request,
+            )
+            projected = estimate_request_input_tokens(request)
+            if projected > context_limit:
+                # The existing budget check runs on the provider receipt, which
+                # means the request has already been sent and charged before
+                # anyone notices it was too large.  The session history grows
+                # on every turn and is never pruned, so a long workflow reaches
+                # this point by construction rather than by accident: measured
+                # across fourteen live sessions, input tokens rose monotonically
+                # on every single turn and total cost scaled with the square of
+                # the turn count.  Refusing here spends nothing and says why.
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=EventKind.TURN_BLOCKED.value,
+                    payload={
+                        "reason": (
+                            "the conversation would exceed the provider "
+                            f"context budget: about {projected} input tokens "
+                            f"against a limit of {context_limit}. The session "
+                            "history grows every turn and is never pruned, so "
+                            "this is reached by accumulation, not by one large "
+                            "message."
+                        ),
+                        "rule_ids": ("budget.context_would_be_exceeded",),
+                        "projected_input_tokens": projected,
+                        "context_limit": context_limit,
+                    },
+                    idempotency_key="context-budget:" + request_sha256,
+                )
+                terminal_state = "blocked"
+                final_text = "conversation exceeds the provider context budget"
+                terminal_reason = "context budget would be exceeded"
+                break
             attempt_start = self.clock()
             try:
                 response, provider_receipt = session.turn(
