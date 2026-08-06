@@ -32,6 +32,11 @@ from chemsmart.jobs.iterate.report import (
     ERROR_CODE_TIMEOUT,
     IterateReport,
 )
+from chemsmart.jobs.iterate.runner import (
+    IterateAssignment,
+    IterateCombination,
+    IterateJobRunner,
+)
 from chemsmart.jobs.iterate.settings import (
     IterateJobSettings,
     resolve_algorithm_config,
@@ -173,12 +178,59 @@ def _write_iterate_config(tmp_path: Path, name: str, content: str) -> Path:
     return config_path
 
 
-def _assignment_signature(combo) -> tuple[tuple[int, str], ...]:
+def _write_overlapping_slot_config(
+    tmp_path: Path,
+    name: str = "overlapping_slots.yaml",
+    *,
+    shared_substituent: bool = False,
+) -> Path:
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    water = INPUT_DIR / "water.xyz"
+    if shared_substituent:
+        substituents = f"""\
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1, 2]
+"""
+    else:
+        substituents = f"""\
+  - file_path: "{water}"
+    label: OH
+    link_index: 1
+    groups: [1]
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [2]
+"""
+
+    return _write_iterate_config(
+        tmp_path,
+        name,
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: overlap
+    skeleton_indices: "1-6"
+    slots:
+      - group: 1
+        link_indices: [1, 2]
+      - group: 2
+        link_indices: [2, 3]
+substituents:
+{substituents}""",
+    )
+
+
+def _assignment_signature(combo) -> tuple[tuple[int, int, int], ...]:
     return tuple(
         sorted(
             (
                 assignment.skeleton_link_index,
-                assignment.substituent_label,
+                assignment.substituent_idx,
+                assignment.substituent_link_index,
             )
             for assignment in combo.assignments
         )
@@ -224,17 +276,24 @@ def _minimal_iterate_report(
 
 
 def test_iterate_job_names_follow_config_stem(tmp_path: Path):
-    """Job, report, and default merged output share one config-based stem."""
+    """Config stem drives default Iterate job, output, and report names."""
+    # [sterp 1] : Build settings from a config path whose stem contains a space.
     settings = IterateJobSettings(config_file=str(tmp_path / "my config.yaml"))
+
+    # [sterp 2] : Instantiate the job and bind its report directory to tmp_path.
     job = IterateJob(settings=settings)
     job.folder = str(tmp_path)
 
+    # [sterp 3] : Confirm default names use the sanitized configuration stem.
     assert job.label == "my_config_iterate"
     assert job.outputfile == "my_config_iterate.xyz"
     assert job.reportfile == str(tmp_path / "my_config_iterate.out")
 
+    # [sterp 4] : Build a second job with an explicit output base path.
     custom_output = tmp_path / "custom"
     custom_job = IterateJob(settings=settings, outputfile=str(custom_output))
+
+    # [sterp 5] : Confirm custom output naming does not change job/report stems.
     assert custom_job.label == "my_config_iterate"
     assert custom_job.outputfile == str(custom_output.with_suffix(".xyz"))
     assert custom_job.reportfile == str(tmp_path / "my_config_iterate.out")
@@ -243,7 +302,8 @@ def test_iterate_job_names_follow_config_stem(tmp_path: Path):
 def test_iterate_job_skips_complete_output_unless_rerun_requested(
     tmp_path: Path,
 ):
-    """A normal report and its declared output activate skip-completed."""
+    """Complete output/report files skip the runner until rerun is forced."""
+    # [sterp 1] : Create a job with an existing XYZ output and normal report marker.
     settings = IterateJobSettings(config_file=str(tmp_path / "complete.yaml"))
     job = IterateJob(settings=settings)
     job.folder = str(tmp_path)
@@ -268,13 +328,21 @@ def test_iterate_job_skips_complete_output_unless_rerun_requested(
     runner = RecordingRunner()
     job.jobrunner = runner
 
-    assert job.is_complete()
+    # [sterp 2] : Evaluate completion detection and run with skip_completed enabled.
+    is_complete = job.is_complete()
+    skipped_result = job.run()
+
+    # [sterp 3] : Confirm the complete job is skipped without calling the runner.
+    assert is_complete
     assert job.skip_completed
-    assert job.run() is None
+    assert skipped_result is None
     assert runner.calls == 0
 
+    # [sterp 4] : Disable skip_completed and run the same job again.
     job.skip_completed = False
     summary = job.run()
+
+    # [sterp 5] : Confirm forced rerun succeeds and invokes the runner once.
     assert summary.exit_code == 0
     assert runner.calls == 1
 
@@ -303,7 +371,10 @@ def test_iterate_cli_generation_matches_golden(
     tmp_path: Path,
 ):
     """Both algorithms reproduce their manually generated eight structures."""
+    # [sterp 1] : Select the output stem for the parameterized algorithm fixture.
     output_base = tmp_path / Path(config_name).stem
+
+    # [sterp 2] : Run the iterate YAML CLI in global mode with algorithm_args.
     result = CliRunner().invoke(
         run,
         [
@@ -322,14 +393,17 @@ def test_iterate_cli_generation_matches_golden(
         obj={},
     )
 
+    # [sterp 3] : Require a clean CLI exit before reading generated XYZ output.
     assert result.exit_code == 0, result.output
 
+    # [sterp 4] : Compare generated labels, atom order, and coordinates to golden XYZ.
     output_path = output_base.with_suffix(".xyz")
     actual = _read_xyz(output_path)
     expected = _read_xyz(EXPECTED_DIR / expected_name)
     assert set(actual) == GENERATION_LABELS
     _assert_structure_maps_equal(actual, expected)
 
+    # [sterp 5] : Confirm the run report records eight successful combinations.
     report_path = tmp_path / f"{Path(config_name).stem}_iterate.out"
     report_text = report_path.read_text()
     assert "CHEMSMART ITERATE JOB REPORT" in report_text
@@ -342,6 +416,7 @@ def test_iterate_cli_generation_matches_golden(
 
 def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
     """A worker exceeding its limit becomes a timed-out combination."""
+    # [sterp 1] : Build a one-combination job with a near-zero worker timeout.
     job = _build_job(
         "single_generation.yaml",
         iterate_jobrunner,
@@ -349,10 +424,12 @@ def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
         timeout=1e-9,
     )
 
+    # [sterp 2] : Run the job and capture the IterateExecutionError summary.
     with pytest.raises(IterateExecutionError) as exc_info:
         job.run()
     summary = exc_info.value.summary
 
+    # [sterp 3] : Confirm the only combination timed out and no structure was written.
     assert summary.total == 1
     assert summary.succeeded == 0
     assert summary.failed == 0
@@ -367,9 +444,11 @@ def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
 
 def test_iterate_template_matches_golden(tmp_path: Path):
     """The generated YAML template remains identical to its golden copy."""
+    # [sterp 1] : Generate the Iterate YAML template into a temporary path.
     generated_path = Path(generate_yaml_template(str(tmp_path / "template")))
     generated_text = generated_path.read_text()
 
+    # [sterp 2] : Compare the emitted template text and parse key defaults.
     assert generated_text.strip() == TEMPLATE_GOLDEN.read_text().strip()
     parsed = yaml.safe_load(generated_text)
     assert parsed["algorithm"]["name"] == "etkdg"
@@ -379,8 +458,10 @@ def test_iterate_template_matches_golden(tmp_path: Path):
 
 def test_iterate_template_generation_is_rejected_under_sub(tmp_path: Path):
     """The real CLI hierarchy must not run template utilities under ``sub``."""
+    # [sterp 1] : Choose an output path that must not be created by sub mode.
     output_path = tmp_path / "should_not_be_written.yaml"
 
+    # [sterp 2] : Invoke template generation through the scheduler-facing command.
     result = CliRunner().invoke(
         entry_point,
         [
@@ -393,6 +474,7 @@ def test_iterate_template_generation_is_rejected_under_sub(tmp_path: Path):
         obj={},
     )
 
+    # [sterp 3] : Confirm Click rejects the local utility and leaves no file behind.
     assert result.exit_code == 2
     assert "local utility" in result.output
     assert not output_path.exists()
@@ -418,9 +500,11 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
     resource_directive: str,
 ):
     """``sub --test`` reconstructs Iterate and writes native CPU scripts."""
+    # [sterp 1] : Set the temporary working directory and select the Iterate config.
     monkeypatch.chdir(tmp_path)
     config_path = CONFIG_DIR / "etkdg_generation.yaml"
 
+    # [sterp 2] : Generate native scripts for iterate YAML with CLI max-site options.
     result = CliRunner().invoke(
         entry_point,
         [
@@ -443,6 +527,7 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
         obj={},
     )
 
+    # [sterp 3] : Confirm script generation succeeded for the selected scheduler.
     assert result.exit_code == 0, result.output
 
     label = "etkdg_generation_iterate"
@@ -451,6 +536,7 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
     assert run_script.exists()
     assert submit_script.exists()
 
+    # [sterp 4] : Parse the generated Python run script's reconstructed CLI args.
     run_tree = ast.parse(run_script.read_text())
     cli_assignment = next(
         node
@@ -462,6 +548,8 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
         )
     )
     reconstructed_args = ast.literal_eval(cli_assignment.value)
+
+    # [sterp 5] : Verify scheduler, resource, max-site, and algorithm arguments.
     assert reconstructed_args[reconstructed_args.index("--server") + 1] == (
         server_name
     )
@@ -486,6 +574,7 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
         "sys.argv = ['chemsmart', 'run', *cli_args]" in run_script.read_text()
     )
 
+    # [sterp 6] : Verify the submit script uses native Python execution resources.
     submit_contents = submit_script.read_text()
     assert resource_directive in submit_contents
     assert "conda activate" not in submit_contents
@@ -499,8 +588,9 @@ def test_iterate_sub_test_writes_rerunnable_python_native_scripts(
 
 def test_iterate_cli_rejects_link_outside_skeleton_indices(tmp_path: Path):
     """A declared link atom must belong to the retained skeleton atoms."""
+    # [sterp 1] : Write YAML where link_index 7 is outside skeleton_indices 1-6.
     config_path = tmp_path / "invalid_link.yaml"
-    config_path.write_text("""\
+    config_text = """\
 skeletons:
   - file_path: skeleton.xyz
     label: skeleton
@@ -511,12 +601,15 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-""")
+"""
+    config_path.write_text(config_text)
 
+    # [sterp 2] : Invoke iterate YAML validation through the CLI entrypoint.
     result = CliRunner().invoke(
         run, ["iterate", "yaml", "-f", str(config_path)], obj={}
     )
 
+    # [sterp 3] : Confirm Click reports the missing skeleton_indices membership.
     assert result.exit_code == 2
     assert "Invalid value" in result.output
     assert (
@@ -588,14 +681,17 @@ def test_iterate_cli_rejects_invalid_config(
     message: str,
     tmp_path: Path,
 ):
-    """Representative malformed configurations fail before molecule loading."""
+    """Malformed YAML configs fail validation before molecule loading."""
+    # [sterp 1] : Write the parameterized malformed YAML configuration.
     config_path = tmp_path / "invalid.yaml"
     config_path.write_text(content)
 
+    # [sterp 2] : Invoke iterate YAML with the invalid config path.
     result = CliRunner().invoke(
         run, ["iterate", "yaml", "-f", str(config_path)], obj={}
     )
 
+    # [sterp 3] : Confirm Click reports the expected validation message.
     assert result.exit_code == 2
     assert "Invalid value" in result.output
     assert message in result.output
@@ -607,6 +703,7 @@ def test_iterate_runner_rejects_out_of_bounds_indices(
     iterate_jobrunner,
 ):
     """Runtime validation rejects indices beyond the loaded molecule size."""
+    # [sterp 1] : Replace the parameterized atom-index field with out-of-bounds 99.
     config = {
         "file_path": str(INPUT_DIR / "benzene.xyz"),
         "file_path_raw": "benzene.xyz",
@@ -617,10 +714,12 @@ def test_iterate_runner_rejects_out_of_bounds_indices(
     config[field] = [99]
     errors = []
 
+    # [sterp 2] : Load the skeleton through runner-side atom-count validation.
     molecule, label = iterate_jobrunner._load_molecule(
         config, "skeleton", 0, errors
     )
 
+    # [sterp 3] : Confirm the molecule is skipped and the field is reported.
     assert molecule is None
     assert label == "benzene"
     assert len(errors) == 1
@@ -630,12 +729,15 @@ def test_iterate_runner_rejects_out_of_bounds_indices(
 
 def test_iterate_cli_rejects_missing_config_file(tmp_path: Path):
     """A missing YAML file is a CLI usage/configuration error."""
+    # [sterp 1] : Point the CLI at a YAML path that does not exist.
     missing_path = tmp_path / "missing.yaml"
 
+    # [sterp 2] : Invoke iterate YAML with the missing -f path.
     result = CliRunner().invoke(
         run, ["iterate", "yaml", "-f", str(missing_path)], obj={}
     )
 
+    # [sterp 3] : Confirm Click returns a usage error mentioning the missing file.
     assert result.exit_code == 2
     assert "does not exist" in result.output
 
@@ -660,8 +762,10 @@ def test_iterate_cli_max_substituted_sites_option(
     monkeypatch,
 ):
     """The YAML input command forwards the reusable Iterate limit option."""
+    # [sterp 1] : Capture the job built from the parameterized max-site CLI args.
     captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
 
+    # [sterp 2] : Invoke iterate YAML with option_args before job execution.
     result = CliRunner().invoke(
         run,
         [
@@ -674,6 +778,7 @@ def test_iterate_cli_max_substituted_sites_option(
         obj={},
     )
 
+    # [sterp 3] : Confirm one job is created with the normalized max-site value.
     assert result.exit_code == 0, result.output
     assert len(captured_jobs) == 1
     assert captured_jobs[0].settings.max_substituted_sites == expected
@@ -693,8 +798,10 @@ def test_iterate_cli_rejects_invalid_max_substituted_sites(
     monkeypatch,
 ):
     """Invalid limits fail as Click usage errors before job execution."""
+    # [sterp 1] : Stub job execution while passing parameterized invalid limit args.
     captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
 
+    # [sterp 2] : Invoke iterate YAML with the invalid max-substituted-sites form.
     result = CliRunner().invoke(
         run,
         [
@@ -707,6 +814,7 @@ def test_iterate_cli_rejects_invalid_max_substituted_sites(
         obj={},
     )
 
+    # [sterp 3] : Confirm Click rejects the option before dispatching any job.
     assert result.exit_code == 2
     assert "Error:" in result.output
     assert captured_jobs == []
@@ -721,8 +829,9 @@ def test_iterate_cli_missing_molecule_file_is_input_error(tmp_path: Path):
     Iterate propagates its internal completion status to the CLI process so a
     scheduler can distinguish this failure from a successful calculation.
     """
+    # [sterp 1] : Write a structurally valid config whose molecule files are absent.
     config_path = tmp_path / "missing_molecule.yaml"
-    config_path.write_text("""\
+    config_text = """\
 skeletons:
   - file_path: does_not_exist.xyz
     label: skeleton
@@ -732,9 +841,11 @@ substituents:
     label: Me
     link_index: 1
     groups: [1]
-""")
+"""
+    config_path.write_text(config_text)
     output_base = tmp_path / "missing_out"
 
+    # [sterp 2] : Run iterate YAML with a merged-output base path.
     result = CliRunner().invoke(
         run,
         [
@@ -750,6 +861,7 @@ substituents:
         obj={},
     )
 
+    # [sterp 3] : Confirm the run fails as an Iterate input error.
     assert result.exit_code == 1
     assert isinstance(result.exception, IterateExecutionError)
     # Nothing was generated, so the merged output file is never created.
@@ -758,6 +870,8 @@ substituents:
     report_path = tmp_path / "missing_molecule_iterate.out"
     assert report_path.exists()
     report_text = report_path.read_text()
+
+    # [sterp 4] : Confirm the report carries the input-error code and termination.
     assert ERROR_CODE_INPUT in report_text
     assert "Error termination of CHEMSMART Iterate" in report_text
 
@@ -769,6 +883,7 @@ def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
     missing. The report records an error termination with ``ITR-INPUT-001``,
     while the structure that did generate is retained in the merged output.
     """
+    # [sterp 1] : Write YAML with one loadable substituent and one missing file.
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
     missing = tmp_path / "missing.xyz"
@@ -793,6 +908,7 @@ def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
     )
     output_base = tmp_path / "partial_out"
 
+    # [sterp 2] : Run iterate YAML so the good substituent can still generate output.
     result = CliRunner().invoke(
         run,
         [
@@ -808,6 +924,7 @@ def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
         obj={},
     )
 
+    # [sterp 3] : Confirm the CLI reports an input-error termination.
     assert result.exit_code == 1
     assert isinstance(result.exception, IterateExecutionError)
     # The single loadable substituent still produced and retained its output.
@@ -815,6 +932,8 @@ def test_iterate_cli_partial_failure_retains_successes(tmp_path: Path):
     assert output_path.exists()
     assert set(_read_xyz(output_path)) == {"benzene_1Me"}
     report_text = (tmp_path / "partial_failure_iterate.out").read_text()
+
+    # [sterp 4] : Confirm the report preserves the partial success error code.
     assert ERROR_CODE_INPUT in report_text
     assert "Error termination of CHEMSMART Iterate" in report_text
 
@@ -823,7 +942,8 @@ def test_iterate_three_site_combination_traversal(
     iterate_jobrunner,
     tmp_path: Path,
 ):
-    """Two substituents traverse three sites as 6/12/8 substitutions."""
+    """Global mode expands two substituents across three sites as 6/12/8 combos."""
+    # [sterp 1] : Build the three-site traversal fixture in global mode.
     job = _build_job(
         "combination_traversal.yaml",
         iterate_jobrunner,
@@ -831,11 +951,13 @@ def test_iterate_three_site_combination_traversal(
         combination_mode="global",
     )
 
+    # [sterp 2] : Generate all global combinations without running geometry.
     _, combinations, input_errors, attachment_sites = (
         iterate_jobrunner._generate_combinations(job)
     )
     labels = [combination.label for combination in combinations]
 
+    # [sterp 3] : Build the expected non-empty Cartesian-product label set.
     expected_labels = set()
     for choices in product((None, "Me", "OH"), repeat=3):
         assignments = [
@@ -846,6 +968,7 @@ def test_iterate_three_site_combination_traversal(
         if assignments:
             expected_labels.add("_".join(["benzene", *assignments]))
 
+    # [sterp 4] : Confirm counts, unique labels, and assignment-depth distribution.
     assert input_errors == []
     assert attachment_sites == 3
     assert len(combinations) == 26
@@ -870,8 +993,11 @@ def test_iterate_settings_normalizes_max_substituted_sites(
     raw_value,
     expected,
 ):
+    """None, zero, and positive max-site settings normalize to runtime values."""
+    # [sterp 1] : Construct settings with the parameterized raw max-site value.
     settings = IterateJobSettings(max_substituted_sites=raw_value)
 
+    # [sterp 2] : Confirm zero becomes unlimited and positive integers remain set.
     assert settings.max_substituted_sites == expected
 
 
@@ -886,16 +1012,26 @@ def test_iterate_settings_normalizes_max_substituted_sites(
     ],
 )
 def test_iterate_settings_rejects_invalid_max_substituted_sites(raw_value):
+    """Negative, non-integer, and bool max-site settings are rejected."""
+    # [sterp 1] : Use the parameterized invalid raw max-site value.
     with pytest.raises(ValueError, match="max_substituted_sites"):
+        # [sterp 2] : Construct settings and require a max_substituted_sites error.
         IterateJobSettings(max_substituted_sites=raw_value)
 
 
 def test_iterate_settings_copy_preserves_max_substituted_sites():
+    """Copying settings preserves limited and unlimited max-site values."""
+    # [sterp 1] : Create one limited settings object and one zero-as-unlimited object.
     limited = IterateJobSettings(max_substituted_sites=2)
     unlimited = IterateJobSettings(max_substituted_sites=0)
 
-    assert limited.copy().max_substituted_sites == 2
-    assert unlimited.copy().max_substituted_sites is None
+    # [sterp 2] : Copy both settings objects and inspect their normalized limits.
+    limited_copy = limited.copy()
+    unlimited_copy = unlimited.copy()
+
+    # [sterp 3] : Confirm the copy retains the limited value and unlimited None.
+    assert limited_copy.max_substituted_sites == 2
+    assert unlimited_copy.max_substituted_sites is None
 
 
 def test_iterate_independent_max_substituted_sites_limits_current_group(
@@ -903,6 +1039,7 @@ def test_iterate_independent_max_substituted_sites_limits_current_group(
     tmp_path: Path,
 ):
     """A three-position slot is pruned to singles and doubles at K=2."""
+    # [sterp 1] : Build independent-mode jobs with unlimited and K=2 traversal.
     unlimited_job = _build_job(
         "combination_traversal.yaml",
         iterate_jobrunner,
@@ -917,6 +1054,7 @@ def test_iterate_independent_max_substituted_sites_limits_current_group(
         max_substituted_sites=2,
     )
 
+    # [sterp 2] : Generate the three-position group combinations for both limits.
     _, unlimited, unlimited_errors, _ = (
         iterate_jobrunner._generate_combinations(unlimited_job)
     )
@@ -924,6 +1062,7 @@ def test_iterate_independent_max_substituted_sites_limits_current_group(
         limited_job
     )
 
+    # [sterp 3] : Confirm K=2 removes triples while preserving singles and doubles.
     assert unlimited_errors == []
     assert limited_errors == []
     assert len(unlimited) == 26
@@ -943,6 +1082,8 @@ def test_iterate_global_max_substituted_sites_spans_groups(
     iterate_jobrunner,
     tmp_path: Path,
 ):
+    """Global max-site limit counts assignments across separate slot groups."""
+    # [sterp 1] : Write a three-group skeleton where each group has one site.
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
     config_path = _write_iterate_config(
@@ -983,10 +1124,12 @@ substituents:
         max_substituted_sites=2,
     )
 
+    # [sterp 2] : Generate global combinations with max_substituted_sites=2.
     _, combinations, input_errors, _ = (
         iterate_jobrunner._generate_combinations(job)
     )
 
+    # [sterp 3] : Confirm no combination exceeds two assignments across groups.
     assert input_errors == []
     assert len(combinations) == 6
     assert all(len(combo.assignments) <= 2 for combo in combinations)
@@ -1001,6 +1144,8 @@ def test_iterate_max_substituted_sites_is_per_skeleton(
     iterate_jobrunner,
     tmp_path: Path,
 ):
+    """Max-site pruning is evaluated separately for each skeleton entry."""
+    # [sterp 1] : Write a two-site skeleton and a three-site skeleton in one config.
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
     water = INPUT_DIR / "water.xyz"
@@ -1046,6 +1191,7 @@ substituents:
         max_substituted_sites=2,
     )
 
+    # [sterp 2] : Generate unlimited and K=2 global combinations for both skeletons.
     _, unlimited, unlimited_errors, _ = (
         iterate_jobrunner._generate_combinations(unlimited_job)
     )
@@ -1053,6 +1199,7 @@ substituents:
         limited_job
     )
 
+    # [sterp 3] : Confirm only the three-site skeleton loses its triple assignment.
     assert unlimited_errors == []
     assert limited_errors == []
     assert Counter(combo.skeleton_label for combo in unlimited) == {
@@ -1070,6 +1217,8 @@ def test_iterate_multi_link_index_forms_one_implicit_group(
     iterate_jobrunner,
     tmp_path: Path,
 ):
+    """A multi-value link_index acts as one implicit group in both modes."""
+    # [sterp 1] : Write a shorthand three-site skeleton with Me/OH in group 1.
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
     water = INPUT_DIR / "water.xyz"
@@ -1094,6 +1243,8 @@ substituents:
 """,
     )
     combinations_by_case = {}
+
+    # [sterp 2] : Generate unlimited, independent-limited, and global-limited sets.
     for case, mode, limit in (
         ("unlimited", "independent", None),
         ("independent-limited", "independent", 2),
@@ -1109,9 +1260,11 @@ substituents:
         _, combinations, input_errors, _ = (
             iterate_jobrunner._generate_combinations(job)
         )
+        # [sterp 3] : Confirm each traversal variant loads without input errors.
         assert input_errors == []
         combinations_by_case[case] = combinations
 
+    # [sterp 4] : Confirm unlimited traversal covers singles, doubles, and triples.
     unlimited = combinations_by_case["unlimited"]
     assert len(unlimited) == 26
     assert Counter(len(combo.assignments) for combo in unlimited) == {
@@ -1128,6 +1281,7 @@ substituents:
         "shorthand_1Me_3OH_5Me",
     }.issubset(labels)
 
+    # [sterp 5] : Confirm K=2 gives the same signatures in independent and global modes.
     limited_by_mode = {
         case: combinations_by_case[case]
         for case in ("independent-limited", "global-limited")
@@ -1151,6 +1305,8 @@ def test_iterate_multi_link_index_uses_one_implicit_group_number(
     iterate_jobrunner,
     tmp_path: Path,
 ):
+    """A multi-link shorthand skeleton consumes one global group number."""
+    # [sterp 1] : Write two skeletons where the first has three shorthand sites.
     benzene = INPUT_DIR / "benzene.xyz"
     methane = INPUT_DIR / "methane.xyz"
     water = INPUT_DIR / "water.xyz"
@@ -1185,10 +1341,12 @@ substituents:
         combination_mode="global",
     )
 
+    # [sterp 2] : Generate global combinations to observe group assignment.
     _, combinations, input_errors, _ = (
         iterate_jobrunner._generate_combinations(job)
     )
 
+    # [sterp 3] : Confirm group 1 belongs to first and group 2 to second skeleton.
     assert input_errors == []
     assert {combo.label for combo in combinations} == {
         "first_1Me",
@@ -1260,11 +1418,15 @@ def test_iterate_yaml_rejects_max_substituted_sites_key(
     message: str,
     tmp_path: Path,
 ):
+    """YAML rejects max_substituted_sites at every unsupported config level."""
+    # [sterp 1] : Use the parameterized YAML block containing max_substituted_sites.
     config_path = tmp_path / "bad.yaml"
 
+    # [sterp 2] : Validate the YAML and capture the BadParameter exception.
     with pytest.raises(click.BadParameter) as exc_info:
         validate_yaml_config(yaml.safe_load(content), str(config_path))
 
+    # [sterp 3] : Confirm the rejected field and owning config level are reported.
     assert message in str(exc_info.value)
     assert "max_substituted_sites" in str(exc_info.value)
 
@@ -1274,7 +1436,10 @@ def test_iterate_independent_and_global_combination_modes(
     tmp_path: Path,
 ):
     """Global mode adds the cross-group structure to independent results."""
+    # [sterp 1] : Prepare a label map for independent and global mode outputs.
     labels_by_mode = {}
+
+    # [sterp 2] : Generate combinations for each mode from the two-slot fixture.
     for mode in ("independent", "global"):
         job = _build_job(
             "combination_modes.yaml",
@@ -1285,9 +1450,11 @@ def test_iterate_independent_and_global_combination_modes(
         _, combinations, input_errors, _ = (
             iterate_jobrunner._generate_combinations(job)
         )
+        # [sterp 3] : Confirm each mode loads cleanly before comparing labels.
         assert input_errors == []
         labels_by_mode[mode] = {combo.label for combo in combinations}
 
+    # [sterp 4] : Confirm only global mode includes the cross-slot assignment.
     assert labels_by_mode["independent"] == {
         "benzene_1Me",
         "benzene_3OH",
@@ -1297,6 +1464,442 @@ def test_iterate_independent_and_global_combination_modes(
         "benzene_3OH",
         "benzene_1Me_3OH",
     }
+
+
+def test_iterate_yaml_accepts_slot_link_indices_shared_across_groups(
+    tmp_path: Path,
+):
+    """YAML validation accepts slots whose groups share skeleton position 2."""
+    # [sterp 1] : Write overlapping slots [1, 2] and [2, 3] for two groups.
+    config_path = _write_overlapping_slot_config(tmp_path)
+
+    # [sterp 2] : Validate the YAML without rejecting the shared physical site.
+    config = validate_yaml_config(
+        yaml.safe_load(config_path.read_text()), str(config_path)
+    )
+
+    slots = config["skeletons"][0]["slots"]
+
+    # [sterp 3] : Confirm both slots retain their original link-index lists.
+    assert [slot["link_indices"] for slot in slots] == [[1, 2], [2, 3]]
+
+
+def test_iterate_global_overlapping_slots_use_physical_positions_once(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Global mode merges overlapping slot candidates by physical link index."""
+    # [sterp 1] : Build the overlap fixture in global mode with shared site 2.
+    config_path = _write_overlapping_slot_config(tmp_path)
+    job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="global",
+    )
+
+    # [sterp 2] : Generate global position choices across both slot groups.
+    _, combinations, input_errors, attachment_sites = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+
+    # [sterp 3] : Collect candidates per physical site and reject duplicate occupancy.
+    candidates_by_site = {}
+    for combo in combinations:
+        site_indices = [
+            assignment.skeleton_link_index for assignment in combo.assignments
+        ]
+        assert len(site_indices) == len(set(site_indices))
+        for assignment in combo.assignments:
+            candidates_by_site.setdefault(
+                assignment.skeleton_link_index, set()
+            ).add(assignment.substituent_label)
+
+    # [sterp 4] : Confirm 11 non-empty combinations and merged site-2 candidates.
+    assert input_errors == []
+    assert attachment_sites == 3
+    assert len(combinations) == 11
+    assert candidates_by_site == {
+        1: {"OH"},
+        2: {"OH", "Me"},
+        3: {"Me"},
+    }
+    assert {combo.label for combo in combinations} == {
+        "overlap_1OH",
+        "overlap_2OH",
+        "overlap_2Me",
+        "overlap_3Me",
+        "overlap_1OH_2OH",
+        "overlap_1OH_2Me",
+        "overlap_1OH_3Me",
+        "overlap_2OH_3Me",
+        "overlap_2Me_3Me",
+        "overlap_1OH_2OH_3Me",
+        "overlap_1OH_2Me_3Me",
+    }
+
+
+def test_iterate_independent_overlapping_slots_expand_by_group(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Independent mode expands each overlapping slot group separately."""
+    # [sterp 1] : Build the overlap fixture in independent combination mode.
+    config_path = _write_overlapping_slot_config(tmp_path)
+    job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode="independent",
+    )
+
+    # [sterp 2] : Generate combinations as the union of per-group expansions.
+    _, combinations, input_errors, _ = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+
+    # [sterp 3] : Confirm OH-only and Me-only group products are not cross-combined.
+    assert input_errors == []
+    assert {combo.label for combo in combinations} == {
+        "overlap_1OH",
+        "overlap_2OH",
+        "overlap_1OH_2OH",
+        "overlap_2Me",
+        "overlap_3Me",
+        "overlap_2Me_3Me",
+    }
+
+
+@pytest.mark.parametrize(
+    ("combination_mode", "expected_labels", "expected_signatures"),
+    [
+        pytest.param(
+            "global",
+            {
+                "overlap_1Me",
+                "overlap_2Me",
+                "overlap_3Me",
+                "overlap_1Me_2Me",
+                "overlap_1Me_3Me",
+                "overlap_2Me_3Me",
+                "overlap_1Me_2Me_3Me",
+            },
+            {
+                ((1, 0, 1),),
+                ((2, 0, 1),),
+                ((3, 0, 1),),
+                ((1, 0, 1), (2, 0, 1)),
+                ((1, 0, 1), (3, 0, 1)),
+                ((2, 0, 1), (3, 0, 1)),
+                ((1, 0, 1), (2, 0, 1), (3, 0, 1)),
+            },
+            id="global",
+        ),
+        pytest.param(
+            "independent",
+            {
+                "overlap_1Me",
+                "overlap_2Me",
+                "overlap_1Me_2Me",
+                "overlap_3Me",
+                "overlap_2Me_3Me",
+            },
+            {
+                ((1, 0, 1),),
+                ((2, 0, 1),),
+                ((1, 0, 1), (2, 0, 1)),
+                ((3, 0, 1),),
+                ((2, 0, 1), (3, 0, 1)),
+            },
+            id="independent",
+        ),
+    ],
+)
+def test_iterate_overlapping_groups_dedupe_same_substituent_at_same_site(
+    combination_mode: str,
+    expected_labels: set[str],
+    expected_signatures: set[tuple[tuple[int, int, int], ...]],
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Verify identity-based deduplication across overlapping substituent groups."""
+    # [sterp 1] : Build overlap YAML where the same Me substituent belongs to both groups.
+    config_path = _write_overlapping_slot_config(
+        tmp_path,
+        f"same_substituent_{combination_mode}.yaml",
+        shared_substituent=True,
+    )
+    job = _build_job_from_config_path(
+        config_path,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode=combination_mode,
+    )
+
+    # [sterp 2] : Generate combinations in the parameterized traversal mode.
+    _, combinations, input_errors, _ = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+    labels = [combo.label for combo in combinations]
+
+    # [sterp 3] : Confirm duplicate labels and structured assignments are deduped.
+    assert input_errors == []
+    assert len(labels) == len(set(labels))
+    assert set(labels) == expected_labels
+    assert {_assignment_signature(combo) for combo in combinations} == (
+        expected_signatures
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_field", "expected_message"),
+    [
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: duplicate_slot
+    skeleton_indices: "1-6"
+    slots:
+      - group: 1
+        link_indices: [1, 1]
+substituents:
+  - file_path: substituent.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""",
+            "link_indices",
+            "contains duplicate value(s) [1]",
+            id="duplicate-slot-index",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: scalar_bool
+    link_index: true
+substituents:
+  - file_path: substituent.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""",
+            "link_index",
+            "must contain only positive integers (1-based)",
+            id="scalar-bool-index",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: slot_bool
+    slots:
+      - group: 1
+        link_indices: [true, 2]
+substituents:
+  - file_path: substituent.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""",
+            "link_indices",
+            "must contain only positive integers (1-based)",
+            id="list-bool-index",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: scalar_float
+    link_index: 1.5
+substituents:
+  - file_path: substituent.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""",
+            "link_index",
+            "must contain only positive integers (1-based)",
+            id="scalar-float-index",
+        ),
+        pytest.param(
+            """\
+skeletons:
+  - file_path: skeleton.xyz
+    label: mixed_list
+    slots:
+      - group: 1
+        link_indices: [1, "2"]
+substituents:
+  - file_path: substituent.xyz
+    label: Me
+    link_index: 1
+    groups: [1]
+""",
+            "link_indices",
+            "must contain only positive integers (1-based)",
+            id="mixed-list-index",
+        ),
+    ],
+)
+def test_iterate_yaml_rejects_invalid_atom_indices(
+    content: str,
+    expected_field: str,
+    expected_message: str,
+    tmp_path: Path,
+):
+    """YAML atom-index validation rejects duplicate or non-strict-int entries."""
+    # [sterp 1] : Use the parameterized duplicate, bool, float, or mixed-list index.
+    config_path = tmp_path / "invalid_index.yaml"
+
+    # [sterp 2] : Validate the YAML and capture the BadParameter exception.
+    with pytest.raises(click.BadParameter) as exc_info:
+        validate_yaml_config(yaml.safe_load(content), str(config_path))
+
+    # [sterp 3] : Confirm the message names the affected field and index rule.
+    message = str(exc_info.value)
+    assert expected_field in message
+    assert expected_message in message
+
+
+def test_iterate_combination_signature_uses_structured_identity():
+    """Runner signatures distinguish physical identity outside YAML validation.
+
+    These objects directly exercise the runner contract and bypass YAML label
+    validation.
+    """
+    # [sterp 1] : Construct combinations with controlled identity-field variations.
+    base_assignments = [
+        IterateAssignment(
+            substituent_idx=0,
+            substituent_label="Me",
+            substituent_link_index=1,
+            skeleton_link_index=1,
+        ),
+        IterateAssignment(
+            substituent_idx=1,
+            substituent_label="OH",
+            substituent_link_index=1,
+            skeleton_link_index=2,
+        ),
+    ]
+    base_combination = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=base_assignments,
+    )
+    reversed_order = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=list(reversed(base_assignments)),
+    )
+    same_physical_identity = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=[
+            IterateAssignment(
+                substituent_idx=0,
+                substituent_label="Me",
+                substituent_link_index=1,
+                skeleton_link_index=1,
+            ),
+            IterateAssignment(
+                substituent_idx=1,
+                substituent_label="OH",
+                substituent_link_index=1,
+                skeleton_link_index=2,
+            ),
+        ],
+    )
+    different_skeleton = IterateCombination(
+        skeleton_idx=1,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=base_assignments,
+    )
+    different_skeleton_link = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=[
+            IterateAssignment(
+                substituent_idx=0,
+                substituent_label="Me",
+                substituent_link_index=1,
+                skeleton_link_index=3,
+            ),
+            base_assignments[1],
+        ],
+    )
+    different_substituent = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=[
+            IterateAssignment(
+                substituent_idx=2,
+                substituent_label="Me",
+                substituent_link_index=1,
+                skeleton_link_index=1,
+            ),
+            base_assignments[1],
+        ],
+    )
+    different_substituent_link = IterateCombination(
+        skeleton_idx=0,
+        skeleton_label="core",
+        skeleton_indices=[1, 2, 3],
+        assignments=[
+            IterateAssignment(
+                substituent_idx=0,
+                substituent_label="Me",
+                substituent_link_index=2,
+                skeleton_link_index=1,
+            ),
+            base_assignments[1],
+        ],
+    )
+
+    # [sterp 2] : Compute runner signatures for order and identity variants.
+    base_signature = IterateJobRunner._combination_signature(base_combination)
+    reversed_signature = IterateJobRunner._combination_signature(
+        reversed_order
+    )
+    same_physical_signature = IterateJobRunner._combination_signature(
+        same_physical_identity
+    )
+    different_skeleton_signature = IterateJobRunner._combination_signature(
+        different_skeleton
+    )
+    different_skeleton_link_signature = (
+        IterateJobRunner._combination_signature(different_skeleton_link)
+    )
+    different_substituent_signature = IterateJobRunner._combination_signature(
+        different_substituent
+    )
+    different_substituent_link_signature = (
+        IterateJobRunner._combination_signature(different_substituent_link)
+    )
+
+    # [sterp 3] : Confirm assignment order does not change the physical signature.
+    assert base_combination.label == reversed_order.label
+    assert base_signature == reversed_signature
+
+    # [sterp 4] : Confirm identical identity fields describe the same combination.
+    assert base_combination.label == same_physical_identity.label
+    assert base_signature == same_physical_signature
+
+    # [sterp 5] : Confirm skeleton and assignment identity fields are distinguished.
+    assert base_combination.label == different_skeleton.label
+    assert base_combination.label == different_substituent.label
+    assert base_signature != different_skeleton_signature
+    assert base_signature != different_skeleton_link_signature
+    assert base_signature != different_substituent_signature
+    assert base_signature != different_substituent_link_signature
 
 
 @pytest.mark.parametrize(
@@ -1310,15 +1913,21 @@ def test_iterate_report_renders_max_substituted_sites(
     raw_value,
     expected_text: str,
 ):
+    """Normal reports render unlimited and positive max-site limits."""
+    # [sterp 1] : Render a normal report with the parameterized max-site value.
     text = _minimal_iterate_report(raw_value).render()
 
+    # [sterp 2] : Confirm the report includes the limit text and normal termination.
     assert expected_text in text
     assert "Normal termination of CHEMSMART Iterate" in text
 
 
 def test_iterate_error_report_renders_max_substituted_sites():
+    """Error reports keep the max-site limit alongside internal error status."""
+    # [sterp 1] : Render an error report with max_substituted_sites set to 2.
     text = _minimal_iterate_report(2, error=True).render()
 
+    # [sterp 2] : Confirm the limit, internal code, and error termination are present.
     assert "Maximum substituted sites: 2" in text
     assert ERROR_CODE_INTERNAL in text
     assert "Error termination of CHEMSMART Iterate" in text
@@ -1342,6 +1951,8 @@ def test_iterate_skip_completed_compares_max_substituted_sites(
     expected: bool,
     tmp_path: Path,
 ):
+    """Skip-completed compares recorded and current max-site limits."""
+    # [sterp 1] : Create a job whose current max-site limit is parameterized.
     settings = IterateJobSettings(
         config_file=str(tmp_path / "complete.yaml"),
         max_substituted_sites=current_value,
@@ -1358,12 +1969,19 @@ def test_iterate_skip_completed_compares_max_substituted_sites(
     ]
     Path(job.reportfile).write_text("".join(report_lines))
 
-    assert job.is_complete() is expected
+    # [sterp 2] : Evaluate completion against the parameterized report value.
+    is_complete = job.is_complete()
+
+    # [sterp 3] : Confirm only matching recorded/current limits allow skipping.
+    assert is_complete is expected
 
 
 def test_iterate_cli_separate_outputs(tmp_path: Path):
     """Separate-output mode writes one correctly named XYZ per combination."""
+    # [sterp 1] : Choose an output directory for per-combination XYZ files.
     output_directory = tmp_path / "separate"
+
+    # [sterp 2] : Run the CLI in global mode with separate outputs enabled.
     result = CliRunner().invoke(
         run,
         [
@@ -1382,6 +2000,7 @@ def test_iterate_cli_separate_outputs(tmp_path: Path):
         obj={},
     )
 
+    # [sterp 3] : Confirm the CLI succeeds and writes one file per generation label.
     assert result.exit_code == 0, result.output
     output_files = sorted(output_directory.glob("*.xyz"))
     assert len(output_files) == 8
@@ -1393,6 +2012,7 @@ def test_iterate_cli_separate_outputs(tmp_path: Path):
         assert set(structures) == {output_file.stem}
         actual.update(structures)
 
+    # [sterp 4] : Compare separated structures to the merged golden output.
     expected = _read_xyz(EXPECTED_DIR / "etkdg_generation.xyz")
     _assert_structure_maps_equal(actual, expected)
     assert (output_directory / "etkdg_generation_iterate.out").exists()

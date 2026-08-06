@@ -1153,8 +1153,12 @@ class IterateJobRunner(JobRunner):
             # Count attachment sites for this loaded skeleton.
             _slots = skel_config.get("slots")
             if _slots:
-                attachment_site_count += sum(
-                    len(s["link_indices"]) for s in _slots
+                attachment_site_count += len(
+                    {
+                        link_idx
+                        for slot in _slots
+                        for link_idx in slot["link_indices"]
+                    }
                 )
             else:
                 attachment_site_count += len(
@@ -1236,19 +1240,58 @@ class IterateJobRunner(JobRunner):
                     max_substituted_sites,
                 )
 
-        # Guard: combination labels must be unique so results are not
-        # silently overwritten and separate-output files never collide.
-        seen_labels: dict = {}
+        combinations = self._dedupe_combinations(combinations)
+
+        # Guard: different combinations must not share a display label, so
+        # results are not silently overwritten and separate-output files never
+        # collide.
+        seen_labels: dict[str, tuple] = {}
         for combo in combinations:
-            if combo.label in seen_labels:
+            signature = self._combination_signature(combo)
+            if (
+                combo.label in seen_labels
+                and seen_labels[combo.label] != signature
+            ):
                 raise ValueError(
                     f"Duplicate combination label '{combo.label}'. This "
-                    f"usually means duplicate skeleton/substituent labels or "
-                    f"overlapping link positions in the configuration."
+                    f"usually means duplicate skeleton/substituent labels."
                 )
-            seen_labels[combo.label] = combo
+            seen_labels[combo.label] = signature
 
         return pool, combinations, input_errors, attachment_site_count
+
+    @staticmethod
+    def _combination_signature(combo: IterateCombination) -> tuple:
+        return (
+            combo.skeleton_idx,
+            combo.skeleton_label,
+            tuple(combo.skeleton_indices or ()),
+            tuple(
+                sorted(
+                    (
+                        assignment.skeleton_link_index,
+                        assignment.substituent_idx,
+                        assignment.substituent_label,
+                        assignment.substituent_link_index,
+                    )
+                    for assignment in combo.assignments
+                )
+            ),
+        )
+
+    @classmethod
+    def _dedupe_combinations(
+        cls, combinations: list[IterateCombination]
+    ) -> list[IterateCombination]:
+        deduped: list[IterateCombination] = []
+        seen: set[tuple] = set()
+        for combo in combinations:
+            signature = cls._combination_signature(combo)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            deduped.append(combo)
+        return deduped
 
     def _build_position_options(
         self,

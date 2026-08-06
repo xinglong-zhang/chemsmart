@@ -139,8 +139,8 @@ Index formats
 -  a comma-separated string: ``"1,5"``;
 -  a range string: ``"1-5,8"``.
 
-All indices are 1-based. Duplicate attachment sites and sites shared by multiple slots are rejected during configuration
-validation.
+All indices are 1-based. Duplicate attachment sites within one field are rejected during configuration validation. Each
+generated combination assigns at most one substituent to each skeleton position.
 
 *********************************
  Attachment Groups and Expansion

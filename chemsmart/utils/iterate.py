@@ -182,47 +182,45 @@ def _parse_index_string(
     if value is None or value == "" or value == "null":
         return None
 
-    # Handle single integer
-    if isinstance(value, int):
-        if value <= 0:
+    try:
+        if type(value) is int:
+            parsed_indices = [value]
+        elif isinstance(value, str):
+            parsed_indices = get_list_from_string_range(value)
+        elif isinstance(value, list):
+            parsed_indices = value
+        else:
             raise click.BadParameter(
                 f"{context}: "
-                f"Found invalid index {value} in '{field_name}'. "
-                f"Index must be positive (1-based).",
+                f"'{field_name}' must contain only positive integers "
+                f"(1-based).",
                 param_hint="'-f' / '--filename'",
             )
-        return [value]
 
-    # Use utility function for string parsing
-    try:
-        parsed_indices = None
-        if isinstance(value, str):
-            parsed_indices = get_list_from_string_range(value)
-        elif isinstance(value, list) and all(
-            isinstance(x, int) for x in value
-        ):
-            # Already a list of ints
-            parsed_indices = value
+        if len(parsed_indices) == 0:
+            raise click.BadParameter(
+                f"{context}: "
+                f"Found empty list in '{field_name}'. "
+                f"At least one index must be provided.",
+                param_hint="'-f' / '--filename'",
+            )
 
-        if parsed_indices is not None:
-            # S2 Check: Validate not empty
-            if len(parsed_indices) == 0:
-                raise click.BadParameter(
-                    f"{context}: "
-                    f"Found empty list in '{field_name}'. "
-                    f"At least one index must be provided.",
-                    param_hint="'-f' / '--filename'",
-                )
+        if any(type(index) is not int for index in parsed_indices):
+            raise click.BadParameter(
+                f"{context}: "
+                f"'{field_name}' must contain only positive integers "
+                f"(1-based).",
+                param_hint="'-f' / '--filename'",
+            )
 
-            # S2 Check: Validate positive non-zero indices
-            if any(i <= 0 for i in parsed_indices):
-                raise click.BadParameter(
-                    f"{context}: "
-                    f"Found invalid index <= 0 in '{field_name}'. "
-                    f"All indices must be positive (1-based). Found: {parsed_indices}",
-                    param_hint="'-f' / '--filename'",
-                )
-            return parsed_indices
+        if any(index <= 0 for index in parsed_indices):
+            raise click.BadParameter(
+                f"{context}: "
+                f"Found invalid index <= 0 in '{field_name}'. "
+                f"All indices must be positive (1-based). Found: {parsed_indices}",
+                param_hint="'-f' / '--filename'",
+            )
+        return parsed_indices
 
     except click.BadParameter:
         raise
@@ -233,14 +231,6 @@ def _parse_index_string(
             f"Expected integer, comma-separated list, or range (e.g. '1-5').",
             param_hint="'-f' / '--filename'",
         )
-
-    # If it's not None, not Int, and not String
-    # (or string parsing failed silently elsewhere)
-    raise click.BadParameter(
-        f"{context}: "
-        f"'{field_name}' has invalid type {type(value).__name__}.",
-        param_hint="'-f' / '--filename'",
-    )
 
 
 def _resolve_file_path(file_path, config_dir: str):
@@ -523,9 +513,6 @@ def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
     # Rule 4: link_index values must not repeat within one skeleton
     _rule_no_duplicate_link_index(entry, idx, filename)
 
-    # Rule 5: a connection site must not be shared across slots
-    _rule_no_overlapping_slot_links(entry, idx, filename)
-
 
 def _rule_no_duplicate_link_index(entry: dict, idx: int, filename: str):
     """Rule: link_index values must be unique within a skeleton."""
@@ -542,26 +529,6 @@ def _rule_no_duplicate_link_index(entry: dict, idx: int, filename: str):
             f"Each connection site must be listed once.",
             param_hint=filename,
         )
-
-
-def _rule_no_overlapping_slot_links(entry: dict, idx: int, filename: str):
-    """Rule: a link index must belong to at most one slot."""
-    slots = entry.get("slots")
-    if not slots:
-        return
-    owner: dict = {}
-    for slot in slots:
-        for link in slot["link_indices"]:
-            if link in owner:
-                raise click.BadParameter(
-                    f"Skeleton entry {idx + 1} "
-                    f"(label='{entry.get('label', 'unnamed')}'): "
-                    f"link index {link} is used by multiple slots "
-                    f"(groups {owner[link]} and {slot['group']}). "
-                    f"Each connection site may belong to only one slot.",
-                    param_hint=filename,
-                )
-            owner[link] = slot["group"]
 
 
 def _rule_label_syntax(entry: dict, idx: int, entry_type: str, filename: str):
