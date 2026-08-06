@@ -230,3 +230,91 @@ def test_mismatched_values_and_states_are_refused_with_both_counts():
             "avg",
         )
     assert "2 values and 3 energies" in str(failure.value)
+
+
+def test_degeneracies_move_the_answer_and_belong_to_the_owned_weighting():
+    """n-Butane: the two gauche forms are enantiomers, so gauche counts twice.
+
+    Gibbs free energies computed by ChemSmart at B3LYP/6-31G*.  Folding the
+    multiplicity in by hand would put it in the model's arithmetic; declaring
+    it keeps the weighting owned and the multiplicity visible as an input.
+    """
+
+    anti, gauche = -158.35045218500127, -158.34900918428787
+    inputs = (
+        _quantity("g", (anti, gauche), "hartree", ENERGY),
+        _quantity("t", 298.15, "K", TEMPERATURE),
+        _quantity("d", (1.0, 2.0), "1", (0, 0, 0, 0, 0, 0)),
+    )
+    single = _populations(
+        (
+            QuantityExpressionNodeV1(
+                node_id="p",
+                operation="boltzmann_populations",
+                input_ids=("g", "t"),
+            ),
+        ),
+        inputs[:2],
+        "p",
+    ).outputs[0]
+    weighted = _populations(
+        (
+            QuantityExpressionNodeV1(
+                node_id="p",
+                operation="boltzmann_populations",
+                input_ids=("g", "t", "d"),
+            ),
+        ),
+        inputs,
+        "p",
+    )
+    assert single.value[0] == pytest.approx(0.8218, abs=5e-4)
+    assert weighted.outputs[0].value[0] == pytest.approx(0.6974, abs=5e-4)
+    # The measured ~68% anti is only reachable with the multiplicity.
+    assert abs(single.value[0] - weighted.outputs[0].value[0]) > 0.1
+    dependency = weighted.output_dependencies[0]
+    assert dependency.convention_operations == ("boltzmann_populations",)
+    assert dependency.arithmetic_node_count == 0
+
+
+def test_a_degeneracy_vector_must_be_dimensionless():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionError
+
+    with pytest.raises(QuantityExpressionError, match="dimensionless"):
+        _populations(
+            (
+                QuantityExpressionNodeV1(
+                    node_id="p",
+                    operation="boltzmann_populations",
+                    input_ids=("g", "t", "d"),
+                ),
+            ),
+            (
+                _quantity("g", (0.0, _KCAL), "hartree", ENERGY),
+                _quantity("t", 298.15, "K", TEMPERATURE),
+                _quantity("d", (1.0, 2.0), "hartree", ENERGY),
+            ),
+            "p",
+        )
+
+
+def test_a_wrong_degeneracy_count_names_both_counts():
+    from chemsmart.analysis.quantity_expressions import QuantityExpressionError
+
+    with pytest.raises(QuantityExpressionError) as failure:
+        _populations(
+            (
+                QuantityExpressionNodeV1(
+                    node_id="p",
+                    operation="boltzmann_populations",
+                    input_ids=("g", "t", "d"),
+                ),
+            ),
+            (
+                _quantity("g", (0.0, _KCAL, 2 * _KCAL), "hartree", ENERGY),
+                _quantity("t", 298.15, "K", TEMPERATURE),
+                _quantity("d", (1.0, 2.0), "1", (0, 0, 0, 0, 0, 0)),
+            ),
+            "p",
+        )
+    assert "2 degeneracies for 3 states" in str(failure.value)

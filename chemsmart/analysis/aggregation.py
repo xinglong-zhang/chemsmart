@@ -244,17 +244,38 @@ def boltzmann_populations(
     *,
     temperature: float = 298.15,
     unit: str = "kcal/mol",
+    degeneracies: tuple[float, ...] | None = None,
 ) -> tuple[float, ...]:
     """Return normalised Boltzmann populations for relative energies.
 
     ``energies`` may be absolute or relative; only differences matter, and the
     lowest is used as the reference to keep the exponentials finite.
+
+    ``degeneracies`` are the multiplicities of each state, defaulting to one
+    each.  They are not optional in practice: an enantiomeric pair, a rotamer
+    related by an internal rotation, or a conformer reachable by symmetry all
+    contribute their multiplicity, and omitting it is a scientific error rather
+    than an approximation.  For n-butane at 298 K, weighting the two gauche
+    forms as one state gives 82% anti where the correct treatment gives 70%.
+    The values themselves belong to the protocol being reproduced; the
+    weighting they enter belongs here.
     """
 
     if not energies:
         raise AggregationError("at least one energy is required")
     if float(temperature) <= 0:
         raise AggregationError("temperature must be positive")
+    if degeneracies is None:
+        multiplicities = [1.0] * len(tuple(energies))
+    else:
+        multiplicities = [float(item) for item in degeneracies]
+        if len(multiplicities) != len(tuple(energies)):
+            raise AggregationError(
+                f"got {len(multiplicities)} degeneracies for "
+                f"{len(tuple(energies))} states; supply one per state"
+            )
+        if any(item <= 0 for item in multiplicities):
+            raise AggregationError("degeneracies must be positive")
     key = str(unit).strip().lower()
     if key == "hartree":
         values = [convert_energy(item, "kcal/mol") for item in energies]
@@ -268,8 +289,11 @@ def boltzmann_populations(
         )
     reference = min(values)
     weights = [
-        math.exp(-(item - reference) / (GAS_CONSTANT_KCAL * float(temperature)))
-        for item in values
+        multiplicity
+        * math.exp(
+            -(item - reference) / (GAS_CONSTANT_KCAL * float(temperature))
+        )
+        for item, multiplicity in zip(values, multiplicities)
     ]
     total = sum(weights)
     return tuple(item / total for item in weights)
@@ -281,6 +305,7 @@ def boltzmann_average(
     *,
     temperature: float = 298.15,
     unit: str = "kcal/mol",
+    degeneracies: tuple[float, ...] | None = None,
 ) -> float:
     """Return the Boltzmann-weighted average of ``values``."""
 
@@ -289,7 +314,10 @@ def boltzmann_average(
             "values and energies must have the same length"
         )
     populations = boltzmann_populations(
-        energies, temperature=temperature, unit=unit
+        energies,
+        temperature=temperature,
+        unit=unit,
+        degeneracies=degeneracies,
     )
     return sum(
         float(value) * weight for value, weight in zip(values, populations)

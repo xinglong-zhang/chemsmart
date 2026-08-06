@@ -126,13 +126,17 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
     "photon_wavelength": "wavelength of a positive excitation energy",
     "boltzmann_populations": (
         "normalized Boltzmann populations of a set of states. Takes the state "
-        "energies and a temperature, in that order, and owns the weighting, "
-        "the gas constant and the unit handling. Do not rebuild it from exp, "
-        "divide and sum"
+        "energies and a temperature, in that order, optionally followed by a "
+        "dimensionless vector of per-state degeneracies, and owns the "
+        "weighting, the gas constant and the unit handling. Supply the "
+        "degeneracies whenever states are multiply realizable -- an "
+        "enantiomeric pair counts twice. Do not rebuild any of this from exp, "
+        "scale, divide and sum"
     ),
     "boltzmann_average": (
         "Boltzmann-weighted average of a property. Takes the per-state values, "
-        "the state energies and a temperature, in that order"
+        "the state energies and a temperature, in that order, optionally "
+        "followed by the per-state degeneracies"
     ),
 }
 
@@ -1213,6 +1217,23 @@ def _node_value(
 
         wants_values = operation == "boltzmann_average"
         expected = 3 if wants_values else 2
+        # An optional trailing dimensionless input carries the per-state
+        # multiplicities.  Without it a model that knows two gauche forms are
+        # enantiomers has to fold the factor into the energies or scale the
+        # result by hand, and the factor stops being visible as a scientific
+        # input.  For n-butane it moves the answer by twelve points.
+        degeneracies = None
+        if len(inputs) == expected + 1:
+            candidate = inputs[-1]
+            if candidate.dimension != DIMENSIONLESS:
+                raise QuantityExpressionError(
+                    f"the optional last input to {operation} is the "
+                    "per-state degeneracies and must be dimensionless"
+                )
+            degeneracies = tuple(
+                float(item) for item in _numeric(candidate).reshape(-1)
+            )
+            inputs = inputs[:-1]
         if len(inputs) != expected:
             raise QuantityExpressionError(
                 f"{operation} requires "
@@ -1221,7 +1242,8 @@ def _node_value(
                     if wants_values
                     else "the state energies and a temperature"
                 )
-                + f"; got {len(inputs)} inputs"
+                + ", optionally followed by the per-state degeneracies; got "
+                + f"{len(inputs)} inputs"
             )
         temperature_value = inputs[-1]
         if temperature_value.dimension != TEMPERATURE:
@@ -1239,6 +1261,7 @@ def _node_value(
                 tuple(float(item) for item in energies),
                 temperature=temperature,
                 unit="hartree",
+                degeneracies=degeneracies,
             )
             if not wants_values:
                 payload = _payload(np.asarray(populations, dtype=float))
@@ -1263,6 +1286,7 @@ def _node_value(
                     tuple(float(item) for item in energies),
                     temperature=temperature,
                     unit="hartree",
+                    degeneracies=degeneracies,
                 )
             )
         except AggregationError as exc:
