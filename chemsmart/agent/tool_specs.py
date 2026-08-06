@@ -823,6 +823,70 @@ def _constrain(name: str, schema: dict) -> dict:
     return {**schema, "pattern": pattern}
 
 
+#: What binds each kind of host-owned object, phrased to complete the sentence
+#: "no <label> is bound yet; one is bound <producer>".  A caller told only
+#: that a registry is empty cannot act; a caller told what fills it can.
+REGISTRY_PRODUCERS: dict[str, str] = {
+    "canonical invocation": "by compiling a prepared program node",
+    "capability receipt": "by inspecting a program capability",
+    "command context": "by preparing a program node",
+    "command inspection receipt": "by compiling a program node",
+    "counterexample": (
+        "by the host when a compiled command fails inspection, safe preview, "
+        "or program validation -- do not reference one before a failure has "
+        "produced it"
+    ),
+    "engine binding": "by inspecting the program environment",
+    "functional equivalence receipt": "by validating a project document",
+    "program binding": "by inspecting the program environment",
+    "program validator receipt": "by safe-previewing a compiled command",
+    "project render receipt": "by rendering a project YAML document",
+    "project validation receipt": "by validating a rendered project",
+    "run receipt": "by executing an approved node",
+    "safe preview receipt": "by safe-previewing a compiled command",
+    "scientific claim evidence": "by extracting quantities from a result",
+    "scientific identity": "by binding an approved molecular identity",
+    "settings object": "by validating a project document",
+    "trusted artifact": "by recording a workspace file as an artifact",
+}
+
+
+#: Which host registry each late-bound argument indexes.  A tool taking one of
+#: these cannot succeed until something else has run, and saying so only in the
+#: rejection means the model learns it by failing.  Observed across six live
+#: sessions: repair_command called with no counterexample bound (four times)
+#: and assess_program_candidate called with no claim evidence bound.
+LATE_BOUND_ARGUMENTS: dict[str, str] = {
+    "command_inspection_receipt_sha256": "command inspection receipt",
+    "counterexample_id": "counterexample",
+    "invocation_sha256": "canonical invocation",
+    "render_receipt_sha256": "project render receipt",
+    "run_receipt_id": "run receipt",
+    "settings_id": "settings object",
+    "source_claim_sha256s": "scientific claim evidence",
+}
+
+
+def _precondition_sentence(properties) -> str:
+    """State what must already exist before this tool can succeed."""
+
+    parts = []
+    for name in sorted(properties):
+        label = LATE_BOUND_ARGUMENTS.get(name)
+        if not label:
+            continue
+        producer = REGISTRY_PRODUCERS.get(label)
+        if producer:
+            parts.append(f"{name} names a {label}, which is bound {producer}")
+    if not parts:
+        return ""
+    return (
+        " PRECONDITION: "
+        + "; ".join(parts)
+        + ". Calling this before that has happened cannot succeed."
+    )
+
+
 def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...]:
     """Describe every argument the surface exposes, by argument name."""
 
@@ -839,6 +903,9 @@ def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...
                 for name, schema in properties.items()
             }
             function["parameters"] = parameters
+        sentence = _precondition_sentence(parameters.get("properties") or {})
+        if sentence and "PRECONDITION" not in function.get("description", ""):
+            function["description"] = function["description"] + sentence
         described.append({**item, "function": function})
     return tuple(described)
 

@@ -135,6 +135,7 @@ from chemsmart.agent.scientific_toolchain import (
     project_scientific_toolchain_frontier,
 )
 from chemsmart.agent.tool_specs import (
+    REGISTRY_PRODUCERS,
     AgentToolSurfaceV1,
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
@@ -4742,7 +4743,7 @@ class CommandCompiledToolHostV1:
                 # produced, because being told the registry was empty did not
                 # say what fills it.
                 detail = f"no {label} is bound yet"
-                producer = _REGISTRY_PRODUCERS.get(label)
+                producer = REGISTRY_PRODUCERS.get(label)
                 if producer:
                     detail += f"; one is bound {producer}"
             elif len(known) <= 8:
@@ -4796,34 +4797,6 @@ def _public_validator_findings(validator: Any) -> tuple[dict[str, str], ...]:
             },
         )
     return recorded
-
-
-#: What binds each kind of host-owned object, phrased to complete the sentence
-#: "no <label> is bound yet; one is bound <producer>".  A caller told only
-#: that a registry is empty cannot act; a caller told what fills it can.
-_REGISTRY_PRODUCERS: Mapping[str, str] = {
-    "canonical invocation": "by compiling a prepared program node",
-    "capability receipt": "by inspecting a program capability",
-    "command context": "by preparing a program node",
-    "command inspection receipt": "by compiling a program node",
-    "counterexample": (
-        "by the host when a compiled command fails inspection, safe preview, "
-        "or program validation -- do not reference one before a failure has "
-        "produced it"
-    ),
-    "engine binding": "by inspecting the program environment",
-    "functional equivalence receipt": "by validating a project document",
-    "program binding": "by inspecting the program environment",
-    "program validator receipt": "by safe-previewing a compiled command",
-    "project render receipt": "by rendering a project YAML document",
-    "project validation receipt": "by validating a rendered project",
-    "run receipt": "by executing an approved node",
-    "safe preview receipt": "by safe-previewing a compiled command",
-    "scientific claim evidence": "by extracting quantities from a result",
-    "scientific identity": "by binding an approved molecular identity",
-    "settings object": "by validating a project document",
-    "trusted artifact": "by recording a workspace file as an artifact",
-}
 
 
 def _validate_tool_arguments(

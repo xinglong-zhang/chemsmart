@@ -145,7 +145,7 @@ def test_an_empty_registry_names_what_would_fill_it():
     failure had produced.  Being told the registry was empty did not say what
     fills it, so the retry was identical."""
 
-    from chemsmart.agent.tool_runtime import _REGISTRY_PRODUCERS
+    from chemsmart.agent.tool_specs import REGISTRY_PRODUCERS
 
     class _Host:
         _get = staticmethod(
@@ -167,7 +167,7 @@ def test_an_empty_registry_names_what_would_fill_it():
     assert "bound counterexample IDs: ['abc']" in str(populated.value)
     assert "one is bound" not in str(populated.value)
 
-    assert "trusted artifact" in _REGISTRY_PRODUCERS
+    assert "trusted artifact" in REGISTRY_PRODUCERS
 
 
 def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
@@ -176,7 +176,7 @@ def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
     import re as _re
     from pathlib import Path
 
-    from chemsmart.agent.tool_runtime import _REGISTRY_PRODUCERS
+    from chemsmart.agent.tool_specs import REGISTRY_PRODUCERS
 
     source = Path("chemsmart/agent/tool_runtime.py").read_text()
     labels = set(
@@ -185,7 +185,7 @@ def test_every_registry_label_the_host_looks_up_has_a_producer_hint():
     labels |= set(
         _re.findall(r'_get\(\s*self\.[a-z_]+,\s*[^,]+,\s*\n\s*"([a-z ]+)"', source)
     )
-    missing = sorted(labels - set(_REGISTRY_PRODUCERS))
+    missing = sorted(labels - set(REGISTRY_PRODUCERS))
     assert not missing, (
         f"these host registries have no producer hint: {missing}; a caller "
         "told one is empty would not know what fills it"
@@ -256,3 +256,64 @@ def test_a_tool_with_a_precondition_states_it_in_its_own_description():
     # And the argument still says it too, for a caller already inside the tool.
     counterexample = definition["parameters"]["properties"]["counterexample_id"]
     assert "only after such a failure" in counterexample["description"]
+
+
+def test_every_late_bound_tool_states_its_precondition():
+    """The failure is a pattern, not one tool.
+
+    repair_command was called with no counterexample bound in four sessions;
+    assess_program_candidate was called with no claim evidence bound in
+    another.  Both take an argument that indexes a host registry which only
+    something else can fill, and in both cases the rule appeared only in the
+    rejection.
+    """
+
+    from chemsmart.agent.tool_specs import (
+        LATE_BOUND_ARGUMENTS,
+        REGISTRY_PRODUCERS,
+        build_command_compiled_tool_surface,
+    )
+
+    silent = []
+    for item in build_command_compiled_tool_surface().tool_definitions:
+        function = item["function"]
+        properties = (function.get("parameters") or {}).get("properties") or {}
+        if any(name in LATE_BOUND_ARGUMENTS for name in properties):
+            if "PRECONDITION" not in function["description"]:
+                silent.append(function["name"])
+    assert not silent, (
+        f"these tools take a late-bound argument and do not say so: {silent}"
+    )
+
+    # Every late-bound argument must name a registry the producers table knows,
+    # so the sentence before the call and the rejection after it agree.
+    unknown = sorted(
+        set(LATE_BOUND_ARGUMENTS.values()) - set(REGISTRY_PRODUCERS)
+    )
+    assert not unknown, unknown
+
+
+def test_the_precondition_and_the_rejection_come_from_one_table():
+    """Two texts that could drift would eventually contradict each other."""
+
+    from chemsmart.agent import tool_runtime
+    from chemsmart.agent.tool_specs import (
+        REGISTRY_PRODUCERS,
+        build_command_compiled_tool_surface,
+    )
+
+    assert tool_runtime.REGISTRY_PRODUCERS is REGISTRY_PRODUCERS
+
+    definition = next(
+        item["function"]
+        for item in build_command_compiled_tool_surface().tool_definitions
+        if item["function"]["name"] == "preview_command"
+    )
+    producer = REGISTRY_PRODUCERS["canonical invocation"]
+    assert producer in definition["description"]
+
+    with pytest.raises(ContractError) as failure:
+        tool_runtime.CommandCompiledToolHostV1._get(
+            {}, "abc", "canonical invocation"
+        )
+    assert producer in str(failure.value)
