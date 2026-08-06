@@ -2694,6 +2694,12 @@ class CommandCompiledToolHostV1:
             critical_finding_count=len(
                 validator.critical_finding_sha256s
             ),
+            # Record what the validator objected to, not only how many
+            # objections there were.  A count cannot be reviewed: when a live
+            # session was told twice that a correct ORCA project produced
+            # invalid input, nothing durable said which field disagreed, so
+            # the defect had to be reproduced by hand to be found at all.
+            findings=_public_validator_findings(validator),
             source_receipt_sha256=validator.source_receipt_sha256,
         )
         return {"safe_preview": receipt, "validator": validator}
@@ -4749,6 +4755,47 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 f"unknown {label} ID {key!r}; {detail}"
             ) from exc
+
+
+#: How many validator findings an event records, and how much of each value.
+#: A rejection is for reading, not a channel for arbitrary bytes, so both the
+#: count and the rendered values stay bounded.
+_RECORDED_FINDINGS = 8
+_FINDING_VALUE_CHARS = 120
+
+
+def _public_validator_findings(validator: Any) -> tuple[dict[str, str], ...]:
+    """Render preview-validation findings as bounded, reviewable records."""
+
+    def _text(value: Any) -> str:
+        if isinstance(value, (dict, list, tuple)):
+            rendered = f"a {type(value).__name__} of {len(value)} entries"
+        else:
+            rendered = repr(value)
+        if len(rendered) > _FINDING_VALUE_CHARS:
+            rendered = rendered[: _FINDING_VALUE_CHARS - 3] + "..."
+        return rendered
+
+    findings = tuple(getattr(validator, "findings", ()) or ())
+    recorded = tuple(
+        {
+            "rule_id": str(getattr(item, "rule_id", "")),
+            "field": str(getattr(item, "field", "")),
+            "expected": _text(getattr(item, "expected", None)),
+            "observed": _text(getattr(item, "observed", None)),
+        }
+        for item in findings[:_RECORDED_FINDINGS]
+    )
+    if len(findings) > _RECORDED_FINDINGS:
+        recorded += (
+            {
+                "rule_id": "record.truncated",
+                "field": "",
+                "expected": f"{len(findings)} findings",
+                "observed": f"first {_RECORDED_FINDINGS} recorded",
+            },
+        )
+    return recorded
 
 
 #: What binds each kind of host-owned object, phrased to complete the sentence
