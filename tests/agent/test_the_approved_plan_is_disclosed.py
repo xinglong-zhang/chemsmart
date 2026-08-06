@@ -1,0 +1,117 @@
+"""A session required to reproduce an approved plan must be shown it.
+
+`agent run` refuses to execute unless the session's own plan hashes to the
+approved `plan_sha256`:
+
+    planned workflow differs from frozen execution approval
+
+That digest covers nine top-level plan fields, ten fields per node and seven
+per edge. The public approval projection disclosed one, four and two of them.
+A session therefore had to re-derive `project_role` (`"opt-hf-631gd"`),
+`required_observables`, `complexity_factors`
+(`["multiple_stages", "producer_artifact_edge"]`) and `edge_id`
+(`"data.opt.hess.optimized_geometry"`) -- free-form strings chosen by an
+earlier, different session -- and was told only that its plan "differs".
+
+Measured on a real run: the approval loaded, the composition threaded the
+frozen body, `execute_approved_program_node` appeared on the surface for the
+first time, and the session was then refused on a digest it had no way to hit.
+Reproducing an approved plan was not merely hard, it was unspecified.
+
+Disclosing the approved plan grants nothing. It is the plan the user signed,
+execution still requires the digest to match, and the body is disclosed only
+when it hashes to the digest the frozen approval already pins -- so a reviewer
+cannot show the session one plan while approving another.
+"""
+
+import inspect
+
+from chemsmart.agent import live_session
+
+#: Every field `plan_sha256` is computed over, by level.
+_PLAN_FIELDS = {
+    "schema_version",
+    "workflow_id",
+    "task_spec_sha256",
+    "scientific_identity_sha256",
+    "nodes",
+    "edges",
+    "complexity_factors",
+    "status",
+    "required_observables",
+}
+_NODE_FIELDS = {
+    "node_id",
+    "stage",
+    "requested_program",
+    "program",
+    "engine",
+    "project_role",
+    "unresolved_fields",
+    "produces_observables",
+    "support_state",
+    "blocked_reason",
+}
+_EDGE_FIELDS = {
+    "edge_id",
+    "source_node_id",
+    "target_node_id",
+    "edge_kind",
+    "artifact_class",
+    "producer_output_id",
+    "consumer_input_id",
+}
+
+
+def test_the_digest_covers_exactly_the_fields_this_gate_names():
+    """If the plan contract grows, this gate must be revisited deliberately."""
+    import dataclasses as dc
+
+    from chemsmart.agent.workflows import (
+        ScientificWorkflowEdgeV2,
+        ScientificWorkflowNodeV2,
+        ScientificWorkflowPlanV2,
+    )
+
+    plan_fields = {f.name for f in dc.fields(ScientificWorkflowPlanV2)}
+    assert plan_fields == _PLAN_FIELDS | {"plan_sha256"}
+    assert {
+        f.name for f in dc.fields(ScientificWorkflowNodeV2)
+    } == _NODE_FIELDS
+    assert {
+        f.name for f in dc.fields(ScientificWorkflowEdgeV2)
+    } == _EDGE_FIELDS
+
+
+def test_the_projection_discloses_the_plan_it_will_be_judged_against():
+    source = inspect.getsource(live_session._public_workflow_approval)
+    assert "approved_scientific_plan" in source
+    assert "approved_plan_sha256" in source
+    assert "plan_reproduction_rule" in source, (
+        "the session must be told that reproduction is required, not only "
+        "given the material to reproduce"
+    )
+
+
+def test_the_disclosed_plan_is_self_verifying():
+    """A reviewer cannot show one plan while approving another."""
+    source = inspect.getsource(live_session._execution_composition_inputs)
+    assert "plan.plan_sha256 != frozen.plan_sha256" in source
+    assert "approved scientific plan is not the plan that was frozen" in source
+
+
+def test_disclosure_stays_optional():
+    """An approval with no plan body keeps working, minus the disclosure."""
+    source = inspect.getsource(live_session._execution_composition_inputs)
+    assert "if raw_plan is not None:" in source
+
+    projection = inspect.signature(live_session._public_workflow_approval)
+    assert projection.parameters["approved_plan"].default is None
+
+
+def test_the_execution_gate_it_serves_still_exists():
+    """If this refusal is ever removed, the disclosure loses its reason."""
+    from chemsmart.agent import tool_runtime
+
+    source = inspect.getsource(tool_runtime)
+    assert "planned workflow differs from frozen execution approval" in source

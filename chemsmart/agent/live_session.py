@@ -123,7 +123,12 @@ from chemsmart.agent.tool_specs import (
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
 )
-from chemsmart.agent.workflows import HarnessExperimentConfigV1
+from chemsmart.agent.workflows import (
+    HarnessExperimentConfigV1,
+    ScientificWorkflowEdgeV2,
+    ScientificWorkflowNodeV2,
+    ScientificWorkflowPlanV2,
+)
 from chemsmart.analysis.result_quantities import (
     QuantityExtractionError,
     validate_pyscf_analysis_artifact,
@@ -829,7 +834,8 @@ def run_live_agent_session(
             task_spec_sha256=task_spec_sha256,
         )
         approved_workflow_record = _public_workflow_approval(
-            execution_inputs["workflow_execution_approval"]
+            execution_inputs["workflow_execution_approval"],
+            approved_plan=execution_inputs.pop("approved_scientific_plan"),
         )
         approved_projects = execution_inputs.pop("approved_project_artifacts")
         host_kwargs["artifacts"].update(
@@ -3154,6 +3160,7 @@ def _execution_composition_inputs(
     # advertised one. Its absence stays legal so an approval that deliberately
     # authorises preview alone keeps working.
     raw_frozen = payload.get("frozen_workflow_approval")
+    composed["approved_scientific_plan"] = None
     if raw_frozen is not None:
         if not isinstance(raw_frozen, Mapping):
             raise ContractError("frozen workflow approval must be an object")
@@ -3163,7 +3170,54 @@ def _execution_composition_inputs(
                 "frozen workflow approval targets another task spec"
             )
         composed["frozen_workflow_approval"] = frozen
+        # The plan body is optional, and self-verifying: it is disclosed only
+        # when it hashes to the digest the frozen approval already pins, so a
+        # reviewer cannot show the session one plan while approving another.
+        raw_plan = payload.get("approved_scientific_plan")
+        if raw_plan is not None:
+            if not isinstance(raw_plan, Mapping):
+                raise ContractError(
+                    "approved scientific plan must be an object"
+                )
+            plan = _parse_scientific_workflow_plan(raw_plan)
+            if plan.plan_sha256 != frozen.plan_sha256:
+                raise ContractError(
+                    "approved scientific plan is not the plan that was frozen"
+                )
+            composed["approved_scientific_plan"] = plan
     return composed
+
+
+def _parse_scientific_workflow_plan(
+    value: Mapping[str, Any],
+) -> ScientificWorkflowPlanV2:
+    """Rebuild the approved plan a session is required to reproduce."""
+
+    def _tuples(mapping: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            key: tuple(item) if isinstance(item, list) else item
+            for key, item in mapping.items()
+        }
+
+    raw = dict(value)
+    try:
+        raw["nodes"] = tuple(
+            ScientificWorkflowNodeV2(**_tuples(item))
+            for item in raw.get("nodes", ())
+        )
+        raw["edges"] = tuple(
+            ScientificWorkflowEdgeV2(**_tuples(item))
+            for item in raw.get("edges", ())
+        )
+        raw["complexity_factors"] = tuple(raw.get("complexity_factors", ()))
+        raw["required_observables"] = tuple(
+            raw.get("required_observables", ())
+        )
+        return ScientificWorkflowPlanV2(**raw)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractError(
+            "approved scientific plan does not match the v2 schema"
+        ) from exc
 
 
 def _approved_project_artifacts(
@@ -3207,9 +3261,37 @@ def _approved_project_artifacts(
 
 def _public_workflow_approval(
     approval: WorkflowExecutionApprovalV1,
+    *,
+    approved_plan: ScientificWorkflowPlanV2 | None = None,
 ) -> dict[str, Any]:
-    """Expose only the typed execution sequence needed by the model."""
+    """Expose the typed execution sequence, and the plan that must be matched.
 
+    Execution refuses unless the session's own plan hashes to the approved
+    ``plan_sha256``.  That digest covers nine top-level plan fields, ten fields
+    per node and seven per edge; this projection used to disclose one, four and
+    two of them.  A session was therefore required to re-derive
+    ``project_role``, ``required_observables``, ``complexity_factors`` and
+    ``edge_id`` -- free-form strings it has no way to know -- and was told only
+    "planned workflow differs from frozen execution approval" when it did not.
+    Reproducing an approved plan was not merely hard, it was unspecified.
+
+    Disclosing the approved plan grants nothing: it is the plan the user
+    already signed, execution still requires the digest to match, and the
+    session cannot widen the approval by reading it.  What it removes is a
+    guessing game that no model could win.
+    """
+
+    if approved_plan is not None:
+        return {
+            **_public_workflow_approval(approval),
+            "approved_scientific_plan": canonical_data(approved_plan),
+            "approved_plan_sha256": approved_plan.plan_sha256,
+            "plan_reproduction_rule": (
+                "plan_scientific_workflow must reproduce "
+                "approved_scientific_plan exactly; execution refuses any plan "
+                "whose digest differs from approved_plan_sha256"
+            ),
+        }
     return {
         "schema_version": "chemsmart.public-approved-workflow.v1",
         "workflow_id": approval.workflow_id,
