@@ -424,3 +424,63 @@ as `execution_supported: false` rather than offering it as runnable.
 The methodological point is the one worth keeping. Three fixes aimed at the
 symptom looked reasonable and were cheap to write, and the cost of not checking
 whether the tool could work at all was four wasted sessions.
+
+# W8: a case built from a real article, and a paired arm that got worse
+
+W8 is the first case since W1 built from genuinely extracted article text.
+Ramakrishnan et al., [arXiv:2007.06436](https://arxiv.org/abs/2007.06436): PDF
+fetched, text-extracted, methodology quoted rather than paraphrased —
+
+> DFA calculations "at the B3LYP/6-31G(2df,p) minimum energy geometry in a
+> single point fashion using the def2-QZVP basis set"; SCF "threshold of 10^-9
+> Hartree".
+
+Sealed before dispatch from ChemSmart's own execution of that protocol:
+E(geometry level) = −115.726281 E_h, E(final) = −115.786709 E_h, difference
+−37.92 kcal/mol.
+
+**A correction to the earlier packets.** W2–W7 said "restated from the
+computational section of a published study". They were not: those protocols
+were constructed for the benchmark and anchored to well-known experimental
+values. The task files now say so. W1's claim was accurate and is unchanged.
+Asserting a provenance that had not been established is the same failure this
+campaign has been repairing in the harness, and it was mine.
+
+## The trap the paper itself contains
+
+The level that produces the reported energy is not the level that produces the
+geometry. Conflating them is a 37.9 kcal/mol error. Both arms kept the two
+levels distinct, extracted both energies separately, and reported the
+difference — the sealed DAG.
+
+## The paired arm
+
+| W8 | arm A | arm B |
+|---|---|---|
+| provider turns | 52 | **79** |
+| input tokens | 4,327,985 | **11,636,721** |
+| rejections | 3 | 4 |
+| `artifact_id` pattern rejection | 1 | **0** |
+| two-level protocol preserved | yes | yes |
+
+- **S2 confirmed, decisively.** Arm A was rejected on
+  `calculation_nodes[1].inputs[0].artifact_id is ''`, a regression I had
+  introduced by classing `artifact_id` as a strict identifier when an input fed
+  by a producer leaves it empty by design. Arm B has no such rejection.
+- **S3 held.** The science did not move.
+- **S1 was not testable, as preregistered.** Neither arm had a section-shape
+  rejection, so the `project_section_names` projection has no evidence for or
+  against it from this pair. That was written down before the run.
+
+**Arm B cost 2.7× the input tokens of arm A**, with four rejections of kinds
+not seen before (`unknown scientific workflow ID`, `project validation uses
+another capability`). One run each, and the manipulation was a single
+additive field in a capability record, so a causal reading is not available.
+What can be said is that the projection did not demonstrably help here and the
+session that had it was much more expensive. Recorded as it happened.
+
+## Campaign totals
+
+Fourteen live sessions, 470 provider turns, 38.2 M input tokens, 777 k output,
+499 k reasoning, 116 minutes of provider latency. No rate-limit or quota error
+was returned at any point.
