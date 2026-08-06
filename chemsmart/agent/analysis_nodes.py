@@ -94,6 +94,13 @@ def _require_sorted_unique(values: tuple[str, ...], field_name: str) -> None:
         raise AnalysisContractError(f"{field_name} must be sorted and unique")
 
 
+#: See scientific_toolchain._UNIT_HINT; kept identical so the two planes
+#: give one answer to the same mistake.
+_UNIT_HINT = (
+    "a dimensionless quantity such as a count, a population or an oscillator strength uses '1', not an empty string"
+)
+
+
 @dataclass(frozen=True)
 class ResultQuantitySelectorV1:
     """Program-neutral semantic quantity selector.
@@ -160,7 +167,10 @@ class AnalysisOutputSpecV1:
     def __post_init__(self) -> None:
         _require_symbol(self.quantity_id, "quantity_id")
         if not str(self.unit).strip():
-            raise AnalysisContractError("analysis output unit must not be empty")
+            raise AnalysisContractError(
+                f"analysis output {self.quantity_id!r} declares no unit; "
+                + _UNIT_HINT
+            )
         object.__setattr__(self, "dimension", tuple(self.dimension))
         if len(self.dimension) != 6 or not all(
             isinstance(value, int) for value in self.dimension
@@ -787,7 +797,10 @@ class AnalysisOutputQuantityRefV1:
             self.source_receipt_sha256, "source_receipt_sha256"
         )
         if not str(self.unit).strip():
-            raise AnalysisContractError("analysis output unit must not be empty")
+            raise AnalysisContractError(
+                f"analysis output {self.quantity_id!r} declares no unit; "
+                + _UNIT_HINT
+            )
         object.__setattr__(self, "dimension", tuple(self.dimension))
         if len(self.dimension) != 6 or not all(
             isinstance(value, int) for value in self.dimension

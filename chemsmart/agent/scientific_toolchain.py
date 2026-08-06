@@ -30,6 +30,13 @@ ANALYSIS_INTENT_KINDS = (
 )
 ANALYSIS_INTENT_SUPPORT_STATES = ("blocked_unsupported", "planned")
 
+#: Seen in three separate live cases: an output whose unit was left blank
+#: because the quantity is a count. "must not be empty" named neither the
+#: output nor the value a dimensionless quantity should carry.
+_UNIT_HINT = (
+    "a dimensionless quantity such as a count, a population or an oscillator strength uses '1', not an empty string"
+)
+
 
 class ScientificToolchainContractError(ContractError):
     """Raised when a proposed paper-level tool chain is inconsistent."""
@@ -95,7 +102,8 @@ class AnalysisOutputIntentV1:
         _identifier(self.quantity_kind, "analysis quantity_kind")
         if not str(self.unit).strip():
             raise ScientificToolchainContractError(
-                "analysis output unit must not be empty"
+                f"analysis output {self.output_id!r} "
+                f"({self.quantity_kind}) declares no unit; " + _UNIT_HINT
             )
 
 

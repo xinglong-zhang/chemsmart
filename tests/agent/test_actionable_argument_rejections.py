@@ -305,3 +305,41 @@ def test_the_precondition_and_the_rejection_come_from_one_table():
             {}, "abc", "canonical invocation"
         )
     assert producer in str(failure.value)
+
+
+def test_a_blank_unit_names_the_output_and_the_value_to_use():
+    """Seen in three separate live cases, always on a count.
+
+    "analysis output unit must not be empty" named neither which output was
+    blank nor what a dimensionless quantity should carry, so a model that had
+    written a count with no unit had to guess between "", "none", "count" and
+    "1".
+    """
+
+    from chemsmart.agent.analysis_nodes import AnalysisContractError
+    from chemsmart.agent.scientific_toolchain import (
+        AnalysisOutputIntentV1,
+        ScientificToolchainContractError,
+    )
+
+    with pytest.raises(ScientificToolchainContractError) as failure:
+        AnalysisOutputIntentV1(
+            output_id="n_imaginary", quantity_kind="count", unit=""
+        )
+    message = str(failure.value)
+    assert "'n_imaginary'" in message
+    assert "count" in message
+    assert "'1'" in message
+
+    assert (
+        AnalysisOutputIntentV1(
+            output_id="n_imaginary", quantity_kind="count", unit="1"
+        ).unit
+        == "1"
+    )
+
+    # The other plane must answer the same mistake the same way.
+    from chemsmart.agent import analysis_nodes, scientific_toolchain
+
+    assert analysis_nodes._UNIT_HINT == scientific_toolchain._UNIT_HINT
+    assert AnalysisContractError is not None
