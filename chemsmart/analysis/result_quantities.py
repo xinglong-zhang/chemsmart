@@ -71,6 +71,24 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
     }
 )
 
+#: Quantities a caller will reasonably ask this plane for that another tool
+#: owns.  Refusing them by name alone sends the caller looking for a selector
+#: that does not exist, when the quantity is available one tool away: the RRHO
+#: engine computes all of these from a Hessian result and the extraction plane
+#: reads structured fields.  Naming the producer is the same courtesy the host
+#: registries already extend when an ID is unknown.
+QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
+    "electronic_energy": "derive_thermochemistry",
+    "enthalpy": "derive_thermochemistry",
+    "entropy": "derive_thermochemistry",
+    "entropy_times_temperature": "derive_thermochemistry",
+    "internal_energy": "derive_thermochemistry",
+    "thermal_enthalpy_correction": "derive_thermochemistry",
+    "thermal_gibbs_correction": "derive_thermochemistry",
+    "thermal_internal_energy_correction": "derive_thermochemistry",
+    "zero_point_energy": "derive_thermochemistry",
+}
+
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
 _CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
 _SELECTOR_RESULT_UNITS = {
@@ -190,8 +208,15 @@ class QuantitySelectorV1:
     def __post_init__(self) -> None:
         _require_identifier(self.quantity_id, "quantity_id")
         if self.selector not in SUPPORTED_SELECTORS:
+            elsewhere = QUANTITIES_FROM_ANOTHER_TOOL.get(self.selector)
+            detail = (
+                f"; that quantity is produced by {elsewhere}, not by result "
+                "extraction"
+                if elsewhere
+                else f"; supported selectors: {sorted(SUPPORTED_SELECTORS)}"
+            )
             raise QuantityContractError(
-                f"unsupported quantity selector: {self.selector!r}"
+                f"unsupported quantity selector: {self.selector!r}{detail}"
             )
 
 
