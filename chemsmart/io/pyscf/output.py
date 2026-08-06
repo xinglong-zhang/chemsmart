@@ -624,6 +624,19 @@ class PySCFOutput(FileMixin):
         return list(self.spec.get("symbols", []))
 
     @cached_property
+    def symbols(self):
+        """Return the element list, overriding the text-log implementation.
+
+        ``FileMixin.symbols`` reads an ``input_coordinates_block`` parsed out
+        of a human-facing log.  This reader has no such block by design -- it
+        reads the structured ``.h5`` sibling -- so the inherited property
+        raised an opaque AttributeError on an artifact that carries the
+        symbols perfectly well.
+        """
+
+        return self.chemical_symbols
+
+    @cached_property
     def vibrational_frequencies(self):
         """Return harmonic frequencies in cm^-1, or None."""
         values = self.results.get("vibrational_frequencies")

@@ -420,7 +420,16 @@ def project_scientific_toolchain_frontier(
     states: dict[str, str] = {}
     nodes: list[dict[str, object]] = []
     analysis_by_id = {node.node_id: node for node in plan.analysis_nodes}
+    # Which nodes consume each producer.  The model submitted the edges; the
+    # host can therefore state the branching instead of leaving the model to
+    # recall its own DAG, which is where a stage carrying the answer is lost.
+    dependents: dict[str, set[str]] = {}
+    for node in plan.analysis_nodes:
+        for edge in node.inputs:
+            dependents.setdefault(edge.producer_node_id, set()).add(node.node_id)
     for node_id in plan.node_order:
+        waiting_on: tuple[str, ...] = ()
+        unsatisfied: tuple[dict[str, str], ...] = ()
         if node_id in plan.calculation_node_ids:
             state = "actionable" if node_id in actionable else "waiting"
             if node_id in unresolved:
@@ -432,23 +441,71 @@ def project_scientific_toolchain_frontier(
             )
         else:
             node = analysis_by_id[node_id]
+            blocked_parents = tuple(
+                sorted(
+                    parent
+                    for parent in node.dependencies
+                    if states.get(parent)
+                    in {"blocked_unsupported", "blocked_upstream"}
+                )
+            )
             if node.support_state == "blocked_unsupported":
                 state = "blocked_unsupported"
                 reason = node.blocked_reason
-            elif any(
-                states.get(parent) in {"blocked_unsupported", "blocked_upstream"}
-                for parent in node.dependencies
-            ):
+            elif blocked_parents:
                 state = "blocked_upstream"
-                reason = "a required producer is blocked"
+                waiting_on = blocked_parents
+                reason = (
+                    "blocked because "
+                    + ", ".join(blocked_parents)
+                    + (" is" if len(blocked_parents) == 1 else " are")
+                    + " blocked"
+                )
             elif node.dependencies:
                 state = "waiting_for_artifact"
-                reason = "await producer outputs"
+                # Name the exact producer outputs.  "await producer outputs"
+                # is the same sentence for every waiting node in every
+                # workflow, so it carries none of the dependency structure the
+                # host already holds.
+                unsatisfied = tuple(
+                    {
+                        "input_id": edge.input_id,
+                        "producer_node_id": edge.producer_node_id,
+                        "producer_output_id": edge.producer_output_id,
+                        "source_kind": edge.source_kind,
+                    }
+                    for edge in sorted(
+                        node.inputs,
+                        key=lambda item: (
+                            item.producer_node_id,
+                            item.producer_output_id,
+                            item.input_id,
+                        ),
+                    )
+                )
+                waiting_on = tuple(
+                    sorted({edge.producer_node_id for edge in node.inputs})
+                )
+                named = ", ".join(
+                    f"{edge['producer_node_id']}.{edge['producer_output_id']}"
+                    for edge in unsatisfied
+                ) or ", ".join(waiting_on)
+                reason = f"await {named}"
             else:
                 state = "actionable"
                 reason = "execute the registered analysis operation"
         states[node_id] = state
-        nodes.append({"node_id": node_id, "state": state, "next_action": reason})
+        entry: dict[str, object] = {
+            "node_id": node_id,
+            "state": state,
+            "next_action": reason,
+            "feeds": tuple(sorted(dependents.get(node_id, ()))),
+        }
+        if waiting_on:
+            entry["waiting_on"] = waiting_on
+        if unsatisfied:
+            entry["unsatisfied_inputs"] = unsatisfied
+        nodes.append(entry)
     return {
         "schema_version": "chemsmart.scientific-toolchain-frontier.v1",
         "workflow_id": plan.workflow_id,
