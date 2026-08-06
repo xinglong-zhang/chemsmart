@@ -81,6 +81,13 @@ class ProgramCapabilityV1:
     project_parameter_domains: tuple[
         tuple[str, tuple[str, ...]], ...
     ] = ()
+    #: Which YAML sections this program's loader reads.  Declared in
+    #: settings/capabilities.py since the section-shape gate was added, but
+    #: never projected here, so a model authoring a project had to guess the
+    #: one thing the loader is strictest about.  Across this campaign sessions
+    #: guessed a td: section for a phase-keyed program, guessed gas: where the
+    #: loader wanted solv:, and learned the rule only from a rejection.
+    project_section_names: tuple[str, ...] = ()
     engine_job_capabilities: tuple[EngineJobCapabilityV1, ...] = ()
 
     def __post_init__(self) -> None:
@@ -834,6 +841,10 @@ def load_program_capabilities(
                     "project_owned_parameters",
                 ),
                 engines=engines,
+                project_section_names=_normalized_tuple(
+                    getattr(raw, "project_section_names", ()),
+                    "project_section_names",
+                ),
                 project_parameter_domains=tuple(
                     (
                         require_identifier(

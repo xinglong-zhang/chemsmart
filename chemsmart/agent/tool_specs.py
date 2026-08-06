@@ -786,7 +786,6 @@ def _describe(name: str, schema: dict) -> dict:
 IDENTIFIER_ARGUMENTS = frozenset(
     {
         "artifact_class",
-        "artifact_id",
         "counterexample_id",
         "jobtype",
         "node_id",
@@ -797,11 +796,17 @@ IDENTIFIER_ARGUMENTS = frozenset(
     }
 )
 
-#: Fields that are an identifier *or* deliberately empty.  An input bound to an
-#: initial artifact has no producer, and says so with "".  Constraining these to
-#: the plain identifier pattern would forbid the commonest edge in any workflow.
+#: Fields that are an identifier *or* deliberately empty.  The two halves of a
+#: workflow edge are mutually exclusive: an input bound to an initial artifact
+#: names artifact_id and leaves the producer fields empty, while an input fed by
+#: an upstream node names the producer fields and leaves artifact_id empty.
+#: Constraining either half to the plain identifier pattern forbids the other.
+#:
+#: Membership here is not a judgement call.  It is what the runtime validators
+#: actually accept, checked by probing them rather than by reading the code --
+#: artifact_id was misclassed on the first attempt and a live session hit it.
 OPTIONAL_IDENTIFIER_ARGUMENTS = frozenset(
-    {"producer_node_id", "producer_output_id"}
+    {"artifact_id", "producer_node_id", "producer_output_id"}
 )
 
 _PUBLIC_IDENTIFIER_PATTERN = "^[a-z][a-z0-9_.-]*$"
