@@ -7,7 +7,10 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
-from chemsmart.settings.project_resolution import project_settings_from_path
+from chemsmart.settings.project_resolution import (
+    project_settings_from_path,
+    require_jobtype_settings,
+)
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -340,34 +343,84 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
-        return self._opt_settings
+        return require_jobtype_settings(
+            self._opt_settings,
+            program="gaussian",
+            jobtype="opt",
+            project=self,
+        )
 
     def modred_settings(self):
-        return self._modred_settings
+        return require_jobtype_settings(
+            self._modred_settings,
+            program="gaussian",
+            jobtype="modred",
+            project=self,
+        )
 
     def ts_settings(self):
-        return self._ts_settings
+        return require_jobtype_settings(
+            self._ts_settings,
+            program="gaussian",
+            jobtype="ts",
+            project=self,
+        )
 
     def irc_settings(self):
-        return self._irc_settings
+        return require_jobtype_settings(
+            self._irc_settings,
+            program="gaussian",
+            jobtype="irc",
+            project=self,
+        )
 
     def scan_settings(self):
-        return self._scan_settings
+        return require_jobtype_settings(
+            self._scan_settings,
+            program="gaussian",
+            jobtype="scan",
+            project=self,
+        )
 
     def nci_settings(self):
-        return self._nci_settings
+        return require_jobtype_settings(
+            self._nci_settings,
+            program="gaussian",
+            jobtype="nci",
+            project=self,
+        )
 
     def sp_settings(self):
-        return self._sp_settings
+        return require_jobtype_settings(
+            self._sp_settings,
+            program="gaussian",
+            jobtype="sp",
+            project=self,
+        )
 
     def td_settings(self):
-        return self._td_settings
+        return require_jobtype_settings(
+            self._td_settings,
+            program="gaussian",
+            jobtype="td",
+            project=self,
+        )
 
     def wbi_settings(self):
-        return self._wbi_settings
+        return require_jobtype_settings(
+            self._wbi_settings,
+            program="gaussian",
+            jobtype="wbi",
+            project=self,
+        )
 
     def qmmm_settings(self):
-        return self._qmmm_settings
+        return require_jobtype_settings(
+            self._qmmm_settings,
+            program="gaussian",
+            jobtype="qmmm",
+            project=self,
+        )
 
     @classmethod
     def from_yaml(cls, filename):

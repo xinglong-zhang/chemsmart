@@ -45,3 +45,36 @@ def project_settings_from_path(project, manager_class):
     if not os.path.isfile(path):
         return None
     return manager_class(filename=path).create()
+
+
+def require_jobtype_settings(settings, *, program, jobtype, project):
+    """Return per-jobtype settings, or say which section is missing.
+
+    A project that omits the section a job type reads used to return ``None``,
+    and the CLI then called ``.merge()`` on it.  The caller saw
+
+        AttributeError: 'NoneType' object has no attribute 'merge'
+
+    which names neither the program, the job type, nor the section to add.  A
+    live agent session hit this three times on a Gaussian excited-state job and
+    concluded from it that the program could not preview that job at all --
+    a wrong conclusion caused entirely by an opaque failure.
+    """
+
+    if settings is not None:
+        return settings
+    present = sorted(
+        name.lstrip("_").removesuffix("_settings")
+        for name, value in vars(project).items()
+        if name.endswith("_settings") and value is not None
+    )
+    detail = (
+        f"sections present: {present}"
+        if present
+        else "the project defines no job-type sections at all"
+    )
+    raise ValueError(
+        f"{program} project settings define no '{jobtype}' section, so a "
+        f"'{jobtype}' job has nothing to merge. Add a '{jobtype}:' section, "
+        f"or a 'gas:' section that every job type inherits; {detail}."
+    )

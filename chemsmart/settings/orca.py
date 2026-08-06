@@ -8,7 +8,10 @@ from chemsmart.jobs.orca.settings import (
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
-from chemsmart.settings.project_resolution import project_settings_from_path
+from chemsmart.settings.project_resolution import (
+    project_settings_from_path,
+    require_jobtype_settings,
+)
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -417,7 +420,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured optimization settings.
         """
-        return self._opt_settings
+        return require_jobtype_settings(
+            self._opt_settings,
+            program="orca",
+            jobtype="opt",
+            project=self,
+        )
 
     def modred_settings(self):
         """
@@ -426,7 +434,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured modredundant settings.
         """
-        return self._modred_settings
+        return require_jobtype_settings(
+            self._modred_settings,
+            program="orca",
+            jobtype="modred",
+            project=self,
+        )
 
     def ts_settings(self):
         """
@@ -435,7 +448,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCATSJobSettings: Pre-configured TS optimization settings.
         """
-        return self._ts_settings
+        return require_jobtype_settings(
+            self._ts_settings,
+            program="orca",
+            jobtype="ts",
+            project=self,
+        )
 
     def irc_settings(self):
         """
@@ -444,7 +462,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAIRCJobSettings: Pre-configured IRC calculation settings.
         """
-        return self._irc_settings
+        return require_jobtype_settings(
+            self._irc_settings,
+            program="orca",
+            jobtype="irc",
+            project=self,
+        )
 
     def scan_settings(self):
         """
@@ -453,7 +476,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured scan calculation settings.
         """
-        return self._scan_settings
+        return require_jobtype_settings(
+            self._scan_settings,
+            program="orca",
+            jobtype="scan",
+            project=self,
+        )
 
     def nci_settings(self):
         """
@@ -462,7 +490,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured NCI analysis settings.
         """
-        return self._nci_settings
+        return require_jobtype_settings(
+            self._nci_settings,
+            program="orca",
+            jobtype="nci",
+            project=self,
+        )
 
     def sp_settings(self):
         """
@@ -471,7 +504,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured single point settings.
         """
-        return self._sp_settings
+        return require_jobtype_settings(
+            self._sp_settings,
+            program="orca",
+            jobtype="sp",
+            project=self,
+        )
 
     def td_settings(self):
         """
@@ -480,7 +518,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured TD-DFT settings.
         """
-        return self._td_settings
+        return require_jobtype_settings(
+            self._td_settings,
+            program="orca",
+            jobtype="td",
+            project=self,
+        )
 
     def wbi_settings(self):
         """
@@ -489,10 +532,20 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured WBI calculation settings.
         """
-        return self._wbi_settings
+        return require_jobtype_settings(
+            self._wbi_settings,
+            program="orca",
+            jobtype="wbi",
+            project=self,
+        )
 
     def qmmm_settings(self):
-        return self._qmmm_settings
+        return require_jobtype_settings(
+            self._qmmm_settings,
+            program="orca",
+            jobtype="qmmm",
+            project=self,
+        )
 
     def neb_settings(self):
         """
