@@ -765,6 +765,55 @@ def _describe(name: str, schema: dict) -> dict:
     return {**schema, "description": f"{meaning} {existing}"}
 
 
+#: Arguments the runtime passes through its public-identifier validator.
+#:
+#: Measured: 36 of 37 identifier-guarded arguments were exposed as
+#: unconstrained strings, so the rule existed only after submission.  Two live
+#: sessions wrote whole sentences into identifier fields -- a dependency phrase
+#: into ``stage_order``, a method description into ``project_role`` -- and only
+#: learned the rule from the rejection.  Declaring the pattern states it before
+#: the call instead of after it.
+IDENTIFIER_ARGUMENTS = frozenset(
+    {
+        "artifact_class",
+        "artifact_id",
+        "counterexample_id",
+        "jobtype",
+        "node_id",
+        "output_id",
+        "program",
+        "project_role",
+        "workflow_id",
+    }
+)
+
+#: Fields that are an identifier *or* deliberately empty.  An input bound to an
+#: initial artifact has no producer, and says so with "".  Constraining these to
+#: the plain identifier pattern would forbid the commonest edge in any workflow.
+OPTIONAL_IDENTIFIER_ARGUMENTS = frozenset(
+    {"producer_node_id", "producer_output_id"}
+)
+
+_PUBLIC_IDENTIFIER_PATTERN = "^[a-z][a-z0-9_.-]*$"
+_OPTIONAL_IDENTIFIER_PATTERN = "^$|^[a-z][a-z0-9_.-]*$"
+
+
+def _constrain(name: str, schema: dict) -> dict:
+    """Declare the identifier rule the runtime will enforce anyway."""
+
+    if not isinstance(schema, dict):
+        return schema
+    if name in OPTIONAL_IDENTIFIER_ARGUMENTS:
+        pattern = _OPTIONAL_IDENTIFIER_PATTERN
+    elif name in IDENTIFIER_ARGUMENTS:
+        pattern = _PUBLIC_IDENTIFIER_PATTERN
+    else:
+        return schema
+    if schema.get("type") != "string" or schema.get("enum") or schema.get("pattern"):
+        return schema
+    return {**schema, "pattern": pattern}
+
+
 def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...]:
     """Describe every argument the surface exposes, by argument name."""
 
@@ -775,12 +824,35 @@ def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...
         properties = parameters.get("properties")
         if isinstance(properties, dict):
             parameters["properties"] = {
-                name: _describe(name, schema) if isinstance(schema, dict) else schema
+                name: _describe(name, _walk_constrain(name, schema))
+                if isinstance(schema, dict)
+                else schema
                 for name, schema in properties.items()
             }
             function["parameters"] = parameters
         described.append({**item, "function": function})
     return tuple(described)
+
+
+def _walk_constrain(name: str, schema: dict) -> dict:
+    """Apply the identifier rule at every depth, including inside arrays."""
+
+    schema = _constrain(name, schema)
+    if not isinstance(schema, dict):
+        return schema
+    updated = dict(schema)
+    properties = updated.get("properties")
+    if isinstance(properties, dict):
+        updated["properties"] = {
+            key: _describe(key, _walk_constrain(key, value))
+            if isinstance(value, dict)
+            else value
+            for key, value in properties.items()
+        }
+    items = updated.get("items")
+    if isinstance(items, dict):
+        updated["items"] = _walk_constrain(name, items)
+    return updated
 
 
 def _string() -> dict:
