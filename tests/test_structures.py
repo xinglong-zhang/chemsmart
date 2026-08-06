@@ -1465,9 +1465,14 @@ class TestChemicalFeatures:
     )
     def test_more_stereochemistry_handling(self):
         """Test preservation of stereochemical information with PubChem."""
-        chiral_mol2 = Molecule.from_pubchem(
-            "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
-        )
+        try:
+            chiral_mol2 = Molecule.from_pubchem(
+                "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
+            )
+        except Exception as exc:
+            pytest.skip(f"PubChem unavailable for stereochemistry test: {exc}")
+        if chiral_mol2 is None:
+            pytest.skip("PubChem returned no structure for this query")
         assert chiral_mol2.is_chiral
         rdkit_mol2 = chiral_mol2.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol2) != []

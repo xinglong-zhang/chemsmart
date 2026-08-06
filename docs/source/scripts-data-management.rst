@@ -99,8 +99,8 @@ Prefer the built-in CLI for structure conversion:
    chemsmart run convert -i molecule.pdb -o molecule.xyz
    chemsmart run convert -d /path/to/dir -t log --output-filetype xyz
 
-See :doc:`cli-overview` and :doc:`molecule-input-formats` for supported formats and the
-Open Babel write fallback for non-native output types.
+See :doc:`cli-overview` and :doc:`molecule-input-formats` for supported formats and the Open Babel write fallback for
+non-native output types.
 
 The legacy ``file_converter.py`` script remains available for the same workflow.
 

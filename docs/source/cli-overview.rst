@@ -187,9 +187,8 @@ Single-file conversion infers the output format from the ``--output`` extension:
    chemsmart run convert -i molecule.pdb -o molecule.xyz
    chemsmart run convert -i molecule.log -o molecule.mol2
 
-Native writers support ``xyz``, ``extxyz``, ``com``, and ``pdb``. Other output formats
-fall back to Open Babel when it is installed. See :doc:`molecule-input-formats` for
-supported inputs and the Open Babel write fallback.
+Native writers support ``xyz``, ``extxyz``, ``com``, and ``pdb``. Other output formats fall back to Open Babel when it
+is installed. See :doc:`molecule-input-formats` for supported inputs and the Open Babel write fallback.
 
 ************
  Next Steps
