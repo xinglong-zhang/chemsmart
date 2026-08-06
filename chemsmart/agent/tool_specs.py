@@ -34,6 +34,25 @@ class AgentToolSurfaceV1:
             raise ContractError("agent tool schema digest mismatch")
 
 
+#: repair_command is built but not reachable, so it is not advertised.
+#:
+#: CommandCounterexampleV1 is never constructed anywhere in the package and
+#: register_counterexample has no callers, so the counterexamples registry is
+#: empty for the whole lifetime of every session and this tool cannot succeed.
+#: Four live sessions called it anyway, across three cases, and three separate
+#: attempts to discourage that by wording all failed -- because the problem was
+#: never the wording.
+#:
+#: The handler, the contract, and the invocation fields that carry a repair are
+#: all kept.  Re-expose this by adding _REPAIR_COMMAND_TOOL back to the tuple in
+#: the same change that wires a producer for counterexamples.
+_REPAIR_COMMAND_TOOL_SOURCE = """_tool(
+            "repair_command",
+            (
+                "Apply one constrained counterexample patch without changing "
+                "bindings. PRECONDITION: a counterexample must already"""
+
+
 def build_command_compiled_tool_surface(
     registry: ProgramCapabilityRegistryV1 | None = None,
 ) -> AgentToolSurfaceV1:
@@ -291,24 +310,6 @@ def build_command_compiled_tool_surface(
                 "capability_receipt_sha256",
                 "engine_binding_sha256",
             ),
-        ),
-        _tool(
-            "repair_command",
-            (
-                "Apply one constrained counterexample patch without changing "
-                "bindings. PRECONDITION: a counterexample must already exist, "
-                "and only the host creates one -- when a compiled command "
-                "fails inspection, safe preview, or program validation. There "
-                "is nothing to repair until something has failed, so calling "
-                "this after a successful preview cannot succeed. Fix a "
-                "rejected argument by calling the tool again with it "
-                "corrected, not by repairing it."
-            ),
-            {
-                "invocation_sha256": digest,
-                "counterexample_id": _string(),
-            },
-            ("invocation_sha256", "counterexample_id"),
         ),
         _tool(
             "preview_command",

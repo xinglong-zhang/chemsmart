@@ -97,10 +97,15 @@ def test_a_tool_specific_description_is_not_overwritten_by_the_shared_one():
     assert sections["description"], "sections must be described"
 
 
+#: Arguments described for a tool that is built but deliberately withheld.
+#: Keeping the text means re-exposing the tool is a one-line surface change.
+_WITHHELD = {"counterexample_id"}
+
+
 def test_the_registry_carries_no_entry_no_surface_uses():
     """A stale entry describes a field that no longer exists."""
 
-    used = set()
+    used = set(_WITHHELD)
     for build in _SURFACES:
         for item in build().tool_definitions:
             properties = (
