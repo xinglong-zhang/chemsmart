@@ -165,6 +165,24 @@ calculation directory must contain exactly one xTB main output.
 
    chemsmart sub -s server gaussian -p project -f co2_ohess/co2_ohess.out sp
 
+CREST Files
+===========
+
+CREST Ensemble XYZ Files
+------------------------
+
+A CREST calculation writes its results to a **directory** (containing files such as ``crest_conformers.xyz``,
+``crest_best.xyz``, ``crest.energies``, and related auxiliary files). For geometry input, use the ensemble XYZ files
+directly (for example ``crest_best.xyz`` or ``crest_conformers.xyz``).
+
+.. code:: bash
+
+   # From CREST best conformer XYZ
+   chemsmart sub -s server gaussian -p project -f crest_best.xyz -c 0 -m 1 opt
+
+   # Run TS optimization on CREST conformer ensemble
+   chemsmart sub -s server gaussian -p project -f crest_conformers.xyz -c 0 -m 1 crest -j ts
+
 ChemDraw Files
 ==============
 
@@ -428,6 +446,7 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
 -  :doc:`xtb-cli-options`
+-  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`

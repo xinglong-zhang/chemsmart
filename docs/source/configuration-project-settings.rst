@@ -2,7 +2,7 @@
  Project Settings
 ##################
 
-Configure project-specific settings for Gaussian, ORCA, and xTB calculations.
+Configure project-specific settings for Gaussian, ORCA, xTB, and CREST calculations.
 
 ***************************
  Gaussian Project Settings
@@ -498,12 +498,54 @@ Solvent example:
 A packaged template is available as ``template_xtb_simple.yaml`` under the CHEMSMART settings templates directory. Copy
 it into ``~/.chemsmart/xtb/`` and rename it for your project.
 
+************************
+ CREST Project Settings
+************************
+
+The ``~/.chemsmart/crest/`` directory contains CREST project settings files. Currently, the supported job type is
+``conformers``. The ``crest`` executable is used for execution; install CREST (and typically ``xtb``) so that they are
+available from the conda environment or ``PATH`` configured in the server YAML ``CREST`` section.
+
+Example project file (``~/.chemsmart/crest/test.yaml``):
+
+.. code:: yaml
+
+   conformers:
+     gfn_version: gfn2
+     energy_window: 6.0
+     optimization_level: vtight
+     nci: false
+
+Solvent example (``~/.chemsmart/crest/test2.yaml``):
+
+.. code:: yaml
+
+   conformers:
+     gfn_version: gfn2
+     energy_window: 6.0
+     optimization_level: vtight
+     solvent_model: gbsa
+     solvent_id: water
+
+Common keys:
+
+-  ``gfn_version``: ``gfn1``, ``gfn2``, ``gfnff``, or ``gfn2//gfnff``
+-  ``energy_window``: energy window for the conformer ensemble (kcal/mol)
+-  ``optimization_level``: ANCOPT level (``crude`` … ``extreme``; packaged default is ``vtight``)
+-  ``solvent_model`` / ``solvent_id``: implicit solvent (``gbsa`` or ``alpb``); both should be set together
+-  ``nci``: enable non-covalent interaction search mode when ``true``
+-  ``quick_mode``, ``rmsd_threshold``, ``energy_threshold``, and related MD/ensemble keys: optional CREST fine-tuning
+   (see :doc:`crest-cli-options`)
+
+A packaged template is available as ``template_crest_simple.yaml`` under the CHEMSMART settings templates directory.
+Copy it into ``~/.chemsmart/crest/`` and rename it for your project.
+
 *******************
  Scratch Directory
 *******************
 
-Set up a scratch directory path for Gaussian, ORCA, xTB, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved by
-``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
+Set up a scratch directory path for Gaussian, ORCA, xTB, CREST, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved
+by ``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. code:: bash
 

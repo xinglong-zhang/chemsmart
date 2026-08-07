@@ -306,7 +306,7 @@ class XTBExecutable(Executable):
 
         Args:
             executable_folder (str, optional):
-            Path to xTB executable directory. If omitted, ``xtb`` is resolved
+            Path to xTB executable directory. If omitted, xtb is resolved
             from PATH, e.g. from an activated conda environment.
             **kwargs: Additional arguments passed to parent Executable class.
         """
@@ -318,11 +318,43 @@ class XTBExecutable(Executable):
 
         Returns:
             str: Full path to xtb if executable_folder is set, otherwise
-            ``xtb`` to use PATH resolution.
+            xtb to use PATH resolution.
         """
         if self.executable_folder is not None:
             return os.path.join(self.executable_folder, "xtb")
         return "xtb"
+
+
+class CRESTExecutable(Executable):
+    """
+    Executable handler for CREST conformer-rotamer ensemble sampling tool.
+    """
+
+    PROGRAM = "CREST"
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize CRESTExecutable instance.
+
+        Args:
+            executable_folder (str, optional):
+            Path to CREST executable directory. If omitted, crest is
+            resolved from PATH, e.g. from an activated conda environment.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the full path to the CREST executable.
+
+        Returns:
+            str: Full path to crest if executable_folder is set, otherwise
+            crest to use PATH resolution.
+        """
+        if self.executable_folder is not None:
+            return os.path.join(self.executable_folder, "crest")
+        return "crest"
 
 
 class NCIPLOTExecutable(Executable):
