@@ -1763,6 +1763,32 @@ def crest_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "CRESTTests")
 
 
+# crest yaml files
+@pytest.fixture()
+def crest_yaml_settings_directory(crest_test_directory):
+    return os.path.join(crest_test_directory, "project_yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv")
+
+
 @pytest.fixture()
 def crest_outputs_directory(crest_test_directory):
     crest_outputs_directory = os.path.join(crest_test_directory, "outputs")
