@@ -74,8 +74,8 @@ def click_crest_settings_options(f):
         help="Level for GFN-xTB optimizations.",
     )
     @click.option(
-        "--ewin",
-        "energy_window",
+        "-w",
+        "--energy-window",
         type=float,
         default=None,
         help="Energy window in kcal/mol for conformer selection.",

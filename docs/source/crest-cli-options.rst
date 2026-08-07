@@ -196,7 +196,7 @@ Route and Calculation Options
       -  bool
       -  Enable or disable non-covalent interaction mode
 
-   -  -  ``--ewin``
+   -  -  ``-w, --energy-window``
       -  float
       -  Energy window in kcal/mol for conformer selection
 
@@ -211,7 +211,7 @@ Examples:
    chemsmart sub -s server crest -p test -f molecule.xyz --nci conformers
 
    # Energy window for conformer selection
-   chemsmart sub -s server crest -p test -f molecule.xyz --ewin 6.0 conformers
+   chemsmart sub -s server crest -p test -f molecule.xyz -w 6.0 conformers
 
 Solvent Options
 ===============

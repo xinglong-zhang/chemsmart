@@ -626,7 +626,7 @@ chemsmart sub -s <server_name> crest -p <project> -f <input.log> conformers \
   --constraints [[1,2],[5,7,8],[3,4,1,7]] --force-constant 0.25
 ```
 
-Shared CREST options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-O/--optimization-level`, `-r/--additional-flags`, `--ewin`, `--nci/--no-nci`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `-l/--label`, `-a/--append-label`, and `-i/--index`. The `conformers` subcommand also accepts `--constraints` and `--force-constant`. The rendered command is based on the CREST executable, for example `crest <label>.xyz --gfn2 --chrg 0 --uhf 0`; solvent flags are included only when both solvent model and solvent id are set, and constrained searches also write a `constraints.inp` passed via `--cinp`.
+Shared CREST options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-O/--optimization-level`, `-r/--additional-flags`, `-w/--energy-window`, `--nci/--no-nci`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `-l/--label`, `-a/--append-label`, and `-i/--index`. The `conformers` subcommand also accepts `--constraints` and `--force-constant`. The rendered command is based on the CREST executable, for example `crest <label>.xyz --gfn2 --chrg 0 --uhf 0`; solvent flags are included only when both solvent model and solvent id are set, and constrained searches also write a `constraints.inp` passed via `--cinp`.
 
 ## Development
 

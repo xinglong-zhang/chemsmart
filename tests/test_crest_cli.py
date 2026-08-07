@@ -61,7 +61,7 @@ class TestCRESTCLISettings:
                 "alpb",
                 "-si",
                 "water",
-                "--ewin",
+                "-w",
                 "8.0",
                 "conformers",
             ],
