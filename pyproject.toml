@@ -44,6 +44,7 @@ dependencies = [
     "pillow>=12.1.1",
     "ipython>=8.12.3",
     "image>=1.5.33",
+    "dbstep>=1.1.0",
 ]
 
 [project.optional-dependencies]
