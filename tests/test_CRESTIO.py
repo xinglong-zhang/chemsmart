@@ -13,6 +13,18 @@ class TestCRESTRoute:
     """Tests for CRESTRoute class."""
 
     def test_read_route(self):
+        s0 = "crest mol.xyz"
+        r0 = CRESTRoute(route_string=s0)
+        assert r0.gfn_version is None
+        assert r0.optimization_level is None
+        assert r0.solvent_model is None
+        assert r0.solvent_id is None
+        assert r0.energy_window is None
+        assert r0.quick_mode is None
+        assert r0.threads is None
+        assert r0.nci is False
+        assert r0.constrained is False
+
         s1 = "crest mol.xyz --gfn2//gfnff"
         r1 = CRESTRoute(route_string=s1)
         assert r1.method == "gfn2//gfnff"
@@ -20,6 +32,7 @@ class TestCRESTRoute:
         assert r1.basis == "default"
         assert r1.charge == 0
         assert r1.uhf == 0
+        assert r1.multiplicity == 1
         assert r1.jobtype == "conformers"
 
         s2 = (
@@ -107,6 +120,36 @@ class TestCRESTRoute:
         assert r7.constrained is True
         assert r7.no_reference_topology_check is True
         assert r7.no_topology_check is True
+
+        s8 = "crest mol.xyz --gff --opt verytight"
+        r8 = CRESTRoute(route_string=s8)
+        assert r8.gfn_version == "gfnff"
+        assert r8.optimization_level == "vtight"
+
+        s9 = (
+            "crest mol.xyz --gfn2 "
+            "-nci -cinp constraints.inp -noreftopo -notopo "
+            "-ewin 10 -rthr 0.2 -ethr 0.05 -bthr 0.01 -pthr 0.1 "
+            "-temp 250 -shake 0 -tstep 3 -mdlen 20 "
+            "-mddump 50 -vbdump 2.0 -tnmd 350"
+        )
+        r9 = CRESTRoute(route_string=s9)
+        assert r9.nci is True
+        assert r9.constrained is True
+        assert r9.no_reference_topology_check is True
+        assert r9.no_topology_check is True
+        assert r9.energy_window == 10.0
+        assert r9.rmsd_threshold == 0.2
+        assert r9.energy_threshold == 0.05
+        assert r9.bconst_threshold == 0.01
+        assert r9.population_threshold == 0.1
+        assert r9.temperature == 250.0
+        assert r9.shake == 0
+        assert r9.md_timestep == 3
+        assert r9.md_length == 20.0
+        assert r9.md_dump_step == 50
+        assert r9.vbias_dump_interval == 2.0
+        assert r9.additional_md_temperature == 350.0
 
 
 class TestCRESTMainOut:
