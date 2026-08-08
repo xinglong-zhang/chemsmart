@@ -38,6 +38,9 @@ _GAUSSIAN_LOG_C4 = (
 _GAUSSIAN_TD_LOG = (
     "tests/data/GaussianTests/tddft/tddft_r1s50_gas_radical_anion.log"
 )
+_ORCA_DLPNO_LOG = (
+    "tests/data/ORCATests/outputs/water_dlpno_ccsdt_sp.out"
+)
 
 
 def _artifact(path, program, artifact_id="result"):
@@ -118,6 +121,24 @@ def test_a_gaussian_energy_becomes_a_hash_bound_quantity():
 def test_a_gaussian_free_energy_is_read_from_the_thermochemistry_block():
     receipt = _extract(_GAUSSIAN_LOG, "gaussian", "gibbs_free_energy")
     assert receipt.quantities[0].value == pytest.approx(-2189.409887)
+
+
+def test_orca_post_hf_energy_preserves_total_and_reference_components():
+    """A correlated ORCA result must not collapse to its SCF reference."""
+
+    total = _extract(_ORCA_DLPNO_LOG, "orca", "energy", "total").quantities[0]
+    scf = _extract(_ORCA_DLPNO_LOG, "orca", "scf_energy", "scf").quantities[0]
+    correlation = _extract(
+        _ORCA_DLPNO_LOG,
+        "orca",
+        "correlation_energy",
+        "correlation",
+    ).quantities[0]
+
+    assert total.value == pytest.approx(-76.377481488944)
+    assert scf.value == pytest.approx(-76.05666270)
+    assert correlation.value == pytest.approx(total.value - scf.value)
+    assert total.value != pytest.approx(scf.value)
 
 
 def test_gaussian_excited_state_results_enter_the_shared_quantity_plane():

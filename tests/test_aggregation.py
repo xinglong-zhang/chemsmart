@@ -280,6 +280,59 @@ def test_expression_engine_exposes_general_two_point_cbs_components():
     assert outputs["total_cbs"] == pytest.approx(expected_scf + expected_corr)
 
 
+def test_expression_engine_exposes_inverse_power_scf_cbs_without_relabeling_it():
+    """Published algebraic SCF extrapolation is not exponential extrapolation."""
+
+    from chemsmart.analysis.aggregation import extrapolate_scf_inverse_power
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionNodeV1,
+        QuantityExpressionRequestV1,
+        evaluate_quantity_expression,
+    )
+    from chemsmart.analysis.result_quantities import ENERGY, make_quantity_value
+
+    values = {"scf_qz": -76.01, "scf_5z": -76.025}
+    inputs = tuple(
+        make_quantity_value(
+            quantity_id=quantity_id,
+            source_value=value,
+            source_unit="hartree",
+            value=value,
+            unit="hartree",
+            dimension=ENERGY,
+            evidence_ref=f"artifact:{quantity_id}#" + "0" * 64,
+        )
+        for quantity_id, value in values.items()
+    )
+    receipt = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="scf.inverse-power.cbs",
+            inputs=inputs,
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="scf_cbs",
+                    operation="scf_inverse_power_cbs_limit",
+                    input_ids=("scf_qz", "scf_5z"),
+                    cardinal_numbers=(4, 5),
+                    extrapolation_exponent=3.9,
+                ),
+            ),
+            output_node_ids=("scf_cbs",),
+        )
+    )
+
+    assert receipt.outputs[0].value == pytest.approx(
+        extrapolate_scf_inverse_power(
+            smaller_cardinal=4,
+            larger_cardinal=5,
+            smaller_scf_energy=values["scf_qz"],
+            larger_scf_energy=values["scf_5z"],
+            exponent=3.9,
+        )
+    )
+
+
 def test_two_point_cbs_contract_rejects_hidden_default_exponents():
     from chemsmart.analysis.quantity_expressions import QuantityExpressionNodeV1
     from chemsmart.analysis.result_quantities import QuantityContractError

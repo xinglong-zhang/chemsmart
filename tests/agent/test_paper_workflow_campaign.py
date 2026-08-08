@@ -9,6 +9,7 @@ from chemsmart.agent.analysis_claims import (
     build_analysis_claim_record,
 )
 from chemsmart.agent.experiments.paper_workflow_campaign import (
+    analysis_claim_record_from_live_result,
     PaperWorkflowObservationV1,
     WorkflowDependencyAnswerV1,
     WorkflowProjectAnswerV1,
@@ -59,10 +60,10 @@ def _key(case, *, value=2.50, tolerance=0.10):
     )
 
 
-def _claim_record(*, value, unit):
+def _claim_record(*, value, unit, claim_id="spin-gap", quantity_id="spin-gap"):
     canonical_value, canonical_unit, dimension = normalize_numeric_value(value, unit)
     quantity = make_quantity_value(
-        quantity_id="spin-gap",
+        quantity_id=quantity_id,
         source_value=value,
         source_unit=unit,
         value=canonical_value,
@@ -71,7 +72,7 @@ def _claim_record(*, value, unit):
         evidence_ref="expression:spin-gap#" + "b" * 64,
     )
     claim = AnalysisReportedQuantityV1(
-        claim_id="spin-gap",
+        claim_id=claim_id,
         source_kind="quantity_expression",
         source_receipt_sha256="c" * 64,
         quantity_id=quantity.quantity_id,
@@ -130,6 +131,14 @@ def test_benchmark_dispatch_requires_a_matching_prepared_answer_key():
     assert eligibility.required_quantity_ids == ("spin-gap",)
     assert "2.5" not in task
     assert "private validated reference receipt" not in task
+    assert case.article_title not in task
+    assert case.paper_doi not in task
+    assert case.source_locator not in task
+    assert case.case_id not in task
+    assert case.methods_excerpt in task
+    assert case.coordinate_description in task
+    assert case.requested_result in task
+    assert case.execution_policy in task
 
     other_case = _case(case_id="other-case")
     with pytest.raises(ContractError, match="another black-box case"):
@@ -173,6 +182,199 @@ def test_primary_grade_compares_compatible_units_with_declared_tolerance():
     assert within.quantity_grades[0].status == "within_tolerance"
     assert not outside.primary_pass
     assert outside.quantity_grades[0].status == "outside_tolerance"
+
+
+def test_primary_grade_uses_canonical_quantity_not_free_form_claim_label():
+    case = _case()
+    key = _key(case, value=2.50, tolerance=0.10)
+
+    grade = grade_paper_numerical_claims(
+        case=case,
+        answer_key=key,
+        claim_record=_claim_record(
+            value=10.50,
+            unit="kJ/mol",
+            claim_id="reported-state-energy-difference",
+            quantity_id="spin-gap",
+        ),
+    )
+
+    assert grade.primary_pass
+
+
+def test_primary_grade_matches_conservative_semantic_claim_tokens():
+    case = _case()
+    key = _key(case, value=2.50, tolerance=0.10)
+
+    grade = grade_paper_numerical_claims(
+        case=case,
+        answer_key=key,
+        claim_record=_claim_record(
+            value=10.50,
+            unit="kJ/mol",
+            claim_id="reported-molar-spin-gap",
+            quantity_id="gap-display",
+        ),
+    )
+
+    assert grade.primary_pass
+
+
+def test_primary_grade_uses_preregistered_identifier_without_paper_alias_code():
+    case = _case()
+    reference = build_reference_quantity(
+        quantity_id="dimethyl-ether-energy",
+        expected_value=-11.388320847866,
+        unit="hartree",
+        absolute_tolerance=1.0e-9,
+        evidence_locator="private validated reference receipt",
+        accepted_identifiers=("dme-sp-energy",),
+    )
+    key = build_paper_answer_key(
+        answer_key_id="paper-case-alias-answers",
+        case=case,
+        answer_source="host-prepared result withheld from the model",
+        quantities=(reference,),
+    )
+
+    grade = grade_paper_numerical_claims(
+        case=case,
+        answer_key=key,
+        claim_record=_claim_record(
+            value=-11.388320847866,
+            unit="hartree",
+            claim_id="dme_sp_energy_claim",
+            quantity_id="dme_sp_energy",
+        ),
+    )
+
+    assert grade.primary_pass
+
+
+def test_answer_key_rejects_identifier_shared_by_two_quantities():
+    case = _case()
+    references = tuple(
+        build_reference_quantity(
+            quantity_id=quantity_id,
+            expected_value=value,
+            unit="hartree",
+            absolute_tolerance=1.0e-9,
+            evidence_locator="private validated reference receipt",
+            accepted_identifiers=("shared-energy",),
+        )
+        for quantity_id, value in (("energy-a", -1.0), ("energy-b", -2.0))
+    )
+
+    with pytest.raises(ContractError, match="identify only one"):
+        build_paper_answer_key(
+            answer_key_id="paper-case-shared-alias",
+            case=case,
+            answer_source="host-prepared result withheld from the model",
+            quantities=references,
+        )
+
+
+def test_primary_grade_collapses_equivalent_multi_unit_claim_presentations():
+    case = _case()
+    key = _key(case, value=2.50, tolerance=0.10)
+    canonical_value, canonical_unit, dimension = normalize_numeric_value(
+        2.50, "kcal/mol"
+    )
+    quantity = make_quantity_value(
+        quantity_id="delta-energy",
+        source_value=2.50,
+        source_unit="kcal/mol",
+        value=canonical_value,
+        unit=canonical_unit,
+        dimension=dimension,
+        evidence_ref="expression:spin-gap#" + "b" * 64,
+    )
+    claims = tuple(
+        AnalysisReportedQuantityV1(
+            claim_id=claim_id,
+            source_kind="quantity_expression",
+            source_receipt_sha256="c" * 64,
+            quantity_id=quantity.quantity_id,
+            quantity_value_sha256=quantity.value_sha256,
+            display_value=value,
+            display_unit=unit,
+            canonical_value=quantity.value,
+            canonical_unit=quantity.unit,
+            dimension=ENERGY,
+            data_kind="scalar",
+        )
+        for claim_id, value, unit in (
+            ("spin-gap-kcal", 2.50, "kcal/mol"),
+            ("spin-gap-kj", 10.46, "kJ/mol"),
+        )
+    )
+    record = build_analysis_claim_record(
+        task_spec_sha256="d" * 64, claims=claims
+    )
+
+    grade = grade_paper_numerical_claims(
+        case=case, answer_key=key, claim_record=record
+    )
+
+    assert grade.primary_pass
+
+
+def test_primary_grade_normalizes_hartree_identifier_abbreviation():
+    case = _case()
+    reference = build_reference_quantity(
+        quantity_id="isomerization-energy",
+        expected_value=0.003,
+        unit="hartree",
+        absolute_tolerance=1.0e-9,
+        evidence_locator="private validated reference receipt",
+        accepted_identifiers=("delta-e-hartree",),
+    )
+    key = build_paper_answer_key(
+        answer_key_id="paper-case-hartree-alias",
+        case=case,
+        answer_source="host-prepared result withheld from the model",
+        quantities=(reference,),
+    )
+
+    grade = grade_paper_numerical_claims(
+        case=case,
+        answer_key=key,
+        claim_record=_claim_record(
+            value=0.003,
+            unit="hartree",
+            claim_id="isomerization-delta-e-eh",
+            quantity_id="delta-e",
+        ),
+    )
+
+    assert grade.primary_pass
+
+
+def test_live_primary_grade_uses_host_claim_record_not_model_prose():
+    record = _claim_record(value=10.50, unit="kJ/mol")
+    envelope = {
+        "schema_version": "chemsmart.tool-result.v1",
+        "status": "ok",
+        "tool": "record_analysis_claims",
+        "result": {
+            "schema_version": record.schema_version,
+            "task_spec_sha256": record.task_spec_sha256,
+            "claims": [claim.__dict__ for claim in record.claims],
+            "status": record.status,
+            "receipt_sha256": record.receipt_sha256,
+        },
+    }
+    result = SimpleNamespace(
+        task_spec_sha256=record.task_spec_sha256,
+        public_transcript=(
+            {"role": "assistant", "content": "The answer is 999 kcal/mol."},
+            {"role": "tool", "content": __import__("json").dumps(envelope)},
+        ),
+    )
+
+    observed = analysis_claim_record_from_live_result(result)
+
+    assert observed == record
 
 
 def _orca_workflow(*, opt_node_id, analysis_node_id, jobtype="opt"):
@@ -261,3 +463,182 @@ def test_intermediate_case_uses_exact_program_relative_yaml_cli_dag_answer():
     assert not wrong.strict_pass
     assert wrong.missing_node_signatures
     assert wrong.unexpected_node_signatures
+
+
+def test_intermediate_strict_grade_distinguishes_cbs_law_parameters():
+    case = _case(
+        case_id="cbs-intermediate", system_scale="intermediate_or_larger"
+    )
+    project = WorkflowProjectAnswerV1(
+        project_id="orca-qz",
+        document=project_document(
+            program="orca",
+            sections={"solv": {"ab_initio": "dlpno-ccsd(t1)", "basis": "cc-pvqz-dk"}},
+        ),
+    )
+    calculation = WorkflowSemanticNodeV1(
+        node_id="sp-qz",
+        node_kind="calculation",
+        program="orca",
+        jobtype="sp",
+        project_id=project.project_id,
+        input_geometry_sha256s=("a" * 64,),
+        output_semantics=("program_result",),
+    )
+    reference_analysis = WorkflowSemanticNodeV1(
+        node_id="scf-cbs",
+        node_kind="analysis",
+        operation="quantity_expression",
+        dependencies=(
+            WorkflowDependencyAnswerV1("sp-qz", "program_result", "program_result"),
+        ),
+        output_semantics=("scf_energy",),
+        semantic_parameters=(
+            ("cardinal_numbers", (4, 5)),
+            ("extrapolation_exponent", 3.9),
+            ("operation", "scf_inverse_power_cbs_limit"),
+        ),
+    )
+    key = build_paper_workflow_answer_key(
+        answer_key_id="cbs-intermediate-answer",
+        case=case,
+        answer_source="expert-prepared inverse-power CBS contract",
+        projects=(project,),
+        nodes=(calculation, reference_analysis),
+    )
+    wrong_analysis = WorkflowSemanticNodeV1(
+        node_id="renamed-cbs",
+        node_kind="analysis",
+        operation="quantity_expression",
+        dependencies=(
+            WorkflowDependencyAnswerV1("renamed-sp", "program_result", "program_result"),
+        ),
+        output_semantics=("scf_energy",),
+        semantic_parameters=(
+            ("cardinal_numbers", (3, 4)),
+            ("extrapolation_exponent", 3.0),
+            ("operation", "correlation_inverse_power_cbs_limit"),
+        ),
+    )
+    renamed_calculation = WorkflowSemanticNodeV1(
+        node_id="renamed-sp",
+        node_kind="calculation",
+        program="orca",
+        jobtype="sp",
+        project_id=project.project_id,
+        input_geometry_sha256s=("a" * 64,),
+        output_semantics=("program_result",),
+    )
+
+    grade = grade_paper_workflow_answer(
+        case=case,
+        answer_key=key,
+        observation=PaperWorkflowObservationV1(
+            schema_version="chemsmart.paper-workflow-observation.v1",
+            projects=(project,),
+            nodes=(renamed_calculation, wrong_analysis),
+        ),
+    )
+
+    assert not grade.strict_pass
+    assert grade.missing_node_signatures
+    assert grade.unexpected_node_signatures
+
+
+def test_orca_sp_grading_compares_effective_settings_not_section_spelling():
+    case = _case(
+        case_id="orca-sp-sections", system_scale="intermediate_or_larger"
+    )
+    legacy = WorkflowProjectAnswerV1(
+        project_id="reference-sp",
+        document=project_document(
+            program="orca",
+            sections={
+                "solv": {
+                    "ab_initio": "dlpno-ccsd(t1)",
+                    "basis": "cc-pvtz-dk",
+                }
+            },
+        ),
+    )
+    reference_node = WorkflowSemanticNodeV1(
+        node_id="reference-node",
+        node_kind="calculation",
+        program="orca",
+        jobtype="sp",
+        project_id=legacy.project_id,
+        input_geometry_sha256s=("a" * 64,),
+        output_semantics=("program_result",),
+    )
+    key = build_paper_workflow_answer_key(
+        answer_key_id="orca-sp-section-answer",
+        case=case,
+        answer_source="expert-prepared effective ORCA SP settings",
+        projects=(legacy,),
+        nodes=(reference_node,),
+    )
+
+    explicit_stage = WorkflowProjectAnswerV1(
+        project_id="model-sp",
+        document=project_document(
+            program="orca",
+            sections={
+                "gas": {},
+                "sp": {
+                    "ab_initio": "DLPNO-CCSD(T1)",
+                    "basis": "cc-pVTZ-DK",
+                },
+            },
+        ),
+    )
+    model_node = WorkflowSemanticNodeV1(
+        node_id="model-node",
+        node_kind="calculation",
+        program="orca",
+        jobtype="sp",
+        project_id=explicit_stage.project_id,
+        input_geometry_sha256s=("a" * 64,),
+        output_semantics=("program_result",),
+    )
+    equivalent = grade_paper_workflow_answer(
+        case=case,
+        answer_key=key,
+        observation=PaperWorkflowObservationV1(
+            schema_version="chemsmart.paper-workflow-observation.v1",
+            projects=(explicit_stage,),
+            nodes=(model_node,),
+        ),
+    )
+    misplaced = WorkflowProjectAnswerV1(
+        project_id="misplaced-sp",
+        document=project_document(
+            program="orca",
+            sections={
+                "gas": {
+                    "ab_initio": "dlpno-ccsd(t1)",
+                    "basis": "cc-pvtz-dk",
+                }
+            },
+        ),
+    )
+    misplaced_node = WorkflowSemanticNodeV1(
+        node_id="misplaced-node",
+        node_kind="calculation",
+        program="orca",
+        jobtype="sp",
+        project_id=misplaced.project_id,
+        input_geometry_sha256s=("a" * 64,),
+        output_semantics=("program_result",),
+    )
+    wrong = grade_paper_workflow_answer(
+        case=case,
+        answer_key=key,
+        observation=PaperWorkflowObservationV1(
+            schema_version="chemsmart.paper-workflow-observation.v1",
+            projects=(misplaced,),
+            nodes=(misplaced_node,),
+        ),
+    )
+
+    assert equivalent.strict_pass
+    assert not wrong.strict_pass
