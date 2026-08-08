@@ -1032,6 +1032,10 @@ def run_live_agent_session(
     lease = load_secret_lease(
         provider=normalized_provider,
         path=secret_file,
+        # The profile already says which key it bills; selecting a different
+        # one here is how a second key for the same provider gets charged by
+        # accident.
+        label=profile.api_key_env,
         ttl_seconds=_SESSION_WALL_TIME_SECONDS + 60,
     )
     loop_result = UnifiedSessionRunner(

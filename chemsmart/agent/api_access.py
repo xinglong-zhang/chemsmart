@@ -10,7 +10,6 @@ from typing import Callable, TypeVar
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
 
-
 _LABEL = re.compile(r"^[A-Za-z0-9_-]+$")
 _T = TypeVar("_T")
 
@@ -25,6 +24,47 @@ DEFAULT_KEY_LABELS = {
     "serpapi": ("SERPAPI_API_KEY", "SerpApi_api_key"),
     "tavily": ("TAVILY_API_KEY", "Tavily_api_key"),
 }
+
+#: The substring a provider's key label must carry.  Kept here, beside
+#: ``DEFAULT_KEY_LABELS``, so one module owns what a label may be: a second
+#: copy in the profile loader would be free to disagree with this one.
+PROVIDER_KEY_LABEL_TOKENS = {
+    "alibaba-token-plan": "ALIBABA",
+    "deepseek": "DEEPSEEK",
+    "elsevier": "ELS",
+    "serpapi": "SERPAPI",
+    "tavily": "TAVILY",
+}
+
+
+def normalize_key_label(label: str) -> str:
+    """Fold separators and case so ``A-b_C`` and ``a_B-c`` compare equal."""
+
+    return re.sub(r"[-_]", "", str(label)).upper()
+
+
+def require_provider_key_label(label: str, *, provider: str) -> None:
+    """Require a key label to name the provider it will bill.
+
+    An enumeration of accepted labels cannot express a second key for the same
+    provider: a lab, team or project key was refused purely for being new, and
+    the refusal did not say what would be accepted.  The hazard the
+    enumeration defended against is narrower than it looks -- pointing one
+    provider's profile at another provider's secret, which bills the wrong
+    account and sends the key to the wrong endpoint -- and carrying the
+    provider's name is enough to prevent exactly that.
+    """
+
+    token = PROVIDER_KEY_LABEL_TOKENS.get(str(provider).lower())
+    if token is None:
+        return
+    if token not in normalize_key_label(label):
+        raise ContractError(
+            f"a {provider} profile must name a {provider} key: label "
+            f"{str(label)!r} does not contain {token!r}. Any prefix or "
+            "suffix is accepted, so a lab, team or project key is fine, but "
+            "the label must identify the provider it bills."
+        )
 
 
 class SecretLease:
@@ -102,13 +142,21 @@ def parse_secret_file(path: str | Path) -> dict[str, str]:
         if stripped.startswith("export "):
             stripped = stripped[7:].lstrip()
         if "=" not in stripped:
-            raise ContractError(f"secret file line {ordinal} is not an assignment")
+            raise ContractError(
+                f"secret file line {ordinal} is not an assignment"
+            )
         label, value = stripped.split("=", 1)
         label = label.strip()
         value = value.strip()
         if _LABEL.fullmatch(label) is None:
-            raise ContractError(f"secret file line {ordinal} has an invalid label")
-        if len(value) >= 2 and value[:1] == value[-1:] and value[0] in {'"', "'"}:
+            raise ContractError(
+                f"secret file line {ordinal} has an invalid label"
+            )
+        if (
+            len(value) >= 2
+            and value[:1] == value[-1:]
+            and value[0] in {'"', "'"}
+        ):
             value = value[1:-1]
         if not value:
             raise ContractError(f"secret file label {label!r} has no value")
@@ -120,30 +168,57 @@ def load_secret_lease(
     *,
     provider: str,
     path: str | Path,
+    label: str | None = None,
     ttl_seconds: float = 60.0,
     clock: Callable[[], float] = time.monotonic,
 ) -> SecretLease:
+    """Lease one secret, preferring the label the caller actually declared.
+
+    ``label`` exists because a provider profile declares ``api_key_env`` and
+    this loader used to ignore it, selecting instead the first entry of
+    ``DEFAULT_KEY_LABELS`` present in the file.  An account with two keys --
+    a personal key and a lab key, say -- therefore billed whichever label
+    happened to sort first, silently, no matter which one the profile named.
+    A declared label is now honoured exactly; omitting it keeps the previous
+    priority-order behaviour for callers that have no profile to consult.
+    """
+
     if ttl_seconds <= 0:
         raise ContractError("credential lease TTL must be positive")
-    labels = DEFAULT_KEY_LABELS.get(str(provider).lower(), ())
+    if label is not None and not str(label).strip():
+        raise ContractError("requested secret label must not be blank")
+    requested = None if label is None else str(label)
+    if requested is not None:
+        require_provider_key_label(requested, provider=provider)
+    labels = (
+        (requested,)
+        if requested is not None
+        else DEFAULT_KEY_LABELS.get(str(provider).lower(), ())
+    )
     if not labels:
         raise ContractError("provider has no approved secret labels")
     values = parse_secret_file(path)
     normalized = {}
-    for label, value in values.items():
-        normalized_label = _normalize_label(label)
+    for file_label, value in values.items():
+        normalized_label = _normalize_label(file_label)
         if normalized_label in normalized:
             raise ContractError("secret file contains ambiguous key labels")
-        normalized[normalized_label] = (label, value)
+        normalized[normalized_label] = (file_label, value)
     selected = next(
         (
-            normalized[_normalize_label(label)]
-            for label in labels
-            if _normalize_label(label) in normalized
+            normalized[_normalize_label(candidate)]
+            for candidate in labels
+            if _normalize_label(candidate) in normalized
         ),
         None,
     )
     if selected is None:
+        if requested is not None:
+            raise ContractError(
+                f"secret file has no entry for the requested label "
+                f"{requested!r}; the profile's api_key_env names the key it "
+                "bills, so the label must exist in the secret file"
+            )
         raise ContractError("approved provider key label was not found")
     label, secret = selected
     return SecretLease(
@@ -156,7 +231,9 @@ def load_secret_lease(
 
 
 def _normalize_label(label: str) -> str:
-    return re.sub(r"[-_]", "", str(label)).lower()
+    # One implementation, so matching and provider-token checking can never
+    # disagree about whether two spellings are the same label.
+    return normalize_key_label(label).lower()
 
 
 __all__ = [
