@@ -1946,6 +1946,10 @@ class CommandCompiledToolHostV1:
         context = self._workflow_context(draft)
         if context is not None:
             result["workflow_context"] = context
+        if scientific_plan is not None:
+            result["approval_readiness"] = self._approval_readiness(
+                scientific_plan
+            )
         return result
 
     def _plan_scientific_workflow(self, turn_id: str, values: dict) -> Any:
@@ -2606,6 +2610,62 @@ class CommandCompiledToolHostV1:
             )
         return matches[0] if matches else None
 
+    def _node_is_previewed(self, node_id: str) -> bool:
+        """Whether a node holds the green preview an approval will demand."""
+
+        preflight = self._preflight_by_node.get(node_id)
+        return (
+            preflight is not None
+            and preflight.plan_state == "previewed"
+            and not preflight.critical_finding_sha256s
+        )
+
+    def _approval_readiness(self, plan: Any) -> dict[str, Any]:
+        """Say which nodes still stand between this plan and an approval.
+
+        An approval freezes a preview for *every* materialized node, so one
+        node left unpreviewed makes the entire plan unapprovable. A live
+        session hit exactly that: it abandoned two programs whose previews it
+        could not repair, left their nodes in the plan, and finished with a
+        clean termination and a plan that could never be executed. Nothing
+        told it, because the rule only spoke at freeze time -- after the
+        session had ended.
+
+        A model that knows this can do the right thing: keep the program the
+        task named while it can, and if it truly cannot preview green, drop
+        that node rather than carrying it as dead weight.
+        """
+
+        nodes = []
+        blocking = []
+        for node in getattr(plan, "nodes", ()):
+            node_id = node.node_id
+            previewed = self._node_is_previewed(node_id)
+            if not previewed:
+                blocking.append(node_id)
+            nodes.append(
+                {
+                    "node_id": node_id,
+                    "program": getattr(node, "program", ""),
+                    "previewed": previewed,
+                    "blocks_approval": not previewed,
+                }
+            )
+        return {
+            "approvable": not blocking,
+            "blocking_node_ids": tuple(blocking),
+            "nodes": tuple(nodes),
+            "rule": (
+                "every node in the plan needs a green preview before the "
+                "plan can be approved, so one unpreviewable node blocks all "
+                "of them. Prefer the program the task names and repair its "
+                "preview using the findings returned by preview_command; if "
+                "it still cannot preview green, plan the workflow again "
+                "without that node and use a program that can, rather than "
+                "leaving an abandoned node in the plan."
+            ),
+        }
+
     def _invocation_identity(self, node_id: str) -> str:
         """Path-independent identity of a node's latest compiled command.
 
@@ -3088,12 +3148,7 @@ class CommandCompiledToolHostV1:
             ):
                 unresolved_node_ids.append(planned_node.node_id)
                 continue
-            preflight = self._preflight_by_node.get(planned_node.node_id)
-            previewed = (
-                preflight is not None
-                and preflight.plan_state == "previewed"
-                and not preflight.critical_finding_sha256s
-            )
+            previewed = self._node_is_previewed(planned_node.node_id)
             materialized_nodes.append(
                 MaterializedNodeV1(
                     node_id=planned_node.node_id,
