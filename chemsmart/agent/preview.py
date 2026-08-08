@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 import click
 from click.testing import CliRunner
 
@@ -55,6 +56,14 @@ class SafePreviewReceiptV1:
     status: str
     rule_ids: tuple[str, ...]
     receipt_sha256: str
+    #: The findings those digests identify.  A digest cannot be acted on: a
+    #: live session was told six times that its command was invalid, given
+    #: only hashes, and recompiled blindly until it abandoned two programs.
+    #: The validator computes these bodies in order to hash them, so keeping
+    #: them costs nothing and is the difference between a refusal and a
+    #: repair.  Excluded from the digest when empty so receipts recorded
+    #: before this field keep their identity.
+    critical_findings: tuple[Any, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.safe-preview-receipt.v1":
@@ -151,6 +160,7 @@ def execute_safe_preview(
     program_validation_receipt_sha256 = ""
     program_validation_status = "invalid"
     critical_finding_sha256s: tuple[str, ...] = ()
+    critical_findings: tuple[Any, ...] = ()
     with runner.isolated_filesystem() as workspace:
         result = runner.invoke(
             root,
@@ -168,8 +178,14 @@ def execute_safe_preview(
         program_validation_receipt_sha256 = program_validation.receipt_sha256
         program_validation_status = program_validation.status
         critical_finding_sha256s = tuple(
-            sorted(canonical_sha256(item) for item in program_validation.findings)
+            sorted(
+                canonical_sha256(item) for item in program_validation.findings
+            )
         )
+        # Keep what the digests identify.  Hashing a finding and discarding
+        # its body is what left a live session recompiling against opaque
+        # hashes; the digests above still bind these bodies for integrity.
+        critical_findings = tuple(program_validation.findings)
 
     after_input = _verified_artifact_hash(input_artifact)
     after_project = (
@@ -214,7 +230,9 @@ def execute_safe_preview(
         "rule_ids": tuple(sorted(set(rules))),
     }
     return SafePreviewReceiptV1(
-        **body, receipt_sha256=canonical_sha256(body)
+        **body,
+        receipt_sha256=canonical_sha256(body),
+        critical_findings=critical_findings,
     )
 
 
@@ -235,7 +253,9 @@ def _validate_preview_bindings(
     if observed_project != invocation.project_sha256:
         raise ContractError("preview project binding differs from invocation")
     if not invocation.argv or invocation.argv[0] != "chemsmart":
-        raise ContractError("preview argv must be compiler-owned ChemSmart argv")
+        raise ContractError(
+            "preview argv must be compiler-owned ChemSmart argv"
+        )
     if (expectation.program, expectation.jobtype) != (
         invocation.command_path[1],
         invocation.command_path[2],
@@ -270,7 +290,9 @@ def _option_enabled(
     )
 
 
-def _collect_preview_artifacts(workspace: Path) -> tuple[PreviewArtifactV1, ...]:
+def _collect_preview_artifacts(
+    workspace: Path,
+) -> tuple[PreviewArtifactV1, ...]:
     rows = []
     for path in sorted(workspace.rglob("*")):
         if path.is_symlink():

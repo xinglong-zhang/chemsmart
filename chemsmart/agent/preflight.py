@@ -27,6 +27,22 @@ from chemsmart.agent.projects import ProjectValidationReceiptV1
 
 
 @dataclass(frozen=True)
+class PreviewRuleFindingV1:
+    """A broken preview rule, rendered in the same shape as a validation one.
+
+    ``_public_validator_findings`` reads ``rule_id``/``field``/``expected``/
+    ``observed``, so a rule objection has to answer the same questions a
+    program-validator objection does or it will disclose as blanks.
+    """
+
+    rule_id: str
+    field: str = "invocation"
+    expected: str = "a preview that satisfies this rule"
+    observed: str = "the rule was violated by this invocation"
+    evidence_ref: str = ""
+
+
+@dataclass(frozen=True)
 class ProgramValidatorReceiptV1:
     """Typed, target-bound deterministic validator result."""
 
@@ -40,6 +56,12 @@ class ProgramValidatorReceiptV1:
     status: str
     critical_finding_sha256s: tuple[str, ...]
     receipt_sha256: str
+    #: What the digests above identify.  ``_public_validator_findings`` has
+    #: read this attribute since the projection was added, but nothing ever
+    #: set it, so every disclosure rendered an empty list and a live session
+    #: recompiled six times against opaque hashes.  Kept outside the digest
+    #: because ``critical_finding_sha256s`` already binds these bodies.
+    findings: tuple[Any, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.program-validator-receipt.v1":
@@ -55,11 +77,11 @@ class ProgramValidatorReceiptV1:
             require_sha256(digest, field_name)
         if self.status not in {"valid", "invalid"}:
             raise ContractError("invalid program validator status")
-        _require_digest_set(
-            self.critical_finding_sha256s, "critical finding"
-        )
+        _require_digest_set(self.critical_finding_sha256s, "critical finding")
         if self.status == "valid" and self.critical_finding_sha256s:
-            raise ContractError("a valid validator cannot carry critical findings")
+            raise ContractError(
+                "a valid validator cannot carry critical findings"
+            )
         body = {
             "schema_version": self.schema_version,
             "node_id": self.node_id,
@@ -110,8 +132,21 @@ def validator_receipt_from_safe_preview(
         "status": "valid" if not critical else "invalid",
         "critical_finding_sha256s": tuple(sorted(critical)),
     }
+    # Carry both kinds of objection the digests above stand for: what the
+    # program validator found in the generated input, and which preview rule
+    # the invocation broke. Either alone leaves a caller guessing.
+    findings = tuple(getattr(safe_preview, "critical_findings", ()) or ())
+    if safe_preview.status != "previewed" or (
+        safe_preview.program_validation_status != "valid"
+    ):
+        findings += tuple(
+            PreviewRuleFindingV1(rule_id=rule_id)
+            for rule_id in safe_preview.rule_ids
+        )
     return ProgramValidatorReceiptV1(
-        **body, receipt_sha256=canonical_sha256(body)
+        **body,
+        receipt_sha256=canonical_sha256(body),
+        findings=findings,
     )
 
 
@@ -134,7 +169,10 @@ class ProgramNodePreflightRequestV1:
     request_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.program-node-preflight-request.v1":
+        if (
+            self.schema_version
+            != "chemsmart.program-node-preflight-request.v1"
+        ):
             raise ContractError("unsupported node preflight request schema")
         require_identifier(self.node_id, "node_id")
         for field_name, digest in (
@@ -180,7 +218,10 @@ class ProgramNodePreflightReceiptV1:
     receipt_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.program-node-preflight-receipt.v1":
+        if (
+            self.schema_version
+            != "chemsmart.program-node-preflight-receipt.v1"
+        ):
             raise ContractError("unsupported node preflight receipt schema")
         if self.plan_state not in {
             "blocked",
@@ -189,8 +230,13 @@ class ProgramNodePreflightReceiptV1:
         }:
             raise ContractError("invalid node preflight state")
         if self.execution_ready and self.plan_state != "previewed":
-            raise ContractError("execution readiness requires preview evidence")
-        if self.plan_state == "previewed" and not self.safe_preview_receipt_sha256:
+            raise ContractError(
+                "execution readiness requires preview evidence"
+            )
+        if (
+            self.plan_state == "previewed"
+            and not self.safe_preview_receipt_sha256
+        ):
             raise ContractError("previewed state requires a preview receipt")
         body = {
             "schema_version": self.schema_version,
@@ -288,9 +334,15 @@ def evaluate_program_node_preflight(
         failures.append("preflight.engine.capability_mismatch")
     if engine_binding.program_binding_sha256 != program_binding.binding_sha256:
         failures.append("preflight.engine.program_binding_mismatch")
-    if invocation.program_engine_binding_sha256 != engine_binding.binding_sha256:
+    if (
+        invocation.program_engine_binding_sha256
+        != engine_binding.binding_sha256
+    ):
         failures.append("preflight.invocation.engine_binding_mismatch")
-    if invocation.joined_capability_sha256 != capability.joined_capability_sha256:
+    if (
+        invocation.joined_capability_sha256
+        != capability.joined_capability_sha256
+    ):
         failures.append("preflight.invocation.capability_mismatch")
     if (program_binding.selected_program, engine_binding.program) != (
         capability.query.program,
@@ -310,11 +362,20 @@ def evaluate_program_node_preflight(
             failures.append("preflight.project.red")
     if request.geometry_artifact_sha256 != invocation.input_sha256:
         failures.append("preflight.request.geometry_mismatch")
-    if request.scientific_identity_sha256 != scientific_identity.binding_sha256:
+    if (
+        request.scientific_identity_sha256
+        != scientific_identity.binding_sha256
+    ):
         failures.append("preflight.request.scientific_identity_mismatch")
-    if invocation.scientific_identity_sha256 != scientific_identity.binding_sha256:
+    if (
+        invocation.scientific_identity_sha256
+        != scientific_identity.binding_sha256
+    ):
         failures.append("preflight.invocation.scientific_identity_mismatch")
-    if scientific_identity.geometry_artifact_sha256 != request.geometry_artifact_sha256:
+    if (
+        scientific_identity.geometry_artifact_sha256
+        != request.geometry_artifact_sha256
+    ):
         failures.append("preflight.identity.geometry_mismatch")
     if (request.charge, request.multiplicity) != (
         scientific_identity.charge,
@@ -401,9 +462,11 @@ def evaluate_program_node_preflight(
             and engine_binding.execution_ready
         )
         rules = (
-            "preflight.execution_environment.observed"
-            if execution_ready
-            else "preflight.preview_only.execution_not_authorized",
+            (
+                "preflight.execution_environment.observed"
+                if execution_ready
+                else "preflight.preview_only.execution_not_authorized"
+            ),
         )
     body = {
         "schema_version": "chemsmart.program-node-preflight-receipt.v1",

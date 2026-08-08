@@ -2886,7 +2886,14 @@ class CommandCompiledToolHostV1:
             findings=_public_validator_findings(validator),
             source_receipt_sha256=validator.source_receipt_sha256,
         )
-        return {"safe_preview": receipt, "validator": validator}
+        # The model is the one that has to act on these. Disclosing them
+        # only to the event log is what left a live session recompiling
+        # against hashes it could not resolve.
+        return {
+            "safe_preview": receipt,
+            "validator": validator,
+            "critical_findings": _public_validator_findings(validator),
+        }
 
     def _preflight_program_node(self, turn_id: str, values: dict) -> Any:
         capability = self._get(
