@@ -19,6 +19,7 @@ from chemsmart.analysis.result_quantities import (
     ResultQuantityExtractionRequestV1,
     ThermochemistryReceiptV1,
     ThermochemistryRequestV1,
+    derive_result_thermochemistry,
     derive_pyscf_thermochemistry,
     extract_pyscf_quantities,
 )
@@ -72,22 +73,58 @@ def derive_trusted_thermochemistry(
     program: str,
     temperature_k: float,
     pressure_atm: float,
+    concentration_mol_l: float | None = None,
+    entropy_method: str = "rrho",
+    entropy_cutoff_cm1: float | None = None,
+    enthalpy_cutoff_cm1: float | None = None,
+    alpha: int = 4,
+    use_weighted_mass: bool = False,
+    frequency_scale_factor: float = 1.0,
 ) -> ThermochemistryReceiptV1:
-    """Evaluate shared ChemSmart RRHO thermochemistry for a trusted result."""
+    """Evaluate shared RRHO or quasi-harmonic thermochemistry."""
 
-    if program != "pyscf":
-        raise ContractError("no structured thermochemistry bridge is registered")
-    if artifact.kind != "pyscf_hdf5":
-        raise ContractError("PySCF thermochemistry requires a bound pyscf_hdf5 artifact")
+    from chemsmart.analysis.result_readers import (
+        reader_for,
+        registered_reader_programs,
+    )
+
+    normalized_program = str(program).strip().lower()
+    reader = reader_for(normalized_program)
+    if normalized_program == "pyscf":
+        expected_kind = "pyscf_hdf5"
+    elif reader is not None:
+        expected_kind = reader.artifact_kind
+    else:
+        raise ContractError(
+            "no structured thermochemistry bridge is registered for program; "
+            f"registered: {('pyscf',) + registered_reader_programs()}"
+        )
+    if artifact.kind != expected_kind:
+        raise ContractError(
+            f"{normalized_program} thermochemistry requires a bound "
+            f"{expected_kind} artifact, not {artifact.kind!r}"
+        )
     request = ThermochemistryRequestV1(
         schema_version="chemsmart.thermochemistry-request.v1",
         artifact_id=artifact.artifact_id,
         artifact_sha256=artifact.sha256,
-        program=program,
+        program=normalized_program,
         temperature_k=temperature_k,
         pressure_atm=pressure_atm,
+        concentration_mol_l=concentration_mol_l,
+        entropy_method=entropy_method,
+        entropy_cutoff_cm1=entropy_cutoff_cm1,
+        enthalpy_cutoff_cm1=enthalpy_cutoff_cm1,
+        alpha=alpha,
+        use_weighted_mass=use_weighted_mass,
+        frequency_scale_factor=frequency_scale_factor,
     )
-    return derive_pyscf_thermochemistry(
+    if normalized_program == "pyscf":
+        return derive_pyscf_thermochemistry(
+            request=request,
+            artifact_path=artifact.path,
+        )
+    return derive_result_thermochemistry(
         request=request,
         artifact_path=artifact.path,
     )

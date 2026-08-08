@@ -465,14 +465,74 @@ def build_command_compiled_tool_surface(
         _tool(
             "derive_thermochemistry",
             (
-                "Derive RRHO thermochemistry from a trusted Hessian result at "
-                "an explicit temperature and pressure using ChemSmart's common engine."
+                "Derive harmonic RRHO and, when requested, Grimme/Truhlar "
+                "quasi-harmonic thermochemistry from a trusted frequency result "
+                "using ChemSmart's common engine. A supplied concentration "
+                "defines the translational standard state instead of pressure. "
+                "Grimme or Truhlar requires entropy_cutoff_cm1; an enthalpy "
+                "cutoff independently enables Head-Gordon qRRHO enthalpy."
             ),
             {
                 "program": structured_result_program,
                 "artifact_id": _string(),
                 "temperature_k": {"type": "number", "exclusiveMinimum": 0},
                 "pressure_atm": {"type": "number", "exclusiveMinimum": 0},
+                "concentration_mol_l": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": (
+                        "Optional solution standard-state concentration in mol/L; "
+                        "when supplied, pressure remains recorded but is not used "
+                        "for the translational partition function."
+                    ),
+                },
+                "entropy_method": {
+                    "type": "string",
+                    "enum": ["rrho", "grimme", "truhlar"],
+                    "description": (
+                        "Entropy treatment; omitted means harmonic RRHO. Grimme "
+                        "and Truhlar require entropy_cutoff_cm1."
+                    ),
+                },
+                "entropy_cutoff_cm1": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": (
+                        "Positive low-frequency entropy cutoff in cm^-1, required "
+                        "for Grimme or Truhlar and invalid for harmonic RRHO."
+                    ),
+                },
+                "enthalpy_cutoff_cm1": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": (
+                        "Optional positive Head-Gordon qRRHO enthalpy cutoff in "
+                        "cm^-1; omission retains harmonic enthalpy."
+                    ),
+                },
+                "alpha": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "Damping exponent for Grimme entropy and Head-Gordon "
+                        "enthalpy corrections; omitted means 4."
+                    ),
+                },
+                "use_weighted_mass": {
+                    "type": "boolean",
+                    "description": (
+                        "Use natural-abundance weighted isotope masses; omitted "
+                        "means the backward-compatible most-abundant masses."
+                    ),
+                },
+                "frequency_scale_factor": {
+                    "type": "number",
+                    "enum": [1.0],
+                    "description": (
+                        "Frequency scale factor. The current shared engine does "
+                        "not apply scaling, so only 1.0 is accepted."
+                    ),
+                },
             },
             ("program", "artifact_id", "temperature_k", "pressure_atm"),
         ),

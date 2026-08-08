@@ -85,6 +85,10 @@ QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
     "entropy": "derive_thermochemistry",
     "entropy_times_temperature": "derive_thermochemistry",
     "internal_energy": "derive_thermochemistry",
+    "quasi_harmonic_enthalpy": "derive_thermochemistry",
+    "quasi_harmonic_entropy": "derive_thermochemistry",
+    "quasi_harmonic_entropy_times_temperature": "derive_thermochemistry",
+    "quasi_harmonic_gibbs_free_energy": "derive_thermochemistry",
     "thermal_enthalpy_correction": "derive_thermochemistry",
     "thermal_gibbs_correction": "derive_thermochemistry",
     "thermal_internal_energy_correction": "derive_thermochemistry",
@@ -337,18 +341,56 @@ class ThermochemistryRequestV1:
     program: str
     temperature_k: float
     pressure_atm: float
+    concentration_mol_l: float | None = None
+    entropy_method: str = "rrho"
+    entropy_cutoff_cm1: float | None = None
+    enthalpy_cutoff_cm1: float | None = None
+    alpha: int = 4
+    use_weighted_mass: bool = False
+    frequency_scale_factor: float = 1.0
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.thermochemistry-request.v1":
             raise QuantityContractError("unsupported thermochemistry request schema")
         _require_identifier(self.artifact_id, "artifact_id")
         _require_sha256(self.artifact_sha256)
-        if self.program != "pyscf":
-            raise QuantityContractError("only PySCF thermochemistry is registered")
+        normalized_program = str(self.program).strip().lower()
+        object.__setattr__(self, "program", normalized_program)
+        if normalized_program != "pyscf":
+            from chemsmart.analysis.result_readers import reader_for
+
+            if reader_for(normalized_program) is None:
+                raise QuantityContractError(
+                    "no thermochemistry result reader is registered for "
+                    f"{normalized_program!r}"
+                )
         if not math.isfinite(self.temperature_k) or self.temperature_k <= 0.0:
             raise QuantityContractError("temperature_k must be finite and positive")
         if not math.isfinite(self.pressure_atm) or self.pressure_atm <= 0.0:
             raise QuantityContractError("pressure_atm must be finite and positive")
+        _validate_thermochemistry_controls(
+            concentration_mol_l=self.concentration_mol_l,
+            entropy_method=self.entropy_method,
+            entropy_cutoff_cm1=self.entropy_cutoff_cm1,
+            enthalpy_cutoff_cm1=self.enthalpy_cutoff_cm1,
+            alpha=self.alpha,
+            use_weighted_mass=self.use_weighted_mass,
+            frequency_scale_factor=self.frequency_scale_factor,
+        )
+        object.__setattr__(
+            self, "entropy_method", str(self.entropy_method).strip().lower()
+        )
+        for field in (
+            "concentration_mol_l",
+            "entropy_cutoff_cm1",
+            "enthalpy_cutoff_cm1",
+        ):
+            value = getattr(self, field)
+            if value is not None:
+                object.__setattr__(self, field, float(value))
+        object.__setattr__(
+            self, "frequency_scale_factor", float(self.frequency_scale_factor)
+        )
 
 
 @dataclass(frozen=True)
@@ -364,6 +406,13 @@ class ThermochemistryReceiptV1:
     assumptions: tuple[str, ...]
     status: str
     receipt_sha256: str
+    concentration_mol_l: float | None = None
+    entropy_method: str = "rrho"
+    entropy_cutoff_cm1: float | None = None
+    enthalpy_cutoff_cm1: float | None = None
+    alpha: int = 4
+    use_weighted_mass: bool = False
+    frequency_scale_factor: float = 1.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "quantities", tuple(self.quantities))
@@ -372,7 +421,16 @@ class ThermochemistryReceiptV1:
             raise QuantityContractError("unsupported thermochemistry receipt schema")
         if self.status != "derived":
             raise QuantityContractError("invalid thermochemistry receipt status")
-        body = {
+        _validate_thermochemistry_controls(
+            concentration_mol_l=self.concentration_mol_l,
+            entropy_method=self.entropy_method,
+            entropy_cutoff_cm1=self.entropy_cutoff_cm1,
+            enthalpy_cutoff_cm1=self.enthalpy_cutoff_cm1,
+            alpha=self.alpha,
+            use_weighted_mass=self.use_weighted_mass,
+            frequency_scale_factor=self.frequency_scale_factor,
+        )
+        legacy_body = {
             "schema_version": self.schema_version,
             "artifact_id": self.artifact_id,
             "artifact_sha256": self.artifact_sha256,
@@ -384,8 +442,84 @@ class ThermochemistryReceiptV1:
             "assumptions": self.assumptions,
             "status": self.status,
         }
-        if self.receipt_sha256 != canonical_quantity_sha256(body):
+        extended_body = {
+            **legacy_body,
+            "concentration_mol_l": self.concentration_mol_l,
+            "entropy_method": self.entropy_method,
+            "entropy_cutoff_cm1": self.entropy_cutoff_cm1,
+            "enthalpy_cutoff_cm1": self.enthalpy_cutoff_cm1,
+            "alpha": self.alpha,
+            "use_weighted_mass": self.use_weighted_mass,
+            "frequency_scale_factor": self.frequency_scale_factor,
+        }
+        extended_matches = self.receipt_sha256 == canonical_quantity_sha256(
+            extended_body
+        )
+        legacy_matches = (
+            self.program == "pyscf"
+            and self.concentration_mol_l is None
+            and self.entropy_method == "rrho"
+            and self.entropy_cutoff_cm1 is None
+            and self.enthalpy_cutoff_cm1 is None
+            and self.alpha == 4
+            and self.use_weighted_mass is False
+            and self.frequency_scale_factor == 1.0
+            and self.receipt_sha256 == canonical_quantity_sha256(legacy_body)
+        )
+        if not extended_matches and not legacy_matches:
             raise QuantityContractError("thermochemistry receipt digest mismatch")
+
+
+def _validate_thermochemistry_controls(
+    *,
+    concentration_mol_l: float | None,
+    entropy_method: str,
+    entropy_cutoff_cm1: float | None,
+    enthalpy_cutoff_cm1: float | None,
+    alpha: int,
+    use_weighted_mass: bool,
+    frequency_scale_factor: float,
+) -> None:
+    method = str(entropy_method).strip().lower()
+    if method not in {"rrho", "grimme", "truhlar"}:
+        raise QuantityContractError(
+            "entropy_method must be one of 'rrho', 'grimme', or 'truhlar'"
+        )
+    if concentration_mol_l is not None and (
+        not math.isfinite(float(concentration_mol_l))
+        or float(concentration_mol_l) <= 0.0
+    ):
+        raise QuantityContractError(
+            "concentration_mol_l must be finite and positive"
+        )
+    for field, value in (
+        ("entropy_cutoff_cm1", entropy_cutoff_cm1),
+        ("enthalpy_cutoff_cm1", enthalpy_cutoff_cm1),
+    ):
+        if value is not None and (
+            not math.isfinite(float(value)) or float(value) <= 0.0
+        ):
+            raise QuantityContractError(f"{field} must be finite and positive")
+    if method == "rrho" and entropy_cutoff_cm1 is not None:
+        raise QuantityContractError(
+            "entropy_cutoff_cm1 requires entropy_method 'grimme' or 'truhlar'"
+        )
+    if method in {"grimme", "truhlar"} and entropy_cutoff_cm1 is None:
+        raise QuantityContractError(
+            f"entropy_method {method!r} requires entropy_cutoff_cm1"
+        )
+    if isinstance(alpha, bool) or not isinstance(alpha, int) or alpha <= 0:
+        raise QuantityContractError("alpha must be a positive integer")
+    if not isinstance(use_weighted_mass, bool):
+        raise QuantityContractError("use_weighted_mass must be boolean")
+    if (
+        not math.isfinite(float(frequency_scale_factor))
+        or float(frequency_scale_factor) != 1.0
+    ):
+        raise QuantityContractError(
+            "the shared thermochemistry engine does not yet apply frequency "
+            "scaling; frequency_scale_factor must be exactly 1.0"
+        )
 
 
 def _numeric_kind(value: Any) -> str:
@@ -878,12 +1012,88 @@ def _thermo_quantity(
     )
 
 
-def derive_pyscf_thermochemistry(
+def _uses_legacy_pyscf_thermochemistry_contract(
+    request: ThermochemistryRequestV1,
+) -> bool:
+    return (
+        request.program == "pyscf"
+        and request.concentration_mol_l is None
+        and request.entropy_method == "rrho"
+        and request.entropy_cutoff_cm1 is None
+        and request.enthalpy_cutoff_cm1 is None
+        and request.alpha == 4
+        and request.use_weighted_mass is False
+        and request.frequency_scale_factor == 1.0
+    )
+
+
+def _thermochemistry_assumptions(
+    request: ThermochemistryRequestV1,
+) -> tuple[str, ...]:
+    if _uses_legacy_pyscf_thermochemistry_contract(request):
+        return (
+            "ideal-gas translational partition function",
+            "rigid-rotor harmonic-oscillator thermochemistry",
+            "ground-state electronic degeneracy equals spin multiplicity",
+            "most-abundant isotopic masses",
+            "rotational symmetry derived by the shared ChemSmart engine",
+        )
+
+    assumptions = [
+        "rigid-rotor harmonic-oscillator thermochemistry for harmonic quantities",
+        "ground-state electronic degeneracy equals spin multiplicity",
+        (
+            "natural-abundance weighted isotopic masses"
+            if request.use_weighted_mass
+            else "most-abundant isotopic masses"
+        ),
+        "rotational symmetry derived by the shared ChemSmart engine",
+        (
+            "frequency scale factor 1.0; the shared engine applies no "
+            "frequency scaling"
+        ),
+    ]
+    if request.concentration_mol_l is None:
+        assumptions.append(
+            f"ideal-gas translational standard state at {request.pressure_atm:g} atm"
+        )
+    else:
+        assumptions.append(
+            "solution translational standard state at "
+            f"{request.concentration_mol_l:g} mol L^-1; pressure is recorded "
+            "but not used in the translational partition function"
+        )
+    if request.entropy_method == "grimme":
+        assumptions.append(
+            "Grimme quasi-RRHO vibrational entropy with "
+            f"{request.entropy_cutoff_cm1:g} cm^-1 cutoff and alpha "
+            f"{request.alpha}"
+        )
+    elif request.entropy_method == "truhlar":
+        assumptions.append(
+            "Truhlar quasi-harmonic vibrational entropy with frequencies "
+            f"below {request.entropy_cutoff_cm1:g} cm^-1 raised to the cutoff"
+        )
+    if request.enthalpy_cutoff_cm1 is not None:
+        assumptions.append(
+            "Head-Gordon quasi-RRHO vibrational enthalpy with "
+            f"{request.enthalpy_cutoff_cm1:g} cm^-1 cutoff and alpha "
+            f"{request.alpha}"
+        )
+    elif request.entropy_method != "rrho":
+        assumptions.append(
+            "quasi-harmonic correction applies to entropy only; enthalpy "
+            "remains harmonic"
+        )
+    return tuple(assumptions)
+
+
+def derive_result_thermochemistry(
     *,
     request: ThermochemistryRequestV1,
     artifact_path: str | os.PathLike[str],
 ) -> ThermochemistryReceiptV1:
-    """Derive RRHO thermochemistry at an explicit temperature and pressure.
+    """Derive RRHO or quasi-harmonic thermochemistry from a trusted result.
 
     The formulas and molecular conventions remain owned by ChemSmart's common
     :class:`Thermochemistry` engine.  This function only binds conditions and
@@ -891,30 +1101,46 @@ def derive_pyscf_thermochemistry(
     """
 
     artifact = _verify_artifact(artifact_path, request.artifact_sha256)
-    output = PySCFOutput(artifact)
-    _require_analysis_ready_pyscf_result(
-        artifact=artifact,
-        expected_sha256=request.artifact_sha256,
-        output=output,
-        required_units={
-            "results/energies": "Eh",
-            "results/positions": "Angstrom",
-            "results/hessian": "Eh/Bohr^2",
-            "results/vibrational_frequencies": "cm^-1",
-        },
-    )
-    if not output.freq:
-        raise QuantityExtractionError(
-            "thermochemistry requires a validated PySCF Hessian result"
+    if request.program == "pyscf":
+        output = PySCFOutput(artifact)
+        _require_analysis_ready_pyscf_result(
+            artifact=artifact,
+            expected_sha256=request.artifact_sha256,
+            output=output,
+            required_units={
+                "results/energies": "Eh",
+                "results/positions": "Angstrom",
+                "results/hessian": "Eh/Bohr^2",
+                "results/vibrational_frequencies": "cm^-1",
+            },
         )
-    if output.result_sha256 != request.artifact_sha256:
-        raise QuantityExtractionError("PySCF parser observed substituted bytes")
+        if not output.freq:
+            raise QuantityExtractionError(
+                "thermochemistry requires a validated PySCF Hessian result"
+            )
+        if output.result_sha256 != request.artifact_sha256:
+            raise QuantityExtractionError(
+                "PySCF parser observed substituted bytes"
+            )
     engine = Thermochemistry(
         filename=str(artifact),
         temperature=request.temperature_k,
+        concentration=request.concentration_mol_l,
         pressure=request.pressure_atm,
+        use_weighted_mass=request.use_weighted_mass,
+        alpha=request.alpha,
+        s_freq_cutoff=request.entropy_cutoff_cm1,
+        entropy_method=(
+            None if request.entropy_method == "rrho" else request.entropy_method
+        ),
+        h_freq_cutoff=request.enthalpy_cutoff_cm1,
         check_imaginary_frequencies=True,
     )
+    if engine.program != request.program:
+        raise QuantityExtractionError(
+            "trusted result program differs from the requested thermochemistry "
+            f"program: expected {request.program!r}, observed {engine.program!r}"
+        )
     engine.check_frequencies()
     evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
     energy_values = {
@@ -979,17 +1205,66 @@ def derive_pyscf_thermochemistry(
             ),
         ]
     )
+    if request.entropy_method != "rrho":
+        quantities.extend(
+            [
+                _thermo_quantity(
+                    quantity_id="quasi_harmonic_entropy",
+                    value=engine.qrrho_total_entropy,
+                    source_unit="J mol^-1 K^-1",
+                    normalized_unit="hartree K^-1",
+                    dimension=ENTROPY,
+                    evidence_ref=evidence_ref,
+                ),
+                _thermo_quantity(
+                    quantity_id="quasi_harmonic_entropy_times_temperature",
+                    value=engine.qrrho_entropy_times_temperature,
+                    source_unit="J mol^-1",
+                    normalized_unit="hartree",
+                    dimension=ENERGY,
+                    evidence_ref=evidence_ref,
+                ),
+            ]
+        )
+    if request.enthalpy_cutoff_cm1 is not None:
+        quantities.append(
+            _thermo_quantity(
+                quantity_id="quasi_harmonic_enthalpy",
+                value=engine.qrrho_enthalpy,
+                source_unit="J mol^-1",
+                normalized_unit="hartree",
+                dimension=ENERGY,
+                evidence_ref=evidence_ref,
+            )
+        )
+    if (
+        request.entropy_method != "rrho"
+        or request.enthalpy_cutoff_cm1 is not None
+    ):
+        if (
+            request.entropy_method != "rrho"
+            and request.enthalpy_cutoff_cm1 is not None
+        ):
+            quasi_harmonic_gibbs = engine.qrrho_gibbs_free_energy
+        elif request.entropy_method != "rrho":
+            quasi_harmonic_gibbs = engine.qrrho_gibbs_free_energy_qs
+        else:
+            quasi_harmonic_gibbs = engine.qrrho_gibbs_free_energy_qh
+        quantities.append(
+            _thermo_quantity(
+                quantity_id="quasi_harmonic_gibbs_free_energy",
+                value=quasi_harmonic_gibbs,
+                source_unit="J mol^-1",
+                normalized_unit="hartree",
+                dimension=ENERGY,
+                evidence_ref=evidence_ref,
+            )
+        )
     if result_file_sha256(artifact) != request.artifact_sha256:
         raise QuantityExtractionError(
             "result artifact changed during thermochemistry derivation"
         )
-    assumptions = (
-        "ideal-gas translational partition function",
-        "rigid-rotor harmonic-oscillator thermochemistry",
-        "ground-state electronic degeneracy equals spin multiplicity",
-        "most-abundant isotopic masses",
-        "rotational symmetry derived by the shared ChemSmart engine",
-    )
+    assumptions = _thermochemistry_assumptions(request)
     body = {
         "schema_version": "chemsmart.thermochemistry-receipt.v1",
         "artifact_id": request.artifact_id,
@@ -1002,8 +1277,37 @@ def derive_pyscf_thermochemistry(
         "assumptions": assumptions,
         "status": "derived",
     }
+    if not _uses_legacy_pyscf_thermochemistry_contract(request):
+        body.update(
+            {
+                "concentration_mol_l": request.concentration_mol_l,
+                "entropy_method": request.entropy_method,
+                "entropy_cutoff_cm1": request.entropy_cutoff_cm1,
+                "enthalpy_cutoff_cm1": request.enthalpy_cutoff_cm1,
+                "alpha": request.alpha,
+                "use_weighted_mass": request.use_weighted_mass,
+                "frequency_scale_factor": request.frequency_scale_factor,
+            }
+        )
     return ThermochemistryReceiptV1(
         **body, receipt_sha256=canonical_quantity_sha256(body)
+    )
+
+
+def derive_pyscf_thermochemistry(
+    *,
+    request: ThermochemistryRequestV1,
+    artifact_path: str | os.PathLike[str],
+) -> ThermochemistryReceiptV1:
+    """Backward-compatible PySCF entry point for the shared implementation."""
+
+    if request.program != "pyscf":
+        raise QuantityContractError(
+            "derive_pyscf_thermochemistry requires program 'pyscf'"
+        )
+    return derive_result_thermochemistry(
+        request=request,
+        artifact_path=artifact_path,
     )
 
 
@@ -1083,6 +1387,7 @@ __all__ = [
     "ThermochemistryRequestV1",
     "canonical_quantity_sha256",
     "derive_pyscf_thermochemistry",
+    "derive_result_thermochemistry",
     "extract_pyscf_quantities",
     "make_quantity_value",
     "quantity_map",

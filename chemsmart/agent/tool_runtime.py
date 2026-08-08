@@ -4958,6 +4958,27 @@ class CommandCompiledToolHostV1:
             program=values["program"],
             temperature_k=float(values["temperature_k"]),
             pressure_atm=float(values["pressure_atm"]),
+            concentration_mol_l=(
+                float(values["concentration_mol_l"])
+                if "concentration_mol_l" in values
+                else None
+            ),
+            entropy_method=str(values.get("entropy_method", "rrho")),
+            entropy_cutoff_cm1=(
+                float(values["entropy_cutoff_cm1"])
+                if "entropy_cutoff_cm1" in values
+                else None
+            ),
+            enthalpy_cutoff_cm1=(
+                float(values["enthalpy_cutoff_cm1"])
+                if "enthalpy_cutoff_cm1" in values
+                else None
+            ),
+            alpha=int(values.get("alpha", 4)),
+            use_weighted_mass=bool(values.get("use_weighted_mass", False)),
+            frequency_scale_factor=float(
+                values.get("frequency_scale_factor", 1.0)
+            ),
         )
         self.thermochemistry_receipts[receipt.receipt_sha256] = receipt
         record = canonical_data(receipt)
