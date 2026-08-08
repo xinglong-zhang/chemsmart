@@ -78,9 +78,7 @@ class ProgramCapabilityV1:
     jobtypes: tuple[str, ...]
     project_owned_parameters: tuple[str, ...]
     engines: tuple[str, ...]
-    project_parameter_domains: tuple[
-        tuple[str, tuple[str, ...]], ...
-    ] = ()
+    project_parameter_domains: tuple[tuple[str, tuple[str, ...]], ...] = ()
     #: Which YAML sections this program's loader reads.  Declared in
     #: settings/capabilities.py since the section-shape gate was added, but
     #: never projected here, so a model authoring a project had to guess the
@@ -95,7 +93,9 @@ class ProgramCapabilityV1:
         if self.requires_project_configuration and not (
             self.supports_project_configuration
         ):
-            raise ContractError("required project configuration is unsupported")
+            raise ContractError(
+                "required project configuration is unsupported"
+            )
         _require_sorted_unique(self.jobtypes, "jobtypes")
         _require_sorted_unique(
             self.project_owned_parameters, "project_owned_parameters"
@@ -387,9 +387,17 @@ class ProgramComponentConformanceReceiptV1:
         statuses = (
             ("compiler", self.compiler_status, self.compiler_receipt_sha256),
             ("preview", self.preview_status, self.preview_receipt_sha256),
-            ("preflight", self.preflight_status, self.preflight_receipt_sha256),
+            (
+                "preflight",
+                self.preflight_status,
+                self.preflight_receipt_sha256,
+            ),
             ("verifier", self.verifier_status, self.verifier_receipt_sha256),
-            ("execution", self.execution_status, self.execution_receipt_sha256),
+            (
+                "execution",
+                self.execution_status,
+                self.execution_receipt_sha256,
+            ),
         )
         for name, status, digest in statuses:
             if status not in {"passed", "failed", "not_observed"}:
@@ -420,7 +428,9 @@ class ProgramComponentConformanceReceiptV1:
         if self.covered_engine_job_pairs:
             body["covered_engine_job_pairs"] = self.covered_engine_job_pairs
         if self.receipt_sha256 != canonical_sha256(body):
-            raise ContractError("component conformance receipt digest mismatch")
+            raise ContractError(
+                "component conformance receipt digest mismatch"
+            )
 
     @property
     def effective_engine_job_pairs(self) -> tuple[tuple[str, str], ...]:
@@ -524,7 +534,9 @@ class EnvironmentTargetV1:
         _require_sorted_unique(
             self.required_dependencies, "required_dependencies"
         )
-        version_names = tuple(item[0] for item in self.required_dependency_versions)
+        version_names = tuple(
+            item[0] for item in self.required_dependency_versions
+        )
         _require_sorted_unique(version_names, "required_dependency_versions")
         _require_sorted_unique(self.required_gpu_facts, "required_gpu_facts")
         _require_sorted_unique(self.required_gpu_values, "required_gpu_values")
@@ -558,7 +570,9 @@ class TrustedComputeEnvironmentReceiptV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.compute-environment-receipt.v1":
-            raise ContractError("unsupported compute environment receipt schema")
+            raise ContractError(
+                "unsupported compute environment receipt schema"
+            )
         require_identifier(self.program, "program")
         require_identifier(self.engine, "engine")
         require_sha256(
@@ -569,7 +583,9 @@ class TrustedComputeEnvironmentReceiptV1:
             raise ContractError("compute environment source probe is required")
         names = tuple(item[0] for item in self.dependency_versions)
         if names != tuple(sorted(set(names))):
-            raise ContractError("dependency evidence must be sorted and unique")
+            raise ContractError(
+                "dependency evidence must be sorted and unique"
+            )
         solver_names = tuple(item[0] for item in self.solver_evidence)
         if solver_names != tuple(sorted(set(solver_names))):
             raise ContractError("solver evidence must be sorted and unique")
@@ -614,11 +630,13 @@ class EnvironmentCapabilityReceiptV1:
     receipt_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.environment-capability-receipt.v1":
+        if (
+            self.schema_version
+            != "chemsmart.environment-capability-receipt.v1"
+        ):
             raise ContractError("unsupported environment receipt schema")
         if self.status is EnvironmentStatus.AVAILABLE and not (
-            self.compute_interpreter_sha256
-            or self.observed_location_sha256
+            self.compute_interpreter_sha256 or self.observed_location_sha256
         ):
             raise ContractError(
                 "available environment requires target identity evidence"
@@ -749,9 +767,7 @@ class ResolvedEngineBindingV1:
                 "requested_engine": self.requested_engine,
                 "selected_engine": self.selected_engine,
                 "program_binding_sha256": self.program_binding_sha256,
-                "capability_receipt_sha256": (
-                    self.capability_receipt_sha256
-                ),
+                "capability_receipt_sha256": (self.capability_receipt_sha256),
                 "environment_receipt_sha256": self.environment_receipt_sha256,
                 "state": self.state,
                 "execution_ready": self.execution_ready,
@@ -785,7 +801,9 @@ def load_program_capabilities(
         raise ContractError("settings capability registry is not a mapping")
 
     programs = []
-    for raw_name, raw in sorted(raw_registry.items(), key=lambda item: str(item[0])):
+    for raw_name, raw in sorted(
+        raw_registry.items(), key=lambda item: str(item[0])
+    ):
         program = require_identifier(str(raw_name), "program")
         declared = require_identifier(
             str(getattr(raw, "program", program)), "declared program"
@@ -794,9 +812,7 @@ def load_program_capabilities(
             raise ContractError("capability mapping key differs from program")
         jobtypes = _normalized_tuple(getattr(raw, "jobtypes", ()), "jobtypes")
         engines = _normalized_tuple(getattr(raw, "engines", ()), "engines")
-        raw_matrix = tuple(
-            getattr(raw, "engine_job_capabilities", ()) or ()
-        )
+        raw_matrix = tuple(getattr(raw, "engine_job_capabilities", ()) or ())
         if raw_matrix:
             engine_job_capabilities = tuple(
                 sorted(
@@ -904,12 +920,9 @@ def build_support_overlay(
             raise ContractError(
                 "support overlay broadens declared engine-job capability"
             )
-        if (
-            rule.support_level is SupportLevel.AVAILABLE
-            and not set(allowed_pairs).issubset(
-                capability.execution_engine_job_pairs
-            )
-        ):
+        if rule.support_level is SupportLevel.AVAILABLE and not set(
+            allowed_pairs
+        ).issubset(capability.execution_engine_job_pairs):
             raise ContractError(
                 "execution overlay includes a preview-only engine-job pair"
             )
@@ -984,9 +997,7 @@ def build_program_component_conformance_receipt(
 def build_command_compiled_preview_overlay(
     registry: ProgramCapabilityRegistryV1 | None = None,
     *,
-    conformance_receipts: Iterable[
-        ProgramComponentConformanceReceiptV1
-    ] = (),
+    conformance_receipts: Iterable[ProgramComponentConformanceReceiptV1] = (),
     live_schema: Any | None = None,
 ) -> ProgramSupportOverlayV1:
     """Build an observation-bound, fail-closed preview support declaration.
@@ -1002,9 +1013,7 @@ def build_command_compiled_preview_overlay(
 
         live_schema = build_live_click_schema()
     conformance_receipts = tuple(conformance_receipts)
-    evidence_by_program = {
-        item.program: item for item in conformance_receipts
-    }
+    evidence_by_program = {item.program: item for item in conformance_receipts}
     if len(evidence_by_program) != len(conformance_receipts):
         raise ContractError("program conformance receipts must be unique")
     rules = []
@@ -1045,9 +1054,7 @@ def build_command_compiled_preview_overlay(
                 allowed_jobtypes=(
                     evidence.covered_jobtypes if operable else ()
                 ),
-                allowed_engines=(
-                    evidence.covered_engines if operable else ()
-                ),
+                allowed_engines=(evidence.covered_engines if operable else ()),
                 allowed_engine_job_pairs=(
                     evidence.effective_engine_job_pairs if operable else ()
                 ),
@@ -1260,20 +1267,10 @@ def query_capability(
                 effective_engine_job_pairs = rule_pairs
             if rule_pairs:
                 effective_jobtypes = tuple(
-                    sorted(
-                        {
-                            jobtype
-                            for _engine, jobtype in rule_pairs
-                        }
-                    )
+                    sorted({jobtype for _engine, jobtype in rule_pairs})
                 )
                 effective_engines = tuple(
-                    sorted(
-                        {
-                            engine
-                            for engine, _jobtype in rule_pairs
-                        }
-                    )
+                    sorted({engine for engine, _jobtype in rule_pairs})
                 )
         if overlay is None or rule is None:
             status = CapabilityQueryStatus.DISABLED
@@ -1287,12 +1284,9 @@ def query_capability(
         elif (
             query.jobtype
             and query.engine
-            and (query.engine, query.jobtype)
-            not in effective_engine_job_pairs
+            and (query.engine, query.jobtype) not in effective_engine_job_pairs
         ):
-            status = (
-                CapabilityQueryStatus.UNSUPPORTED_ENGINE_JOB_COMBINATION
-            )
+            status = CapabilityQueryStatus.UNSUPPORTED_ENGINE_JOB_COMBINATION
         elif level is SupportLevel.REFERENCE_ONLY:
             status = CapabilityQueryStatus.REFERENCE_ONLY
         elif query.jobtype and not (
@@ -1392,7 +1386,10 @@ def query_environment(
                 missing_rules.append(
                     f"environment.dependency.{dependency}_missing"
                 )
-        for dependency, expected_version in target.required_dependency_versions:
+        for (
+            dependency,
+            expected_version,
+        ) in target.required_dependency_versions:
             if dependencies.get(dependency) != expected_version:
                 missing_rules.append(
                     f"environment.dependency.{dependency}_version_mismatch"
@@ -1445,9 +1442,11 @@ def query_environment(
         ),
         observation_method=method,
         rule_ids=(
-            "environment.target.available"
-            if available
-            else "environment.target.missing",
+            (
+                "environment.target.available"
+                if available
+                else "environment.target.missing"
+            ),
         ),
     )
 
@@ -1485,9 +1484,11 @@ def build_trusted_compute_environment_receipt(
             sorted(
                 (
                     require_identifier(name, "gpu evidence"),
-                    canonical_sha256(value)
-                    if isinstance(value, (dict, list, tuple))
-                    else value,
+                    (
+                        canonical_sha256(value)
+                        if isinstance(value, (dict, list, tuple))
+                        else value
+                    ),
                 )
                 for name, value in (gpu_evidence or {}).items()
             )
@@ -1548,7 +1549,10 @@ def consume_pyscf_compute_environment_receipt(
         if version
     }
     for name, detail in dependencies_raw.items():
-        if not isinstance(detail, Mapping) or detail.get("available") is not True:
+        if (
+            not isinstance(detail, Mapping)
+            or detail.get("available") is not True
+        ):
             continue
         dependency_name = str(name).lower()
         if dependency_name == "libxc":
@@ -1598,24 +1602,16 @@ def consume_pyscf_compute_environment_receipt(
     )
     gpu4pyscf_detail = raw.get("gpu4pyscf_distribution")
     gpu4pyscf_detail = (
-        gpu4pyscf_detail
-        if isinstance(gpu4pyscf_detail, Mapping)
-        else {}
+        gpu4pyscf_detail if isinstance(gpu4pyscf_detail, Mapping) else {}
     )
     gpu_evidence = {
         "cuda_available": int(raw.get("cuda_available", 0) or 0) > 0,
-        "cuda_driver_version": int(
-            raw.get("cuda_driver_version", 0) or 0
-        ),
-        "cuda_runtime_version": int(
-            raw.get("cuda_runtime_version", 0) or 0
-        ),
+        "cuda_driver_version": int(raw.get("cuda_driver_version", 0) or 0),
+        "cuda_runtime_version": int(raw.get("cuda_runtime_version", 0) or 0),
         "cupy_version": str(cupy_detail.get("version") or ""),
         "cupy_distribution_name": str(cupy_detail.get("name") or ""),
         "cutensor_version": str(cutensor_detail.get("version") or ""),
-        "cutensor_runtime_version": int(
-            raw.get("cutensor_runtime", 0) or 0
-        ),
+        "cutensor_runtime_version": int(raw.get("cutensor_runtime", 0) or 0),
         "cutensor_compatible": raw.get("cutensor_compatible") is True,
         "cutensor_runtime_available": (
             raw.get("cutensor_runtime_available") is True
@@ -1625,9 +1621,7 @@ def consume_pyscf_compute_environment_receipt(
         "gpu_model": str(raw.get("device_name") or ""),
         "gpu_uuid": str(raw.get("device_uuid") or ""),
         "gpu4pyscf_distribution": bool(gpu4pyscf_detail),
-        "gpu4pyscf_distribution_name": str(
-            gpu4pyscf_detail.get("name") or ""
-        ),
+        "gpu4pyscf_distribution_name": str(gpu4pyscf_detail.get("name") or ""),
         "gpu4pyscf_distribution_suffix_supported": bool(
             str(gpu4pyscf_detail.get("name") or "") == "gpu4pyscf"
             or str(gpu4pyscf_detail.get("name") or "").startswith(
@@ -1703,7 +1697,9 @@ def resolve_program_engine_binding(
 ) -> ResolvedEngineBindingV1:
     """Compatibility wrapper returning the canonical engine binding."""
 
-    return resolve_engine_binding(resolve_program_binding(capability), environment)
+    return resolve_engine_binding(
+        resolve_program_binding(capability), environment
+    )
 
 
 def resolve_program_binding(
@@ -1752,7 +1748,10 @@ def resolve_engine_binding(
         raise ContractError(
             "environment capability differs from program binding"
         )
-    if environment.query.capability_receipt_sha256 != capability_receipt_sha256:
+    if (
+        environment.query.capability_receipt_sha256
+        != capability_receipt_sha256
+    ):
         raise ContractError("environment query and receipt bindings differ")
     engine = environment.engine
     if program_binding.state == "blocked":
