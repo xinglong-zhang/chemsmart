@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import click
@@ -11,7 +12,9 @@ from chemsmart.utils.cli import MyGroup
 
 def _task_options(function):
     options = (
-        click.option("--task", type=str, default=None, help="Natural-language task."),
+        click.option(
+            "--task", type=str, default=None, help="Natural-language task."
+        ),
         click.option(
             "--task-file",
             type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -133,6 +136,81 @@ def run(
         analysis_completion_file=analysis_completion_file,
     )
     click.echo(result.public_summary_json())
+
+
+@agent.command("execute")
+@click.option(
+    "--approval-file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Host workflow approval to execute. Required: this command runs an "
+    "already-approved plan and never produces one.",
+)
+@click.option(
+    "--workspace",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Approved workspace holding the geometry and project artifacts.",
+)
+@click.option(
+    "--run-directory",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Where the append-only event stream and receipts are written.",
+)
+@click.option(
+    "--task-spec-sha256",
+    default="",
+    help="Task specification digest the approval was frozen against.",
+)
+def execute(approval_file, workspace, run_directory, task_spec_sha256):
+    """Execute an approved workflow deterministically, with no model.
+
+    Every scientific choice -- program, project YAML, method, node graph,
+    charge and multiplicity -- was made when the plan was written and is
+    frozen in the approval. What remains is bookkeeping with one right
+    answer, so this command takes no provider and no credential: it cannot
+    reach a model, and its options say so.
+    """
+
+    from chemsmart.agent.executor import execute_approved_workflow
+
+    result = execute_approved_workflow(
+        approval_file=approval_file,
+        workspace=workspace,
+        run_directory=run_directory,
+        task_spec_sha256=task_spec_sha256,
+    )
+    click.echo(
+        json.dumps(
+            {
+                "workflow_id": result.workflow_id,
+                "plan_sha256": result.plan_sha256,
+                "approval_sha256": result.approval_sha256,
+                "status": result.status,
+                "provider_calls": result.provider_calls,
+                "run_directory": result.run_directory,
+                "nodes": [
+                    {
+                        "node_id": node.node_id,
+                        "program": node.program,
+                        "jobtype": node.jobtype,
+                        "state": node.state,
+                        "invocation_identity_sha256": (
+                            node.invocation_identity_sha256
+                        ),
+                        "execution_receipt_sha256": (
+                            node.execution_receipt_sha256
+                        ),
+                        "failure": node.failure,
+                    }
+                    for node in result.nodes
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 @agent.command("experiment")
