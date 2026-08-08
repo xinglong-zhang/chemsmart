@@ -1,4 +1,5 @@
 import logging
+import re
 
 from chemsmart.io.gaussian import (
     GAUSSIAN_AB_INITIO,
@@ -209,22 +210,28 @@ class GaussianRoute:
         """
         Extract job type from route specification.
         """
-        # get job type: opt/ts/sp/ircf/ircr
-        if "ts" in self.route_string:
+        # Match whole route keywords and resolve IRC before TS.  A raw
+        # substring check misclassified ``maxpoints`` in every IRC route as
+        # the two letters ``ts``.
+        if "irc" in self.route_string and "forward" in self.route_string:
+            jobtype = "ircf"
+        elif "irc" in self.route_string and "reverse" in self.route_string:
+            jobtype = "ircr"
+        elif re.search(r"(?<![a-z0-9_])irc(?![a-z0-9_])", self.route_string):
+            jobtype = "irc"
+        elif re.search(r"(?<![a-z0-9_])ts(?![a-z0-9_])", self.route_string):
             jobtype = "ts"
         elif (
             "opt" in self.route_string
-            and "ts" not in self.route_string
+            and not re.search(
+                r"(?<![a-z0-9_])ts(?![a-z0-9_])", self.route_string
+            )
             and "modred" not in self.route_string
             and "stable=opt" not in self.route_string
         ):
             jobtype = "opt"
         elif "opt=modred" in self.route_string:
             jobtype = "modred"  # would include scan jobs too
-        elif "irc" in self.route_string and "forward" in self.route_string:
-            jobtype = "ircf"
-        elif "irc" in self.route_string and "reverse" in self.route_string:
-            jobtype = "ircr"
         elif "output=wfn" in self.route_string:
             jobtype = "nci"
         elif (

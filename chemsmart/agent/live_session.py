@@ -2128,7 +2128,13 @@ _CONFORMANCE_PROJECT_SHAPES = {
 
 
 def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
-    """Return the core stages ``program`` previews on ``engine``."""
+    """Return the declared stages ``program`` previews on ``engine``.
+
+    An explicit engine/job matrix is the program owner's bounded preview
+    surface.  The legacy core-stage intersection remains only for older
+    declarations whose independent engine and job lists would otherwise form
+    an unverified Cartesian product.
+    """
 
     from chemsmart.settings.capabilities import ENGINE_CAPABILITIES
 
@@ -2144,8 +2150,8 @@ def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
             for item in pairs
             if item.engine == engine and item.preview_supported
         }
-    else:
-        declared = set(capability.jobtypes)
+        return tuple(sorted(declared))
+    declared = set(capability.jobtypes)
     return tuple(sorted(declared & _CONFORMANCE_CORE_STAGES))
 
 

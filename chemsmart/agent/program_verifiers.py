@@ -251,9 +251,17 @@ def _validate_native_input(expectation, paths):
             "multiplicity": expectation.multiplicity,
         }
     )
+    parsed_candidates = [
+        (path, settings_cls.from_filepath(str(path))) for path in candidates
+    ]
+    if expectation.program == "gaussian" and expectation.jobtype == "irc":
+        return _validate_gaussian_irc_bundle(
+            expectation,
+            parsed_candidates,
+            expected_settings=expected_settings,
+        )
     matches = []
-    for path in candidates:
-        parsed = settings_cls.from_filepath(str(path))
+    for path, parsed in parsed_candidates:
         matches.append(
             _settings_match(
                 parsed,
@@ -275,6 +283,48 @@ def _validate_native_input(expectation, paths):
             )
         ]
     return []
+
+
+def _validate_gaussian_irc_bundle(
+    expectation,
+    parsed_candidates,
+    *,
+    expected_settings,
+):
+    """Validate one canonical IRC node as forward and reverse native inputs."""
+
+    directions = tuple(
+        sorted(
+            getattr(parsed, "jobtype", "")
+            for _path, parsed in parsed_candidates
+        )
+    )
+    if directions != ("ircf", "ircr"):
+        return [
+            _mismatch(
+                "jobtype_bundle",
+                ("ircf", "ircr"),
+                directions,
+                "generated:native_input_bundle",
+            )
+        ]
+
+    shared_expected = dict(expected_settings)
+    shared_expected.pop("jobtype", None)
+    findings = []
+    for path, parsed in parsed_candidates:
+        findings.extend(_settings_match(parsed, shared_expected))
+        if not _geometry_sets_equal(expectation.input_artifact.path, [path]):
+            findings.append(
+                PreviewValidationFindingV1(
+                    "preview.geometry.mismatch",
+                    "geometry",
+                    expectation.input_artifact.sha256,
+                    f"generated geometry differs in {path.name}",
+                    path.name,
+                )
+            )
+    return findings
 
 
 def _validate_xtb_preview(expectation, paths):

@@ -287,6 +287,13 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             ),
             project_owned_parameters=_GAUSSIAN_PROJECT_PARAMETERS,
             engines=("cpu",),
+            engine_job_capabilities=(
+                EngineJobCapability(engine="cpu", jobtype="irc"),
+                EngineJobCapability(engine="cpu", jobtype="opt"),
+                EngineJobCapability(engine="cpu", jobtype="sp"),
+                EngineJobCapability(engine="cpu", jobtype="td"),
+                EngineJobCapability(engine="cpu", jobtype="ts"),
+            ),
             project_section_names=("gas", "solv"),
         ),
         "nciplot": ProgramCapability(
