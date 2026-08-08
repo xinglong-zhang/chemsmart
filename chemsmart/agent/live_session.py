@@ -180,6 +180,10 @@ class _PySCFResultObservation:
     validation_receipt_sha256: str
     scientific_validation_state: str
 
+    @property
+    def program(self) -> str:
+        return "pyscf"
+
     def public_record(self) -> dict[str, Any]:
         return {
             "artifact_id": self.artifact.artifact_id,
@@ -204,6 +208,46 @@ class _PySCFResultObservation:
             ),
             "provenance_status": "workspace_exact_structured_result",
         }
+
+
+@dataclass(frozen=True)
+class _LoggedResultObservation:
+    """One validated native-output artifact exposed through a shared reader."""
+
+    artifact: TrustedArtifactRefV1
+    program: str
+    jobtype: str
+    method: str
+    engine: str
+    charge: int
+    multiplicity: int
+    project_yaml_sha256: str
+    input_artifact_sha256: str
+    validation_receipt_sha256: str
+    scientific_validation_state: str
+
+    def public_record(self) -> dict[str, Any]:
+        return {
+            "artifact_id": self.artifact.artifact_id,
+            "artifact_class": self.artifact.kind,
+            "sha256": self.artifact.sha256,
+            "size_bytes": self.artifact.size_bytes,
+            "program": self.program,
+            "jobtype": self.jobtype,
+            "requested_method": self.method,
+            "applied_method": self.method,
+            "engine": self.engine,
+            "charge": self.charge,
+            "multiplicity": self.multiplicity,
+            "project_yaml_sha256": self.project_yaml_sha256,
+            "input_artifact_sha256": self.input_artifact_sha256,
+            "validation_receipt_sha256": self.validation_receipt_sha256,
+            "scientific_validation_state": self.scientific_validation_state,
+            "provenance_status": "workspace_exact_validated_native_result",
+        }
+
+
+_ResultObservation = _PySCFResultObservation | _LoggedResultObservation
 
 
 @dataclass(frozen=True)
@@ -519,7 +563,7 @@ def probe_live_experiment_preparation(
     )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
-    result_observations = _scan_pyscf_result_artifacts(workspace_path)
+    result_observations = _scan_result_artifacts(workspace_path)
     if not observations:
         raise ContractError("experiment preparation requires an exact XYZ")
     identity_records = _validated_identity_records(
@@ -680,7 +724,7 @@ def run_live_agent_session(
         )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
-    result_observations = _scan_pyscf_result_artifacts(workspace_path)
+    result_observations = _scan_result_artifacts(workspace_path)
     identities = _coerce_approved_identities(
         approved_molecular_identity, approved_molecular_identities
     )
@@ -820,6 +864,7 @@ def run_live_agent_session(
         "result_functional_evidence": {
             item.validation_receipt_sha256: item.public_record()
             for item in result_observations
+            if item.program == "pyscf"
         },
         "analysis_completion_policy": analysis_completion_policy,
         "dependency_context": dependency_context,
@@ -1770,6 +1815,130 @@ def _scan_pyscf_result_artifacts(
     )
 
 
+def _scan_xtb_result_artifacts(
+    workspace: Path,
+) -> tuple[_LoggedResultObservation, ...]:
+    """Admit validated xTB native outputs to the shared quantity tool chain.
+
+    The xTB runner already emits a complete result receipt next to its native
+    output.  This adapter reuses that program contract and exposes the output
+    under the registered ``xtb_output`` reader kind; it does not add a second
+    parser or a paper-specific result path.
+    """
+
+    from chemsmart.jobs.xtb.validation import audit_xtb_result_receipt
+
+    observations: dict[str, _LoggedResultObservation] = {}
+    private_root = workspace / _PRIVATE_ROOT_NAME
+    host_artifact_root = workspace / "artifacts"
+    host_node_root = workspace / "nodes"
+    for receipt_path in sorted(workspace.rglob("*.xtb-result-receipt.json")):
+        if any(
+            root in receipt_path.parents
+            for root in (private_root, host_artifact_root, host_node_root)
+        ):
+            continue
+        if receipt_path.is_symlink() or not receipt_path.is_file():
+            continue
+        try:
+            receipt_path.resolve().relative_to(workspace)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            requested = receipt["requested_settings"]
+            jobtype = str(requested["jobtype"]).strip().lower()
+            charge = requested["charge"]
+            multiplicity = requested["multiplicity"]
+            observation, findings = audit_xtb_result_receipt(
+                receipt_path,
+                expected_jobtype=jobtype,
+                expected_charge=charge,
+                expected_multiplicity=multiplicity,
+                expected_settings={
+                    key: requested.get(key)
+                    for key in (
+                        "gfn_version",
+                        "solvent_model",
+                        "solvent_id",
+                        "grad",
+                    )
+                },
+            )
+            if findings:
+                continue
+            artifacts = receipt["artifacts"]
+            output_names = tuple(
+                sorted(name for name in artifacts if str(name).endswith(".out"))
+            )
+            if len(output_names) != 1:
+                continue
+            output_path = (receipt_path.parent / output_names[0]).resolve()
+            output_path.relative_to(workspace)
+            output_record = artifacts[output_names[0]]
+            digest = file_sha256(output_path)
+            if (
+                output_record.get("sha256") != digest
+                or output_record.get("size") != output_path.stat().st_size
+                or observation.get("final_energy_hartree") is None
+                or not isinstance(charge, int)
+                or not isinstance(multiplicity, int)
+                or multiplicity < 1
+            ):
+                continue
+            project_record = receipt.get("project_artifact") or {}
+            source_record = receipt.get("source_artifact") or {}
+            validation_receipt_sha256 = str(receipt["receipt_sha256"])
+            artifact = TrustedArtifactRefV1(
+                artifact_id=f"xtb-result-{digest[:16]}",
+                kind="xtb_output",
+                sha256=digest,
+                size_bytes=output_path.stat().st_size,
+                path=str(output_path),
+                cli_value=str(output_path),
+            )
+            observations.setdefault(
+                digest,
+                _LoggedResultObservation(
+                    artifact=artifact,
+                    program="xtb",
+                    jobtype=jobtype,
+                    method=str(requested["gfn_version"]).strip().lower(),
+                    engine="cpu",
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    project_yaml_sha256=str(project_record.get("sha256") or ""),
+                    input_artifact_sha256=str(source_record.get("sha256") or ""),
+                    validation_receipt_sha256=validation_receipt_sha256,
+                    scientific_validation_state=str(receipt["validation_state"]),
+                ),
+            )
+        except (
+            ContractError,
+            KeyError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
+            continue
+    return tuple(
+        sorted(observations.values(), key=lambda item: item.artifact.artifact_id)
+    )
+
+
+def _scan_result_artifacts(workspace: Path) -> tuple[_ResultObservation, ...]:
+    """Collect every registered, analysis-ready program result."""
+
+    return tuple(
+        sorted(
+            (
+                *_scan_pyscf_result_artifacts(workspace),
+                *_scan_xtb_result_artifacts(workspace),
+            ),
+            key=lambda item: item.artifact.artifact_id,
+        )
+    )
+
+
 def _inspect_xyz(path: Path) -> tuple[int, tuple[str, ...]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -1806,7 +1975,7 @@ def _task_spec_sha256(
         | None
     ) = None,
     *,
-    result_observations: Iterable[_PySCFResultObservation] = (),
+    result_observations: Iterable[_ResultObservation] = (),
 ) -> str:
     identities = _coerce_approved_identities(
         (
@@ -1841,7 +2010,7 @@ def _task_spec_sha256(
             {
                 "artifact_id": item.artifact.artifact_id,
                 "sha256": item.artifact.sha256,
-                "program": "pyscf",
+                "program": item.program,
                 "jobtype": item.jobtype,
             }
             for item in result_observations
@@ -2532,7 +2701,7 @@ def _public_context(
     task: str,
     task_spec_sha256: str,
     observations: tuple[_XyzObservation, ...],
-    result_observations: tuple[_PySCFResultObservation, ...] = (),
+    result_observations: tuple[_ResultObservation, ...] = (),
     conformance_records: tuple[dict[str, Any], ...],
     registry_sha256: str,
     live_schema_sha256: str,
@@ -2878,7 +3047,10 @@ def _system_prompt(
         "environment support it; otherwise label it as a scientifically relevant "
         "but unmaterialized alternative. PySCF project stage keys are exactly "
         "sp, opt, hess, and preview-only td; xTB project stage keys are exactly "
-        "sp, opt, and hess. "
+        "sp, opt, and hess. Gaussian and ORCA projects retain gas/solv phase "
+        "sections: SP consumes solv or an explicit sp override even for a "
+        "gas-phase calculation, and physical solvation is enabled only by the "
+        "solvent settings themselves. "
         "workflow node IDs may separately express initial or optimized geometry. "
         "For each job, pass the exact receipt_sha256 returned by that job's "
         "inspect_program_capability call into environment inspection and project "
@@ -2894,6 +3066,10 @@ def _system_prompt(
         "with empty producer_node_id and producer_output_id strings; represent a "
         "future optimized input with its producer IDs and no invented artifact ID. "
         "Omit absent optional settings instead of encoding them as the string none. "
+        "If a corrected project is promoted under a new artifact ID after the "
+        "workflow was planned, use rebind_scientific_workflow_projects so the "
+        "latest DAG names that validated project; do not leave a repaired "
+        "project detached from the final workflow. "
         "When an approved project artifact is supplied, read and validate that exact "
         "artifact instead of rerendering an equivalent project. "
         "If critical evidence is missing, identify it and block honestly. "

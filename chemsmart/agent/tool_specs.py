@@ -131,8 +131,12 @@ def build_command_compiled_tool_surface(
             "render_project_yaml",
             (
                 "Render a typed project candidate; this does not validate or "
-                "write it. Sections must be an object whose stage names map "
-                "to setting-name/value objects, never a list."
+                "write it. Sections must be an object mapping section names "
+                "to setting-name/value objects, never a list. PySCF and xTB "
+                "use job sections. Gaussian and ORCA retain gas/solv phase "
+                "sections plus optional job overrides: SP reads solv or an "
+                "explicit sp override even for a physically gas-phase job; "
+                "the section name solv does not enable solvation by itself."
             ),
             {
                 "program": program,
@@ -180,7 +184,12 @@ def build_command_compiled_tool_surface(
         ),
         _tool(
             "validate_project_yaml",
-            "Validate a bound project through the checked-out settings loader.",
+            (
+                "Validate a bound project through the checked-out settings "
+                "loader and report which YAML sections actually feed the "
+                "requested job. Loader-valid with no explicit applied settings "
+                "requires a project-section repair before planning."
+            ),
             {
                 "project_artifact_id": _string(),
                 "capability_receipt_sha256": digest,
@@ -258,6 +267,35 @@ def build_command_compiled_tool_surface(
                 "analysis_nodes",
                 "required_output_ids",
             ),
+        ),
+        _tool(
+            "rebind_scientific_workflow_projects",
+            (
+                "Replace only project-artifact roles in the latest scientific "
+                "workflow after a corrected project has been promoted and "
+                "validated. The host preserves calculation identities, inputs, "
+                "outputs, dependencies, analysis nodes, and required outputs. "
+                "Use this instead of resubmitting the entire DAG after a "
+                "project-only repair."
+            ),
+            {
+                "workflow_id": _public_identifier(),
+                "replacements": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "node_id": _public_identifier(),
+                            "project_role": _public_identifier(),
+                        },
+                        "required": ["node_id", "project_role"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ("workflow_id", "replacements"),
         ),
         _tool(
             "inspect_workflow_frontier",
@@ -1158,11 +1196,45 @@ def _analysis_intent_node_schema() -> dict:
                 "type": "array",
                 "items": _public_identifier(),
             },
+            "validation_rules": {
+                "type": "array",
+                "description": (
+                    "Program-neutral validation predicates over named typed "
+                    "inputs. Use minimum_greater_equal with threshold 0 cm-1 "
+                    "for a no-imaginary-frequency requirement; do not hide "
+                    "criteria only in prose."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "rule_id": _public_identifier(),
+                        "predicate": {
+                            "type": "string",
+                            "enum": [
+                                "all_equal",
+                                "all_finite",
+                                "count_equals",
+                                "maximum_absolute_less_equal",
+                                "minimum_greater_equal",
+                                "symmetric_within",
+                            ],
+                        },
+                        "input_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": _public_identifier(),
+                        },
+                        "threshold": {"type": "number"},
+                        "expected_count": {"type": "integer", "minimum": 0},
+                        "unit": _string(),
+                    },
+                    "required": ["rule_id", "predicate", "input_ids"],
+                    "additionalProperties": False,
+                },
+            },
             # Most analysis kinds have no thermodynamic state, and the node
-            # contract accepts None for them.  Refusing an explicit null while
-            # accepting an omitted key made the honest way to say "this stage
-            # has no temperature" the one the schema rejected -- a live session
-            # sent null on a result-extraction node and was refused for it.
+            # contract accepts None for them. Refusing an explicit null while
+            # accepting an omitted key makes an honest stateless analysis fail.
             "temperature_k": _nullable_positive_number(),
             "pressure_atm": _nullable_positive_number(),
             "support_state": {

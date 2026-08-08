@@ -29,6 +29,14 @@ ANALYSIS_INTENT_KINDS = (
     "unsupported_external",
 )
 ANALYSIS_INTENT_SUPPORT_STATES = ("blocked_unsupported", "planned")
+ANALYSIS_VALIDATION_PREDICATES = (
+    "all_equal",
+    "all_finite",
+    "count_equals",
+    "maximum_absolute_less_equal",
+    "minimum_greater_equal",
+    "symmetric_within",
+)
 
 
 class ScientificToolchainContractError(ContractError):
@@ -102,6 +110,61 @@ class AnalysisOutputIntentV1:
 
 
 @dataclass(frozen=True)
+class AnalysisValidationRuleIntentV1:
+    """One program-neutral numerical or categorical validation predicate."""
+
+    rule_id: str
+    predicate: str
+    input_ids: tuple[str, ...]
+    threshold: float | None = None
+    expected_count: int | None = None
+    unit: str = ""
+
+    def __post_init__(self) -> None:
+        _identifier(self.rule_id, "analysis validation rule_id")
+        if self.predicate not in ANALYSIS_VALIDATION_PREDICATES:
+            raise ScientificToolchainContractError(
+                "unsupported analysis validation predicate"
+            )
+        object.__setattr__(self, "input_ids", tuple(self.input_ids))
+        _sorted_unique(self.input_ids, "analysis validation input IDs")
+        if not self.input_ids:
+            raise ScientificToolchainContractError(
+                "analysis validation rule requires a typed input"
+            )
+        if self.predicate == "count_equals":
+            if self.expected_count is None or self.expected_count < 0:
+                raise ScientificToolchainContractError(
+                    "count_equals requires a non-negative expected_count"
+                )
+            if self.threshold is not None or self.unit:
+                raise ScientificToolchainContractError(
+                    "count_equals does not accept threshold or unit"
+                )
+        elif self.predicate in {
+            "maximum_absolute_less_equal",
+            "minimum_greater_equal",
+            "symmetric_within",
+        }:
+            if self.threshold is None or not str(self.unit).strip():
+                raise ScientificToolchainContractError(
+                    f"{self.predicate} requires threshold and unit"
+                )
+            if self.expected_count is not None:
+                raise ScientificToolchainContractError(
+                    f"{self.predicate} does not accept expected_count"
+                )
+        elif (
+            self.threshold is not None
+            or self.expected_count is not None
+            or self.unit
+        ):
+            raise ScientificToolchainContractError(
+                f"{self.predicate} accepts only input_ids"
+            )
+
+
+@dataclass(frozen=True)
 class AnalysisNodeIntentV1:
     """One extraction, validation, mathematics, or reporting intent."""
 
@@ -117,6 +180,7 @@ class AnalysisNodeIntentV1:
     pressure_atm: float | None
     support_state: str
     blocked_reason: str
+    validation_rules: tuple[AnalysisValidationRuleIntentV1, ...] = ()
 
     def __post_init__(self) -> None:
         _identifier(self.node_id, "analysis node_id")
@@ -132,6 +196,7 @@ class AnalysisNodeIntentV1:
         object.__setattr__(self, "inputs", tuple(self.inputs))
         object.__setattr__(self, "selectors", tuple(self.selectors))
         object.__setattr__(self, "outputs", tuple(self.outputs))
+        object.__setattr__(self, "validation_rules", tuple(self.validation_rules))
         object.__setattr__(
             self,
             "expression_nodes",
@@ -155,6 +220,10 @@ class AnalysisNodeIntentV1:
             tuple(item.output_id for item in self.outputs),
             "analysis output IDs",
         )
+        _sorted_unique(
+            tuple(item.rule_id for item in self.validation_rules),
+            "analysis validation rule IDs",
+        )
         if not self.outputs:
             raise ScientificToolchainContractError(
                 "analysis intent must preserve at least one output"
@@ -177,6 +246,18 @@ class AnalysisNodeIntentV1:
             raise ScientificToolchainContractError(
                 "selectors apply only to result extraction"
             )
+        if self.analysis_kind != "scientific_validation" and self.validation_rules:
+            raise ScientificToolchainContractError(
+                "validation_rules apply only to scientific_validation"
+            )
+        input_ids = {item.input_id for item in self.inputs}
+        for rule in self.validation_rules:
+            unknown = set(rule.input_ids).difference(input_ids)
+            if unknown:
+                raise ScientificToolchainContractError(
+                    f"validation rule {rule.rule_id!r} references unknown inputs "
+                    f"{sorted(unknown)}"
+                )
         if self.analysis_kind == "thermochemistry":
             if self.temperature_k is None or self.temperature_k <= 0:
                 raise ScientificToolchainContractError(
@@ -351,6 +432,7 @@ def build_scientific_toolchain_plan(
             pressure_atm=node.pressure_atm,
             support_state=node.support_state,
             blocked_reason=node.blocked_reason,
+            validation_rules=node.validation_rules,
         )
         normalized_analyses.append(normalized)
         dependencies[node.node_id].update(effective_dependencies)
@@ -544,6 +626,8 @@ __all__ = [
     "AnalysisNodeIntentV1",
     "AnalysisOutputIntentV1",
     "AnalysisSelectorIntentV1",
+    "AnalysisValidationRuleIntentV1",
+    "ANALYSIS_VALIDATION_PREDICATES",
     "ScientificToolchainContractError",
     "ScientificToolchainPlanV1",
     "build_scientific_toolchain_plan",

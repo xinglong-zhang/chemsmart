@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 import math
@@ -123,6 +123,7 @@ from chemsmart.agent.projects import (
     ProjectValidationReceiptV1,
     PySCFFunctionalResolutionReceiptV1,
     project_document,
+    project_section_application_observation,
     project_scientific_materializations,
     read_project_yaml,
     render_project_yaml,
@@ -135,6 +136,7 @@ from chemsmart.agent.scientific_toolchain import (
     AnalysisNodeIntentV1,
     AnalysisOutputIntentV1,
     AnalysisSelectorIntentV1,
+    AnalysisValidationRuleIntentV1,
     ScientificToolchainPlanV1,
     build_scientific_toolchain_plan,
     project_scientific_toolchain_frontier,
@@ -1328,6 +1330,9 @@ class CommandCompiledToolHostV1:
             "validate_project_yaml": self._validate_project_yaml,
             "plan_command_workflow": self._plan_command_workflow,
             "plan_scientific_workflow": self._plan_scientific_workflow,
+            "rebind_scientific_workflow_projects": (
+                self._rebind_scientific_workflow_projects
+            ),
             "inspect_workflow_frontier": self._inspect_workflow_frontier,
             "prepare_program_node": self._prepare_program_node,
             "synthesize_command": self._synthesize_command,
@@ -1631,6 +1636,10 @@ class CommandCompiledToolHostV1:
             "capability receipt",
         )
         receipt = validate_project_yaml(artifact, capability=capability)
+        document = read_project_yaml(artifact, program=capability.query.program)
+        section_application = project_section_application_observation(
+            document, jobtype=capability.query.jobtype
+        )
         self.project_validations[receipt.receipt_sha256] = receipt
         materializations = project_scientific_materializations(receipt)
         for materialization in materializations:
@@ -1666,7 +1675,59 @@ class CommandCompiledToolHostV1:
             "decision_binding": _scientific_decision_binding_requirement(
                 materializations
             ),
+            "section_application": section_application,
+            "workflow_binding": self._project_workflow_binding_observation(
+                artifact.artifact_id
+            ),
         }
+
+    def _project_workflow_binding_observation(
+        self, project_artifact_id: str
+    ) -> dict[str, Any]:
+        """Show whether a validated project participates in the latest DAG.
+
+        Project promotion is intentionally append-only, so a repaired YAML gets
+        a new artifact ID.  Without this small relational observation a model
+        can validate the replacement yet finish with an older project still
+        named by the workflow.  The observation contains only public host state
+        and never consults a benchmark answer.
+        """
+
+        latest_by_workflow: dict[str, ScientificToolchainPlanV1] = {}
+        for plan in self.scientific_toolchain_plans.values():
+            latest_by_workflow[plan.workflow_id] = plan
+        bindings: list[dict[str, Any]] = []
+        active_roles: dict[str, tuple[str, ...]] = {}
+        for workflow_id, plan in sorted(latest_by_workflow.items()):
+            command_result = self._scientific_toolchain_command_results[
+                plan.plan_sha256
+            ]
+            draft = command_result["workflow_draft"]
+            roles = tuple(sorted({node.project_role for node in draft.nodes}))
+            active_roles[workflow_id] = roles
+            for node in draft.nodes:
+                if node.project_role == project_artifact_id:
+                    bindings.append(
+                        {
+                            "workflow_id": workflow_id,
+                            "node_id": node.node_id,
+                        }
+                    )
+        if bindings:
+            return {
+                "status": "bound",
+                "bindings": tuple(bindings),
+            }
+        if active_roles:
+            return {
+                "status": "unbound",
+                "active_project_roles": active_roles,
+                "next_action": (
+                    "if this project repairs an active node, call "
+                    "rebind_scientific_workflow_projects"
+                ),
+            }
+        return {"status": "no_scientific_workflow_planned"}
 
     def _record_scientific_decision(self, turn_id: str, values: dict) -> Any:
         task_spec_sha256 = values["task_spec_sha256"]
@@ -2035,6 +2096,22 @@ class CommandCompiledToolHostV1:
                     pressure_atm=raw_node.get("pressure_atm"),
                     support_state=raw_node["support_state"],
                     blocked_reason=raw_node["blocked_reason"],
+                    validation_rules=tuple(
+                        sorted(
+                            (
+                                AnalysisValidationRuleIntentV1(
+                                    rule_id=item["rule_id"],
+                                    predicate=item["predicate"],
+                                    input_ids=tuple(sorted(set(item["input_ids"]))),
+                                    threshold=item.get("threshold"),
+                                    expected_count=item.get("expected_count"),
+                                    unit=item.get("unit", ""),
+                                )
+                                for item in raw_node.get("validation_rules", ())
+                            ),
+                            key=lambda item: item.rule_id,
+                        )
+                    ),
                 )
             )
         observables = {
@@ -2069,7 +2146,150 @@ class CommandCompiledToolHostV1:
             "workflow_frontier": frontier,
         }
 
-    def _inspect_workflow_frontier(self, turn_id: str, values: dict) -> Any:
+    def _rebind_scientific_workflow_projects(
+        self, turn_id: str, values: dict
+    ) -> Any:
+        """Clone the latest scientific DAG while changing project roles only."""
+
+        workflow_id = values["workflow_id"]
+        candidates = tuple(
+            plan
+            for plan in self.scientific_toolchain_plans.values()
+            if plan.workflow_id == workflow_id
+        )
+        if not candidates:
+            raise ContractError("unknown scientific workflow ID")
+        current_plan = candidates[-1]
+        current_result = self._scientific_toolchain_command_results[
+            current_plan.plan_sha256
+        ]
+        current_draft = current_result["workflow_draft"]
+        nodes_by_id = {node.node_id: node for node in current_draft.nodes}
+        replacements = {
+            item["node_id"]: item["project_role"]
+            for item in values["replacements"]
+        }
+        if len(replacements) != len(values["replacements"]):
+            raise ContractError("project rebindings must name each node once")
+        unknown = sorted(set(replacements).difference(nodes_by_id))
+        if unknown:
+            raise ContractError(
+                f"project rebindings reference unknown nodes {unknown}"
+            )
+
+        for node_id, project_role in replacements.items():
+            node = nodes_by_id[node_id]
+            project = self._artifact(project_role)
+            if project.kind != "project_yaml":
+                raise ContractError(
+                    f"replacement for node {node_id!r} is not project YAML"
+                )
+            valid = tuple(
+                receipt
+                for receipt in self.project_validations.values()
+                if receipt.project_artifact_id == project.artifact_id
+                and receipt.project_sha256 == project.sha256
+                and receipt.program == node.program
+                and receipt.jobtype == node.jobtype
+                and receipt.status == "valid"
+            )
+            if not valid:
+                raise ContractError(
+                    f"replacement project {project_role!r} is not validated "
+                    f"for {node.program}/{node.jobtype}"
+                )
+
+        revised_nodes = tuple(
+            replace(
+                node,
+                project_role=replacements.get(node.node_id, node.project_role),
+            )
+            for node in current_draft.nodes
+        )
+        scientific_v2 = current_result.get("scientific_workflow_plan")
+        annotations = {
+            node.node_id: {
+                "produces_observables": node.produces_observables,
+                "support_state": node.support_state,
+                "blocked_reason": node.blocked_reason,
+            }
+            for node in (scientific_v2.nodes if scientific_v2 else ())
+        }
+        command_result = self._plan_command_workflow(
+            turn_id,
+            {
+                "workflow_id": current_draft.workflow_id,
+                "task_spec_id": current_draft.task_spec_id,
+                "nodes": tuple(
+                    {
+                        "node_id": node.node_id,
+                        "program": node.program,
+                        "jobtype": node.jobtype,
+                        "project_role": node.project_role,
+                        "dependencies": node.dependencies,
+                        "inputs": tuple(
+                            {
+                                "binding_id": item.binding_id,
+                                "artifact_id": item.artifact_id,
+                                "artifact_class": item.artifact_class,
+                                "producer_node_id": item.producer_node_id,
+                                "producer_output_id": item.producer_output_id,
+                            }
+                            for item in node.inputs
+                        ),
+                        "expected_outputs": tuple(
+                            {
+                                "output_id": item.output_id,
+                                "artifact_class": item.artifact_class,
+                            }
+                            for item in node.expected_outputs
+                        ),
+                        "unresolved_fields": node.unresolved_fields,
+                    }
+                    for node in revised_nodes
+                ),
+            },
+            node_annotations=annotations,
+        )
+        draft = command_result["workflow_draft"]
+        observables = dict(current_plan.calculation_observables)
+        revised_plan = build_scientific_toolchain_plan(
+            plan_id=current_plan.plan_id,
+            workflow_id=current_plan.workflow_id,
+            command_workflow_draft_sha256=draft.draft_sha256,
+            calculation_nodes=draft.nodes,
+            calculation_observables=observables,
+            analysis_nodes=current_plan.analysis_nodes,
+            required_output_ids=current_plan.required_output_ids,
+        )
+        self.scientific_toolchain_plans[revised_plan.plan_sha256] = revised_plan
+        self._scientific_toolchain_command_results[
+            revised_plan.plan_sha256
+        ] = command_result
+        return {
+            "scientific_toolchain_plan": revised_plan,
+            "calculation_plan": command_result,
+            "workflow_frontier": project_scientific_toolchain_frontier(
+                revised_plan,
+                actionable_calculation_node_ids=command_result[
+                    "actionable_node_ids"
+                ],
+                unresolved_calculation_node_ids=command_result[
+                    "unresolved_node_ids"
+                ],
+            ),
+            "replacements": tuple(
+                {
+                    "node_id": node_id,
+                    "project_role": project_role,
+                }
+                for node_id, project_role in sorted(replacements.items())
+            ),
+        }
+
+    def _inspect_workflow_frontier(
+        self, turn_id: str, values: dict
+    ) -> Any:
         """Return the latest connected frontier for a named workflow."""
 
         del turn_id
