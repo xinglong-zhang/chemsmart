@@ -103,7 +103,9 @@ class ProgramPreviewValidationReceiptV1:
             raise ContractError("preview validation receipt digest mismatch")
 
 
-def _adapter(program: str, adapter_id: str, contract: str) -> ProgramVerifierAdapterV1:
+def _adapter(
+    program: str, adapter_id: str, contract: str
+) -> ProgramVerifierAdapterV1:
     body = {
         "program": program,
         "adapter_id": adapter_id,
@@ -122,7 +124,9 @@ def _adapter(program: str, adapter_id: str, contract: str) -> ProgramVerifierAda
 
 PROGRAM_PREVIEW_VERIFIERS = {
     "gaussian": _adapter(
-        "gaussian", "gaussian_native_input_v1", "parsed .com/.gjf plus geometry"
+        "gaussian",
+        "gaussian_native_input_v1",
+        "parsed .com/.gjf plus geometry",
     ),
     "orca": _adapter(
         "orca", "orca_native_input_v1", "parsed .inp plus geometry"
@@ -138,7 +142,9 @@ PROGRAM_PREVIEW_VERIFIERS = {
 }
 
 
-def program_support_status_matrix(registry) -> tuple[ProgramSupportStatusV1, ...]:
+def program_support_status_matrix(
+    registry,
+) -> tuple[ProgramSupportStatusV1, ...]:
     rows = []
     for capability in registry.programs:
         adapter = PROGRAM_PREVIEW_VERIFIERS.get(capability.program)
@@ -210,7 +216,11 @@ def validate_preview_workspace(
             )
         )
     artifact_rows = tuple(
-        (path.relative_to(root).as_posix(), path.stat().st_size, file_sha256(path))
+        (
+            path.relative_to(root).as_posix(),
+            path.stat().st_size,
+            file_sha256(path),
+        )
         for path in paths
     )
     body = {
@@ -227,14 +237,19 @@ def validate_preview_workspace(
 
 
 def _validate_native_input(expectation, paths):
-    suffixes = (".com", ".gjf") if expectation.program == "gaussian" else (".inp",)
+    suffixes = (
+        (".com", ".gjf") if expectation.program == "gaussian" else (".inp",)
+    )
     candidates = [path for path in paths if path.suffix.lower() in suffixes]
     if not candidates:
         return [_missing("native_input", suffixes, "workspace")]
     settings_cls = _settings_class(expectation.program)
     expected_settings = dict(expectation.settings)
     expected_settings.update(
-        {"charge": expectation.charge, "multiplicity": expectation.multiplicity}
+        {
+            "charge": expectation.charge,
+            "multiplicity": expectation.multiplicity,
+        }
     )
     matches = []
     for path in candidates:
@@ -274,7 +289,9 @@ def _validate_xtb_preview(expectation, paths):
         if payload.get("schema_version") == "chemsmart.xtb-preview.v1":
             receipts.append((path, payload))
     if len(receipts) != 1:
-        return [_missing("preview_receipt", "one hash-bound receipt", "workspace")]
+        return [
+            _missing("preview_receipt", "one hash-bound receipt", "workspace")
+        ]
     receipt_path, payload = receipts[0]
     from chemsmart.jobs.xtb.validation import canonical_sha256 as xtb_sha256
 
@@ -318,11 +335,16 @@ def _validate_xtb_preview(expectation, paths):
         ]
         generated_xyz = candidates[0] if len(candidates) == 1 else None
     if generated_xyz is None:
-        findings.append(_missing("geometry", "receipt-bound XYZ", receipt_path.name))
+        findings.append(
+            _missing("geometry", "receipt-bound XYZ", receipt_path.name)
+        )
     else:
-        if (
-            input_record.get("size") != generated_xyz.stat().st_size
-            or input_record.get("sha256") != file_sha256(generated_xyz)
+        if input_record.get(
+            "size"
+        ) != generated_xyz.stat().st_size or input_record.get(
+            "sha256"
+        ) != file_sha256(
+            generated_xyz
         ):
             findings.append(
                 _mismatch(
@@ -364,7 +386,9 @@ def _validate_xtb_preview(expectation, paths):
     )
     observed_argv = payload.get("canonical_argv")
     if not isinstance(observed_argv, list) or not observed_argv:
-        findings.append(_missing("canonical_argv", "receipt argv", receipt_path.name))
+        findings.append(
+            _missing("canonical_argv", "receipt argv", receipt_path.name)
+        )
     elif (
         observed_argv[0] != "xtb"
         or generated_xyz is None
@@ -387,16 +411,19 @@ def _validate_xtb_preview(expectation, paths):
     }
     observed_settings = payload.get("settings")
     for key, value in expected_settings.items():
-        if not isinstance(observed_settings, dict) or canonical_data(
-            observed_settings.get(key)
-        ) != value:
+        if (
+            not isinstance(observed_settings, dict)
+            or canonical_data(observed_settings.get(key)) != value
+        ):
             findings.append(
                 _mismatch(
                     "settings." + key,
                     value,
-                    observed_settings.get(key)
-                    if isinstance(observed_settings, dict)
-                    else "missing",
+                    (
+                        observed_settings.get(key)
+                        if isinstance(observed_settings, dict)
+                        else "missing"
+                    ),
                     receipt_path.name,
                 )
             )
@@ -424,7 +451,11 @@ def _validate_pyscf_preview(expectation, paths):
         if isinstance(payload, dict):
             receipts.append((path, payload))
     run = next(
-        (item for item in receipts if item[1].get("schema_version") == "chemsmart.pyscf-run.v1"),
+        (
+            item
+            for item in receipts
+            if item[1].get("schema_version") == "chemsmart.pyscf-run.v1"
+        ),
         None,
     )
     if run is None:
@@ -433,16 +464,45 @@ def _validate_pyscf_preview(expectation, paths):
     observed_digest = payload.pop("receipt_sha256", "")
     findings = []
     if observed_digest != canonical_sha256(payload):
-        findings.append(_mismatch("run_receipt.digest", "valid", "invalid", path.name))
+        findings.append(
+            _mismatch("run_receipt.digest", "valid", "invalid", path.name)
+        )
     if payload.get("state") != "previewed" or payload.get("fake") is not True:
-        findings.append(_mismatch("run_receipt.state", "previewed fake", payload.get("state"), path.name))
+        findings.append(
+            _mismatch(
+                "run_receipt.state",
+                "previewed fake",
+                payload.get("state"),
+                path.name,
+            )
+        )
     if payload.get("project_yaml_sha256") != expectation.project_sha256:
-        findings.append(_mismatch("project_yaml_sha256", expectation.project_sha256, payload.get("project_yaml_sha256"), path.name))
+        findings.append(
+            _mismatch(
+                "project_yaml_sha256",
+                expectation.project_sha256,
+                payload.get("project_yaml_sha256"),
+                path.name,
+            )
+        )
     if payload.get("findings"):
-        findings.append(_mismatch("run_receipt.findings", [], payload.get("findings"), path.name))
-    result = next((item for item in paths if item.suffix.lower() == ".h5"), None)
+        findings.append(
+            _mismatch(
+                "run_receipt.findings", [], payload.get("findings"), path.name
+            )
+        )
+    result = next(
+        (item for item in paths if item.suffix.lower() == ".h5"), None
+    )
     if result is None or payload.get("result_sha256") != file_sha256(result):
-        findings.append(_mismatch("result_sha256", payload.get("result_sha256"), "missing_or_mismatch", path.name))
+        findings.append(
+            _mismatch(
+                "result_sha256",
+                payload.get("result_sha256"),
+                "missing_or_mismatch",
+                path.name,
+            )
+        )
     return findings
 
 
@@ -462,7 +522,9 @@ def _settings_match(parsed, expected, *, native_input=None):
     if native_input is not None:
         from chemsmart.io.orca.input import ORCAInput
 
-        route_tokens = set(ORCAInput(str(native_input)).route_object.route_keywords)
+        route_tokens = set(
+            ORCAInput(str(native_input)).route_object.route_keywords
+        )
     for field, value in sorted(expected.items()):
         if value is None:
             continue
@@ -486,27 +548,43 @@ def _settings_match(parsed, expected, *, native_input=None):
             )
             continue
         observed = getattr(parsed, field)
+        # A method or basis name means the same chemistry in any case, in
+        # every program ChemSmart drives -- and the observed side is read
+        # back by ChemSmart's own parser, which lowercases. Comparing case
+        # therefore tested the parser's normalisation, not the chemistry, and
+        # no spelling could pass: a live session wrote the standard
+        # ``6-31G(d)``, ChemSmart's writer emitted it, its reader returned
+        # ``6-31g(d)``, and the preview was refused as
+        # ``preview.semantic.mismatch``. The session recompiled six times and
+        # abandoned Gaussian and ORCA. This rule was already applied to ORCA
+        # alone, which is why only Gaussian's failure looked mysterious.
+        if isinstance(value, str) and isinstance(observed, str):
+            if value.strip().casefold() == observed.strip().casefold():
+                continue
         if native_input is not None:
-            # ORCA simple-input keywords are case-insensitive, and an absent
-            # opt-in boolean is the native representation of ``false``.
-            if isinstance(value, str) and isinstance(observed, str):
-                if value.strip().casefold() == observed.strip().casefold():
-                    continue
+            # An absent opt-in boolean is the native representation of
+            # ``false`` in ORCA's simple input.
             if value is False and observed in {None, False}:
                 continue
         if canonical_data(observed) != canonical_data(value):
-            findings.append(_mismatch(field, value, observed, "generated:native_input"))
+            findings.append(
+                _mismatch(field, value, observed, "generated:native_input")
+            )
     return findings
 
 
 def _geometry_sets_equal(source, generated):
     from chemsmart.io.molecules.structure import Molecule
 
-    source_molecules = Molecule.from_filepath(source, index=":", return_list=True)
+    source_molecules = Molecule.from_filepath(
+        source, index=":", return_list=True
+    )
     source_rows = sorted(_molecule_identity(item) for item in source_molecules)
     generated_rows = []
     for path in generated:
-        molecules = Molecule.from_filepath(str(path), index=":", return_list=True)
+        molecules = Molecule.from_filepath(
+            str(path), index=":", return_list=True
+        )
         generated_rows.extend(_molecule_identity(item) for item in molecules)
     return source_rows == sorted(generated_rows)
 
@@ -526,7 +604,10 @@ def _molecule_identity(molecule):
 def _contains_subsequence(values, required):
     if len(required) > len(values):
         return False
-    return any(values[index : index + len(required)] == required for index in range(len(values) - len(required) + 1))
+    return any(
+        values[index : index + len(required)] == required
+        for index in range(len(values) - len(required) + 1)
+    )
 
 
 def _missing(field, expected, evidence):
@@ -537,7 +618,11 @@ def _missing(field, expected, evidence):
 
 def _mismatch(field, expected, observed, evidence):
     return PreviewValidationFindingV1(
-        "preview.semantic.mismatch", field, canonical_data(expected), canonical_data(observed), evidence
+        "preview.semantic.mismatch",
+        field,
+        canonical_data(expected),
+        canonical_data(observed),
+        evidence,
     )
 
 
