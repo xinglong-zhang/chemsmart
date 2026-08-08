@@ -171,6 +171,37 @@ def extrapolate_scf_exponential(
     return float(smaller_scf_energy) - amplitude * fx
 
 
+def extrapolate_scf_inverse_power(
+    *,
+    smaller_cardinal,
+    larger_cardinal,
+    smaller_scf_energy: float,
+    larger_scf_energy: float,
+    exponent: float,
+) -> float:
+    """Two-point inverse-power SCF complete-basis-set limit.
+
+    Some published protocols extrapolate the SCF component with the same
+    algebraic form used for correlation, but with a protocol-specific exponent
+    such as ``3.9``::
+
+        E_inf = (X**p * E_X - Y**p * E_Y) / (X**p - Y**p)
+
+    This is scientifically distinct from :func:`extrapolate_scf_exponential`.
+    Keeping separate operations prevents a model or report from calling two
+    different convergence laws equivalent merely because both produce a CBS
+    energy.
+    """
+
+    return extrapolate_correlation_inverse_power(
+        smaller_cardinal=smaller_cardinal,
+        larger_cardinal=larger_cardinal,
+        smaller_correlation_energy=smaller_scf_energy,
+        larger_correlation_energy=larger_scf_energy,
+        exponent=exponent,
+    )
+
+
 def cbs_extrapolation(
     *,
     smaller_cardinal,
@@ -353,7 +384,9 @@ __all__ = [
     "convert_energy",
     "count_imaginary_modes",
     "extrapolate_correlation_helgaker",
+    "extrapolate_correlation_inverse_power",
     "extrapolate_scf_exponential",
+    "extrapolate_scf_inverse_power",
     "state_energy_difference",
 ]
 

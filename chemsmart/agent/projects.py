@@ -251,6 +251,90 @@ def read_project_yaml(
     return project_document(program=program, sections=sections)
 
 
+def project_effective_section_settings(
+    document: ProjectDocumentV1, *, jobtype: str
+) -> tuple[tuple[str, Any], ...]:
+    """Return explicit YAML settings that actually feed one program/job pair.
+
+    Gaussian and ORCA retain the historical ``gas``/``solv`` dialect: when a
+    ``gas`` section exists, optimization-family jobs read it and ``sp`` reads
+    ``solv``.  The latter is a workflow-stage name and does not itself enable a
+    solvent model.  An explicit job section then overrides that legacy base.
+    PySCF and xTB use their job section directly.
+    """
+
+    normalized_jobtype = require_identifier(jobtype, "jobtype")
+    sections = {section.name: dict(section.settings) for section in document.sections}
+    effective: dict[str, Any] = {}
+    if document.program in {"gaussian", "orca"}:
+        if normalized_jobtype == "sp":
+            effective.update(sections.get("solv") or {})
+        elif normalized_jobtype not in {"td", "qmmm"}:
+            effective.update(
+                (
+                    sections.get("gas")
+                    if "gas" in sections
+                    else sections.get("solv")
+                )
+                or {}
+            )
+        effective.update(sections.get(normalized_jobtype) or {})
+    else:
+        effective.update(sections.get(normalized_jobtype) or {})
+    return tuple(
+        sorted(
+            (str(name), canonical_data(value))
+            for name, value in effective.items()
+        )
+    )
+
+
+def project_section_application_observation(
+    document: ProjectDocumentV1, *, jobtype: str
+) -> dict[str, Any]:
+    """Explain which public YAML sections contribute to one job."""
+
+    normalized_jobtype = require_identifier(jobtype, "jobtype")
+    sections = {section.name: dict(section.settings) for section in document.sections}
+    available = tuple(sorted(sections))
+    if document.program in {"gaussian", "orca"}:
+        if normalized_jobtype == "sp":
+            candidates = ("solv", "sp")
+        elif normalized_jobtype in {"td", "qmmm"}:
+            candidates = (normalized_jobtype,)
+        else:
+            candidates = (
+                "gas" if "gas" in sections else "solv",
+                normalized_jobtype,
+            )
+    else:
+        candidates = (normalized_jobtype,)
+    used = tuple(dict.fromkeys(name for name in candidates if name in sections))
+    ignored = tuple(sorted(set(available).difference(used)))
+    effective = dict(
+        project_effective_section_settings(document, jobtype=normalized_jobtype)
+    )
+    status = (
+        "effective_settings_present"
+        if effective
+        else "no_explicit_settings_applied"
+    )
+    observation: dict[str, Any] = {
+        "status": status,
+        "jobtype": normalized_jobtype,
+        "used_sections": used,
+        "ignored_sections": ignored,
+        "effective_setting_names": tuple(sorted(effective)),
+    }
+    if status != "effective_settings_present":
+        observation["next_action"] = (
+            "render settings in a section consumed by this job; Gaussian/ORCA "
+            "single points read 'solv' or an explicit 'sp' override, and the "
+            "section name 'solv' alone does not enable physical solvation"
+        )
+    return observation
+
+
 def _require_declared_section_shape(
     program: str, payload: Mapping[str, Any]
 ) -> None:
@@ -500,6 +584,8 @@ __all__ = [
     "ProjectValidationReceiptV1",
     "PySCFFunctionalResolutionReceiptV1",
     "project_document",
+    "project_effective_section_settings",
+    "project_section_application_observation",
     "project_scientific_materializations",
     "read_project_yaml",
     "render_project_yaml",

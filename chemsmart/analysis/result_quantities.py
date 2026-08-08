@@ -68,6 +68,8 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "excitation_energies",
         "gibbs_free_energy",
         "oscillator_strengths",
+        "scf_energy",
+        "correlation_energy",
     }
 )
 

@@ -56,6 +56,8 @@ SELECTOR_UNITS = {
     "symbols": "",
     "charge": "",
     "multiplicity": "",
+    "scf_energy": "Eh",
+    "correlation_energy": "Eh",
 }
 
 
@@ -159,6 +161,71 @@ def _orca_output(path: Path) -> Any:
     return ORCAOutput(filename=str(path))
 
 
+def _orca_total_energy(output: Any) -> float:
+    """Return the final total ORCA energy, including post-SCF correlation.
+
+    ``ORCAOutput.final_energy`` historically prefers ``final_scf_energy``.
+    That is suitable for DFT but silently drops the correlation contribution
+    from MP2 and coupled-cluster results.  The last explicit ORCA final-energy
+    record is the program's total result and remains correct for DFT jobs too.
+    """
+
+    values: list[float] = []
+    for line in getattr(output, "contents", ()):
+        if "FINAL SINGLE POINT ENERGY" not in str(line).upper():
+            continue
+        try:
+            values.append(float(str(line).split()[-1]))
+        except (TypeError, ValueError):
+            continue
+    if values:
+        return values[-1]
+    return _last_energy(output)
+
+
+def _orca_scf_energy(output: Any) -> float:
+    # ``ORCAOutput.final_scf_energy`` currently treats an empty optimization
+    # slice as an optimization result and can therefore return ``None`` for a
+    # perfectly valid correlated single point.  Read the last explicit TOTAL
+    # SCF ENERGY value first; for post-HF output that is the reference energy
+    # paired with the final correlated total below it.
+    values: list[float] = []
+    for line in getattr(output, "contents", ()):
+        text = str(line)
+        if "Total Energy" not in text or ":" not in text:
+            continue
+        fields = text.split()
+        try:
+            colon = fields.index(":")
+            values.append(float(fields[colon + 1]))
+        except (ValueError, IndexError):
+            continue
+    if values:
+        return values[-1]
+    value = getattr(output, "final_scf_energy", None)
+    if value is None:
+        raise MissingQuantityError("ORCA result contains no final SCF energy")
+    return float(value)
+
+
+def _orca_correlation_energy(output: Any) -> float:
+    """Return total post-SCF correlation as ``E(total) - E(SCF)``."""
+
+    return _orca_total_energy(output) - _orca_scf_energy(output)
+
+
+def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
+    accessors = _text_output_accessors()
+    accessors.update(
+        {
+            "energy": _orca_total_energy,
+            "scf_energy": _orca_scf_energy,
+            "correlation_energy": _orca_correlation_energy,
+        }
+    )
+    return accessors
+
+
 def _gaussian_output(path: Path) -> Any:
     from chemsmart.io.gaussian.output import Gaussian16Output
 
@@ -186,7 +253,12 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
 def _xtb_output(path: Path) -> Any:
     from chemsmart.io.xtb.output import XTBOutput
 
-    return XTBOutput(filename=str(path))
+    # Unlike the Gaussian and ORCA readers, XTBOutput represents the complete
+    # calculation directory because xTB can distribute one result across the
+    # main log, geometry, Hessian, and vibrational-spectrum files.  The host
+    # has already resolved and verified the exact main output artifact; its
+    # parent is therefore the corresponding calculation directory.
+    return XTBOutput(folder=str(path.parent))
 
 
 def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
@@ -211,7 +283,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         artifact_kind="orca_output",
         parser_id="chemsmart.io.orca.output.ORCAOutput",
         open_output=_orca_output,
-        accessors=_text_output_accessors(),
+        accessors=_orca_accessors(),
     ),
     "gaussian": ResultReaderV1(
         program="gaussian",
@@ -243,6 +315,8 @@ _SELECTOR_DIMENSIONS = {
     "symbols": "DIMENSIONLESS",
     "charge": "DIMENSIONLESS",
     "multiplicity": "DIMENSIONLESS",
+    "scf_energy": "ENERGY",
+    "correlation_energy": "ENERGY",
 }
 
 

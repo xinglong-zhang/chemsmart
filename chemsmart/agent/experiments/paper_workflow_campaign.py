@@ -22,9 +22,11 @@ import re
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 import numpy as np
+import yaml
 
 from chemsmart.agent._contracts import (
     ContractError,
+    canonical_data,
     canonical_json,
     canonical_sha256,
     file_sha256,
@@ -38,7 +40,10 @@ from chemsmart.agent.dependency_context import (
     build_task_dependency_context_policy,
     select_task_dependency_context,
 )
-from chemsmart.agent.projects import ProjectDocumentV1
+from chemsmart.agent.projects import (
+    ProjectDocumentV1,
+    project_effective_section_settings,
+)
 from chemsmart.agent.workflows import ScientificWorkflowPlanV2
 from chemsmart.analysis.quantity_expressions import normalize_numeric_value
 
@@ -49,6 +54,22 @@ if TYPE_CHECKING:
 
 _ELEMENT = re.compile(r"^[A-Z][a-z]?$", re.ASCII)
 _CONTEXT_ARMS = ("p0", "p1", "p2")
+_GENERIC_CLAIM_TOKENS = frozenset(
+    {
+        "calculated",
+        "claim",
+        "computed",
+        "display",
+        "molar",
+        "reported",
+        "standard",
+        "value",
+    }
+)
+_SCIENTIFIC_IDENTIFIER_TOKEN_ALIASES = {
+    "eh": "hartree",
+    "ha": "hartree",
+}
 
 
 @dataclass(frozen=True)
@@ -154,6 +175,55 @@ def extract_multi_xyz_record(
 
 
 @dataclass(frozen=True)
+class PaperModelInputV1:
+    """Minimal black-box material visible to the benchmark model.
+
+    Bibliographic metadata, host case identifiers, private answer material,
+    graders, and earlier trajectories deliberately have no representation in
+    this object.  Provenance remains host-side and is joined to the resulting
+    evidence only after the model episode.
+    """
+
+    methods_excerpt: str
+    coordinate_context: str
+    requested_result: str
+    execution_policy: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "methods_excerpt",
+            "coordinate_context",
+            "requested_result",
+            "execution_policy",
+        ):
+            if not str(getattr(self, name)).strip():
+                raise ContractError(f"model input {name} must not be empty")
+
+    def render(self) -> str:
+        return (
+            "Use ChemSmart and its normal typed tools to answer the scientific "
+            "request below. The workspace contains the exact Cartesian XYZ "
+            "artifact(s) described here. Derive the required project YAML, "
+            "program-relative calculation workflow, result extraction, and "
+            "postprocessing from the supplied Methods text and coordinates. "
+            "Do not invent a missing scientific setting or numerical result; "
+            "leave an unsupported or underdetermined stage explicit.\n\n"
+            "METHODS\n"
+            "---\n"
+            f"{self.methods_excerpt.strip()}\n\n"
+            "COORDINATE CONTEXT\n"
+            "---\n"
+            f"{self.coordinate_context.strip()}\n\n"
+            "REQUESTED RESULT AND CONDITIONS\n"
+            "---\n"
+            f"{self.requested_result.strip()}\n\n"
+            "EXECUTION BOUNDARY\n"
+            "---\n"
+            f"{self.execution_policy.strip()}"
+        )
+
+
+@dataclass(frozen=True)
 class PaperBlackBoxCaseV1:
     """Public model packet plus host-only source identity.
 
@@ -208,33 +278,23 @@ class PaperBlackBoxCaseV1:
         }
 
     def public_task(self) -> str:
-        """Render only the black-box evidence and user-visible request.
+        """Render only the minimal model-visible scientific input.
 
         Benchmark dispatchers must call :func:`prepare_benchmark_dispatch`
         instead.  Keeping this renderer answer-free makes it usable for
         diagnostic planning pilots without making those pilots benchmarks.
         """
 
-        return (
-            "You are given an exact official Cartesian coordinate artifact set in "
-            "this workspace and an unrefined excerpt from a published Methods "
-            "section. Use the normal ChemSmart typed tools to construct the most "
-            "complete scientifically defensible project-YAML, program-relative "
-            "calculation DAG, safe previews, result-extraction, mathematical "
-            "postprocessing, validation, and numerical-claim plan. Preserve every "
-            "requested observable even when a required method or parser is not "
-            "currently supported; represent that stage explicitly as unsupported "
-            "instead of replacing or deleting it. Do not infer reference values.\n\n"
-            f"Paper: {self.article_title}\n"
-            f"DOI: {self.paper_doi}\n"
-            f"Source locator: {self.source_locator}\n"
-            f"Coordinate evidence: {self.coordinate_description}\n\n"
-            "Methods excerpt (verbatim from the cited source):\n"
-            "--- BEGIN METHODS EXCERPT ---\n"
-            f"{self.methods_excerpt.strip()}\n"
-            "--- END METHODS EXCERPT ---\n\n"
-            f"Requested result:\n{self.requested_result.strip()}\n\n"
-            f"Execution boundary:\n{self.execution_policy.strip()}"
+        return self.model_input().render()
+
+    def model_input(self) -> PaperModelInputV1:
+        """Project host evidence onto the strict public input allowlist."""
+
+        return PaperModelInputV1(
+            methods_excerpt=self.methods_excerpt,
+            coordinate_context=self.coordinate_description,
+            requested_result=self.requested_result,
+            execution_policy=self.execution_policy,
         )
 
 
@@ -282,12 +342,28 @@ class ReferenceQuantityV1:
     absolute_tolerance: float
     relative_tolerance: float
     evidence_locator: str
+    accepted_identifiers: tuple[str, ...]
     reference_sha256: str
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.reference-quantity.v1":
             raise ContractError("unsupported reference quantity schema")
         require_identifier(self.quantity_id, "quantity_id")
+        object.__setattr__(
+            self, "accepted_identifiers", tuple(self.accepted_identifiers)
+        )
+        if (
+            not self.accepted_identifiers
+            or self.quantity_id not in self.accepted_identifiers
+            or self.accepted_identifiers
+            != tuple(sorted(set(self.accepted_identifiers)))
+        ):
+            raise ContractError(
+                "reference accepted identifiers must be sorted, unique, and "
+                "include quantity_id"
+            )
+        for identifier in self.accepted_identifiers:
+            require_identifier(identifier, "accepted_identifier")
         try:
             normalize_numeric_value(self.expected_value, self.unit)
             normalize_numeric_value(self.absolute_tolerance, self.unit)
@@ -321,7 +397,19 @@ def build_reference_quantity(
     absolute_tolerance: float,
     relative_tolerance: float = 0.0,
     evidence_locator: str,
+    accepted_identifiers: Sequence[str] = (),
 ) -> ReferenceQuantityV1:
+    identifiers = tuple(
+        sorted(
+            {
+                require_identifier(quantity_id, "quantity_id"),
+                *(
+                    require_identifier(item, "accepted_identifier")
+                    for item in accepted_identifiers
+                ),
+            }
+        )
+    )
     body = {
         "schema_version": "chemsmart.reference-quantity.v1",
         "quantity_id": require_identifier(quantity_id, "quantity_id"),
@@ -330,6 +418,7 @@ def build_reference_quantity(
         "absolute_tolerance": float(absolute_tolerance),
         "relative_tolerance": float(relative_tolerance),
         "evidence_locator": str(evidence_locator).strip(),
+        "accepted_identifiers": identifiers,
     }
     return ReferenceQuantityV1(
         **body, reference_sha256=canonical_sha256(body)
@@ -362,6 +451,15 @@ class PaperAnswerKeyV1:
             raise ContractError(
                 "paper answer-key quantities must be non-empty, sorted, and unique"
             )
+        identifier_owners: dict[str, str] = {}
+        for quantity in self.quantities:
+            for identifier in quantity.accepted_identifiers:
+                owner = identifier_owners.setdefault(identifier, quantity.quantity_id)
+                if owner != quantity.quantity_id:
+                    raise ContractError(
+                        "accepted claim identifiers must identify only one "
+                        "reference quantity"
+                    )
         if self.answer_key_sha256 != canonical_sha256(self._body()):
             raise ContractError("paper answer-key digest mismatch")
 
@@ -434,6 +532,7 @@ class WorkflowSemanticNodeV1:
     input_geometry_sha256s: tuple[str, ...] = ()
     dependencies: tuple[WorkflowDependencyAnswerV1, ...] = ()
     output_semantics: tuple[str, ...] = ()
+    semantic_parameters: tuple[tuple[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
@@ -457,6 +556,9 @@ class WorkflowSemanticNodeV1:
         )
         object.__setattr__(self, "dependencies", tuple(self.dependencies))
         object.__setattr__(self, "output_semantics", tuple(self.output_semantics))
+        object.__setattr__(
+            self, "semantic_parameters", tuple(self.semantic_parameters)
+        )
         if self.input_geometry_sha256s != tuple(
             sorted(set(self.input_geometry_sha256s))
         ):
@@ -475,6 +577,14 @@ class WorkflowSemanticNodeV1:
             raise ContractError("workflow output semantics must be sorted and unique")
         for output in self.output_semantics:
             require_identifier(output, "output_semantic")
+        parameter_names = tuple(item[0] for item in self.semantic_parameters)
+        if parameter_names != tuple(sorted(set(parameter_names))):
+            raise ContractError(
+                "workflow semantic parameters must be sorted and unique"
+            )
+        for name, value in self.semantic_parameters:
+            require_identifier(name, "semantic_parameter")
+            canonical_data(value)
 
 
 @dataclass(frozen=True)
@@ -554,12 +664,67 @@ def _canonical_workflow_signatures(
     node_by_id = {item.node_id: item for item in nodes}
     if len(node_by_id) != len(tuple(nodes)):
         raise ContractError("workflow node IDs must be unique")
+    def normalized_settings(
+        settings_rows: Sequence[tuple[str, Any]],
+    ) -> dict[str, Any]:
+        settings: dict[str, Any] = {}
+        for name, value in settings_rows:
+            if isinstance(value, str):
+                normalized: Any = value.strip()
+                if name not in {
+                    "custom_solvent",
+                    "additional_solvent_options",
+                    "input_string",
+                }:
+                    normalized = normalized.lower()
+                if name == "additional_route_parameters":
+                    normalized = " ".join(sorted(normalized.split()))
+            elif name == "heavy_elements" and isinstance(value, (list, tuple)):
+                normalized = tuple(
+                    sorted(str(item).capitalize() for item in value)
+                )
+            else:
+                normalized = canonical_data(value)
+            settings[name] = normalized
+        return settings
+
+    project_jobtypes: dict[str, set[str]] = {
+        item.project_id: set() for item in projects
+    }
+    for node in nodes:
+        if node.node_kind == "calculation":
+            project_jobtypes.setdefault(node.project_id, set()).add(
+                node.jobtype
+            )
+
+    def effective_project_sha256(
+        document: ProjectDocumentV1, jobtype: str
+    ) -> str:
+        return canonical_sha256(
+            {
+                "program": document.program,
+                "jobtype": jobtype,
+                "settings": normalized_settings(
+                    project_effective_section_settings(
+                        document, jobtype=jobtype
+                    )
+                ),
+            }
+        )
+
+    project_semantics = {
+        item.project_id: tuple(
+            (jobtype, effective_project_sha256(item.document, jobtype))
+            for jobtype in sorted(project_jobtypes.get(item.project_id) or ())
+        )
+        for item in projects
+    }
     project_signatures = tuple(
         sorted(
             canonical_sha256(
                 {
                     "program": item.document.program,
-                    "project_content_sha256": item.document.content_sha256,
+                    "effective_job_settings": project_semantics[item.project_id],
                 }
             )
             for item in projects
@@ -587,7 +752,9 @@ def _canonical_workflow_signatures(
                 "program": node.program,
                 "jobtype": node.jobtype,
                 "project_program": project.program,
-                "project_content_sha256": project.content_sha256,
+                "project_effective_sha256": effective_project_sha256(
+                    project, node.jobtype
+                ),
             }
         else:
             program_fields = {"operation": node.operation}
@@ -601,6 +768,23 @@ def _canonical_workflow_signatures(
                 for edge in node.dependencies
             )
         )
+
+        def bind_lineage(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                if set(value) == {"source_node_id", "source_output"}:
+                    source_node_id = str(value["source_node_id"])
+                    return {
+                        "source_node_signature": node_signature(source_node_id),
+                        "source_output": value["source_output"],
+                    }
+                return {
+                    str(key): bind_lineage(item)
+                    for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+                }
+            if isinstance(value, (list, tuple)):
+                return tuple(bind_lineage(item) for item in value)
+            return canonical_data(value)
+
         signature = canonical_sha256(
             {
                 "node_kind": node.node_kind,
@@ -608,6 +792,10 @@ def _canonical_workflow_signatures(
                 "input_geometry_sha256s": node.input_geometry_sha256s,
                 "dependencies": dependency_signatures,
                 "output_semantics": node.output_semantics,
+                "semantic_parameters": tuple(
+                    (name, bind_lineage(value))
+                    for name, value in node.semantic_parameters
+                ),
             }
         )
         visiting.remove(node_id)
@@ -1011,16 +1199,42 @@ def grade_paper_numerical_claims(
 
     if answer_key.case_id != case.case_id or answer_key.case_sha256 != case.case_sha256:
         raise ContractError("paper answer key targets another black-box case")
-    claims = {
+    claims_by_id = {
         claim.claim_id: claim
         for claim in claim_record.claims
     } if claim_record is not None else {}
+    claims_by_quantity: dict[str, list[Any]] = {}
+    if claim_record is not None:
+        for claim in claim_record.claims:
+            claims_by_quantity.setdefault(claim.quantity_id, []).append(claim)
     grades: list[NumericalQuantityGradeV1] = []
     for reference in answer_key.quantities:
         expected, canonical_unit, expected_dimension = normalize_numeric_value(
             reference.expected_value, reference.unit
         )
-        claim = claims.get(reference.quantity_id)
+        claim = claims_by_id.get(reference.quantity_id)
+        if claim is None:
+            quantity_matches = claims_by_quantity.get(reference.quantity_id, [])
+            claim = _collapse_equivalent_claim_presentations(quantity_matches)
+        if claim is None:
+            accepted_token_sets = tuple(
+                _semantic_quantity_tokens(identifier)
+                for identifier in reference.accepted_identifiers
+            )
+            semantic_matches = tuple(
+                candidate
+                for candidate in claims_by_id.values()
+                if any(
+                    accepted_tokens
+                    and accepted_tokens.issubset(
+                        _semantic_quantity_tokens(candidate.claim_id).union(
+                            _semantic_quantity_tokens(candidate.quantity_id)
+                        )
+                    )
+                    for accepted_tokens in accepted_token_sets
+                )
+            )
+            claim = _collapse_equivalent_claim_presentations(semantic_matches)
         if claim is None:
             grades.append(
                 NumericalQuantityGradeV1(
@@ -1122,6 +1336,101 @@ def grade_paper_numerical_claims(
     )
 
 
+def _semantic_quantity_tokens(identifier: str) -> frozenset[str]:
+    """Return conservative tokens for matching answer and claim semantics.
+
+    Model-selected local IDs are presentation details.  Matching strips only
+    generic reporting qualifiers and never introduces chemical aliases, so a
+    Gibbs energy cannot become an electronic energy and an entropy cannot
+    become a heat capacity merely because the dimensions coincide.
+    """
+
+    return frozenset(
+        _SCIENTIFIC_IDENTIFIER_TOKEN_ALIASES.get(token, token)
+        for token in re.split(r"[-_]+", str(identifier).strip().lower())
+        if token and token not in _GENERIC_CLAIM_TOKENS
+    )
+
+
+def _collapse_equivalent_claim_presentations(
+    candidates: Sequence[Any],
+) -> Any | None:
+    """Return one claim when candidates are displays of one typed quantity.
+
+    A single expression result is often reported in hartree, kJ/mol, and
+    kcal/mol.  Those are not three competing scientific answers when every
+    claim points to the same host quantity value and source receipt.  Distinct
+    source values remain ambiguous and therefore fail closed.
+    """
+
+    values = tuple(candidates)
+    if not values:
+        return None
+    identities = {
+        (
+            claim.source_kind,
+            claim.source_receipt_sha256,
+            claim.quantity_id,
+            claim.quantity_value_sha256,
+        )
+        for claim in values
+    }
+    if len(identities) != 1:
+        return None
+    return min(values, key=lambda claim: claim.claim_id)
+
+
+def analysis_claim_record_from_live_result(
+    result: "LiveAgentSessionResultV1",
+) -> "AnalysisClaimRecordV1 | None":
+    """Recover the last host-rendered claim record from a live episode.
+
+    A paper benchmark must grade the typed value copied by the host, not a
+    number repeated in model prose.  The public transcript already contains
+    the sanitized ``record_analysis_claims`` tool result, so this adapter does
+    not reopen private provider state or depend on Runtime V2 filesystem paths.
+    When a bounded repair records a replacement claim set, the latest
+    successful host record is authoritative.
+    """
+
+    from chemsmart.agent.analysis_claims import (
+        analysis_claim_record_from_record,
+    )
+
+    observed: AnalysisClaimRecordV1 | None = None
+    for message in result.public_transcript:
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            envelope = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, Mapping) or (
+            envelope.get("schema_version") != "chemsmart.tool-result.v1"
+            or envelope.get("status") != "ok"
+            or envelope.get("tool") != "record_analysis_claims"
+        ):
+            continue
+        record = envelope.get("result")
+        if not isinstance(record, Mapping):
+            raise ContractError(
+                "successful analysis-claim tool result is not a record"
+            )
+        values = dict(record)
+        receipt_sha256 = str(values.pop("receipt_sha256", ""))
+        observed = analysis_claim_record_from_record(
+            values, receipt_sha256=receipt_sha256
+        )
+        if observed.task_spec_sha256 != result.task_spec_sha256:
+            raise ContractError(
+                "analysis claim record belongs to another live task"
+            )
+    return observed
+
+
 @dataclass(frozen=True)
 class PaperWorkflowObservationV1:
     """Host-normalized YAML and DAG semantics observed from one model run."""
@@ -1136,6 +1445,483 @@ class PaperWorkflowObservationV1:
         object.__setattr__(self, "projects", tuple(self.projects))
         object.__setattr__(self, "nodes", tuple(self.nodes))
         _canonical_workflow_signatures(self.projects, self.nodes)
+
+
+def _successful_live_tool_results(
+    result: "LiveAgentSessionResultV1",
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    observed: list[tuple[str, Mapping[str, Any]]] = []
+    for message in result.public_transcript:
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            envelope = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, Mapping) or (
+            envelope.get("schema_version") != "chemsmart.tool-result.v1"
+            or envelope.get("status") != "ok"
+        ):
+            continue
+        tool = str(envelope.get("tool") or "")
+        payload = envelope.get("result")
+        if tool and isinstance(payload, Mapping):
+            observed.append((tool, payload))
+    return tuple(observed)
+
+
+def _semantic_name(value: Any) -> str:
+    text = re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
+    aliases = {
+        "energy": "total_energy",
+        "energies": "total_energy",
+        "final_energy": "total_energy",
+        "frequency": "vibrational_frequencies",
+        "frequencies": "vibrational_frequencies",
+        "geometry_xyz": "geometry",
+        "optimized_coordinates": "optimized_geometry",
+        "orca_output": "program_result",
+        "orca_result": "program_result",
+        "result": "program_result",
+    }
+    normalized = aliases.get(text, text)
+    return require_identifier(normalized, "workflow semantic")
+
+
+def _artifact_output_semantic(
+    *, artifact_class: str, producer_jobtype: str
+) -> str:
+    normalized = _semantic_name(artifact_class)
+    if normalized == "geometry" and producer_jobtype == "opt":
+        return "optimized_geometry"
+    if normalized.endswith("_result") or normalized.endswith("_output"):
+        return "program_result"
+    return normalized
+
+
+def _effective_project_validation(
+    validations: Sequence[Mapping[str, Any]],
+    *,
+    artifact_id: str,
+    program: str,
+    jobtype: str,
+) -> Mapping[str, Any]:
+    candidates = tuple(
+        payload
+        for payload in validations
+        if payload.get("project_artifact_id") == artifact_id
+        and payload.get("program") == program
+        and payload.get("jobtype") == jobtype
+        and payload.get("status") == "valid"
+    )
+    if not candidates:
+        raise ContractError(
+            f"workflow project {artifact_id!r} lacks a valid {program}/{jobtype} "
+            "loader observation"
+        )
+    selected = candidates[-1]
+    settings = dict(selected.get("settings") or ())
+    method = settings.get("functional") or settings.get("ab_initio") or settings.get(
+        "semiempirical"
+    )
+    basis = (
+        settings.get("basis")
+        or settings.get("light_elements_basis")
+        or settings.get("gfn_version")
+    )
+    if program in {"gaussian", "orca", "pyscf"} and (not method or not basis):
+        raise ContractError(
+            f"workflow project {artifact_id!r} validated without effective "
+            f"{program}/{jobtype} method and basis settings"
+        )
+    return selected
+
+
+_COMMUTATIVE_EXPRESSION_OPERATIONS = frozenset(
+    {"add", "multiply", "sum", "weighted_sum"}
+)
+
+
+def _canonical_expression_outputs(
+    node: Mapping[str, Any],
+    *,
+    input_semantics: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], ...]:
+    raw_nodes = tuple(node.get("expression_nodes") or ())
+    by_id = {
+        str(item.get("node_id")): item
+        for item in raw_nodes
+        if isinstance(item, Mapping) and item.get("node_id")
+    }
+    memo: dict[str, Mapping[str, Any]] = {}
+    visiting: set[str] = set()
+
+    def visit(node_id: str) -> Mapping[str, Any]:
+        if node_id in memo:
+            return memo[node_id]
+        if node_id in visiting or node_id not in by_id:
+            raise ContractError("analysis expression is cyclic or incomplete")
+        visiting.add(node_id)
+        raw = by_id[node_id]
+        operation = _semantic_name(raw.get("operation"))
+        if operation == "ref":
+            reference = str(raw.get("reference") or "")
+            try:
+                record: dict[str, Any] = {
+                    "operation": "ref",
+                    "input_semantic": input_semantics[reference],
+                }
+            except KeyError as exc:
+                raise ContractError(
+                    "analysis expression references an unknown typed input"
+                ) from exc
+        else:
+            arguments = [visit(str(item)) for item in raw.get("input_ids") or ()]
+            if operation in _COMMUTATIVE_EXPRESSION_OPERATIONS:
+                arguments.sort(key=canonical_json)
+            record = {"operation": operation, "arguments": tuple(arguments)}
+            for field in (
+                "literal_value",
+                "literal_unit",
+                "target_unit",
+                "scale_factor",
+                "cardinal_numbers",
+                "extrapolation_exponent",
+            ):
+                if raw.get(field) is not None:
+                    record[field] = canonical_data(raw[field])
+        visiting.remove(node_id)
+        memo[node_id] = record
+        return record
+
+    outputs = tuple(
+        visit(str(item)) for item in node.get("expression_output_node_ids") or ()
+    )
+    return tuple(sorted(outputs, key=canonical_json))
+
+
+def paper_workflow_observation_from_live_result(
+    result: "LiveAgentSessionResultV1",
+) -> PaperWorkflowObservationV1:
+    """Normalize the last typed paper plan into private-answer semantics.
+
+    Only successful public tool records are observed.  Model prose, provider
+    reasoning, expected answers, and benchmark rubrics are deliberately absent
+    from this adapter.  A project counts only when the same promoted artifact
+    passed the checked-out loader for the job form used by the final plan.
+    """
+
+    from chemsmart.agent.projects import project_document
+
+    tools = _successful_live_tool_results(result)
+    renders: dict[str, Mapping[str, Any]] = {}
+    promotions: dict[str, str] = {}
+    validations: list[Mapping[str, Any]] = []
+    identities: dict[str, tuple[str, int, int]] = {}
+    final_plan: Mapping[str, Any] | None = None
+    for tool, payload in tools:
+        if tool == "render_project_yaml":
+            renders[str(payload.get("receipt_sha256"))] = payload
+        elif tool == "promote_project_yaml":
+            artifact = payload.get("artifact") or {}
+            promotion = payload.get("promotion") or {}
+            if isinstance(artifact, Mapping) and isinstance(promotion, Mapping):
+                promotions[str(artifact.get("artifact_id"))] = str(
+                    promotion.get("render_receipt_sha256")
+                )
+        elif tool == "validate_project_yaml":
+            validations.append(payload)
+        elif tool == "bind_scientific_identity":
+            artifact_id = str(payload.get("geometry_artifact_id") or "")
+            if artifact_id:
+                identities[artifact_id] = (
+                    require_sha256(
+                        str(payload.get("geometry_artifact_sha256")),
+                        "geometry_artifact_sha256",
+                    ),
+                    int(payload.get("charge")),
+                    int(payload.get("multiplicity")),
+                )
+        elif tool in {
+            "plan_scientific_workflow",
+            "rebind_scientific_workflow_projects",
+        }:
+            final_plan = payload
+    if final_plan is None:
+        raise ContractError("live episode contains no successful scientific workflow plan")
+
+    calculation_plan = final_plan.get("calculation_plan") or {}
+    draft = calculation_plan.get("workflow_draft") or {}
+    raw_calculations = tuple(draft.get("nodes") or ())
+    toolchain = final_plan.get("scientific_toolchain_plan") or {}
+    raw_analyses = tuple(toolchain.get("analysis_nodes") or ())
+    if not raw_calculations or not raw_analyses:
+        raise ContractError("scientific workflow plan is incomplete")
+    calculation_by_id = {
+        str(item.get("node_id")): item
+        for item in raw_calculations
+        if isinstance(item, Mapping)
+    }
+    if len(calculation_by_id) != len(raw_calculations):
+        raise ContractError("scientific workflow has duplicate calculation IDs")
+
+    artifact_sha256s = {
+        str(item.get("artifact_id")): str(item.get("sha256"))
+        for item in result.artifact_records
+        if item.get("artifact_id") and item.get("sha256")
+    }
+    observable_rows = dict(toolchain.get("calculation_observables") or ())
+    output_maps: dict[str, dict[str, str]] = {}
+    root_geometry_memo: dict[str, tuple[str, ...]] = {}
+
+    def calculation_roots(node_id: str, visiting: set[str] | None = None) -> tuple[str, ...]:
+        if node_id in root_geometry_memo:
+            return root_geometry_memo[node_id]
+        active = set() if visiting is None else set(visiting)
+        if node_id in active:
+            raise ContractError("scientific calculation DAG contains a cycle")
+        active.add(node_id)
+        node = calculation_by_id[node_id]
+        roots: set[str] = set()
+        for item in node.get("inputs") or ():
+            artifact_id = str(item.get("artifact_id") or "")
+            producer = str(item.get("producer_node_id") or "")
+            if artifact_id:
+                try:
+                    roots.add(require_sha256(artifact_sha256s[artifact_id], "geometry"))
+                except KeyError as exc:
+                    raise ContractError(
+                        "workflow references an unobserved initial geometry"
+                    ) from exc
+            elif producer:
+                roots.update(calculation_roots(producer, active))
+        value = tuple(sorted(roots))
+        root_geometry_memo[node_id] = value
+        return value
+
+    observed_projects: dict[str, WorkflowProjectAnswerV1] = {}
+    calculation_nodes: list[WorkflowSemanticNodeV1] = []
+    for node_id, raw in calculation_by_id.items():
+        program = _semantic_name(raw.get("program"))
+        jobtype = _semantic_name(raw.get("jobtype"))
+        project_id = str(raw.get("project_role") or "")
+        try:
+            render = renders[promotions[project_id]]
+        except KeyError as exc:
+            raise ContractError(
+                f"workflow project role {project_id!r} is not a promoted project"
+            ) from exc
+        if str(render.get("program")) != program:
+            raise ContractError("workflow project program differs from calculation")
+        parsed = yaml.safe_load(str(render.get("rendered_yaml") or ""))
+        if not isinstance(parsed, Mapping) or not parsed:
+            raise ContractError("workflow project render is not a YAML mapping")
+        document = project_document(
+            program=program,
+            sections={str(key): dict(value) for key, value in parsed.items()},
+        )
+        _effective_project_validation(
+            validations,
+            artifact_id=project_id,
+            program=program,
+            jobtype=jobtype,
+        )
+        observed_projects[project_id] = WorkflowProjectAnswerV1(
+            project_id=project_id,
+            document=document,
+        )
+
+        output_map: dict[str, str] = {}
+        output_semantics: set[str] = set()
+        for output in raw.get("expected_outputs") or ():
+            semantic = _artifact_output_semantic(
+                artifact_class=str(output.get("artifact_class") or ""),
+                producer_jobtype=jobtype,
+            )
+            output_map[str(output.get("output_id"))] = semantic
+            output_semantics.add(semantic)
+        for observable in observable_rows.get(node_id, ()):
+            output_semantics.add(_semantic_name(observable))
+        output_maps[node_id] = output_map
+
+        dependencies: set[tuple[str, str, str]] = set()
+        data_producers: set[str] = set()
+        for item in raw.get("inputs") or ():
+            producer = str(item.get("producer_node_id") or "")
+            if not producer:
+                continue
+            data_producers.add(producer)
+            source_output = output_maps.get(producer, {}).get(
+                str(item.get("producer_output_id") or ""),
+                _artifact_output_semantic(
+                    artifact_class=str(item.get("artifact_class") or ""),
+                    producer_jobtype=_semantic_name(
+                        calculation_by_id[producer].get("jobtype")
+                    ),
+                ),
+            )
+            target_input = _semantic_name(item.get("artifact_class") or "artifact")
+            dependencies.add((producer, source_output, target_input))
+        for producer in raw.get("dependencies") or ():
+            producer_id = str(producer)
+            if producer_id not in data_producers:
+                dependencies.add((producer_id, "completion", "control"))
+
+        roots = calculation_roots(node_id)
+        states = {
+            identities[artifact_id]
+            for artifact_id, digest in artifact_sha256s.items()
+            if digest in roots and artifact_id in identities
+        }
+        semantic_parameters: list[tuple[str, Any]] = []
+        if states:
+            semantic_parameters.append(
+                (
+                    "electronic_states",
+                    tuple(sorted((charge, multiplicity) for _, charge, multiplicity in states)),
+                )
+            )
+        calculation_nodes.append(
+            WorkflowSemanticNodeV1(
+                node_id=node_id,
+                node_kind="calculation",
+                program=program,
+                jobtype=jobtype,
+                project_id=project_id,
+                input_geometry_sha256s=roots,
+                dependencies=tuple(
+                    WorkflowDependencyAnswerV1(*item)
+                    for item in sorted(dependencies)
+                ),
+                output_semantics=tuple(sorted(output_semantics)),
+                semantic_parameters=tuple(sorted(semantic_parameters)),
+            )
+        )
+
+    analysis_output_maps: dict[str, dict[str, str]] = {}
+    for raw in raw_analyses:
+        analysis_output_maps[str(raw.get("node_id"))] = {
+            str(item.get("output_id")): _semantic_name(item.get("quantity_kind"))
+            for item in raw.get("outputs") or ()
+        }
+
+    required_outputs = set(toolchain.get("required_output_ids") or ())
+    analysis_nodes: list[WorkflowSemanticNodeV1] = []
+    for raw in raw_analyses:
+        node_id = str(raw.get("node_id"))
+        dependencies: set[tuple[str, str, str]] = set()
+        data_producers: set[str] = set()
+        input_semantics: dict[str, Any] = {}
+        for item in raw.get("inputs") or ():
+            producer = str(item.get("producer_node_id") or "")
+            producer_output = str(item.get("producer_output_id") or "")
+            data_producers.add(producer)
+            source_semantic = (
+                output_maps.get(producer, {}).get(producer_output)
+                or analysis_output_maps.get(producer, {}).get(producer_output)
+                or _semantic_name(producer_output)
+            )
+            input_id = str(item.get("input_id") or "")
+            input_semantics[input_id] = {
+                "source_node_id": producer,
+                "source_output": source_semantic,
+            }
+            dependencies.add((producer, source_semantic, source_semantic))
+        for producer in raw.get("dependencies") or ():
+            producer_id = str(producer)
+            if producer_id not in data_producers:
+                dependencies.add((producer_id, "completion", "control"))
+
+        outputs = tuple(raw.get("outputs") or ())
+        parameters: list[tuple[str, Any]] = [
+            ("support_state", _semantic_name(raw.get("support_state"))),
+            (
+                "output_units",
+                tuple(
+                    sorted(
+                        (
+                            _semantic_name(item.get("quantity_kind")),
+                            str(item.get("unit") or "").strip().lower(),
+                        )
+                        for item in outputs
+                    )
+                ),
+            ),
+        ]
+        selectors = tuple(
+            sorted(_semantic_name(item.get("selector")) for item in raw.get("selectors") or ())
+        )
+        if selectors:
+            parameters.append(("selectors", selectors))
+        validation_rules = tuple(
+            sorted(
+                (
+                    _semantic_name(item.get("predicate")),
+                    tuple(
+                        sorted(
+                            (
+                                input_semantics.get(str(input_id), {}) or {}
+                            ).get("source_output", _semantic_name(input_id))
+                            for input_id in item.get("input_ids") or ()
+                        )
+                    ),
+                    canonical_data(item.get("threshold")),
+                    canonical_data(item.get("expected_count")),
+                    str(item.get("unit") or "").strip().lower(),
+                )
+                for item in raw.get("validation_rules") or ()
+            ),
+            key=canonical_json,
+        )
+        if validation_rules:
+            parameters.append(("validation_rules", validation_rules))
+        expression_outputs = _canonical_expression_outputs(
+            raw, input_semantics=input_semantics
+        )
+        if expression_outputs:
+            parameters.append(("expression_outputs", expression_outputs))
+        required_semantics = tuple(
+            sorted(
+                _semantic_name(item.get("quantity_kind"))
+                for item in outputs
+                if item.get("output_id") in required_outputs
+            )
+        )
+        if required_semantics:
+            parameters.append(("required_outputs", required_semantics))
+        if raw.get("temperature_k") is not None:
+            parameters.append(("temperature_k", float(raw["temperature_k"])))
+        if raw.get("pressure_atm") is not None:
+            parameters.append(("pressure_atm", float(raw["pressure_atm"])))
+        analysis_nodes.append(
+            WorkflowSemanticNodeV1(
+                node_id=node_id,
+                node_kind="analysis",
+                operation=_semantic_name(raw.get("analysis_kind")),
+                dependencies=tuple(
+                    WorkflowDependencyAnswerV1(*item)
+                    for item in sorted(dependencies)
+                ),
+                output_semantics=tuple(
+                    sorted(
+                        {
+                            _semantic_name(item.get("quantity_kind"))
+                            for item in outputs
+                        }
+                    )
+                ),
+                semantic_parameters=tuple(sorted(parameters)),
+            )
+        )
+
+    return PaperWorkflowObservationV1(
+        schema_version="chemsmart.paper-workflow-observation.v1",
+        projects=tuple(sorted(observed_projects.values(), key=lambda item: item.project_id)),
+        nodes=tuple(sorted((*calculation_nodes, *analysis_nodes), key=lambda item: item.node_id)),
+    )
 
 
 @dataclass(frozen=True)
@@ -1276,6 +2062,7 @@ __all__ = [
     "PaperAnswerKeyV1",
     "PaperBenchmarkEligibilityV1",
     "PaperBlackBoxCaseV1",
+    "PaperModelInputV1",
     "PaperContextArmV1",
     "PaperContextRecordV1",
     "PaperWorkflowGradeV1",
@@ -1293,6 +2080,8 @@ __all__ = [
     "build_paper_context_arms",
     "build_paper_workflow_answer_key",
     "build_reference_quantity",
+    "analysis_claim_record_from_live_result",
+    "paper_workflow_observation_from_live_result",
     "extract_multi_xyz_record",
     "grade_paper_workflow_result",
     "grade_paper_numerical_claims",

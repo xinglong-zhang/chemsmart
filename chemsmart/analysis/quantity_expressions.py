@@ -68,6 +68,7 @@ _OPERATIONS = frozenset(
         "linear_fit_intercept",
         "exponential_cbs_limit",
         "scf_exponential_cbs_limit",
+        "scf_inverse_power_cbs_limit",
         "correlation_inverse_power_cbs_limit",
         "photon_wavelength",
         "boltzmann_populations",
@@ -459,6 +460,7 @@ class QuantityExpressionNodeV1:
             raise QuantityContractError("scale_factor must be finite")
         cbs_operations = {
             "scf_exponential_cbs_limit",
+            "scf_inverse_power_cbs_limit",
             "correlation_inverse_power_cbs_limit",
         }
         if self.operation in cbs_operations:
@@ -1269,6 +1271,7 @@ def _node_value(
 
     if operation in {
         "scf_exponential_cbs_limit",
+        "scf_inverse_power_cbs_limit",
         "correlation_inverse_power_cbs_limit",
     }:
         if (
@@ -1287,6 +1290,7 @@ def _node_value(
             AggregationError,
             extrapolate_correlation_inverse_power,
             extrapolate_scf_exponential,
+            extrapolate_scf_inverse_power,
         )
 
         try:
@@ -1297,6 +1301,14 @@ def _node_value(
                     smaller_scf_energy=smaller_energy,
                     larger_scf_energy=larger_energy,
                     alpha=float(node.extrapolation_exponent),
+                )
+            elif operation == "scf_inverse_power_cbs_limit":
+                payload = extrapolate_scf_inverse_power(
+                    smaller_cardinal=smaller_cardinal,
+                    larger_cardinal=larger_cardinal,
+                    smaller_scf_energy=smaller_energy,
+                    larger_scf_energy=larger_energy,
+                    exponent=float(node.extrapolation_exponent),
                 )
             else:
                 payload = extrapolate_correlation_inverse_power(
