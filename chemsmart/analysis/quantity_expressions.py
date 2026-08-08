@@ -127,6 +127,11 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "two-point SCF exponential limit from two energies at "
         "cardinal_numbers, using an extrapolation_exponent you supply"
     ),
+    "scf_inverse_power_cbs_limit": (
+        "two-point SCF complete-basis-set limit in inverse powers of the "
+        "cardinal number, using an explicit extrapolation_exponent. This is "
+        "a different convergence law from scf_exponential_cbs_limit"
+    ),
     "correlation_inverse_power_cbs_limit": (
         "two-point correlation-energy limit in inverse powers of the cardinal "
         "number, using an extrapolation_exponent you supply. Takes correlation "
@@ -188,6 +193,7 @@ CONVENTION_OPERATIONS = frozenset(
         "linear_fit_slope",
         "photon_wavelength",
         "scf_exponential_cbs_limit",
+        "scf_inverse_power_cbs_limit",
     }
 )
 

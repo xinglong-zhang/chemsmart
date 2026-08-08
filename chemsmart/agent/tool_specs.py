@@ -6,11 +6,6 @@ from dataclasses import dataclass
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
 from chemsmart.agent.skills import skills_enabled
-from chemsmart.agent.workflows import (
-    AGGREGATE_NODE_PROGRAM,
-    AGGREGATE_NODE_STAGE,
-    WORKFLOW_NODE_KINDS,
-)
 from chemsmart.agent.capabilities import (
     ProgramCapabilityRegistryV1,
     load_program_capabilities,
@@ -1026,16 +1021,15 @@ def _workflow_node_schema() -> dict:
             },
             "node_kind": {
                 "type": "string",
-                "enum": list(WORKFLOW_NODE_KINDS),
+                # Legacy Runtime V2 events may still replay an aggregate
+                # command node, but new model proposals use the scientific
+                # analysis DAG as the single post-processing authority.
+                "enum": ["program_call"],
                 "description": (
-                    "Omit or use 'program_call' to invoke a program. Use "
-                    "'aggregate' for a stage that combines finished results "
-                    "into the requested number: set program to "
-                    f"'{AGGREGATE_NODE_PROGRAM}' and jobtype to "
-                    f"'{AGGREGATE_NODE_STAGE}'. An observable that needs such "
-                    "a stage has no other producer, so declare it rather than "
-                    "dropping it; the arithmetic itself is supplied later "
-                    "as a quantity expression."
+                    "Omit or use 'program_call' to invoke a program. Declare "
+                    "post-processing with the scientific toolchain's typed "
+                    "analysis nodes, not a second command-level aggregate "
+                    "plane."
                 ),
             },
             "project_role": _string(),
@@ -1338,7 +1332,8 @@ def _quantity_expression_node_schema() -> dict:
                 "exclusiveMinimum": 0,
                 "description": (
                     "Method/protocol-derived positive exponent for a two-point "
-                    "SCF exponential or correlation inverse-power CBS limit. "
+                    "SCF exponential, SCF inverse-power, or correlation "
+                    "inverse-power CBS limit. "
                     "This is a number you supply, not one the host measured, "
                     "so the receipt records it as model-authored and it is "
                     "auditable as such. Supply it only when the protocol you "

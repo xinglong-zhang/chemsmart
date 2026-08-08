@@ -2222,8 +2222,9 @@ class CommandCompiledToolHostV1:
                 "task_spec_id": current_draft.task_spec_id,
                 "nodes": tuple(
                     {
-                        "node_id": node.node_id,
-                        "program": node.program,
+                         "node_id": node.node_id,
+                         "node_kind": node.node_kind,
+                         "program": node.program,
                         "jobtype": node.jobtype,
                         "project_role": node.project_role,
                         "dependencies": node.dependencies,
