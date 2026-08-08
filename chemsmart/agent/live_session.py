@@ -125,6 +125,8 @@ from chemsmart.agent.tool_specs import (
 )
 from chemsmart.agent.workflows import (
     HarnessExperimentConfigV1,
+    MaterializedNodeV1,
+    MaterializedWorkflowV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
     ScientificWorkflowPlanV2,
@@ -848,6 +850,15 @@ def run_live_agent_session(
             # means execution can resolve the approved DAG directly instead of
             # waiting for the model to re-derive it byte for byte.
             host_kwargs["scientific_workflow_plan"] = approved_plan
+        approved_materialization = execution_inputs.pop(
+            "approved_materialized_workflow"
+        )
+        if approved_materialization is not None:
+            # Same story one layer down: execution resolves the frozen
+            # approval's ``materialized_workflow_sha256`` from a registry that
+            # only this session fills, and refuses with "frozen workflow
+            # approval has no canonical materialization" when it cannot.
+            host_kwargs["materialized_workflow"] = approved_materialization
         approved_projects = execution_inputs.pop("approved_project_artifacts")
         host_kwargs["artifacts"].update(
             {item.artifact_id: item for item in approved_projects}
@@ -3172,6 +3183,7 @@ def _execution_composition_inputs(
     # authorises preview alone keeps working.
     raw_frozen = payload.get("frozen_workflow_approval")
     composed["approved_scientific_plan"] = None
+    composed["approved_materialized_workflow"] = None
     if raw_frozen is not None:
         if not isinstance(raw_frozen, Mapping):
             raise ContractError("frozen workflow approval must be an object")
@@ -3196,7 +3208,55 @@ def _execution_composition_inputs(
                     "approved scientific plan is not the plan that was frozen"
                 )
             composed["approved_scientific_plan"] = plan
+        raw_material = payload.get("approved_materialized_workflow")
+        if raw_material is not None:
+            if not isinstance(raw_material, Mapping):
+                raise ContractError(
+                    "approved materialized workflow must be an object"
+                )
+            material = _parse_materialized_workflow(raw_material)
+            if material.materialized_sha256 != (
+                frozen.materialized_workflow_sha256
+            ):
+                raise ContractError(
+                    "approved materialization is not the one that was frozen"
+                )
+            composed["approved_materialized_workflow"] = material
+        # The environment the reviewer approved, identified by machine rather
+        # than by receipt digest. A receipt digest folds in its capability
+        # receipt, which changes with the active overlay, so the digest a plan
+        # session records is never the one execution computes even on the same
+        # interpreter. The reviewer holds the plan session's receipts and can
+        # state their identity; without it, only an exact digest match passes.
+        raw_identities = payload.get("approved_environment_identities")
+        if raw_identities is not None:
+            if not isinstance(raw_identities, (list, tuple)):
+                raise ContractError(
+                    "approved environment identities must be a list"
+                )
+            composed["approved_environment_identities"] = tuple(
+                require_sha256(item, "approved environment identity")
+                for item in raw_identities
+            )
     return composed
+
+
+def _parse_materialized_workflow(
+    value: Mapping[str, Any],
+) -> MaterializedWorkflowV1:
+    """Rebuild the materialization the frozen approval pins."""
+
+    raw = dict(value)
+    try:
+        raw["nodes"] = tuple(
+            MaterializedNodeV1(**dict(item)) for item in raw.get("nodes", ())
+        )
+        raw["unresolved_node_ids"] = tuple(raw.get("unresolved_node_ids", ()))
+        return MaterializedWorkflowV1(**raw)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractError(
+            "approved materialized workflow does not match the v1 schema"
+        ) from exc
 
 
 def _parse_scientific_workflow_plan(

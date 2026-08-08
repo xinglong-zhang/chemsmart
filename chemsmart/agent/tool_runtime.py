@@ -48,6 +48,7 @@ from chemsmart.agent.capabilities import (
     build_approved_execution_overlay,
     build_command_compiled_preview_overlay,
     consume_pyscf_compute_environment_receipt,
+    environment_identity_sha256,
     load_program_capabilities,
     query_capability,
     query_environment,
@@ -852,6 +853,8 @@ class CommandCompiledToolHostV1:
         execution_resources: ExecutionResourceSpecV1 | None = None,
         workflow_execution_approval: WorkflowExecutionApprovalV1 | None = None,
         frozen_workflow_approval: FrozenWorkflowApprovalV1 | None = None,
+        approved_environment_identities: tuple[str, ...] = (),
+        materialized_workflow: MaterializedWorkflowV1 | None = None,
         stationary_point_policy: (
             StationaryPointValidationPolicyV1 | None
         ) = None,
@@ -892,6 +895,9 @@ class CommandCompiledToolHostV1:
         self.surface = tool_surface or h1_surface
         self.artifacts = dict(artifacts)
         self.task_spec_sha256s = frozenset(task_spec_sha256s)
+        self.approved_environment_identities = tuple(
+            approved_environment_identities
+        )
         self.approved_workspace = (
             Path(approved_workspace).resolve()
             if approved_workspace is not None
@@ -1123,6 +1129,10 @@ class CommandCompiledToolHostV1:
             {}
         )
         self.materialized_workflows: dict[str, MaterializedWorkflowV1] = {}
+        if materialized_workflow is not None:
+            self.materialized_workflows[
+                materialized_workflow.materialized_sha256
+            ] = materialized_workflow
         if scientific_workflow_plan is not None:
             self.scientific_workflow_plans[
                 scientific_workflow_plan.plan_sha256
@@ -2595,6 +2605,43 @@ class CommandCompiledToolHostV1:
             )
         return matches[0] if matches else None
 
+    def _environment_identity_is_approved(
+        self, observed_sha256: str, approved_sha256s
+    ) -> bool:
+        """Accept the approved *machine* even when the receipt digest moved.
+
+        An environment receipt's digest folds in its capability receipt, and a
+        capability receipt changes with the active overlay, so the receipt a
+        plan session records is never the one an execution session computes --
+        even on the same interpreter, with identical versions. Pinning the
+        digest therefore rejected the machine the approval named, and no
+        reviewer could supply the right digest because it does not exist until
+        execution is already authorised.
+
+        Comparing environment identity keeps the property the check exists for:
+        a different interpreter, a different dependency set, or a different
+        accelerator still fails. Only the authorisation flavour is ignored.
+        Falls back to refusing when either side's receipt body is unavailable.
+        """
+
+        approved = {digest for digest in approved_sha256s if digest}
+        if not approved:
+            return False
+        observed = self.environments.get(observed_sha256)
+        if observed is None:
+            return False
+        identity = environment_identity_sha256(observed)
+        for digest in approved:
+            candidate = self.environments.get(digest)
+            if candidate is None:
+                continue
+            if environment_identity_sha256(candidate) == identity:
+                return True
+        approved_identities = getattr(
+            self, "approved_environment_identities", ()
+        )
+        return identity in set(approved_identities or ())
+
     def _resolve_safe_preview(self, invocation_sha256: str):
         """Find the safe preview this invocation already produced.
 
@@ -3635,6 +3682,9 @@ class CommandCompiledToolHostV1:
             )
             if execution_invocation.environment_receipt_sha256 not in (
                 expected_environments
+            ) and not self._environment_identity_is_approved(
+                execution_invocation.environment_receipt_sha256,
+                expected_environments,
             ):
                 raise ContractError(
                     "execution environment differs from the exact frozen "

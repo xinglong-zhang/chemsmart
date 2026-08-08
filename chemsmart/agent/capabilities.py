@@ -1090,6 +1090,58 @@ def build_command_compiled_preview_overlay(
     )
 
 
+def environment_identity_sha256(receipt: Any) -> str:
+    """Identify the *machine*, independently of what was asked of it.
+
+    ``EnvironmentCapabilityReceiptV1.receipt_sha256`` folds in
+    ``capability_receipt_sha256``, and a capability receipt changes with the
+    active overlay.  A plan session and an execution session therefore observe
+    the same interpreter and produce different environment digests: measured on
+    one PySCF node, ``compute_evidence_sha256``,
+    ``compute_interpreter_sha256``, ``locator`` and every dependency version
+    were byte-identical while the receipt digests were ``8aed9113…`` and
+    ``cc554e28…``.
+
+    An approval that pinned the receipt digest therefore rejected the very
+    machine it had approved, and no reviewer could have supplied the right
+    digest, because it does not exist until execution is already authorised.
+    This is the environment's own identity: the fields that say which
+    interpreter, which versions, and which accelerator, and nothing about who
+    was asking.
+    """
+
+    return canonical_sha256(
+        {
+            "schema_version": "chemsmart.environment-identity.v1",
+            "program": getattr(receipt, "program", ""),
+            "engine": getattr(receipt, "engine", ""),
+            "target_kind": getattr(receipt, "target_kind", ""),
+            "locator": getattr(receipt, "locator", ""),
+            "observation_method": getattr(receipt, "observation_method", ""),
+            "observed_version": getattr(receipt, "observed_version", ""),
+            "observed_location_sha256": getattr(
+                receipt, "observed_location_sha256", ""
+            ),
+            "compute_interpreter_sha256": getattr(
+                receipt, "compute_interpreter_sha256", ""
+            ),
+            "compute_evidence_sha256": getattr(
+                receipt, "compute_evidence_sha256", ""
+            ),
+            "dependency_versions": tuple(
+                tuple(item)
+                for item in getattr(receipt, "dependency_versions", ())
+            ),
+            "solver_evidence": tuple(
+                tuple(item) for item in getattr(receipt, "solver_evidence", ())
+            ),
+            "gpu_evidence": tuple(
+                tuple(item) for item in getattr(receipt, "gpu_evidence", ())
+            ),
+        }
+    )
+
+
 def build_approved_execution_overlay(
     *,
     registry: ProgramCapabilityRegistryV1,
