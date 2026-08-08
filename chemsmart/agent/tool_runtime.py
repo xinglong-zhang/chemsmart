@@ -3148,6 +3148,7 @@ class CommandCompiledToolHostV1:
             ):
                 unresolved_node_ids.append(planned_node.node_id)
                 continue
+            preflight = self._preflight_by_node.get(planned_node.node_id)
             previewed = self._node_is_previewed(planned_node.node_id)
             materialized_nodes.append(
                 MaterializedNodeV1(
