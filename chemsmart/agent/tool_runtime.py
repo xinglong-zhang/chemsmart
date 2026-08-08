@@ -92,6 +92,7 @@ from chemsmart.agent.execution import (
     build_scientific_decision_record,
     build_validated_data_edge_binding,
     handoff_optimized_pyscf_geometry,
+    invocation_identity_sha256,
     promote_project_candidate,
 )
 from chemsmart.agent.knowledge import (
@@ -2605,6 +2606,39 @@ class CommandCompiledToolHostV1:
             )
         return matches[0] if matches else None
 
+    def _invocation_identity(self, node_id: str) -> str:
+        """Path-independent identity of a node's latest compiled command.
+
+        Computed from one place so the digest a materialization freezes and
+        the digest execution presents cannot be assembled differently.
+        """
+
+        try:
+            invocation, context = self._latest_invocation_for_node(node_id)
+        except ContractError:
+            return ""
+        project_artifact = context.project_artifact
+        identity = context.scientific_identity
+        if project_artifact is None or identity is None:
+            return ""
+        return invocation_identity_sha256(
+            program=invocation.command_path[1],
+            engine=context.engine_binding.engine,
+            jobtype=invocation.command_path[-1],
+            project_sha256=project_artifact.sha256,
+            input_sha256=context.input_artifact.sha256,
+            scientific_identity_sha256=identity.binding_sha256,
+            argv=invocation.argv,
+        )
+
+    def _environment_identity_for(self, receipt_sha256: str) -> str:
+        """Identity of an observed environment, or "" when unresolvable."""
+
+        observed = self.environments.get(receipt_sha256)
+        return (
+            "" if observed is None else environment_identity_sha256(observed)
+        )
+
     def _environment_identity_is_approved(
         self, observed_sha256: str, approved_sha256s
     ) -> bool:
@@ -3061,6 +3095,9 @@ class CommandCompiledToolHostV1:
                     project_validation_receipt_sha256=project.receipt_sha256,
                     environment_receipt_sha256=environment_sha256,
                     invocation_sha256=invocation.invocation_sha256,
+                    invocation_identity_sha256=(
+                        self._invocation_identity(planned_node.node_id)
+                    ),
                     preflight_receipt_sha256=(
                         preflight.receipt_sha256 if previewed else ""
                     ),
@@ -3668,24 +3705,32 @@ class CommandCompiledToolHostV1:
             resources=self.execution_resources,
             argv=real_argv,
             handoff=handoff,
+            environment_identity_sha256=self._environment_identity_for(
+                context.engine_binding.environment_receipt_sha256
+            ),
+            # Identity of the *compiled* command, not of ``real_argv``: the
+            # preview froze the compiled one, and the host rewrite that adds
+            # --no-fake and the resource flags is deterministic from it.
+            invocation_identity_sha256=self._invocation_identity(node_id),
         )
         if self.frozen_workflow_approval is not None:
             future_rules = self.frozen_workflow_approval.producer_rules_for(
                 node_id
             )
-            expected_environments = (
-                {item.environment_receipt_sha256 for item in future_rules}
-                if future_rules
-                else set(
-                    self.frozen_workflow_approval.environment_receipt_sha256s
+            if future_rules:
+                # A future producer rule still pins a receipt digest, so its
+                # identity has to be resolved through the observed receipts.
+                approved = self._environment_identity_is_approved(
+                    execution_invocation.environment_receipt_sha256,
+                    {item.environment_receipt_sha256 for item in future_rules},
                 )
-            )
-            if execution_invocation.environment_receipt_sha256 not in (
-                expected_environments
-            ) and not self._environment_identity_is_approved(
-                execution_invocation.environment_receipt_sha256,
-                expected_environments,
-            ):
+            else:
+                approved = execution_invocation.environment_identity_sha256 in (
+                    set(
+                        self.frozen_workflow_approval.environment_identity_sha256s
+                    )
+                )
+            if not approved:
                 raise ContractError(
                     "execution environment differs from the exact frozen "
                     "node approval"

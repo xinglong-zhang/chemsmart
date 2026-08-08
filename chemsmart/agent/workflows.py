@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -841,9 +841,19 @@ class MaterializedNodeV1:
     invocation_sha256: str
     preflight_receipt_sha256: str
     state: str
+    #: Path-independent identity of the compiled command.  ``invocation_sha256``
+    #: covers argv, which carries absolute paths into this session's own
+    #: timestamped run directory, so no later process can reproduce it.
+    #: Omitted from the workflow digest when empty, so a materialization
+    #: recorded before this field existed keeps the digest it was stored with.
+    invocation_identity_sha256: str = ""
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
+        if self.invocation_identity_sha256:
+            require_sha256(
+                self.invocation_identity_sha256, "invocation_identity_sha256"
+            )
         for name, digest in (
             ("input_artifact_sha256", self.input_artifact_sha256),
             ("project_artifact_sha256", self.project_artifact_sha256),
@@ -868,6 +878,33 @@ class MaterializedNodeV1:
             raise ContractError(
                 "only previewed node carries preflight evidence"
             )
+
+
+def _materialized_node_body(node: MaterializedNodeV1) -> dict[str, Any]:
+    """Canonical node projection that omits unset optional evidence.
+
+    The workflow digest folds its nodes, so serialising the dataclass whole
+    would have made every stored ``materialized_sha256`` invalid the moment an
+    optional field was added.  Omitting an empty optional keeps a workflow
+    recorded before the field readable, and a workflow that carries the field
+    digests it.
+    """
+
+    body = {
+        "node_id": node.node_id,
+        "input_artifact_sha256": node.input_artifact_sha256,
+        "project_artifact_sha256": node.project_artifact_sha256,
+        "project_validation_receipt_sha256": (
+            node.project_validation_receipt_sha256
+        ),
+        "environment_receipt_sha256": node.environment_receipt_sha256,
+        "invocation_sha256": node.invocation_sha256,
+        "preflight_receipt_sha256": node.preflight_receipt_sha256,
+        "state": node.state,
+    }
+    if node.invocation_identity_sha256:
+        body["invocation_identity_sha256"] = node.invocation_identity_sha256
+    return body
 
 
 @dataclass(frozen=True)
@@ -938,7 +975,9 @@ class MaterializedWorkflowV1:
             "scientific_identity_sha256": self.scientific_identity_sha256,
             "live_cli_schema_sha256": self.live_cli_schema_sha256,
             "resource_sha256": self.resource_sha256,
-            "nodes": self.nodes,
+            "nodes": tuple(
+                _materialized_node_body(node) for node in self.nodes
+            ),
             "unresolved_node_ids": self.unresolved_node_ids,
             "status": self.status,
         }
@@ -987,8 +1026,14 @@ def build_materialized_workflow(
         "unresolved_node_ids": unresolved,
         "status": str(status),
     }
+    # The digest is taken over the same node projection the validator uses.
+    # Two spellings of one body is how a record becomes unconstructible.
+    digest_body = dict(body)
+    digest_body["nodes"] = tuple(
+        _materialized_node_body(node) for node in normalized_nodes
+    )
     return MaterializedWorkflowV1(
-        **body, materialized_sha256=canonical_sha256(body)
+        **body, materialized_sha256=canonical_sha256(digest_body)
     )
 
 

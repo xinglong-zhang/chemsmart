@@ -63,9 +63,7 @@ def _strict_record(
         if extra:
             detail.append("extra=" + ",".join(extra))
         if detail:
-            raise ContractError(
-                f"{label} fields differ ({'; '.join(detail)})"
-            )
+            raise ContractError(f"{label} fields differ ({'; '.join(detail)})")
     return record
 
 
@@ -92,7 +90,9 @@ def scientific_workflow_plan_from_record(
     record = _strict_record(value, ScientificWorkflowPlanV2, "scientific plan")
     nodes = []
     for item in _tuple(record["nodes"], "scientific plan nodes"):
-        node = _strict_record(item, ScientificWorkflowNodeV2, "scientific node")
+        node = _strict_record(
+            item, ScientificWorkflowNodeV2, "scientific node"
+        )
         node["unresolved_fields"] = tuple(
             str(value)
             for value in _tuple(
@@ -142,16 +142,16 @@ def materialized_workflow_from_record(
             record["unresolved_node_ids"], "unresolved workflow nodes"
         )
     )
-    return _construct(
-        MaterializedWorkflowV1, record, "materialized workflow"
-    )
+    return _construct(MaterializedWorkflowV1, record, "materialized workflow")
 
 
 def frozen_workflow_approval_from_record(
     value: Mapping[str, Any],
 ) -> FrozenWorkflowApprovalV1:
     if not isinstance(value, Mapping):
-        raise ContractError("frozen workflow approval must be a canonical mapping")
+        raise ContractError(
+            "frozen workflow approval must be a canonical mapping"
+        )
     normalized = dict(value)
     legacy_fields = {
         item.name for item in fields(FrozenWorkflowApprovalV1)
@@ -172,7 +172,7 @@ def frozen_workflow_approval_from_record(
         normalized, FrozenWorkflowApprovalV1, "frozen workflow approval"
     )
     for name in (
-        "environment_receipt_sha256s",
+        "environment_identity_sha256s",
         "approved_node_ids",
         "producer_edge_sha256s",
     ):
@@ -248,9 +248,7 @@ def workflow_run_state_from_record(
                 for item in _tuple(node[name], f"workflow node {name}")
             )
         nodes.append(
-            _construct(
-                WorkflowNodeRunStateV1, node, "workflow node run state"
-            )
+            _construct(WorkflowNodeRunStateV1, node, "workflow node run state")
         )
     record["nodes"] = tuple(nodes)
     return _construct(WorkflowRunStateV1, record, "workflow run state")
@@ -323,7 +321,10 @@ class WorkflowNodeLaunchReservationV1:
     data_edge_binding_sha256s: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.workflow-node-launch-reservation.v1":
+        if (
+            self.schema_version
+            != "chemsmart.workflow-node-launch-reservation.v1"
+        ):
             raise ContractError("unsupported workflow launch reservation")
         for name, value in (
             ("reservation_id", self.reservation_id),
@@ -364,15 +365,21 @@ class WorkflowNodeLaunchReservationV1:
         }
         if not self.admission_sha256:
             if self.data_edge_binding_sha256s:
-                raise ContractError("legacy reservation cannot bind data edges")
+                raise ContractError(
+                    "legacy reservation cannot bind data edges"
+                )
             if self.reservation_sha256 != canonical_sha256(legacy_body):
-                raise ContractError("workflow launch reservation digest mismatch")
+                raise ContractError(
+                    "workflow launch reservation digest mismatch"
+                )
             return
         require_sha256(self.admission_sha256, "admission_sha256")
         if self.data_edge_binding_sha256s != tuple(
             sorted(set(self.data_edge_binding_sha256s))
         ):
-            raise ContractError("data edge binding digests must be sorted and unique")
+            raise ContractError(
+                "data edge binding digests must be sorted and unique"
+            )
         for digest in self.data_edge_binding_sha256s:
             require_sha256(digest, "data_edge_binding_sha256")
         body = {
@@ -415,10 +422,25 @@ def build_workflow_node_launch_reservation(
         raise ContractError("invocation node is absent from frozen approval")
     if invocation.resource_sha256 != approval.resource_sha256:
         raise ContractError("invocation resources differ from frozen approval")
-    if invocation.environment_receipt_sha256 not in (
-        approval.environment_receipt_sha256s
+    # Compare identity with identity. The invocation's *receipt* digest names
+    # the exact observation that produced its binding, but it folds in a
+    # capability receipt that changes with the active tool overlay, so it
+    # never equals the digest a planning session recorded for the same
+    # unchanged machine. Comparing it here rejected the very environment the
+    # approval named, and no reviewer could supply an accepted digest because
+    # it does not exist until execution is already authorised.
+    # An approval built from identities is matched by identity; one built
+    # before identities existed still holds receipt digests and is matched the
+    # old way. Requiring identity outright would make every approval already
+    # on disk unexecutable, which is the failure this change exists to remove.
+    approved_environments = approval.environment_identity_sha256s
+    if (
+        invocation.environment_identity_sha256 not in approved_environments
+        and invocation.environment_receipt_sha256 not in approved_environments
     ):
-        raise ContractError("invocation environment differs from frozen approval")
+        raise ContractError(
+            "invocation environment differs from frozen approval"
+        )
     preview_binding = approval.preview_binding(invocation.node_id)
     producer_rules = approval.producer_rules_for(invocation.node_id)
     matched_data_bindings = tuple(
@@ -436,27 +458,44 @@ def build_workflow_node_launch_reservation(
             raise ContractError(
                 "frozen preview node cannot also consume a future data edge"
             )
+        # Content and identity are comparable across sessions; the two raw
+        # digests are not.  ``invocation_sha256`` covers argv, whose absolute
+        # paths point into the planning session's own timestamped run
+        # directory, and the two sides digest different record types over
+        # different argv besides.  ``environment_receipt_sha256`` folds in a
+        # capability receipt that moves with the tool overlay.  Comparing
+        # either made an approval unexecutable by any later process.
         if (
-            invocation.invocation_sha256 != preview_binding.invocation_sha256
-            or invocation.input_sha256
-            != preview_binding.input_artifact_sha256
+            invocation.input_sha256 != preview_binding.input_artifact_sha256
             or invocation.project_sha256
             != preview_binding.project_artifact_sha256
-            or invocation.environment_receipt_sha256
-            != preview_binding.environment_receipt_sha256
             or invocation.scientific_identity_sha256
             != plan.scientific_identity_sha256
         ):
             raise ContractError("invocation differs from exact frozen preview")
+        frozen_identity = preview_binding.invocation_identity_sha256
+        if frozen_identity:
+            if invocation.invocation_identity_sha256 != frozen_identity:
+                raise ContractError(
+                    "invocation differs from exact frozen preview"
+                )
+        elif invocation.invocation_sha256 != preview_binding.invocation_sha256:
+            # A preview frozen before invocation identity existed can only be
+            # matched the old way, which is exact but session-scoped.
+            raise ContractError("invocation differs from exact frozen preview")
     else:
-        if not producer_rules or len(matched_data_bindings) != len(producer_rules):
+        if not producer_rules or len(matched_data_bindings) != len(
+            producer_rules
+        ):
             raise ContractError(
                 "future producer-dependent invocation lacks exact data bindings"
             )
         if tuple(
             item.producer_rule_sha256 for item in matched_data_bindings
         ) != tuple(item.rule_sha256 for item in producer_rules):
-            raise ContractError("data bindings differ from frozen producer rules")
+            raise ContractError(
+                "data bindings differ from frozen producer rules"
+            )
         selected = tuple(
             item
             for item in matched_data_bindings
@@ -469,7 +508,8 @@ def build_workflow_node_launch_reservation(
                 "invocation input/state differs from selected producer artifact"
             )
     node = next(
-        (item for item in plan.nodes if item.node_id == invocation.node_id), None
+        (item for item in plan.nodes if item.node_id == invocation.node_id),
+        None,
     )
     if node is None:
         raise ContractError("invocation node is absent from scientific plan")
@@ -552,12 +592,16 @@ class ReconstructedWorkflowFrontierV1:
     data_edge_bindings: tuple[ValidatedDataEdgeBindingV1, ...]
     legacy_incomplete: bool
 
-    def receipt_for_node(self, node_id: str) -> ProgramExecutionReceiptV1 | None:
+    def receipt_for_node(
+        self, node_id: str
+    ) -> ProgramExecutionReceiptV1 | None:
         matches = tuple(
             item for item in self.execution_receipts if item.node_id == node_id
         )
         if len(matches) > 1:
-            raise ContractError("multiple execution receipts exist for one node")
+            raise ContractError(
+                "multiple execution receipts exist for one node"
+            )
         return matches[0] if matches else None
 
     def reservation_for_node(
@@ -567,7 +611,9 @@ class ReconstructedWorkflowFrontierV1:
             item for item in self.reservations if item.node_id == node_id
         )
         if len(matches) > 1:
-            raise ContractError("multiple launch reservations exist for one node")
+            raise ContractError(
+                "multiple launch reservations exist for one node"
+            )
         return matches[0] if matches else None
 
 
@@ -590,8 +636,7 @@ class LaunchFenceResultV1:
         ):
             raise ContractError("reserved launch fence result is incomplete")
         if self.status == "terminal_replay" and (
-            self.reservation is not None
-            or self.execution_receipt is None
+            self.reservation is not None or self.execution_receipt is None
         ):
             raise ContractError("terminal replay result is incomplete")
 
@@ -644,7 +689,9 @@ def reconstruct_workflow_frontier(
             state, "materialized_workflow_records", {}
         ).get(approval.materialized_workflow_sha256)
         if isinstance(materialized_record, Mapping):
-            materialized = materialized_workflow_from_record(materialized_record)
+            materialized = materialized_workflow_from_record(
+                materialized_record
+            )
 
     reservations = tuple(
         sorted(
@@ -710,25 +757,24 @@ def reconstruct_workflow_frontier(
         )
     )
     has_legacy_execution = bool(
-        set(getattr(state, "legacy_incomplete_execution_node_ids", ())).intersection(
-            {node.node_id for node in plan.nodes} if plan is not None else set()
+        set(
+            getattr(state, "legacy_incomplete_execution_node_ids", ())
+        ).intersection(
+            {node.node_id for node in plan.nodes}
+            if plan is not None
+            else set()
         )
     )
     legacy_incomplete = bool(
         has_legacy_execution
-        or (
-            run_state is not None
-            and not reservations
-        )
+        or (run_state is not None and not reservations)
         or (
             approval is not None
             and approval.approval_id
             in set(getattr(state, "consumed_workflow_approval_ids", ()))
             and not reservations
         )
-        or (
-            approval is not None and not approval.execution_admissible
-        )
+        or (approval is not None and not approval.execution_admissible)
         or any(not item.admission_sha256 for item in reservations)
     )
     return ReconstructedWorkflowFrontierV1(

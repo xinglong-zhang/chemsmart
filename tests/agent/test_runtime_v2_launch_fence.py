@@ -92,7 +92,7 @@ def _frontier(tmp_path):
         plan=plan,
         materialized_workflow=materialized,
         resources=resources,
-        environment_receipt_sha256s=("1" * 64,),
+        environment_identity_sha256s=("1" * 64,),
     )
     return plan, materialized, approval, invocation
 

@@ -100,7 +100,7 @@ def _approval():
         plan=plan,
         materialized_workflow=materialized,
         resources=resources,
-        environment_receipt_sha256s=("f" * 64,),
+        environment_identity_sha256s=("f" * 64,),
     )
     return plan, materialized, approval
 
@@ -222,7 +222,7 @@ def test_frozen_approval_rejects_compiled_materialized_node():
             plan=plan,
             materialized_workflow=materialized,
             resources=resources,
-            environment_receipt_sha256s=("f" * 64,),
+            environment_identity_sha256s=("f" * 64,),
         )
 
 
@@ -252,7 +252,7 @@ def test_future_node_requires_an_exact_environment_when_multiple_are_approved():
             plan=plan,
             materialized_workflow=materialized,
             resources=resources,
-            environment_receipt_sha256s=("e" * 64, "f" * 64),
+            environment_identity_sha256s=("e" * 64, "f" * 64),
         )
 
     approval = build_frozen_workflow_approval(
@@ -260,8 +260,8 @@ def test_future_node_requires_an_exact_environment_when_multiple_are_approved():
         plan=plan,
         materialized_workflow=materialized,
         resources=resources,
-        environment_receipt_sha256s=("e" * 64, "f" * 64),
-        future_node_environment_receipt_sha256s={
+        environment_identity_sha256s=("e" * 64, "f" * 64),
+        future_node_environment_identity_sha256s={
             "hess-optimized": "f" * 64,
         },
     )

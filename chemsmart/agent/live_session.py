@@ -360,7 +360,7 @@ class CampaignPreparationHostSnapshotV1:
             "environment_target_sha256s": tuple(
                 canonical_sha256(item) for item in self.environment_targets
             ),
-            "compute_environment_receipt_sha256s": tuple(
+            "compute_environment_identity_sha256s": tuple(
                 item.evidence_sha256
                 for item in self.compute_environment_receipts
             ),
@@ -449,7 +449,7 @@ def build_campaign_preparation_host_snapshot(
         "environment_target_sha256s": tuple(
             canonical_sha256(item) for item in environment_targets
         ),
-        "compute_environment_receipt_sha256s": tuple(
+        "compute_environment_identity_sha256s": tuple(
             item.evidence_sha256 for item in compute_receipts
         ),
         "conformance_records": records,
@@ -3423,8 +3423,8 @@ def _parse_frozen_workflow_approval(
 
     raw = dict(value)
     try:
-        raw["environment_receipt_sha256s"] = tuple(
-            raw.get("environment_receipt_sha256s", ())
+        raw["environment_identity_sha256s"] = tuple(
+            raw.get("environment_identity_sha256s", ())
         )
         raw["approved_node_ids"] = tuple(raw.get("approved_node_ids", ()))
         raw["producer_edge_sha256s"] = tuple(

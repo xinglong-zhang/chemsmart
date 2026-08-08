@@ -1163,6 +1163,63 @@ def _require_locked_pyscf_settings(settings: object, *, jobtype: str) -> None:
         )
 
 
+def argv_shape(argv: Sequence[str]) -> tuple[str, ...]:
+    """Replace absolute-path tokens with a placeholder.
+
+    Paths in a compiled command are where files happened to sit during one
+    session: a plan session writes its project YAML and server profile under a
+    private run directory whose name carries a timestamp and a nonce, so those
+    tokens can never recur.  What the command *does* -- the subcommand, the
+    flags, their order and their literal values -- is identical wherever it
+    runs, and the file contents are pinned separately by digest.
+    """
+
+    return tuple(
+        "<path>" if str(token).startswith("/") else str(token)
+        for token in argv
+    )
+
+
+def invocation_identity_sha256(
+    *,
+    program: str,
+    engine: str,
+    jobtype: str,
+    project_sha256: str,
+    input_sha256: str,
+    scientific_identity_sha256: str,
+    argv: Sequence[str],
+) -> str:
+    """Identify a compiled command by what it computes, not where it ran.
+
+    An approval that pinned ``invocation_sha256`` could not be executed by any
+    later process.  That digest covers argv, and argv carries absolute paths
+    into the planning session's own timestamped run directory; it also covers
+    a different record type on each side of the check, since a preview pins a
+    ``CanonicalCommandInvocationV1`` over the preview argv while execution
+    builds a ``ProgramExecutionInvocationV1`` over a host-rewritten real argv.
+    Two schemas, two argvs, one field name.
+
+    This identity is stable across directories and machines, and still fails
+    on a changed program, engine, job type, project bytes, input bytes,
+    molecular identity, or command shape -- which is everything the check was
+    defending.
+    """
+
+    return canonical_sha256(
+        {
+            "schema_version": "chemsmart.invocation-identity.v1",
+            "program": str(program),
+            "engine": str(engine),
+            "jobtype": str(jobtype),
+            "project_sha256": str(project_sha256),
+            "input_sha256": str(input_sha256),
+            "scientific_identity_sha256": str(scientific_identity_sha256),
+            "argv_shape": argv_shape(argv),
+        }
+    )
+
+
 @dataclass(frozen=True)
 class ProgramExecutionInvocationV1:
     """Exact host-compiled argv for one approved node; never shell text."""
@@ -1184,6 +1241,17 @@ class ProgramExecutionInvocationV1:
     idempotency_key: str
     status: str
     invocation_sha256: str
+    #: Identity of the environment this invocation observed.  Carried
+    #: separately from ``environment_receipt_sha256`` because a receipt digest
+    #: folds in a capability receipt and therefore differs between the session
+    #: that planned and the session that executes, on one unchanged machine.
+    #: Admission compares this; the receipt digest still names the exact
+    #: observation.  Defaulted so records built before the field existed keep
+    #: their digests.
+    environment_identity_sha256: str = ""
+    #: Path-independent identity of the compiled command this execution
+    #: realises.  See ``invocation_identity_sha256``.
+    invocation_identity_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.program-execution-invocation.v1":
@@ -1237,6 +1305,22 @@ class ProgramExecutionInvocationV1:
             "idempotency_key": self.idempotency_key,
             "status": self.status,
         }
+        if self.environment_identity_sha256:
+            require_sha256(
+                self.environment_identity_sha256,
+                "environment_identity_sha256",
+            )
+            body["environment_identity_sha256"] = (
+                self.environment_identity_sha256
+            )
+        if self.invocation_identity_sha256:
+            require_sha256(
+                self.invocation_identity_sha256,
+                "invocation_identity_sha256",
+            )
+            body["invocation_identity_sha256"] = (
+                self.invocation_identity_sha256
+            )
         if self.invocation_sha256 != canonical_sha256(body):
             raise ContractError("execution invocation digest mismatch")
 
@@ -1252,8 +1336,16 @@ def build_program_execution_invocation(
     resources: ExecutionResourceSpecV1,
     argv: Sequence[str],
     handoff: OptimizedGeometryHandoffV1 | None = None,
+    environment_identity_sha256: str = "",
+    invocation_identity_sha256: str = "",
 ) -> ProgramExecutionInvocationV1:
-    """Resolve a ``node_id`` to an exact invocation using host bindings."""
+    """Resolve a ``node_id`` to an exact invocation using host bindings.
+
+    ``environment_identity_sha256`` is what admission compares against the
+    frozen approval.  The receipt digest still records which exact observation
+    produced the binding, but it cannot be compared across sessions: it folds
+    in a capability receipt that changes with the active tool overlay.
+    """
 
     node = approval.node(node_id)
     _require_current_artifact(project_artifact, "project artifact")
@@ -1336,6 +1428,14 @@ def build_program_execution_invocation(
         "idempotency_key": idempotency_key,
         "status": "ready",
     }
+    if environment_identity_sha256:
+        body["environment_identity_sha256"] = require_sha256(
+            environment_identity_sha256, "environment_identity_sha256"
+        )
+    if invocation_identity_sha256:
+        body["invocation_identity_sha256"] = require_sha256(
+            invocation_identity_sha256, "invocation_identity_sha256"
+        )
     return ProgramExecutionInvocationV1(
         **body, invocation_sha256=canonical_sha256(body)
     )
@@ -2038,6 +2138,10 @@ class FrozenMaterializedNodePreviewV1:
     invocation_sha256: str
     preflight_receipt_sha256: str
     binding_sha256: str
+    #: What admission actually compares.  ``invocation_sha256`` is retained as
+    #: the exact record of what this session previewed, but it is path-scoped
+    #: and cannot be matched by a later process.
+    invocation_identity_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.frozen-node-preview.v1":
@@ -2067,6 +2171,13 @@ class FrozenMaterializedNodePreviewV1:
             "invocation_sha256": self.invocation_sha256,
             "preflight_receipt_sha256": self.preflight_receipt_sha256,
         }
+        if self.invocation_identity_sha256:
+            require_sha256(
+                self.invocation_identity_sha256, "invocation_identity_sha256"
+            )
+            body["invocation_identity_sha256"] = (
+                self.invocation_identity_sha256
+            )
         if self.binding_sha256 != canonical_sha256(body):
             raise ContractError("frozen node preview digest mismatch")
 
@@ -2143,6 +2254,9 @@ def _frozen_preview_binding(node: Any) -> FrozenMaterializedNodePreviewV1:
         "invocation_sha256": node.invocation_sha256,
         "preflight_receipt_sha256": node.preflight_receipt_sha256,
     }
+    identity = getattr(node, "invocation_identity_sha256", "")
+    if identity:
+        body["invocation_identity_sha256"] = identity
     return FrozenMaterializedNodePreviewV1(
         **body, binding_sha256=canonical_sha256(body)
     )
@@ -2197,7 +2311,7 @@ class FrozenWorkflowApprovalV1:
     task_spec_sha256: str
     scientific_identity_sha256: str
     resource_sha256: str
-    environment_receipt_sha256s: tuple[str, ...]
+    environment_identity_sha256s: tuple[str, ...]
     approved_node_ids: tuple[str, ...]
     producer_edge_sha256s: tuple[str, ...]
     stationary_point_policy_sha256: str
@@ -2226,14 +2340,17 @@ class FrozenWorkflowApprovalV1:
         ):
             require_sha256(digest, name)
         for name, values in (
-            ("environment_receipt_sha256s", self.environment_receipt_sha256s),
+            (
+                "environment_identity_sha256s",
+                self.environment_identity_sha256s,
+            ),
             ("producer_edge_sha256s", self.producer_edge_sha256s),
         ):
             if values != tuple(sorted(set(values))):
                 raise ContractError(f"{name} must be sorted and unique")
             for digest in values:
                 require_sha256(digest, name)
-        if not self.environment_receipt_sha256s:
+        if not self.environment_identity_sha256s:
             raise ContractError("approval requires environment evidence")
         if self.approved_node_ids != tuple(
             sorted(set(self.approved_node_ids))
@@ -2259,7 +2376,7 @@ class FrozenWorkflowApprovalV1:
             "task_spec_sha256": self.task_spec_sha256,
             "scientific_identity_sha256": self.scientific_identity_sha256,
             "resource_sha256": self.resource_sha256,
-            "environment_receipt_sha256s": self.environment_receipt_sha256s,
+            "environment_identity_sha256s": self.environment_identity_sha256s,
             "approved_node_ids": self.approved_node_ids,
             "producer_edge_sha256s": self.producer_edge_sha256s,
             "stationary_point_policy_sha256": (
@@ -2358,8 +2475,9 @@ def build_frozen_workflow_approval(
     plan: ScientificWorkflowPlanV2,
     materialized_workflow: MaterializedWorkflowV1,
     resources: ExecutionResourceSpecV1,
-    environment_receipt_sha256s: Sequence[str],
-    future_node_environment_receipt_sha256s: Mapping[str, str] | None = None,
+    environment_identity_sha256s: Sequence[str],
+    future_node_environment_identity_sha256s: Mapping[str, str] | None = None,
+    environment_identity_by_receipt: Mapping[str, str] | None = None,
     stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
 ) -> FrozenWorkflowApprovalV1:
     """Freeze one plan without pretending future data artifacts exist."""
@@ -2415,10 +2533,21 @@ def build_frozen_workflow_approval(
         )
     )
     normalized_environment_receipts = tuple(
-        sorted(set(environment_receipt_sha256s))
+        sorted(set(environment_identity_sha256s))
     )
+    # The materialization records the environment *receipt* each preview
+    # observed, while the approval pins environment *identities*.  The two are
+    # different digests for the same machine, so the completeness checks below
+    # need a translation the caller supplies from the receipt bodies it holds.
+    # Defaulting to the digest itself keeps callers that pin receipts working
+    # unchanged, since there identity and receipt are the same value.
+    identity_by_receipt = dict(environment_identity_by_receipt or {})
+
+    def _identity_of(receipt_sha256: str) -> str:
+        return identity_by_receipt.get(receipt_sha256, receipt_sha256)
+
     future_environment_bindings = dict(
-        future_node_environment_receipt_sha256s or {}
+        future_node_environment_identity_sha256s or {}
     )
     if data_targets and not future_environment_bindings:
         if len(normalized_environment_receipts) != 1:
@@ -2433,9 +2562,9 @@ def build_frozen_workflow_approval(
         raise ContractError(
             "future environment bindings must cover exactly unresolved nodes"
         )
-    if set(future_environment_bindings.values()).difference(
-        normalized_environment_receipts
-    ):
+    if {
+        _identity_of(value) for value in future_environment_bindings.values()
+    }.difference(normalized_environment_receipts):
         raise ContractError(
             "future node environment is absent from approval evidence"
         )
@@ -2455,7 +2584,8 @@ def build_frozen_workflow_approval(
         )
     )
     if {
-        item.environment_receipt_sha256 for item in preview_bindings
+        _identity_of(item.environment_receipt_sha256)
+        for item in preview_bindings
     }.difference(normalized_environment_receipts):
         raise ContractError(
             "frozen preview environment is absent from approval evidence"
@@ -2494,7 +2624,7 @@ def build_frozen_workflow_approval(
         "task_spec_sha256": plan.task_spec_sha256,
         "scientific_identity_sha256": plan.scientific_identity_sha256,
         "resource_sha256": resources.resource_sha256,
-        "environment_receipt_sha256s": normalized_environment_receipts,
+        "environment_identity_sha256s": normalized_environment_receipts,
         "approved_node_ids": tuple(
             sorted(node.node_id for node in plan.nodes)
         ),

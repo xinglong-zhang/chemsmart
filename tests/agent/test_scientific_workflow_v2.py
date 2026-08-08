@@ -166,7 +166,7 @@ def _approval(plan):
         plan=plan,
         materialized_workflow=materialized,
         resources=resources,
-        environment_receipt_sha256s=("f" * 64,),
+        environment_identity_sha256s=("f" * 64,),
     )
 
 
@@ -302,7 +302,7 @@ def test_stationary_point_policy_binds_exact_plan_task_and_hessian_node():
         plan=plan,
         materialized_workflow=materialized,
         resources=resources,
-        environment_receipt_sha256s=("f" * 64,),
+        environment_identity_sha256s=("f" * 64,),
         stationary_point_policy=policy,
     )
 
