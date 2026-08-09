@@ -1359,6 +1359,24 @@ class CommandCompiledToolHostV1:
             "result": _model_visible_data(canonical_data(result)),
         }
 
+    def _resolve_task_spec_reference(
+        self, values: Mapping[str, Any], field_name: str
+    ) -> str:
+        """Bind an omitted reference only when the host task is unambiguous."""
+
+        if field_name in values:
+            supplied = str(values[field_name]).strip()
+            if not supplied:
+                raise ContractError(f"{field_name} must not be empty")
+            return supplied
+        if len(self.task_spec_sha256s) == 1:
+            return next(iter(self.task_spec_sha256s))
+        if not self.task_spec_sha256s:
+            raise ContractError("the host has no active task spec")
+        raise ContractError(
+            f"{field_name} is required when multiple task specs are active"
+        )
+
     def _consult_domain_skill(self, turn_id: str, values: dict) -> Any:
         """Return one advisory skill body with its digests.
 
@@ -1388,7 +1406,9 @@ class CommandCompiledToolHostV1:
         }
 
     def _bind_scientific_identity(self, turn_id: str, values: dict) -> Any:
-        task_spec_sha256 = values["task_spec_sha256"]
+        task_spec_sha256 = self._resolve_task_spec_reference(
+            values, "task_spec_sha256"
+        )
         if task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError(
                 "scientific identity targets an unknown task spec"
@@ -1730,7 +1750,9 @@ class CommandCompiledToolHostV1:
         return {"status": "no_scientific_workflow_planned"}
 
     def _record_scientific_decision(self, turn_id: str, values: dict) -> Any:
-        task_spec_sha256 = values["task_spec_sha256"]
+        task_spec_sha256 = self._resolve_task_spec_reference(
+            values, "task_spec_sha256"
+        )
         if task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError(
                 "scientific decision targets an unknown task spec"
@@ -1953,9 +1975,12 @@ class CommandCompiledToolHostV1:
                         }
                     )
             nodes.append(node)
+        task_spec_id = self._resolve_task_spec_reference(
+            values, "task_spec_id"
+        )
         draft = build_command_workflow_draft(
             workflow_id=values["workflow_id"],
-            task_spec_id=values["task_spec_id"],
+            task_spec_id=task_spec_id,
             nodes=tuple(nodes),
         )
         self.workflow_drafts[draft.draft_sha256] = draft
@@ -2034,8 +2059,12 @@ class CommandCompiledToolHostV1:
             turn_id,
             {
                 "workflow_id": values["workflow_id"],
-                "task_spec_id": values["task_spec_id"],
                 "nodes": calculation_nodes,
+                **(
+                    {"task_spec_id": values["task_spec_id"]}
+                    if "task_spec_id" in values
+                    else {}
+                ),
             },
             node_annotations=node_annotations,
         )
@@ -5093,7 +5122,9 @@ class CommandCompiledToolHostV1:
     def _record_analysis_claims(self, turn_id: str, values: dict) -> Any:
         """Render reportable values from exact typed receipt outputs."""
 
-        task_spec_sha256 = str(values["task_spec_sha256"])
+        task_spec_sha256 = self._resolve_task_spec_reference(
+            values, "task_spec_sha256"
+        )
         if task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("analysis claims target an unknown task spec")
         registries = (

@@ -166,7 +166,6 @@ def build_command_compiled_tool_surface(
             },
             (
                 "input_artifact_id",
-                "task_spec_sha256",
                 "charge",
                 "multiplicity",
             ),
@@ -220,7 +219,7 @@ def build_command_compiled_tool_surface(
                     "items": _workflow_node_schema(),
                 },
             },
-            ("workflow_id", "task_spec_id", "nodes"),
+            ("workflow_id", "nodes"),
         ),
         _tool(
             "plan_scientific_workflow",
@@ -257,7 +256,6 @@ def build_command_compiled_tool_surface(
             (
                 "plan_id",
                 "workflow_id",
-                "task_spec_id",
                 "calculation_nodes",
                 "analysis_nodes",
                 "required_output_ids",
@@ -407,7 +405,6 @@ def build_command_compiled_tool_surface(
             },
             (
                 "decision_id",
-                "task_spec_sha256",
                 "assumptions",
                 "method_rationale",
                 "alternatives",
@@ -614,7 +611,7 @@ def build_command_compiled_tool_surface(
                     },
                 },
             },
-            ("task_spec_sha256", "claims"),
+            ("claims",),
         ),
     )
     if not skills_enabled():
@@ -838,8 +835,16 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
         "nothing else. Do not put dependency prose here -- the host states "
         "dependencies itself in the workflow frontier."
     ),
-    "task_spec_id": "Identifier of the task specification being planned.",
-    "task_spec_sha256": "Digest of the task specification this binds to.",
+    "task_spec_id": (
+        "Identifier of the task specification being planned. Omit it when "
+        "the host has exactly one active task; multi-task hosts require the "
+        "exact identifier."
+    ),
+    "task_spec_sha256": (
+        "Digest of the task specification this binds to. Omit it when the "
+        "host has exactly one active task; multi-task hosts require the exact "
+        "digest."
+    ),
     "temperature_k": "Temperature in kelvin.",
     "uncertainties": (
         "What could still make this wrong, and what would resolve it."
