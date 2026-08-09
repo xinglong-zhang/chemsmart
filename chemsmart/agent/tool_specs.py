@@ -228,6 +228,8 @@ def build_command_compiled_tool_surface(
                 "program calculations and deterministic analysis stages. "
                 "Future analysis inputs name producer node/output pairs; they "
                 "do not require artifact or receipt hashes before execution. "
+                "A result extraction may instead consume one existing "
+                "host-registered result by artifact_id. "
                 "Keep unsupported requested analyses as blocked_unsupported nodes."
             ),
             {
@@ -1198,6 +1200,14 @@ def _analysis_intent_node_schema() -> dict:
             "dependencies": {
                 "type": "array",
                 "items": _public_identifier(),
+            },
+            "artifact_id": {
+                "type": "string",
+                "description": (
+                    "For result_extraction only, name one existing registered "
+                    "result instead of a future program output. Leave inputs "
+                    "empty. Do not supply a path, hash, or program-native text."
+                ),
             },
             "inputs": {
                 "type": "array",

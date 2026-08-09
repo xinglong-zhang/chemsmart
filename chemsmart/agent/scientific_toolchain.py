@@ -1,10 +1,9 @@
 """Planning contracts for connected calculation and analysis tool chains.
 
-This module deliberately models *future* data flow.  A paper-level plan must be
-able to say that an analysis consumes a quantity produced by a calculation
-before that calculation has run.  Consequently these intent objects bind
-producer node/output names, not artifact paths or receipt hashes.  Materialized
-artifacts are attached later by the existing execution and analysis tools.
+This module models both future data flow and analysis of results that ChemSmart
+has already registered. Future values bind producer node/output names. Existing
+results enter the DAG as registered artifact inputs, without a fictitious
+calculation producer or a model-authored path.
 """
 
 from __future__ import annotations
@@ -76,6 +75,23 @@ class AnalysisInputIntentV1:
             )
         _identifier(self.producer_node_id, "analysis producer_node_id")
         _identifier(self.producer_output_id, "analysis producer_output_id")
+
+
+@dataclass(frozen=True)
+class RegisteredResultInputIntentV1:
+    """A host-registered result consumed directly by an analysis root."""
+
+    input_id: str
+    artifact_id: str
+    source_kind: str = "registered_result"
+
+    def __post_init__(self) -> None:
+        _identifier(self.input_id, "analysis input_id")
+        _identifier(self.artifact_id, "registered result artifact_id")
+        if self.source_kind != "registered_result":
+            raise ScientificToolchainContractError(
+                "registered result source_kind must be registered_result"
+            )
 
 
 @dataclass(frozen=True)
@@ -171,7 +187,9 @@ class AnalysisNodeIntentV1:
     node_id: str
     analysis_kind: str
     dependencies: tuple[str, ...]
-    inputs: tuple[AnalysisInputIntentV1, ...]
+    inputs: tuple[
+        AnalysisInputIntentV1 | RegisteredResultInputIntentV1, ...
+    ]
     selectors: tuple[AnalysisSelectorIntentV1, ...]
     outputs: tuple[AnalysisOutputIntentV1, ...]
     expression_nodes: tuple[dict[str, object], ...]
@@ -242,6 +260,13 @@ class AnalysisNodeIntentV1:
                 raise ScientificToolchainContractError(
                     "result extraction needs one result input and selectors"
                 )
+        elif any(
+            isinstance(item, RegisteredResultInputIntentV1)
+            for item in self.inputs
+        ):
+            raise ScientificToolchainContractError(
+                "registered result inputs apply only to result extraction"
+            )
         elif self.selectors:
             raise ScientificToolchainContractError(
                 "selectors apply only to result extraction"
@@ -394,6 +419,8 @@ def build_scientific_toolchain_plan(
     for node in analyses:
         effective_dependencies = set(node.dependencies)
         for item in node.inputs:
+            if isinstance(item, RegisteredResultInputIntentV1):
+                continue
             producer = item.producer_node_id
             if producer not in all_ids:
                 raise ScientificToolchainContractError(
@@ -517,6 +544,8 @@ def project_scientific_toolchain_frontier(
     dependents: dict[str, set[str]] = {}
     for node in plan.analysis_nodes:
         for edge in node.inputs:
+            if isinstance(edge, RegisteredResultInputIntentV1):
+                continue
             dependents.setdefault(edge.producer_node_id, set()).add(
                 node.node_id
             )
@@ -556,6 +585,11 @@ def project_scientific_toolchain_frontier(
                 )
             elif node.dependencies:
                 state = "waiting_for_artifact"
+                future_inputs = tuple(
+                    edge
+                    for edge in node.inputs
+                    if isinstance(edge, AnalysisInputIntentV1)
+                )
                 # Name the exact producer outputs.  "await producer outputs"
                 # is the same sentence for every waiting node in every
                 # workflow, so it carries none of the dependency structure the
@@ -568,7 +602,7 @@ def project_scientific_toolchain_frontier(
                         "source_kind": edge.source_kind,
                     }
                     for edge in sorted(
-                        node.inputs,
+                        future_inputs,
                         key=lambda item: (
                             item.producer_node_id,
                             item.producer_output_id,
@@ -576,9 +610,7 @@ def project_scientific_toolchain_frontier(
                         ),
                     )
                 )
-                waiting_on = tuple(
-                    sorted({edge.producer_node_id for edge in node.inputs})
-                )
+                waiting_on = tuple(sorted(set(node.dependencies)))
                 named = ", ".join(
                     f"{edge['producer_node_id']}.{edge['producer_output_id']}"
                     for edge in unsatisfied
@@ -625,6 +657,7 @@ __all__ = [
     "AnalysisInputIntentV1",
     "AnalysisNodeIntentV1",
     "AnalysisOutputIntentV1",
+    "RegisteredResultInputIntentV1",
     "AnalysisSelectorIntentV1",
     "AnalysisValidationRuleIntentV1",
     "ANALYSIS_VALIDATION_PREDICATES",

@@ -137,6 +137,7 @@ from chemsmart.agent.scientific_toolchain import (
     AnalysisOutputIntentV1,
     AnalysisSelectorIntentV1,
     AnalysisValidationRuleIntentV1,
+    RegisteredResultInputIntentV1,
     ScientificToolchainPlanV1,
     build_scientific_toolchain_plan,
     project_scientific_toolchain_frontier,
@@ -2071,27 +2072,43 @@ class CommandCompiledToolHostV1:
         draft = command_result["workflow_draft"]
         analysis_nodes = []
         for raw_node in values["analysis_nodes"]:
+            artifact_id = str(raw_node.get("artifact_id", "")).strip()
+            raw_inputs = tuple(raw_node["inputs"])
+            if artifact_id and raw_inputs:
+                raise ContractError(
+                    "result extraction must choose a registered result or a "
+                    "future program output, not both"
+                )
+            if artifact_id:
+                artifact = self._artifact(artifact_id)
+                self._analysis_result_program_for_kind(artifact.kind)
+                analysis_inputs = (
+                    RegisteredResultInputIntentV1(
+                        input_id="registered-result",
+                        artifact_id=artifact.artifact_id,
+                    ),
+                )
+            else:
+                analysis_inputs = tuple(
+                    sorted(
+                        (
+                            AnalysisInputIntentV1(
+                                input_id=item["input_id"],
+                                source_kind=item["source_kind"],
+                                producer_node_id=item["producer_node_id"],
+                                producer_output_id=item["producer_output_id"],
+                            )
+                            for item in raw_inputs
+                        ),
+                        key=lambda item: item.input_id,
+                    )
+                )
             analysis_nodes.append(
                 AnalysisNodeIntentV1(
                     node_id=raw_node["node_id"],
                     analysis_kind=raw_node["analysis_kind"],
                     dependencies=tuple(sorted(set(raw_node["dependencies"]))),
-                    inputs=tuple(
-                        sorted(
-                            (
-                                AnalysisInputIntentV1(
-                                    input_id=item["input_id"],
-                                    source_kind=item["source_kind"],
-                                    producer_node_id=item["producer_node_id"],
-                                    producer_output_id=item[
-                                        "producer_output_id"
-                                    ],
-                                )
-                                for item in raw_node["inputs"]
-                            ),
-                            key=lambda item: item.input_id,
-                        )
-                    ),
+                    inputs=analysis_inputs,
                     selectors=tuple(
                         sorted(
                             (
@@ -2174,6 +2191,26 @@ class CommandCompiledToolHostV1:
             "calculation_plan": command_result,
             "workflow_frontier": frontier,
         }
+
+    @staticmethod
+    def _analysis_result_program_for_kind(artifact_kind: str) -> str:
+        """Resolve a registered result kind through the existing readers."""
+
+        from chemsmart.analysis.result_readers import RESULT_READERS
+
+        programs = {
+            reader.program
+            for reader in RESULT_READERS.values()
+            if reader.artifact_kind == artifact_kind
+        }
+        if artifact_kind == "pyscf_hdf5":
+            programs.add("pyscf")
+        if len(programs) != 1:
+            raise ContractError(
+                "registered analysis input must be a supported result "
+                f"artifact; kind {artifact_kind!r} maps to {sorted(programs)}"
+            )
+        return next(iter(programs))
 
     def _rebind_scientific_workflow_projects(
         self, turn_id: str, values: dict
