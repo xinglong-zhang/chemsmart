@@ -443,9 +443,7 @@ def test_load_server_templates_rejects_invalid_template(
         update_config_module.resources, "files", lambda package: tmp_path
     )
 
-    with pytest.raises(
-        update_config_module.ConfigUpdateError, match=expected
-    ):
+    with pytest.raises(update_config_module.ConfigUpdateError, match=expected):
         update_config_module._load_server_templates()
 
 
