@@ -351,5 +351,46 @@ def version(ctx, version_number: str):
     logger.info("Update complete.")
 
 
+@update.command(name="config")
+@click.option(
+    "-s",
+    "--server",
+    type=str,
+    help="Existing server YAML to update, with or without .yaml.",
+)
+def config(server: str | None):
+    """Update existing server YAML program sections from bundled templates."""
+
+    try:
+        from chemsmart.cli.update_config import (
+            ConfigUpdateError,
+            update_server_configs,
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name in {"ruamel", "ruamel.yaml"}:
+            raise click.ClickException(
+                "ruamel.yaml is required for 'chemsmart update config'.\n"
+                "Install it with `pip install 'ruamel.yaml>=0.18.16'`\n"
+                "or rerun `make env`."
+            ) from exc
+        raise
+
+    try:
+        reports = update_server_configs(server=server)
+    except ConfigUpdateError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    for report in reports:
+        click.echo(f"{report.path.name}:")
+        if report.skipped_reason is not None:
+            click.echo(f"  skipped: {report.skipped_reason}")
+            continue
+        if report.added_programs:
+            for program in report.added_programs:
+                click.echo(f"  added program: {program}")
+        if report.is_up_to_date:
+            click.echo("  already up to date")
+
+
 if __name__ == "__main__":
     update()

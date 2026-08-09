@@ -31,6 +31,27 @@ To use a template, copy it to your ``~/.chemsmart/server/`` directory and custom
 
 Then use it with: ``chemsmart sub -s myserver <other commands>``
 
+Updating Existing Server YAML Files
+===================================
+
+When CHEMSMART adds support for a new program section in the bundled server templates, existing user YAML files can be
+updated with:
+
+.. code:: bash
+
+   chemsmart update config
+   chemsmart update config -s SLURM
+
+The command only adds missing top-level program configuration sections, such as ``XTB`` or future program sections. It
+does not update ``SERVER``, does not recursively fill missing fields inside an existing program section, and does not
+overwrite existing program sections or existing ``EXEFOLDER`` values. Custom top-level fields are preserved.
+
+Use ``-s`` / ``--server`` to update one existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
+without ``.yaml``. Without ``-s``, all existing ``*.yaml`` files in the server directory are checked. The command does
+not create missing server YAML files.
+
+The update is non-interactive. It never prompts for input and never creates missing server YAML files.
+
 Configuration Structure
 =======================
 
