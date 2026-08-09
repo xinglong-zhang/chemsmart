@@ -132,10 +132,8 @@ def update_server_configs(
 
 def _server_config_dir() -> Path:
     """Return the resolved ``server`` config directory."""
-    configured_dir = os.environ.get(
-        "CHEMSMART_CONFIG_DIR", CHEMSMARTUserSettings.USER_CONFIG_DIR
-    )
-    return Path(os.path.abspath(os.path.expanduser(configured_dir))) / "server"
+    configured_dir = CHEMSMARTUserSettings.resolve_config_dir()
+    return Path(os.path.abspath(configured_dir)) / "server"
 
 
 def _select_server_yaml_files(
