@@ -1,3 +1,5 @@
+import builtins
+import errno
 from importlib import resources
 from pathlib import Path
 from textwrap import dedent
@@ -158,14 +160,27 @@ def test_update_config_missing_server_fails_without_creating_file(tmp_path):
     assert not (tmp_path / "server" / "missing.yaml").exists()
 
 
-@pytest.mark.parametrize("server_arg", ["../SLURM", "/tmp/SLURM.yaml"])
-def test_update_config_server_option_rejects_paths(tmp_path, server_arg):
-    _server_dir(tmp_path)
+@pytest.mark.parametrize(
+    "server_arg, expected",
+    [
+        ("../SLURM", "not a path"),
+        ("/tmp/SLURM.yaml", "not a path"),
+        ("", "--server must not be empty"),
+        ("SLURM.json", "--server must name a .yaml file"),
+    ],
+)
+def test_update_config_server_option_rejects_invalid_values(
+    tmp_path, server_arg, expected
+):
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+    before = slurm.read_text(encoding="utf-8")
 
     result = _invoke_update_config(tmp_path, ["-s", server_arg])
 
     assert result.exit_code != 0
-    assert "not a path" in result.output
+    assert expected in result.output
+    assert slurm.read_text(encoding="utf-8") == before
+    assert not (tmp_path / "server" / "SLURM.json").exists()
 
 
 def test_update_config_prefers_same_name_template(tmp_path):
@@ -303,14 +318,28 @@ def test_update_config_invalid_yaml_roots_are_not_overwritten(
     assert slurm.read_text(encoding="utf-8") == before
 
 
-def test_update_config_unknown_scheduler_is_skipped_by_default(tmp_path):
-    custom = _write_server_yaml(
-        tmp_path,
-        "custom.yaml",
+@pytest.mark.parametrize(
+    "content",
+    [
         """
         SERVER:
             SCHEDULER: UNKNOWN
         """,
+        """
+        SERVER: []
+        """,
+        """
+        SERVER: {}
+        """,
+    ],
+)
+def test_update_config_unmatched_scheduler_is_skipped_by_default(
+    tmp_path, content
+):
+    custom = _write_server_yaml(
+        tmp_path,
+        "custom.yaml",
+        content,
     )
     before = custom.read_text(encoding="utf-8")
 
@@ -321,6 +350,103 @@ def test_update_config_unknown_scheduler_is_skipped_by_default(tmp_path):
         "skipped: could not match a bundled server template" in result.output
     )
     assert custom.read_text(encoding="utf-8") == before
+
+
+def test_update_config_missing_server_directory_is_clean_error(tmp_path):
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code != 0
+    assert "Server config directory not found" in result.output
+    assert not (tmp_path / "server").exists()
+    assert not list(tmp_path.glob("*.yaml"))
+
+
+def test_update_config_missing_ruamel_shows_install_hint(
+    tmp_path, monkeypatch
+):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "chemsmart.cli.update_config":
+            raise ModuleNotFoundError(name="ruamel")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code != 0
+    assert "ruamel.yaml is required" in result.output
+    assert "pip install" in result.output
+    assert "make env" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_update_config_unrelated_import_error_is_not_mislabeled(
+    tmp_path, monkeypatch
+):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "chemsmart.cli.update_config":
+            raise ModuleNotFoundError(name="unexpected_dependency")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    result = _invoke_update_config(tmp_path)
+
+    assert isinstance(result.exception, ModuleNotFoundError)
+    assert result.exception.name == "unexpected_dependency"
+    assert "ruamel.yaml is required" not in result.output
+
+
+def test_update_config_user_yaml_read_error_is_clean(tmp_path, monkeypatch):
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+    before = slurm.read_text(encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def fake_read_text(path, *args, **kwargs):
+        if path == slurm:
+            raise PermissionError(errno.EACCES, "Permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code != 0
+    assert "Could not read SLURM.yaml" in result.output
+    assert "Permission denied" in result.output
+    assert "Traceback" not in result.output
+    assert original_read_text(slurm, encoding="utf-8") == before
+
+
+@pytest.mark.parametrize(
+    "template_content, expected",
+    [
+        ("SERVER: [", "is not valid YAML"),
+        ("- invalid\n- template\n", "must contain a mapping"),
+    ],
+)
+def test_load_server_templates_rejects_invalid_template(
+    tmp_path, monkeypatch, template_content, expected
+):
+    from chemsmart.cli import update_config as update_config_module
+
+    template_dir = tmp_path / "templates" / ".chemsmart" / "server"
+    template_dir.mkdir(parents=True)
+    (template_dir / "INVALID.yaml").write_text(
+        template_content, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        update_config_module.resources, "files", lambda package: tmp_path
+    )
+
+    with pytest.raises(
+        update_config_module.ConfigUpdateError, match=expected
+    ):
+        update_config_module._load_server_templates()
 
 
 def test_update_config_unknown_scheduler_errors_when_selected(tmp_path):
