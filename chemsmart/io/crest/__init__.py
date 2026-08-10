@@ -28,6 +28,8 @@ class CRESTRefs:
         "alpb",  # analytical linearized Poisson-Boltzmann (ALPB) model
     ]
 
+    # Solvent/model availability by method: see
+    # https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents
     CREST_SOLVENT_IDS = [
         "acetone",
         "acetonitrile",
@@ -46,9 +48,9 @@ class CRESTRefs:
         "furane",
         "hexadecane",
         "hexane",
-        "h2o",  # alias for water in GBSA
+        "h2o",
         "methanol",
-        "n-hexane",  # only for GBSA with GFN2-xTB parameterization
+        "n-hexane",
         "nitromethane",
         "octanol",
         "woctanol",
