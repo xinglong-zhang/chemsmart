@@ -3345,3 +3345,32 @@ def get_additional_solvent_options(self):
 **Impact:** None -- purely redundant defensive code with no behavioral effect.
 
 **Suggested direction:** no action needed; the trailing `return None` is harmless (and still correctly handles the "no scrf at all" case via the outer guard).
+
+---
+
+## 68. `remove_phantom_metal_carbons` in `utils/io.py` has ~46 lines of orphaned, unreachable code after its `return`
+
+**Location:** `chemsmart/utils/io.py:810-924`
+
+`remove_phantom_metal_carbons` returns unconditionally at line 877 (`return new_mol, new_metal_idxs`). Immediately after that `return`, still indented as part of the same function body, lines 879-924 contain an orphaned triple-quoted docstring followed by a second, complete block of logic that de-aromatizes 5-membered all-carbon rings into `[cH-]` Cp anions (setting a formal charge of -1 and an explicit H on one ring atom, then de-aromatizing the ring bonds) and returns `rw.GetMol()`. This second block can never execute -- Python returns from the function at line 877 before reaching it. It reads like a second function body (perhaps a `dearomatize_cp_ring`-style helper) that got merged into `remove_phantom_metal_carbons` during a refactor, losing its own `def` line in the process.
+
+```python
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol, new_metal_idxs                      # <-- line 877, always returns here
+
+    """
+    RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
+    ...
+    """
+    rw = Chem.RWMol(mol)                                 # <-- unreachable from here on
+    ri = mol.GetRingInfo()
+    for ring in ri.AtomRings():
+        ...
+    return rw.GetMol()                                   # <-- line 924, dead
+```
+
+**Reproduce:** confirmed by code inspection (an unconditional `return` at the same indentation level unconditionally exits the function) and empirically by the coverage-improvement agent that found it while adding tests for this file -- no test input can reach lines 879-924 through the public `remove_phantom_metal_carbons` API. See `tests/test_io_utils_organometallic.py` (added while raising this file from 77% to 98% coverage) for the reachable behavior of this function.
+
+**Impact:** None on current behavior (dead code, no effect), but the *intended* Cp-dearomatization logic itself never runs anywhere in the codebase -- if some other caller was meant to invoke this as a separate helper (e.g., to handle ChemDraw's neutral-aromatic-Cp drawing convention before `attach_eta_bonds_for_cp_rings` runs), that functionality is effectively missing/silently absent.
+
+**Suggested direction:** needs a decision, not a pure test-coverage fix: either (a) delete the dead lines 879-924 if the logic is truly obsolete/superseded by `attach_eta_bonds_for_cp_rings`'s own dearomatization (lines 1054-1078 in the same file already do something similar inline), or (b) extract lines 879-924 into their own properly-named function (e.g. `_dearomatize_neutral_cp_rings`) and wire it into the actual CDX-parsing pipeline in `chemsmart/io/file.py` if the Cp-anion handling it implements is still needed for some ChemDraw drawing style not currently covered.
