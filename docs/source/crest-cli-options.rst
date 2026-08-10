@@ -128,7 +128,8 @@ Molecular Properties Options
 
    -  -  ``-m, --multiplicity``
       -  int
-      -  Molecular multiplicity
+      -  Molecular spin multiplicity, this is the actual spin multiplicity (2S+1) and it will be converted automatically
+         by CHEMSMART to uhf in CREST, which is the number of unpaired electrons.
 
 .. note::
 
