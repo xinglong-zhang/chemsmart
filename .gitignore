@@ -141,3 +141,6 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# Local manual convert CLI scratch (not used by pytest)
+convert_test_files/
