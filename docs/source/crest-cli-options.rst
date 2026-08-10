@@ -158,11 +158,13 @@ Method Options
 
    -  -  ``-g, --gfn-version``
       -  choice
-      -  GFN method: ``gfn1``, ``gfn2``, ``gfnff``, or the ``gfn2//gfnff`` composite protocol
+      -  GFN method: ``gfn1``, ``gfn2``, ``gfnff``, or the ``gfn2//gfnff`` composite protocol. If not specified,
+         defaults to the CREST default (``gfn2``).
 
    -  -  ``-O, --optimization-level``
       -  choice
-      -  Optimization level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``
+      -  Optimization level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``.
+         If not specified, defaults to the CREST default (``vtight``).
 
 Examples:
 
@@ -194,11 +196,12 @@ Route and Calculation Options
 
    -  -  ``--nci/--no-nci``
       -  bool
-      -  Enable or disable non-covalent interaction mode
+      -  Enable or disable non-covalent interaction mode. If not specified, defaults to the CREST default (disable NCI).
 
    -  -  ``-w, --energy-window``
       -  float
-      -  Energy window in kcal/mol for conformer selection
+      -  Energy window in kcal/mol for conformer selection. If not specified, defaults to the CREST default (``6.0``
+         kcal/mol).
 
 Examples:
 

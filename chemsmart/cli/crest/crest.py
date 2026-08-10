@@ -52,7 +52,8 @@ def click_crest_settings_options(f):
             ["gfn1", "gfn2", "gfnff", "gfn2//gfnff"], case_sensitive=False
         ),
         default=None,
-        help="GFN-xTB method version.",
+        help="GFN-xTB method version. If not specified, defaults to the "
+        "CREST default (gfn2).",
     )
     @click.option(
         "-O",
@@ -71,19 +72,22 @@ def click_crest_settings_options(f):
             case_sensitive=False,
         ),
         default=None,
-        help="Level for GFN-xTB optimizations.",
+        help="Level for GFN-xTB optimizations. If not specified, defaults "
+        "to the CREST default (vtight).",
     )
     @click.option(
         "-w",
         "--energy-window",
         type=float,
         default=None,
-        help="Energy window in kcal/mol for conformer selection.",
+        help="Energy window in kcal/mol for conformer selection. If not "
+        "specified, defaults to the CREST default (6.0 kcal/mol).",
     )
     @click.option(
         "--nci/--no-nci",
         default=None,
-        help="Enable non-covalent interaction mode.",
+        help="Enable non-covalent interaction mode. If not specified, "
+        "defaults to the CREST default (disable NCI).",
     )
     @click.option(
         "-r",
