@@ -18,6 +18,11 @@ import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.io.gaussian.route import (
+    normalize_gaussian_dispersion,
+    split_gaussian_functional_dispersion_shorthand,
+    split_gaussian_dispersion_tokens,
+)
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
@@ -88,6 +93,7 @@ class GaussianJobSettings(MolecularJobSettings):
         append_additional_info=None,
         forces=False,
         input_string=None,
+        dispersion=None,
         **kwargs,
     ):
         """
@@ -99,6 +105,7 @@ class GaussianJobSettings(MolecularJobSettings):
         Args:
             ab_initio (str, optional): Ab initio method (e.g., 'HF', 'MP2').
             functional (str, optional): DFT functional (e.g., 'B3LYP').
+            dispersion (str, optional): Empirical dispersion (e.g., 'GD3').
             basis (str, optional): Basis set (e.g., '6-31G*').
             semiempirical (str, optional): Semi-empirical method.
             charge (int, optional): Molecular charge.
@@ -132,6 +139,7 @@ class GaussianJobSettings(MolecularJobSettings):
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
+            dispersion=dispersion,
             basis=basis,
             semiempirical=semiempirical,
             charge=charge,
@@ -652,6 +660,42 @@ class GaussianJobSettings(MolecularJobSettings):
     def _get_level_of_theory_string(self):
         """Get level of theory string for route."""
         route_string = ""
+        additional_route_parameters, additional_dispersion = (
+            split_gaussian_dispersion_tokens(
+                self.additional_route_parameters
+            )
+        )
+        functional_without_dispersion, functional_dispersion = (
+            split_gaussian_dispersion_tokens(
+                self.functional
+            )
+        )
+        functional_without_shorthand, shorthand_dispersion = (
+            split_gaussian_functional_dispersion_shorthand(
+                functional_without_dispersion
+            )
+        )
+        typed_dispersion = (
+            normalize_gaussian_dispersion(self.dispersion)
+            if self.dispersion is not None
+            else None
+        )
+        declared_dispersions = {
+            value
+            for value in (
+                typed_dispersion,
+                functional_dispersion,
+                shorthand_dispersion,
+                additional_dispersion,
+            )
+            if value is not None
+        }
+        if len(declared_dispersions) > 1:
+            raise ValueError(
+                "Conflicting Gaussian dispersion declarations: "
+                + ", ".join(sorted(declared_dispersions))
+            )
+        resolved_dispersion = next(iter(declared_dispersions), None)
 
         # Determine computational method and add to route string
         if self.semiempirical is not None:
@@ -684,9 +728,10 @@ class GaussianJobSettings(MolecularJobSettings):
                 raise ValueError(
                     "Error: Basis set is required for DFT methods."
                 )
-            route_string += f" {self.functional} {self.basis}"
+            functional = functional_without_shorthand
+            route_string += f" {functional} {self.basis}"
             logger.debug(
-                f"Added DFT functional: {self.functional} with basis: "
+                f"Added DFT functional: {functional} with basis: "
                 f"{self.basis}"
             )
 
@@ -701,6 +746,10 @@ class GaussianJobSettings(MolecularJobSettings):
 
         else:
             raise ValueError("Error: No computational method provided.")
+
+        _, emitted_dispersion = split_gaussian_dispersion_tokens(route_string)
+        if resolved_dispersion is not None and emitted_dispersion is None:
+            route_string += f" empiricaldispersion={resolved_dispersion}"
 
         # Write forces calculation keyword
         if self.forces:
@@ -758,11 +807,11 @@ class GaussianJobSettings(MolecularJobSettings):
                 route_string += ")"
 
         # Write additional parameters for route
-        if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
+        if additional_route_parameters:
+            route_string += f" {additional_route_parameters}"
             logger.debug(
                 f"Added additional route parameters: "
-                f"{self.additional_route_parameters}"
+                f"{additional_route_parameters}"
             )
 
         # Write job type specific route keywords

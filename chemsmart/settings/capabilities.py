@@ -203,6 +203,9 @@ _ORCA_PROJECT_PARAMETERS = tuple(
             "light_elements_basis",
             "mdci_cutoff",
             "mdci_density",
+            "joboption",
+            "nimages",
+            "preopt_ends",
             "numfreq",
             "quadrupole",
             "reference",
@@ -322,8 +325,27 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             ),
             project_owned_parameters=_ORCA_PROJECT_PARAMETERS,
             engines=("cpu",),
-            project_section_names=("gas", "solv"),
+            engine_job_capabilities=(
+                EngineJobCapability(engine="cpu", jobtype="irc"),
+                EngineJobCapability(engine="cpu", jobtype="neb"),
+                EngineJobCapability(engine="cpu", jobtype="opt"),
+                EngineJobCapability(engine="cpu", jobtype="sp"),
+                EngineJobCapability(engine="cpu", jobtype="ts"),
+            ),
+            project_section_names=("gas", "neb", "solv"),
             project_parameter_domains=(
+                (
+                    "ab_initio",
+                    (
+                        "ccsd(t)",
+                        "dlpno-ccsd",
+                        "dlpno-ccsd(t)",
+                        "hf",
+                        "mp2",
+                        "rhf",
+                        "uhf",
+                    ),
+                ),
                 (
                     "defgrid",
                     (
@@ -339,7 +361,9 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                         "grid7",
                     ),
                 ),
+                ("dispersion", ("d2", "d3bj", "d3zero", "d4")),
                 ("frozen_core", ("fc_electrons", "fc_ewin", "fc_none")),
+                ("mdci_cutoff", ("loose", "normal", "tight")),
                 ("reference", ("rhf", "rohf", "uhf")),
                 ("relativistic", ("dkh", "dkh2", "zora")),
                 ("ri_approximation", ("none", "ri", "rijcosx", "rijk")),

@@ -41,6 +41,7 @@ _GAUSSIAN_TD_LOG = (
 _ORCA_DLPNO_LOG = (
     "tests/data/ORCATests/outputs/water_dlpno_ccsdt_sp.out"
 )
+_ORCA_ERROR_LOG = "tests/data/ORCATests/error_files/GTOInt_error.out"
 
 
 def _artifact(path, program, artifact_id="result"):
@@ -139,6 +140,13 @@ def test_orca_post_hf_energy_preserves_total_and_reference_components():
     assert scf.value == pytest.approx(-76.05666270)
     assert correlation.value == pytest.approx(total.value - scf.value)
     assert total.value != pytest.approx(scf.value)
+
+
+def test_error_terminated_orca_output_cannot_supply_scientific_quantities():
+    """A wrapper-created log is not a result when ORCA itself aborted."""
+
+    with pytest.raises(Exception, match="normally terminated"):
+        _extract(_ORCA_ERROR_LOG, "orca", "energy")
 
 
 def test_gaussian_excited_state_results_enter_the_shared_quantity_plane():

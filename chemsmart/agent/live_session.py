@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_data,
@@ -1925,6 +1926,93 @@ def _scan_xtb_result_artifacts(
     )
 
 
+def _scan_orca_result_artifacts(
+    workspace: Path,
+) -> tuple[_LoggedResultObservation, ...]:
+    """Expose normally terminated ORCA outputs to the typed result reader."""
+
+    from chemsmart.io.orca.output import ORCAOutput
+
+    observations: dict[str, _LoggedResultObservation] = {}
+    private_root = workspace / _PRIVATE_ROOT_NAME
+    host_artifact_root = workspace / "artifacts"
+    host_node_root = workspace / "nodes"
+    for candidate in sorted(workspace.rglob("*.out")):
+        if any(
+            root in candidate.parents
+            for root in (private_root, host_artifact_root, host_node_root)
+        ):
+            continue
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(workspace)
+            output = ORCAOutput(filename=resolved)
+            energy = output.final_energy
+            molecule = output.molecule
+            positions = molecule.positions
+            method = str(output.method or "").strip().lower()
+            basis = str(output.basis or "").strip().lower()
+            jobtype = str(output.jobtype or "").strip().lower()
+            charge = output.charge
+            multiplicity = output.multiplicity
+            if (
+                not output.normal_termination
+                or energy is None
+                or not math.isfinite(float(energy))
+                or not method
+                or not basis
+                or jobtype not in {"sp", "opt", "freq", "ts", "irc"}
+                or not isinstance(charge, int)
+                or not isinstance(multiplicity, int)
+                or multiplicity < 1
+                or not molecule.chemical_symbols
+                or not all(
+                    math.isfinite(float(value))
+                    for row in positions
+                    for value in row
+                )
+            ):
+                continue
+        except (
+            AttributeError,
+            IndexError,
+            OSError,
+            TypeError,
+            ValueError,
+        ):
+            continue
+        digest = file_sha256(resolved)
+        artifact = TrustedArtifactRefV1(
+            artifact_id=f"orca-result-{digest[:16]}",
+            kind="orca_output",
+            sha256=digest,
+            size_bytes=resolved.stat().st_size,
+            path=str(resolved),
+            cli_value=str(resolved),
+        )
+        observations.setdefault(
+            digest,
+            _LoggedResultObservation(
+                artifact=artifact,
+                program="orca",
+                jobtype=jobtype,
+                method=method,
+                engine="cpu",
+                charge=charge,
+                multiplicity=multiplicity,
+                project_yaml_sha256="",
+                input_artifact_sha256="",
+                validation_receipt_sha256="",
+                scientific_validation_state="parsed_normal_termination",
+            ),
+        )
+    return tuple(
+        sorted(observations.values(), key=lambda item: item.artifact.artifact_id)
+    )
+
+
 def _scan_result_artifacts(workspace: Path) -> tuple[_ResultObservation, ...]:
     """Collect every registered, analysis-ready program result."""
 
@@ -1933,6 +2021,7 @@ def _scan_result_artifacts(workspace: Path) -> tuple[_ResultObservation, ...]:
             (
                 *_scan_pyscf_result_artifacts(workspace),
                 *_scan_xtb_result_artifacts(workspace),
+                *_scan_orca_result_artifacts(workspace),
             ),
             key=lambda item: item.artifact.artifact_id,
         )
@@ -2159,7 +2248,7 @@ def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
 #: instead of ``gas``/``solv``.  The section carries only ordinary project
 #: keys: stage-specific parameters such as the excited-state count are
 #: CLI-owned, and putting one here makes the whole project fail to load.
-_ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"td"})
+_ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"neb", "td"})
 
 
 def _conformance_project_sections(
@@ -2182,7 +2271,16 @@ def _conformance_project_sections(
         # conformance fails inside the CLI rather than reporting a gap.
         for stage in _conformance_jobtypes(program, "cpu"):
             if stage in _ROUTE_PROGRAM_STAGE_SECTIONS:
-                sections[stage] = dict(common)
+                sections[stage] = (
+                    {
+                        **common,
+                        "joboption": "NEB-TS",
+                        "nimages": 2,
+                        "preopt_ends": False,
+                    }
+                    if stage == "neb"
+                    else dict(common)
+                )
         return sections
     return None
 
@@ -2485,6 +2583,25 @@ def _declared_server_programs() -> tuple[tuple[str, str], ...]:
 def _preview_server_profile() -> str:
     """Scheduler-shaped profile for non-submitting run/sub conformance."""
 
+    return (
+        "SERVER:\n"
+        "  SCHEDULER: PBS\n"
+        "  QUEUE_NAME: preview\n"
+        "  NUM_HOURS: 1\n"
+        "  MEM_GB: 4\n"
+        "  NUM_CORES: 4\n"
+        "  NUM_GPUS: 0\n"
+        "  NUM_THREADS: 4\n"
+        "  SUBMIT_COMMAND: true\n"
+        "  SCRATCH_DIR: null\n"
+        "  PROJECT: preview\n"
+        "  USE_HOSTS: false\n" + _local_program_server_blocks()
+    )
+
+
+def _local_program_server_blocks() -> str:
+    """Return the installed-program blocks shared by preview and execution."""
+
     declared = dict(_declared_server_programs())
     xtb = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which("xtb")
     if "xtb" not in declared and xtb:
@@ -2507,20 +2624,7 @@ def _preview_server_profile() -> str:
             "  LOCAL_RUN: true\n"
             "  SCRATCH: false\n"
         )
-    return (
-        "SERVER:\n"
-        "  SCHEDULER: PBS\n"
-        "  QUEUE_NAME: preview\n"
-        "  NUM_HOURS: 1\n"
-        "  MEM_GB: 4\n"
-        "  NUM_CORES: 4\n"
-        "  NUM_GPUS: 0\n"
-        "  NUM_THREADS: 4\n"
-        "  SUBMIT_COMMAND: true\n"
-        "  SCRATCH_DIR: null\n"
-        "  PROJECT: preview\n"
-        "  USE_HOSTS: false\n" + "".join(blocks)
-    )
+    return "".join(blocks)
 
 
 def _write_private_exact(path: Path, payload: bytes) -> None:
@@ -2581,6 +2685,14 @@ def _observe_environments() -> tuple[
         if program == "pyscf":
             continue
         executable = _declared_executable_path(program, folder)
+        # A discovery stub is useful for loader/preview conformance, but it is
+        # not an execution environment.  Do not hand it to the environment
+        # resolver as an executable target: doing so makes ``which`` succeed
+        # and invites the agent to choose a program that cannot produce a
+        # scientific result.  With no target, the ordinary binding remains
+        # preview-only while project rendering and safe preview still work.
+        if executable and _executable_is_discovery_stub(executable):
+            continue
         targets.append(
             EnvironmentTargetV1(
                 program=program,
@@ -2650,18 +2762,23 @@ def _observe_environments() -> tuple[
             if candidate and Path(candidate).exists()
             else (shutil.which(program) or "")
         )
+        is_discovery_stub = _executable_is_discovery_stub(located)
         records.append(
             {
                 "record_kind": "program_environment",
                 "program": program,
                 "engine": "cpu",
-                "status": "available" if located else "missing",
+                "status": (
+                    "preview_only"
+                    if is_discovery_stub
+                    else ("available" if located else "missing")
+                ),
                 "declared_folder": folder,
                 "observation_method": "declared_server_exefolder",
                 # A stub satisfies discovery and planning but cannot compute.
                 # Recording that keeps "a binary was found" distinct from "a
                 # scientific result is obtainable" in the evidence chain.
-                "is_discovery_stub": _executable_is_discovery_stub(located),
+                "is_discovery_stub": is_discovery_stub,
             }
         )
     return tuple(targets), tuple(receipts), tuple(records)
@@ -3054,9 +3171,9 @@ def _system_prompt(
         "but unmaterialized alternative. PySCF project stage keys are exactly "
         "sp, opt, hess, and preview-only td; xTB project stage keys are exactly "
         "sp, opt, and hess. Gaussian and ORCA projects retain gas/solv phase "
-        "sections: SP consumes solv or an explicit sp override even for a "
-        "gas-phase calculation, and physical solvation is enabled only by the "
-        "solvent settings themselves. "
+        "sections: SP consumes solv when present, otherwise gas, and an "
+        "explicit sp override takes precedence; physical solvation is enabled "
+        "only by the solvent settings themselves. "
         "workflow node IDs may separately express initial or optimized geometry. "
         "For each job, pass the exact receipt_sha256 returned by that job's "
         "inspect_program_capability call into environment inspection and project "
@@ -3333,8 +3450,13 @@ def _execution_composition_inputs(
     raw_approval = payload.get("workflow_approval", payload)
     if not isinstance(raw_approval, Mapping):
         raise ContractError("workflow approval must be an object")
-    resources = _locked_execution_resources()
     approval = _parse_workflow_approval(raw_approval)
+    raw_resources = payload.get("execution_resources")
+    resources = (
+        _locked_execution_resources()
+        if raw_resources is None
+        else _parse_execution_resources(raw_resources)
+    )
     if Path(approval.workspace).resolve() != workspace:
         raise ContractError("workflow approval targets another workspace")
     if approval.task_spec_sha256 != task_spec_sha256:
@@ -3343,7 +3465,7 @@ def _execution_composition_inputs(
         raise ContractError(
             "workflow approval resources differ from locked resources"
         )
-    server_profile = _write_execution_server_profile(run_directory)
+    server_profile = _write_execution_server_profile(run_directory, resources)
     path_value = os.environ.get("PATH", "")
     xtb_executable = os.environ.get(
         "CHEMSMART_XTB_EXECUTABLE"
@@ -3444,9 +3566,15 @@ def _parse_materialized_workflow(
 
     raw = dict(value)
     try:
-        raw["nodes"] = tuple(
-            MaterializedNodeV1(**dict(item)) for item in raw.get("nodes", ())
-        )
+        nodes = []
+        for item in raw.get("nodes", ()):
+            node = dict(item)
+            node["auxiliary_input_bindings"] = tuple(
+                AuxiliaryArtifactBindingV1(**dict(binding))
+                for binding in node.get("auxiliary_input_bindings", ())
+            )
+            nodes.append(MaterializedNodeV1(**node))
+        raw["nodes"] = tuple(nodes)
         raw["unresolved_node_ids"] = tuple(raw.get("unresolved_node_ids", ()))
         return MaterializedWorkflowV1(**raw)
     except (KeyError, TypeError, ValueError) as exc:
@@ -3496,18 +3624,24 @@ def _approved_project_artifacts(
         item.project_artifact_sha256 for item in approval.node_bindings
     }
     matches: dict[str, Path] = {}
-    project_root = workspace / "projects"
-    if project_root.is_dir() and not project_root.is_symlink():
+    project_roots = [workspace / "projects"]
+    run_root = workspace / ".chemsmart-agent" / "runs"
+    if run_root.is_dir() and not run_root.is_symlink():
+        project_roots.extend(sorted(run_root.glob("*/projects")))
+    for project_root in project_roots:
+        if not project_root.is_dir() or project_root.is_symlink():
+            continue
         for candidate in sorted(project_root.glob("*.yaml")):
             if candidate.is_symlink() or not candidate.is_file():
                 continue
             digest = file_sha256(candidate)
             if digest in required:
-                if digest in matches:
-                    raise ContractError(
-                        "approved project bytes have multiple workspace identities"
-                    )
-                matches[digest] = candidate.resolve()
+                # Approval binds project content, not a presentation filename.
+                # A prior agent session may legitimately promote the same
+                # validated YAML under another role-specific name.  Keep the
+                # first sorted regular-file match so an identical copy does
+                # not make an approved workflow impossible to replay.
+                matches.setdefault(digest, candidate.resolve())
     missing = sorted(required.difference(matches))
     if missing:
         raise ContractError(
@@ -3622,10 +3756,15 @@ def _parse_frozen_workflow_approval(
         raw["producer_edge_sha256s"] = tuple(
             raw.get("producer_edge_sha256s", ())
         )
-        raw["materialized_preview_bindings"] = tuple(
-            FrozenMaterializedNodePreviewV1(**dict(item))
-            for item in raw.get("materialized_preview_bindings", ())
-        )
+        previews = []
+        for item in raw.get("materialized_preview_bindings", ()):
+            preview = dict(item)
+            preview["auxiliary_input_bindings"] = tuple(
+                AuxiliaryArtifactBindingV1(**dict(binding))
+                for binding in preview.get("auxiliary_input_bindings", ())
+            )
+            previews.append(FrozenMaterializedNodePreviewV1(**preview))
+        raw["materialized_preview_bindings"] = tuple(previews)
         raw["producer_edge_rules"] = tuple(
             FrozenProducerEdgeRuleV1(**dict(item))
             for item in raw.get("producer_edge_rules", ())
@@ -3642,10 +3781,15 @@ def _parse_workflow_approval(
 ) -> WorkflowExecutionApprovalV1:
     raw = dict(value)
     try:
-        raw["node_bindings"] = tuple(
-            ApprovedNodeBindingV1(**dict(item))
-            for item in raw.get("node_bindings", ())
-        )
+        nodes = []
+        for item in raw.get("node_bindings", ()):
+            node = dict(item)
+            node["auxiliary_input_bindings"] = tuple(
+                AuxiliaryArtifactBindingV1(**dict(binding))
+                for binding in node.get("auxiliary_input_bindings", ())
+            )
+            nodes.append(ApprovedNodeBindingV1(**node))
+        raw["node_bindings"] = tuple(nodes)
         raw["producer_edges"] = tuple(
             ProducerEdgeRuleV1(**dict(item))
             for item in raw.get("producer_edges", ())
@@ -3657,32 +3801,37 @@ def _parse_workflow_approval(
         ) from exc
 
 
-def _write_execution_server_profile(run_directory: Path) -> Path:
-    """Write the deterministic local CPU profile used by approved nodes."""
+def _parse_execution_resources(value: Any) -> ExecutionResourceSpecV1:
+    """Rehydrate the user-approved resource allocation for execution."""
 
-    xtb = shutil.which("xtb")
+    if not isinstance(value, Mapping):
+        raise ContractError("execution resources must be an object")
+    try:
+        return ExecutionResourceSpecV1(**dict(value))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractError(
+            "execution resources do not match the v1 schema"
+        ) from exc
+
+
+def _write_execution_server_profile(
+    run_directory: Path,
+    resources: ExecutionResourceSpecV1,
+) -> Path:
+    """Write the local CPU profile from the user-approved allocation."""
+
     profile = run_directory / "execution-server.yaml"
     text = (
         "SERVER:\n"
         "  SCHEDULER: null\n"
         "  NUM_HOURS: 2\n"
-        "  MEM_GB: 4\n"
-        "  NUM_CORES: 4\n"
-        "  NUM_GPUS: 0\n"
-        "  NUM_THREADS: 4\n"
+        f"  MEM_GB: {resources.memory_gb:g}\n"
+        f"  NUM_CORES: {resources.cores}\n"
+        f"  NUM_GPUS: {resources.gpu_count}\n"
+        f"  NUM_THREADS: {resources.cores}\n"
         "  SCRATCH_DIR: null\n"
-        "PYSCF:\n"
-        f"  EXEFOLDER: {str(_PYSCF_INTERPRETER.parent)!r}\n"
-        "  LOCAL_RUN: true\n"
-        "  SCRATCH: false\n"
+        + _local_program_server_blocks()
     )
-    if xtb:
-        text += (
-            "XTB:\n"
-            f"  EXEFOLDER: {str(Path(xtb).resolve().parent)!r}\n"
-            "  LOCAL_RUN: true\n"
-            "  SCRATCH: false\n"
-        )
     _write_private_exact(profile, text.encode("utf-8"))
     return profile
 

@@ -209,13 +209,24 @@ def test_argv_shape_erases_only_absolute_paths():
 def test_the_frozen_preview_still_pins_content():
     """Dropping the unmatched digests must not drop the real constraints."""
 
+    from chemsmart.agent import execution
     from chemsmart.agent.runtime import records
 
     source = inspect.getsource(records.build_workflow_node_launch_reservation)
     for clause in (
         "invocation.input_sha256",
         "invocation.project_sha256",
-        "invocation.scientific_identity_sha256",
         "invocation_identity_sha256",
     ):
         assert clause in source, clause
+
+    # Molecular identity is node-specific.  It is checked while the host
+    # builds the execution invocation from the approved node, not against the
+    # workflow's aggregate multi-geometry identity at launch reservation.
+    identity_source = inspect.getsource(
+        execution.build_program_execution_invocation
+    )
+    assert (
+        "identity_sha256 != node.scientific_identity_sha256" in identity_source
+    )
+    assert "!= plan.scientific_identity_sha256" not in source

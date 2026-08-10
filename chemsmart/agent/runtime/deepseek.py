@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from http.client import IncompleteRead
 import json
 import re
 from typing import Any, Callable, Mapping
@@ -81,30 +82,43 @@ class DeepSeekHttpsTransport:
         encoded = json.dumps(
             payload, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
-        request = Request(
-            self.endpoint + "/chat/completions",
-            data=encoded,
-            method="POST",
-            headers={
-                "Authorization": "Bearer " + self._api_key,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "chemsmart-agent/1",
-            },
-        )
-        try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = response.read()
-        except HTTPError as exc:
-            raise DeepSeekTransportError(
-                _http_error_class(exc.code), http_status=exc.code
-            ) from None
-        except TimeoutError:
-            raise DeepSeekTransportError("timeout") from None
-        except URLError as exc:
-            reason = getattr(exc, "reason", None)
-            error_class = "timeout" if isinstance(reason, TimeoutError) else "transport"
-            raise DeepSeekTransportError(error_class) from None
+        for attempt in range(2):
+            request = Request(
+                self.endpoint + "/chat/completions",
+                data=encoded,
+                method="POST",
+                headers={
+                    "Authorization": "Bearer " + self._api_key,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "chemsmart-agent/1",
+                },
+            )
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw = response.read()
+                break
+            except IncompleteRead as exc:
+                # The official endpoint can occasionally close a chunked
+                # response before sending its first byte.  No provider message
+                # exists to preserve in that case, so one transparent replay
+                # of the identical request is safer than aborting the entire
+                # scientific tool session.  Never replay a partial response.
+                if attempt == 0 and not exc.partial:
+                    continue
+                raise DeepSeekTransportError("incomplete_read") from None
+            except HTTPError as exc:
+                raise DeepSeekTransportError(
+                    _http_error_class(exc.code), http_status=exc.code
+                ) from None
+            except TimeoutError:
+                raise DeepSeekTransportError("timeout") from None
+            except URLError as exc:
+                reason = getattr(exc, "reason", None)
+                error_class = (
+                    "timeout" if isinstance(reason, TimeoutError) else "transport"
+                )
+                raise DeepSeekTransportError(error_class) from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

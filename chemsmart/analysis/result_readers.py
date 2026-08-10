@@ -48,6 +48,7 @@ SELECTOR_UNITS = {
     "absorption_wavelengths": "nm",
     "energy": "Eh",
     "energies": "Eh",
+    "entropy_times_temperature": "Eh",
     "excitation_energies": "eV",
     "gibbs_free_energy": "Eh",
     "oscillator_strengths": "",
@@ -214,11 +215,32 @@ def _orca_correlation_energy(output: Any) -> float:
     return _orca_total_energy(output) - _orca_scf_energy(output)
 
 
+def _orca_positions(output: Any) -> list[list[float]]:
+    molecule = output.thermochemistry_molecule
+    return [[float(value) for value in row] for row in molecule.positions]
+
+
+def _orca_symbols(output: Any) -> list[str]:
+    return [
+        str(item)
+        for item in output.thermochemistry_molecule.chemical_symbols
+    ]
+
+
 def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
     accessors = _text_output_accessors()
     accessors.update(
         {
             "energy": _orca_total_energy,
+            "entropy_times_temperature": lambda output: float(
+                output.entropy_times_temperature
+            ),
+            "positions": _orca_positions,
+            "symbols": _orca_symbols,
+            "charge": lambda output: int(output.thermochemistry_charge),
+            "multiplicity": lambda output: int(
+                output.thermochemistry_multiplicity
+            ),
             "scf_energy": _orca_scf_energy,
             "correlation_energy": _orca_correlation_energy,
         }
@@ -307,6 +329,7 @@ _SELECTOR_DIMENSIONS = {
     "absorption_wavelengths": "LENGTH",
     "energy": "ENERGY",
     "energies": "ENERGY",
+    "entropy_times_temperature": "ENERGY",
     "excitation_energies": "ENERGY",
     "gibbs_free_energy": "ENERGY",
     "oscillator_strengths": "DIMENSIONLESS",
@@ -342,13 +365,16 @@ def extract_logged_quantities(
         )
     artifact = rq._verify_artifact(artifact_path, request.artifact_sha256)
     output = reader.open_output(artifact)
+    if getattr(output, "normal_termination", None) is not True:
+        raise rq.QuantityExtractionError(
+            f"{request.program} scientific quantities require a normally "
+            "terminated program result"
+        )
     evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
     quantities = []
     for selector in request.selectors:
         try:
-            source_value, source_unit = reader.read(
-                output, selector.selector
-            )
+            source_value, source_unit = reader.read(output, selector.selector)
         except MissingQuantityError as exc:
             raise rq.QuantityExtractionError(str(exc)) from exc
         dimension = getattr(rq, _SELECTOR_DIMENSIONS[selector.selector])

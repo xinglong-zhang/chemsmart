@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_data,
@@ -28,6 +29,7 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     file_sha256,
     require_identifier,
+    require_auxiliary_artifact_bindings,
     require_sha256,
 )
 from chemsmart.agent.projects import (
@@ -673,6 +675,7 @@ class ApprovedNodeBindingV1:
     initial_artifact_sha256: str
     scientific_identity_sha256: str
     producer_edge_sha256: str
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -684,6 +687,7 @@ class ApprovedNodeBindingV1:
             require_identifier(value, name)
         require_sha256(self.project_artifact_sha256, "project_artifact_sha256")
         require_sha256(self.settings_sha256, "settings_sha256")
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
         if self.multiplicity < 1:
             raise ContractError("multiplicity must be positive")
         if self.input_mode not in {"initial", "producer"}:
@@ -708,6 +712,31 @@ class ApprovedNodeBindingV1:
                     "future geometry identity cannot be precomputed"
                 )
             require_sha256(self.producer_edge_sha256, "producer_edge_sha256")
+
+
+def _approved_node_binding_body(
+    binding: ApprovedNodeBindingV1,
+) -> dict[str, Any]:
+    """Canonical approval projection with additive auxiliary inputs."""
+
+    body = {
+        "node_id": binding.node_id,
+        "program": binding.program,
+        "engine": binding.engine,
+        "jobtype": binding.jobtype,
+        "project_artifact_sha256": binding.project_artifact_sha256,
+        "settings_sha256": binding.settings_sha256,
+        "charge": binding.charge,
+        "multiplicity": binding.multiplicity,
+        "input_mode": binding.input_mode,
+        "initial_artifact_id": binding.initial_artifact_id,
+        "initial_artifact_sha256": binding.initial_artifact_sha256,
+        "scientific_identity_sha256": binding.scientific_identity_sha256,
+        "producer_edge_sha256": binding.producer_edge_sha256,
+    }
+    if binding.auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = binding.auxiliary_input_bindings
+    return body
 
 
 @dataclass(frozen=True)
@@ -770,7 +799,10 @@ class WorkflowExecutionApprovalV1:
             "task_spec_sha256": self.task_spec_sha256,
             "workspace": self.workspace,
             "resource_sha256": self.resource_sha256,
-            "node_bindings": self.node_bindings,
+            "node_bindings": tuple(
+                _approved_node_binding_body(item)
+                for item in self.node_bindings
+            ),
             "producer_edges": self.producer_edges,
             "status": self.status,
         }
@@ -806,6 +838,7 @@ def build_workflow_execution_approval(
     """Create the host record consumed by the execution-only tool profile."""
 
     workspace = _absolute_workspace(approved_workspace)
+    normalized_node_bindings = tuple(node_bindings)
     body = {
         "schema_version": "chemsmart.workflow-execution-approval.v1",
         "approval_id": require_identifier(approval_id, "approval_id"),
@@ -816,12 +849,19 @@ def build_workflow_execution_approval(
         ),
         "workspace": str(workspace),
         "resource_sha256": resources.resource_sha256,
-        "node_bindings": tuple(node_bindings),
+        "node_bindings": normalized_node_bindings,
         "producer_edges": tuple(producer_edges),
         "status": "approved",
     }
+    digest_body = {
+        **body,
+        "node_bindings": tuple(
+            _approved_node_binding_body(item)
+            for item in normalized_node_bindings
+        ),
+    }
     return WorkflowExecutionApprovalV1(
-        **body, approval_sha256=canonical_sha256(body)
+        **body, approval_sha256=canonical_sha256(digest_body)
     )
 
 
@@ -1189,6 +1229,7 @@ def invocation_identity_sha256(
     input_sha256: str,
     scientific_identity_sha256: str,
     argv: Sequence[str],
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = (),
 ) -> str:
     """Identify a compiled command by what it computes, not where it ran.
 
@@ -1206,18 +1247,20 @@ def invocation_identity_sha256(
     defending.
     """
 
-    return canonical_sha256(
-        {
-            "schema_version": "chemsmart.invocation-identity.v1",
-            "program": str(program),
-            "engine": str(engine),
-            "jobtype": str(jobtype),
-            "project_sha256": str(project_sha256),
-            "input_sha256": str(input_sha256),
-            "scientific_identity_sha256": str(scientific_identity_sha256),
-            "argv_shape": argv_shape(argv),
-        }
-    )
+    require_auxiliary_artifact_bindings(auxiliary_input_bindings)
+    body = {
+        "schema_version": "chemsmart.invocation-identity.v1",
+        "program": str(program),
+        "engine": str(engine),
+        "jobtype": str(jobtype),
+        "project_sha256": str(project_sha256),
+        "input_sha256": str(input_sha256),
+        "scientific_identity_sha256": str(scientific_identity_sha256),
+        "argv_shape": argv_shape(argv),
+    }
+    if auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = auxiliary_input_bindings
+    return canonical_sha256(body)
 
 
 @dataclass(frozen=True)
@@ -1252,6 +1295,7 @@ class ProgramExecutionInvocationV1:
     #: Path-independent identity of the compiled command this execution
     #: realises.  See ``invocation_identity_sha256``.
     invocation_identity_sha256: str = ""
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.program-execution-invocation.v1":
@@ -1287,6 +1331,7 @@ class ProgramExecutionInvocationV1:
             )
         if self.status != "ready":
             raise ContractError("execution invocation must be ready")
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
         body = {
             "schema_version": self.schema_version,
             "node_id": self.node_id,
@@ -1321,6 +1366,8 @@ class ProgramExecutionInvocationV1:
             body["invocation_identity_sha256"] = (
                 self.invocation_identity_sha256
             )
+        if self.auxiliary_input_bindings:
+            body["auxiliary_input_bindings"] = self.auxiliary_input_bindings
         if self.invocation_sha256 != canonical_sha256(body):
             raise ContractError("execution invocation digest mismatch")
 
@@ -1338,6 +1385,9 @@ def build_program_execution_invocation(
     handoff: OptimizedGeometryHandoffV1 | None = None,
     environment_identity_sha256: str = "",
     invocation_identity_sha256: str = "",
+    auxiliary_input_artifacts: Mapping[
+        str, TrustedArtifactRefV1
+    ] | None = None,
 ) -> ProgramExecutionInvocationV1:
     """Resolve a ``node_id`` to an exact invocation using host bindings.
 
@@ -1350,6 +1400,22 @@ def build_program_execution_invocation(
     node = approval.node(node_id)
     _require_current_artifact(project_artifact, "project artifact")
     _require_current_artifact(input_artifact, "input artifact")
+    auxiliary_input_artifacts = dict(auxiliary_input_artifacts or {})
+    auxiliary_input_bindings = tuple(
+        AuxiliaryArtifactBindingV1(
+            parameter_name=parameter_name,
+            artifact_id=artifact.artifact_id,
+            artifact_sha256=artifact.sha256,
+        )
+        for parameter_name, artifact in sorted(
+            auxiliary_input_artifacts.items()
+        )
+    )
+    require_auxiliary_artifact_bindings(auxiliary_input_bindings)
+    for parameter_name, artifact in sorted(auxiliary_input_artifacts.items()):
+        _require_current_artifact(artifact, f"auxiliary input {parameter_name}")
+    if auxiliary_input_bindings != node.auxiliary_input_bindings:
+        raise ContractError("auxiliary inputs differ from workflow approval")
     if resources.resource_sha256 != approval.resource_sha256:
         raise ContractError("resources differ from workflow approval")
     if project_artifact.sha256 != node.project_artifact_sha256:
@@ -1398,18 +1464,21 @@ def build_program_execution_invocation(
         environment_receipt_sha256, "environment_receipt_sha256"
     )
     argv_tuple = tuple(str(item) for item in argv)
-    idempotency_key = canonical_sha256(
-        {
-            "approval_sha256": approval.approval_sha256,
-            "node_id": node.node_id,
-            "project_sha256": project_artifact.sha256,
-            "input_sha256": input_artifact.sha256,
-            "scientific_identity_sha256": identity_sha256,
-            "environment_receipt_sha256": environment_sha256,
-            "resource_sha256": resources.resource_sha256,
-            "argv": argv_tuple,
-        }
-    )
+    idempotency_body = {
+        "approval_sha256": approval.approval_sha256,
+        "node_id": node.node_id,
+        "project_sha256": project_artifact.sha256,
+        "input_sha256": input_artifact.sha256,
+        "scientific_identity_sha256": identity_sha256,
+        "environment_receipt_sha256": environment_sha256,
+        "resource_sha256": resources.resource_sha256,
+        "argv": argv_tuple,
+    }
+    if auxiliary_input_bindings:
+        idempotency_body["auxiliary_input_bindings"] = (
+            auxiliary_input_bindings
+        )
+    idempotency_key = canonical_sha256(idempotency_body)
     body = {
         "schema_version": "chemsmart.program-execution-invocation.v1",
         "node_id": node.node_id,
@@ -1436,6 +1505,8 @@ def build_program_execution_invocation(
         body["invocation_identity_sha256"] = require_sha256(
             invocation_identity_sha256, "invocation_identity_sha256"
         )
+    if auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = auxiliary_input_bindings
     return ProgramExecutionInvocationV1(
         **body, invocation_sha256=canonical_sha256(body)
     )
@@ -1606,8 +1677,15 @@ def _typed_result_validation_findings(
         return ()
 
     state = str(result_validation.get("state") or "").strip().lower()
+    downstream_hessian_classification = bool(
+        observations.get("runner_validation_delegation")
+        == "downstream_scientific_analysis"
+        and state == "unclassified"
+    )
     derived: list[str] = []
-    if state not in {"valid", "validated"}:
+    if state not in {"valid", "validated"} and not (
+        downstream_hessian_classification
+    ):
         derived.append("result_validation.state_not_validated")
 
     embedded = result_validation.get("findings", ())
@@ -2142,6 +2220,7 @@ class FrozenMaterializedNodePreviewV1:
     #: the exact record of what this session previewed, but it is path-scoped
     #: and cannot be matched by a later process.
     invocation_identity_sha256: str = ""
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.frozen-node-preview.v1":
@@ -2159,27 +2238,38 @@ class FrozenMaterializedNodePreviewV1:
             ("preflight_receipt_sha256", self.preflight_receipt_sha256),
         ):
             require_sha256(digest, name)
-        body = {
-            "schema_version": self.schema_version,
-            "node_id": self.node_id,
-            "input_artifact_sha256": self.input_artifact_sha256,
-            "project_artifact_sha256": self.project_artifact_sha256,
-            "project_validation_receipt_sha256": (
-                self.project_validation_receipt_sha256
-            ),
-            "environment_receipt_sha256": self.environment_receipt_sha256,
-            "invocation_sha256": self.invocation_sha256,
-            "preflight_receipt_sha256": self.preflight_receipt_sha256,
-        }
-        if self.invocation_identity_sha256:
-            require_sha256(
-                self.invocation_identity_sha256, "invocation_identity_sha256"
-            )
-            body["invocation_identity_sha256"] = (
-                self.invocation_identity_sha256
-            )
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
+        body = _frozen_preview_binding_body(self)
         if self.binding_sha256 != canonical_sha256(body):
             raise ContractError("frozen node preview digest mismatch")
+
+
+def _frozen_preview_binding_body(
+    binding: FrozenMaterializedNodePreviewV1,
+) -> dict[str, Any]:
+    body = {
+        "schema_version": binding.schema_version,
+        "node_id": binding.node_id,
+        "input_artifact_sha256": binding.input_artifact_sha256,
+        "project_artifact_sha256": binding.project_artifact_sha256,
+        "project_validation_receipt_sha256": (
+            binding.project_validation_receipt_sha256
+        ),
+        "environment_receipt_sha256": binding.environment_receipt_sha256,
+        "invocation_sha256": binding.invocation_sha256,
+        "preflight_receipt_sha256": binding.preflight_receipt_sha256,
+    }
+    if binding.invocation_identity_sha256:
+        require_sha256(
+            binding.invocation_identity_sha256,
+            "invocation_identity_sha256",
+        )
+        body["invocation_identity_sha256"] = (
+            binding.invocation_identity_sha256
+        )
+    if binding.auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = binding.auxiliary_input_bindings
+    return body
 
 
 @dataclass(frozen=True)
@@ -2257,6 +2347,9 @@ def _frozen_preview_binding(node: Any) -> FrozenMaterializedNodePreviewV1:
     identity = getattr(node, "invocation_identity_sha256", "")
     if identity:
         body["invocation_identity_sha256"] = identity
+    auxiliary = getattr(node, "auxiliary_input_bindings", ())
+    if auxiliary:
+        body["auxiliary_input_bindings"] = auxiliary
     return FrozenMaterializedNodePreviewV1(
         **body, binding_sha256=canonical_sha256(body)
     )
@@ -2423,18 +2516,22 @@ class FrozenWorkflowApprovalV1:
         )
         if covered != set(self.approved_node_ids):
             raise ContractError("workflow admission does not cover every node")
+        preview_binding_bodies = tuple(
+            _frozen_preview_binding_body(item)
+            for item in self.materialized_preview_bindings
+        )
         admission_body = {
             "schema_version": "chemsmart.frozen-workflow-admission.v1",
             "plan_sha256": self.plan_sha256,
             "materialized_workflow_sha256": self.materialized_workflow_sha256,
-            "materialized_preview_bindings": self.materialized_preview_bindings,
+            "materialized_preview_bindings": preview_binding_bodies,
             "producer_edge_rules": self.producer_edge_rules,
         }
         if self.admission_sha256 != canonical_sha256(admission_body):
             raise ContractError("frozen workflow admission digest mismatch")
         body = {
             **legacy_body,
-            "materialized_preview_bindings": self.materialized_preview_bindings,
+            "materialized_preview_bindings": preview_binding_bodies,
             "producer_edge_rules": self.producer_edge_rules,
             "admission_sha256": self.admission_sha256,
         }
@@ -2604,13 +2701,16 @@ def build_frozen_workflow_approval(
     producer_digests = tuple(
         sorted(item.scientific_edge_sha256 for item in producer_rules)
     )
+    preview_binding_bodies = tuple(
+        _frozen_preview_binding_body(item) for item in preview_bindings
+    )
     admission_body = {
         "schema_version": "chemsmart.frozen-workflow-admission.v1",
         "plan_sha256": plan.plan_sha256,
         "materialized_workflow_sha256": (
             materialized_workflow.materialized_sha256
         ),
-        "materialized_preview_bindings": preview_bindings,
+        "materialized_preview_bindings": preview_binding_bodies,
         "producer_edge_rules": producer_rules,
     }
     body = {
@@ -2639,8 +2739,12 @@ def build_frozen_workflow_approval(
         "producer_edge_rules": producer_rules,
         "admission_sha256": canonical_sha256(admission_body),
     }
+    digest_body = {
+        **body,
+        "materialized_preview_bindings": preview_binding_bodies,
+    }
     return FrozenWorkflowApprovalV1(
-        **body, approval_sha256=canonical_sha256(body)
+        **body, approval_sha256=canonical_sha256(digest_body)
     )
 
 
@@ -2779,6 +2883,7 @@ def build_validated_data_edge_binding(
     approval: FrozenWorkflowApprovalV1,
     scientific_edge: ScientificWorkflowEdgeV2,
     producer_edge: ProducerEdgeRuleV1,
+    producer_invocation: ProgramExecutionInvocationV1,
     producer_receipt: ProgramExecutionReceiptV1,
     handoff: OptimizedGeometryHandoffV1,
     producer_scientific_identity_sha256: str,
@@ -2827,6 +2932,14 @@ def build_validated_data_edge_binding(
         producer_receipt.node_id != rule.source_node_id
     ):
         raise ContractError("data edge producer is not validated")
+    if (
+        producer_invocation.node_id != rule.source_node_id
+        or producer_receipt.invocation_sha256
+        != producer_invocation.invocation_sha256
+    ):
+        raise ContractError(
+            "data edge producer invocation differs from validated execution"
+        )
     if not producer_receipt.validator_receipt_sha256s:
         raise ContractError("data edge producer lacks validator evidence")
     if not any(
@@ -2835,8 +2948,18 @@ def build_validated_data_edge_binding(
         for artifact in producer_receipt.output_artifacts
     ):
         raise ContractError("data edge source artifact differs from producer")
-    if producer_scientific_identity_sha256 != plan.scientific_identity_sha256:
-        raise ContractError("producer scientific identity differs from plan")
+    # ``plan.scientific_identity_sha256`` is an aggregate over every external
+    # starting geometry in a multi-structure workflow.  It is deliberately not
+    # the identity of any one producer node.  Bind the handoff to the exact
+    # producer invocation instead; the validated receipt above already binds
+    # that invocation to this source node and its output artifact.
+    if (
+        producer_scientific_identity_sha256
+        != producer_invocation.scientific_identity_sha256
+    ):
+        raise ContractError(
+            "producer scientific identity differs from execution invocation"
+        )
     atom_order_sha256 = canonical_sha256({"symbols": handoff.symbols})
     body = {
         "schema_version": "chemsmart.validated-data-edge-binding.v1",

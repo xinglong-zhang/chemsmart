@@ -530,11 +530,13 @@ def project_scientific_toolchain_frontier(
     *,
     actionable_calculation_node_ids: Iterable[str] = (),
     unresolved_calculation_node_ids: Iterable[str] = (),
+    completed_calculation_node_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     """Return model-useful next actions without pretending future data exist."""
 
     actionable = set(actionable_calculation_node_ids)
     unresolved = set(unresolved_calculation_node_ids)
+    completed = set(completed_calculation_node_ids)
     states: dict[str, str] = {}
     nodes: list[dict[str, object]] = []
     analysis_by_id = {node.node_id: node for node in plan.analysis_nodes}
@@ -553,14 +555,20 @@ def project_scientific_toolchain_frontier(
         waiting_on: tuple[str, ...] = ()
         unsatisfied: tuple[dict[str, str], ...] = ()
         if node_id in plan.calculation_node_ids:
-            state = "actionable" if node_id in actionable else "waiting"
-            if node_id in unresolved:
+            if node_id in completed:
+                state = "completed"
+            elif node_id in actionable:
+                state = "actionable"
+            else:
                 state = "waiting"
-            reason = (
-                "compile_and_preview"
-                if state == "actionable"
-                else "resolve_inputs_or_scientific_settings"
-            )
+            if node_id in unresolved and state != "completed":
+                state = "waiting"
+            if state == "completed":
+                reason = "validated execution result already exists"
+            elif state == "actionable":
+                reason = "compile_and_preview"
+            else:
+                reason = "resolve_inputs_or_scientific_settings"
         else:
             node = analysis_by_id[node_id]
             blocked_parents = tuple(
@@ -637,6 +645,9 @@ def project_scientific_toolchain_frontier(
         "nodes": tuple(nodes),
         "actionable_node_ids": tuple(
             item["node_id"] for item in nodes if item["state"] == "actionable"
+        ),
+        "completed_node_ids": tuple(
+            item["node_id"] for item in nodes if item["state"] == "completed"
         ),
         "waiting_node_ids": tuple(
             item["node_id"]

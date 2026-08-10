@@ -79,7 +79,10 @@ class Thermochemistry:
     ):
         self.filename = filename
         self.program = get_program_type_from_file(self.filename)
-        self.molecule = Molecule.from_filepath(filename)
+        if self.program == "orca":
+            self.molecule = self.file_object.thermochemistry_molecule
+        else:
+            self.molecule = Molecule.from_filepath(filename)
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
         self.rotational_mode = rotational_mode
@@ -198,6 +201,8 @@ class Thermochemistry:
 
     @property
     def jobtype(self):
+        if self.program == "orca":
+            return self.file_object.thermochemistry_jobtype
         return self.file_object.jobtype
 
     @property
@@ -317,11 +322,27 @@ class Thermochemistry:
     @property
     def rotational_symmetry_number(self):
         """Obtain the rotational symmetry number."""
+        if self.program == "orca":
+            section = self.file_object._last_complete_thermochemistry_section
+            if (
+                section is not None
+                and section.rotational_symmetry_number is not None
+            ):
+                return section.rotational_symmetry_number
         return self.file_object.rotational_symmetry_number
 
     @property
     def vibrational_frequencies(self):
         """Obtain the vibrational frequencies of the molecule."""
+        if self.program == "orca":
+            section = self.file_object._last_complete_thermochemistry_section
+            if section is None:
+                return None
+            return [
+                frequency
+                for frequency in section.frequencies
+                if frequency != 0.0
+            ]
         if not self.file_object.freq:
             return None
         return self.file_object.vibrational_frequencies
@@ -455,11 +476,17 @@ class Thermochemistry:
     @property
     def electronic_energy(self):
         """Obtain the total electronic energy in J mol^-1."""
-        return self.file_object.energies[-1] * hartree_to_joules * units._Nav
+        if self.program == "orca":
+            energy = self.file_object.thermochemistry_electronic_energy
+        else:
+            energy = self.file_object.energies[-1]
+        return energy * hartree_to_joules * units._Nav
 
     @property
     def multiplicity(self):
         """Obtain the multiplicity of the molecule."""
+        if self.program == "orca":
+            return self.file_object.thermochemistry_multiplicity
         return self.file_object.multiplicity
 
     @property

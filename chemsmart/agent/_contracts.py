@@ -152,7 +152,44 @@ class TrustedArtifactRefV1:
             raise ContractError("cli_value must not be empty")
 
 
+@dataclass(frozen=True)
+class AuxiliaryArtifactBindingV1:
+    """Path-free binding for an additional file consumed by one command.
+
+    ``filename`` remains the primary molecular input.  Multi-file jobs such
+    as ORCA NEB additionally consume a product geometry through a job-scoped
+    CLI parameter.  The path is session-local, so the durable computation
+    identity is the parameter role plus the host artifact ID and bytes.
+    """
+
+    parameter_name: str
+    artifact_id: str
+    artifact_sha256: str
+
+    def __post_init__(self) -> None:
+        require_identifier(self.parameter_name, "parameter_name")
+        if not str(self.artifact_id).strip():
+            raise ContractError("auxiliary artifact ID must not be empty")
+        require_sha256(self.artifact_sha256, "artifact_sha256")
+
+
+def require_auxiliary_artifact_bindings(
+    values: tuple[AuxiliaryArtifactBindingV1, ...],
+) -> tuple[AuxiliaryArtifactBindingV1, ...]:
+    """Require one deterministic artifact binding per CLI parameter."""
+
+    if not isinstance(values, tuple):
+        raise ContractError("auxiliary artifact bindings must be a tuple")
+    names = tuple(item.parameter_name for item in values)
+    if names != tuple(sorted(set(names))):
+        raise ContractError(
+            "auxiliary artifact bindings must be sorted and unique by parameter"
+        )
+    return values
+
+
 __all__ = [
+    "AuxiliaryArtifactBindingV1",
     "DIMENSIONLESS_UNIT_HINT",
     "ContractError",
     "TrustedArtifactRefV1",
@@ -161,5 +198,6 @@ __all__ = [
     "canonical_sha256",
     "file_sha256",
     "require_identifier",
+    "require_auxiliary_artifact_bindings",
     "require_sha256",
 ]

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_data,
@@ -16,12 +17,15 @@ from chemsmart.agent._contracts import (
     file_sha256,
 )
 from chemsmart.agent.execution import (
+    ApprovedNodeBindingV1,
+    _typed_result_validation_findings,
     build_execution_resource_spec,
     build_locked_pyscf_sp_opt_hess_approval,
     build_program_execution_invocation,
     build_program_execution_receipt,
     build_program_result_validation_receipt,
     handoff_optimized_pyscf_geometry,
+    build_workflow_execution_approval,
     workflow_execution_approval_json,
 )
 from chemsmart.agent.capabilities import (
@@ -38,10 +42,14 @@ from chemsmart.agent.tool_runtime import (
     _inspect_pyscf_engine_observation,
     _pyscf_environment_evidence,
     _prepare_execution_node_workspace,
+    _staged_auxiliary_input_findings,
     _runner_defers_hessian_classification,
     _validate_stationary_point_policy_binding,
 )
 from chemsmart.agent.workflows import StationaryPointValidationPolicyV1
+from chemsmart.analysis.result_quantities import (
+    validate_pyscf_analysis_artifact,
+)
 from chemsmart.jobs.pyscf.writer import (
     APPLIED_SPEC_FIELDS,
     RESULT_CONTRACT_VERSION,
@@ -191,6 +199,108 @@ def test_preexisting_node_outputs_block_a_second_launch(tmp_path):
 
     with pytest.raises(ContractError, match="already contains outputs"):
         _prepare_execution_node_workspace(node_workspace)
+
+
+def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
+    reactant_path = tmp_path / "reactant.xyz"
+    reactant_path.write_text(
+        "3\nreactant\nO 0.0 0.0 0.1\n"
+        "H -0.8 0.0 -0.5\nH 0.8 0.0 -0.5\n",
+        encoding="utf-8",
+    )
+    product_path = tmp_path / "product.xyz"
+    product_path.write_text(
+        "3\nproduct\nO 0.0 0.0 0.2\n"
+        "H -0.8 0.0 -0.4\nH 0.8 0.0 -0.4\n",
+        encoding="utf-8",
+    )
+    product = _artifact(
+        product_path,
+        artifact_id="geometry.water.product",
+        kind="geometry_xyz",
+    )
+    reactant = _artifact(
+        reactant_path,
+        artifact_id="geometry.water.reactant",
+        kind="geometry_xyz",
+    )
+    project_path = tmp_path / "water-neb.yaml"
+    project_path.write_text(
+        "gas:\n  functional: b3lyp\n  basis: def2-svp\n"
+        "neb:\n  joboption: NEB-TS\n  nimages: 6\n",
+        encoding="utf-8",
+    )
+    project = _artifact(
+        project_path,
+        artifact_id="project.water.neb",
+        kind="project_yaml",
+    )
+    binding = AuxiliaryArtifactBindingV1(
+        parameter_name="ending_xyzfile",
+        artifact_id=product.artifact_id,
+        artifact_sha256=product.sha256,
+    )
+    node = ApprovedNodeBindingV1(
+        node_id="water-neb",
+        program="orca",
+        engine="cpu",
+        jobtype="neb",
+        project_artifact_sha256=project.sha256,
+        settings_sha256="c" * 64,
+        charge=0,
+        multiplicity=1,
+        input_mode="initial",
+        initial_artifact_id=reactant.artifact_id,
+        initial_artifact_sha256=reactant.sha256,
+        scientific_identity_sha256="d" * 64,
+        producer_edge_sha256="",
+        auxiliary_input_bindings=(binding,),
+    )
+    approval = build_workflow_execution_approval(
+        approval_id="water-with-product",
+        workflow_id="water-neb-workflow",
+        workflow_sha256="e" * 64,
+        task_spec_sha256="a" * 64,
+        approved_workspace=tmp_path,
+        resources=_locked_resources(),
+        node_bindings=(node,),
+    )
+    node = approval.node("water-neb")
+    invocation = build_program_execution_invocation(
+        node_id=node.node_id,
+        approval=approval,
+        project_artifact=project,
+        input_artifact=reactant,
+        scientific_identity_sha256=node.scientific_identity_sha256,
+        environment_receipt_sha256="b" * 64,
+        resources=_locked_resources(),
+        argv=("chemsmart", "run", "orca", "neb"),
+        auxiliary_input_artifacts={"ending_xyzfile": product},
+    )
+
+    assert invocation.auxiliary_input_bindings == (binding,)
+    staged = tmp_path / "nodes" / "water-neb"
+    staged.mkdir(parents=True)
+    staged_product = staged / product_path.name
+    staged_product.write_bytes(product_path.read_bytes())
+    assert _staged_auxiliary_input_findings(
+        node_workspace=staged,
+        job_artifact_options=(("ending_xyzfile", product),),
+    ) == ()
+
+    product_path.write_text("changed", encoding="utf-8")
+    with pytest.raises(ContractError, match="auxiliary input"):
+        build_program_execution_invocation(
+            node_id=node.node_id,
+            approval=approval,
+            project_artifact=project,
+            input_artifact=reactant,
+            scientific_identity_sha256=node.scientific_identity_sha256,
+            environment_receipt_sha256="b" * 64,
+            resources=_locked_resources(),
+            argv=("chemsmart", "run", "orca", "neb"),
+            auxiliary_input_artifacts={"ending_xyzfile": product},
+        )
 
 
 def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
@@ -539,10 +649,18 @@ def _unclassified_hessian_run_receipt():
     }
 
 
-def test_agent_admits_unclassified_runner_only_for_exact_approved_hessian_policy():
+def test_agent_admits_complete_unclassified_hessian_for_downstream_analysis():
     policy = _minimum_stationary_point_policy()
     run_receipt = _unclassified_hessian_run_receipt()
 
+    assert _runner_defers_hessian_classification(
+        run_receipt=run_receipt,
+        jobtype="hess",
+        hessian_node_id="hess-optimized",
+        engine_complete=True,
+        stationary_point_policy=None,
+        approved_stationary_point_policy_sha256="",
+    ) is True
     assert _runner_defers_hessian_classification(
         run_receipt=run_receipt,
         jobtype="hess",
@@ -664,6 +782,71 @@ def test_parent_policy_validator_promotes_exact_unclassified_hessian_handoff(
     assert validate.call_args.kwargs["stationary_point_policy"] is policy
 
 
+def test_unclassified_hessian_is_valid_data_for_downstream_scientific_analysis(
+    tmp_path,
+):
+    result_path = tmp_path / "water-hess.h5"
+    result_path.write_bytes(b"host-bound-hessian-result")
+    result = _artifact(
+        result_path,
+        artifact_id="result.hess.hdf5",
+        kind="pyscf_hdf5",
+    )
+    engine = _PySCFEngineObservation(
+        child_exit_status=0,
+        engine_complete=True,
+        run_receipt_sha256="c" * 64,
+        run_receipt=_unclassified_hessian_run_receipt(),
+        result_artifact=result,
+        findings=(),
+    )
+    host_validation = {
+        "schema_version": "chemsmart.pyscf-result-validation.v1",
+        "state": "unclassified",
+        "findings": [],
+    }
+
+    with (
+        patch(
+            "chemsmart.jobs.pyscf.validation.validate_pyscf_result",
+            return_value=host_validation,
+        ),
+        patch(
+            "chemsmart.agent.tool_runtime._pyscf_input_geometry",
+            return_value=(("O", "H", "H"), np.zeros((3, 3))),
+        ),
+        patch(
+            "chemsmart.io.pyscf.output.read_pyscf_h5",
+            return_value=(
+                {"program": "pyscf", "engine": "cpu"},
+                {},
+                {},
+                {},
+            ),
+        ),
+    ):
+        evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+            program="pyscf",
+            jobtype="hess",
+            charge=0,
+            multiplicity=1,
+            expected_settings={"engine": "cpu"},
+            output_artifacts=(result,),
+            exit_status=0,
+            pyscf_engine_observation=engine,
+            stationary_point_policy=None,
+            approved_stationary_point_policy_sha256="",
+            approved_hessian_node_id="hess-optimized",
+        )
+
+    assert evaluation.validated is True
+    assert evaluation.findings == ()
+    assert evaluation.observations["runner_validation_delegation"] == (
+        "downstream_scientific_analysis"
+    )
+    assert _typed_result_validation_findings(evaluation.observations) == ()
+
+
 def _write_digest_bound_receipt(path, payload):
     body = dict(payload)
     body["receipt_sha256"] = canonical_sha256(body)
@@ -763,6 +946,39 @@ def test_run_environment_is_semantically_compared_not_digest_equal(tmp_path):
     )
 
 
+def test_run_environment_allows_additional_observed_facts(tmp_path):
+    path, raw, capability = _pyscf_environment_pair(tmp_path)
+    body = {
+        field: getattr(capability, field)
+        for field in capability.__dataclass_fields__
+        if field != "receipt_sha256"
+    }
+    body["dependency_versions"] = tuple(
+        item
+        for item in capability.dependency_versions
+        if item[0] in {"h5py", "numpy", "pyscf"}
+    )
+    body["solver_evidence"] = ()
+    body["gpu_evidence"] = ()
+    narrowed = EnvironmentCapabilityReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+    artifact = _artifact(
+        path,
+        artifact_id="result.sp.environment.superset",
+        kind="json",
+    )
+
+    observation, findings = _pyscf_environment_evidence(
+        output_artifacts=(artifact,),
+        run_receipt={"environment_receipt_sha256": raw["receipt_sha256"]},
+        capability_environment=narrowed,
+    )
+
+    assert findings == ()
+    assert observation["state"] == "valid"
+
+
 def test_run_environment_substitution_is_rejected_semantically(tmp_path):
     original_path, _raw, capability = _pyscf_environment_pair(tmp_path)
     original_path.unlink()
@@ -811,7 +1027,10 @@ def test_run_environment_libxc_substitution_is_rejected_semantically(tmp_path):
     assert "pyscf.environment.semantic_mismatch" in findings
 
 
-def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
+@pytest.mark.parametrize("bind_source_artifact", [True, False])
+def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
+    tmp_path, bind_source_artifact
+):
     approval = _locked_approval(tmp_path)
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
@@ -831,6 +1050,7 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
             "run_nonce": "agent-nonce",
             "program": "pyscf",
             "result_contract_version": RESULT_CONTRACT_VERSION,
+            "preview_only": False,
             "jobtype": "sp",
             "engine": "cpu",
             "ab_initio": "hf",
@@ -849,9 +1069,25 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
             "multiplicity": 1,
             "num_electrons": 10,
             "nelec": [5, 5],
-            "input_geometry_sha256": "3" * 64,
-            "input_artifact_kind": "geometry_xyz",
-            "input_artifact_sha256": initial.sha256,
+            "input_geometry_sha256": canonical_sha256(
+                {
+                    "symbols": ("O", "H", "H"),
+                    "positions": (
+                        (0.0, 0.0, 0.1174),
+                        (-0.757, 0.0, -0.4696),
+                        (0.757, 0.0, -0.4696),
+                    ),
+                    "unit": "Angstrom",
+                    "charge": 0,
+                    "multiplicity": 1,
+                }
+            ),
+            "input_artifact_kind": (
+                "geometry_xyz" if bind_source_artifact else None
+            ),
+            "input_artifact_sha256": (
+                initial.sha256 if bind_source_artifact else None
+            ),
             "requested_settings_sha256": "d" * 64,
             "settings_digest": "4" * 64,
         }
@@ -941,9 +1177,10 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
             "state": "validated",
             "fake": False,
             "child_returncode": 0,
-            "engine_complete": True,
-            "scientifically_validated": True,
-            "run_id": spec["run_id"],
+                "engine_complete": True,
+                "scientifically_validated": True,
+                "scientific_validation_state": "unclassified",
+                "run_id": spec["run_id"],
             "run_nonce": spec["run_nonce"],
             "script_sha256": bound_provenance["script_sha256"],
             "input_receipt_sha256": bound_provenance[
@@ -951,9 +1188,9 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
             ],
             "environment_receipt_sha256": "b" * 64,
             "input_geometry_sha256": spec["input_geometry_sha256"],
-            "input_artifact_kind": spec["input_artifact_kind"],
-            "project_yaml_sha256": project.sha256,
-            "input_artifact_sha256": initial.sha256,
+                "input_artifact_kind": spec["input_artifact_kind"],
+                "project_yaml_sha256": project.sha256,
+                "input_artifact_sha256": spec["input_artifact_sha256"],
             "requested_settings_sha256": spec[
                 "requested_settings_sha256"
             ],
@@ -995,6 +1232,12 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(tmp_path):
         evaluation.observations, sort_keys=True
     )
     assert findings == ()
+    analysis_output, analysis_receipt = validate_pyscf_analysis_artifact(
+        h5_path,
+        expected_sha256=result.sha256,
+    )
+    assert analysis_output.energies[-1] == pytest.approx(-76.3)
+    assert analysis_receipt["result_sha256"] == result.sha256
 
 
 def test_substituted_pyscf_run_receipt_cannot_prove_engine_completion(
@@ -1058,6 +1301,97 @@ def test_output_is_rehashed_immediately_before_validation(tmp_path):
     assert "execution.output.artifact_binding_mismatch" in (
         evaluation.findings
     )
+
+
+def test_orca_error_termination_is_not_engine_completion():
+    output_path = Path(
+        "tests/data/ORCATests/error_files/GTOInt_error.out"
+    ).resolve()
+    output = _artifact(
+        output_path,
+        artifact_id="result.orca.error",
+        kind="orca_output",
+    )
+
+    evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+        program="orca",
+        jobtype="opt",
+        charge=0,
+        multiplicity=1,
+        expected_settings={"freq": True},
+        output_artifacts=(output,),
+        # The command wrapper can return zero even when ORCA reports an
+        # internal error; program termination is the scientific authority.
+        exit_status=0,
+    )
+
+    assert evaluation.validated is False
+    assert "orca.result.normal_termination" in evaluation.findings
+    assert evaluation.observations["orca"]["normal_termination"] is False
+
+
+@pytest.mark.parametrize(
+    (
+        "neb_converged",
+        "ts_converged",
+        "expected_validated",
+        "expected_finding",
+    ),
+    (
+        (False, False, False, "orca.result.neb_not_converged"),
+        (True, False, False, "orca.result.neb_ts_not_converged"),
+        (True, True, True, None),
+    ),
+)
+def test_orca_neb_execution_requires_path_and_ts_convergence(
+    tmp_path,
+    neb_converged,
+    ts_converged,
+    expected_validated,
+    expected_finding,
+):
+    output_path = tmp_path / "neb.out"
+    output_path.write_text("host-bound ORCA output", encoding="utf-8")
+    output_artifact = _artifact(
+        output_path,
+        artifact_id="result.orca.neb",
+        kind="orca_output",
+    )
+    parsed_output = SimpleNamespace(
+        vibrational_frequencies=(),
+        normal_termination=True,
+        converged=False,
+        charge=0,
+        multiplicity=1,
+        final_energy=-100.0,
+        route_object=SimpleNamespace(neb_joboption="NEB-TS"),
+        neb_converged=neb_converged,
+        ts_converged=ts_converged,
+    )
+
+    with patch(
+        "chemsmart.io.orca.output.ORCANEBOutput",
+        return_value=parsed_output,
+    ):
+        evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+            program="orca",
+            jobtype="neb",
+            charge=0,
+            multiplicity=1,
+            expected_settings={"joboption": "NEB-TS", "freq": False},
+            output_artifacts=(output_artifact,),
+            exit_status=0,
+        )
+
+    assert evaluation.validated is expected_validated
+    if expected_finding is None:
+        assert evaluation.findings == ()
+    else:
+        assert expected_finding in evaluation.findings
+    assert evaluation.observations["orca"]["neb_converged"] is (
+        neb_converged
+    )
+    assert evaluation.observations["orca"]["ts_converged"] is ts_converged
 
 
 def test_live_prompt_preserves_typed_edges_and_evidence_bounded_alternatives():

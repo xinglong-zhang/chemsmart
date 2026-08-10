@@ -192,6 +192,23 @@ def test_no_two_waiting_nodes_share_one_contentless_sentence(frontier):
     assert "await producer outputs" not in reasons
 
 
+def test_completed_calculation_is_not_offered_for_rerun():
+    calculations = ("sp-dz",)
+    observables = (("sp-dz", ("result-e_dz",)),)
+    analysis = (
+        _extraction("extract-dz", "sp-dz", "e_dz"),
+        _limit("cbs", (("extract-dz", "e_dz"),)),
+    )
+    projected = project_scientific_toolchain_frontier(
+        _plan(analysis, calculations, observables),
+        completed_calculation_node_ids=calculations,
+    )
+
+    assert _node(projected, "sp-dz")["state"] == "completed"
+    assert projected["completed_node_ids"] == ("sp-dz",)
+    assert projected["actionable_node_ids"] == ()
+
+
 def test_a_blocked_upstream_node_names_which_parent_is_blocked():
     calculations = ("sp-dz",)
     observables = (("sp-dz", ("result-e_dz",)),)

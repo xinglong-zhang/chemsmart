@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     canonical_data,
     canonical_sha256,
     require_identifier,
+    require_auxiliary_artifact_bindings,
     require_sha256,
 )
 
@@ -847,6 +849,7 @@ class MaterializedNodeV1:
     #: Omitted from the workflow digest when empty, so a materialization
     #: recorded before this field existed keeps the digest it was stored with.
     invocation_identity_sha256: str = ""
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
@@ -854,6 +857,7 @@ class MaterializedNodeV1:
             require_sha256(
                 self.invocation_identity_sha256, "invocation_identity_sha256"
             )
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
         for name, digest in (
             ("input_artifact_sha256", self.input_artifact_sha256),
             ("project_artifact_sha256", self.project_artifact_sha256),
@@ -904,6 +908,8 @@ def _materialized_node_body(node: MaterializedNodeV1) -> dict[str, Any]:
     }
     if node.invocation_identity_sha256:
         body["invocation_identity_sha256"] = node.invocation_identity_sha256
+    if node.auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = node.auxiliary_input_bindings
     return body
 
 

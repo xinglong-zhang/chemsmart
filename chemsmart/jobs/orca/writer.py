@@ -101,6 +101,35 @@ class ORCAInputWriter(InputWriter):
                         f"Copied solventfilename file {file_to_copy} to {dest}."
                     )
 
+        # ORCA's %NEB block intentionally contains basenames so the input is
+        # portable into scratch or a scheduler workspace.  Materialize every
+        # referenced geometry beside the generated input; otherwise a valid
+        # absolute CLI argument is shortened in the input but the file itself
+        # remains elsewhere and a real ORCA run cannot open it.
+        if isinstance(self.job.settings, ORCANEBJobSettings):
+            for field_name in (
+                "ending_xyzfile",
+                "intermediate_xyzfile",
+                "restarting_xyzfile",
+            ):
+                source = getattr(self.job.settings, field_name, None)
+                if source is None:
+                    continue
+                source = os.path.abspath(source)
+                if not os.path.isfile(source):
+                    raise FileNotFoundError(
+                        f"ORCA NEB {field_name} does not exist: {source}"
+                    )
+                destination = os.path.join(folder, os.path.basename(source))
+                if source != os.path.abspath(destination):
+                    shutil.copy2(source, destination)
+                    logger.info(
+                        "Copied ORCA NEB %s file %s to %s.",
+                        field_name,
+                        source,
+                        destination,
+                    )
+
     def _write_all(self, f):
         """
         Write the complete input file with all sections.
@@ -480,52 +509,24 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If invalid MDCI options are specified
         """
-        mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
 
-        if mdci_cutoff is not None:
-            logger.debug("Writing MDCI block")
-            # check that mdci_cutoff is one of the
-            # allowed values: ["loose", "normal", "tight"]
-            assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
-                "mdci_cutoff must be one of the allowed values: "
-                "['loose', 'normal', 'tight']"
+        # Accuracy presets are emitted on the simple-input line by
+        # ORCAJobSettings.  A %mdci block is needed only for the independent
+        # density request; reproducing a subset of preset thresholds here can
+        # silently override other parts of ORCA's Loose/Normal/TightPNO model.
+        if mdci_density is None:
+            return
+        normalized = str(mdci_density).strip().lower()
+        if normalized not in {"none", "unrelaxed", "relaxed"}:
+            raise ValueError(
+                "mdci_density must be one of "
+                "['none', 'unrelaxed', 'relaxed']"
             )
-            f.write("%mdci\n")
-            if mdci_cutoff.lower() == "loose":
-                f.write("  # loose cutoff\n")
-                f.write("  TCutPairs 1e-3\n")
-                f.write("  TCutPNO 1e-6\n")
-                f.write("  TCutMKN 1e-3\n")
-            elif mdci_cutoff.lower() == "normal":
-                f.write("  # normal cutoff\n")
-                f.write("  TCutPairs 1e-4\n")
-                f.write("  TCutPNO 3.33e-7\n")
-                f.write("  TCutMKN 1e-3\n")
-            elif mdci_cutoff.lower() == "tight":
-                f.write("  # tight cutoff\n")
-                f.write("  TCutPairs 1e-5\n")
-                f.write("  TCutPNO 1e-7\n")
-                f.write("  TCutMKN 1e-4\n")
-
-            if mdci_density is not None:
-                # check that mdci_density is one of the allowed
-                # values: ["none", "unrelaxed", "relaxed"]
-                assert mdci_density.lower() in [
-                    "none",
-                    "unrelaxed",
-                    "relaxed",
-                ], (
-                    "mdci_density must be one of the allowed values: "
-                    "['none', 'unrelaxed', 'relaxed']"
-                )
-                if mdci_density.lower() == "none":
-                    f.write("  Density None  # no density\n")
-                elif mdci_density.lower() == "unrelaxed":
-                    f.write("  Density Unrelaxed  # unrelaxed density\n")
-                elif mdci_density.lower() == "relaxed":
-                    f.write("  Density Relaxed  # relaxed density\n")
-            f.write("end\n")
+        logger.debug("Writing MDCI density block")
+        f.write("%mdci\n")
+        f.write(f"  Density {normalized.capitalize()}\n")
+        f.write("end\n")
 
     def _write_elprop_block(self, f):
         """

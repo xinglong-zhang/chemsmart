@@ -540,6 +540,24 @@ class ORCANEBInput(ORCAInput):
     def pre_optimization(self):
         return self._get_pre_optimization_status()
 
+    def read_settings(self):
+        """Read ordinary ORCA settings plus NEB-specific input semantics."""
+
+        settings = super().read_settings()
+        if settings.jobtype != "neb":
+            return settings
+        from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+
+        return ORCANEBJobSettings(
+            **settings.__dict__,
+            joboption=self.route_object.neb_joboption,
+            nimages=self.nimages,
+            ending_xyzfile=self.ending_xyzfile,
+            intermediate_xyzfile=self.ts_xyzfile,
+            restarting_xyzfile=self.restarting_allxyzfile,
+            preopt_ends=self.pre_optimization,
+        )
+
     def _get_geometries(self):
         neb_starting_xyz = neb_end_xyzile = neb_ts_xyzile = (
             restart_allxyzfile

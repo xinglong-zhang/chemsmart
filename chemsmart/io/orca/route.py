@@ -11,6 +11,8 @@ from chemsmart.io.orca import (
     ORCA_ALL_QM2_BUILT_IN_METHODS,
     ORCA_ALL_SCF_ALGORITHMS,
     ORCA_SCF_CONVERGENCE,
+    is_orca_neb_joboption,
+    normalize_orca_neb_joboption,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,9 +85,33 @@ class ORCARoute:
         return None
 
     @property
+    def semiempirical(self):
+        """Extract a built-in semiempirical or xTB method.
+
+        The ORCA writer emits the project-facing GFN aliases as native
+        ``XTB0``/``XTB1``/``XTB2`` keywords.  Parse both vocabularies back to
+        the same canonical setting so a generated input retains its method
+        meaning when ChemSmart independently reads it for preview validation.
+        """
+
+        from chemsmart.jobs.orca.settings import (
+            ORCA_SEMIEMPIRICAL_ALIASES,
+            _normalize_orca_semiempirical,
+        )
+
+        recognized = {
+            *ORCA_SEMIEMPIRICAL_ALIASES,
+            *(value.casefold() for value in ORCA_SEMIEMPIRICAL_ALIASES.values()),
+        }
+        for route_keyword in self.route_keywords:
+            if route_keyword.casefold() in recognized:
+                return _normalize_orca_semiempirical(route_keyword)
+        return None
+
+    @property
     def method(self):
-        """Extract the computational method (functional or ab initio)."""
-        return self.functional or self.ab_initio
+        """Extract the computational method from the simple-input route."""
+        return self.functional or self.ab_initio or self.semiempirical
 
     @property
     def dispersion(self):
@@ -98,6 +124,21 @@ class ORCARoute:
         for route_keyword in self.route_keywords:
             if route_keyword in ORCA_ALL_DISPERSION_CORRECTIONS:
                 return route_keyword
+        return None
+
+    @property
+    def mdci_cutoff(self):
+        """Return the project-facing DLPNO accuracy preset."""
+
+        by_keyword = {
+            "loosepno": "loose",
+            "normalpno": "normal",
+            "tightpno": "tight",
+        }
+        for route_keyword in self.route_keywords:
+            value = by_keyword.get(route_keyword)
+            if value is not None:
+                return value
         return None
 
     @property
@@ -195,10 +236,23 @@ class ORCARoute:
         Returns:
             str: Job type (e.g., 'opt', 'freq') or 'sp' as default
         """
-        for route_input in self.route_inputs:
+        for route_input in self.route_keywords:
+            if is_orca_neb_joboption(route_input):
+                return "neb"
+            if route_input in {"optts", "scants"}:
+                return "ts"
             if route_input in ORCA_ALL_JOB_TYPES:
                 return route_input
         return "sp"
+
+    @property
+    def neb_joboption(self):
+        """Return the native NEB variant from the simple-input route."""
+
+        for route_input in self.route_keywords:
+            if is_orca_neb_joboption(route_input):
+                return normalize_orca_neb_joboption(route_input)
+        return None
 
     @property
     def freq(self):

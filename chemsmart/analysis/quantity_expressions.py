@@ -1390,13 +1390,16 @@ def _node_value(
             )
         except AggregationError as exc:
             raise QuantityExpressionError(str(exc)) from exc
+        normalized, canonical_unit, dimension = normalize_numeric_value(
+            payload, unit
+        )
         return make_quantity_value(
             quantity_id=node.node_id,
             source_value=payload,
             source_unit=unit,
-            value=payload,
-            unit=unit,
-            dimension=ENERGY,
+            value=normalized,
+            unit=canonical_unit,
+            dimension=dimension,
             evidence_ref=evidence_ref,
         )
 

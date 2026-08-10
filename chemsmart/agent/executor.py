@@ -230,6 +230,11 @@ class ApprovedWorkflowExecutor:
             )
 
             input_artifact_id = self._input_artifact_id(binding)
+            input_artifact = self.host.artifacts.get(input_artifact_id)
+            if input_artifact is None:
+                raise ContractError(
+                    f"input artifact {input_artifact_id!r} is unavailable"
+                )
             scientific_identity = self._call(
                 "bind_scientific_identity",
                 input_artifact_id=input_artifact_id,
@@ -279,8 +284,7 @@ class ApprovedWorkflowExecutor:
                 program_binding_sha256=program_binding_sha256,
                 engine_binding_sha256=engine_binding_sha256,
                 geometry_artifact_sha256=(
-                    binding.initial_artifact_sha256
-                    or self.initial_artifact.sha256
+                    input_artifact.sha256
                 ),
                 scientific_identity_sha256=scientific_identity_sha256,
                 charge=binding.charge,
@@ -298,14 +302,9 @@ class ApprovedWorkflowExecutor:
                     item["handoff"] if isinstance(item, Mapping) else item
                 )
                 artifact = _field(handoff, "geometry_artifact_id")
-                for consumer in self.plan.edges:
-                    if (
-                        consumer.edge_kind == "data"
-                        and consumer.source_node_id == node_id
-                    ):
-                        self._handoff_inputs[consumer.target_node_id] = (
-                            artifact
-                        )
+                self._handoff_inputs[
+                    _field(handoff, "consumer_node_id")
+                ] = artifact
             return ExecutedNodeV1(
                 node_id=node_id,
                 program=binding.program,
@@ -319,7 +318,7 @@ class ApprovedWorkflowExecutor:
                 result_validation_receipt_sha256=_field(
                     receipt, "result_validation_receipt_sha256"
                 ),
-                invocation_sha256=invocation_sha256,
+                invocation_sha256=_field(receipt, "invocation_sha256"),
             )
         except ContractError as error:
             return ExecutedNodeV1(
@@ -397,8 +396,9 @@ class ApprovedWorkflowExecutor:
     def run(self) -> WorkflowExecutionResultV1:
         """Execute every ready node until the frontier stops advancing."""
 
+        run_id = "run." + self.approval.approval_id
         run_state = build_workflow_run_state(
-            run_id=f"exec-{self.plan.workflow_id}",
+            run_id=run_id,
             plan=self.plan,
             approval=self.frozen_approval,
             # This walk is the act of consuming the approval. An unconsumed
@@ -408,10 +408,13 @@ class ApprovedWorkflowExecutor:
         )
         executed: list[ExecutedNodeV1] = []
         seen: set[str] = set()
+        data_edge_bindings = ()
         while True:
             ready = tuple(
                 node_id
-                for node_id in derive_ready_node_ids(self.plan, run_state)
+                for node_id in derive_ready_node_ids(
+                    self.plan, run_state, data_edge_bindings
+                )
                 if node_id not in seen
             )
             if not ready:
@@ -421,7 +424,19 @@ class ApprovedWorkflowExecutor:
                 seen.add(node_id)
                 outcome = self.run_node(node_id)
                 executed.append(outcome)
-                run_state = self._settle(run_state, outcome)
+                if outcome.execution_receipt_sha256:
+                    frontier = self.host.event_store.workflow_frontier(
+                        workflow_id=self.plan.workflow_id,
+                        run_id=run_id,
+                    )
+                    if frontier.run_state is None:
+                        raise ContractError(
+                            "executed node has no durable workflow run state"
+                        )
+                    run_state = frontier.run_state
+                    data_edge_bindings = frontier.data_edge_bindings
+                else:
+                    run_state = self._settle(run_state, outcome)
                 progressed = progressed or outcome.validated
             if not progressed:
                 break

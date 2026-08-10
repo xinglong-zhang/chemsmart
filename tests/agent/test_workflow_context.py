@@ -155,6 +155,25 @@ def test_the_frontier_advances_as_artifacts_materialize():
     assert "sp_5z" in projection.waiting_node_ids
 
 
+def test_a_validated_handoff_advances_the_unchanged_producer_edge():
+    """Re-planning must not erase an OPT geometry already handed to HESS."""
+
+    projection = project_workflow_context(
+        workflow_id="wf.probe",
+        nodes=_fan_out_fan_in(),
+        materialized_artifact_ids={"start.xyz", "opt.xyz"},
+        materialized_producer_inputs={
+            ("sp_qz", "geom", "opt", "opt_geom"),
+        },
+        completed_node_ids={"opt"},
+    )
+
+    assert projection.completed_node_ids == ("opt",)
+    assert projection.node("opt").state == "completed"
+    assert projection.node("sp_qz").state == "ready"
+    assert projection.node("sp_5z").state == "waiting"
+
+
 def test_an_input_with_no_producer_and_no_artifact_is_blocked_not_waiting():
     """Waiting resolves itself; a dangling input never will, so say so."""
 

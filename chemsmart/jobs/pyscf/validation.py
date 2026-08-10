@@ -140,7 +140,11 @@ FREQUENCY_VALIDATION_SCHEMA_VERSION = (
     "chemsmart.pyscf-frequency-validation.v1"
 )
 RESULT_VALIDATION_SCHEMA_VERSION = "chemsmart.pyscf-result-validation.v1"
-_LINEARITY_RELATIVE_TOLERANCE = 1.0e-8
+# Geometry optimizers do not preserve exact collinearity at machine precision.
+# A relative transverse spread of 1e-4 is still a conservative linear-rotor
+# classification (about 0.01 degrees for a triatomic), while admitting the
+# small residual displacement left by ordinary geometry convergence.
+_LINEARITY_RELATIVE_TOLERANCE = 1.0e-4
 # Analytic PySCF Hessians can retain micro-Hartree/Bohr^2 antisymmetric
 # numerical noise.  These tolerances admit the archived water result while
 # still rejecting chemically material asymmetry.
@@ -158,6 +162,31 @@ _BOHR_M = 5.29177210903e-11
 _LIGHT_SPEED_M_S = 299792458.0
 _HESSIAN_FREQUENCY_ATOL_CM1 = 0.5
 _HESSIAN_FREQUENCY_RTOL = 5.0e-4
+
+
+def _linearity_metrics(coordinates):
+    """Return scale, transverse spread, and effective linearity.
+
+    The dimensionless singular-value ratio is invariant to translation,
+    rotation, and uniform coordinate scaling.  The same classification is
+    used for both the 3N-5 mode-count rule and the independent removal of
+    translations and rotations from a Cartesian Hessian.
+    """
+
+    values = np.asarray(coordinates, dtype=float)
+    centered = values - values.mean(axis=0)
+    singular_values = np.linalg.svd(centered, compute_uv=False)
+    scale = float(singular_values[0]) if singular_values.size else 0.0
+    second = (
+        float(singular_values[1]) if singular_values.size > 1 else 0.0
+    )
+    if not math.isfinite(scale) or scale <= 0.0:
+        return scale, second, None
+    return (
+        scale,
+        second,
+        second <= _LINEARITY_RELATIVE_TOLERANCE * scale,
+    )
 
 
 _MISSING = object()
@@ -1237,10 +1266,8 @@ def frequency_validation_receipt(
         geometry_class = "linear"
         expected_mode_count = 1
     else:
-        centered = coordinates - coordinates.mean(axis=0)
-        singular_values = np.linalg.svd(centered, compute_uv=False)
-        scale = float(singular_values[0]) if singular_values.size else 0.0
-        if not math.isfinite(scale) or scale <= 0.0:
+        scale, second, linear = _linearity_metrics(coordinates)
+        if linear is None:
             findings.append(
                 PySCFViolation(
                     rule_id=RULE_FREQUENCY_GEOMETRY,
@@ -1251,12 +1278,6 @@ def frequency_validation_receipt(
                 )
             )
         else:
-            second = (
-                float(singular_values[1])
-                if singular_values.size > 1
-                else 0.0
-            )
-            linear = second <= _LINEARITY_RELATIVE_TOLERANCE * scale
             geometry_class = "linear" if linear else "nonlinear"
             expected_mode_count = 3 * len(symbol_list) - (5 if linear else 6)
 
@@ -2650,10 +2671,16 @@ def _independent_mass_weighted_frequencies(*, matrix, symbols, positions):
             (square_root_masses[:, None] * rotation).reshape(-1)
         )
     tr_matrix = np.column_stack(vectors)
-    left, singular_values, _ = np.linalg.svd(tr_matrix, full_matrices=True)
-    largest = float(singular_values[0]) if singular_values.size else 0.0
-    threshold = max(tr_matrix.shape) * np.finfo(float).eps * largest
-    tr_rank = int(np.count_nonzero(singular_values > threshold))
+    left, _, _ = np.linalg.svd(tr_matrix, full_matrices=True)
+    if len(symbols) == 1:
+        tr_rank = 3
+    elif len(symbols) == 2:
+        tr_rank = 5
+    else:
+        _, _, linear = _linearity_metrics(coordinates)
+        if linear is None:
+            raise ValueError("degenerate molecular geometry")
+        tr_rank = 5 if linear else 6
     vibrational_basis = left[:, tr_rank:]
 
     coordinate_mass = np.repeat(square_root_masses, 3)

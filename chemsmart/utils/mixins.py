@@ -810,6 +810,12 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def dispersion(self):
+        """Get the independently parsed Gaussian dispersion setting."""
+
+        return self.route_object.dispersion
+
+    @property
     def method(self):
         """Get the computational method from route string."""
         return self.route_object.method
@@ -950,6 +956,7 @@ class GaussianFileMixin(FileMixin):
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
+            dispersion=self.dispersion,
             basis=self.basis,
             semiempirical=self.semiempirical,
             charge=self.charge,
@@ -1033,6 +1040,9 @@ class ORCAFileMixin(FileMixin):
         Returns:
             str or None: MDCI cutoff value or None if not found.
         """
+        route_value = self.route_object.mdci_cutoff
+        if route_value is not None:
+            return route_value
         for i, line in enumerate(self.contents):
             if "%mdci" in line.lower():
                 # mdci cutoff in %mdci block
@@ -1234,6 +1244,12 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.ab_initio
 
     @property
+    def semiempirical(self):
+        """Get the parsed ORCA semiempirical or native xTB method."""
+
+        return self.route_object.semiempirical
+
+    @property
     def method(self):
         """Get the computational method from ORCA route string."""
         return self.route_object.method
@@ -1304,6 +1320,17 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.defgrid
 
     @property
+    def ri_approximation(self):
+        """Get the requested resolution-of-identity mode from the ORCA route.
+
+        The project setting is emitted as a simple route keyword.  Preserve
+        the parsed value when reconstructing :class:`ORCAJobSettings` so the
+        generated-input validator observes the same setting that ChemSmart
+        materialized.
+        """
+        return self.route_object.ri_approximation
+
+    @property
     def scf_tol(self):
         """
         Get SCF convergence tolerance from ORCA route.
@@ -1328,6 +1355,24 @@ class ORCAFileMixin(FileMixin):
             str or None: SCF algorithm or None if not specified.
         """
         return self.route_object.scf_algorithm
+
+    @property
+    def reference(self):
+        """Read the determinant choice written in an ORCA ``%scf`` block."""
+
+        from chemsmart.jobs.orca.settings import ORCA_REFERENCE_DETERMINANTS
+
+        by_keyword = {
+            keyword.casefold(): name
+            for name, keyword in ORCA_REFERENCE_DETERMINANTS.items()
+        }
+        for raw_line in self.contents:
+            fields = raw_line.split("#", 1)[0].split()
+            for index, field in enumerate(fields[:-1]):
+                if field.casefold() != "hftyp":
+                    continue
+                return by_keyword.get(fields[index + 1].casefold())
+        return None
 
     @property
     def jobtype(self):
@@ -1384,15 +1429,18 @@ class ORCAFileMixin(FileMixin):
         return ORCAJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
+            semiempirical=self.semiempirical,
             dispersion=self.dispersion,
             basis=self.basis,
             aux_basis=self.aux_basis,
             extrapolation_basis=self.extrapolation_basis,
             defgrid=self.defgrid,
+            ri_approximation=self.ri_approximation,
             scf_tol=self.scf_tol,
             scf_algorithm=self.scf_algorithm,
             scf_maxiter=self.scf_maxiter,
             scf_convergence=self.scf_convergence,
+            reference=self.reference,
             charge=self.charge,
             multiplicity=self.multiplicity,
             gbw=dv.gbw,

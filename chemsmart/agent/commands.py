@@ -5,16 +5,18 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import click
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_sha256,
     file_sha256,
     require_identifier,
+    require_auxiliary_artifact_bindings,
     require_sha256,
 )
 from chemsmart.agent.capabilities import (
@@ -146,36 +148,39 @@ class CanonicalCommandInvocationV1:
     status: str
     rule_ids: tuple[str, ...]
     invocation_sha256: str
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.canonical-command-invocation.v1":
             raise ContractError("unsupported canonical invocation schema")
         if self.status != "compiled":
             raise ContractError("compilation does not establish preview")
-        expected = canonical_sha256(
-            {
-                "schema_version": self.schema_version,
-                "node_id": self.node_id,
-                "command_path": self.command_path,
-                "scoped_options": self.scoped_options,
-                "argv": self.argv,
-                "display_command": self.display_command,
-                "live_cli_schema_sha256": self.live_cli_schema_sha256,
-                "joined_capability_sha256": self.joined_capability_sha256,
-                "project_receipt_sha256": self.project_receipt_sha256,
-                "project_sha256": self.project_sha256,
-                "input_sha256": self.input_sha256,
-                "scientific_identity_sha256": self.scientific_identity_sha256,
-                "program_engine_binding_sha256": (
-                    self.program_engine_binding_sha256
-                ),
-                "repair_parent_sha256": self.repair_parent_sha256,
-                "counterexample_sha256": self.counterexample_sha256,
-                "repair_attempt": self.repair_attempt,
-                "status": self.status,
-                "rule_ids": self.rule_ids,
-            }
-        )
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
+        body = {
+            "schema_version": self.schema_version,
+            "node_id": self.node_id,
+            "command_path": self.command_path,
+            "scoped_options": self.scoped_options,
+            "argv": self.argv,
+            "display_command": self.display_command,
+            "live_cli_schema_sha256": self.live_cli_schema_sha256,
+            "joined_capability_sha256": self.joined_capability_sha256,
+            "project_receipt_sha256": self.project_receipt_sha256,
+            "project_sha256": self.project_sha256,
+            "input_sha256": self.input_sha256,
+            "scientific_identity_sha256": self.scientific_identity_sha256,
+            "program_engine_binding_sha256": (
+                self.program_engine_binding_sha256
+            ),
+            "repair_parent_sha256": self.repair_parent_sha256,
+            "counterexample_sha256": self.counterexample_sha256,
+            "repair_attempt": self.repair_attempt,
+            "status": self.status,
+            "rule_ids": self.rule_ids,
+        }
+        if self.auxiliary_input_bindings:
+            body["auxiliary_input_bindings"] = self.auxiliary_input_bindings
+        expected = canonical_sha256(body)
         if self.invocation_sha256 != expected:
             raise ContractError("canonical invocation digest mismatch")
 
@@ -260,6 +265,7 @@ def compile_command(
     project_validation: ProjectValidationReceiptV1 | None,
     input_artifact: TrustedArtifactRefV1,
     scientific_identity: ScientificIdentityBindingV1,
+    job_artifact_options: Mapping[str, TrustedArtifactRefV1] | None = None,
     live_schema: LiveClickSchemaV1 | None = None,
     server: str = "",
     repair_parent_sha256: str = "",
@@ -292,6 +298,7 @@ def compile_command(
     )
     execution_scope = (proposal.execution_target,)
     program_scope = execution_scope + (proposal.program,)
+    job_scope = program_scope + (proposal.jobtype,)
     options: list[ScopedCommandOptionV1] = []
 
     if server:
@@ -368,12 +375,44 @@ def compile_command(
             )
         )
 
+    # Some canonical ChemSmart jobs consume more than one registered file.
+    # Keep the main molecular geometry on the long-standing program-level
+    # ``filename`` option, and bind every additional artifact to an option on
+    # the exact live job command (for example ORCA NEB's
+    # ``ending_xyzfile``).  The model supplies only semantic artifact IDs in
+    # its workflow; the host resolves paths here.
+    auxiliary_input_bindings = []
+    for parameter_name, artifact in sorted(
+        (job_artifact_options or {}).items()
+    ):
+        if parameter_name == "filename":
+            raise ContractError(
+                "filename is the primary program input, not a job artifact option"
+            )
+        _require_current_artifact(artifact, parameter_name)
+        options.append(
+            _scoped_option(
+                live_schema,
+                job_scope,
+                parameter_name,
+                artifact.cli_value,
+            )
+        )
+        auxiliary_input_bindings.append(
+            AuxiliaryArtifactBindingV1(
+                parameter_name=parameter_name,
+                artifact_id=artifact.artifact_id,
+                artifact_sha256=artifact.sha256,
+            )
+        )
+
     ordered_options = tuple(options)
     argv = ["chemsmart", proposal.execution_target]
     argv.extend(_render_scope_options(ordered_options, execution_scope))
     argv.append(proposal.program)
     argv.extend(_render_scope_options(ordered_options, program_scope))
     argv.append(proposal.jobtype)
+    argv.extend(_render_scope_options(ordered_options, job_scope))
     argv_tuple = tuple(argv)
     body = {
         "schema_version": "chemsmart.canonical-command-invocation.v1",
@@ -399,6 +438,8 @@ def compile_command(
         "status": "compiled",
         "rule_ids": ("command.compiler.live_click", "command.preview.flags"),
     }
+    if auxiliary_input_bindings:
+        body["auxiliary_input_bindings"] = tuple(auxiliary_input_bindings)
     return CanonicalCommandInvocationV1(
         **body, invocation_sha256=canonical_sha256(body)
     )
@@ -444,6 +485,11 @@ def inspect_command(
         )
     )
     reconstructed.append(invocation.command_path[2])
+    reconstructed.extend(
+        _render_scope_options(
+            invocation.scoped_options, invocation.command_path
+        )
+    )
     if tuple(reconstructed) != invocation.argv:
         valid = False
         rules.append("command.inspect.argv_roundtrip_mismatch")

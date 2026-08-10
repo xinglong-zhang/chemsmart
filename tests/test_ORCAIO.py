@@ -36,6 +36,12 @@ class TestORCARoute:
         assert r2.functional == "m062x"
         assert r2.basis == "def2-tzvp"
 
+        r2_pople = ORCARoute(
+            route_string="! Opt Freq M062X 6-311+G(d,p)"
+        )
+        assert r2_pople.functional == "m062x"
+        assert r2_pople.basis == "6-311+g(d,p)"
+
         s3 = "! CPCM(toluene) DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID2 TightSCF KDIIS"
         r3 = ORCARoute(route_string=s3)
         assert r3.route_keywords == [
@@ -2962,6 +2968,7 @@ class TestORCANEB:
         orca_neb.__dict__["content_lines_string"] = data
         assert orca_neb.nimages == 10
         assert orca_neb.num_atoms == 148
+        assert orca_neb.neb_converged is True
         assert orca_neb.ci_converged is True
         assert orca_neb.ts_converged is True
         assert orca_neb.ci == "Climbing Image:  image 4."
@@ -2997,6 +3004,24 @@ class TestORCANEBJobSettings:
         assert settings.joboption == "NEB-TS"
         assert settings.nimages == 8
         assert settings.semiempirical == "XTB2"
+
+    def test_joboption_uses_shared_canonical_vocabulary(self):
+        settings = ORCANEBJobSettings(
+            joboption="fast-neb-ts", nimages=8, semiempirical="XTB2"
+        )
+
+        assert settings.joboption == "FAST-NEB-TS"
+        route = ORCARoute(settings.route_string)
+        assert route.jobtype == "neb"
+        assert route.neb_joboption == "FAST-NEB-TS"
+
+    def test_invalid_joboption_is_rejected_before_input_generation(self):
+        with pytest.raises(ValueError, match="Unsupported ORCA NEB"):
+            ORCANEBJobSettings(
+                joboption="NEB-TRANSITION-STATE",
+                nimages=8,
+                semiempirical="XTB2",
+            )
 
     def test_route_string_generation(self):
         """Test route string generation."""

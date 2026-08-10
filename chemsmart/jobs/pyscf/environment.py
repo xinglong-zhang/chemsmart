@@ -493,6 +493,9 @@ def distribution_versions():
         "gpu4pyscf",
         "cupy",
         "cutensor",
+        "geometric",
+        "pyberny",
+        "ase",
     )
     found = {}
     for distribution in importlib.metadata.distributions():

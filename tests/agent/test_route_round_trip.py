@@ -45,9 +45,10 @@ def _domains():
 
 @pytest.mark.parametrize("name,value", list(_domains()))
 def test_a_declared_route_parameter_reads_back_as_itself(name, value):
-    settings = ORCAJobSettings.from_dict(
-        {"functional": "B3LYP", "basis": "6-31G*", name: value}
-    )
+    project = {"basis": "6-31G*", name: value}
+    if name != "ab_initio":
+        project["functional"] = "B3LYP"
+    settings = ORCAJobSettings.from_dict(project)
     route = ORCARoute(settings.route_string)
     recovered = getattr(route, name, None)
     assert recovered is not None, (
@@ -71,6 +72,27 @@ def test_conventional_four_index_integrals_survive_the_round_trip():
     )
     assert "NoRI" in settings.route_string
     assert ORCARoute(settings.route_string).ri_approximation == "none"
+
+
+@pytest.mark.parametrize(
+    "choice,keyword",
+    [("none", "NoRI"), ("ri", "RI"), ("rijcosx", "RIJCOSX"), ("rijk", "RIJK")],
+)
+def test_settings_reader_preserves_ri_choice(tmp_path, choice, keyword):
+    """The preview parser must retain the RI choice, not only see the token."""
+
+    native_input = tmp_path / "round-trip.inp"
+    native_input.write_text(
+        f"! PBE def2-SVP {keyword}\n"
+        "* xyz 0 1\n"
+        "H 0.0 0.0 0.0\n"
+        "H 0.0 0.0 0.74\n"
+        "*\n",
+        encoding="utf-8",
+    )
+
+    observed = ORCAJobSettings.from_filepath(str(native_input))
+    assert observed.ri_approximation == choice
 
 
 def test_an_absent_choice_reads_back_as_absent_not_as_a_default():

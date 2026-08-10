@@ -320,6 +320,12 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
+            if job == "sp":
+                # A single-point project must not acquire the route-building
+                # program's historical default frequency job merely because
+                # only the solv phase was declared.  An explicit ``freq`` in
+                # the section still overrides this below.
+                all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], shared_config
@@ -380,6 +386,15 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 # point into an opt+freq, so freq stays off on this path.
                 all_project_configs[job]["freq"] = False
 
+    if program == "orca" and "neb" in all_project_configs:
+        # ``gas:`` supplies the electronic-structure settings shared by the
+        # path calculation, but its historical default ``freq=True`` belongs
+        # to ordinary optimizations.  A NEB job should not silently acquire a
+        # frequency calculation from that borrowed phase section.  A chemist
+        # can still request one explicitly under the job's own ``neb:``
+        # section, which is applied below.
+        all_project_configs["neb"]["freq"] = False
+
     # check if td settings exist (optional)
     if "td" in project_config:
         td_config = project_config["td"]
@@ -422,6 +437,17 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         if job not in all_project_configs:
             all_project_configs[job] = default_config.copy()
             all_project_configs[job]["jobtype"] = job
+        if program == "orca" and job == "neb":
+            # The shared ORCA defaults describe one-geometry jobs and
+            # therefore do not contain the canonical NEB project keys.  Lift
+            # this stage into its real settings class before applying the
+            # explicit ``neb:`` section so joboption/nimages/preopt_ends are
+            # owned by normal YAML loading rather than forced into CLI text.
+            from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+
+            all_project_configs[job] = ORCANEBJobSettings(
+                **all_project_configs[job]
+            ).__dict__.copy()
         all_project_configs[job] = update_dict_with_existing_keys(
             all_project_configs[job], stage_config
         )

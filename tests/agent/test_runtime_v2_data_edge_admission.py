@@ -5,10 +5,15 @@ import pytest
 from chemsmart.agent._contracts import ContractError, canonical_data, canonical_sha256
 from chemsmart.agent.execution import (
     FrozenWorkflowApprovalV1,
+    OptimizedGeometryHandoffV1,
+    ProgramExecutionInvocationV1,
+    ProgramExecutionReceiptV1,
     ProgramResultValidationReceiptV1,
     ValidatedDataEdgeBindingV1,
     build_execution_resource_spec,
     build_frozen_workflow_approval,
+    build_producer_edge_rule,
+    build_validated_data_edge_binding,
     build_workflow_run_state,
     derive_ready_node_ids,
     transition_workflow_node,
@@ -331,6 +336,121 @@ def test_arbitrary_producer_digest_does_not_ready_data_consumer():
         receipt_sha256=canonical_sha256(mismatched_body),
     )
     assert derive_ready_node_ids(plan, run, (mismatched,)) == ()
+
+
+def test_data_edge_binds_node_identity_not_multi_geometry_plan_aggregate():
+    plan, _, approval = _approval()
+    producer_identity = "7" * 64
+    invocation_body = {
+        "schema_version": "chemsmart.program-execution-invocation.v1",
+        "node_id": "opt-initial",
+        "approval_sha256": "a" * 64,
+        "program": "pyscf",
+        "engine": "cpu",
+        "jobtype": "opt",
+        "project_sha256": "d" * 64,
+        "input_artifact_id": "geometry.initial",
+        "input_sha256": "c" * 64,
+        "scientific_identity_sha256": producer_identity,
+        "environment_receipt_sha256": "f" * 64,
+        "resource_sha256": "e" * 64,
+        "workspace": "/tmp/chemsmart-data-edge-test",
+        "argv": ("chemsmart", "run", "pyscf", "opt"),
+        "idempotency_key": "1" * 64,
+        "status": "ready",
+    }
+    invocation = ProgramExecutionInvocationV1(
+        **invocation_body,
+        invocation_sha256=canonical_sha256(invocation_body),
+    )
+    result = {
+        "artifact_id": "result.opt",
+        "kind": "pyscf_hdf5",
+        "sha256": "5" * 64,
+        "size_bytes": 1,
+        "path": "/tmp/chemsmart-data-edge-test/result.h5",
+        "cli_value": "/tmp/chemsmart-data-edge-test/result.h5",
+    }
+    from chemsmart.agent._contracts import TrustedArtifactRefV1
+
+    result_artifact = TrustedArtifactRefV1(**result)
+    receipt_body = {
+        "schema_version": "chemsmart.program-execution-receipt.v1",
+        "invocation_sha256": invocation.invocation_sha256,
+        "node_id": "opt-initial",
+        "idempotency_key": invocation.idempotency_key,
+        "execution_state": "validated",
+        "wrapper_exit_status": 0,
+        "child_exit_status": 0,
+        "engine_complete": True,
+        "validated": True,
+        "engine_receipt_sha256": "6" * 64,
+        "environment_receipt_sha256": invocation.environment_receipt_sha256,
+        "result_validation_receipt_sha256": "4" * 64,
+        "output_artifacts": (result_artifact,),
+        "validator_receipt_sha256s": ("4" * 64,),
+        "findings": (),
+        "started_at": "2026-08-10T00:00:00+00:00",
+        "finished_at": "2026-08-10T00:00:01+00:00",
+    }
+    receipt = ProgramExecutionReceiptV1(
+        **receipt_body, receipt_sha256=canonical_sha256(receipt_body)
+    )
+    producer_edge = build_producer_edge_rule(
+        producer_node_id="opt-initial",
+        consumer_node_id="hess-optimized",
+        artifact_kind="geometry_xyz",
+        selection_rule="validated_optimized_geometry",
+    )
+    handoff_body = {
+        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
+        "producer_node_id": "opt-initial",
+        "consumer_node_id": "hess-optimized",
+        "producer_edge_sha256": producer_edge.edge_sha256,
+        "producer_execution_receipt_sha256": receipt.receipt_sha256,
+        "result_artifact_id": result_artifact.artifact_id,
+        "result_artifact_sha256": result_artifact.sha256,
+        "geometry_artifact_id": "geometry.optimized",
+        "geometry_artifact_sha256": "6" * 64,
+        "atom_count": 3,
+        "symbols": ("O", "H", "H"),
+        "positions_sha256": "a" * 64,
+        "charge": 0,
+        "multiplicity": 1,
+        "status": "validated_handoff",
+    }
+    handoff = OptimizedGeometryHandoffV1(
+        **handoff_body, receipt_sha256=canonical_sha256(handoff_body)
+    )
+
+    binding = build_validated_data_edge_binding(
+        run_id="run.water-approval",
+        plan=plan,
+        approval=approval,
+        scientific_edge=plan.edges[0],
+        producer_edge=producer_edge,
+        producer_invocation=invocation,
+        producer_receipt=receipt,
+        handoff=handoff,
+        producer_scientific_identity_sha256=producer_identity,
+        consumer_scientific_identity_sha256="8" * 64,
+    )
+
+    assert producer_identity != plan.scientific_identity_sha256
+    assert binding.producer_scientific_identity_sha256 == producer_identity
+    with pytest.raises(ContractError, match="execution invocation"):
+        build_validated_data_edge_binding(
+            run_id="run.water-approval",
+            plan=plan,
+            approval=approval,
+            scientific_edge=plan.edges[0],
+            producer_edge=producer_edge,
+            producer_invocation=invocation,
+            producer_receipt=receipt,
+            handoff=handoff,
+            producer_scientific_identity_sha256="9" * 64,
+            consumer_scientific_identity_sha256="8" * 64,
+        )
 
 
 def test_legacy_frozen_approval_remains_readable_but_not_admissible():

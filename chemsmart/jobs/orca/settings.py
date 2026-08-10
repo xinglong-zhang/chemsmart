@@ -13,7 +13,10 @@ import logging
 import os
 import re
 
-from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
+from chemsmart.io.orca import (
+    ORCA_ALL_SOLVENT_MODELS,
+    normalize_orca_neb_joboption,
+)
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
@@ -124,6 +127,67 @@ ORCA_RI_KEYWORDS = {
     "rijk": "RIJK",
 }
 
+#: Recommended simple-input presets for domain-based local correlation.
+#: ORCA explicitly recommends these keywords over manually reproducing a
+#: partial set of numeric ``%mdci`` thresholds.  The project-facing values
+#: remain short, stable choices while the writer owns the native spelling.
+ORCA_MDCI_CUTOFF_KEYWORDS = {
+    "loose": "LoosePNO",
+    "normal": "NormalPNO",
+    "tight": "TightPNO",
+}
+
+# ORCA spells the GFN-xTB family as XTB0/XTB1/XTB2 in its simple input.
+# Project authors naturally use either vocabulary, so keep that translation in
+# the program adapter rather than requiring users or agents to memorize the
+# native spelling.
+ORCA_SEMIEMPIRICAL_ALIASES = {
+    "xtb": "XTB",
+    "gfn0-xtb": "XTB0",
+    "gfn0xtb": "XTB0",
+    "xtb0": "XTB0",
+    "gfn1-xtb": "XTB1",
+    "gfn1xtb": "XTB1",
+    "xtb1": "XTB1",
+    "gfn2-xtb": "XTB2",
+    "gfn2xtb": "XTB2",
+    "xtb2": "XTB2",
+    "am1": "AM1",
+    "pm3": "PM3",
+}
+
+
+# ORCA does not use every punctuation-rich name printed in papers.  In
+# particular, the Truhlar functional normally written ``M06-2X`` in Methods
+# sections is the native simple-input keyword ``M062X``.  Keep that translation
+# in the ORCA adapter so project authors and agents can use the scientific name
+# while ChemSmart owns the program grammar.
+ORCA_FUNCTIONAL_ALIASES = {
+    "m06-2x": "M062X",
+    "m06_2x": "M062X",
+}
+
+
+def _normalize_orca_functional(value):
+    """Return the native ORCA keyword for a recognized functional alias."""
+
+    if value is None:
+        return None
+    literal = str(value).strip()
+    if not literal:
+        return None
+    return ORCA_FUNCTIONAL_ALIASES.get(literal.casefold(), literal)
+
+
+def _normalize_orca_semiempirical(value):
+    if value is None:
+        return None
+    literal = str(value).strip()
+    if not literal:
+        return None
+    key = literal.lower().replace("_", "-")
+    return ORCA_SEMIEMPIRICAL_ALIASES.get(key, literal)
+
 
 class ORCAJobSettings(MolecularJobSettings):
     """
@@ -196,6 +260,7 @@ class ORCAJobSettings(MolecularJobSettings):
         functional=None,
         dispersion=None,
         basis=None,
+        semiempirical=None,
         aux_basis=None,
         extrapolation_basis=None,
         defgrid=None,
@@ -283,11 +348,21 @@ class ORCAJobSettings(MolecularJobSettings):
             invert_constraints: Whether to invert constraints
             **kwargs: Additional keyword arguments
         """
+        # ``NumFreq`` is a frequency mode, not an independent request that
+        # conflicts with ``freq``.  Project authors (and agents) naturally
+        # write ``freq: true`` together with ``numfreq: true`` to mean
+        # "calculate frequencies numerically".  Normalize that intent here so
+        # the effective settings and the native ORCA route both contain one
+        # unambiguous frequency keyword.
+        if numfreq is True:
+            freq = False
+
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
             dispersion=dispersion,
             basis=basis,
+            semiempirical=_normalize_orca_semiempirical(semiempirical),
             defgrid=_normalize_orca_grid(defgrid),
             charge=charge,
             multiplicity=multiplicity,
@@ -318,7 +393,9 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_maxiter = scf_maxiter
         self.scf_convergence = scf_convergence
         self.gbw = gbw
-        self.mdci_cutoff = mdci_cutoff
+        self.mdci_cutoff = _normalize_choice(
+            mdci_cutoff, ORCA_MDCI_CUTOFF_KEYWORDS, "mdci_cutoff"
+        )
         self.mdci_density = mdci_density
         self.relativistic = _normalize_choice(
             relativistic, ORCA_RELATIVISTIC_KEYWORDS, "relativistic"
@@ -542,12 +619,13 @@ class ORCAJobSettings(MolecularJobSettings):
             ORCAJobSettings: Settings object from input file
         """
         inp_path = os.path.abspath(inp_path)
-        from chemsmart.io.orca.input import ORCAInput
+        from chemsmart.io.orca.input import ORCAInput, ORCANEBInput
 
         logger.info(f"Return settings object from {inp_path}")
-        orca_settings_from_inpfile = ORCAInput(
-            filename=inp_path
-        ).read_settings()
+        parser = ORCAInput(filename=inp_path)
+        if parser.jobtype == "neb":
+            parser = ORCANEBInput(filename=inp_path)
+        orca_settings_from_inpfile = parser.read_settings()
         logger.info(f"with settings: {orca_settings_from_inpfile.__dict__}")
         return orca_settings_from_inpfile
 
@@ -710,20 +788,46 @@ class ORCAJobSettings(MolecularJobSettings):
         elif self.jobtype == "sp":
             route_string += ""
 
-        # add frequency calculation
-        # not okay if both freq and numfreq are True
-        if self.freq and self.numfreq:
-            raise ValueError("Cannot specify both freq and numfreq!")
-
-        if self.freq:
-            route_string += " Freq"
-        elif self.numfreq:
+        # Numerical frequency mode takes precedence over analytic frequency.
+        # The constructor already normalizes the common YAML spelling with
+        # both booleans true, while this ordering also keeps direct mutation
+        # from producing two contradictory native keywords.
+        if self.numfreq:
             route_string += " NumFreq"  # requires numerical frequency,
             # e.g., in SMD model where analytic Hessian is not available
+        elif self.freq:
+            route_string += " Freq"
 
-        # write level of theory
-        level_of_theory = self._get_level_of_theory()
+        # Built-in semiempirical methods do not take an orbital basis.  The
+        # same project field is used by NEB and ordinary ORCA jobs such as
+        # IRC, so materialize it here instead of dropping it outside NEB.
+        if self.semiempirical is not None:
+            if any(
+                value is not None
+                for value in (self.ab_initio, self.functional, self.basis)
+            ):
+                raise ValueError(
+                    "semiempirical ORCA methods cannot be combined with "
+                    "ab_initio, functional, or basis settings"
+                )
+            level_of_theory = self.semiempirical
+        else:
+            level_of_theory = self._get_level_of_theory()
         route_string += f" {level_of_theory}"
+
+        # Empirical dispersion is a first-class project setting.  Keeping it
+        # only on the Python object made loader-valid B3LYP-D3BJ projects emit
+        # plain B3LYP inputs, which changes the requested Hamiltonian.
+        if self.dispersion is not None:
+            route_string += f" {self.dispersion}"
+
+        # Use ORCA's own Loose/Normal/TightPNO presets.  These control more
+        # than the three thresholds the old handwritten %mdci block copied,
+        # so the preset is the scientifically faithful representation.
+        if self.mdci_cutoff is not None:
+            route_string += (
+                f" {ORCA_MDCI_CUTOFF_KEYWORDS[self.mdci_cutoff]}"
+            )
 
         # scalar-relativistic Hamiltonian; belongs with the method because it
         # changes the operator, not just the numerics
@@ -851,7 +955,7 @@ class ORCAJobSettings(MolecularJobSettings):
         if self.ab_initio is not None:
             level_of_theory += f"{self.ab_initio}"
         elif self.functional is not None:
-            level_of_theory += f"{self.functional}"
+            level_of_theory += f"{_normalize_orca_functional(self.functional)}"
 
         if self.basis is not None:
             level_of_theory += f" {self.basis}"
@@ -2750,13 +2854,13 @@ class ORCANEBJobSettings(ORCAJobSettings):
             from the main molecule input file.
         """
         super().__init__(**kwargs)
-        self.joboption = joboption
+        self.joboption = normalize_orca_neb_joboption(joboption)
         self.nimages = nimages
         self.ending_xyzfile = ending_xyzfile
         self.intermediate_xyzfile = intermediate_xyzfile
         self.restarting_xyzfile = restarting_xyzfile
         self.preopt_ends = preopt_ends
-        self.semiempirical = semiempirical
+        self.semiempirical = _normalize_orca_semiempirical(semiempirical)
 
     def __eq__(self, other):
         """
@@ -2785,6 +2889,35 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         return self_dict == other_dict
 
+    def validate(self):
+        """Check the project-owned inputs needed to materialize an ORCA NEB.
+
+        Endpoint filenames are command inputs and are deliberately checked by
+        the CLI/writer.  The algorithm and image count, however, are part of
+        the scientific project.  Surfacing their absence while validating the
+        YAML keeps a missing ``NEB-TS`` choice from appearing later as an
+        unexplained zero-byte native input.
+        """
+
+        if not self.joboption or not str(self.joboption).strip():
+            raise ValueError(
+                "ORCA NEB project section requires 'joboption' "
+                "(for example NEB, NEB-CI, or NEB-TS)"
+            )
+        self.joboption = normalize_orca_neb_joboption(self.joboption)
+        if isinstance(self.nimages, bool) or not isinstance(self.nimages, int):
+            raise ValueError(
+                "ORCA NEB project section requires integer 'nimages'"
+            )
+        if self.nimages <= 0:
+            raise ValueError("ORCA NEB 'nimages' must be greater than zero")
+        if not isinstance(self.preopt_ends, bool):
+            raise ValueError("ORCA NEB 'preopt_ends' must be true or false")
+
+        # Exercise the same native route materializer used by the writer.  It
+        # catches method combinations that a loader-only check cannot see.
+        self._get_neb_route_string()
+
     # populate attribute from parent class (optional)
     @property
     def route_string(self):
@@ -2807,80 +2940,14 @@ class ORCANEBJobSettings(ORCAJobSettings):
             "! XTB2 NEB-TS" (with semiempirical)
             "! B3LYP def2-SVP NEB-CI" (with DFT)
         """
-        route_string = ""
-        if not route_string.startswith("!"):
-            route_string += "! "
+        if not self.joboption:
+            raise ValueError("ORCA NEB requires a joboption such as NEB-TS")
+        self.joboption = normalize_orca_neb_joboption(self.joboption)
 
-        # add frequency calculation
-        # not okay if both freq and numfreq are True
-        if self.freq and self.numfreq:
-            raise ValueError("Cannot specify both freq and numfreq!")
-
-        if self.freq:
-            route_string += " Freq"
-        elif self.numfreq:
-            route_string += " NumFreq"  # requires numerical frequency,
-            # e.g., in SMD model where analytic Hessian is not available
-
-        # write level of theory
-        if self.semiempirical:
-            route_string += f" {self.semiempirical} {self.joboption}"
-        else:
-            route_string += f" {self._get_level_of_theory()} {self.joboption}"
-
-        # write grid information
-        if self.defgrid is not None:
-            route_string += (
-                f" {self.defgrid}"  # default is 'defgrid2', if not specified
-            )
-
-        # write convergence criteria in simple input/route
-        if self.scf_tol is not None:
-            if not self.scf_tol.lower().endswith("scf"):
-                self.scf_tol += "SCF"
-            route_string += f" {self.scf_tol}"
-
-        # write convergence algorithm if not default
-        if self.scf_algorithm is not None:
-            route_string += f" {self.scf_algorithm}"
-
-        # write solvent if solvation is turned on
-        route_kw = self._get_solvent_route_keyword()
-        if self.custom_solvent is not None:
-            # Custom solvent parameters will be written in the appropriate
-            # solvent block.  The route keyword depends on the model.
-            if self.solvent_id is not None:
-                route_string += f" {route_kw}({self.solvent_id})"
-            else:
-                route_string += f" {route_kw}"
-        elif self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {route_kw}({self.solvent_id})"
-        elif self.solvent_model is not None and self.solvent_id is None:
-            route_string += f" {route_kw}"
-        elif self.solvent_model is None and self.solvent_id is not None:
-            logger.warning(
-                "Warning: Solvent identity is specified but solvent model "
-                "is missing!\nDefaulting to CPCM model."
-            )
-            route_string += f" CPCM({self.solvent_id})"
-        else:
-            pass
-
-        # Deduplication: if solvent model appears twice,
-        # the first time it appears is removed
-        if (
-            self.solvent_model is not None
-            and len(
-                re.findall(
-                    rf"\b{re.escape(self.solvent_model)}\b",
-                    route_string,
-                    re.IGNORECASE,
-                )
-            )
-            > 1
-        ):
-            route_string = deduplicate_string_keywords(
-                route_string, self.solvent_model
-            )
-
-        return route_string
+        # A NEB job changes the path-optimization keyword, not the electronic
+        # structure semantics.  Reuse the ordinary ORCA route materializer so
+        # dispersion, RI/RIJCOSX, reference, relativistic treatment, grids,
+        # SCF controls, solvent, and future general settings cannot disappear
+        # merely because the job is NEB.
+        route_string = super()._get_route_string_from_jobtype()
+        return f"{route_string} {self.joboption}"

@@ -11,15 +11,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 import click
 from click.testing import CliRunner
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_sha256,
     file_sha256,
+    require_auxiliary_artifact_bindings,
 )
 from chemsmart.agent.commands import CanonicalCommandInvocationV1
 from chemsmart.agent.program_verifiers import (
@@ -64,6 +66,7 @@ class SafePreviewReceiptV1:
     #: repair.  Excluded from the digest when empty so receipts recorded
     #: before this field keep their identity.
     critical_findings: tuple[Any, ...] = ()
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.safe-preview-receipt.v1":
@@ -82,30 +85,32 @@ class SafePreviewReceiptV1:
             raise ContractError(
                 "previewed requires fake, no-scratch, emitted-artifact evidence"
             )
-        expected = canonical_sha256(
-            {
-                "schema_version": self.schema_version,
-                "invocation_sha256": self.invocation_sha256,
-                "observed_argv_sha256": self.observed_argv_sha256,
-                "input_sha256": self.input_sha256,
-                "project_sha256": self.project_sha256,
-                "exit_status": self.exit_status,
-                "fake_mode": self.fake_mode,
-                "no_scratch_mode": self.no_scratch_mode,
-                "scheduler_test_mode": self.scheduler_test_mode,
-                "artifacts": self.artifacts,
-                "artifact_set_sha256": self.artifact_set_sha256,
-                "output_sha256": self.output_sha256,
-                "exception_class": self.exception_class,
-                "program_validation_receipt_sha256": (
-                    self.program_validation_receipt_sha256
-                ),
-                "program_validation_status": self.program_validation_status,
-                "critical_finding_sha256s": self.critical_finding_sha256s,
-                "status": self.status,
-                "rule_ids": self.rule_ids,
-            }
-        )
+        require_auxiliary_artifact_bindings(self.auxiliary_input_bindings)
+        body = {
+            "schema_version": self.schema_version,
+            "invocation_sha256": self.invocation_sha256,
+            "observed_argv_sha256": self.observed_argv_sha256,
+            "input_sha256": self.input_sha256,
+            "project_sha256": self.project_sha256,
+            "exit_status": self.exit_status,
+            "fake_mode": self.fake_mode,
+            "no_scratch_mode": self.no_scratch_mode,
+            "scheduler_test_mode": self.scheduler_test_mode,
+            "artifacts": self.artifacts,
+            "artifact_set_sha256": self.artifact_set_sha256,
+            "output_sha256": self.output_sha256,
+            "exception_class": self.exception_class,
+            "program_validation_receipt_sha256": (
+                self.program_validation_receipt_sha256
+            ),
+            "program_validation_status": self.program_validation_status,
+            "critical_finding_sha256s": self.critical_finding_sha256s,
+            "status": self.status,
+            "rule_ids": self.rule_ids,
+        }
+        if self.auxiliary_input_bindings:
+            body["auxiliary_input_bindings"] = self.auxiliary_input_bindings
+        expected = canonical_sha256(body)
         if self.receipt_sha256 != expected:
             raise ContractError("safe preview receipt digest mismatch")
 
@@ -116,16 +121,22 @@ def execute_safe_preview(
     input_artifact: TrustedArtifactRefV1,
     project_artifact: TrustedArtifactRefV1 | None,
     expectation: ProgramPreviewExpectationV1,
+    auxiliary_input_artifacts: Mapping[str, TrustedArtifactRefV1] | None = None,
     root: click.Command | None = None,
     runner: CliRunner | None = None,
 ) -> SafePreviewReceiptV1:
     """Execute one compiler-owned safe preview and observe actual artifacts."""
 
+    auxiliary_input_artifacts = dict(auxiliary_input_artifacts or {})
+    auxiliary_bindings = _auxiliary_input_bindings(
+        auxiliary_input_artifacts
+    )
     _validate_preview_bindings(
         invocation,
         input_artifact=input_artifact,
         project_artifact=project_artifact,
         expectation=expectation,
+        auxiliary_input_bindings=auxiliary_bindings,
     )
     fake = _option_enabled(invocation, "fake", "--fake")
     no_scratch = _option_enabled(invocation, "scratch", "--no-scratch")
@@ -152,6 +163,10 @@ def execute_safe_preview(
         _verified_artifact_hash(project_artifact)
         if project_artifact is not None
         else ""
+    )
+    before_auxiliary = tuple(
+        _verified_artifact_hash(artifact)
+        for _name, artifact in sorted(auxiliary_input_artifacts.items())
     )
     artifacts: tuple[PreviewArtifactV1, ...] = ()
     exit_status = -1
@@ -186,6 +201,11 @@ def execute_safe_preview(
         # its body is what left a live session recompiling against opaque
         # hashes; the digests above still bind these bodies for integrity.
         critical_findings = tuple(program_validation.findings)
+        rules.extend(
+            _validate_staged_auxiliary_inputs(
+                Path(workspace), auxiliary_input_artifacts
+            )
+        )
 
     after_input = _verified_artifact_hash(input_artifact)
     after_project = (
@@ -193,10 +213,16 @@ def execute_safe_preview(
         if project_artifact is not None
         else ""
     )
+    after_auxiliary = tuple(
+        _verified_artifact_hash(artifact)
+        for _name, artifact in sorted(auxiliary_input_artifacts.items())
+    )
     if before_input != after_input:
         rules.append("preview.input_artifact_mutated")
     if before_project != after_project:
         rules.append("preview.project_artifact_mutated")
+    if before_auxiliary != after_auxiliary:
+        rules.append("preview.auxiliary_input_artifact_mutated")
     if exit_status != 0:
         rules.append("preview.click_invocation_failed")
     if not artifacts:
@@ -229,6 +255,8 @@ def execute_safe_preview(
         "status": status,
         "rule_ids": tuple(sorted(set(rules))),
     }
+    if auxiliary_bindings:
+        body["auxiliary_input_bindings"] = auxiliary_bindings
     return SafePreviewReceiptV1(
         **body,
         receipt_sha256=canonical_sha256(body),
@@ -242,6 +270,7 @@ def _validate_preview_bindings(
     input_artifact: TrustedArtifactRefV1,
     project_artifact: TrustedArtifactRefV1 | None,
     expectation: ProgramPreviewExpectationV1,
+    auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...],
 ) -> None:
     if invocation.status != "compiled":
         raise ContractError("only a compiled invocation can be previewed")
@@ -265,6 +294,48 @@ def _validate_preview_bindings(
         raise ContractError("preview expectation differs from input binding")
     if expectation.project_sha256 != invocation.project_sha256:
         raise ContractError("preview expectation differs from project binding")
+    if auxiliary_input_bindings != invocation.auxiliary_input_bindings:
+        raise ContractError(
+            "preview auxiliary inputs differ from compiled invocation"
+        )
+
+
+def _auxiliary_input_bindings(
+    artifacts: Mapping[str, TrustedArtifactRefV1],
+) -> tuple[AuxiliaryArtifactBindingV1, ...]:
+    return tuple(
+        AuxiliaryArtifactBindingV1(
+            parameter_name=parameter_name,
+            artifact_id=artifact.artifact_id,
+            artifact_sha256=artifact.sha256,
+        )
+        for parameter_name, artifact in sorted(artifacts.items())
+    )
+
+
+def _validate_staged_auxiliary_inputs(
+    workspace: Path,
+    artifacts: Mapping[str, TrustedArtifactRefV1],
+) -> tuple[str, ...]:
+    """Confirm the generated job staged the exact bound auxiliary files."""
+
+    findings = []
+    for parameter_name, artifact in sorted(artifacts.items()):
+        basename = Path(artifact.path).name
+        candidates = tuple(
+            path
+            for path in workspace.rglob(basename)
+            if path.is_file() and not path.is_symlink()
+        )
+        if not any(
+            path.stat().st_size == artifact.size_bytes
+            and file_sha256(path) == artifact.sha256
+            for path in candidates
+        ):
+            findings.append(
+                f"preview.auxiliary_input_not_staged.{parameter_name}"
+            )
+    return tuple(findings)
 
 
 def _verified_artifact_hash(binding: TrustedArtifactRefV1) -> str:

@@ -258,8 +258,9 @@ def project_effective_section_settings(
 
     Gaussian and ORCA retain the historical ``gas``/``solv`` dialect: when a
     ``gas`` section exists, optimization-family jobs read it and ``sp`` reads
-    ``solv``.  The latter is a workflow-stage name and does not itself enable a
-    solvent model.  An explicit job section then overrides that legacy base.
+    ``solv`` when present, otherwise ``gas``.  The former is a workflow-stage
+    name and does not itself enable a solvent model.  An explicit job section
+    then overrides that legacy base.
     PySCF and xTB use their job section directly.
     """
 
@@ -268,7 +269,14 @@ def project_effective_section_settings(
     effective: dict[str, Any] = {}
     if document.program in {"gaussian", "orca"}:
         if normalized_jobtype == "sp":
-            effective.update(sections.get("solv") or {})
+            effective.update(
+                (
+                    sections.get("solv")
+                    if "solv" in sections
+                    else sections.get("gas")
+                )
+                or {}
+            )
         elif normalized_jobtype not in {"td", "qmmm"}:
             effective.update(
                 (
@@ -299,7 +307,10 @@ def project_section_application_observation(
     available = tuple(sorted(sections))
     if document.program in {"gaussian", "orca"}:
         if normalized_jobtype == "sp":
-            candidates = ("solv", "sp")
+            candidates = (
+                "solv" if "solv" in sections else "gas",
+                "sp",
+            )
         elif normalized_jobtype in {"td", "qmmm"}:
             candidates = (normalized_jobtype,)
         else:
@@ -329,8 +340,9 @@ def project_section_application_observation(
     if status != "effective_settings_present":
         observation["next_action"] = (
             "render settings in a section consumed by this job; Gaussian/ORCA "
-            "single points read 'solv' or an explicit 'sp' override, and the "
-            "section name 'solv' alone does not enable physical solvation"
+            "single points read 'solv' when present, otherwise 'gas', with an "
+            "explicit 'sp' override taking precedence; the section name "
+            "'solv' alone does not enable physical solvation"
         )
     return observation
 

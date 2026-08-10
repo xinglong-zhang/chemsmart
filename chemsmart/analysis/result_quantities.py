@@ -66,6 +66,7 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
     {
         "absorption_wavelengths",
         "excitation_energies",
+        "entropy_times_temperature",
         "gibbs_free_energy",
         "oscillator_strengths",
         "scf_energy",
@@ -83,7 +84,6 @@ QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
     "electronic_energy": "derive_thermochemistry",
     "enthalpy": "derive_thermochemistry",
     "entropy": "derive_thermochemistry",
-    "entropy_times_temperature": "derive_thermochemistry",
     "internal_energy": "derive_thermochemistry",
     "quasi_harmonic_enthalpy": "derive_thermochemistry",
     "quasi_harmonic_entropy": "derive_thermochemistry",
@@ -707,6 +707,15 @@ def _require_analysis_ready_pyscf_result(
     ):
         expected = receipt_source.get(field)
         observed = hdf5_source.get(hdf5_field)
+        # PySCF's CLI can receive an exact geometry value without a source
+        # artifact binding.  In that normal path both records deliberately
+        # carry a null ``input_artifact_sha256`` while the canonical
+        # ``input_geometry_sha256`` above still binds atom order, coordinates,
+        # units, charge and multiplicity.  Do not reject a matching absence as
+        # if it were a broken digest.
+        if field == "input_artifact_sha256" and expected in (None, ""):
+            if observed in (None, ""):
+                continue
         try:
             valid_digest = (
                 isinstance(expected, str)
@@ -732,7 +741,12 @@ def _require_analysis_ready_pyscf_result(
                 "PySCF run identity differs from structured result: " + field
             )
     input_artifact_kind = receipt.get("input_artifact_kind")
-    if (
+    no_source_artifact = input_artifact_kind in (None, "")
+    matching_absence = no_source_artifact and (
+        spec.get("input_artifact_kind") in (None, "")
+        and provenance.get("input_artifact_kind") in (None, "")
+    )
+    if not matching_absence and (
         not isinstance(input_artifact_kind, str)
         or not input_artifact_kind
         or spec.get("input_artifact_kind") != input_artifact_kind

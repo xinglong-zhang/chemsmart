@@ -52,6 +52,7 @@ class ORCARefs:
         "HF",
         "RHF",
         "UHF",
+        "MP2",
         "CCSD(T)",
         "DLPNO-CCSD",
         "DLPNO-CCSD(T)",
@@ -123,7 +124,6 @@ class ORCARefs:
         "PWP1",  # 1 parameter version of PWP (analogous to PBE0)
         "M06",  # Truhlar's 2006 low-HF hybrid  [311]
         "M062X",  # Truhlar's 2006 high-HF hybrid [311]
-        "M06-2X",  # Truhlar's 2006 high-HF hybrid [311]
         "mPW1PW",  # 1 parameter version of mPWPW (analogous to PBE0)
         "mPW1LYP",  # 2 parameter version of mPWLYP (analogous to PBE0)
         "PW91_0",  # 1 parameter version of PW91 (analogous to PBE0)
@@ -455,7 +455,7 @@ class ORCARefs:
 
     ORCA_JOB_TYPES = [
         "opt",  # geometry optimisation
-        "freq"  # vibrational frequency
+        "freq",  # vibrational frequency
         "engrad",  # energy + gradient
         "md",  # molecular dynamics
     ]
@@ -763,27 +763,35 @@ class ORCARefs:
         """
         Get list of basis sets with both polarization and diffuse functions.
 
-        Generates combinations of 6-31+G and 6-311++G basis sets with various
-        polarization options. Includes single and double diffuse functions.
+        Generate the native Pople 6-31G and 6-311G families with single or
+        double diffuse augmentation and their supported polarization forms.
 
         Returns:
             list: All basis sets with polarization and diffuse functions
         """
-        orca_basis_with_polarization_and_diffusion = [
-            "6-31+G",  # diffusion only, no polarization
-            "6-31+G*",
-            "6-31+G(d)",
-        ]
-
-        for polarization in self.ORCA_BASIS_POLARIZATIONS:
-            if (
-                "**" in polarization
-                or ",p" in polarization
-                or ",2p" in polarization
-                or ",3p" in polarization
-            ):
-                orca_basis = f"6-311++G{polarization}"
-                orca_basis_with_polarization_and_diffusion.append(orca_basis)
+        orca_basis_with_polarization_and_diffusion = []
+        for base in self.ORCA_BASIS_FOR_POLARIZATION_AND_DIFFUSSION:
+            polarizations = self.ORCA_BASIS_POLARIZATIONS
+            if base == "6-31G":
+                polarizations = tuple(
+                    value
+                    for value in polarizations
+                    if value not in {"(3df)", "(3df,3pd)"}
+                )
+            for diffusion in self.ORCA_BASIS_DIFFUSIONS:
+                diffuse_base = base.replace("G", f"{diffusion}G")
+                for polarization in polarizations:
+                    has_hydrogen_polarization = (
+                        "**" in polarization
+                        or ",p" in polarization
+                        or ",2p" in polarization
+                        or ",3p" in polarization
+                    )
+                    if diffusion == "++" and not has_hydrogen_polarization:
+                        continue
+                    orca_basis_with_polarization_and_diffusion.append(
+                        f"{diffuse_base}{polarization}"
+                    )
 
         return [
             basis.lower()
@@ -1353,6 +1361,51 @@ ORCA_ALL_BASIS_SETS = orca_ref.orca_all_basis_sets
 ORCA_ALL_AUXILIARY_BASIS_SETS = orca_ref.orca_all_auxiliary_basis_sets
 ORCA_ALL_EXTRAPOLATION_BASIS_SETS = orca_ref.orca_all_extrapolation_basis_sets
 ORCA_ALL_JOB_TYPES = orca_ref.ORCA_JOB_TYPES
+ORCA_NEB_JOBOPTIONS = (
+    "NEB",
+    "NEB-CI",
+    "NEB-TS",
+    "FAST-NEB-TS",
+    "TIGHT-NEB-TS",
+    "LOOSE-NEB",
+    "ZOOM-NEB",
+    "ZOOM-NEB-CI",
+    "ZOOM-NEB-TS",
+    "NEB-IDPP",
+)
+_ORCA_NEB_JOBOPTION_BY_CASEFOLD = {
+    value.casefold(): value for value in ORCA_NEB_JOBOPTIONS
+}
+
+
+def normalize_orca_neb_joboption(value):
+    """Return ORCA's canonical NEB simple-input keyword.
+
+    The project loader, Click command and route reader all use this one
+    program-owned vocabulary.  This keeps a misspelled algorithm from being
+    accepted by YAML validation and emitted verbatim into a native input.
+    """
+
+    if value is None:
+        return None
+    literal = str(value).strip()
+    normalized = _ORCA_NEB_JOBOPTION_BY_CASEFOLD.get(literal.casefold())
+    if normalized is None:
+        raise ValueError(
+            f"Unsupported ORCA NEB joboption {value!r}; expected one of "
+            f"{list(ORCA_NEB_JOBOPTIONS)}."
+        )
+    return normalized
+
+
+def is_orca_neb_joboption(value):
+    """Whether ``value`` is one of the supported ORCA NEB keywords."""
+
+    if value is None:
+        return False
+    return str(value).strip().casefold() in _ORCA_NEB_JOBOPTION_BY_CASEFOLD
+
+
 ORCA_ALL_SOLVENTS = orca_ref.orca_all_solvents
 ORCA_ALL_SOLVENT_MODELS = orca_ref.ORCA_SOLVENT_MODELS
 ORCA_SCF_CONVERGENCE = orca_ref.ORCA_SCF_CONVERGENCE_CRITERIA

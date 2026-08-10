@@ -34,8 +34,15 @@ from chemsmart.analysis.quantity_expressions import (
     CONVENTION_OPERATIONS,
     OPERATION_DESCRIPTIONS,
     _unit_spec,
+    QuantityExpressionNodeV1,
+    QuantityExpressionRequestV1,
+    evaluate_quantity_expression,
 )
-from chemsmart.analysis.result_quantities import ENERGY, FREQUENCY
+from chemsmart.analysis.result_quantities import (
+    ENERGY,
+    FREQUENCY,
+    make_quantity_value,
+)
 
 #: HF/6-31G(d) water, from ChemSmart's own hess run of the sealed case.
 _WATER_HF_631GD = (
@@ -59,6 +66,57 @@ def test_it_reproduces_the_sealed_zero_point_energy():
     assert harmonic_zero_point_energy(
         _WATER_HF_631GD, unit="hartree"
     ) == pytest.approx(0.022907841891569164, abs=1e-8)
+
+
+def test_expression_keeps_zpe_source_display_but_uses_canonical_energy():
+    """A ZPE produced in kJ/mol must add directly to a Hartree energy."""
+
+    frequencies = make_quantity_value(
+        quantity_id="frequencies",
+        source_value=_WATER_HF_631GD,
+        source_unit="cm^-1",
+        value=_WATER_HF_631GD,
+        unit="cm^-1",
+        dimension=FREQUENCY,
+        evidence_ref="artifact:water#frequencies",
+    )
+    energy = make_quantity_value(
+        quantity_id="energy",
+        source_value=-76.0,
+        source_unit="hartree",
+        value=-76.0,
+        unit="hartree",
+        dimension=ENERGY,
+        evidence_ref="artifact:water#energy",
+    )
+    receipt = evaluate_quantity_expression(
+        QuantityExpressionRequestV1(
+            schema_version="chemsmart.quantity-expression-request.v1",
+            expression_id="water-zpe",
+            inputs=(frequencies, energy),
+            nodes=(
+                QuantityExpressionNodeV1(
+                    node_id="zpe",
+                    operation="harmonic_zero_point_energy",
+                    input_ids=("frequencies",),
+                ),
+                QuantityExpressionNodeV1(
+                    node_id="energy-plus-zpe",
+                    operation="add",
+                    input_ids=("energy", "zpe"),
+                ),
+            ),
+            output_node_ids=("zpe", "energy-plus-zpe"),
+        )
+    )
+
+    zpe, corrected = receipt.outputs
+    assert zpe.source_unit == "kJ/mol"
+    assert zpe.source_value == pytest.approx(60.145, abs=0.5)
+    assert zpe.unit == "hartree"
+    assert zpe.value == pytest.approx(0.022907841891569164, abs=1e-8)
+    assert corrected.unit == "hartree"
+    assert corrected.value == pytest.approx(-75.97709215810843, abs=1e-8)
 
 
 def test_the_conversion_it_owns_is_one_the_unit_engine_refuses():

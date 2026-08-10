@@ -163,6 +163,26 @@ def bootstrap_program_conformance(
                 if program == "pyscf":
                     argv.append("--gpu" if engine == "gpu" else "--no-gpu")
                 argv.append(jobtype)
+                # Multi-file stages need a second, existing fixture to reach
+                # the same canonical Click callback as a real user command.
+                # The live schema remains the source of the option spelling;
+                # using the primary geometry as both ends is sufficient for a
+                # non-computing syntax/materialization preview.
+                if program == "orca" and jobtype == "neb":
+                    job_command = live_schema.command(
+                        (target, program, jobtype)
+                    )
+                    ending_option = (
+                        job_command.option("ending_xyzfile")
+                        if job_command is not None
+                        else None
+                    )
+                    if ending_option is None:
+                        stage_green = False
+                    else:
+                        argv.extend(
+                            (ending_option.primary_flag, str(input_path))
+                        )
                 with runner.isolated_filesystem():
                     result = runner.invoke(entry_point, argv)
                 stage_rows.append(

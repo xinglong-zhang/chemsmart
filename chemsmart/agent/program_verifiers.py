@@ -569,6 +569,14 @@ def _settings_class(program):
 def _settings_match(parsed, expected, *, native_input=None):
     findings = []
     route_tokens: set[str] = set()
+    from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+    from chemsmart.jobs.orca.settings import (
+        ORCAJobSettings,
+        _normalize_orca_functional,
+    )
+
+    is_gaussian = isinstance(parsed, GaussianJobSettings)
+    is_orca = isinstance(parsed, ORCAJobSettings)
     if native_input is not None:
         from chemsmart.io.orca.input import ORCAInput
 
@@ -598,6 +606,121 @@ def _settings_match(parsed, expected, *, native_input=None):
             )
             continue
         observed = getattr(parsed, field)
+        if is_orca and field == "functional":
+            expected_functional = _normalize_orca_functional(value)
+            observed_functional = _normalize_orca_functional(observed)
+            if (
+                str(expected_functional).strip().casefold()
+                == str(observed_functional).strip().casefold()
+            ):
+                continue
+        if is_gaussian and field == "dispersion":
+            from chemsmart.io.gaussian.route import (
+                normalize_gaussian_dispersion,
+            )
+
+            if normalize_gaussian_dispersion(
+                value
+            ) == normalize_gaussian_dispersion(observed):
+                continue
+        if is_gaussian and field == "additional_route_parameters":
+            from chemsmart.io.gaussian.route import (
+                normalize_gaussian_dispersion,
+                split_gaussian_dispersion_tokens,
+            )
+
+            expected_route, expected_dispersion = (
+                split_gaussian_dispersion_tokens(value)
+            )
+            observed_route, observed_dispersion = (
+                split_gaussian_dispersion_tokens(observed)
+            )
+            parsed_dispersion = normalize_gaussian_dispersion(
+                getattr(parsed, "dispersion", None)
+            )
+            semantic_dispersion = observed_dispersion or parsed_dispersion
+            if (
+                expected_dispersion is not None
+                and expected_dispersion != semantic_dispersion
+            ):
+                findings.append(
+                    _mismatch(
+                        "dispersion",
+                        expected_dispersion,
+                        semantic_dispersion,
+                        "generated:native_input",
+                    )
+                )
+                continue
+            value = expected_route or None
+            observed = observed_route or None
+            if value is None and observed is None:
+                continue
+        if is_gaussian and field == "functional" and isinstance(value, str):
+            from chemsmart.io.gaussian.route import (
+                gaussian_functional_without_dispersion_shorthand,
+                normalize_gaussian_dispersion,
+                split_gaussian_dispersion_tokens,
+                split_gaussian_functional_dispersion_shorthand,
+            )
+
+            expected_functional, embedded_dispersion = (
+                split_gaussian_dispersion_tokens(value)
+            )
+            expected_functional, shorthand_dispersion = (
+                split_gaussian_functional_dispersion_shorthand(
+                    expected_functional
+                )
+            )
+            parsed_dispersion = normalize_gaussian_dispersion(
+                getattr(parsed, "dispersion", None)
+            )
+            expected_dispersions = {
+                item
+                for item in (embedded_dispersion, shorthand_dispersion)
+                if item is not None
+            }
+            if len(expected_dispersions) > 1:
+                findings.append(
+                    _mismatch(
+                        "dispersion",
+                        tuple(sorted(expected_dispersions)),
+                        parsed_dispersion,
+                        "generated:native_input",
+                    )
+                )
+                continue
+            expected_dispersion = next(iter(expected_dispersions), None)
+            if (
+                expected_dispersion is not None
+                and expected_dispersion != parsed_dispersion
+            ):
+                findings.append(
+                    _mismatch(
+                        "dispersion",
+                        expected_dispersion,
+                        parsed_dispersion,
+                        "generated:native_input",
+                    )
+                )
+                continue
+            expected_base = (
+                gaussian_functional_without_dispersion_shorthand(
+                    expected_functional,
+                    parsed_dispersion,
+                )
+            )
+            observed_base = (
+                gaussian_functional_without_dispersion_shorthand(
+                    observed,
+                    parsed_dispersion,
+                )
+            )
+            if (
+                str(expected_base).strip().casefold()
+                == str(observed_base).strip().casefold()
+            ):
+                continue
         # A method or basis name means the same chemistry in any case, in
         # every program ChemSmart drives -- and the observed side is read
         # back by ChemSmart's own parser, which lowercases. Comparing case

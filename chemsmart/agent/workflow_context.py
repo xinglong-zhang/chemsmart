@@ -40,10 +40,11 @@ def workflow_context_enabled() -> bool:
     ).strip() not in ("0", "false", "no")
 
 
+#: ``completed`` -- this exact approved node already has a validated result.
 #: ``ready`` -- every input exists, so this node can be materialized now.
 #: ``waiting`` -- an upstream producer has not yet produced its artifact.
 #: ``blocked`` -- required, but outside the current program surface.
-WORKFLOW_NODE_CONTEXT_STATES = ("blocked", "ready", "waiting")
+WORKFLOW_NODE_CONTEXT_STATES = ("blocked", "completed", "ready", "waiting")
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ class WorkflowContextProjectionV1:
 
     schema_version: str
     workflow_id: str
+    completed_node_ids: tuple[str, ...]
     ready_node_ids: tuple[str, ...]
     waiting_node_ids: tuple[str, ...]
     blocked_node_ids: tuple[str, ...]
@@ -112,14 +114,31 @@ def _producer_edges(node: Any) -> tuple[Any, ...]:
 
 
 def _input_is_satisfied(
-    item: Any, materialized: Mapping[str, Any] | Iterable[str]
+    item: Any,
+    materialized: Mapping[str, Any] | Iterable[str],
+    *,
+    consumer_node_id: str,
+    materialized_producer_inputs: set[tuple[str, str, str, str]],
 ) -> bool:
-    """An input is satisfied when the exact artifact it names already exists."""
+    """Return whether an external artifact or observed producer handoff exists."""
 
     artifact_id = str(getattr(item, "artifact_id", "") or "")
-    if not artifact_id:
+    if artifact_id:
+        return artifact_id in materialized
+    producer_node_id = str(
+        getattr(item, "producer_node_id", "") or ""
+    )
+    producer_output_id = str(
+        getattr(item, "producer_output_id", "") or ""
+    )
+    if not producer_node_id or not producer_output_id:
         return False
-    return artifact_id in materialized
+    return (
+        consumer_node_id,
+        str(getattr(item, "binding_id", "") or ""),
+        producer_node_id,
+        producer_output_id,
+    ) in materialized_producer_inputs
 
 
 def project_workflow_context(
@@ -127,6 +146,10 @@ def project_workflow_context(
     workflow_id: str,
     nodes: Sequence[Any],
     materialized_artifact_ids: Mapping[str, Any] | Iterable[str] = (),
+    materialized_producer_inputs: Iterable[
+        tuple[str, str, str, str]
+    ] = (),
+    completed_node_ids: Iterable[str] = (),
     blocked_reasons: Mapping[str, str] | None = None,
 ) -> WorkflowContextProjectionV1:
     """Derive per-node readiness and dependency context from a workflow.
@@ -139,6 +162,10 @@ def project_workflow_context(
         workflow_id: The workflow these nodes belong to.
         nodes: The workflow's nodes, in any order.
         materialized_artifact_ids: Artifacts that actually exist right now.
+        materialized_producer_inputs: Exact ``(consumer, binding, producer,
+            output)`` tuples whose validated handoff artifacts exist.
+        completed_node_ids: Exact approved nodes with validated execution
+            results. These are reported as complete, not offered for rerun.
         blocked_reasons: Node IDs that cannot be expressed at all, and why.
 
     Returns:
@@ -151,6 +178,8 @@ def project_workflow_context(
         if isinstance(materialized_artifact_ids, Mapping)
         else set(materialized_artifact_ids)
     )
+    materialized_producer_inputs = set(materialized_producer_inputs)
+    completed_node_ids = set(completed_node_ids)
     blocked_reasons = dict(blocked_reasons or {})
 
     dependents: dict[str, set[str]] = {
@@ -180,7 +209,12 @@ def project_workflow_context(
                 _producer_edges(node),
                 key=lambda entry: str(entry.binding_id),
             )
-            if not _input_is_satisfied(item, materialized)
+            if not _input_is_satisfied(
+                item,
+                materialized,
+                consumer_node_id=node_id,
+                materialized_producer_inputs=materialized_producer_inputs,
+            )
         )
         waiting_on = tuple(
             sorted(
@@ -194,6 +228,9 @@ def project_workflow_context(
         if node_id in blocked_reasons:
             state = "blocked"
             reason = blocked_reasons[node_id]
+        elif node_id in completed_node_ids:
+            state = "completed"
+            reason = "validated execution result already exists"
         elif waiting_on:
             state = "waiting"
             reason = "waiting for " + ", ".join(
@@ -235,6 +272,9 @@ def project_workflow_context(
     return WorkflowContextProjectionV1(
         schema_version="chemsmart.workflow-context.v1",
         workflow_id=workflow_id,
+        completed_node_ids=tuple(
+            item.node_id for item in contexts if item.state == "completed"
+        ),
         ready_node_ids=tuple(
             item.node_id for item in contexts if item.state == "ready"
         ),

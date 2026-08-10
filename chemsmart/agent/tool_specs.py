@@ -129,8 +129,8 @@ def build_command_compiled_tool_surface(
                 "write it. Sections must be an object mapping section names "
                 "to setting-name/value objects, never a list. PySCF and xTB "
                 "use job sections. Gaussian and ORCA retain gas/solv phase "
-                "sections plus optional job overrides: SP reads solv or an "
-                "explicit sp override even for a physically gas-phase job; "
+                "sections plus optional job overrides: SP reads solv when "
+                "present, otherwise gas, and an explicit sp override wins; "
                 "the section name solv does not enable solvation by itself."
             ),
             {
@@ -307,7 +307,11 @@ def build_command_compiled_tool_surface(
                 "Prepare and safe-preview one actionable calculation node "
                 "from a scientific workflow. The host resolves its program, "
                 "project, input, electronic state, capability, and engine "
-                "bindings from the typed workflow; do not copy receipt hashes."
+                "bindings from the typed workflow; do not copy receipt hashes. "
+                "For a multi-file CLI job, the workflow uses binding_id "
+                "'filename' for the primary molecular geometry and the exact "
+                "live ChemSmart job-option name for each additional registered "
+                "artifact (for example 'ending_xyzfile')."
             ),
             {
                 "workflow_id": _public_identifier(),
@@ -1106,7 +1110,17 @@ def _workflow_node_schema() -> dict:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "binding_id": _public_identifier(),
+                        "binding_id": {
+                            **_public_identifier(),
+                            "description": (
+                                "Semantic input role. For a single input any "
+                                "unique public role is valid. For a multi-file "
+                                "program call use 'filename' for the primary "
+                                "geometry and the exact live ChemSmart job-option "
+                                "parameter for additional artifacts, such as "
+                                "'ending_xyzfile' for an ORCA NEB product."
+                            ),
+                        },
                         "artifact_id": _string(),
                         "artifact_class": _string(),
                         "producer_node_id": _string(),

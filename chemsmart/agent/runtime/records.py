@@ -12,6 +12,7 @@ from dataclasses import MISSING, dataclass, fields
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import (
+    AuxiliaryArtifactBindingV1,
     ContractError,
     TrustedArtifactRefV1,
     canonical_data,
@@ -84,6 +85,21 @@ def _construct(contract: type, record: dict[str, Any], label: str) -> Any:
         raise ContractError(f"invalid {label}") from exc
 
 
+def _auxiliary_artifact_bindings(
+    value: Any, label: str
+) -> tuple[AuxiliaryArtifactBindingV1, ...]:
+    return tuple(
+        _construct(
+            AuxiliaryArtifactBindingV1,
+            _strict_record(
+                item, AuxiliaryArtifactBindingV1, "auxiliary artifact binding"
+            ),
+            "auxiliary artifact binding",
+        )
+        for item in _tuple(value, label)
+    )
+
+
 def scientific_workflow_plan_from_record(
     value: Mapping[str, Any],
 ) -> ScientificWorkflowPlanV2:
@@ -128,14 +144,16 @@ def materialized_workflow_from_record(
     record = _strict_record(
         value, MaterializedWorkflowV1, "materialized workflow"
     )
-    record["nodes"] = tuple(
-        _construct(
-            MaterializedNodeV1,
-            _strict_record(item, MaterializedNodeV1, "materialized node"),
-            "materialized node",
-        )
-        for item in _tuple(record["nodes"], "materialized workflow nodes")
-    )
+    nodes = []
+    for item in _tuple(record["nodes"], "materialized workflow nodes"):
+        node = _strict_record(item, MaterializedNodeV1, "materialized node")
+        if "auxiliary_input_bindings" in node:
+            node["auxiliary_input_bindings"] = _auxiliary_artifact_bindings(
+                node["auxiliary_input_bindings"],
+                "materialized node auxiliary inputs",
+            )
+        nodes.append(_construct(MaterializedNodeV1, node, "materialized node"))
+    record["nodes"] = tuple(nodes)
     record["unresolved_node_ids"] = tuple(
         str(item)
         for item in _tuple(
@@ -179,21 +197,31 @@ def frozen_workflow_approval_from_record(
         record[name] = tuple(
             str(item) for item in _tuple(record[name], f"approval {name}")
         )
-    record["materialized_preview_bindings"] = tuple(
-        _construct(
+    previews = []
+    for item in _tuple(
+        record["materialized_preview_bindings"],
+        "approval materialized_preview_bindings",
+    ):
+        preview = _strict_record(
+            item,
             FrozenMaterializedNodePreviewV1,
-            _strict_record(
-                item,
-                FrozenMaterializedNodePreviewV1,
-                "frozen materialized preview",
-            ),
             "frozen materialized preview",
         )
-        for item in _tuple(
-            record["materialized_preview_bindings"],
-            "approval materialized_preview_bindings",
+        if "auxiliary_input_bindings" in preview:
+            preview["auxiliary_input_bindings"] = (
+                _auxiliary_artifact_bindings(
+                    preview["auxiliary_input_bindings"],
+                    "frozen preview auxiliary inputs",
+                )
+            )
+        previews.append(
+            _construct(
+                FrozenMaterializedNodePreviewV1,
+                preview,
+                "frozen materialized preview",
+            )
         )
-    )
+    record["materialized_preview_bindings"] = tuple(previews)
     record["producer_edge_rules"] = tuple(
         _construct(
             FrozenProducerEdgeRuleV1,
@@ -263,6 +291,11 @@ def program_execution_invocation_from_record(
     record["argv"] = tuple(
         str(item) for item in _tuple(record["argv"], "execution argv")
     )
+    if "auxiliary_input_bindings" in record:
+        record["auxiliary_input_bindings"] = _auxiliary_artifact_bindings(
+            record["auxiliary_input_bindings"],
+            "execution auxiliary inputs",
+        )
     return _construct(
         ProgramExecutionInvocationV1, record, "program execution invocation"
     )
@@ -465,12 +498,15 @@ def build_workflow_node_launch_reservation(
         # different argv besides.  ``environment_receipt_sha256`` folds in a
         # capability receipt that moves with the tool overlay.  Comparing
         # either made an approval unexecutable by any later process.
+        # ``build_program_execution_invocation`` has already matched the
+        # invocation's scientific identity to the approved *node*.  The plan
+        # identity below is the aggregate identity of every starting geometry
+        # in the workflow, so comparing a per-node identity with it rejects
+        # every valid multi-geometry workflow.
         if (
             invocation.input_sha256 != preview_binding.input_artifact_sha256
             or invocation.project_sha256
             != preview_binding.project_artifact_sha256
-            or invocation.scientific_identity_sha256
-            != plan.scientific_identity_sha256
         ):
             raise ContractError("invocation differs from exact frozen preview")
         frozen_identity = preview_binding.invocation_identity_sha256
