@@ -136,6 +136,22 @@ class TestGaussianJobBackupAndOutput:
         mock_cls.assert_called_once_with(filename=job.outputfile)
         assert result is mock_output
 
+    def test_output_none_on_attribute_error(
+        self, a_molecule, gaussian_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = GaussianJob(
+            molecule=a_molecule, settings=gaussian_settings, label="mylabel"
+        )
+        with open(job.outputfile, "w") as f:
+            f.write("dummy output")
+
+        with patch(
+            "chemsmart.io.gaussian.output.Gaussian16Output",
+            side_effect=AttributeError("boom"),
+        ):
+            assert job._output() is None
+
     def test_output_falls_back_to_pbc_output_on_value_error(
         self, a_molecule, gaussian_settings, tmp_path, monkeypatch
     ):
@@ -188,6 +204,19 @@ class TestGaussianJobFactories:
         assert isinstance(job, GaussianJob)
         assert job.jobrunner is mock_jobrunner
 
+    def test_from_filename_without_explicit_jobrunner_creation_attempted(
+        self, single_molecule_xyz_file, gaussian_settings
+    ):
+        """The base GaussianJob has no TYPE registered with any runner,
+        so JobRunner.from_job() genuinely can't find one -- but this
+        still exercises the "if jobrunner is None:" branch itself
+        before failing."""
+        with pytest.raises(ValueError, match="Could not find any runners"):
+            GaussianJob.from_filename(
+                filename=single_molecule_xyz_file,
+                settings=gaussian_settings,
+            )
+
     def test_from_pubchem_builds_job(self, gaussian_settings):
         pubchem_molecule = MagicMock(spec=Molecule)
         pubchem_molecule.get_chemical_formula.return_value = "H2O"
@@ -207,6 +236,21 @@ class TestGaussianJobFactories:
         assert isinstance(job, GaussianJob)
         assert job.jobrunner is mock_jobrunner
 
+    def test_from_pubchem_without_explicit_jobrunner_creation_attempted(
+        self, gaussian_settings
+    ):
+        pubchem_molecule = MagicMock(spec=Molecule)
+        pubchem_molecule.get_chemical_formula.return_value = "H2O"
+        pubchem_molecule.copy.return_value = pubchem_molecule
+        with patch(
+            "chemsmart.jobs.gaussian.job.Molecule.from_pubchem",
+            return_value=pubchem_molecule,
+        ):
+            with pytest.raises(ValueError, match="Could not find any runners"):
+                GaussianJob.from_pubchem(
+                    identifier="water", settings=gaussian_settings
+                )
+
     def test_from_jobtype_opt(self, a_molecule, gaussian_settings):
         mock_jobrunner = MagicMock()
         job = GaussianJob.from_jobtype(
@@ -219,6 +263,17 @@ class TestGaussianJobFactories:
 
         assert isinstance(job, GaussianOptJob)
 
+    def test_from_jobtype_opt_without_explicit_jobrunner_creates_one(
+        self, a_molecule, gaussian_settings
+    ):
+        job = GaussianJob.from_jobtype(
+            jobtype="opt", molecule=a_molecule, settings=gaussian_settings
+        )
+        from chemsmart.jobs.gaussian.opt import GaussianOptJob
+
+        assert isinstance(job, GaussianOptJob)
+        assert job.jobrunner is not None
+
     def test_from_jobtype_com(self, a_molecule, gaussian_settings):
         mock_jobrunner = MagicMock()
         job = GaussianJob.from_jobtype(
@@ -228,6 +283,15 @@ class TestGaussianJobFactories:
             jobrunner=mock_jobrunner,
         )
         assert isinstance(job, GaussianComJob)
+
+    def test_from_jobtype_com_without_explicit_jobrunner_creates_one(
+        self, a_molecule, gaussian_settings
+    ):
+        job = GaussianJob.from_jobtype(
+            jobtype="com", molecule=a_molecule, settings=gaussian_settings
+        )
+        assert isinstance(job, GaussianComJob)
+        assert job.jobrunner is not None
 
     def test_from_jobtype_g16_without_explicit_jobrunner_works(
         self, a_molecule, gaussian_settings
@@ -293,6 +357,29 @@ class TestGaussianComJob:
             GaussianComJob.from_filename(
                 filename=gaussian_opt_inputfile, jobrunner=mock_jobrunner
             )
+
+    def test_from_filename_with_explicit_label_still_crashes_on_molecule(
+        self, gaussian_opt_inputfile
+    ):
+        """Same underlying bug as above, but confirms the label-is-not-None
+        branch (an explicit label skips deriving one from the filename)
+        is reached before the same molecule=None crash."""
+        mock_jobrunner = MagicMock()
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            GaussianComJob.from_filename(
+                filename=gaussian_opt_inputfile,
+                label="custom_label",
+                jobrunner=mock_jobrunner,
+            )
+
+    def test_from_filename_without_jobrunner_still_crashes_on_molecule(
+        self, gaussian_opt_inputfile
+    ):
+        """Without an explicit jobrunner, the factory tries to build one
+        via JobRunner.from_job(cls(molecule=None, ...)) first -- which
+        hits the same molecule=None crash even earlier."""
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            GaussianComJob.from_filename(filename=gaussian_opt_inputfile)
 
 
 class TestGaussianGeneralJob:
