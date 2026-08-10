@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 
 class TestGaussianCLIPubChemOptCommand:
-    """CLI tests for ``--pubchem`` structure loading without ``-f``."""
+    """CLI tests for PubChem / database label paths without an explicit ``-l``."""
 
     def test_pubchem_only_opt_passes_molecule_to_job(
         self,
@@ -59,6 +59,91 @@ class TestGaussianCLIPubChemOptCommand:
             identifier="222", return_list=True
         )
         assert settings is not None, "GaussianOptJob was never instantiated"
+
+    def test_pubchem_default_label_uses_output_prefix(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+
+        runner = CliRunner()
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock,
+        ):
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock.call_args.kwargs["label"] == "output_opt"
+
+    def test_database_sid_preserved_in_default_label(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from os.path import basename, splitext
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+        from chemsmart.database.database import Database
+
+        db = Database(database_chemsmart_file)
+        structure_id = db.get_record(record_index=1)["molecules"][0][
+            "structure_id"
+        ]
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    database_chemsmart_file,
+                    "--sid",
+                    structure_id,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        base = splitext(basename(database_chemsmart_file))[0]
+        assert (
+            mock.call_args.kwargs["label"] == f"{base}_SID-{structure_id}_opt"
+        )
 
 
 class TestGaussianSolventCLIOptCommand:

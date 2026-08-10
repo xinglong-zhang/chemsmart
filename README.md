@@ -126,6 +126,14 @@ ORCA:
     ENVARS: |
         export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
+XTB:
+    EXEFOLDER: null
+    LOCAL_RUN: True
+    SCRATCH: False
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate chemsmart
+    ENVARS: null
 ```
 This file can be customized by user for different submission systems. This file contains the server configuration information that is needed for chemsmart to automatically write the submission script for each job.
 
@@ -192,6 +200,35 @@ solv:
   solvent_id: "toluene"
 ```
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
+
+---
+The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. For xTB optimization jobs, CHEMSMART follows the same convention as Gaussian: `opt` defaults to `freq: true`, which generates an xTB `--ohess` command unless `freq: false` is set explicitly. Calculations are executed using the `xtb` executable, which must be available either in the configured conda environment or on the system `PATH` specified in the server YAML `XTB` section.
+
+For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
+
+```text
+sp:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+opt:
+  gfn_version: gfn2
+  optimization_level: vtight
+  freq: true
+  solvent_model: null
+  solvent_id: null
+  grad: false
+
+hess:
+  gfn_version: gfn2
+  solvent_model: null
+  solvent_id: null
+  grad: false
+```
+
+Solvent can be added to any xTB job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: alpb` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
 
 ---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
@@ -522,6 +559,27 @@ Similar commands exist for ORCA job submissions. One can run
 chemsmart sub orca --help
 ```
 to find out more.
+
+---
+### xTB job submission
+
+xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`. Inputs can be `.xyz` files, Gaussian/ORCA outputs, an existing xTB main `.out`, a chemsmart database, or a PubChem query.
+
+```bash
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
+chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
+```
+
+To generate scheduler scripts without submitting them, use `sub --test`:
+
+```bash
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
+chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
+```
+
+Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-flags`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `-O/--optimization-level`, `-c/--constrain`, and `-f/--force-constant` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set. When `-c/--constrain` is given, CHEMSMART also writes `{label}.inp` (xcontrol `$constrain`) and adds `--input {label}.inp`.
 
 ## Development
 

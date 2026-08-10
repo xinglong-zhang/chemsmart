@@ -86,7 +86,7 @@ class XTBRefs:
         "ether",
         "ethylacetate",
         "furane",
-        "hexandecane",
+        "hexadecane",
         "hexane",
         "h2o",  # Alias for water in GBSA
         "methanol",
