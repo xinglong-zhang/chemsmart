@@ -46,6 +46,97 @@ def _writer(settings, molecule=None):
     return ORCAInputWriter(job=job)
 
 
+class TestScfBlock:
+    def test_neither_convergence_nor_maxiter_writes_nothing(self):
+        writer = _writer(ORCAJobSettings())
+        f = io.StringIO()
+        writer._write_scf_block(f)
+        assert f.getvalue() == ""
+
+    def test_maxiter_only_defaults_convergence_absent(self):
+        writer = _writer(ORCAJobSettings(scf_maxiter=500))
+        f = io.StringIO()
+        writer._write_scf_block(f)
+        assert f.getvalue() == "%scf\n  maxiter 500\nend\n"
+
+    def test_convergence_only_uses_default_maxiter(self):
+        writer = _writer(ORCAJobSettings(scf_convergence="tight"))
+        f = io.StringIO()
+        writer._write_scf_block(f)
+        assert (
+            f.getvalue() == "%scf\n  maxiter 200\n  convergence tight\nend\n"
+        )
+
+    def test_convergence_with_scf_suffix_is_stripped(self):
+        writer = _writer(ORCAJobSettings(scf_convergence="TightSCF"))
+        f = io.StringIO()
+        writer._write_scf_convergence(f)
+        assert f.getvalue() == "  convergence tight\n"
+
+    def test_invalid_convergence_raises(self):
+        """See BUGS_FOUND.md: the f-string building the ValueError
+        message references self.scf_convergence (an attribute of the
+        writer, which doesn't exist) instead of
+        self.settings.scf_convergence, so this crashes with
+        AttributeError before the intended ValueError is ever raised."""
+        writer = _writer(ORCAJobSettings(scf_convergence="bogusSCF"))
+        with pytest.raises(AttributeError, match="scf_convergence"):
+            writer._write_scf_convergence(io.StringIO())
+
+
+class TestWriteSelfAndRouteQmmm:
+    def test_write_self_writes_input_string_verbatim(self):
+        writer = _writer(ORCAJobSettings(input_string="! B3LYP def2-SVP\n"))
+        f = io.StringIO()
+        writer._write_self(f)
+        assert f.getvalue() == "! B3LYP def2-SVP\n"
+
+    def test_write_without_target_directory_uses_job_folder(self, tmp_path):
+        writer = _writer(
+            ORCAJobSettings(
+                functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
+            )
+        )
+        writer.job.folder = str(tmp_path)
+        writer._write()
+        assert (tmp_path / "test_job.inp").is_file()
+
+    def test_write_dispatches_to_write_self_for_input_string(self, tmp_path):
+        writer = _writer(ORCAJobSettings(input_string="! raw input\n"))
+        writer.job.folder = str(tmp_path)
+        writer._write()
+        assert (tmp_path / "test_job.inp").read_text() == "! raw input\n"
+
+    def test_route_section_uses_qmmm_route_string_for_qmmm_settings(self):
+        settings = ORCAQMMMJobSettings(jobtype="QMMM", parent_jobtype="opt")
+        writer = _writer(settings, molecule=MagicMock(is_monoatomic=False))
+        f = io.StringIO()
+        writer._write_route_section(f)
+        assert f.getvalue() == settings.qmmm_route_string + "\n"
+
+
+class TestSolventBlockFiltering:
+    def test_blank_line_preserved_when_filtering_solvent_name(self):
+        """When solvent-name filtering is active (cosmors + solvent_id),
+        blank lines in custom_solvent must be preserved, not treated as
+        a 'solvent "name"' line to filter."""
+        settings = ORCAJobSettings(
+            solvent_model="cosmors",
+            solvent_id="water",
+            custom_solvent=(
+                'solvent           "water"\n' "\n" "temp              298.15\n"
+            ),
+        )
+        writer = _writer(settings)
+        f = io.StringIO()
+        writer._write_solvent_block(f)
+        out = f.getvalue()
+        assert 'solvent           "water"' not in out
+        assert "temp              298.15" in out
+        # The blank line is preserved (not filtered) as its own line.
+        assert out == "%cosmors\n  \n  temp              298.15\nend\n"
+
+
 class TestMdciBlock:
     def test_no_cutoff_writes_nothing(self):
         writer = _writer(ORCAJobSettings())
@@ -232,6 +323,12 @@ class TestModredBlock:
         writer._write_modred_block(f)
         assert f.getvalue() == ""
 
+    def test_modred_of_unsupported_type_writes_nothing(self):
+        writer = _writer(ORCAJobSettings())
+        f = io.StringIO()
+        writer._write_modred(f, modred="not a list or dict")
+        assert f.getvalue() == ""
+
 
 class TestHessianBlockForTS:
     def test_minimal_ts_settings(self):
@@ -305,6 +402,16 @@ class TestHessianBlockForTS:
         out = f.getvalue()
         assert "Trust 0.3" in out
         assert "trust radius update" in out
+
+    def test_trust_radius_zero_writes_neither_comment(self):
+        settings = ORCATSJobSettings(trust_radius=0)
+        writer = _writer(settings)
+        f = io.StringIO()
+        writer._write_hessian_block_for_ts(f)
+        out = f.getvalue()
+        assert "Trust 0" in out
+        assert "fixed trust radius" not in out
+        assert "trust radius update" not in out
 
     def test_scants_requires_modred(self):
         settings = ORCATSJobSettings(tssearch_type="scants")
@@ -410,6 +517,13 @@ class TestIrcBlockForIrc:
         assert "True" in out
         assert "{ B 0 1 }" in out
         assert "{ B 4 5 }" in out
+
+    def test_monitor_internals_false_writes_nothing_for_it(self):
+        settings = ORCAIRCJobSettings(monitor_internals=False)
+        writer = _writer(settings)
+        f = io.StringIO()
+        writer._write_irc_block_for_irc(f)
+        assert f.getvalue() == "%irc\nend\n"
 
     @pytest.mark.parametrize(
         "key,expected_text",
@@ -524,6 +638,23 @@ class TestNebBlock:
         writer._write_neb_block_for_neb(f)
         written = f.getvalue().rstrip("\n")
         assert written == writer.neb_block
+
+    def test_write_neb_block_for_neb_with_restart_file(self):
+        """The file-writing method (unlike the neb_block property test
+        above, which uses ending_xyzfile) also needs direct coverage
+        of its own restarting_xyzfile branch."""
+        settings = ORCANEBJobSettings(
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            restarting_xyzfile="/some/restart.allxyz",
+        )
+        writer = _writer(settings)
+        f = io.StringIO()
+        writer._write_neb_block_for_neb(f)
+        written = f.getvalue()
+        assert 'Restart_ALLXYZFile "restart.allxyz"' in written
+        assert "NEB_END_XYZFILE" not in written
+        assert "PREOPT_ENDS" not in written
 
 
 class TestNebBlockDispatch:

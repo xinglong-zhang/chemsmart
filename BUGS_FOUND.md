@@ -3707,3 +3707,51 @@ Bug #28 already documents that Click's `type=dict` declaration for `-h` rejects 
 **Impact:** Same as bug #28 -- the `-h` option is completely unusable for its documented purpose through any real CLI input, not just typical ones.
 
 **Suggested direction:** same as bug #28: fix the option's `type=` declaration (e.g. `type=str`, parsed with `ast.literal_eval` in the callback as clearly intended) so a real dict-literal string like `"{1: 1.1}"` can actually reach line 439-442 successfully.
+
+---
+
+## 80. `ORCAInputWriter._write_scf_convergence`'s error message references the wrong object, crashing with `AttributeError` instead of raising the intended `ValueError`
+
+**Location:** `chemsmart/jobs/orca/writer.py:232-244`
+
+```python
+def _write_scf_convergence(self, f):
+    if self.settings.scf_convergence:
+        from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
+
+        scf_conv = self.settings.scf_convergence.lower().strip()
+        if scf_conv.endswith("scf"):
+            scf_conv = scf_conv[:-3]
+            if scf_conv not in ORCA_SCF_CONVERGENCE:
+                raise ValueError(
+                    f"Warning: SCF convergence {self.scf_convergence} is not supported by ORCA!\n"
+                    f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
+                )
+        f.write(f"  convergence {scf_conv}\n")
+```
+
+The f-string building the `ValueError` message references `self.scf_convergence` -- an attribute of the *writer* (`ORCAInputWriter`), which has no such attribute (the writer only exposes `self.settings.scf_convergence`, used correctly two lines above). Evaluating `self.scf_convergence` inside the f-string raises `AttributeError: 'ORCAInputWriter' object has no attribute 'scf_convergence'` before the `ValueError` can even be constructed, so callers get an unrelated, confusing crash instead of the intended "SCF convergence X is not supported by ORCA" message.
+
+**Reproduce:** `tests/test_orca_writer_blocks_unit.py::TestScfBlock::test_invalid_convergence_raises` -- calling `_write_scf_convergence` with `scf_convergence="bogusSCF"` (a value with a valid `...scf` suffix but not in `ORCA_SCF_CONVERGENCE` once stripped) raises `AttributeError`, not `ValueError`.
+
+**Impact:** Low-to-moderate -- functionally the input is still rejected (the job still fails to write), but the error message is actively misleading: a user who mistypes an SCF convergence keyword sees an unrelated `AttributeError` about a missing writer attribute instead of the helpful "not supported by ORCA" message with the list of valid options.
+
+**Suggested direction:** change `self.scf_convergence` to `self.settings.scf_convergence` in the f-string.
+
+---
+
+## 81. Three `elif`/`else` branches in `jobs/orca/writer.py` are unreachable dead code given their guards' fixed value domains
+
+**Location:** `chemsmart/jobs/orca/writer.py:434-457, 460-476, 602-613`
+
+Three separate `if`/`elif` chains in this file check a value against a fixed, small set of options, where an earlier `assert` (or a helper function with a documented, exhaustive return domain) already guarantees the value can only be one of the exact strings each `elif` branch checks for -- making each chain's *final* `elif`'s "condition true" arc's implicit fallthrough (i.e. the case where none of the branches match) unreachable:
+
+1. `_write_mdci_block`'s `mdci_cutoff` chain (`if ...== "loose": elif ...== "normal": elif ...== "tight":`) is preceded by `assert mdci_cutoff.lower() in ["loose", "normal", "tight"]`, so by the time the `elif` chain runs, the value is guaranteed to match exactly one of the three branches -- the "tight" branch is only ever reached when the value truly is "tight", so its own condition is always true when evaluated.
+2. Similarly, `_write_mdci_block`'s nested `mdci_density` chain is preceded by `assert mdci_density.lower() in ["none", "unrelaxed", "relaxed"]`.
+3. `_write_modred_if_dict`'s `prepend_string.lower().startswith(...)` chain (`"b"`/`"a"`/`"d"`, else `scan_var = "variable"`) processes `prepend_string` values produced exclusively by `get_prepend_string_for_modred` (`chemsmart/utils/utils.py:1221-1243`), which raises `ValueError` for any coordinate list not of length 2, 3, or 4 and otherwise returns exactly `"B"`, `"A"`, or `"D"` -- so `prepend_string.lower()` can only ever be `"b"`, `"a"`, or `"d"`, and the `else: scan_var = "variable"; scan_unit = "unit"` fallback can never execute.
+
+**Reproduce:** confirmed by reading the guarding `assert`s (cases 1-2) and `get_prepend_string_for_modred`'s exhaustive 3-value return domain (case 3); `tests/test_orca_writer_blocks_unit.py::TestMdciBlock::test_cutoff_levels`/`test_density_levels` and `TestModredBlock` already cover the reachable branches of all three chains.
+
+**Impact:** None -- purely redundant code paths with no behavioral effect (each `elif`'s condition is always true whenever control reaches it, and the `else` case in #3 can never be entered at all).
+
+**Suggested direction:** no action needed; harmless as defensive coding, though the final `elif` in each chain could be simplified to a plain `else` now that exhaustiveness is confirmed.
