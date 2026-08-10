@@ -3374,3 +3374,39 @@ def get_additional_solvent_options(self):
 **Impact:** None on current behavior (dead code, no effect), but the *intended* Cp-dearomatization logic itself never runs anywhere in the codebase -- if some other caller was meant to invoke this as a separate helper (e.g., to handle ChemDraw's neutral-aromatic-Cp drawing convention before `attach_eta_bonds_for_cp_rings` runs), that functionality is effectively missing/silently absent.
 
 **Suggested direction:** needs a decision, not a pure test-coverage fix: either (a) delete the dead lines 879-924 if the logic is truly obsolete/superseded by `attach_eta_bonds_for_cp_rings`'s own dearomatization (lines 1054-1078 in the same file already do something similar inline), or (b) extract lines 879-924 into their own properly-named function (e.g. `_dearomatize_neutral_cp_rings`) and wire it into the actual CDX-parsing pipeline in `chemsmart/io/file.py` if the Cp-anion handling it implements is still needed for some ChemDraw drawing style not currently covered.
+
+---
+
+## 69. `read_molecular_job_yaml`'s qmmm-fallback `except` block is unreachable -- a bad key in `gas_config` always crashes instead of falling back
+
+**Location:** `chemsmart/jobs/settings.py:310-331`
+
+```python
+for job in gas_phase_jobs:  # jobs using gas config
+    all_project_configs[job] = default_config.copy()
+    all_project_configs[job]["jobtype"] = job
+    all_project_configs[job] = update_dict_with_existing_keys(
+        all_project_configs[job], gas_config
+    )                                              # <-- line 315-317, unguarded
+    try:
+        # Try updating with gas_config first
+        all_project_configs[job] = update_dict_with_existing_keys(
+            all_project_configs[job], gas_config
+        )                                          # <-- line 320-322, identical, inside try
+    except Exception as e:
+        logger.warning(
+            f"Updating job '{job}' with gas_config failed ({e}). "
+            f"Falling back to qmmm_config."
+        )
+        all_project_configs[job] = update_dict_with_existing_keys(
+            all_project_configs[job], qmmm_config
+        )
+```
+
+There are two back-to-back, identical calls to `update_dict_with_existing_keys(all_project_configs[job], gas_config)` -- one unguarded (lines 315-317) immediately followed by the *same* call wrapped in a `try` (lines 320-322) whose `except` is meant to fall back to `qmmm_config` on failure. Since `update_dict_with_existing_keys` raises `ValueError` for any key in `gas_config` not already present in `all_project_configs[job]` (see `chemsmart/utils/utils.py:1191-1216`), the *first*, unguarded call always raises before the `try` block is ever entered whenever `gas_config` contains a bad key. The `except` branch's `logger.warning` and qmmm-fallback (lines 323-329) can therefore never execute -- the `ValueError` from the unguarded duplicate propagates straight out of `read_molecular_job_yaml` instead.
+
+**Reproduce:** `tests/test_GaussianSettings.py::TestGaussianJobSettings::test_get_settings_from_yaml_gas_config_bad_key_raises` -- calling `read_molecular_job_yaml` with a `gas` section containing a key not in `defaults.yaml` (e.g. a QMMM-only key like `high_level_functional`) raises `ValueError: Keyword 'high_level_functional' is not in list of keywords ...` from line 315, even though a `qmmm` section with a valid fallback value is also present in the project YAML.
+
+**Impact:** Medium -- this appears to be the intended mechanism for QMMM project YAMLs to let `gas`/`solv` sections use QMMM-specific keys with a fallback to a separate `qmmm` section (mirroring how `chemsmart/jobs/settings.py:355-368`'s explicit `qmmm` block handling works via direct key assignment, not `update_dict_with_existing_keys`). As written, any project YAML relying on this fallback instead crashes with a raw `ValueError` naming the bad key, rather than silently falling back. In practice this may be low-impact if no real project YAMLs currently rely on the fallback (the existing `qmmm.yaml` test fixture's `gas`/`solv` sections only use keys already in `defaults.yaml`, so they don't trigger this path at all).
+
+**Suggested direction:** delete the unguarded duplicate call at lines 315-317 (it's a copy-paste duplicate of the one inside the `try`) so the `try`/`except` actually gets a chance to run and the qmmm fallback becomes reachable, if that fallback behavior is still wanted; otherwise remove the dead `try`/`except`/fallback entirely and let the `ValueError` propagate directly with a clearer message, if failing fast is the intended behavior.

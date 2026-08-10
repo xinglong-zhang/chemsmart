@@ -1,4 +1,5 @@
 import pytest
+import yaml
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
@@ -10,7 +11,9 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianpKaJobSettings,
     GaussianQMMMJobSettings,
 )
-from chemsmart.jobs.settings import read_molecular_job_yaml
+from chemsmart.jobs.settings import (
+    read_molecular_job_yaml,
+)
 
 
 class TestGaussianJobSettings:
@@ -70,6 +73,89 @@ class TestGaussianJobSettings:
         assert sp_settings.basis == "def2tzvp"
         assert sp_settings.solvent_model == "smd"
         assert sp_settings.solvent_id == "toluene"
+
+    def test_get_settings_from_yaml_no_defaults_file_gaussian(self, tmp_path):
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(
+            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}})
+        )
+        all_project_settings = read_molecular_job_yaml(
+            str(project_yaml), program="gaussian"
+        )
+        assert all_project_settings["opt"]["functional"] == "m062x"
+
+    def test_get_settings_from_yaml_no_defaults_file_orca(self, tmp_path):
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(
+            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}})
+        )
+        all_project_settings = read_molecular_job_yaml(
+            str(project_yaml), program="orca"
+        )
+        assert all_project_settings["opt"]["functional"] == "m062x"
+
+    def test_get_settings_from_yaml_no_defaults_file_other_program(
+        self, tmp_path
+    ):
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(yaml.safe_dump({"solv": {}}))
+        all_project_settings = read_molecular_job_yaml(
+            str(project_yaml), program="other"
+        )
+        # default_config stays {} for an unrecognized program; jobtype is
+        # still populated per job.
+        assert all_project_settings["opt"]["jobtype"] == "opt"
+
+    def test_get_settings_from_yaml_gas_config_bad_key_raises(self, tmp_path):
+        # See BUGS_FOUND.md: read_molecular_job_yaml has an unguarded
+        # duplicate call to update_dict_with_existing_keys(..., gas_config)
+        # immediately before the try/except that's meant to catch exactly
+        # this failure and fall back to qmmm_config. The unguarded call
+        # always raises first, so the except branch is unreachable dead
+        # code -- a bad key in gas_config always propagates as a ValueError
+        # instead of triggering the documented qmmm_config fallback.
+        defaults_yaml = tmp_path / "defaults.yaml"
+        defaults_yaml.write_text(
+            yaml.safe_dump({"functional": None, "basis": None})
+        )
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(
+            yaml.safe_dump(
+                {
+                    "gas": {"high_level_functional": "MN15"},
+                    "solv": {},
+                    "qmmm": {"functional": "pbe"},
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="high_level_functional"):
+            read_molecular_job_yaml(str(project_yaml), program="gaussian")
+
+    def test_get_settings_from_yaml_td_config(self, tmp_path):
+        defaults_yaml = tmp_path / "defaults.yaml"
+        defaults_yaml.write_text(
+            yaml.safe_dump({"functional": None, "basis": None})
+        )
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(
+            yaml.safe_dump({"solv": {}, "td": {"functional": "cam-b3lyp"}})
+        )
+        all_project_settings = read_molecular_job_yaml(
+            str(project_yaml), program="gaussian"
+        )
+        assert all_project_settings["td"]["functional"] == "cam-b3lyp"
+        assert all_project_settings["td"]["jobtype"] == "td"
+
+    def test_get_settings_from_yaml_qmmm_config(
+        self, gaussian_yaml_settings_qmmm
+    ):
+        all_project_settings = read_molecular_job_yaml(
+            gaussian_yaml_settings_qmmm, program="gaussian"
+        )
+        qmmm_settings = all_project_settings["qmmm"]
+        assert qmmm_settings["jobtype"] == "qmmm"
+        assert qmmm_settings["high_level_functional"] == "MN15"
+        assert qmmm_settings["low_level_force_field"] == "AMBER=HardFirst"
 
     def test_get_settings_from_yaml_solv(self, gaussian_yaml_settings_solv):
         all_project_settings = read_molecular_job_yaml(

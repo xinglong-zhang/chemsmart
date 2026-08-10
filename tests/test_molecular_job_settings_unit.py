@@ -14,6 +14,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.settings import MolecularJobSettings
+
+
+class TestBaseCheckSolvent:
+    def test_check_solvent_is_a_no_op_on_the_base_class(self):
+        # GaussianJobSettings/ORCAJobSettings override _check_solvent with
+        # real validation; the base MolecularJobSettings implementation is
+        # a deliberate no-op hook for subclasses that don't need it.
+        settings = MolecularJobSettings()
+        assert settings._check_solvent("anything") is None
+        settings.update_solvent(solvent_model="pcm")
+        assert settings.solvent_model == "pcm"
 
 
 class TestCustomSolventValidation:
