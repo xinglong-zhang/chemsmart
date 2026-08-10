@@ -77,7 +77,9 @@ def main() -> None:
             n_max=4,
             l_max=2,
             sigma=1.0,
-        )[[1, 0], :],  # 1-based centers [2, 1] -> 0-based [1, 0]
+        )[
+            [1, 0], :
+        ],  # 1-based centers [2, 1] -> 0-based [1, 0]
         "water_species_HCON": _dscribe_soap(
             WATER_SYM,
             WATER_POS,

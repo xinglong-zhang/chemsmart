@@ -165,9 +165,7 @@ class TestCalculateSoapBasics:
     def test_parity_lmax4_covers_lpmv_path(
         self, water_molecule, soap_reference
     ):
-        features = calculate_soap(
-            water_molecule, n_max=4, l_max=4, sigma=1.0
-        )
+        features = calculate_soap(water_molecule, n_max=4, l_max=4, sigma=1.0)
         expected = soap_reference["water_lmax4_sigma1"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
