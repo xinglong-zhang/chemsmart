@@ -403,8 +403,21 @@ class TestValidation:
     def test_invalid_l_max(self, water_molecule):
         with pytest.raises(ValueError, match="l_max"):
             calculate_soap(water_molecule, l_max=-1)
+        with pytest.raises(ValueError, match="l_max"):
+            calculate_soap(water_molecule, l_max=21)
         with pytest.raises(TypeError, match="l_max"):
             calculate_soap(water_molecule, l_max=1.5)
+
+    def test_solid_harmonics_survives_cos_theta_roundoff(self):
+        # Float noise can push |z/r| slightly outside [-1, 1]; lpmv needs clip.
+        from chemsmart.analysis.soap import _solid_harmonics_polynomial
+
+        x = np.array([1e-16, 0.0])
+        y = np.array([0.0, 0.0])
+        z = np.array([1.0, 0.0])
+        harm = _solid_harmonics_polynomial(x, y, z, l_max=4)
+        assert harm.shape == (2, 25)
+        assert np.isfinite(harm).all()
 
     def test_invalid_sigma(self, water_molecule):
         with pytest.raises(ValueError, match="sigma"):

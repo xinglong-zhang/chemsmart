@@ -48,6 +48,7 @@ there is no hard exclusion at exactly ``r_cut``.
 | ``n_max``        | Number of radial basis functions.                        |
 +------------------+----------------------------------------------------------+
 | ``l_max``        | Maximum angular momentum (spherical harmonics degree).   |
+|                  | Must be between 0 and 20 inclusive.                       |
 +------------------+----------------------------------------------------------+
 | ``sigma``        | Gaussian width / standard deviation in Å.                |
 +------------------+----------------------------------------------------------+

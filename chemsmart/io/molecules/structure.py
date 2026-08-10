@@ -2619,7 +2619,8 @@ class Molecule:
                 ``r_cut + sigma * sqrt(-2 * ln(1e-3))`` also contribute.
                 Default ``6.0``.
             n_max (int): Number of radial basis functions. Default ``8``.
-            l_max (int): Maximum angular momentum. Default ``6``.
+            l_max (int): Maximum angular momentum. Must be in
+                ``0..20``. Default ``6``.
             sigma (float): Gaussian width in Å (standard deviation). Default
                 ``1.0``.
             species (sequence of str, optional): Explicit SOAP species

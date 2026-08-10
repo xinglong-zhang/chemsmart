@@ -28,7 +28,11 @@ logger = logging.getLogger(__name__)
 _VALID_AGGREGATIONS = frozenset({None, "mean", "sum"})
 # GTO radial basis requires r_cut > 1 Å (same constraint as DScribe).
 _MIN_RCUT_ANGSTROM = 1.0
+# Match DScribe 2.1.2's hard upper bound on spherical-harmonic degree.
+_MAX_LMAX = 20
 _GTO_DECAY_THRESHOLD = 1e-3
+# Guard divisions that are analytically non-zero but can underflow numerically.
+_EPS = 1e-15
 # Per-l angular prefactors in DScribe's analytic GTO integral (soapGTO.cpp).
 _RADIAL_ANGULAR_SCALE = {
     0: np.pi / 2.0,
@@ -137,6 +141,11 @@ def _validate_hyperparameters(
         )
     if int(l_max) < 0:
         raise ValueError(f"l_max must be >= 0; got {l_max}.")
+    if int(l_max) > _MAX_LMAX:
+        raise ValueError(
+            f"l_max must be <= {_MAX_LMAX} (DScribe GTO parity limit); "
+            f"got {l_max}."
+        )
     if not np.isfinite(sigma) or sigma <= 0:
         raise ValueError(
             f"sigma must be a positive finite number; got {sigma}."
@@ -172,7 +181,7 @@ def _validate_symbols(symbols: Sequence[str]) -> None:
     for symbol in symbols:
         if symbol not in _PERIODIC_TABLE.PERIODIC_TABLE:
             raise ValueError(
-                f"Unrecognized elemental symbol for ASE/SOAP: {symbol!r}. "
+                f"Unrecognized elemental symbol for SOAP: {symbol!r}. "
                 "Use standard chemical element symbols (e.g. 'H' not 'D')."
             )
 
@@ -201,8 +210,12 @@ def _gto_basis(
     betas_full = np.zeros((l_max + 1, n_max, n_max), dtype=np.float64)
 
     for ang_l in range(l_max + 1):
-        alphas = -np.log(_GTO_DECAY_THRESHOLD / np.power(a, ang_l)) / a**2
-        m = alphas[:, None] + alphas[None, :]
+        # a is linspace(1, r_cut, n_max) with r_cut > 1, so a >= 1 analytically;
+        # still floor denominators against underflow / accidental zeros.
+        a_pow = np.maximum(np.power(a, ang_l), _EPS)
+        a_sq = np.maximum(a * a, _EPS)
+        alphas = -np.log(_GTO_DECAY_THRESHOLD / a_pow) / a_sq
+        m = np.maximum(alphas[:, None] + alphas[None, :], _EPS)
         overlap = 0.5 * gamma(ang_l + 1.5) * m ** (-(ang_l + 1.5))
         betas = sqrtm(np.linalg.inv(overlap))
         if np.iscomplexobj(betas):
@@ -234,8 +247,11 @@ def _solid_harmonics_polynomial(
 
     r2 = x * x + y * y + z * z
     r = np.sqrt(r2)
-    safe_r = np.where(r > 0.0, r, 1.0)
-    cos_theta = np.where(r > 0.0, z / safe_r, 0.0)
+    # Floor r before dividing so coincident atoms (r=0) and tiny separations
+    # cannot produce 0/0 or huge cos_theta; clip for SciPy lpmv domain.
+    safe_r = np.maximum(r, _EPS)
+    cos_theta = np.clip(z / safe_r, -1.0, 1.0)
+    cos_theta = np.where(r > 0.0, cos_theta, 0.0)
     phi = np.arctan2(y, x)
 
     for ang_l in range(2, l_max + 1):
@@ -243,11 +259,13 @@ def _solid_harmonics_polynomial(
         for im, m in enumerate(range(-ang_l, ang_l + 1)):
             idx = ang_l * ang_l + im
             abs_m = abs(m)
+            # factorial(ang_l + abs_m) >= 1 for ang_l >= 2, abs_m >= 0.
+            denom = max(float(factorial(ang_l + abs_m, exact=True)), _EPS)
             norm = np.sqrt(
                 (2 * ang_l + 1)
                 / (4.0 * np.pi)
-                * factorial(ang_l - abs_m, exact=True)
-                / factorial(ang_l + abs_m, exact=True)
+                * float(factorial(ang_l - abs_m, exact=True))
+                / denom
             )
             plm = lpmv(abs_m, ang_l, cos_theta)
             if m < 0:
@@ -265,7 +283,7 @@ def _solid_harmonics_polynomial(
 
 def _power_spectrum_prefactor(ang_l: int) -> float:
     """Wigner-D normalization prefactor used by DScribe's ``getPD``."""
-    base = np.pi * np.sqrt(8.0 / (2 * ang_l + 1))
+    base = np.pi * np.sqrt(8.0 / max(2 * ang_l + 1, 1))
     if ang_l > 1:
         return base * np.pi**3
     return base
@@ -329,7 +347,8 @@ def _soap_gto_features(
     b_oa = np.zeros((l_max + 1, n_max, n_max), dtype=np.float64)
     for ang_l in range(l_max + 1):
         for k in range(n_max):
-            one_over = 1.0 / (1.0 + two_sigma_sq * alphas[ang_l, k])
+            denom = max(1.0 + two_sigma_sq * float(alphas[ang_l, k]), _EPS)
+            one_over = 1.0 / denom
             a_oa[ang_l, k] = -alphas[ang_l, k] * one_over
             scale = np.sqrt(one_over) * (one_over ** (ang_l + 1))
             b_oa[ang_l, :, k] = inv_eta_3_2 * betas[ang_l, :, k] * scale
@@ -425,6 +444,7 @@ def calculate_soap(
             (Gaussian density tails).
         n_max: Number of radial basis functions.
         l_max: Maximum angular momentum (spherical harmonics degree).
+            Must satisfy ``0 <= l_max <= 20`` (DScribe GTO parity limit).
         sigma: Gaussian width in Å (standard deviation) used to expand
             densities.
         species: Explicit elemental species basis for the SOAP feature space.
