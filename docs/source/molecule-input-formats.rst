@@ -200,12 +200,17 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 .. note::
 
    -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported.
+
    -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
+
    -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule when submitting jobs.
+
    -  3D coordinates are automatically generated from 2D structures.
-   -  Reading binary ``.cdx`` files requires the Open Babel **CLI** (``obabel`` on ``PATH``) when RDKit
-      cannot parse the file. This is separate from the Python ``openbabel`` / ``pybel`` bindings used for
-      generic format conversion. If ``obabel`` is not available, save the file as ``.cdxml`` instead.
+
+   -  Reading binary ``.cdx`` files requires the Open Babel **CLI** (``obabel`` on ``PATH``) when RDKit cannot parse the
+      file. This is separate from the Python ``openbabel`` / ``pybel`` bindings used for generic format conversion. If
+      ``obabel`` is not available, save the file as ``.cdxml`` instead.
+
    -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
       ``-c`` and ``-m`` explicitly.
 
@@ -218,11 +223,9 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. warning::
 
-   **Converting multi-fragment ChemDraw files:** by default,
-   ``chemsmart run convert`` (and ``FileConverter``) writes only the **last**
-   molecule, consistent with other multi-structure formats. To emit every
-   fragment as numbered files (``basename_1.ext``, ``basename_2.ext``, …), pass
-   ``-z`` / ``--include-intermediate-structures``:
+   **Converting multi-fragment ChemDraw files:** by default, ``chemsmart run convert`` (and ``FileConverter``) writes
+   only the **last** molecule, consistent with other multi-structure formats. To emit every fragment as numbered files
+   (``basename_1.ext``, ``basename_2.ext``, …), pass ``-z`` / ``--include-intermediate-structures``:
 
    .. code:: bash
 
@@ -432,38 +435,31 @@ CHEMSMART automatically detects file formats based on extensions:
    file header. If detection fails, an error will be raised indicating the unsupported format. For xTB, the ``.out``
    file is resolved to its parent calculation directory so that the associated output files can be read.
 
-For unsupported extensions, CHEMSMART first tries Open Babel (preferred for molecular
-formats such as ``.mol2``, ``.smi``, ``.cml``, ``.mol``). If Open Babel cannot read the
-file, CHEMSMART falls back to ASE. Periodic / ASE-specific extensions (``.traj``,
-``.cif``, ``.cfg``, ``.db``, VASP/POSCAR, ``.gen``, ``.castep``, ``.xsf``, ``.extxyz``, …)
-skip Open Babel and go straight to ASE, because Open Babel either cannot read them or
-silently drops cell / PBC information.
+For unsupported extensions, CHEMSMART first tries Open Babel (preferred for molecular formats such as ``.mol2``,
+``.smi``, ``.cml``, ``.mol``). If Open Babel cannot read the file, CHEMSMART falls back to ASE. Periodic / ASE-specific
+extensions (``.traj``, ``.cif``, ``.cfg``, ``.db``, VASP/POSCAR, ``.gen``, ``.castep``, ``.xsf``, ``.extxyz``, …) skip
+Open Babel and go straight to ASE, because Open Babel either cannot read them or silently drops cell / PBC information.
 
-Directory batch conversion (``--directory`` + ``--filetype``) still uses a fixed
-whitelist (``log``, ``com``, ``gjf``, ``out``, ``inp``, ``xyz``, ``sdf``, ``pdb``,
-``cdxml``, ``cdx``). Formats such as ``.mol2`` / ``.smi`` are available via single-file
-convert (``-i`` / ``-o``) only.
+Directory batch conversion (``--directory`` + ``--filetype``) still uses a fixed whitelist (``log``, ``com``, ``gjf``,
+``out``, ``inp``, ``xyz``, ``sdf``, ``pdb``, ``cdxml``, ``cdx``). Formats such as ``.mol2`` / ``.smi`` are available via
+single-file convert (``-i`` / ``-o``) only.
 
 .. note::
 
-   **Open Babel read limits:** the Open Babel → ``Molecule`` path round-trips geometry
-   through XYZ, so bond orders, residue metadata, and atom typing are **not** preserved.
-   Non-zero formal charge and spin multiplicity are taken from Open Babel when available;
-   neutral charge is left as ``None``. Zero-dimensional inputs (e.g. SMILES) are expanded
-   with Open Babel ``make3D()`` — coordinates are a force-field guess, not experimental
-   geometry. If ``make3D`` fails, CHEMSMART logs a warning and may still return a molecule
-   with incomplete 3D coordinates.
+   **Open Babel read limits:** the Open Babel → ``Molecule`` path round-trips geometry through XYZ, so bond orders,
+   residue metadata, and atom typing are **not** preserved. Non-zero formal charge and spin multiplicity are taken from
+   Open Babel when available; neutral charge is left as ``None``. Zero-dimensional inputs (e.g. SMILES) are expanded
+   with Open Babel ``make3D()`` — coordinates are a force-field guess, not experimental geometry. If ``make3D`` fails,
+   CHEMSMART logs a warning and may still return a molecule with incomplete 3D coordinates.
 
 *******************************
  Output Formats and Conversion
 *******************************
 
-Native writers (``Molecule.write``) support ``xyz``, ``extxyz``, ``com``, ``pdb``, and
-``cosmorsxyz``.
+Native writers (``Molecule.write``) support ``xyz``, ``extxyz``, ``com``, ``pdb``, and ``cosmorsxyz``.
 
-For any other output format, CHEMSMART falls back to `Open Babel <https://openbabel.org/>`_
-(via a temporary XYZ intermediate). This is used automatically by the convert CLI when the
-output extension is not a native writer format:
+For any other output format, CHEMSMART falls back to `Open Babel <https://openbabel.org/>`_ (via a temporary XYZ
+intermediate). This is used automatically by the convert CLI when the output extension is not a native writer format:
 
 .. code:: bash
 
@@ -472,24 +468,22 @@ output extension is not a native writer format:
 
 .. note::
 
-   Because the write fallback uses a temporary XYZ file, **charge, multiplicity, and
-   bond connectivity are not carried into** Open Babel output formats. Connectivity in
-   the written file is regenerated by Open Babel from geometry.
+   Because the write fallback uses a temporary XYZ file, **charge, multiplicity, and bond connectivity are not carried
+   into** Open Babel output formats. Connectivity in the written file is regenerated by Open Babel from geometry.
 
-Open Babel is included in the CHEMSMART conda environment. If you install CHEMSMART via pip
-and request a non-native output format, install Open Babel separately:
+Open Babel is included in the CHEMSMART conda environment. If you install CHEMSMART via pip and request a non-native
+output format, install Open Babel separately:
 
 .. code:: bash
 
    conda install -c conda-forge openbabel
 
-If Open Babel is not installed, CHEMSMART raises an ``ImportError`` with installation
-instructions. Formats that Open Babel itself cannot write raise a ``ValueError``.
+If Open Babel is not installed, CHEMSMART raises an ``ImportError`` with installation instructions. Formats that Open
+Babel itself cannot write raise a ``ValueError``.
 
-Multi-structure conversion with ``-z`` / ``--include-intermediate-structures`` writes
-numbered files (``basename_1.ext``, ``basename_2.ext``, …) rather than overwriting a
-single output path. This also applies to multi-fragment ChemDraw (``.cdx`` / ``.cdxml``)
-files; without ``-z``, only the last molecule is written:
+Multi-structure conversion with ``-z`` / ``--include-intermediate-structures`` writes numbered files
+(``basename_1.ext``, ``basename_2.ext``, …) rather than overwriting a single output path. This also applies to
+multi-fragment ChemDraw (``.cdx`` / ``.cdxml``) files; without ``-z``, only the last molecule is written:
 
 .. code:: bash
 
@@ -498,9 +492,8 @@ files; without ``-z``, only the last molecule is written:
 
 .. note::
 
-   **Read vs write fallbacks:** unsupported *input* extensions try Open Babel first, then
-   ASE (periodic / ASE-only extensions skip Open Babel; see above). Unsupported *output*
-   formats fall back to Open Babel.
+   **Read vs write fallbacks:** unsupported *input* extensions try Open Babel first, then ASE (periodic / ASE-only
+   extensions skip Open Babel; see above). Unsupported *output* formats fall back to Open Babel.
 
 **********
  See Also

@@ -1538,9 +1538,7 @@ class Molecule:
             ) from exc
 
         if not ob_mols:
-            raise ValueError(
-                f"Open Babel found no molecules in {filepath}"
-            )
+            raise ValueError(f"Open Babel found no molecules in {filepath}")
 
         molecules = []
         for ob_mol in ob_mols:
