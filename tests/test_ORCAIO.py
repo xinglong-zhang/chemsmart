@@ -17,11 +17,26 @@ from chemsmart.io.orca.output import (
     ORCAQMMMOutput,
 )
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCANEBJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 
 
 class TestORCARoute:
+    def test_irc_route_is_not_misclassified_as_single_point(self):
+        route = ORCARoute("! IRC HF aug-cc-pVTZ")
+        settings = ORCAIRCJobSettings(
+            ab_initio="hf",
+            basis="aug-cc-pVTZ",
+            freq=True,
+            numfreq=True,
+        )
+
+        assert route.jobtype == "irc"
+        assert route.freq is False
+        assert settings.freq is False
+        assert settings.numfreq is False
+        assert settings.route_string == "! IRC hf aug-cc-pVTZ"
+
     def test_read_route(self):
         s1 = "!HF DEF2-SVP"
         r1 = ORCARoute(route_string=s1)

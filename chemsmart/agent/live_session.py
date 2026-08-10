@@ -219,6 +219,7 @@ class _LoggedResultObservation:
     program: str
     jobtype: str
     method: str
+    basis: str | None
     engine: str
     charge: int
     multiplicity: int
@@ -237,6 +238,7 @@ class _LoggedResultObservation:
             "jobtype": self.jobtype,
             "requested_method": self.method,
             "applied_method": self.method,
+            "basis": self.basis,
             "engine": self.engine,
             "charge": self.charge,
             "multiplicity": self.multiplicity,
@@ -1902,6 +1904,7 @@ def _scan_xtb_result_artifacts(
                     program="xtb",
                     jobtype=jobtype,
                     method=str(requested["gfn_version"]).strip().lower(),
+                    basis=None,
                     engine="cpu",
                     charge=charge,
                     multiplicity=multiplicity,
@@ -1999,6 +2002,7 @@ def _scan_orca_result_artifacts(
                 program="orca",
                 jobtype=jobtype,
                 method=method,
+                basis=basis,
                 engine="cpu",
                 charge=charge,
                 multiplicity=multiplicity,

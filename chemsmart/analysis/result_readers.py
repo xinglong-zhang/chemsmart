@@ -18,6 +18,7 @@ else in the extraction path needs to know which programs exist.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -29,6 +30,7 @@ __all__ = [
     "SELECTOR_UNITS",
     "reader_for",
     "registered_reader_programs",
+    "registered_reader_selectors",
 ]
 
 
@@ -100,6 +102,10 @@ class ResultReaderV1:
     open_output: Callable[[Path], Any]
     #: Selector name to a callable reading it from the parser object.
     accessors: dict[str, Callable[[Any], Any]]
+    #: Native program outputs must prove normal termination.  A standalone
+    #: geometry artifact is data rather than an engine run, so that format can
+    #: opt out while retaining the same typed quantity path.
+    requires_normal_termination: bool = True
 
     @property
     def selectors(self) -> frozenset[str]:
@@ -338,6 +344,51 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
     }
 
 
+def _xyz_output(path: Path) -> Any:
+    """Open a registered XYZ as molecular data, not as a program run."""
+
+    from chemsmart.io.xyz.xyzfile import XYZFile
+
+    return XYZFile(filename=str(path))
+
+
+_XYZ_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?"
+_XYZ_HARTREE_PATTERNS = (
+    re.compile(
+        rf"\bEnergy\s*\(\s*Hartree\s*\)\s*:\s*({_XYZ_NUMBER})\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^Coordinates from ORCA-job\b.*\sE\s+({_XYZ_NUMBER})\s*$",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _xyz_energy(output: Any) -> float:
+    """Read only an explicitly Hartree-grounded XYZ comment energy."""
+
+    comment = str(output.comments or "").strip()
+    for pattern in _XYZ_HARTREE_PATTERNS:
+        match = pattern.search(comment)
+        if match is not None:
+            return float(match.group(1).replace("D", "E").replace("d", "e"))
+    raise MissingQuantityError(
+        "XYZ energy requires an explicit Energy(Hartree) label or the "
+        "ChemSmart/ORCA 'Coordinates from ORCA-job ... E <value>' form"
+    )
+
+
+def _xyz_accessors() -> dict[str, Callable[[Any], Any]]:
+    """Expose the quantities ChemSmart's XYZ parser actually establishes."""
+
+    return {
+        "energy": _xyz_energy,
+        "positions": _positions,
+        "symbols": _symbols,
+    }
+
+
 #: Programs whose results can be read into typed quantities.  PySCF keeps its
 #: dedicated structured-HDF5 path in ``result_quantities``; the entries here are
 #: the log-parsing programs that had none.
@@ -362,6 +413,14 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         parser_id="chemsmart.io.xtb.output.XTBOutput",
         open_output=_xtb_output,
         accessors=_xtb_accessors(),
+    ),
+    "xyz": ResultReaderV1(
+        program="xyz",
+        artifact_kind="geometry_xyz",
+        parser_id="chemsmart.io.xyz.xyzfile.XYZFile",
+        open_output=_xyz_output,
+        accessors=_xyz_accessors(),
+        requires_normal_termination=False,
     ),
 }
 
@@ -412,7 +471,10 @@ def extract_logged_quantities(
         )
     artifact = rq._verify_artifact(artifact_path, request.artifact_sha256)
     output = reader.open_output(artifact)
-    if getattr(output, "normal_termination", None) is not True:
+    if (
+        reader.requires_normal_termination
+        and getattr(output, "normal_termination", None) is not True
+    ):
         raise rq.QuantityExtractionError(
             f"{request.program} scientific quantities require a normally "
             "terminated program result"
@@ -480,3 +542,12 @@ def registered_reader_programs() -> tuple[str, ...]:
     """Return every program with a registered log reader, sorted."""
 
     return tuple(sorted(RESULT_READERS))
+
+
+def registered_reader_selectors() -> dict[str, tuple[str, ...]]:
+    """Return the model-discoverable selector inventory for each reader."""
+
+    return {
+        program: tuple(sorted(reader.selectors))
+        for program, reader in sorted(RESULT_READERS.items())
+    }

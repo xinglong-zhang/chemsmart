@@ -12,7 +12,10 @@ from chemsmart.agent.capabilities import (
 )
 from chemsmart.analysis.quantity_expressions import OPERATION_DESCRIPTIONS
 from chemsmart.analysis.result_quantities import SUPPORTED_SELECTORS
-from chemsmart.analysis.result_readers import registered_reader_programs
+from chemsmart.analysis.result_readers import (
+    registered_reader_programs,
+    registered_reader_selectors,
+)
 
 
 @dataclass(frozen=True)
@@ -55,9 +58,26 @@ def build_command_compiled_tool_surface(
     programs = [item.program for item in registry.programs]
     program = {"type": "string", "enum": programs}
     result_programs = tuple(sorted({"pyscf", *registered_reader_programs()}))
+    reader_selector_inventory = "; ".join(
+        f"{name}: {', '.join(selectors)}"
+        for name, selectors in registered_reader_selectors().items()
+    )
     structured_result_program = {
         "type": "string",
         "enum": list(result_programs),
+        "description": (
+            "Select the parser matching the registered artifact. Current "
+            "reader selector inventory: "
+            f"{reader_selector_inventory}. PySCF uses its structured HDF5 "
+            "result registry."
+        ),
+    }
+    thermochemistry_program = {
+        "type": "string",
+        # A geometry-only XYZ artifact can provide coordinates and an
+        # embedded electronic energy, but never a Hessian thermochemistry
+        # result.  Keep that truthful distinction in the model surface.
+        "enum": [item for item in result_programs if item != "xyz"],
     }
     result_selector = {
         "type": "string",
@@ -500,7 +520,7 @@ def build_command_compiled_tool_surface(
                 "to an already ZPE-corrected 0 K quantity."
             ),
             {
-                "program": structured_result_program,
+                "program": thermochemistry_program,
                 "artifact_id": _string(),
                 "temperature_k": {"type": "number", "exclusiveMinimum": 0},
                 "pressure_atm": {"type": "number", "exclusiveMinimum": 0},

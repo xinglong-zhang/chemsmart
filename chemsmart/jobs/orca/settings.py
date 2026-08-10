@@ -1940,6 +1940,14 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
+        # ORCA IRC consumes an initial Hessian through the %irc InitHess
+        # semantics; it is not an IRC-plus-Freq compound job.  The generic
+        # ORCA settings default is freq=True, so YAML construction otherwise
+        # advertised a frequency calculation that this class's writer
+        # deliberately removes from the native route.  Keep the in-memory
+        # scientific settings aligned with the input that ChemSmart writes.
+        self.freq = False
+        self.numfreq = False
         self.maxiter = maxiter
         self.printlevel = printlevel
         self.direction = direction

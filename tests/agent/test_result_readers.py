@@ -23,12 +23,16 @@ from chemsmart.agent.analysis_nodes import (
 )
 from chemsmart.agent.postprocessing import extract_trusted_result_quantities
 from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
-from chemsmart.analysis.result_quantities import QuantitySelectorV1
+from chemsmart.analysis.result_quantities import (
+    QuantityExtractionError,
+    QuantitySelectorV1,
+)
 from chemsmart.analysis.result_readers import (
     RESULT_READERS,
     MissingQuantityError,
     reader_for,
     registered_reader_programs,
+    registered_reader_selectors,
 )
 
 _GAUSSIAN_LOG = "tests/data/GaussianTests/boltzmann/udc3_mCF3_monomer_c1.log"
@@ -67,7 +71,12 @@ def _extract(path, program, selector, quantity_id="q"):
 
 
 def test_the_log_parsing_programs_are_registered():
-    assert registered_reader_programs() == ("gaussian", "orca", "xtb")
+    assert registered_reader_programs() == ("gaussian", "orca", "xtb", "xyz")
+    assert registered_reader_selectors()["xyz"] == (
+        "energy",
+        "positions",
+        "symbols",
+    )
 
 
 def test_model_tool_surface_exposes_the_registered_result_plane():
@@ -83,12 +92,57 @@ def test_model_tool_surface_exposes_the_registered_result_plane():
         "orca",
         "pyscf",
         "xtb",
+        "xyz",
+    ]
+    assert "xyz: energy, positions, symbols" in properties["program"][
+        "description"
     ]
     selectors = properties["selectors"]["items"]["properties"]["selector"][
         "enum"
     ]
     assert "excitation_energies" in selectors
     assert "oscillator_strengths" in selectors
+
+
+def test_registered_xyz_geometry_enters_the_typed_quantity_plane(tmp_path):
+    endpoint = tmp_path / "endpoint.xyz"
+    endpoint.write_text(
+        "3\nCoordinates from ORCA-job endpoint E -1.632059341860\n"
+        "H -1.8556865849 0.0 0.0\n"
+        "H  0.5609660462 0.0 0.0\n"
+        "H  1.2947205387 0.0 0.0\n",
+        encoding="utf-8",
+    )
+
+    artifact = _artifact(endpoint, "xyz", "endpoint")
+    receipt = extract_trusted_result_quantities(
+        artifact=artifact,
+        program="xyz",
+        selectors=(
+            QuantitySelectorV1(quantity_id="e", selector="energy"),
+            QuantitySelectorV1(quantity_id="r", selector="positions"),
+            QuantitySelectorV1(quantity_id="z", selector="symbols"),
+        ),
+    )
+
+    values = {item.quantity_id: item for item in receipt.quantities}
+    assert values["e"].value == pytest.approx(-1.632059341860)
+    assert values["r"].value[1][0] == pytest.approx(0.5609660462)
+    assert values["z"].value == ("H", "H", "H")
+
+
+def test_xyz_energy_refuses_an_unlabeled_negative_comment_number(tmp_path):
+    endpoint = tmp_path / "charged.xyz"
+    endpoint.write_text(
+        "1\ncharge -1.0 multiplicity 2\nH 0.0 0.0 0.0\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(QuantityExtractionError, match="explicit Energy"):
+        _extract(endpoint, "xyz", "energy")
+
+    positions = _extract(endpoint, "xyz", "positions").quantities[0]
+    assert positions.value == ((0.0, 0.0, 0.0),)
 
 
 @pytest.mark.parametrize("program", ("gaussian", "orca", "xtb"))
@@ -260,7 +314,7 @@ def test_a_parser_exception_becomes_an_absent_quantity():
 
     class _Empty:
         @property
-        def molecule(self):
+        def thermochemistry_molecule(self):
             raise IndexError("list index out of range")
 
     with pytest.raises(MissingQuantityError, match="IndexError"):

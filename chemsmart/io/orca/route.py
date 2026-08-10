@@ -241,6 +241,12 @@ class ORCARoute:
                 return "neb"
             if route_input in {"optts", "scants"}:
                 return "ts"
+            # IRC is a native ORCA simple-input job keyword, but it is not
+            # listed in the small legacy ORCA_JOB_TYPES reference table.
+            # Treating it as the default SP made a correctly materialized
+            # ``! IRC`` input fail ChemSmart's own preview round trip.
+            if route_input == "irc":
+                return "irc"
             if route_input in ORCA_ALL_JOB_TYPES:
                 return route_input
         return "sp"
