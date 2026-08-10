@@ -182,6 +182,36 @@ class TestBoltzmannJobCompute:
         mock_thermo.compute_boltzmann_averages.assert_called_once()
         mock_thermo.log_results_to_file.assert_called_once()
 
+    def test_compute_defaults_outputfile_when_unset(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        assert job.settings.outputfile is None
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_boltzmann_averages.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.analysis.thermochemistry.BoltzmannAverageThermochemistry",
+            return_value=mock_thermo,
+        ):
+            job.compute_boltzmann_averages()
+
+        assert job.settings.outputfile == job.outputfile
+
     def test_compute_reraises_on_failure(
         self, gaussian_co2_opt_outfile, tmp_path
     ):
