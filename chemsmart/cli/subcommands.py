@@ -1,3 +1,4 @@
+from chemsmart.cli.convert import convert
 from chemsmart.cli.crest import crest
 from chemsmart.cli.database import database
 from chemsmart.cli.gaussian import gaussian
@@ -11,6 +12,7 @@ from chemsmart.cli.thermochemistry import thermochemistry
 from chemsmart.cli.xtb import xtb
 
 subcommands = [
+    convert,
     crest,
     gaussian,
     grouper,

@@ -5,6 +5,8 @@ import inspect
 import logging
 import os
 import re
+import tempfile
+from contextlib import contextmanager
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -25,6 +27,26 @@ from chemsmart.utils.utils import file_cache, string2index_1based
 p = pt()
 
 logger = logging.getLogger(__name__)
+
+# Extensions that must use ASE (Open Babel either cannot read them or
+# silently drops cell / PBC information). Kept as a module-level set so
+# callers and tests can inspect the skip-list.
+ASE_ONLY_EXTENSIONS = frozenset(
+    {
+        "traj",
+        "db",
+        "cif",
+        "cfg",
+        "vasp",
+        "poscar",
+        "contcar",
+        "gen",
+        "cell",
+        "castep",
+        "xsf",
+        "extxyz",
+    }
+)
 
 
 class Molecule:
@@ -781,10 +803,8 @@ class Molecule:
                 reconstructed = pca.inverse_transform(
                     pca.transform(self.positions)
                 )
-                error = np.linalg.norm(
-                    self.positions - reconstructed, axis=1
-                ).max()
-                return error < 1e-2
+                error = np.linalg.norm(self.positions - reconstructed, axis=1)
+                return float(np.max(error, initial=0.0)) < 1e-2
 
     @property
     def moments_of_inertia_tensor(self):
@@ -1087,6 +1107,25 @@ class Molecule:
         Internal method to read molecular data from various file formats.
         """
         basename = os.path.basename(filepath)
+
+        # Check .extxyz before .xyz: basename.endswith(".xyz") is False for
+        # ".extxyz", but keep an explicit branch so ASE (lattice / properties)
+        # is preferred. If ASE cannot parse the file, fall back to the lenient
+        # XYZ parser. Folder scanners that match filetype "xyz" use a dotted
+        # suffix and no longer pick up *.extxyz.
+        if basename.endswith(".extxyz"):
+            try:
+                return cls._read_other(filepath, index, **kwargs)
+            except Exception as exc:
+                logger.debug(
+                    f"ASE failed to read extxyz {filepath}; "
+                    f"trying XYZ parser. ({exc})"
+                )
+                return cls._read_xyz_file(
+                    filepath=filepath,
+                    index=index,
+                    return_list=return_list,
+                )
 
         if basename.endswith(".xyz"):
             logger.debug(f"Reading xyz file: {filepath}")
@@ -1405,13 +1444,155 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
+    @classmethod
+    def _molecule_from_pybel(cls, ob_mol):
+        """
+        Convert an Open Babel ``pybel.Molecule`` to a CHEMSMART ``Molecule``.
+
+        Geometry is obtained by writing the Open Babel molecule to an XYZ
+        string and parsing the coordinate block. Charge and multiplicity are
+        taken from the underlying ``OBMol`` when available.
+        """
+        xyz_string = ob_mol.write("xyz")
+        lines = xyz_string.strip().splitlines()
+        if len(lines) < 3:
+            raise ValueError(
+                "Open Babel produced an empty or incomplete XYZ representation."
+            )
+        try:
+            n_atoms = int(lines[0].split()[0])
+        except (ValueError, IndexError) as exc:
+            raise ValueError(
+                f"Unable to parse atom count from Open Babel XYZ: {lines[0]!r}"
+            ) from exc
+
+        symbols = []
+        positions = []
+        for line in lines[2 : 2 + n_atoms]:
+            parts = line.split()
+            if len(parts) < 4:
+                raise ValueError(
+                    f"Unable to parse Open Babel XYZ coordinate line: {line!r}"
+                )
+            symbols.append(parts[0])
+            positions.append(
+                [float(parts[1]), float(parts[2]), float(parts[3])]
+            )
+
+        if len(symbols) != n_atoms:
+            raise ValueError(
+                f"Open Babel XYZ atom count mismatch: expected {n_atoms}, "
+                f"got {len(symbols)}."
+            )
+
+        charge = None
+        multiplicity = None
+        try:
+            charge_val = int(ob_mol.OBMol.GetTotalCharge())
+            # Propagate charge when non-zero; keep None for neutral so
+            # downstream defaults remain unchanged.
+            if charge_val != 0:
+                charge = charge_val
+            multiplicity = int(ob_mol.OBMol.GetTotalSpinMultiplicity())
+        except Exception:  # pragma: no cover - defensive for stub OBMol
+            pass
+
+        return cls(
+            symbols=symbols,
+            positions=np.asarray(positions, dtype=float),
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+
+    @classmethod
+    def _read_via_openbabel(cls, filepath, index="-1", **kwargs):
+        """
+        Read a molecular structure file via Open Babel (``pybel``).
+
+        Unsupported / empty reads raise so the caller can fall back to ASE.
+        Zero-dimensional inputs (e.g. SMILES) are expanded to 3D with
+        ``make3D()`` when possible.
+
+        Args:
+            filepath (str): Path to the input file.
+            index (str): 1-based structure selector (``'-1'``, ``':'``, ``'1'``).
+            **kwargs: Accepted for API compatibility; unused.
+
+        Returns:
+            Molecule or list[Molecule]: Selected structure(s).
+
+        Raises:
+            ImportError: If Open Babel is not installed.
+            ValueError: If Open Babel cannot read any molecules from the file.
+        """
+        del kwargs  # reserved for _read_other passthrough
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Reading via Open Babel requires openbabel. Install with: "
+                "``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        fmt = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if not fmt:
+            raise ValueError(
+                f"Cannot infer Open Babel format from path: {filepath}"
+            )
+
+        try:
+            ob_mols = list(pybel.readfile(fmt, filepath))
+        except Exception as exc:
+            raise ValueError(
+                f"Open Babel could not read {filepath} as format '{fmt}': {exc}"
+            ) from exc
+
+        if not ob_mols:
+            raise ValueError(f"Open Babel found no molecules in {filepath}")
+
+        molecules = []
+        for ob_mol in ob_mols:
+            # SMILES / InChI etc. arrive as 0-D; generate 3D coordinates.
+            if getattr(ob_mol, "dim", 3) < 3:
+                try:
+                    ob_mol.make3D()
+                except Exception as exc:
+                    logger.warning(
+                        "Open Babel make3D failed for %s (%s); "
+                        "returning molecule with incomplete 3D coordinates.",
+                        filepath,
+                        exc,
+                    )
+            molecules.append(cls._molecule_from_pybel(ob_mol))
+
+        selected = molecules[string2index_1based(index)]
+        return selected
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
         """
-        Reads a file using ASE and returns a Molecule object.
+        Read an unsupported extension via Open Babel, falling back to ASE.
+
+        Molecular formats try Open Babel first. Periodic / ASE-specific
+        extensions listed in ``ASE_ONLY_EXTENSIONS`` (``.traj``, ``.cif``,
+        ``.cfg``, ``.db``, VASP, etc.) skip Open Babel and go straight to ASE,
+        because Open Babel either cannot read them or silently drops cell /
+        PBC data.
         """
         from .atoms import AtomsChargeMultiplicity
+
+        ext = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if ext not in ASE_ONLY_EXTENSIONS:
+            try:
+                return Molecule._read_via_openbabel(
+                    filepath, index=index, **kwargs
+                )
+            except Exception as exc:
+                logger.debug(
+                    f"Open Babel could not read {filepath}; trying ASE. ({exc})"
+                )
 
         # supplied index is 1-indexed, thus need to convert
         index = string2index_1based(index)
@@ -1581,27 +1762,35 @@ class Molecule:
         """
         Write molecule to file in specified format.
 
+        Native writers handle ``xyz``, ``extxyz``, ``com``, ``pdb``, and
+        ``cosmorsxyz``. Any other format falls back to Open Babel via
+        :meth:`_write_via_openbabel` (requires the ``openbabel`` package).
+
         Args:
             filename (str): Output file path
-            format (str): File format ('xyz', 'com', or 'pdb'). Default 'xyz'
-            mode (str): File write mode. Default 'w'
+            format (str): File format. Default ``'xyz'``
+            mode (str): File write mode. Default ``'w'``
             **kwargs: Additional keyword arguments for format-specific writers
 
         Raises:
-            ValueError: If format is not supported
+            ImportError: If a non-native format is requested and Open Babel
+                is not installed.
+            ValueError: If Open Babel cannot write the requested format.
         """
-        if format.lower() == "xyz":
-            self.write_xyz(filename, mode=mode, **kwargs)
-        elif format.lower() == "extxyz":
-            self.write_extxyz(filename, mode=mode, **kwargs)
-        elif format.lower() == "com":
-            self.write_com(filename, **kwargs)
-        elif format.lower() == "pdb":
-            self.write_pdb(filename, mode=mode, **kwargs)
-        # elif format.lower() == "mol":
-        #     self.write_mol(filename, **kwargs)
+        fmt = format.lower()
+        native = {
+            "xyz": lambda: self.write_xyz(filename, mode=mode, **kwargs),
+            "extxyz": lambda: self.write_extxyz(filename, mode=mode, **kwargs),
+            "com": lambda: self.write_com(filename, **kwargs),
+            "pdb": lambda: self.write_pdb(filename, mode=mode, **kwargs),
+            "cosmorsxyz": lambda: self.write_cosmorsxyz(
+                filename, mode=mode, **kwargs
+            ),
+        }
+        if fmt in native:
+            native[fmt]()
         else:
-            raise ValueError(f"Format {format} is not supported for writing.")
+            self._write_via_openbabel(filename, fmt, mode=mode, **kwargs)
 
     def write_xyz(self, filename, mode, **kwargs):
         """
@@ -1796,46 +1985,114 @@ class Molecule:
 
         Examples
         --------
-        >>> molecule.write_pdb_openbabel("output.pdb")
+        >>> molecule.write_pdb_pybabel("output.pdb")
         """
-        import tempfile
+        self._write_via_openbabel(
+            pdb_filename,
+            "pdb",
+            mode=mode,
+            overwrite=overwrite,
+            cleanup=cleanup,
+        )
 
+    @contextmanager
+    def _temp_xyz_path(self, mode="w", cleanup=True):
+        """
+        Yield a temporary XYZ path written from this molecule.
+
+        When *cleanup* is ``True``, the temporary file is removed on exit.
+        """
         tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
         tmp.close()
         xyz_filename = tmp.name
-        logger.debug(
-            f"Created temporary XYZ {xyz_filename} for PDB conversion."
-        )
+        logger.debug(f"Created temporary XYZ {xyz_filename}")
         self.write_xyz(xyz_filename, mode=mode)
-
         try:
-            from openbabel import pybel
-        except ImportError as exc:
+            yield xyz_filename
+        finally:
             if cleanup:
                 try:
                     os.remove(xyz_filename)
-                except OSError:
-                    pass
-            raise ImportError(
-                "Converting to PDB via Open Babel requires openbabel. "
-                "Install with: ``conda install -c conda-forge openbabel``"
-            ) from exc
+                    logger.debug(f"Removed temporary XYZ file {xyz_filename}")
+                except OSError as exc:
+                    logger.warning(
+                        f"Failed to remove temporary file {xyz_filename}: "
+                        f"{exc}"
+                    )
 
-        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
-        if xyz_mol is None:
-            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+    def _write_via_openbabel(
+        self,
+        filename,
+        format,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+        **kwargs,
+    ):
+        """
+        Write molecule to *format* via Open Babel from a temporary XYZ.
 
-        logger.info(
-            f"Converting Molecule {self.__repr__()} to PDB {pdb_filename} via "
-            f"Open Babel (overwrite={overwrite})"
-        )
-        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
-        if cleanup:
+        Used as a fallback for formats that CHEMSMART does not implement
+        natively, and by :meth:`write_pdb_pybabel`.
+
+        Parameters
+        ----------
+        filename : str
+            Destination file path.
+        format : str
+            Open Babel format string (e.g. ``'mol2'``, ``'cml'``, ``'pdb'``).
+        mode : str, default 'w'
+            File mode passed to :meth:`write_xyz` for the temporary XYZ.
+        overwrite : bool, default True
+            Whether to overwrite *filename* if it already exists.
+        cleanup : bool, default True
+            Remove the auto-generated temporary XYZ file after conversion.
+        **kwargs
+            Unused; accepted for compatibility with :meth:`write` kwargs.
+
+        Raises
+        ------
+        ImportError
+            If Open Babel (``openbabel``) is not installed.
+        ValueError
+            If the temporary XYZ cannot be read, or Open Babel cannot write
+            the requested format.
+        """
+        # kwargs reserved for write() passthrough; unused here
+        del kwargs
+
+        with self._temp_xyz_path(mode=mode, cleanup=cleanup) as xyz_filename:
+            logger.debug(
+                f"Using temporary XYZ {xyz_filename} for Open Babel "
+                f"write (format={format})."
+            )
             try:
-                os.remove(xyz_filename)
-                logger.debug(f"Removed temporary XYZ file {xyz_filename}")
-            except OSError as exc:
-                logger.warning(f"Failed to remove temporary file: {exc}")
+                from openbabel import pybel
+            except ImportError as exc:
+                raise ImportError(
+                    f"Writing format '{format}' via Open Babel requires "
+                    "openbabel. Install with: "
+                    "``conda install -c conda-forge openbabel``"
+                ) from exc
+
+            xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+            if xyz_mol is None:
+                raise ValueError(
+                    f"Unable to read molecule from temporary XYZ "
+                    f"{xyz_filename}"
+                )
+
+            logger.info(
+                f"Writing Molecule {self!r} to {filename} via Open Babel "
+                f"(format={format}, overwrite={overwrite})"
+            )
+            try:
+                xyz_mol.write(format, filename, overwrite=overwrite)
+            except Exception as exc:
+                raise ValueError(
+                    f"Open Babel could not write format '{format}' to "
+                    f"{filename}: {exc}"
+                ) from exc
 
     def _write_gaussian_coordinates(self, f):
         """
@@ -1974,7 +2231,11 @@ class Molecule:
         valid_bond = bond_length[..., np.newaxis] < (
             bond_cutoff[..., np.newaxis] * bond_multiplier_matrix
         )
-        bond_order = np.where(valid_bond, multipliers, 0).max(axis=-1)
+        # np.maximum.reduce avoids ndarray.max, which can break when ASE
+        # reloads NumPy under coverage.py branch tracing (_NoValue TypeError).
+        bond_order = np.maximum.reduce(
+            np.where(valid_bond, multipliers, 0), axis=-1
+        )
 
         return bond_order
 
@@ -2018,8 +2279,8 @@ class Molecule:
             **kwargs: Additional keyword arguments (unused)
         """
         with open(filename, mode) as f:
-            for line in self.to_cosmorsxyz():
-                f.write(line)
+            f.write(self.to_cosmorsxyz())
+            f.write("\n")
 
     def to_smiles(self):
         """
@@ -2667,7 +2928,7 @@ class Molecule:
         if normalize:
             logger.debug("normalize so max per-atom displacement = 1")
             per_atom = np.linalg.norm(cart_mode, axis=1)
-            max_disp = float(per_atom.max())
+            max_disp = float(np.max(per_atom, initial=0.0))
             if max_disp == 0.0:
                 raise ValueError("Provided vibrational mode has zero norm.")
             cart_mode = cart_mode / max_disp
