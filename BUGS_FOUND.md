@@ -3240,3 +3240,54 @@ Additionally, `mol.py`'s own group callback (`chemsmart/cli/mol/mol.py`) indepen
 **Impact:** Low -- entirely redundant defensive code with no behavioral effect; consistent with several other findings this session (e.g. bugs #42-43, #52, #60) where copy-pasted or belt-and-suspenders validation duplicates an invariant already enforced earlier in the same call path.
 
 **Suggested direction:** no action needed; could be simplified by deleting the unreachable duplicate checks (139, 183, and the `isinstance`/`molecules` normalizations) now that they're confirmed dead, trusting the earlier guards instead.
+
+---
+
+## 64. `ThermochemistryJob.__init__`'s `molecule`/fallback label branches are unreachable dead code
+
+**Location:** `chemsmart/jobs/thermochemistry/job.py:108-114`
+
+```python
+if label is None:
+    if filename is not None:
+        label = os.path.splitext(os.path.basename(filename))[0]
+    elif molecule is not None:
+        label = molecule.get_chemical_formula(empirical=True)
+    else:
+        label = "thermochemistry_job"
+```
+
+`__init__` raises `ValueError: 'filename' must be provided.` a few lines earlier (line 72-73, see bug #1) whenever `filename is None`, so by the time this block runs `filename` is guaranteed truthy. The `elif molecule is not None:` and `else:` arms can never execute through any real construction path -- `if filename is not None:` always matches.
+
+**Reproduce:** confirmed empirically -- there is no way to call `ThermochemistryJob(...)` with `molecule` set and `filename=None` without hitting the earlier `ValueError` first. See `tests/test_thermochemistry_job_unit.py::TestThermochemistryJobConstruction` for the reachable label-from-filename behavior.
+
+**Impact:** None -- purely redundant defensive code; consistent with bug #1, which already documents that the `filename` guard was added later and makes this fallback chain moot.
+
+**Suggested direction:** no action needed; could be simplified to unconditionally derive `label` from `filename` (dropping the `elif`/`else`), now that `molecule`-only construction is confirmed unreachable.
+
+---
+
+## 65. `cli/gaussian/irc.py`'s `irc()` command has five `is not None` update-guards that are unreachable through the real CLI
+
+**Location:** `chemsmart/cli/gaussian/irc.py:62-71`
+
+```python
+if recalc_step is not None:
+    irc_settings.recalc_step = recalc_step
+if maxpoints is not None:
+    irc_settings.maxpoints = maxpoints
+if maxcycles is not None:
+    irc_settings.maxcycles = maxcycles
+if stepsize is not None:
+    irc_settings.stepsize = stepsize
+if flat_irc is not None:
+    irc_settings.flat_irc = flat_irc
+```
+
+The corresponding Click options (`chemsmart/cli/gaussian/gaussian.py`'s `click_gaussian_irc_options`, lines ~125-178) all declare concrete, non-`None` defaults: `--recalc-step` defaults to `6`, `--maxpoints` to `512`, `--maxcycles` to `128`, `--stepsize` to `20`, and `--flat-irc/--no-flat-irc` to `False`. Click therefore always passes a concrete value for these five parameters -- never `None` -- so each `is not None` check is always `True` through any real CLI invocation; the implicit "skip" (False) arm can never execute. This differs from the two neighboring guards for `predictor` and `recorrect` (and `direction`), whose Click options do default to `None` and whose False arms are genuinely reachable (see `tests/test_gaussian_cli.py::TestGaussianCLIIrcCommand::test_basic_irc_job_creation`, which omits `-pt`/`-rc` and leaves `irc_settings.predictor`/`recorrect` at the project defaults).
+
+**Reproduce:** confirmed via `coverage report -m` on `chemsmart/cli/gaussian/irc.py` after running the full `TestGaussianCLIIrcCommand` suite -- branches `62->64`, `64->66`, `66->68`, `68->70`, `70->72` (the False arm of each guard) remain unexecuted no matter which combination of real CLI flags is supplied, because Click never produces `None` for these five parameters.
+
+**Impact:** None -- purely redundant defensive code that mirrors a pattern (guards duplicating an invariant already enforced upstream, here by Click's own default-value mechanism) seen elsewhere in this file, e.g. bugs #57 and #63.
+
+**Suggested direction:** no action needed; the guards are harmless. Could be simplified by assigning these five attributes unconditionally (dropping the `is not None` checks) since Click guarantees a value, or by changing the five defaults to `None` if "unset by the user" needs to be distinguishable from "user explicitly passed the default" for merge-with-project-settings purposes -- but that would be a behavior change requiring product input, not a pure test-coverage fix.

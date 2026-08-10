@@ -117,6 +117,23 @@ class TestThermochemistryJobRun:
         mock_runner.run.assert_called_once_with(job)
 
 
+class TestThermochemistryJobBackupFiles:
+    def test_backup_files_uses_backup_folder_and_outputfile(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        with (
+            patch.object(
+                job, "_create_backup_folder_name", return_value="bk1"
+            ) as mock_folder,
+            patch.object(job, "backup_file") as mock_backup,
+        ):
+            job._backup_files()
+
+        mock_folder.assert_called_once_with()
+        mock_backup.assert_called_once_with(job.outputfile, folder="bk1")
+
+
 class TestThermochemistryJobComputeAndShow:
     def test_compute_thermochemistry_requires_filename(self):
         """See BUGS_FOUND.md #36: compute_thermochemistry's docstring
@@ -154,6 +171,32 @@ class TestThermochemistryJobComputeAndShow:
         mock_cls.assert_called_once()
         mock_thermo.compute_thermochemistry.assert_called_once()
         mock_thermo.log_results_to_file.assert_called_once()
+
+    def test_compute_thermochemistry_defaults_outputfile_when_unset(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        assert job.settings.outputfile is None
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_thermochemistry.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            return_value=mock_thermo,
+        ):
+            job.compute_thermochemistry()
+
+        assert job.settings.outputfile == job.outputfile
 
     def test_compute_thermochemistry_reraises_on_failure(
         self, gaussian_co2_opt_outfile, tmp_path
@@ -220,3 +263,24 @@ class TestThermochemistryJobFromFilename:
 
         mock_from_job.assert_called_once()
         assert job.jobrunner is mock_runner_instance
+
+    def test_from_filename_uses_explicit_settings(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_jobrunner = MagicMock()
+        settings = ThermochemistryJobSettings(temperature=350.0)
+        job = ThermochemistryJob.from_filename(
+            filename=gaussian_co2_opt_outfile,
+            settings=settings,
+            jobrunner=mock_jobrunner,
+        )
+        assert job.settings.temperature == 350.0
+
+    def test_from_filename_uses_explicit_label(self, gaussian_co2_opt_outfile):
+        mock_jobrunner = MagicMock()
+        job = ThermochemistryJob.from_filename(
+            filename=gaussian_co2_opt_outfile,
+            label="custom_label",
+            jobrunner=mock_jobrunner,
+        )
+        assert job.label == "custom_label"
