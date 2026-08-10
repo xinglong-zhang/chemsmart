@@ -36,6 +36,11 @@ class TestORCARoute:
         assert r2.functional == "m062x"
         assert r2.basis == "def2-tzvp"
 
+        r2_diffuse = ORCARoute(
+            route_string="! Opt Freq B3LYP def2-TZVPD defgrid3"
+        )
+        assert r2_diffuse.basis == "def2-tzvpd"
+
         r2_pople = ORCARoute(
             route_string="! Opt Freq M062X 6-311+G(d,p)"
         )

@@ -144,6 +144,8 @@ class ORCAInputWriter(InputWriter):
         self._write_basis_block(f)
         self._write_method_block(f)
         self._write_scf_block(f)
+        self._write_tddft_block(f)
+        self._write_vpt2_block(f)
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
@@ -248,6 +250,40 @@ class ORCAInputWriter(InputWriter):
             self._write_scf_convergence(f)
             f.write("end\n")
 
+    def _write_tddft_block(self, f):
+        """Write a vertical CIS/TD-DFT request from typed project settings.
+
+        ORCA uses the same ``%tddft`` block for the Tamm-Dancoff
+        approximation and full linear-response TD-DFT.  Keeping the switch in
+        the project settings lets ChemSmart, rather than the model, own the
+        native keyword grammar.
+        """
+
+        if getattr(self.settings, "jobtype", None) != "td":
+            return
+        response_method = getattr(self.settings, "response_method", None)
+        nstates = getattr(self.settings, "nstates", None)
+        state_manifold = getattr(self.settings, "state_manifold", None)
+        if response_method not in {"tda", "tddft"}:
+            raise ValueError(
+                "ORCA td response_method must be 'tda' or 'tddft'"
+            )
+        if nstates is None or int(nstates) <= 0:
+            raise ValueError("ORCA td nstates must be a positive integer")
+        if state_manifold not in {"singlet", "singlet_triplet"}:
+            raise ValueError(
+                "ORCA td supports singlet roots or singlet roots together "
+                "with spin-adapted triplets"
+            )
+        f.write("%tddft\n")
+        f.write(f"  NRoots {int(nstates)}\n")
+        f.write(f"  TDA {'true' if response_method == 'tda' else 'false'}\n")
+        f.write(
+            "  Triplets "
+            f"{'true' if state_manifold == 'singlet_triplet' else 'false'}\n"
+        )
+        f.write("end\n")
+
     def _write_basis_block(self, f):
         """Write per-element basis assignments as an ORCA ``%basis`` block.
 
@@ -323,6 +359,23 @@ class ORCAInputWriter(InputWriter):
                         f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
                     )
             f.write(f"  convergence {scf_conv}\n")
+
+    def _write_vpt2_block(self, f):
+        """Write the typed ORCA anharmonic vibrational settings."""
+
+        if not getattr(self.settings, "vpt2", False):
+            return
+        f.write("%vpt2\n")
+        f.write("  VPT2 On\n")
+        displacement = getattr(
+            self.settings, "vpt2_anharmonic_displacement", None
+        )
+        if displacement is not None:
+            f.write(f"  AnharmDisp {displacement:g}\n")
+        cutoff = getattr(self.settings, "vpt2_hessian_cutoff", None)
+        if cutoff is not None:
+            f.write(f"  HessianCutoff {cutoff:g}\n")
+        f.write("end\n")
 
     def _write_solvent_block(self, f):
         """

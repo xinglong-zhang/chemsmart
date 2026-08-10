@@ -2568,6 +2568,67 @@ class ORCAOutput(ORCAFileMixin):
             return []
         return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
+    @cached_property
+    def _vpt2_fundamental_table(self):
+        """Return the last complete ORCA VPT2 fundamental-transition table.
+
+        Rows contain ``(harmonic, fundamental, shift)`` in cm^-1.  Selecting
+        the last complete table follows the same result-local convention used
+        for repeated ORCA thermochemistry sections.
+        """
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?"
+        row_pattern = re.compile(
+            rf"^\s*\d+\s+({number})\s+({number})\s+({number})\s*$"
+        )
+        tables = []
+        for index, line in enumerate(self.contents):
+            if "Fundamental transitions [1/cm]" not in line:
+                continue
+            rows = []
+            for candidate in self.contents[index + 1 :]:
+                match = row_pattern.match(candidate)
+                if match:
+                    rows.append(tuple(float(value) for value in match.groups()))
+                    continue
+                if rows:
+                    break
+            if rows:
+                tables.append(tuple(rows))
+        return tables[-1] if tables else ()
+
+    @property
+    def vpt2_harmonic_frequencies(self):
+        """Harmonic frequencies printed in the VPT2 transition table."""
+
+        return [row[0] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_fundamental_frequencies(self):
+        """Anharmonic VPT2 fundamental transitions in cm^-1."""
+
+        return [row[1] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_anharmonic_shifts(self):
+        """VPT2 fundamental-minus-harmonic shifts in cm^-1."""
+
+        return [row[2] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_zero_point_rovibrational_energy(self):
+        """Total VPT2 zero-point ro-vibrational energy in cm^-1."""
+
+        totals = []
+        for index, line in enumerate(self.contents):
+            if "Zero-point ro-vibrational energy [1/cm]" not in line:
+                continue
+            for candidate in self.contents[index + 1 : index + 20]:
+                if candidate.strip().casefold().startswith("total:"):
+                    totals.append(float(candidate.split()[-1]))
+                    break
+        return totals[-1] if totals else None
+
     @property
     def normal_modes(self):
         """
@@ -2658,6 +2719,80 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-3])
         return None
+
+    @cached_property
+    def electronic_absorption_spectra(self):
+        """Return complete electric-dipole absorption tables in file order.
+
+        ORCA 6 prints transition labels followed by energy in eV and cm-1,
+        wavelength in nm, and the length-gauge oscillator strength.  A job may
+        contain more than one electronic-spectrum evaluation; callers asking
+        for the final result use the last complete table rather than joining
+        roots from different geometries.
+        """
+
+        header = "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
+        row_pattern = re.compile(
+            r"^\s*\S+\s+->\s+\S+\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)"
+        )
+        tables = []
+        for index, line in enumerate(self.contents):
+            if header not in line:
+                continue
+            rows = []
+            started = False
+            for candidate in self.contents[index + 1 :]:
+                match = row_pattern.match(candidate)
+                if match is not None:
+                    started = True
+                    energy_ev, energy_cm1, wavelength_nm, oscillator = (
+                        float(value) for value in match.groups()
+                    )
+                    rows.append(
+                        {
+                            "energy_eV": energy_ev,
+                            "energy_cm^-1": energy_cm1,
+                            "wavelength_nm": wavelength_nm,
+                            "oscillator_strength": oscillator,
+                        }
+                    )
+                    continue
+                if started and candidate.strip().startswith("-"):
+                    break
+            if rows:
+                tables.append(tuple(rows))
+        return tuple(tables)
+
+    @property
+    def excitation_energies_eV(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["energy_eV"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
+
+    @property
+    def absorption_wavelengths(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["wavelength_nm"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
+
+    @property
+    def oscillator_strengths(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["oscillator_strength"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
 
     @property
     def molar_absorption_coefficients(self):

@@ -64,6 +64,7 @@ class ORCAJobRunner(JobRunner):
         "orcascan",
         "orcats",
         "orcasp",
+        "orcatd",
         "orcairc",
         "orcaqmmm",
         "orcaneb",
@@ -456,6 +457,17 @@ class ORCAJobRunner(JobRunner):
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
+
+        # Some ORCA launchers return zero even when an embedded MPI process
+        # aborts and the ORCA output explicitly reports error termination.
+        # Check the program's own completion semantics only after scratch
+        # artifacts have been copied back so the failed output remains
+        # available for diagnosis.
+        if not job.is_complete():
+            raise RuntimeError(
+                "ORCA did not report normal termination in "
+                f"{job.outputfile}"
+            )
 
 
 class FakeORCAJobRunner(ORCAJobRunner):

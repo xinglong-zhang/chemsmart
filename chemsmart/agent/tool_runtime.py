@@ -2044,10 +2044,14 @@ class CommandCompiledToolHostV1:
             nodes=tuple(nodes),
         )
         self.workflow_drafts[draft.draft_sha256] = draft
-        scientific_plan = self._scientific_plan_from_draft(
-            draft,
-            findings=findings,
-            node_annotations=node_annotations,
+        scientific_plan = (
+            self._scientific_plan_from_draft(
+                draft,
+                findings=findings,
+                node_annotations=node_annotations,
+            )
+            if draft.nodes
+            else None
         )
         if scientific_plan is not None:
             self.scientific_workflow_plans[scientific_plan.plan_sha256] = (
@@ -5529,8 +5533,12 @@ class CommandCompiledToolHostV1:
             input_id = str(item["input_id"])
             receipt_sha256 = str(item["receipt_sha256"])
             receipt = self.quantity_extractions.get(receipt_sha256)
+            quantity_collection = "quantities"
             if receipt is None:
                 receipt = self.thermochemistry_receipts.get(receipt_sha256)
+            if receipt is None:
+                receipt = self.quantity_expression_receipts.get(receipt_sha256)
+                quantity_collection = "outputs"
             if receipt is None:
                 raise ContractError(
                     "quantity expression references an unknown receipt"
@@ -5538,7 +5546,7 @@ class CommandCompiledToolHostV1:
             quantity_id = str(item["quantity_id"])
             matches = tuple(
                 quantity
-                for quantity in receipt.quantities
+                for quantity in getattr(receipt, quantity_collection)
                 if quantity.quantity_id == quantity_id
             )
             if len(matches) != 1:

@@ -146,6 +146,47 @@ def _locate_by_digest(workspace: Path, sha256: str) -> Path:
     )
 
 
+def _approved_initial_artifacts(
+    workspace: Path, approval: Any
+) -> dict[str, TrustedArtifactRefV1]:
+    """Resolve every independently approved workflow entry geometry.
+
+    A comparison workflow can have several sibling roots: two charge states,
+    reactant and product, or multiple conformers.  Each node must receive the
+    artifact named by its own approval binding rather than whichever initial
+    geometry happened to appear first.
+    """
+
+    artifacts: dict[str, TrustedArtifactRefV1] = {}
+    for binding in approval.node_bindings:
+        if binding.input_mode != "initial":
+            continue
+        existing = artifacts.get(binding.initial_artifact_id)
+        if existing is not None:
+            if existing.sha256 != binding.initial_artifact_sha256:
+                raise ContractError(
+                    "one approved initial artifact ID names different bytes"
+                )
+            continue
+        geometry_path = _locate_by_digest(
+            workspace, binding.initial_artifact_sha256
+        )
+        artifacts[binding.initial_artifact_id] = TrustedArtifactRefV1(
+            artifact_id=binding.initial_artifact_id,
+            kind="geometry_xyz",
+            sha256=binding.initial_artifact_sha256,
+            size_bytes=geometry_path.stat().st_size,
+            path=str(geometry_path),
+            cli_value=str(geometry_path),
+        )
+    if not artifacts:
+        raise ContractError(
+            "no approved node takes an initial geometry, so the workflow has "
+            "no entry point"
+        )
+    return artifacts
+
+
 class ApprovedWorkflowExecutor:
     """Walk an approved DAG, dispatching host tools with host-computed args."""
 
@@ -156,7 +197,7 @@ class ApprovedWorkflowExecutor:
         plan: Any,
         approval: Any,
         frozen_approval: Any,
-        initial_artifact: TrustedArtifactRefV1,
+        initial_artifacts: Mapping[str, TrustedArtifactRefV1],
         project_artifacts: Mapping[str, Any],
         task_spec_sha256: str,
         run_directory: Path,
@@ -165,7 +206,7 @@ class ApprovedWorkflowExecutor:
         self.plan = plan
         self.approval = approval
         self.frozen_approval = frozen_approval
-        self.initial_artifact = initial_artifact
+        self.initial_artifacts = dict(initial_artifacts)
         self.project_by_digest = {
             item.sha256: item.artifact_id for item in project_artifacts
         }
@@ -195,7 +236,19 @@ class ApprovedWorkflowExecutor:
 
     def _input_artifact_id(self, binding: Any) -> str:
         if binding.input_mode == "initial":
-            return self.initial_artifact.artifact_id
+            artifact = self.initial_artifacts.get(
+                binding.initial_artifact_id
+            )
+            if artifact is None:
+                raise ContractError(
+                    f"approved initial artifact {binding.initial_artifact_id!r} "
+                    "is unavailable"
+                )
+            if artifact.sha256 != binding.initial_artifact_sha256:
+                raise ContractError(
+                    "approved initial artifact bytes differ from node binding"
+                )
+            return artifact.artifact_id
         handoff = self._handoff_inputs.get(binding.node_id)
         if not handoff:
             raise ContractError(
@@ -497,36 +550,14 @@ def execute_approved_workflow(
     approval = inputs["workflow_execution_approval"]
     frozen_approval = inputs["frozen_workflow_approval"]
 
-    initial_binding = next(
-        (
-            item
-            for item in approval.node_bindings
-            if item.input_mode == "initial"
-        ),
-        None,
-    )
-    if initial_binding is None:
-        raise ContractError(
-            "no approved node takes an initial geometry, so the workflow has "
-            "no entry point"
-        )
-    geometry_path = _locate_by_digest(
-        workspace, initial_binding.initial_artifact_sha256
-    )
-    initial_artifact = TrustedArtifactRefV1(
-        artifact_id=initial_binding.initial_artifact_id,
-        kind="geometry_xyz",
-        sha256=initial_binding.initial_artifact_sha256,
-        size_bytes=geometry_path.stat().st_size,
-        path=str(geometry_path),
-        cli_value=str(geometry_path),
-    )
+    initial_artifacts = _approved_initial_artifacts(workspace, approval)
+    bootstrap_artifact = next(iter(initial_artifacts.values()))
 
     registry = load_program_capabilities()
     live_schema = build_live_click_schema()
     conformance, _records = _bootstrap_conformance(
         run_directory=run_directory,
-        input_artifact=initial_artifact,
+        input_artifact=bootstrap_artifact,
         registry_sha256=registry.registry_sha256,
         live_schema=live_schema,
     )
@@ -539,7 +570,7 @@ def execute_approved_workflow(
         ),
         artifacts={
             **{item.artifact_id: item for item in project_artifacts},
-            initial_artifact.artifact_id: initial_artifact,
+            **initial_artifacts,
         },
         component_conformance_receipts=conformance,
         environment_targets=environment_targets,
@@ -561,7 +592,7 @@ def execute_approved_workflow(
         plan=plan,
         approval=approval,
         frozen_approval=frozen_approval,
-        initial_artifact=initial_artifact,
+        initial_artifacts=initial_artifacts,
         project_artifacts=project_artifacts,
         task_spec_sha256=task_spec_sha256,
         run_directory=run_directory,

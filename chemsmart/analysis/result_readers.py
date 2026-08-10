@@ -53,12 +53,17 @@ SELECTOR_UNITS = {
     "gibbs_free_energy": "Eh",
     "oscillator_strengths": "",
     "vibrational_frequencies": "cm^-1",
+    "vpt2_harmonic_frequencies": "cm^-1",
+    "vpt2_fundamental_frequencies": "cm^-1",
+    "vpt2_zero_point_rovibrational_energy": "cm^-1",
     "positions": "Angstrom",
     "symbols": "",
     "charge": "",
     "multiplicity": "",
     "scf_energy": "Eh",
     "correlation_energy": "Eh",
+    "dipole_moment": "Debye",
+    "dipole_moment_magnitude": "Debye",
 }
 
 
@@ -231,6 +236,15 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
     accessors = _text_output_accessors()
     accessors.update(
         {
+            "absorption_wavelengths": lambda output: [
+                float(item) for item in output.absorption_wavelengths
+            ],
+            "excitation_energies": lambda output: [
+                float(item) for item in output.excitation_energies_eV
+            ],
+            "oscillator_strengths": lambda output: [
+                float(item) for item in output.oscillator_strengths
+            ],
             "energy": _orca_total_energy,
             "entropy_times_temperature": lambda output: float(
                 output.entropy_times_temperature
@@ -243,6 +257,22 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             ),
             "scf_energy": _orca_scf_energy,
             "correlation_energy": _orca_correlation_energy,
+            "dipole_moment": lambda output: [
+                float(item)
+                for item in output.dipole_moment_in_debye.reshape(-1)
+            ],
+            "dipole_moment_magnitude": lambda output: float(
+                output.dipole_moment_magnitude_in_debye
+            ),
+            "vpt2_harmonic_frequencies": lambda output: [
+                float(item) for item in output.vpt2_harmonic_frequencies
+            ],
+            "vpt2_fundamental_frequencies": lambda output: [
+                float(item) for item in output.vpt2_fundamental_frequencies
+            ],
+            "vpt2_zero_point_rovibrational_energy": lambda output: float(
+                output.vpt2_zero_point_rovibrational_energy
+            ),
         }
     )
     return accessors
@@ -267,6 +297,12 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
             "oscillator_strengths": lambda output: [
                 float(item) for item in output.oscillatory_strengths
             ],
+            "dipole_moment": lambda output: [
+                float(item) for item in output.all_dipole_moments[-1]
+            ],
+            "dipole_moment_magnitude": lambda output: float(
+                output.all_dipole_moment_magnitudes[-1]
+            ),
         }
     )
     return accessors
@@ -293,6 +329,12 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         ],
         "positions": _positions,
         "symbols": _symbols,
+        "dipole_moment": lambda output: [
+            float(item) for item in output.molecular_dipole_full
+        ],
+        "dipole_moment_magnitude": lambda output: float(
+            output.total_molecular_dipole_moment
+        ),
     }
 
 
@@ -334,12 +376,17 @@ _SELECTOR_DIMENSIONS = {
     "gibbs_free_energy": "ENERGY",
     "oscillator_strengths": "DIMENSIONLESS",
     "vibrational_frequencies": "FREQUENCY",
+    "vpt2_harmonic_frequencies": "FREQUENCY",
+    "vpt2_fundamental_frequencies": "FREQUENCY",
+    "vpt2_zero_point_rovibrational_energy": "FREQUENCY",
     "positions": "LENGTH",
     "symbols": "DIMENSIONLESS",
     "charge": "DIMENSIONLESS",
     "multiplicity": "DIMENSIONLESS",
     "scf_energy": "ENERGY",
     "correlation_energy": "ENERGY",
+    "dipole_moment": "DIPOLE_MOMENT",
+    "dipole_moment_magnitude": "DIPOLE_MOMENT",
 }
 
 

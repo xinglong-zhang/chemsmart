@@ -41,10 +41,13 @@ class AnalysisReportedQuantityV1:
         require_sha256(self.source_receipt_sha256, "source_receipt_sha256")
         require_identifier(self.quantity_id, "quantity_id")
         require_sha256(self.quantity_value_sha256, "quantity_value_sha256")
-        if len(self.dimension) != 6 or not all(
+        if len(self.dimension) not in {6, 7, 8} or not all(
             isinstance(value, int) for value in self.dimension
         ):
-            raise ContractError("analysis claim dimension must contain six integers")
+            raise ContractError(
+                "analysis claim dimension must contain six legacy, seven "
+                "dipole-extended, or eight mass-extended integers"
+            )
         _require_finite_payload(self.display_value, "display_value")
         _require_finite_payload(self.canonical_value, "canonical_value")
         if not self.display_unit or not self.canonical_unit:

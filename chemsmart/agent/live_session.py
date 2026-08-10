@@ -1963,7 +1963,7 @@ def _scan_orca_result_artifacts(
                 or not math.isfinite(float(energy))
                 or not method
                 or not basis
-                or jobtype not in {"sp", "opt", "freq", "ts", "irc"}
+                or jobtype not in {"sp", "opt", "freq", "td", "ts", "irc"}
                 or not isinstance(charge, int)
                 or not isinstance(multiplicity, int)
                 or multiplicity < 1
@@ -2245,9 +2245,10 @@ def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
 
 
 #: Stages of a route-building program that read their own project section
-#: instead of ``gas``/``solv``.  The section carries only ordinary project
-#: keys: stage-specific parameters such as the excited-state count are
-#: CLI-owned, and putting one here makes the whole project fail to load.
+#: instead of ``gas``/``solv``.  Their project sections include the same typed
+#: scientific settings that a user supplies in a normal project YAML; the
+#: conformance preview must exercise that canonical path rather than rely on
+#: hidden command-specific defaults.
 _ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"neb", "td"})
 
 
@@ -2271,16 +2272,20 @@ def _conformance_project_sections(
         # conformance fails inside the CLI rather than reporting a gap.
         for stage in _conformance_jobtypes(program, "cpu"):
             if stage in _ROUTE_PROGRAM_STAGE_SECTIONS:
-                sections[stage] = (
-                    {
+                if stage == "neb":
+                    sections[stage] = {
                         **common,
                         "joboption": "NEB-TS",
                         "nimages": 2,
                         "preopt_ends": False,
                     }
-                    if stage == "neb"
-                    else dict(common)
-                )
+                elif stage == "td":
+                    sections[stage] = {
+                        **common,
+                        "response_method": "tda",
+                        "nstates": 3,
+                        "state_manifold": "singlet",
+                    }
         return sections
     return None
 
@@ -3111,8 +3116,10 @@ def _system_prompt(
         "commands, and preview every currently resolvable node. Keep every future "
         "producer input unresolved until its validated upstream artifact exists. "
         "For every request that ends in a calculated or derived value, use "
-        "plan_scientific_workflow to record calculations, result extraction, "
-        "validation, mathematics, and claim rendering in one connected DAG. "
+        "plan_scientific_workflow to record any required calculations, result "
+        "extraction, validation, mathematics, and claim rendering in one "
+        "connected DAG. For analysis of registered results, leave "
+        "calculation_nodes empty instead of inventing a placeholder program call. "
         "Its analysis inputs name future producer node/output pairs, so do not wait "
         "for artifact hashes before planning postprocessing. Preserve an unavailable "
         "parser or external analysis as blocked_unsupported instead of deleting the "

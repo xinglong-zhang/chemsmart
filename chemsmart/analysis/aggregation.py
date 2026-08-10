@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ase import units as ase_units
+
 #: Hartree to kcal/mol (CODATA-consistent with the rest of the package).
 HARTREE_TO_KCAL_PER_MOL = 627.5094740631
 #: Hartree to kJ/mol.
@@ -29,6 +31,14 @@ GAS_CONSTANT_KCAL = 1.987204258640832e-3
 #: and a molar energy have different dimensions, so the generic unit engine
 #: refuses to relate them and is right to.
 WAVENUMBER_TO_KJ_PER_MOL = 1.1962656362961932e-2
+#: Transition-state crossover temperature per spectroscopic wavenumber.
+#: ``T_c = h*c*|nu_tilde| / (2*pi*k_B)`` for ``nu_tilde`` in cm^-1.
+TRANSITION_STATE_CROSSOVER_K_CM = (
+    ase_units._hplanck
+    * ase_units._c
+    * 100.0
+    / (2.0 * math.pi * ase_units._k)
+)
 
 ENERGY_UNIT_FACTORS = {
     "hartree": 1.0,
@@ -377,6 +387,7 @@ __all__ = [
     "HARTREE_TO_EV",
     "HARTREE_TO_KCAL_PER_MOL",
     "HARTREE_TO_KJ_PER_MOL",
+    "TRANSITION_STATE_CROSSOVER_K_CM",
     "StateEnergyDifferenceV1",
     "boltzmann_average",
     "boltzmann_populations",
@@ -388,6 +399,7 @@ __all__ = [
     "extrapolate_scf_exponential",
     "extrapolate_scf_inverse_power",
     "state_energy_difference",
+    "transition_state_crossover_temperature",
 ]
 
 
@@ -460,6 +472,38 @@ def count_imaginary_modes(
     if not math.isfinite(cutoff) or cutoff < 0:
         raise AggregationError("cutoff_cm1 must be finite and non-negative")
     return sum(1 for item in values if item < 0.0 and abs(item) > cutoff)
+
+
+def transition_state_crossover_temperature(
+    frequencies_cm1: tuple[float, ...],
+) -> float:
+    """Return the semiclassical crossover temperature of a first-order TS.
+
+    For a full harmonic-frequency vector, exactly one negative mode is
+    required and its magnitude is used.  A single scalar may instead be the
+    signed imaginary frequency or an already-selected positive magnitude.
+    ChemSmart owns the spectroscopic conversion and the ``2*pi`` factor, so a
+    workflow need not introduce a model-authored physical constant.
+    """
+
+    values = [float(item) for item in frequencies_cm1]
+    if not values:
+        raise AggregationError("at least one transition frequency is required")
+    if any(not math.isfinite(item) for item in values):
+        raise AggregationError("transition frequencies must be finite")
+    if len(values) == 1:
+        magnitude = abs(values[0])
+    else:
+        imaginary = [item for item in values if item < 0.0]
+        if len(imaginary) != 1:
+            raise AggregationError(
+                "a transition-state frequency vector must contain exactly "
+                f"one imaginary mode; observed {len(imaginary)}"
+            )
+        magnitude = abs(imaginary[0])
+    if magnitude == 0.0:
+        raise AggregationError("the transition frequency must be non-zero")
+    return magnitude * TRANSITION_STATE_CROSSOVER_K_CM
 
 
 def harmonic_zero_point_energy(

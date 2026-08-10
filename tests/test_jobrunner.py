@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
@@ -154,6 +155,24 @@ class TestJobRunnerSelection:
         assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
         assert Path(runner.job_errfile).name == "orca_opt_fake.err"
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+    def test_orca_postrun_rejects_zero_exit_without_normal_termination(
+        self, pbs_server, tmp_path
+    ):
+        runner = ORCAJobRunner(server=pbs_server, scratch=False)
+        outputfile = tmp_path / "failed.out"
+        outputfile.write_text(
+            "ORCA finished by error termination in Startup\n",
+            encoding="utf-8",
+        )
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            outputfile=str(outputfile),
+            is_complete=lambda: False,
+        )
+
+        with pytest.raises(RuntimeError, match="normal termination"):
+            runner._postrun(job)
 
 
 class TestScratchCLI:

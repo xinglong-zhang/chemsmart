@@ -857,7 +857,11 @@ class ORCARefs:
             if "(" not in basis:
                 property_basis = f"{basis}D"
                 orca_basis_karlsruhe_rappoport_property.append(property_basis)
-        return orca_basis_karlsruhe_rappoport_property
+        # Route keywords are normalized to lowercase before lookup.  The
+        # historical construction appended an uppercase ``D`` to an already
+        # lowercase basis name, making every diffuse Rappoport variant
+        # unrecognizable when an actual ORCA input/output was parsed.
+        return [basis.lower() for basis in orca_basis_karlsruhe_rappoport_property]
 
     @property
     def orca_basis_karlsruhe_Dirac_Fock_ECPs(self):

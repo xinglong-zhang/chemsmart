@@ -271,6 +271,12 @@ class ORCARoute:
         return False
 
     @property
+    def vpt2(self):
+        """Check if ORCA's anharmonic VPT2 analysis is requested."""
+
+        return "vpt2" in self.route_keywords
+
+    @property
     def qmmm_jobtype(self):
         for route_keyword in self.route_keywords:
             if "qm/" in route_keyword or "qmmm" in route_keyword:

@@ -28,8 +28,10 @@ from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.pyscf.environment import canonical_sha256
 from chemsmart.utils.constants import energy_conversion
 
-# Dimension order: energy, length, temperature, angle, frequency, pressure.
-Dimension = tuple[int, int, int, int, int, int]
+# Historical quantities use six bases in the order energy, length,
+# temperature, angle, frequency, pressure.  New independent physical
+# dimensions may append a component without rewriting old receipts.
+Dimension = tuple[int, ...]
 DIMENSIONLESS: Dimension = (0, 0, 0, 0, 0, 0)
 ENERGY: Dimension = (1, 0, 0, 0, 0, 0)
 LENGTH: Dimension = (0, 1, 0, 0, 0, 0)
@@ -38,6 +40,15 @@ ANGLE: Dimension = (0, 0, 0, 1, 0, 0)
 FREQUENCY: Dimension = (0, 0, 0, 0, 1, 0)
 PRESSURE: Dimension = (0, 0, 0, 0, 0, 1)
 ENTROPY: Dimension = (1, 0, -1, 0, 0, 0)
+# Electric charge is not otherwise a base quantity in the current expression
+# vocabulary.  Keep dipole moment independent from length rather than calling a
+# Debye an Angstrom or a dimensionless number.
+DIPOLE_MOMENT: Dimension = (0, 0, 0, 0, 0, 0, 1)
+# Atomic mass is independent from the historical bases and from electric
+# dipole moment.  Appending it preserves every existing six- and seven-entry
+# dimension tuple while allowing coordinate-derived inertia to remain typed.
+MASS: Dimension = (0, 0, 0, 0, 0, 0, 0, 1)
+MOMENT_OF_INERTIA: Dimension = (0, 2, 0, 0, 0, 0, 0, 1)
 
 SUPPORTED_PYSCF_SELECTORS = frozenset(
     {
@@ -53,6 +64,8 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "multiplicity",
         "method",
         "basis",
+        "dipole_moment",
+        "dipole_moment_magnitude",
         "excitation_energies",
         "oscillator_strengths",
     }
@@ -71,6 +84,9 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "oscillator_strengths",
         "scf_energy",
         "correlation_energy",
+        "vpt2_harmonic_frequencies",
+        "vpt2_fundamental_frequencies",
+        "vpt2_zero_point_rovibrational_energy",
     }
 )
 
@@ -90,6 +106,7 @@ QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
     "quasi_harmonic_entropy_times_temperature": "derive_thermochemistry",
     "quasi_harmonic_gibbs_free_energy": "derive_thermochemistry",
     "thermal_enthalpy_correction": "derive_thermochemistry",
+    "enthalpy_increment_above_zero_point": "derive_thermochemistry",
     "thermal_gibbs_correction": "derive_thermochemistry",
     "thermal_internal_energy_correction": "derive_thermochemistry",
     "zero_point_energy": "derive_thermochemistry",
@@ -104,6 +121,8 @@ _SELECTOR_RESULT_UNITS = {
     "oscillator_strengths": {
         "results/oscillator_strengths": "dimensionless"
     },
+    "dipole_moment": {"results/dipole_moment": "Debye"},
+    "dipole_moment_magnitude": {"results/dipole_moment": "Debye"},
     "positions": {"results/positions": "Angstrom"},
     "vibrational_frequencies": {
         "results/vibrational_frequencies": "cm^-1"
@@ -282,10 +301,13 @@ class QuantityValueV1:
             "text_vector",
         }:
             raise QuantityContractError("unsupported quantity data kind")
-        if len(self.dimension) != 6 or not all(
+        if len(self.dimension) not in {6, 7, 8} or not all(
             isinstance(exponent, int) for exponent in self.dimension
         ):
-            raise QuantityContractError("dimension must contain six integers")
+            raise QuantityContractError(
+                "dimension must contain six legacy, seven dipole-extended, "
+                "or eight mass-extended integers"
+            )
         object.__setattr__(self, "source_value", _freeze(self.source_value))
         object.__setattr__(self, "value", _freeze(self.value))
         body = {
@@ -863,6 +885,26 @@ def _extract_selector(
             dimension=DIMENSIONLESS,
             evidence_ref=evidence_ref,
         )
+    if name in {"dipole_moment", "dipole_moment_magnitude"}:
+        if output.dipole_moment is None:
+            raise QuantityExtractionError(
+                "PySCF artifact has no dipole moment"
+            )
+        vector = _require_finite_numeric(output.dipole_moment, name)
+        value = (
+            float(np.linalg.norm(np.asarray(vector, dtype=float)))
+            if name == "dipole_moment_magnitude"
+            else vector
+        )
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="Debye",
+            value=value,
+            unit="debye",
+            dimension=DIPOLE_MOMENT,
+            evidence_ref=evidence_ref,
+        )
     if name == "positions":
         if output.positions is None:
             raise QuantityExtractionError("PySCF artifact has no positions")
@@ -1166,6 +1208,11 @@ def derive_result_thermochemistry(
         "gibbs_free_energy": engine.gibbs_free_energy,
         "thermal_internal_energy_correction": engine.total_internal_energy,
         "thermal_enthalpy_correction": engine.enthalpy - engine.electronic_energy,
+        "enthalpy_increment_above_zero_point": (
+            engine.enthalpy
+            - engine.electronic_energy
+            - engine.zero_point_energy
+        ),
         "thermal_gibbs_correction": (
             engine.gibbs_free_energy - engine.electronic_energy
         ),
@@ -1383,10 +1430,13 @@ def thermochemistry_receipt_from_record(
 __all__ = [
     "ANGLE",
     "DIMENSIONLESS",
+    "DIPOLE_MOMENT",
     "ENERGY",
     "ENTROPY",
     "FREQUENCY",
     "LENGTH",
+    "MASS",
+    "MOMENT_OF_INERTIA",
     "PRESSURE",
     "SUPPORTED_PYSCF_SELECTORS",
     "TEMPERATURE",

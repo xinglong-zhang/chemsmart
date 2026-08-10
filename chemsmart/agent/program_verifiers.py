@@ -614,6 +614,13 @@ def _settings_match(parsed, expected, *, native_input=None):
                 == str(observed_functional).strip().casefold()
             ):
                 continue
+        if is_orca and field == "scf_tol":
+            def _orca_scf_preset(item):
+                preset = str(item or "").strip().casefold()
+                return preset[:-3] if preset.endswith("scf") else preset
+
+            if _orca_scf_preset(value) == _orca_scf_preset(observed):
+                continue
         if is_gaussian and field == "dispersion":
             from chemsmart.io.gaussian.route import (
                 normalize_gaussian_dispersion,

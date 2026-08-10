@@ -1385,7 +1385,14 @@ class ORCAFileMixin(FileMixin):
         Returns:
             str: Job type specification.
         """
-        return self.route_object.jobtype
+        route_jobtype = self.route_object.jobtype
+        # A fixed-geometry ORCA TD calculation has no simple-input ``TD``
+        # keyword: the calculation is activated by a %tddft/%cis block, so the
+        # route alone looks like an SP.  Preserve explicit structural jobs
+        # such as Opt/OptTS, but classify a block-driven single point as TD.
+        if route_jobtype == "sp" and self._orca_tddft_values:
+            return "td"
+        return route_jobtype
 
     @property
     def freq(self):
@@ -1412,6 +1419,118 @@ class ORCAFileMixin(FileMixin):
             bool: True if numerical frequencies requested.
         """
         return self.route_object.numfreq
+
+    @property
+    def vpt2(self):
+        """Return whether the ORCA input requests VPT2."""
+
+        if self.route_object.vpt2:
+            return True
+        in_block = False
+        for raw_line in self.contents:
+            line = raw_line.split("#", 1)[0].strip().casefold()
+            if line.startswith("%vpt2"):
+                in_block = True
+                continue
+            if in_block and line == "end":
+                break
+            if in_block and line.split()[:2] == ["vpt2", "on"]:
+                return True
+        return False
+
+    def _vpt2_float(self, keyword):
+        in_block = False
+        for raw_line in self.contents:
+            line = raw_line.split("#", 1)[0].strip()
+            folded = line.casefold()
+            if folded.startswith("%vpt2"):
+                in_block = True
+                continue
+            if in_block and folded == "end":
+                break
+            fields = line.split()
+            if in_block and len(fields) >= 2 and fields[0].casefold() == keyword:
+                return float(fields[1])
+        return None
+
+    @property
+    def vpt2_anharmonic_displacement(self):
+        return self._vpt2_float("anharmdisp")
+
+    @property
+    def vpt2_hessian_cutoff(self):
+        return self._vpt2_float("hessiancutoff")
+
+    @cached_property
+    def _orca_tddft_values(self):
+        """Read the last echoed or native %tddft/%cis input block.
+
+        ORCA output prefixes the original input with ``| n>``.  Stripping only
+        that presentation prefix keeps input and output parsing on one
+        semantic path and avoids searching unrelated TD-DFT diagnostic text.
+        """
+
+        blocks = []
+        current = None
+        echo_pattern = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo_pattern.match(stripped)
+            if match is not None:
+                stripped = match.group(1).strip()
+            stripped = stripped.split("#", 1)[0].strip()
+            if not stripped:
+                continue
+            fields = stripped.split()
+            first = fields[0].casefold()
+            if first in {"%tddft", "%cis"}:
+                current = []
+                blocks.append(current)
+                fields = fields[1:]
+            if current is None:
+                continue
+            for field in fields:
+                if field.casefold() == "end":
+                    current = None
+                    break
+                current.append(field)
+
+        if not blocks:
+            return {}
+        fields = blocks[-1]
+        values = {}
+        for index, field in enumerate(fields[:-1]):
+            key = field.casefold()
+            if key in {"nroots", "tda", "triplets"}:
+                values[key] = fields[index + 1]
+        return values
+
+    @property
+    def response_method(self):
+        values = self._orca_tddft_values
+        if not values:
+            return None
+        # TDA is ORCA's default.  It must be explicitly disabled for full
+        # linear-response TD-DFT.
+        tda = str(values.get("tda", "true")).strip().casefold()
+        return "tddft" if tda in {"false", "0", "no", "off"} else "tda"
+
+    @property
+    def nstates(self):
+        value = self._orca_tddft_values.get("nroots")
+        return None if value is None else int(value)
+
+    @property
+    def state_manifold(self):
+        if not self._orca_tddft_values:
+            return None
+        triplets = str(
+            self._orca_tddft_values.get("triplets", "false")
+        ).strip().casefold()
+        if triplets in {"true", "1", "yes", "on"}:
+            # ORCA includes spin-adapted triplets in addition to singlets.
+            return "singlet_triplet"
+        return "singlet"
 
     def read_settings(self):
         """
@@ -1446,6 +1565,14 @@ class ORCAFileMixin(FileMixin):
             gbw=dv.gbw,
             freq=self.freq,
             numfreq=self.numfreq,
+            vpt2=self.vpt2,
+            vpt2_anharmonic_displacement=(
+                self.vpt2_anharmonic_displacement
+            ),
+            vpt2_hessian_cutoff=self.vpt2_hessian_cutoff,
+            response_method=self.response_method,
+            nstates=self.nstates,
+            state_manifold=self.state_manifold,
             dipole=self.dipole,
             quadrupole=self.quadrupole,
             mdci_cutoff=self.mdci_cutoff,

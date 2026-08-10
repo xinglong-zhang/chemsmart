@@ -198,6 +198,20 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def td_settings(self):
+        """Create settings for a fixed-geometry electronic spectrum.
+
+        Project YAML normally supplies the response method, root count, and
+        manifold explicitly.  This method keeps programmatic projects on the
+        same job-type path without inventing those scientifically consequential
+        choices.
+        """
+
+        settings = self.main_settings().copy()
+        settings.jobtype = "td"
+        settings.freq = False
+        return settings
+
     def neb_settings(self):
         """
         Create default ORCA NEB job settings.

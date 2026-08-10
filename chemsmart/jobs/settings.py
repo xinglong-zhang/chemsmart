@@ -293,12 +293,19 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     gas_config = project_config.get("gas", None)
     qmmm_config = project_config.get("qmmm", None)
 
-    if gas_config is None and solv_config is None:
-        # Neither phase section is present, so there is nothing to merge. Say
-        # which sections were expected instead of merging None and failing far
-        # away with "'NoneType' object has no attribute 'items'": a project
-        # YAML is the file a chemist edits, and the error has to name the
-        # mistake in that file.
+    direct_stage_present = any(
+        project_config.get(job) is not None
+        for job in all_jobs + qmmm_job
+    )
+    if (
+        gas_config is None
+        and solv_config is None
+        and not direct_stage_present
+    ):
+        # Neither a phase section nor a direct calculation stage is present,
+        # so there is nothing to merge.  A standalone ``td:`` project is a
+        # complete fixed-geometry calculation and must not need a dummy
+        # ``gas:`` section merely to satisfy the historical phase layout.
         found = (
             ", ".join(sorted(str(key) for key in project_config))
             if isinstance(project_config, dict) and project_config
@@ -306,9 +313,8 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
         raise ValueError(
             f"{program} project settings in {filename} define neither a "
-            f"'gas' nor a 'solv' section; found: {found}. Settings must be "
-            "grouped under 'gas' (used by most job types) and/or 'solv' "
-            "(used by sp), not under a job-type name."
+            "'gas'/'solv' section nor a supported direct job section; "
+            f"found: {found}."
         )
 
     if gas_config is None:
@@ -402,6 +408,15 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
+            if program == "orca":
+                # ChemSmart's ORCA ``td`` stage is a vertical spectrum at the
+                # supplied geometry.  The shared molecular-settings default
+                # predates that stage and requests a frequency calculation;
+                # inheriting it makes project validation expect Freq even
+                # though the TD writer correctly materializes a fixed-geometry
+                # response calculation.  An explicit incompatible request is
+                # rejected by ORCAJobSettings rather than silently ignored.
+                all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config

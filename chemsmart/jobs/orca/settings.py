@@ -15,6 +15,7 @@ import re
 
 from chemsmart.io.orca import (
     ORCA_ALL_SOLVENT_MODELS,
+    ORCA_SCF_CONVERGENCE,
     normalize_orca_neb_joboption,
 )
 from chemsmart.jobs.settings import MolecularJobSettings
@@ -87,6 +88,51 @@ def _normalize_orca_grid(value):
             f"Unsupported defgrid {value!r}; expected one of {sorted(allowed)}."
         )
     return literal
+
+
+def _normalize_orca_scf_convergence(value):
+    """Normalize human and simple-input spellings of ORCA SCF convergence.
+
+    Methods sections commonly say "extremely tight SCF" while ORCA names the
+    preset ``ExtremeSCF`` (and the corresponding ``%scf`` value ``extreme``).
+    Keep that program spelling in the adapter instead of asking project authors
+    or agents to guess it.
+    """
+
+    if value is None:
+        return None
+    normalized = str(value).strip().casefold().replace("-", "").replace("_", "")
+    normalized = normalized.replace(" ", "")
+    if normalized.endswith("scf"):
+        normalized = normalized[:-3]
+    aliases = {
+        "extremelytight": "extreme",
+        "extremetight": "extreme",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in ORCA_SCF_CONVERGENCE:
+        raise ValueError(
+            f"Unsupported scf_convergence {value!r}; expected one of "
+            f"{sorted(ORCA_SCF_CONVERGENCE)} or the phrase "
+            "'extremely tight'."
+        )
+    return normalized
+
+
+def _normalize_additional_route_parameters(value):
+    """Normalize the legacy ORCA route escape hatch without Python repr text."""
+
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        if not all(isinstance(item, str) and item.strip() for item in value):
+            raise ValueError(
+                "additional_route_parameters must contain non-empty strings"
+            )
+        return " ".join(item.strip() for item in value)
+    raise ValueError(
+        "additional_route_parameters must be a string or a sequence of strings"
+    )
 
 
 #: Scalar-relativistic Hamiltonians ORCA accepts as simple route keywords.
@@ -166,6 +212,9 @@ ORCA_FUNCTIONAL_ALIASES = {
     "m06-2x": "M062X",
     "m06_2x": "M062X",
 }
+
+ORCA_TD_RESPONSE_METHODS = ("tda", "tddft")
+ORCA_TD_STATE_MANIFOLDS = ("singlet", "singlet_triplet")
 
 
 def _normalize_orca_functional(value):
@@ -273,6 +322,12 @@ class ORCAJobSettings(MolecularJobSettings):
         gbw=True,
         freq=False,
         numfreq=False,
+        vpt2=False,
+        vpt2_anharmonic_displacement=None,
+        vpt2_hessian_cutoff=None,
+        response_method=None,
+        nstates=None,
+        state_manifold=None,
         dipole=False,
         quadrupole=False,
         mdci_cutoff=None,
@@ -321,6 +376,11 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw: Whether to write GBW file
             freq: Whether to calculate frequencies
             numfreq: Whether to use numerical frequencies
+            response_method: Excited-state response approximation for a
+                fixed-geometry calculation (``tda`` or full ``tddft``)
+            nstates: Number of requested electronic excited-state roots
+            state_manifold: Requested spin manifold.  The initial ORCA
+                implementation supports closed-shell singlet roots.
             dipole: Whether to calculate dipole moment
             quadrupole: Whether to calculate quadrupole moment
             mdci_cutoff: MDCI cutoff
@@ -354,7 +414,12 @@ class ORCAJobSettings(MolecularJobSettings):
         # "calculate frequencies numerically".  Normalize that intent here so
         # the effective settings and the native ORCA route both contain one
         # unambiguous frequency keyword.
-        if numfreq is True:
+        if vpt2 is True:
+            # ORCA VPT2 constructs the harmonic and displaced Hessians itself;
+            # a separate Freq/NumFreq keyword would request a second analysis.
+            freq = False
+            numfreq = False
+        elif numfreq is True:
             freq = False
 
         super().__init__(
@@ -372,7 +437,9 @@ class ORCAJobSettings(MolecularJobSettings):
             title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
-            additional_route_parameters=additional_route_parameters,
+            additional_route_parameters=_normalize_additional_route_parameters(
+                additional_route_parameters
+            ),
             route_to_be_written=route_to_be_written,
             modred=modred,
             gen_genecp_file=gen_genecp_file,
@@ -391,7 +458,9 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_tol = scf_tol
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
-        self.scf_convergence = scf_convergence
+        self.scf_convergence = _normalize_orca_scf_convergence(
+            scf_convergence
+        )
         self.gbw = gbw
         self.mdci_cutoff = _normalize_choice(
             mdci_cutoff, ORCA_MDCI_CUTOFF_KEYWORDS, "mdci_cutoff"
@@ -412,6 +481,82 @@ class ORCAJobSettings(MolecularJobSettings):
         )
         self.dipole = dipole
         self.quadrupole = quadrupole
+        self.vpt2 = bool(vpt2)
+        self.vpt2_anharmonic_displacement = (
+            None
+            if vpt2_anharmonic_displacement is None
+            else float(vpt2_anharmonic_displacement)
+        )
+        self.vpt2_hessian_cutoff = (
+            None
+            if vpt2_hessian_cutoff is None
+            else float(vpt2_hessian_cutoff)
+        )
+        if not self.vpt2 and (
+            self.vpt2_anharmonic_displacement is not None
+            or self.vpt2_hessian_cutoff is not None
+        ):
+            raise ValueError(
+                "VPT2 numerical settings require vpt2: true"
+            )
+        if (
+            self.vpt2_anharmonic_displacement is not None
+            and self.vpt2_anharmonic_displacement <= 0
+        ):
+            raise ValueError("VPT2 anharmonic displacement must be positive")
+        if (
+            self.vpt2_hessian_cutoff is not None
+            and self.vpt2_hessian_cutoff <= 0
+        ):
+            raise ValueError("VPT2 Hessian cutoff must be positive")
+        self.response_method = (
+            None
+            if response_method is None
+            else _normalize_choice(
+                response_method,
+                ORCA_TD_RESPONSE_METHODS,
+                "response_method",
+            )
+        )
+        self.nstates = None if nstates is None else int(nstates)
+        self.state_manifold = (
+            None
+            if state_manifold is None
+            else _normalize_choice(
+                state_manifold,
+                ORCA_TD_STATE_MANIFOLDS,
+                "state_manifold",
+            )
+        )
+        td_values = (self.response_method, self.nstates, self.state_manifold)
+        if self.jobtype == "td" and any(
+            value is not None for value in td_values
+        ):
+            if any(value is None for value in td_values):
+                raise ValueError(
+                    "ORCA td requires response_method, nstates, and "
+                    "state_manifold"
+                )
+            if self.nstates <= 0:
+                raise ValueError("ORCA td nstates must be a positive integer")
+            if self.state_manifold in ORCA_TD_STATE_MANIFOLDS and (
+                self.multiplicity is not None
+                and int(self.multiplicity) != 1
+            ):
+                raise ValueError(
+                    "ORCA singlet TD roots require a singlet reference "
+                    "multiplicity"
+                )
+            if self.freq or self.numfreq:
+                raise ValueError(
+                    "ChemSmart ORCA td is a fixed-geometry vertical response "
+                    "calculation and does not accept freq or numfreq"
+                )
+        elif any(value is not None for value in td_values):
+            raise ValueError(
+                "ORCA response_method, nstates, and state_manifold are only "
+                "supported for fixed-geometry jobtype 'td'"
+            )
         self.invert_constraints = invert_constraints
         self.additional_solvent_options = additional_solvent_options
         self.solventfilename = solventfilename
@@ -711,6 +856,9 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw=True,
             freq=True,
             numfreq=False,
+            response_method=None,
+            nstates=None,
+            state_manifold=None,
             dipole=False,
             quadrupole=False,
             mdci_cutoff=None,
@@ -797,6 +945,9 @@ class ORCAJobSettings(MolecularJobSettings):
             # e.g., in SMD model where analytic Hessian is not available
         elif self.freq:
             route_string += " Freq"
+
+        if self.vpt2:
+            route_string += " VPT2"
 
         # Built-in semiempirical methods do not take an orbital basis.  The
         # same project field is used by NEB and ordinary ORCA jobs such as

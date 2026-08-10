@@ -596,14 +596,23 @@ def orca(
         )
 
     # Update keywords based on command-line arguments
-    keywords = (
-        "charge",
-        "multiplicity",
-    )  # default keywords to merge filename charge and multiplicity
+    # A plain XYZ has no electronic-state metadata.  Do not let its default
+    # ``None`` values erase an explicit project charge/multiplicity during the
+    # subcommand merge.  Parsed input/output state and explicit CLI overrides
+    # still take precedence when they are actually present.
+    keywords = ()
+    if job_settings.charge is not None:
+        keywords += ("charge",)
+    if job_settings.multiplicity is not None:
+        keywords += ("multiplicity",)
     if charge is not None:
         job_settings.charge = charge
+        if "charge" not in keywords:
+            keywords += ("charge",)
     if multiplicity is not None:
         job_settings.multiplicity = multiplicity
+        if "multiplicity" not in keywords:
+            keywords += ("multiplicity",)
     if title is not None:
         job_settings.title = title
         keywords += ("title",)

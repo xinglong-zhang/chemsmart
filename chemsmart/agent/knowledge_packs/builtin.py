@@ -36,8 +36,10 @@ BUILTIN_PROGRAM_PACKS = (
             "auxiliary basis evidence",
             "NEB endpoint requirements",
             (
-                "frequency analysis is freq: true on an optimization project, "
-                "not a hess job"
+                "frequency properties are requested with freq: true in project "
+                "YAML rather than a hess CLI job; use opt or ts only when a "
+                "geometry search is intended, and use sp for a fixed-geometry "
+                "frequency or VPT2 calculation"
             ),
             "structured convergence checks",
         ),

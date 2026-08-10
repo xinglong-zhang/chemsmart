@@ -12,6 +12,7 @@ about what the executor may *not* do.
 """
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 
@@ -72,6 +73,28 @@ def test_a_node_is_only_settled_into_the_state_its_receipt_reports():
 def test_an_approved_input_is_located_by_content_not_by_path():
     source = inspect.getsource(executor_module._locate_by_digest)
     assert "file_sha256" in source
+
+
+def test_each_sibling_root_uses_its_own_approved_initial_artifact():
+    executor = object.__new__(executor_module.ApprovedWorkflowExecutor)
+    executor.initial_artifacts = {
+        "neutral": SimpleNamespace(artifact_id="neutral", sha256="a" * 64),
+        "anion": SimpleNamespace(artifact_id="anion", sha256="b" * 64),
+    }
+
+    neutral = SimpleNamespace(
+        input_mode="initial",
+        initial_artifact_id="neutral",
+        initial_artifact_sha256="a" * 64,
+    )
+    anion = SimpleNamespace(
+        input_mode="initial",
+        initial_artifact_id="anion",
+        initial_artifact_sha256="b" * 64,
+    )
+
+    assert executor._input_artifact_id(neutral) == "neutral"
+    assert executor._input_artifact_id(anion) == "anion"
 
 
 class _Node:

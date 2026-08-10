@@ -253,12 +253,18 @@ class ORCAInput(ORCAFileMixin):
         Extract dipole moment calculation specification from elprop block.
 
         Returns:
-            str: Dipole calculation setting or None if not specified
+            bool: Dipole calculation setting or None if not specified
         """
-        # in elprop block
+        # ORCA writes the canonical block as ``Dipole True``.  Input contents
+        # preserve case, so a lower-case-only search made ChemSmart reject its
+        # own generated input even though ORCA accepts and executes it.
         for line in self.contents:
-            if "dipole" in line:
-                return line.split()[-1]
+            if "dipole" in line.casefold():
+                value = line.split()[-1].strip().casefold()
+                if value in {"true", "1", "yes", "on"}:
+                    return True
+                if value in {"false", "0", "no", "off"}:
+                    return False
         return None
 
     @property
@@ -267,12 +273,15 @@ class ORCAInput(ORCAFileMixin):
         Extract quadrupole moment calculation specification from elprop block.
 
         Returns:
-            str: Quadrupole calculation setting or None if not specified
+            bool: Quadrupole calculation setting or None if not specified
         """
-        # in elprop block
         for line in self.contents:
-            if "quadrupole" in line:
-                return line.split()[-1]
+            if "quadrupole" in line.casefold():
+                value = line.split()[-1].strip().casefold()
+                if value in {"true", "1", "yes", "on"}:
+                    return True
+                if value in {"false", "0", "no", "off"}:
+                    return False
         return None
 
 

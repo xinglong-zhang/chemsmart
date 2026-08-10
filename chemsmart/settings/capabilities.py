@@ -206,11 +206,17 @@ _ORCA_PROJECT_PARAMETERS = tuple(
             "joboption",
             "nimages",
             "preopt_ends",
+            "nstates",
             "numfreq",
             "quadrupole",
             "reference",
             "relativistic",
+            "response_method",
             "ri_approximation",
+            "state_manifold",
+            "vpt2",
+            "vpt2_anharmonic_displacement",
+            "vpt2_hessian_cutoff",
         }
     )
 )
@@ -321,6 +327,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 "qrc",
                 "scan",
                 "sp",
+                "td",
                 "ts",
             ),
             project_owned_parameters=_ORCA_PROJECT_PARAMETERS,
@@ -330,9 +337,10 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="neb"),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
+                EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
-            project_section_names=("gas", "neb", "solv"),
+            project_section_names=("gas", "neb", "solv", "td"),
             project_parameter_domains=(
                 (
                     "ab_initio",
@@ -366,7 +374,12 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 ("mdci_cutoff", ("loose", "normal", "tight")),
                 ("reference", ("rhf", "rohf", "uhf")),
                 ("relativistic", ("dkh", "dkh2", "zora")),
+                ("response_method", ("tda", "tddft")),
                 ("ri_approximation", ("none", "ri", "rijcosx", "rijk")),
+                (
+                    "state_manifold",
+                    ("singlet", "singlet_triplet"),
+                ),
             ),
         ),
         "pyscf": ProgramCapability(

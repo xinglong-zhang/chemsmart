@@ -256,8 +256,10 @@ def _draft_node_digest_body(node: CommandNodeIntentV1) -> dict:
 
 
 def _validate_draft_dag(nodes: tuple[CommandNodeIntentV1, ...]) -> None:
-    if not nodes:
-        raise ContractError("command workflow draft must contain a node")
+    # A scientific workflow may be analysis-only when every root is an existing
+    # registered result.  The model-facing calculation-only tool still requires
+    # at least one node; permitting an empty internal draft avoids inventing a
+    # fake program call solely to carry a real analysis DAG.
     seen: dict[str, set[str]] = {}
     for node in nodes:
         if node.node_id in seen:

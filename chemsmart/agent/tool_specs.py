@@ -131,7 +131,18 @@ def build_command_compiled_tool_surface(
                 "use job sections. Gaussian and ORCA retain gas/solv phase "
                 "sections plus optional job overrides: SP reads solv when "
                 "present, otherwise gas, and an explicit sp override wins; "
-                "the section name solv does not enable solvation by itself."
+                "the section name solv does not enable solvation by itself. "
+                "For ORCA, ab_initio is the method field for HF-family and "
+                "correlated wave-function methods; reference only selects the "
+                "SCF determinant and does not replace ab_initio or functional. "
+                "CPU count and memory belong to the ChemSmart run/server "
+                "layer, not project additional_route_parameters; use that "
+                "escape hatch only for source-required scientific keywords "
+                "that refine an otherwise supported typed method. It is not "
+                "a way to introduce, duplicate, or override an electronic-"
+                "structure method or basis that is absent from the program "
+                "capability. Keep such a source-exact stage explicitly "
+                "unsupported and label any typed, supported surrogate."
             ),
             {
                 "program": program,
@@ -224,8 +235,11 @@ def build_command_compiled_tool_surface(
         _tool(
             "plan_scientific_workflow",
             (
-                "Plan one connected paper-level tool chain containing both "
-                "program calculations and deterministic analysis stages. "
+                "Plan one connected scientific tool chain containing any "
+                "required program calculations and deterministic analysis "
+                "stages. For an analysis-only task over registered results, "
+                "calculation_nodes may be empty; do not invent a documentary "
+                "or blocked calculation placeholder. "
                 "Future analysis inputs name producer node/output pairs; they "
                 "do not require artifact or receipt hashes before execution. "
                 "A result extraction may instead consume one existing "
@@ -238,9 +252,14 @@ def build_command_compiled_tool_surface(
                 "task_spec_id": _string(),
                 "calculation_nodes": {
                     "type": "array",
-                    "minItems": 1,
+                    "minItems": 0,
                     "maxItems": 64,
                     "items": _scientific_workflow_node_schema(),
+                    "description": (
+                        "Program calculations required by the task. Use an empty "
+                        "array when every scientific root is an existing "
+                        "host-registered result."
+                    ),
                 },
                 "analysis_nodes": {
                     "type": "array",
@@ -473,7 +492,12 @@ def build_command_compiled_tool_surface(
                 "using ChemSmart's common engine. A supplied concentration "
                 "defines the translational standard state instead of pressure. "
                 "Grimme or Truhlar requires entropy_cutoff_cm1; an enthalpy "
-                "cutoff independently enables Head-Gordon qRRHO enthalpy."
+                "cutoff independently enables Head-Gordon qRRHO enthalpy. The "
+                "receipt distinguishes thermal_enthalpy_correction = H(T) - "
+                "E_electronic, which includes ZPE, from "
+                "enthalpy_increment_above_zero_point = H(T) - E_electronic - "
+                "ZPE. Use the latter when adding a finite-temperature increment "
+                "to an already ZPE-corrected 0 K quantity."
             ),
             {
                 "program": structured_result_program,
@@ -543,9 +567,10 @@ def build_command_compiled_tool_surface(
             "evaluate_quantity_expression",
             (
                 "Evaluate a bounded dimension-aware expression DAG over prior "
-                "extraction or thermochemistry receipts, or over typed literal "
-                "nodes when inputs is empty; Python and formula strings are not "
-                "accepted. Expression inputs use local input_id aliases. "
+                "extraction, thermochemistry, or quantity-expression receipts, "
+                "or over typed literal nodes when inputs is empty; Python and "
+                "formula strings are not accepted. Expression inputs use local "
+                "input_id aliases, so derived outputs can feed later expressions. "
                 "For converted outputs, source_value/source_unit are the requested "
                 "display pair; value/unit remain the canonical arithmetic pair."
             ),
@@ -794,7 +819,10 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
     "job_families": "The job types this request covers.",
     "jobtype": (
         "The target program's ChemSmart CLI job form, not a program-neutral "
-        "label."
+        "label. Use sp when the supplied geometry must remain fixed, opt only "
+        "when a minimum geometry search is intended, and ts only when a "
+        "transition-state search is intended. Project frequency or VPT2 "
+        "settings request properties and do not change this geometry operation."
     ),
     "method_rationale": (
         "Why this method and these settings answer the question, in the terms "
@@ -1083,11 +1111,9 @@ def _workflow_node_schema() -> dict:
             "jobtype": {
                 "type": "string",
                 "description": (
-                    "Use the target program's ChemSmart CLI job form, not a "
-                    "program-neutral conceptual label. In particular, ORCA "
-                    "harmonic frequencies are requested by freq: true in an "
-                    "opt project and remain one opt node; ORCA has no hess CLI "
-                    "jobtype. PySCF uses a separate hess node."
+                    "For ORCA, freq and vpt2 remain project properties and "
+                    "ORCA exposes no hess CLI jobtype. PySCF uses a separate "
+                    "hess node."
                 ),
             },
             "node_kind": {

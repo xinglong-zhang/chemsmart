@@ -22,10 +22,13 @@ from ase import units as ase_units
 from chemsmart.analysis.result_quantities import (
     ANGLE,
     DIMENSIONLESS,
+    DIPOLE_MOMENT,
     ENERGY,
     ENTROPY,
     FREQUENCY,
     LENGTH,
+    MASS,
+    MOMENT_OF_INERTIA,
     PRESSURE,
     TEMPERATURE,
     Dimension,
@@ -75,6 +78,11 @@ _OPERATIONS = frozenset(
         "boltzmann_average",
         "imaginary_mode_count",
         "harmonic_zero_point_energy",
+        "transition_state_crossover_temperature",
+        "center_of_mass",
+        "principal_moments_of_inertia",
+        "linear_rotor_constant",
+        "rigid_rotor_constants",
     }
 )
 
@@ -165,6 +173,33 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "Use this instead of sum -> scale 0.5 -> convert: a wavenumber and a "
         "molar energy are different dimensions, so convert refuses that step"
     ),
+    "transition_state_crossover_temperature": (
+        "semiclassical crossover temperature from one transition-state "
+        "frequency vector, or from one already-selected imaginary-frequency "
+        "magnitude. Owns selection of the unique imaginary mode and the "
+        "h*c/(2*pi*k_B) spectroscopic conversion; do not supply that physical "
+        "constant as a literal"
+    ),
+    "center_of_mass": (
+        "mass-weighted Cartesian center from a coordinate matrix followed by "
+        "an equal-length atomic-mass vector"
+    ),
+    "principal_moments_of_inertia": (
+        "three ascending principal moments for a coordinate matrix and an "
+        "equal-length atomic-mass vector; owns COM translation, construction "
+        "of the full inertia tensor and symmetric diagonalization"
+    ),
+    "linear_rotor_constant": (
+        "the single finite rotational constant B in cm^-1 from the three "
+        "principal moments of a linear molecule. Requires one near-zero axial "
+        "moment and two equal positive perpendicular moments, and owns "
+        "h/(8*pi^2*c*I) and the spectroscopic unit conversion"
+    ),
+    "rigid_rotor_constants": (
+        "A, B, C in descending frequency order from three positive principal "
+        "moments of a nonlinear molecule; owns h/(8*pi^2*I) and the "
+        "spectroscopic unit conversion"
+    ),
 }
 
 if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
@@ -187,7 +222,12 @@ CONVENTION_OPERATIONS = frozenset(
         "correlation_inverse_power_cbs_limit",
         "harmonic_zero_point_energy",
         "imaginary_mode_count",
+        "transition_state_crossover_temperature",
         "distance",
+        "center_of_mass",
+        "principal_moments_of_inertia",
+        "linear_rotor_constant",
+        "rigid_rotor_constants",
         "exponential_cbs_limit",
         "linear_fit_intercept",
         "linear_fit_slope",
@@ -214,15 +254,39 @@ class QuantityExpressionError(ValueError):
     """Raised when an expression is unsafe, ill-typed, or non-finite."""
 
 
+def _canonical_dimension(dimension: Dimension) -> Dimension:
+    """Drop only cancelled appended bases, preserving the six-base legacy."""
+
+    values = list(dimension)
+    while len(values) > len(DIMENSIONLESS) and values[-1] == 0:
+        values.pop()
+    return tuple(values)
+
+
 def _add_dimensions(left: Dimension, right: Dimension) -> Dimension:
-    return tuple(a + b for a, b in zip(left, right))  # type: ignore[return-value]
+    size = max(len(left), len(right))
+    return _canonical_dimension(
+        tuple(
+            (left[index] if index < len(left) else 0)
+            + (right[index] if index < len(right) else 0)
+            for index in range(size)
+        )
+    )
 
 
 def _subtract_dimensions(left: Dimension, right: Dimension) -> Dimension:
-    return tuple(a - b for a, b in zip(left, right))  # type: ignore[return-value]
+    size = max(len(left), len(right))
+    return _canonical_dimension(
+        tuple(
+            (left[index] if index < len(left) else 0)
+            - (right[index] if index < len(right) else 0)
+            for index in range(size)
+        )
+    )
 
 
 def canonical_unit_for_dimension(dimension: Dimension) -> str:
+    dimension = _canonical_dimension(dimension)
     known = {
         DIMENSIONLESS: "1",
         ENERGY: "hartree",
@@ -232,10 +296,21 @@ def canonical_unit_for_dimension(dimension: Dimension) -> str:
         FREQUENCY: "cm^-1",
         PRESSURE: "atm",
         ENTROPY: "hartree K^-1",
+        DIPOLE_MOMENT: "debye",
+        MASS: "u",
     }
     if dimension in known:
         return known[dimension]
-    labels = ("hartree", "angstrom", "K", "radian", "cm^-1", "atm")
+    labels = (
+        "hartree",
+        "angstrom",
+        "K",
+        "radian",
+        "cm^-1",
+        "atm",
+        "debye",
+        "u",
+    )
     terms = []
     for label, exponent in zip(labels, dimension):
         if exponent == 0:
@@ -245,16 +320,66 @@ def canonical_unit_for_dimension(dimension: Dimension) -> str:
 
 
 def _normalized_unit_key(unit: str) -> str:
-    return (
+    normalized = (
         str(unit)
         .strip()
         .lower()
         .replace("·", " ")
+        .replace("*", " ")
         .replace("å", "angstrom")
         .replace("−", "-")
         .replace("⁻", "-")
-        .replace("  ", " ")
     )
+    return " ".join(normalized.split())
+
+
+def _compound_unit_spec(
+    key: str,
+    aliases: Mapping[str, tuple[Dimension, str, float]],
+) -> tuple[Dimension, str, float]:
+    """Parse products of supported one-token units and integer powers.
+
+    Arithmetic already emits canonical products such as ``angstrom^2 u``.
+    Accepting the same vocabulary on input makes those values convertible and
+    claimable without introducing a formula language.  Exact historical
+    aliases (including slash and molar forms) are resolved before this helper.
+    """
+
+    token_aliases = {
+        name: spec
+        for name, spec in aliases.items()
+        if name
+        and " " not in name
+        and "/" not in name
+        and spec[0] != DIMENSIONLESS
+    }
+    bases = sorted(token_aliases, key=len, reverse=True)
+    dimension = DIMENSIONLESS
+    factor = 1.0
+    for token in key.split():
+        exponent = 1
+        base = token if token in token_aliases else ""
+        if not base:
+            for candidate in bases:
+                prefix = f"{candidate}^"
+                if not token.startswith(prefix):
+                    continue
+                suffix = token[len(prefix) :]
+                try:
+                    exponent = int(suffix)
+                except ValueError:
+                    continue
+                base = candidate
+                break
+        if not base:
+            raise QuantityExpressionError(f"unsupported unit: {key!r}")
+        base_dimension, _, base_factor = token_aliases[base]
+        scaled_dimension = tuple(value * exponent for value in base_dimension)
+        dimension = _add_dimensions(dimension, scaled_dimension)
+        factor *= base_factor**exponent
+    if not key:
+        raise QuantityExpressionError(f"unsupported unit: {key!r}")
+    return dimension, canonical_unit_for_dimension(dimension), factor
 
 
 def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
@@ -344,6 +469,12 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
         "bohr": (LENGTH, "angstrom", 0.529177210903),
         "a0": (LENGTH, "angstrom", 0.529177210903),
         "nm": (LENGTH, "angstrom", 10.0),
+        "debye": (DIPOLE_MOMENT, "debye", 1.0),
+        "d": (DIPOLE_MOMENT, "debye", 1.0),
+        "u": (MASS, "u", 1.0),
+        "da": (MASS, "u", 1.0),
+        "dalton": (MASS, "u", 1.0),
+        "amu": (MASS, "u", 1.0),
         "k": (TEMPERATURE, "K", 1.0),
         "kelvin": (TEMPERATURE, "K", 1.0),
         "radian": (ANGLE, "radian", 1.0),
@@ -354,6 +485,8 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
         "cm^-1": (FREQUENCY, "cm^-1", 1.0),
         "cm-1": (FREQUENCY, "cm^-1", 1.0),
         "hz": (FREQUENCY, "cm^-1", 1.0 / 29_979_245_800.0),
+        "mhz": (FREQUENCY, "cm^-1", 1.0e6 / 29_979_245_800.0),
+        "ghz": (FREQUENCY, "cm^-1", 1.0e9 / 29_979_245_800.0),
         "thz": (FREQUENCY, "cm^-1", 1.0e12 / 29_979_245_800.0),
         "atm": (PRESSURE, "atm", 1.0),
         "bar": (PRESSURE, "atm", 1.0 / 1.01325),
@@ -361,8 +494,13 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
     }
     try:
         return aliases[key]
-    except KeyError as exc:
-        raise QuantityExpressionError(f"unsupported unit: {unit!r}") from exc
+    except KeyError:
+        try:
+            return _compound_unit_spec(key, aliases)
+        except QuantityExpressionError as exc:
+            raise QuantityExpressionError(
+                f"unsupported unit: {unit!r}"
+            ) from exc
 
 
 def normalize_numeric_value(
@@ -1210,6 +1348,103 @@ def _node_value(
             evidence_ref=evidence_ref,
         )
 
+    if operation in {"center_of_mass", "principal_moments_of_inertia"}:
+        if (
+            len(inputs) != 2
+            or inputs[0].dimension != LENGTH
+            or inputs[1].dimension != MASS
+        ):
+            raise QuantityExpressionError(
+                f"{operation} requires a coordinate matrix followed by an "
+                "atomic-mass vector"
+            )
+        positions = _numeric(inputs[0])
+        masses = _numeric(inputs[1]).reshape(-1)
+        if (
+            positions.ndim != 2
+            or positions.shape[1] != 3
+            or positions.shape[0] != masses.size
+        ):
+            raise QuantityExpressionError(
+                f"{operation} requires positions shaped (N, 3) and N masses"
+            )
+        if np.any(masses <= 0.0):
+            raise QuantityExpressionError("atomic masses must be positive")
+        if operation == "center_of_mass":
+            payload = _payload(np.average(positions, axis=0, weights=masses))
+            unit = "angstrom"
+            dimension = LENGTH
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            _, moments, _ = calculate_moments_of_inertia(masses, positions)
+            moments = np.asarray(moments, dtype=float)
+            tolerance = max(1.0, float(np.max(np.abs(moments)))) * 1.0e-12
+            moments[np.abs(moments) < tolerance] = 0.0
+            if np.any(moments < 0.0):
+                raise QuantityExpressionError(
+                    "principal moments contain a negative eigenvalue"
+                )
+            payload = _payload(np.sort(moments))
+            unit = "angstrom^2 u"
+            dimension = MOMENT_OF_INERTIA
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=payload,
+            unit=unit,
+            dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation in {"linear_rotor_constant", "rigid_rotor_constants"}:
+        if len(inputs) != 1 or inputs[0].dimension != MOMENT_OF_INERTIA:
+            raise QuantityExpressionError(
+                f"{operation} requires one principal-moment vector"
+            )
+        moments = np.sort(_numeric(inputs[0]).reshape(-1))
+        if moments.size != 3:
+            raise QuantityExpressionError(
+                f"{operation} requires exactly three principal moments"
+            )
+        if operation == "linear_rotor_constant":
+            perpendicular_moment = float(np.mean(moments[1:]))
+            tolerance = max(1.0, perpendicular_moment) * 1.0e-6
+            if (
+                moments[0] < -tolerance
+                or abs(float(moments[0])) > tolerance
+                or np.any(moments[1:] <= 0.0)
+                or abs(float(moments[2] - moments[1])) > tolerance
+            ):
+                raise QuantityExpressionError(
+                    "linear_rotor_constant requires one near-zero axial "
+                    "moment and two equal positive perpendicular moments"
+                )
+            moments = np.asarray((perpendicular_moment,), dtype=float)
+        elif np.any(moments <= 0.0):
+            raise QuantityExpressionError(
+                "rigid_rotor_constants requires three positive moments for "
+                "a nonlinear molecule"
+            )
+        moments_si = moments * ase_units._amu * (ase_units.Ang / ase_units.m) ** 2
+        frequencies_hz = ase_units._hplanck / (8.0 * np.pi**2 * moments_si)
+        rotational_constants = frequencies_hz / (ase_units._c * 100.0)
+        payload = (
+            float(rotational_constants[0])
+            if operation == "linear_rotor_constant"
+            else _payload(rotational_constants)
+        )
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="cm^-1",
+            value=payload,
+            unit="cm^-1",
+            dimension=FREQUENCY,
+            evidence_ref=evidence_ref,
+        )
+
     if operation == "exponential_cbs_limit":
         # A Hartree-Fock basis-set series converges exponentially, so the
         # complete-basis limit is a three-parameter fit rather than a linear
@@ -1443,6 +1678,40 @@ def _node_value(
             value=payload,
             unit="1",
             dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation == "transition_state_crossover_temperature":
+        from chemsmart.analysis.aggregation import (
+            AggregationError,
+            transition_state_crossover_temperature,
+        )
+
+        if len(inputs) != 1 or inputs[0].dimension != FREQUENCY:
+            raise QuantityExpressionError(
+                "transition_state_crossover_temperature takes one frequency "
+                "vector or one selected frequency in cm^-1"
+            )
+        try:
+            payload = _payload(
+                float(
+                    transition_state_crossover_temperature(
+                        tuple(
+                            float(item)
+                            for item in _numeric(inputs[0]).reshape(-1)
+                        )
+                    )
+                )
+            )
+        except AggregationError as exc:
+            raise QuantityExpressionError(str(exc)) from exc
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit="K",
+            value=payload,
+            unit="K",
+            dimension=TEMPERATURE,
             evidence_ref=evidence_ref,
         )
 

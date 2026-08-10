@@ -165,11 +165,12 @@ class AnalysisOutputSpecV1:
                 + DIMENSIONLESS_UNIT_HINT
             )
         object.__setattr__(self, "dimension", tuple(self.dimension))
-        if len(self.dimension) != 6 or not all(
+        if len(self.dimension) not in {6, 7, 8} or not all(
             isinstance(value, int) for value in self.dimension
         ):
             raise AnalysisContractError(
-                "analysis output dimension must contain six integers"
+                "analysis output dimension must contain six legacy, seven "
+                "dipole-extended, or eight mass-extended integers"
             )
         if self.data_kind not in {
             "integer",
@@ -785,11 +786,12 @@ class AnalysisOutputQuantityRefV1:
                 + DIMENSIONLESS_UNIT_HINT
             )
         object.__setattr__(self, "dimension", tuple(self.dimension))
-        if len(self.dimension) != 6 or not all(
+        if len(self.dimension) not in {6, 7, 8} or not all(
             isinstance(value, int) for value in self.dimension
         ):
             raise AnalysisContractError(
-                "analysis output dimension must contain six integers"
+                "analysis output dimension must contain six legacy, seven "
+                "dipole-extended, or eight mass-extended integers"
             )
         if self.data_kind not in {
             "integer",

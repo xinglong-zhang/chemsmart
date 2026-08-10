@@ -1,6 +1,6 @@
 ---
 name: scientific-conventions
-version: 0.2.0
+version: 0.2.1
 description: How computational-chemistry quantities are conventionally defined and reported — direction of every difference quantity, adiabatic versus vertical geometry, which energy terms are included, when an established assignment may be stated, and thermochemistry standard states.
 ---
 
@@ -53,8 +53,10 @@ Distinguish, and name which one is being reported:
 
 - **Electronic energy** — the converged SCF/post-SCF energy at a geometry.
 - **Zero-point corrected (0 K)** — electronic plus harmonic zero-point energy.
-  A quantity quoted at 0 K needs a harmonic analysis of every state involved,
-  not only their energies.
+  A molecular state needs its vibrational analysis, not only its electronic
+  energy. A monatomic fragment has no vibrations or rotations and therefore
+  has exactly zero vibrational ZPE; do not request a fictitious atomic
+  optimization or frequency calculation to manufacture those modes.
 - **Enthalpy / free energy at finite T** — electronic plus zero-point plus
   thermal corrections, with `G = H − TS` at the stated temperature.
 
@@ -135,6 +137,19 @@ cancellation the difference relies on.
 - A reported free energy should be reconstructible from the electronic energy,
   the zero-point energy, the thermal corrections, and `G = H − TS` at the stated
   temperature.
+- For a monatomic ideal-gas species confined to its ground electronic level,
+  there is no rotational or vibrational contribution. Its molar enthalpy
+  increment above the electronic energy is `5/2 RT`: `3/2 RT` translation plus
+  `RT` from `pV`.
+- Check a finite-temperature reaction enthalpy against its 0 K value by
+  subtracting the per-species thermal increments with the same stoichiometric
+  signs. Derive that difference from the planned quantities. A remembered
+  literature number is an external comparison, not an internal consistency
+  equation, unless its source and convention were supplied.
+- When starting from a ZPE-corrected 0 K quantity, the increment to finite
+  temperature is `H(T) - E_electronic - ZPE`. By contrast,
+  `H(T) - E_electronic` already contains ZPE and belongs with an electronic
+  energy difference. Do not add both corrections to the same reaction value.
 
 ## 8. A number without a unit and a convention is not a result
 
