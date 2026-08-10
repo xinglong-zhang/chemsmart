@@ -46,9 +46,9 @@ class CRESTRefs:
         "furane",
         "hexadecane",
         "hexane",
-        "h2o",  # Alias for water in GBSA
+        "h2o",  # alias for water in GBSA
         "methanol",
-        "n-hexane",  # GFN2-xTB only in GBSA
+        "n-hexane",  # only for GBSA with GFN2-xTB parameterization
         "nitromethane",
         "octanol",
         "woctanol",
