@@ -19,6 +19,7 @@ from chemsmart.io.orca.output import (
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.jobs.orca.settings import ORCANEBJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
+from chemsmart.utils.constants import energy_conversion
 
 
 class TestORCARoute:
@@ -306,6 +307,12 @@ class TestORCAInput:
 
 
 def _write_orca_input(tmp_path, name, content):
+    path = tmp_path / name
+    path.write_text(content)
+    return str(path)
+
+
+def _write_orca_output(tmp_path, name, content):
     path = tmp_path / name
     path.write_text(content)
     return str(path)
@@ -3160,6 +3167,345 @@ class TestORCAOutput:
         )
 
 
+class TestORCAOutputDirectPropertyCoverage:
+    """Direct coverage for ORCAOutput branches that the fixture-driven
+    tests above don't reach -- mostly the "marker not found" fallback
+    paths of the many small scanning properties, using minimal
+    synthetic .out content since real fixtures always contain the
+    relevant sections."""
+
+    def test_absent_markers_return_none_for_scalar_properties(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "empty.out", "SOME UNRELATED LINE\nANOTHER LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.route_string is None
+        assert oo.num_atoms is None
+        assert oo.num_basis_functions is None
+        assert oo.num_shells is None
+        assert oo.max_ang_mom is None
+        assert oo.contraction_scheme is None
+        assert oo.coulomb_range_seperation is None
+        assert oo.exchange_range_seperation is None
+        assert oo.finite_nucleus_model is None
+        assert oo.aux_j_fitting_basis is None
+        assert oo.aux_jk_fitting_basis is None
+        assert oo.aux_k_fitting_basis is None
+        assert oo.aux_external_fitting_basis is None
+        assert oo.integral_threshold is None
+        assert oo.primitive_cutoff is None
+        assert oo.primitive_pair_threshold is None
+        assert oo.charge is None
+        assert oo.multiplicity is None
+        assert oo.spin is None
+        assert oo.num_electrons is None
+        assert oo.basis_dim is None
+        assert oo.diis_acceleration is None
+        assert oo.scf_maxiter is None
+        assert oo.scf_convergence is None
+        assert oo.dipole is None
+        assert oo.quadrupole is None
+        assert oo.rotational_symmetry_number is None
+        assert oo.point_group is None
+        assert oo.all_vibrational_frequencies is None
+        assert oo.vibrational_frequencies == []
+        assert oo.num_vib_frequencies == 0
+        assert oo.temperature_in_K is None
+        assert oo.pressure_in_atm is None
+        assert oo.total_mass_in_amu is None
+        assert oo.internal_energy is None
+        assert oo.electronic_energy is None
+        assert oo.zero_point_energy is None
+        assert oo.thermal_vibration_correction is None
+        assert oo.thermal_rotation_correction is None
+        assert oo.thermal_translation_correction is None
+        assert oo.thermal_energy_correction is None
+        assert oo.enthalpy is None
+        assert oo.thermal_enthalpy_correction is None
+        assert oo.electronic_entropy_no_temperature_in_SI is None
+        assert oo.electronic_entropy is None
+        assert oo.vibrational_entropy_no_temperature_in_SI is None
+        assert oo.vibrational_entropy is None
+        assert oo.rotational_entropy_no_temperature_in_SI is None
+        assert oo.rotational_entropy is None
+        assert oo.translational_entropy_no_temperature_in_SI is None
+        assert oo.translational_entropy is None
+        assert oo.entropy_in_J_per_mol_per_K is None
+        assert oo.entropy is None
+        assert oo.entropy_times_temperature is None
+        assert (
+            oo.rotational_entropy_symmetry_correction_J_per_mol_per_K is None
+        )
+        assert oo.gibbs_free_energy is None
+        assert oo.thermal_gibbs_free_energy_correction is None
+        assert oo.max_cosx_asymmetry_energy is None
+        assert oo.potential_energy is None
+        assert oo.kinetic_energy is None
+        assert oo.virial_ratio is None
+        assert oo.dfet_embed_energy is None
+        # These *_eV convenience wrappers call a helper that does
+        # `len(None)`/`self._get_x_hartree() is not None` on a Hartree
+        # value that's None (or an empty, never-None list for xc_energy)
+        # when the marker is absent, so they raise instead of returning
+        # None -- a real (if minor) bug, not exercised elsewhere.
+        with pytest.raises(TypeError):
+            oo.max_cosx_asymmetry_energy_eV
+        with pytest.raises(TypeError):
+            oo.potential_energy_eV
+        with pytest.raises(TypeError):
+            oo.kinetic_energy_eV
+        with pytest.raises(IndexError):
+            oo.xc_energy
+        with pytest.raises(IndexError):
+            oo.xc_energy_eV
+        with pytest.raises(TypeError):
+            oo.dfet_embed_energy_eV
+
+    def test_spin_wavefunction_type_not_r_or_u_returns_none(self, tmp_path):
+        """Covers the branch where the wavefunction-type line is found but
+        its value doesn't start with 'R' or 'U'."""
+        path = _write_orca_output(
+            tmp_path,
+            "odd_spin.out",
+            "Kohn-Sham wavefunction type      ....    Generic\n",
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.spin is None
+
+    def test_truncated_sections_hit_natural_loop_exhaustion(self, tmp_path):
+        """Several population-analysis / spectroscopy properties collect
+        data in an inner loop that normally breaks on a trailer line
+        (e.g. "Sum of atomic charges") or a blank line. If the output
+        file is truncated right after the data (as if ORCA got killed
+        mid-print, or the section is simply the last thing in the
+        file), the inner loop instead runs to natural exhaustion -- a
+        distinct branch from the fixture-driven tests above, which
+        always have well-formed, trailer-terminated sections."""
+        content = (
+            "MULLIKEN ATOMIC CHARGES\n"
+            "------------------------\n"
+            "   0 O :   -0.354299\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_mulliken.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.mulliken_atomic_charges == {"O1": -0.354299}
+
+        content = (
+            "LOEWDIN ATOMIC CHARGES\n"
+            "-----------------------\n"
+            "   0 O :   -0.165023\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_loewdin.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.loewdin_atomic_charges == {"O1": -0.165023}
+
+        content = (
+            "                      * MAYER POPULATION ANALYSIS *\n"
+            "                      *****************************\n"
+            "\n"
+            "  ATOM       NA         ZA         QA         VA         BVA        FA\n"
+            "  0 O      8.3543     8.0000    -0.3543     1.9918     1.9918     0.0000\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_mayer.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.mayer_mulliken_gross_atomic_population == {"O1": 8.3543}
+        oo2 = ORCAOutput(filename=path)
+        assert oo2.mayer_total_nuclear_charge == {"O1": 8.0}
+        oo3 = ORCAOutput(filename=path)
+        assert oo3.mayer_mulliken_gross_atomic_charge == {"O1": -0.3543}
+        oo4 = ORCAOutput(filename=path)
+        assert oo4.mayer_total_valence == {"O1": 1.9918}
+        oo5 = ORCAOutput(filename=path)
+        assert oo5.mayer_bonded_valence == {"O1": 1.9918}
+        oo6 = ORCAOutput(filename=path)
+        assert oo6.mayer_free_valence == {"O1": 0.0}
+
+        content = (
+            "  Mayer bond orders larger than 0.100000\n"
+            "B(  0-O ,  1-H ) :   0.9959\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_bondorder.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.mayer_bond_orders_larger_than_zero_point_one == {
+            "B(O1,H2)": 0.9959
+        }
+
+        content = (
+            "HIRSHFELD ANALYSIS\n"
+            "-------------------\n"
+            "\n"
+            "Total integrated alpha density =    198.000148686\n"
+            "Total integrated beta density  =    198.000148686\n"
+            "\n"
+            "  ATOM     CHARGE      SPIN\n"
+            "   0 O   -0.177356    0.000000\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_hirshfeld.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.hirshfeld_charges == {"O1": -0.177356}
+        assert oo.hirshfeld_spin_densities == {"O1": 0.0}
+
+    def test_moments_of_inertia(self, water_output_gas_path):
+        """Not exercised by any existing test even though the water_opt.out
+        fixture has a full "Rotational spectrum" section."""
+        oo = ORCAOutput(filename=water_output_gas_path)
+        moments = oo.moments_of_inertia
+        assert len(moments) == 3
+        assert all(m > 0 for m in moments)
+
+    def test_thermochemistry_ev_conversions(self, water_output_gas_path):
+        """The *_in_eV convenience properties are never called by any
+        existing test, even though the underlying Hartree values are."""
+        oo = ORCAOutput(filename=water_output_gas_path)
+        assert oo.internal_energy_in_eV == oo.internal_energy * units.Hartree
+        assert (
+            oo.electronic_energy_in_eV == oo.electronic_energy * units.Hartree
+        )
+        assert (
+            oo.zero_point_energy_in_eV == oo.zero_point_energy * units.Hartree
+        )
+        assert (
+            oo.thermal_vibration_correction_in_eV
+            == oo.thermal_vibration_correction * units.Hartree
+        )
+        assert (
+            oo.thermal_rotation_correction_in_eV
+            == oo.thermal_rotation_correction * units.Hartree
+        )
+        assert (
+            oo.thermal_translation_correction_in_eV
+            == oo.thermal_translation_correction * units.Hartree
+        )
+        assert oo.enthalpy_in_eV == oo.enthalpy * units.Hartree
+        assert (
+            oo.thermal_enthalpy_correction_in_eV
+            == oo.thermal_enthalpy_correction * units.Hartree
+        )
+        assert (
+            oo.gibbs_free_energy_in_eV == oo.gibbs_free_energy * units.Hartree
+        )
+
+    def test_cpu_runtime_and_service_units(self, water_output_gas_path):
+        """Not exercised by any existing test."""
+        oo = ORCAOutput(filename=water_output_gas_path)
+        assert oo.elapsed_walltime_by_jobs == [10 / 3600]
+        assert oo.total_elapsed_walltime == round(10 / 3600, 1)
+        assert oo.cpu_runtime_by_jobs_core_hours == oo.total_elapsed_walltime
+        assert oo.service_units_by_jobs == round(
+            oo.cpu_runtime_by_jobs_core_hours, 2
+        )
+        assert oo.total_core_hours == oo.service_units_by_jobs
+        assert oo.total_service_unit == oo.total_core_hours
+
+    def test_cpu_runtime_with_parallel_mpi_processes_line(self, tmp_path):
+        content = (
+            "Program running with 4 parallel MPI-processes\n"
+            "TOTAL RUN TIME: 0 days 0 hours 0 minutes 20 seconds 0 msec\n"
+        )
+        path = _write_orca_output(tmp_path, "mpi.out", content)
+        oo = ORCAOutput(filename=path)
+        assert (
+            oo.cpu_runtime_by_jobs_core_hours == 4 * oo.total_elapsed_walltime
+        )
+
+    def test_energy_component_ev_conversions(self, water_output_gas_path):
+        """The *_eV siblings of the SCF energy-component properties are
+        never called by any existing test, even though their Hartree
+        values are."""
+        oo = ORCAOutput(filename=water_output_gas_path)
+        # final_nuclear_repulsion_eV returns the eV value already printed
+        # in the file directly (no further unit conversion applied), so
+        # it's only approximately final_nuclear_repulsion * units.Hartree.
+        assert (
+            oo.final_nuclear_repulsion_eV
+            == oo._get_final_nuclear_repulsion()[1]
+        )
+        assert math.isclose(
+            oo.final_nuclear_repulsion_eV,
+            oo.final_nuclear_repulsion * units.Hartree,
+            rel_tol=1e-3,
+        )
+        # final_electronic_energy_eV, one_electron_energy_eV and
+        # two_electron_energy_eV all re-multiply the already-eV value
+        # parsed from the file by units.Hartree again (a pre-existing
+        # unit-conversion bug, out of scope here) -- assert their actual
+        # (if numerically wrong) behavior rather than the "correct" eV
+        # value, purely for statement/branch coverage of these lines.
+        assert oo.final_electronic_energy_eV == (
+            oo._get_final_electronic_energy()[1] * units.Hartree
+        )
+        assert oo.one_electron_energy_eV == (
+            oo._get_one_electron_energy()[1] * units.Hartree
+        )
+        assert oo.two_electron_energy_eV == (
+            oo._get_two_electron_energy()[1] * units.Hartree
+        )
+        assert oo.max_cosx_asymmetry_energy_eV == (
+            oo.max_cosx_asymmetry_energy * units.Hartree
+        )
+        assert oo.potential_energy_eV == oo.potential_energy * units.Hartree
+        assert oo.kinetic_energy_eV == oo.kinetic_energy * units.Hartree
+        assert oo.xc_energy_eV == oo.xc_energy * units.Hartree
+        assert oo.dfet_embed_energy_eV == oo.dfet_embed_energy * units.Hartree
+        assert oo.empirical_formula == "H2O"
+
+    def test_final_scf_energy_and_single_point_energy_for_sp_job(
+        self, water_sp_gas_path
+    ):
+        """water_dlpno_ccsdt_sp.out is a single-point job, so
+        optimized_output_lines is [] (empty, not None -- see BUGS_FOUND.md
+        #71). final_scf_energy's "is not None" check on
+        optimized_output_lines is therefore always True, so it always
+        routes through _get_optimized_scf_energy, which -- given an empty
+        list to iterate -- returns None. final_energy falls back to
+        single_point_energy in that case, which is how SP jobs still get
+        a usable energy value despite final_scf_energy being broken."""
+        oo = ORCAOutput(filename=water_sp_gas_path)
+        assert oo.optimized_output_lines == []
+        assert oo.final_scf_energy is None
+        assert oo.single_point_energy is not None
+        assert oo.single_point_energy_eV == (
+            oo.single_point_energy * units.Hartree
+        )
+        assert oo.final_energy == oo.single_point_energy
+
+    def test_final_scf_energy_for_optimized_job(self, water_output_gas_path):
+        """water_opt.out has non-empty optimized_output_lines, so
+        final_scf_energy routes through _get_optimized_scf_energy."""
+        oo = ORCAOutput(filename=water_output_gas_path)
+        assert oo.optimized_output_lines != []
+        assert oo.final_scf_energy is not None
+        assert math.isclose(
+            oo.final_scf_energy,
+            oo._get_optimized_scf_energy(),
+            rel_tol=1e-8,
+        )
+
+    def test_all_structures_empty_when_no_coordinates_found(self, tmp_path):
+        content = "****ORCA TERMINATED NORMALLY****\n"
+        path = _write_orca_output(tmp_path, "no_coords.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.all_structures == []
+
+    def test_abnormal_termination_all_structures_and_final_structure(
+        self, gtoint_errfile
+    ):
+        """GTOInt_error.out is an abnormally-terminated job with exactly
+        one Cartesian coordinate block (the input echo). all_structures
+        should exclude that single, likely-incomplete structure. See
+        BUGS_FOUND.md #71 for why .optimized_structure/.final_structure
+        raise ValueError here instead of falling back gracefully."""
+        oo = ORCAOutput(filename=gtoint_errfile)
+        assert oo.normal_termination is False
+        assert len(oo._get_all_orientations()) == 1
+        assert oo.all_structures == []
+        with pytest.raises(ValueError, match="No symbols found"):
+            oo.optimized_structure
+        oo2 = ORCAOutput(filename=gtoint_errfile)
+        with pytest.raises(ValueError, match="No symbols found"):
+            oo2.final_structure
+
+
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
         orca_engrad = ORCAEngradFile(filename=water_engrad_path)
@@ -3208,6 +3554,28 @@ class TestORCAQMMM:
         assert orca_qmmm1.qm2_energy_of_small_region == -396.0605045891306
         assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
         assert orca_qmmm1.qm_energy == -5290.656904956516
+
+    def test_absent_markers_return_none(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "empty_qmmm.out", "SOME UNRELATED LINE\n"
+        )
+        oq = ORCAQMMMOutput(filename=path)
+        assert oq.multiscale_model is None
+        assert oq.qm2_method is None
+        assert oq.total_charge is None
+        assert oq.scaling_factor_qm2 is None
+        assert oq.number_of_link_atoms is None
+        assert oq.qm_plus_link_atoms_size is None
+        (
+            qm2_large,
+            qm2_small,
+            qm_qm2,
+            qm_e,
+        ) = oq._get_qmmm_energies()
+        assert qm2_large is None
+        assert qm2_small is None
+        assert qm_qm2 is None
+        assert qm_e is None
 
 
 class TestORCAQMMMJobSettings:
@@ -3303,6 +3671,41 @@ class TestORCANEB:
         assert orca_neb.ts_max_abs_force == 0.00543
         assert orca_neb.ts_energy == -219.09056
         assert orca_neb.preopt_ends
+
+    def test_absent_markers_return_none_or_false(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "empty_neb.out", "SOME UNRELATED LINE\n"
+        )
+        neb = ORCANEBOutput(filename=path)
+        assert neb.ci_converged is False
+        assert neb.ts_converged is False
+        assert neb.ci is None
+        assert neb.ci_energy is None
+        assert neb.ci_max_abs_force is None
+        assert neb.nimages is None
+        assert neb.ts_energy is None
+        assert neb.ts_delta_energy is None
+        assert neb.ts_max_abs_force is None
+        assert neb.ts_rms_force is None
+        assert neb.preopt_ends is False
+
+    def test_product_raises_indexerror_when_only_reactant_present(
+        self, tmp_path
+    ):
+        """product's except clause catches (TypeError, ValueError), but
+        _get_geometries()[1] on a single-element list actually raises
+        IndexError, which propagates uncaught -- see BUGS_FOUND.md."""
+        content = (
+            "REACTANT (ANGSTROEM)\n"
+            "  O     -0.000000    0.000000    0.087341\n"
+            "  H     -0.755205    0.000000   -0.509670\n"
+            "  H      0.755205    0.000000   -0.509670\n"
+        )
+        path = _write_orca_output(tmp_path, "reactant_only.out", content)
+        neb = ORCANEBOutput(filename=path)
+        assert len(neb._get_geometries()) == 1
+        with pytest.raises(IndexError):
+            neb.product
 
 
 class TestORCANEBJobSettings:
@@ -3682,3 +4085,96 @@ class TestORCApKaOutput:
 
         # Sanity: pKa field is finite and reflects reference + delta
         assert np.isfinite(result["pKa"])
+
+    def test_thermochemical_properties_and_compute_thermochemistry(
+        self, orca_outputs_directory
+    ):
+        """thermochemical_properties, compute_thermochemistry and the
+        individual *_in_units properties are never exercised by any
+        existing test."""
+        files = self._files(orca_outputs_directory)
+        ha = ORCApKaOutput(filename=files["ha_gas"])
+
+        assert ha.zero_point_energy_in_units == pytest.approx(
+            energy_conversion(
+                "j/mol", ha.energy_units, ha.thermochemistry.zero_point_energy
+            )
+        )
+        assert ha.enthalpy_in_units == pytest.approx(
+            energy_conversion(
+                "j/mol", ha.energy_units, ha.thermochemistry.enthalpy
+            )
+        )
+        assert ha.qh_enthalpy_in_units == pytest.approx(
+            energy_conversion(
+                "j/mol", ha.energy_units, ha.thermochemistry.qrrho_enthalpy
+            )
+        )
+        assert ha.gibbs_free_energy_in_units == pytest.approx(
+            energy_conversion(
+                "j/mol", ha.energy_units, ha.thermochemistry.gibbs_free_energy
+            )
+        )
+
+        props = ha.thermochemical_properties
+        assert set(props) == {
+            "electronic_energy",
+            "zero_point_energy",
+            "enthalpy",
+            "qh_enthalpy",
+            "gibbs_free_energy",
+            "qh_gibbs_free_energy",
+        }
+        assert props["electronic_energy"] == ha.electronic_energy_in_units
+        assert props["qh_gibbs_free_energy"] == ha.qh_gibbs_free_energy
+
+        computed = ha.compute_thermochemistry()
+        assert (
+            computed["structure"]
+            == os.path.splitext(os.path.basename(files["ha_gas"]))[0]
+        )
+        assert computed["electronic_energy"] == ha.electronic_energy_in_units
+        assert computed["gibbs_free_energy"] == ha.gibbs_free_energy_in_units
+        assert computed["qh_gibbs_free_energy"] == ha.qh_gibbs_free_energy
+        assert computed["entropy_times_temperature"] is not None
+        assert computed["qh_entropy_times_temperature"] is not None
+
+    def test_thermochemistry_properties_raise_without_freq_data(
+        self, orca_outputs_directory
+    ):
+        """The *_solv files are single-point-only (no frequency
+        calculation), so Thermochemistry can't compute ZPE/enthalpy/
+        qh-enthalpy/Gibbs free energy and each *_in_units property (and
+        qh_gibbs_free_energy) should raise ValueError rather than
+        silently returning something wrong."""
+        files = self._files(orca_outputs_directory)
+        ha_solv = ORCApKaOutput(filename=files["ha_solv"])
+
+        with pytest.raises(ValueError, match="qh-Gibbs"):
+            ha_solv.qh_gibbs_free_energy
+        with pytest.raises(ValueError, match="ZPE"):
+            ha_solv.zero_point_energy_in_units
+        with pytest.raises(ValueError, match="enthalpy"):
+            ha_solv.enthalpy_in_units
+        with pytest.raises(ValueError, match="qh-enthalpy"):
+            ha_solv.qh_enthalpy_in_units
+        with pytest.raises(ValueError, match="Gibbs free energy"):
+            ha_solv.gibbs_free_energy_in_units
+
+    def test_print_pka_summary_runs_without_error(
+        self, orca_outputs_directory, capsys
+    ):
+        files = self._files(orca_outputs_directory)
+        ORCApKaOutput.print_pka_summary(
+            ha_gas_file=files["ha_gas"],
+            a_gas_file=files["a_gas"],
+            href_gas_file=files["hb_gas"],
+            ref_gas_file=files["b_gas"],
+            ha_solv_file=files["ha_solv"],
+            a_solv_file=files["a_solv"],
+            href_solv_file=files["hb_solv"],
+            ref_solv_file=files["b_solv"],
+            pka_reference=6.75,
+        )
+        captured = capsys.readouterr()
+        assert "pKa" in captured.out or captured.out != ""

@@ -3439,3 +3439,127 @@ def sort_structure_dicts_by_energy(db_file, struct_dicts):
 **Impact:** None -- purely redundant defensive code; the `if sorted_frames:` guard's `else` was presumably written defensively without noticing the length-preservation invariant of the two functions it wraps.
 
 **Suggested direction:** no action needed; could be simplified by removing the `if sorted_frames: ... else: primary_mb = None` branch and unconditionally taking the `if` body, now that `sorted_frames` is confirmed always non-empty when reached.
+
+## 71. `ORCAOutput.final_scf_energy`'s and `final_structure`'s single-point/abnormal-termination branches, and all of `_get_sp_scf_energy`, are unreachable dead code
+
+**Location:** `chemsmart/io/orca/output.py:333-343, 973-987, 1104-1128`
+
+```python
+@cached_property
+def optimized_output_lines(self):
+    """... FOR SP CALCULATION, THIS WILL BE EMPTY! """
+    optimized_output_lines = []
+    for i, line_i in enumerate(self.contents):
+        if "THE OPTIMIZATION HAS CONVERGED" in line_i:
+            optimized_output_lines = list(self.contents[i:])
+    return optimized_output_lines
+
+@property
+def _get_sp_scf_energy(self):
+    if self.optimized_output_lines is None:
+        for line in self.contents:
+            ...
+            return energy_in_hartree
+
+@property
+def final_scf_energy(self):
+    if self.optimized_output_lines is not None:
+        return self._get_optimized_scf_energy()
+    return self._get_sp_scf_energy()
+
+@property
+def final_structure(self):
+    if self.optimized_output_lines is not None:
+        return self.optimized_structure
+    try:
+        return self.last_structure
+    except (ValueError, IndexError):
+        return self._get_molecule_from_sp_output_file()
+```
+
+`optimized_output_lines` always returns a `list` -- it's initialized to `[]` and only ever reassigned to another list via `list(...)`, never to `None`. So `self.optimized_output_lines is None` is always `False`, and `self.optimized_output_lines is not None` is always `True`. This affects two independent properties that both guard on it the same (broken) way:
+
+1. `final_scf_energy`/`_get_sp_scf_energy`: `_get_sp_scf_energy`'s entire body is dead -- the docstring-implied "single point energy" fallback can never run, and the property implicitly returns `None` in every case. `final_scf_energy` always takes the `_get_optimized_scf_energy()` branch and never calls `_get_sp_scf_energy` (whose `else`-branch call site at line 1128 is itself unreachable). For a genuine single-point job, `optimized_output_lines` is `[]` (per its own docstring), so `_get_optimized_scf_energy` iterates zero times and `final_scf_energy` silently returns `None` instead of the SP energy the dead `_get_sp_scf_energy` was written to supply. As a bonus latent bug, even if line 1128 were somehow reached, `self._get_sp_scf_energy()` would fail: `_get_sp_scf_energy` is itself decorated `@property`, so `self._get_sp_scf_energy` already invokes it (returning `None`), and appending `()` would then try to call `None`, raising `TypeError`.
+
+2. `final_structure`: always takes `return self.optimized_structure` and never reaches the `try`/`except` block, so the `except (ValueError, IndexError): return self._get_molecule_from_sp_output_file()` fallback (clearly intended for abnormally-terminated jobs) is dead code. For a job that crashed before producing any usable coordinate block, `self.optimized_structure` -> `self._get_optimized_final_structure()` can raise `ValueError` (via `CoordinateBlock([]).molecule` finding no symbols) that propagates straight out of `final_structure` uncaught, instead of falling back to `_get_molecule_from_sp_output_file()` as designed.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_final_scf_energy_and_single_point_energy_for_sp_job` -- for `water_dlpno_ccsdt_sp.out` (a pure single-point job), `oo.optimized_output_lines == []` and `oo.final_scf_energy is None`, even though the file contains a `Total Energy       :` line that `_get_sp_scf_energy` was clearly written to parse. `final_energy` happens to still work because it separately falls back to `self.single_point_energy` (parsed from `FINAL SINGLE POINT ENERGY`) whenever `final_scf_energy` is `None`. Separately, `test_abnormal_termination_all_structures_and_final_structure` shows `ORCAOutput(filename=".../GTOInt_error.out").optimized_structure` (and therefore `.final_structure`) raising an uncaught `ValueError` rather than falling back gracefully.
+
+**Impact:** Low-to-moderate. `final_energy` papers over the `final_scf_energy` bug via its own fallback, but `final_scf_energy` itself is silently broken for every single-point ORCA job -- any caller relying on `final_scf_energy` directly (rather than `final_energy`) gets `None` instead of the SCF energy. `final_structure`'s dead fallback is more consequential: any abnormally-terminated job without a parseable coordinate block raises an uncaught `ValueError` from `final_structure`/`molecule` instead of the intended graceful fallback to the input-echo-derived structure.
+
+As a further consequence, `_get_molecule_from_sp_output_file` (`chemsmart/io/orca/output.py:1011-1034`) and the helper it calls, `_get_input_structure_in_output` (`chemsmart/io/orca/output.py:1036-1069`), have no other call site in the codebase besides `final_structure`'s dead `except` block, so they are transitively unreachable through the only path that exists to them.
+
+**Suggested direction:** either change `optimized_output_lines` to return `None` (not `[]`) when no `"THE OPTIMIZATION HAS CONVERGED"` line is found, or change all three `is None` / `is not None` checks (in `final_scf_energy`, `_get_sp_scf_energy`, and `final_structure`) to test truthiness (`if self.optimized_output_lines:` / `if not self.optimized_output_lines:`) instead of identity against `None`. Also fix the call site `self._get_sp_scf_energy()` to `self._get_sp_scf_energy` (drop the parens) once the branch becomes reachable, since it's a `@property`.
+
+## 72. `ORCANEBOutput.product`'s except clause catches the wrong exception type and can never fire
+
+**Location:** `chemsmart/io/orca/output.py:3571-3577`
+
+```python
+@property
+def product(self):
+    try:
+        return self._get_geometries()[1]
+    except (TypeError, ValueError):
+        # product geometry may not be found for a free end NEB
+        return None
+```
+
+`_get_geometries()` always returns a plain `list` of `Molecule` objects (possibly empty, possibly length 1 for a free-end NEB with only a `REACTANT (ANGSTROEM)` block and no `PRODUCT (ANGSTROEM)` block). Indexing a list with `[1]` when the list has fewer than 2 elements raises `IndexError` -- never `TypeError` or `ValueError`. So the `except (TypeError, ValueError):` clause, clearly intended to gracefully handle exactly this "free end NEB with no product geometry" case (per its own comment), can never actually catch anything.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCANEB::test_product_raises_indexerror_when_only_reactant_present` -- a synthetic output with only a `REACTANT (ANGSTROEM)` block makes `_get_geometries()` return a length-1 list, and `.product` raises an uncaught `IndexError` instead of returning `None`.
+
+**Impact:** Real users hit this: any free-end NEB job (no product geometry) makes `.product` raise instead of returning `None` as documented by the surrounding comment.
+
+**Suggested direction:** change the caught exception type to `IndexError` (or broaden to `(IndexError, TypeError, ValueError)` to stay defensive against other malformed-input failure modes too).
+
+## 73. `ORCAOutput._get_all_structures` is defined but never called
+
+**Location:** `chemsmart/io/orca/output.py:856-871`
+
+```python
+def _get_all_structures(self):
+    """Extract all Cartesian coordinate blocks from the ORCA output.
+    This does not however include energy and forces."""
+    structures = []
+    for i, line in enumerate(self.contents):
+        if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+            ...
+    return structures
+```
+
+A grep across `chemsmart/` and `tests/` finds no call site for `self._get_all_structures()` (or `ORCAOutput._get_all_structures`) anywhere outside its own definition. Its functionality is a strict subset of `_get_all_orientations` (used by the actively-maintained `all_structures` property), which does the same coordinate-block scan but additionally returns raw `np.array` coordinate data (rather than fully-built `Molecule` objects) for use with the energies/forces/PBC assembly pipeline in `all_structures`.
+
+**Reproduce:** `grep -rn "_get_all_structures" chemsmart/ tests/` matches only the method's own `def` line.
+
+**Impact:** None -- dead code with no runtime effect; presumably an earlier implementation of the same functionality later superseded by `_get_all_orientations` + `all_structures`, left behind after the refactor.
+
+**Suggested direction:** remove `_get_all_structures`, or if some future caller needs a plain `Molecule`-list view without energies/forces, wire it in explicitly.
+
+## 74. `ORCAOutput._get_input_structure_coordinates_block_in_output` is defined but never called
+
+**Location:** `chemsmart/io/orca/output.py:170-202`
+
+```python
+def _get_input_structure_coordinates_block_in_output(self):
+    """In ORCA output file, the input structure
+    is rewritten and for single points,
+    is same as the output structure.
+    ...
+    """
+    coordinates_block_lines_list = []
+    pattern = re.compile(orca_input_coordinate_in_output)
+    for i, line in enumerate(self.contents):
+        if "INPUT FILE" in line:
+            ...
+    cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+    return cb
+```
+
+`input_coordinates_block` (the only plausibly-related public property, right above this method) actually calls `self._get_first_structure_coordinates_block_in_output()` -- a differently-named, differently-implemented method a few lines below (`chemsmart/io/orca/output.py:204-233`) that scans for `"CARTESIAN COORDINATES (ANGSTROEM)"` rather than `"INPUT FILE"`. A grep across `chemsmart/` and `tests/` finds no call site for `_get_input_structure_coordinates_block_in_output` anywhere.
+
+**Reproduce:** `grep -rn "_get_input_structure_coordinates_block_in_output" chemsmart/ tests/` matches only the method's own `def` line.
+
+**Impact:** None -- dead code with no runtime effect. Likely an earlier implementation (parsing the "INPUT FILE" echo section) superseded by `_get_first_structure_coordinates_block_in_output` (parsing the "CARTESIAN COORDINATES (ANGSTROEM)" section directly), with the old version left behind.
+
+**Suggested direction:** remove `_get_input_structure_coordinates_block_in_output`.
