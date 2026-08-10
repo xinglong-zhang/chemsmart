@@ -1647,13 +1647,13 @@ class CRESTFileMixin(FileMixin):
         program call. Implementation is provided by subclasses.
 
         Returns:
-            str: Route string for CREST calculations.
+            str: Program call for CREST calculations.
         """
         return self._get_route()
 
     def _get_route(self):
         """
-        Get route string from file contents.
+        Get program call from file contents.
 
         Default implementation that must be overridden by subclasses
         to provide specific route string extraction logic.
@@ -1666,9 +1666,9 @@ class CRESTFileMixin(FileMixin):
     @property
     def route_object(self):
         """
-        Get parsed CREST route object from route string.
+        Get parsed CREST route object from the program call.
 
-        Creates a CRESTRoute object from the route string to
+        Creates a CRESTRoute object from the program call to
         provide structured access to calculation parameters.
 
         Returns:

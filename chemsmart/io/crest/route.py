@@ -18,6 +18,11 @@ class CRESTRoute:
     calculation parameters from the program call, enabling programmatic
     analysis of CREST calculation settings.
 
+    The name CRESTRoute follows the Gaussian/ORCA Route parsing
+    convention in CHEMSMART. For CREST there is no Gaussian-style # route
+    line; the string is the run command printed under "Command line
+    input:" in the CREST log (e.g. "crest mol.xyz --gfn2 --chrg 0").
+
     Args:
         route_string (str): CREST command line string
     """
