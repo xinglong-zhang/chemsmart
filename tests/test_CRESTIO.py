@@ -243,6 +243,32 @@ class TestCRESTMainOut:
         assert ts1a_main_out.num_rotamers == 63
         assert ts1a_main_out.num_atoms == 40
 
+    def test_main_out_hexane_failed(self, crest_hexane_failed_outfolder):
+        """Failed CREST run: parseable header/route, but no ensemble summary."""
+        hexane_main_out_file = os.path.join(
+            crest_hexane_failed_outfolder, "hexane.out"
+        )
+        assert os.path.exists(hexane_main_out_file)
+        hexane_main_out = CRESTMainOut(hexane_main_out_file)
+        assert hexane_main_out.version == "3.0.2"
+        assert not hexane_main_out.normal_termination
+        assert hexane_main_out.route_string.startswith("crest ")
+        assert "hexane.xyz" in hexane_main_out.route_string
+        assert hexane_main_out.route_string.endswith(
+            "--gfn2 --chrg 0 --uhf 0 --ewin 6.0 --optlev vtight"
+        )
+        assert not hexane_main_out.constrained
+        assert not hexane_main_out.topology_mismatch
+        assert hexane_main_out.charge == 0
+        assert hexane_main_out.uhf == 0
+        assert hexane_main_out.multiplicity == 1
+        assert hexane_main_out.num_conformers is None
+        assert hexane_main_out.num_rotamers is None
+        assert hexane_main_out.num_atoms is None
+        assert hexane_main_out.lowest_energy is None
+        assert hexane_main_out.wall_time is None
+        assert hexane_main_out.cpu_time is None
+
 
 class TestCRESTEnergiesFile:
     """Tests for CRESTEnergiesFile class."""
@@ -419,3 +445,14 @@ class TestCRESTOutput:
         assert np.isclose(octane_output.best_conformer.energy, -26.32263)
         assert np.isclose(octane_output.energies[0], -26.32263)
         assert np.isclose(octane_output.lowest_energy, -26.32263)
+
+    def test_hexane_failed_output(self, crest_hexane_failed_outfolder):
+        """Failed CREST run: no ensembles, no energies, abnormal termination."""
+        assert os.path.exists(crest_hexane_failed_outfolder)
+        hexane_output = CRESTOutput(folder=crest_hexane_failed_outfolder)
+
+        assert not hexane_output.normal_termination
+        assert hexane_output.conformers == []
+        assert hexane_output.rotamers == []
+        assert hexane_output.best_conformer is None
+        assert hexane_output.energies == []
