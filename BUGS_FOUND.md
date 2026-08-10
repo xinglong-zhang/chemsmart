@@ -3941,3 +3941,256 @@ for direction in ["f", "r"]:
 **Impact:** None -- purely redundant code with no behavioral effect, since the loop's iterable is a fixed two-element list.
 
 **Suggested direction:** no action needed; could be simplified to a plain `else:` now that the two-value domain is confirmed.
+
+**Suggested direction:** no action needed; if desired, the loop could be simplified to a direct index into `self.molecular_dipole_lines[0]` instead of a `for`/`startswith` scan, now that the ordering invariant is confirmed.
+
+---
+
+## 89. `Gaussian16Output.hirshfeld_charges`/`hirshfeld_spin_densities`/`hirshfeld_dipoles`/`hirshfeld_cm5_charges` crash with `IndexError` instead of returning `None` when the file has no Hirshfeld section
+
+**Location:** `chemsmart/io/gaussian/output.py:2340-2383`
+
+```python
+def _get_hirshfeld_charges_spins_dipoles_cm5(self):
+    all_hirshfeld_charges = []
+    all_spin_densities = []
+    all_dipoles = []
+    all_cm5_charges = []
+    for i, line_i in enumerate(self.contents):
+        ...
+        if (
+            "Hirshfeld charges, spin densities, dipoles, and CM5 charges"
+            in line_i
+        ):
+            ...
+            all_hirshfeld_charges.append(hirshfeld_charges)
+            all_spin_densities.append(spin_densities)
+            all_dipoles.append(dipoles)
+            all_cm5_charges.append(cm5_charges)
+    return (
+        all_hirshfeld_charges[-1],
+        all_spin_densities[-1],
+        all_dipoles[-1],
+        all_cm5_charges[-1],
+    )
+```
+
+Unlike its heavy-atom counterpart `_get_hirshfeld_charges_spin_densities_cm5_charges_heavy_atoms` (a few lines below, at `output.py:2385-2451`), which explicitly checks `if all_hirshfeld_charges_heavy_atoms and ...` / `elif ... :` / `else: return None, None, None` before indexing, this plain (non-heavy-atom) variant has no such guard: it unconditionally indexes `all_hirshfeld_charges[-1]` etc. If the "Hirshfeld charges, spin densities, dipoles, and CM5 charges" header is never found in the file (e.g. a calculation that doesn't request Hirshfeld population analysis), all four accumulator lists stay empty, and `all_hirshfeld_charges[-1]` raises `IndexError: list index out of range` instead of gracefully falling back to `None`, `None`, `None`, `None` the way the heavy-atom sibling does for the exact same "not found" case.
+
+**Reproduce:** `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_hirshfeld_charges_raises_indexerror_when_section_absent` -- for `nhc_neutral_singlet.log` (a normal opt+freq file with no Hirshfeld analysis requested), `g16.hirshfeld_charges` raises `IndexError`, while `g16.hirshfeld_charges_heavy_atoms` (and its spin/CM5 counterparts) correctly return `None` for the identical "section absent" situation.
+
+**Impact:** Moderate. Any caller that accesses `hirshfeld_charges`, `hirshfeld_spin_densities`, `hirshfeld_dipoles`, or `hirshfeld_cm5_charges` on a Gaussian output file without a Hirshfeld analysis section (the common case, since Hirshfeld population analysis must be explicitly requested) gets an uncaught `IndexError` crash instead of a `None` they could check for, unlike every other "not found" property in this class (including the heavy-atom sibling of this exact data).
+
+**Suggested direction:** guard the final `return` the same way the heavy-atom variant does, e.g. `return (all_hirshfeld_charges[-1] if all_hirshfeld_charges else None, ...)` for each of the four values, or restructure with an explicit `if not all_hirshfeld_charges: return None, None, None, None` before the indexed return.
+
+---
+
+## 90. `Gaussian16Output.hirshfeld_cm5_charges_heavy_atoms` returns a one-element list-of-dicts instead of a dict when spin densities are also present
+
+**Location:** `chemsmart/io/gaussian/output.py:2432-2440`
+
+```python
+if (
+    all_hirshfeld_charges_heavy_atoms
+    and all_hirshfeld_spin_densities_heavy_atoms
+):
+    return (
+        all_hirshfeld_charges_heavy_atoms[-1],
+        all_hirshfeld_spin_densities_heavy_atoms[-1],
+        all_cm5_charges_heavy_atoms,          # <-- missing [-1]
+    )
+elif (
+    all_hirshfeld_charges_heavy_atoms
+    and not all_hirshfeld_spin_densities_heavy_atoms
+):
+    return (
+        all_hirshfeld_charges_heavy_atoms[-1],
+        None,
+        all_cm5_charges_heavy_atoms[-1],      # <-- correctly indexed here
+    )
+```
+
+`_get_hirshfeld_charges_spin_densities_cm5_charges_heavy_atoms` accumulates one dict per matched section into `all_cm5_charges_heavy_atoms` (a list), exactly like the other two accumulators. Both the charges and spin-densities return values are correctly indexed with `[-1]` (the last/most recent occurrence) in *both* branches of the `if`/`elif`. The CM5 return value, however, only gets `[-1]` in the `elif` (closed-shell, no spin densities) branch; in the `if` branch (open-shell, spin densities present), it returns the raw list `all_cm5_charges_heavy_atoms` unindexed. `hirshfeld_cm5_charges_heavy_atoms` therefore returns a `list` containing one `dict` for any open-shell Hirshfeld calculation, instead of the `dict` itself that every other branch (and every sibling property) returns.
+
+**Reproduce:** `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_hirshfeld_cm5_charges_heavy_atoms_wrong_type_when_spin_present` -- for `oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log` (an open-shell radical-cation Hirshfeld calculation, where `hirshfeld_spin_densities_heavy_atoms` is non-`None`), `g16.hirshfeld_cm5_charges_heavy_atoms` returns `[{'O1': 0.012879, ...}]` (a one-element `list`) rather than `{'O1': 0.012879, ...}` (a `dict`), even though the closed-shell fixture `oxetane_hirshfeld_sp_smd_n_n-DiMethylFormamide.log` correctly returns a plain `dict` for the same property.
+
+**Impact:** Moderate. Any caller doing `hirshfeld_cm5_charges_heavy_atoms["O1"]` (the natural/documented usage, matching every other charges dict in this class) raises `TypeError: list indices must be integers or slices, not str` for any open-shell Hirshfeld calculation, while working fine for closed-shell ones -- a silent, data-dependent type inconsistency.
+
+**Suggested direction:** change `all_cm5_charges_heavy_atoms` to `all_cm5_charges_heavy_atoms[-1]` in the `if` branch's return tuple, matching the `elif` branch immediately below it.
+
+---
+
+## 91. `Gaussian16Output.moments_of_inertia`/`moments_of_inertia_principal_axes` crash with `TypeError` instead of returning `None` when the "Principal axes" section is absent
+
+**Location:** `chemsmart/io/gaussian/output.py:2475-2530`
+
+```python
+@cached_property
+def moments_of_inertia(self):
+    moments_of_inertia, _ = (
+        self._get_moments_of_inertia_and_principal_axes()
+    )
+    return moments_of_inertia
+
+def _get_moments_of_inertia_and_principal_axes(self):
+    for i, line in enumerate(self.contents):
+        if "Principal axes and moments of inertia" in line:
+            ...
+            return np.array(moments_of_inertia), np.array(
+                moments_of_inertia_principal_axes
+            )
+    # falls off the end here -> implicitly returns a single `None`,
+    # not a `(None, None)` tuple
+```
+
+`_get_moments_of_inertia_and_principal_axes` only ever `return`s explicitly inside the `if "Principal axes..." in line:` branch, as a 2-tuple. If that line is never found in the file, the `for` loop exhausts and the function falls off the end, implicitly returning a single `None` (Python's default), not `(None, None)`. Both `moments_of_inertia` and `moments_of_inertia_principal_axes` unconditionally unpack the helper's return value as a 2-tuple (`moments_of_inertia, _ = ...` / `_, principal_axes = ...`), so `None` cannot be unpacked and both properties raise `TypeError: cannot unpack non-iterable NoneType object` instead of gracefully returning `None`, unlike essentially every other "section not found" property in this class (e.g. `zero_point_energy`, `rotational_symmetry_number`, `pbc` in the PBC subclass, etc., all of which have an explicit trailing `return None`).
+
+**Reproduce:** `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_moments_of_inertia_crashes_when_section_absent` -- for `oxygen_openshell_singlet_sp_link.log` (a real single-point link-job output, which never prints the "Principal axes and moments of inertia" banner), both `g16.moments_of_inertia` and `g16.moments_of_inertia_principal_axes` raise `TypeError` rather than returning `None`.
+
+**Impact:** Moderate. Any single-point (or otherwise banner-less) Gaussian output crashes on `moments_of_inertia`/`moments_of_inertia_principal_axes` access instead of returning `None`, which is surprising given the consistent "return `None` when not found" convention used everywhere else in this class.
+
+**Suggested direction:** add an explicit `return None, None` (or `return None`) after the `for` loop in `_get_moments_of_inertia_and_principal_axes`.
+
+---
+
+## 92. Three separate unreachable defensive guards in `Gaussian16Output`'s gen/genecp and ECP parsing helpers
+
+**Location:** `chemsmart/io/gaussian/output.py:173-180, 303-306, 382-388`
+
+```python
+# (a) _genecp_info, line 173-180
+if self.gen_genecp is None:
+    return result
+try:
+    atom_symbols = self.symbols
+except Exception:
+    return result
+if not atom_symbols:          # <-- unreachable
+    return result
+
+# (b) _parse_pseudopotential_section, line 303-306
+def _parse_pseudopotential_section(self):
+    try:
+        atom_symbols = self.symbols     # <-- self.symbols already
+    except Exception:                   #     succeeded and is cached
+        return {}                       #     by the only caller
+
+# (c) _parse_pseudopotential_section, line 382-388
+elif (
+    current is not None
+    and not center_re.match(line)      # <-- redundant with `is_center`
+    and not term_re.match(line)        #     and `is_term` above, which
+):                                      #     already consume any line
+    _flush_channel()                   #     these regexes would match
+    current["_channel_name"] = line
+```
+
+Three independent, unreachable branches, all discovered while writing coverage for the gen/genecp and ECP (pseudopotential) parsing helpers:
+
+(a) `self.symbols` (from `GaussianFileMixin`, via `CoordinateBlock.chemical_symbols` -> `_get_symbols`) can never return an empty/falsy list: `_get_symbols` explicitly `raise`s `ValueError("No symbols found in the coordinate block...")` whenever its accumulated `symbols` list would be empty. So `self.symbols` either returns a non-empty list or raises -- it can never reach `_genecp_info`'s `if not atom_symbols:` check with a falsy value; that check is dead.
+
+(b) `_parse_pseudopotential_section` is only ever called from one call site, `_genecp_info` (`output.py:253`), and only *after* `_genecp_info` has already evaluated `atom_symbols = self.symbols` successfully at its own top (line 176) -- if that raised, `_genecp_info` would already have returned early via its own `except Exception: return result` at line 177-178, never reaching the call to `_parse_pseudopotential_section` at all. Since `symbols` is a `cached_property`, the second access inside `_parse_pseudopotential_section` is guaranteed to hit the cache and return the same already-successful value. Its own `try/except` around `self.symbols` can therefore never catch anything.
+
+(c) Within `_parse_pseudopotential_section`'s per-line dispatch, `is_center` (`len(tokens) in (2, 3) and all(t.isdigit() for t in tokens)`) and `center_re` (`r"^\d+(?:\s+\d+){1,2}\s*$"`) match the same set of strings, as do `is_term` and `term_re`. Any line for which `center_re.match(line)` or `term_re.match(line)` would be `True` is therefore already consumed earlier by the `if is_center:` / `elif is_term and current is not None:` branches above, so by the time control reaches the final `elif ... not center_re.match(line) and not term_re.match(line):`, those two sub-conditions are always `True` given `current is not None`. The only way this `elif`'s condition could be `False` is `current is None`, but that can't happen either for genuine Gaussian ECP output, since the very first data line after the second `===` separator is always a center header (matching `is_center`), which sets `current` before any other line type is seen.
+
+**Reproduce:** covered indirectly by `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_genecp_info_empty_symbols_raises_and_is_caught` (demonstrates (a)/(b): `self.symbols` raises rather than returning empty) and `test_parse_pseudopotential_section_only_reachable_via_genecp_info` (demonstrates (b): direct call succeeds using the already-cached `symbols`). Branch (c) remains uncovered in the coverage report at `chemsmart/io/gaussian/output.py:382->339`; no fixture could be constructed to reach it without fabricating non-Gaussian-shaped ECP table input.
+
+**Impact:** None -- pure dead code / redundant defensive programming with no observed effect on behavior for any real Gaussian output.
+
+**Suggested direction:** for (a), drop the `if not atom_symbols: return result` check (or change `_get_symbols` to return `[]` instead of raising, if that's ever desired, and keep the check). For (b), drop the redundant inner `try/except` (or, if defensive-programming-by-habit is preferred, leave as documentation that the method assumes a pre-validated `self.symbols`). For (c), simplify the final `elif` to just `elif current is not None:` since the regex re-checks add nothing given the earlier `is_center`/`is_term` dispatch already filters those line shapes out.
+
+---
+
+## 93. Six vibrational-property "stop at Thermochemistry" early-exit checks are unreachable dead code
+
+**Location:** `chemsmart/io/gaussian/output.py:1068-1077, 1086-1095, 1104-1113, 1122-1131, 1140-1150, 1161-1184` (`vibrational_frequencies`, `reduced_masses`, `force_constants`, `ir_intensities`, `vibrational_mode_symmetries`, `vibrational_modes`)
+
+```python
+@cached_property
+def vibrational_frequencies(self):
+    frequencies = []
+    for line in self.contents:
+        if line.startswith("Frequencies --"):
+            freq_string = line.split("--")[1].strip()
+            for freq in freq_string.split():
+                frequencies.append(float(freq))
+        else:
+            continue
+        if "Thermochemistry" in line:
+            break
+    return frequencies
+```
+
+All six of these properties share the identical `if <prefix match>: ... else: continue` / `if "Thermochemistry" in line: break` idiom, apparently intended as an early-exit once the frequency block has been fully consumed and the "-------------------- Thermochemistry --------------------" banner that follows it is reached. But because the `else` branch does `continue` (skipping straight to the next loop iteration), the `if "Thermochemistry" in line:` check is *only* ever reached immediately after the `if` branch already ran -- i.e. only for a line that just matched `line.startswith("Frequencies --")` (or the analogous `"Red. masses --"`, `"Frc consts  --"`, `"IR Inten    --"` prefix, or was consumed as a normal-mode data row). No such line can simultaneously also contain the substring `"Thermochemistry"` in Gaussian's fixed output format -- the banner line is its own separate line, never combined with a frequency/mass/constant/intensity data line. So the `break` can never fire for real Gaussian output; the loop always runs to completion over the full file instead of stopping early once past the last frequency block.
+
+**Reproduce:** confirmed via `coverage report` on `chemsmart/io/gaussian/output.py` -- the six `break` statements at lines 1076, 1094, 1112, 1130, 1149, and 1184 remain in the missing-lines list even after `tests/test_GaussianIO.py` exercises dozens of real frequency-containing fixtures (`gaussian_singlet_opt_outfile`, `gaussian_triplet_opt_outfile`, `gaussian_ts_genecp_outfile`, etc.) through these exact properties.
+
+**Impact:** Low -- purely a missed micro-optimization (the loop scans the rest of the file instead of stopping early), not a correctness bug; the collected frequencies/masses/constants/intensities/symmetries/modes are unaffected either way since nothing after the frequency block would match the `startswith` prefixes anyway.
+
+**Suggested direction:** if the early-exit is still wanted, move the `"Thermochemistry" in line` check so it triggers on any line (not gated behind the `else: continue`), e.g. check it unconditionally at the top of the loop body before the `if line.startswith(...)`. Otherwise, remove the dead check entirely.
+
+---
+
+## 94. `frozen_coordinate_indices` and `_get_frozen_and_free_atoms`'s `if len(line_i) == 0: break` checks are unreachable
+
+**Location:** `chemsmart/io/gaussian/output.py:1239-1242, 1285-1288`
+
+```python
+for i, line_i in enumerate(self.contents):
+    if "Symbolic Z-matrix:" in line_i:
+        if len(line_i) == 0:
+            break
+        for j, line_j in enumerate(self.contents[i + 2 :]):
+            ...
+```
+
+Both `frozen_coordinate_indices` and `_get_frozen_and_free_atoms` guard their inner parsing loop with `if "Symbolic Z-matrix:" in line_i:` and then immediately check `if len(line_i) == 0: break` before doing anything else. But the outer condition `"Symbolic Z-matrix:" in line_i` already guarantees `line_i` contains that 19-character substring, so `len(line_i)` is necessarily >= 19 whenever the inner check runs -- `len(line_i) == 0` can never be `True` at that point. The `break` is unreachable.
+
+**Reproduce:** confirmed via `coverage report` -- lines 1242 and 1288 remain in the missing-lines list even with `tests/test_GaussianIO.py::TestGaussian16Output::test_read_frozen_opt_outputfile` (which exercises both properties on a real frozen-coordinate fixture) passing.
+
+**Impact:** None -- dead code with no effect on behavior; likely copy-pasted from a similar (also arguably unnecessary) pattern elsewhere in the file.
+
+**Suggested direction:** remove both unreachable `if len(line_i) == 0: break` checks.
+
+---
+
+## 95. `_get_route`'s final `else: route = None` and `energies`'s implicit fallthrough are both unreachable given their preceding exhaustive conditions
+
+**Location:** `chemsmart/io/gaussian/output.py:922-941, 1380-1385`
+
+```python
+# _get_route
+elif line.startswith("#"):
+    if lines[i + 1].startswith("------"):
+        route = line.lower()
+    elif not lines[i + 1].startswith("------") and lines[i + 2].startswith("------"):
+        route = line.lower()
+        route += lines[i + 1].strip().lower()
+    elif not lines[i + 1].startswith("------") and not lines[i + 2].startswith("------"):
+        route = line.lower()
+        route += lines[i + 1].lower()
+        route += lines[i + 2].lower()
+    else:
+        route = None          # <-- unreachable
+    return route
+
+# energies
+if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:
+    return self.scf_energies
+elif len(self.mp2_energies) != 0:
+    return self.mp2_energies
+elif len(self.oniom_energies) != 0:   # <-- always True when reached
+    return self.oniom_energies
+# implicit `return None` here is unreachable
+```
+
+Two separate exhaustive-but-not-recognized-as-such `if`/`elif` chains, both with a residual branch that can never fire:
+
+- `_get_route`'s three conditions test, respectively, "`lines[i+1]` starts with `------`" (call it `A`), "not `A` and `lines[i+2]` starts with `------`" (`B`), and "not `A` and not (`lines[i+2]` starts with `------`)" (exactly `not A and not B`'s complement-of-`B`-given-`not A`). Since `A`, `B`-given-`not A`, and `not B`-given-`not A` together cover every possibility, the trailing `else: route = None` can never execute.
+- `energies`'s first condition is `mp2==0 and oniom==0`; if that's `False`, at least one of `mp2!=0`/`oniom!=0` holds. The second `elif` (`mp2!=0`) then filters out the `mp2!=0` case, so by the time the third `elif` (`oniom!=0`) is evaluated, the only way to have arrived there is `mp2==0` (else the second `elif` would already have returned) and `not (mp2==0 and oniom==0)` (else the first `if` would already have returned) -- which together force `oniom!=0`. So the third `elif`'s condition is always `True` when reached, and the function can never actually fall off the end.
+
+**Reproduce:** confirmed via `coverage report` -- `chemsmart/io/gaussian/output.py:940` (the `else: route = None` line) and `:1384->exit` (the `energies` fallthrough arc) remain in the missing-lines list even with `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_route_string_spanning_two_lines`/`test_route_string_spanning_three_lines` (which exercise all three real `_get_route` branches) and the various `energies`-dependent tests (which exercise all three real `energies` branches) passing.
+
+**Impact:** None -- dead code with no effect on behavior; both chains already correctly handle every real input via their preceding branches.
+
+**Suggested direction:** for `_get_route`, drop the `else: route = None` (the final `elif` could become a plain `else`). For `energies`, drop the third condition's redundant re-check and make it a plain `else: return self.oniom_energies`.
