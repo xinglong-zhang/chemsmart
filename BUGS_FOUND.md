@@ -3616,3 +3616,40 @@ def molecular_dipole_qonly(self):
 **Impact:** None -- purely a coverage/dead-code observation; the loop still produces the correct result, it just never needs more than one iteration given the fixed, guaranteed line ordering.
 
 **Suggested direction:** no action needed; if desired, the loop could be simplified to a direct index into `self.molecular_dipole_lines[0]` instead of a `for`/`startswith` scan, now that the ordering invariant is confirmed.
+
+---
+
+## 77. `IterateJobRunner.run_combinations`'s "no results at all" summary-skip branch is unreachable dead code
+
+**Location:** `chemsmart/jobs/iterate/runner.py:290-292, 400-430`
+
+```python
+if not combinations:
+    logger.warning("No combinations to process.")
+    return []
+...
+# Check for missing results (crashes that didn't write to queue)
+for comb in combinations:
+    if comb.label not in results_dict:
+        failed_labels.append(comb.label)
+        results_dict[comb.label] = None
+    elif (
+        results_dict[comb.label] is None
+        and comb.label not in timed_out_labels
+    ):
+        if comb.label not in failed_labels:
+            failed_labels.append(comb.label)
+...
+if successful_labels or timed_out_labels or failed_labels:
+    logger.info("=" * 40)
+    logger.info("       SUMMARY OF RESULTS")
+    ...
+```
+
+An early guard at the top of `run_combinations` already returns `[]` when `combinations` is empty, so by the time the summary-printing block runs, `combinations` is guaranteed non-empty -- at least one `IterateCombination` exists. For every combination, the bookkeeping loop guarantees its label ends up in exactly one of three buckets: `successful_labels` (built from any `results_dict` entry with a non-`None` molecule), `timed_out_labels` (populated directly by the watchdog when a worker is killed for exceeding its timeout), or `failed_labels` (populated either when the label never appears in `results_dict` at all -- a crashed worker -- or when it maps to an explicit `None` and wasn't a timeout). There is no path for a combination to avoid all three: a timeout always adds to `timed_out_labels`; a missing/crashed result always adds to `failed_labels`; an explicit `None` result either adds to `failed_labels` or (if a duplicate label already added it) leaves `failed_labels` non-empty regardless. So `successful_labels or timed_out_labels or failed_labels` is always `True` when this line is reached, and the branch where all three are falsy (skipping the summary block entirely) can never execute.
+
+**Reproduce:** confirmed by reasoning through every code path that appends to `results_dict`/`successful_labels`/`timed_out_labels`/`failed_labels` -- combined with the `if not combinations: return []` early guard, no combination can reach the summary check without having landed in one of the three lists. See `tests/test_iterate_run_combinations_unit.py` for direct coverage of each of the three population paths (timeout, missing/crashed, explicit-None-not-timed-out) using fake `multiprocessing.Process`/`Manager` objects.
+
+**Impact:** None -- purely redundant defensive code with no behavioral effect.
+
+**Suggested direction:** no action needed; could be simplified by removing the `if successful_labels or timed_out_labels or failed_labels:` guard and printing the summary unconditionally, now that at least one of the three is confirmed always non-empty whenever this code runs.

@@ -337,6 +337,42 @@ class TestLoadMolecule:
         assert molecule is not None
         assert label == "myskel"
 
+    def test_link_index_as_non_int_non_list_falsy_value_is_left_alone(
+        self, single_molecule_xyz_file
+    ):
+        """A link_index that's neither a list nor an int (e.g. an empty
+        string, if the CLI's own normalization were somehow skipped)
+        isn't wrapped in a list; falsy values just skip the
+        out-of-bounds check below."""
+        runner = IterateJobRunner()
+        molecule, label = runner._load_molecule(
+            {
+                "file_path": single_molecule_xyz_file,
+                "label": "myskel",
+                "link_index": "",
+            },
+            "skeleton",
+            0,
+        )
+        assert molecule is not None
+        assert label == "myskel"
+
+    def test_skeleton_indices_as_non_int_non_list_falsy_value_is_left_alone(
+        self, single_molecule_xyz_file
+    ):
+        runner = IterateJobRunner()
+        molecule, label = runner._load_molecule(
+            {
+                "file_path": single_molecule_xyz_file,
+                "label": "myskel",
+                "skeleton_indices": "",
+            },
+            "skeleton",
+            0,
+        )
+        assert molecule is not None
+        assert label == "myskel"
+
 
 class TestGenerateCombinations:
     def test_generates_cross_product_of_valid_configs(
