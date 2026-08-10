@@ -1096,6 +1096,13 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith(".trj"):
+            from chemsmart.utils.io import is_xyzfile
+
+            if is_xyzfile(filepath):
+                return cls._read_xyz_file(filepath, index, return_list)
+            return cls._read_other(filepath, index, **kwargs)
+
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
@@ -1110,6 +1117,10 @@ class Molecule:
             return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
+            from chemsmart.utils.io import is_xyzfile
+
+            if is_xyzfile(filepath):
+                return cls._read_xyz_file(filepath, index, return_list)
             return cls._read_gaussian_logfile(filepath, index, **kwargs)
 
         if basename.endswith(".inp"):
