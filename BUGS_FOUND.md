@@ -3410,3 +3410,32 @@ There are two back-to-back, identical calls to `update_dict_with_existing_keys(a
 **Impact:** Medium -- this appears to be the intended mechanism for QMMM project YAMLs to let `gas`/`solv` sections use QMMM-specific keys with a fallback to a separate `qmmm` section (mirroring how `chemsmart/jobs/settings.py:355-368`'s explicit `qmmm` block handling works via direct key assignment, not `update_dict_with_existing_keys`). As written, any project YAML relying on this fallback instead crashes with a raw `ValueError` naming the bad key, rather than silently falling back. In practice this may be low-impact if no real project YAMLs currently rely on the fallback (the existing `qmmm.yaml` test fixture's `gas`/`solv` sections only use keys already in `defaults.yaml`, so they don't trigger this path at all).
 
 **Suggested direction:** delete the unguarded duplicate call at lines 315-317 (it's a copy-paste duplicate of the one inside the `try`) so the `try`/`except` actually gets a chance to run and the qmmm fallback becomes reachable, if that fallback behavior is still wanted; otherwise remove the dead `try`/`except`/fallback entirely and let the `ValueError` propagate directly with a clearer message, if failing fast is the intended behavior.
+
+---
+
+## 70. `sort_structure_dicts_by_energy`'s `sorted_frames` falsy branch is unreachable dead code
+
+**Location:** `chemsmart/database/utils.py:389-413`
+
+```python
+def sort_structure_dicts_by_energy(db_file, struct_dicts):
+    if not struct_dicts:
+        return struct_dicts
+    frames = [
+        {...}
+        for s in struct_dicts
+    ]
+    sorted_frames = sort_frames_by_energy(frames)
+    if sorted_frames:
+        ...
+    else:
+        primary_mb = None
+```
+
+`frames` is built with a list comprehension over `struct_dicts` -- one entry per input dict, so `len(frames) == len(struct_dicts)`. `struct_dicts` is guaranteed non-empty by the early `if not struct_dicts: return struct_dicts` guard, so `frames` is always non-empty by the time `sort_frames_by_energy(frames)` is called. `sort_frames_by_energy` itself either returns its input unchanged (`return frames` early exit when no `(method, basis)` pairs are covered) or `sorted(frames, key=sort_key)`, both of which preserve length. So `sorted_frames` can never be empty/falsy at this point, and the `else: primary_mb = None` branch can never execute.
+
+**Reproduce:** `tests/test_database.py::TestDatabaseUtilities::test_sort_structure_dicts_by_energy_empty_input` and `test_sort_structure_dicts_no_energy` cover the two adjacent reachable cases (empty `struct_dicts` hits the earlier guard; non-empty `struct_dicts` with zero energies still produces one frame per input dict, so `sorted_frames` stays non-empty and takes the `if` branch, not the `else`).
+
+**Impact:** None -- purely redundant defensive code; the `if sorted_frames:` guard's `else` was presumably written defensively without noticing the length-preservation invariant of the two functions it wraps.
+
+**Suggested direction:** no action needed; could be simplified by removing the `if sorted_frames: ... else: primary_mb = None` branch and unconditionally taking the `if` body, now that `sorted_frames` is confirmed always non-empty when reached.

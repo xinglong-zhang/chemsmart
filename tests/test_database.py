@@ -1,6 +1,7 @@
 import csv
 import json
 import sqlite3
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -80,6 +81,16 @@ class TestDatabaseUtilities:
         assert is_chemsmart_database(database_chemsmart_file)
         assert not is_chemsmart_database(database_ase_file)
         assert not is_chemsmart_database(database_empty_file)
+
+    def test_is_chemsmart_database_returns_false_for_non_db_extension(self):
+        assert not is_chemsmart_database("not_a_database.txt")
+
+    def test_is_chemsmart_database_returns_false_for_corrupt_file(
+        self, tmp_path
+    ):
+        corrupt_db = tmp_path / "corrupt.db"
+        corrupt_db.write_bytes(b"not a real sqlite file at all \x00\x01")
+        assert not is_chemsmart_database(str(corrupt_db))
 
     def test_is_custom_basis(self):
         assert is_custom_basis(" GenECP ")
@@ -300,6 +311,10 @@ class TestDatabaseUtilities:
         for known in ("pbe0", "def2tzvp", "opt"):
             assert known not in tokens3
 
+    def test_canonicalize_route_string_returns_none_for_falsy_input(self):
+        assert canonicalize_route_string("") is None
+        assert canonicalize_route_string(None) is None
+
     def test_compute_trajectory_id(self):
         sid_a = "a" * 64
         sid_b = "b" * 64
@@ -327,6 +342,7 @@ class TestDatabaseUtilities:
         assert human_size(1024) == "1.0 KB"
         assert human_size(1048576) == "1.0 MB"
         assert human_size(None) == "-"
+        assert human_size(1024**4) == "1.0 TB"
 
     def test_convert_numpy(self):
         assert convert_numpy(np.int64(2)) == 2  # int
@@ -378,6 +394,8 @@ class TestDatabaseUtilities:
         assert standardize_basis_set("def2-svp") == "def2svp"
         assert standardize_basis_set("def2-tzvp") == "def2tzvp"
         assert standardize_basis_set("6-31g") == "6-31g"
+        assert standardize_basis_set(None) is None
+        assert standardize_basis_set("") == ""
 
     def test_sort_frames_by_energy(self):
         frames = [
@@ -419,6 +437,11 @@ class TestDatabaseUtilities:
         # No-energy case: original order preserved, no IndexError.
         empty_frames = [{"structure_id": "x", "energies": []}]
         assert sort_frames_by_energy(empty_frames) == empty_frames
+
+    def test_sort_structure_dicts_by_energy_empty_input(self, tmp_path):
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        assert sort_structure_dicts_by_energy(db.db_file, []) == []
 
     def test_sort_structure_dicts_no_energy(self, tmp_path):
         db = Database(str(tmp_path / "empty.db"))
@@ -463,6 +486,26 @@ class TestDatabaseUtilities:
         assert record_by_id["record_id"] == gaussian.record_id
 
         assert record_by_index["record_id"] == record_by_id["record_id"]
+
+        with pytest.raises(ValueError, match="No record found at index"):
+            resolve_record(db, record_index=999)
+
+    def test_resolve_record_by_id_not_found_raises(self):
+        # get_record_by_partial_id resolves to a full ID, but get_record
+        # then finds nothing for it (e.g. deleted between the two calls).
+        mock_db = MagicMock()
+        mock_db.get_record_by_partial_id.return_value = "full-record-id"
+        mock_db.get_record.return_value = None
+
+        with pytest.raises(ValueError, match="No record found with ID"):
+            resolve_record(mock_db, record_id="partial")
+
+    def test_resolve_record_requires_index_or_id(self):
+        mock_db = MagicMock()
+        with pytest.raises(
+            ValueError, match="Either record_index or record_id"
+        ):
+            resolve_record(mock_db)
 
 
 class TestDatabaseSchemaAndInsertion:
@@ -632,6 +675,11 @@ class TestDatabaseSchemaAndInsertion:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         conn.close()
         assert version == SCHEMA_VERSION
+
+    def test_schema_version_matches_does_not_raise(self, tmp_path):
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        check_schema_version(db.db_file)  # should not raise
 
     def test_schema_version_mismatch_raises(self, tmp_path):
         """check_schema_version() raises RuntimeError for a stale database."""
