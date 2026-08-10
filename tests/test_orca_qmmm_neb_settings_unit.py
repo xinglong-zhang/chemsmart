@@ -134,6 +134,25 @@ class TestQMMMIntermediateValidation:
                 mult_total=1,
             )
 
+    def test_all_provided_intermediate_params_are_listed_when_no_low_level(
+        self,
+    ):
+        """No low_level_method means no error is raised, but the
+        param-collection loop that builds the (unused-in-this-case)
+        error message must still run over every intermediate-level field
+        so that each optional attribute is exercised."""
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            intermediate_level_method="XTB2",
+            charge_intermediate=0,
+            mult_intermediate=1,
+            intermediate_level_solvation="cpcm(water)",
+        )
+        assert s.intermediate_level_method == "XTB2"
+        assert s.charge_intermediate == 0
+        assert s.mult_intermediate == 1
+        assert s.intermediate_level_solvation == "cpcm(water)"
+
     def test_intermediate_params_for_non_qm2_jobtype_without_low_level_is_silently_accepted(
         self,
     ):
@@ -176,6 +195,43 @@ class TestQMMMIntermediateValidation:
         s.intermediate_level_basis = None
         with pytest.raises(ValueError, match="requires QM2"):
             s.re_init_and_validate()
+
+    def test_re_init_and_validate_falls_back_to_intermediate_charge(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="XTB2",
+            intermediate_level_atoms=[1, 2],
+            charge_intermediate=1,
+            mult_intermediate=2,
+        )
+        assert s.charge == 1
+        assert s.multiplicity == 2
+        # Clear high-level charge/mult (already unset) and re-run: should
+        # still fall back to the intermediate charge/mult pair.
+        s.high_level_functional = "PBE0"
+        s.re_init_and_validate()
+        assert s.charge == 1
+        assert s.multiplicity == 2
+        assert s.functional == "PBE0"
+
+    def test_re_init_and_validate_falls_back_to_total_charge(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            low_level_method="ff.prms",
+            charge_total=2,
+            mult_total=3,
+        )
+        assert s.charge == 2
+        assert s.multiplicity == 3
+        s.high_level_functional = "PBE0"
+        s.re_init_and_validate()
+        assert s.charge == 2
+        assert s.multiplicity == 3
+        assert s.functional == "PBE0"
 
 
 class TestQMMMLevelOfTheoryString:
@@ -253,6 +309,101 @@ class TestQMMMLevelOfTheoryString:
             low_level_method="ff.prms",
         )
         assert s.qmmm_route_string == s._get_level_of_theory_string()
+
+    def test_unrecognized_parent_jobtype_appends_no_opt_keyword(self):
+        """A parent_jobtype that doesn't match any of opt/modred/scan/ts/
+        irc/sp simply falls through without adding any job-type keyword."""
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            parent_jobtype="something-else",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            low_level_method="ff.prms",
+            charge_total=0,
+            mult_total=1,
+        )
+        route = s._get_level_of_theory_string()
+        assert route.startswith("! QMMM")
+
+    def test_solvent_model_appended_to_qmmm_route(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            parent_jobtype="opt",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            low_level_method="ff.prms",
+            solvent_model="cpcm",
+            charge_total=0,
+            mult_total=1,
+        )
+        route = s._get_level_of_theory_string()
+        assert "cpcm" in route
+
+    def test_intermediate_level_solvation_alpb_requires_xtb(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            parent_jobtype="sp",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="XTB",
+            intermediate_level_atoms=[1, 2],
+            intermediate_level_solvation="alpb(water)",
+            charge_high=0,
+            mult_high=1,
+        )
+        route = s._get_level_of_theory_string()
+        assert "alpb(water)" in route
+
+    def test_intermediate_level_solvation_alpb_raises_when_not_xtb(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            parent_jobtype="sp",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            intermediate_level_functional="B3LYP",
+            intermediate_level_basis="def2-SVP",
+            intermediate_level_atoms=[1, 2],
+            intermediate_level_solvation="alpb(water)",
+            charge_high=0,
+            mult_high=1,
+        )
+        with pytest.raises(AssertionError, match="only compatible"):
+            s._get_level_of_theory_string()
+
+    def test_intermediate_level_solvation_unrecognized_value_appends_nothing(
+        self,
+    ):
+        """A truthy intermediate_level_solvation that matches neither the
+        ALPB/DDCOSMO/CPCMX list nor 'cpcm(water)' falls through both
+        branches without appending anything."""
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            parent_jobtype="sp",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="XTB2",
+            intermediate_level_atoms=[1, 2],
+            intermediate_level_solvation="some_other_model",
+            charge_high=0,
+            mult_high=1,
+        )
+        route = s._get_level_of_theory_string()
+        assert "some_other_model" not in route
+
+    def test_intermediate_level_solvation_cpcm_water(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            parent_jobtype="sp",
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="XTB2",
+            intermediate_level_atoms=[1, 2],
+            intermediate_level_solvation="cpcm(water)",
+            charge_high=0,
+            mult_high=1,
+        )
+        route = s._get_level_of_theory_string()
+        assert "cpcm(water)" in route
 
 
 class TestValidateAndAssignLevel:
@@ -345,6 +496,20 @@ class TestCheckCrystalQmmm:
         with pytest.raises(AssertionError, match="only applicable"):
             s.check_crystal_qmmm()
 
+    def test_mol_crystal_qmmm_conv_charges_false_with_low_level_method_passes(
+        self,
+    ):
+        """When conv_charges is False, a force-field file must be given
+        via low_level_method; if it is, the assertion simply passes."""
+        s = ORCAQMMMJobSettings(
+            jobtype="MOL-CRYSTAL-QMMM",
+            n_unit_cell_atoms=12,
+            low_level_method="ff.prms",
+            conv_charges=False,
+        )
+        s.check_crystal_qmmm()  # must not raise
+        assert s.multiplicity == 0
+
     def test_non_crystal_jobtype_is_a_no_op(self):
         s = ORCAQMMMJobSettings(
             jobtype="QMMM",
@@ -387,6 +552,22 @@ class TestFormattedPartitionStrings:
         s = self._settings()
         with pytest.raises(TypeError):
             s._get_formatted_partition_strings(object())
+
+    def test_fallback_parser_handles_dash_colon_and_plain_tokens(self):
+        """`get_list_from_string_range` cannot parse ':'-style tokens, so
+        mixing a ':' token into the string forces the whole call to raise
+        and fall back to the local regex-based parser, which understands
+        '-', ':', and bare-integer tokens."""
+        s = self._settings()
+        result = s._get_formatted_partition_strings("1-3,1:5,7")
+        # union of {1,2,3} (dash), {1,2,3,4,5} (colon), {7} (plain) =
+        # {1,2,3,4,5,7}; shifted to 0-index and compressed.
+        assert result == "0:4 6"
+
+    def test_min_atom_already_zero_indexed_is_not_shifted(self):
+        s = self._settings()
+        result = s._get_formatted_partition_strings([0, 1, 2])
+        assert result == "0:2"
 
 
 class TestQmmmBlockGeneration:
@@ -495,6 +676,102 @@ class TestQmmmBlockGeneration:
         assert "Conv_Charges False" in block
         assert "NumUnitCellAtoms 12" in block
 
+    def test_intermediate_solv_scheme_line(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            intermediate_level_method="XTB2",
+            intermediate_level_atoms=[1, 2],
+            intermediate_solv_scheme="cds",
+            charge_intermediate=0,
+            mult_intermediate=1,
+        )
+        block = s._write_qmmm_block()
+        assert "solv_scheme cds" in block
+
+    def test_active_atoms_line(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            low_level_method="ff.prms",
+            active_atoms=[1, 2, 3],
+            charge_total=0,
+            mult_total=1,
+        )
+        block = s._write_qmmm_block()
+        assert "ActiveAtoms {0:2} end" in block
+
+    def test_optregion_fixed_atoms_that_format_to_none_skips_line(self):
+        """A truthy but content-free optregion_fixed_atoms value (e.g. a
+        whitespace-only string) reaches the elif branch but formats down
+        to None, so no OptRegion_FixedAtoms line is written."""
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            low_level_method="ff.prms",
+            optregion_fixed_atoms=" ",
+            charge_total=0,
+            mult_total=1,
+        )
+        block = s._write_qmmm_block()
+        assert "OptRegion_FixedAtoms" not in block
+
+    def test_h_bond_length_dict_included_in_full_block(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            low_level_method="ff.prms",
+            high_level_h_bond_length={("C", "H"): 1.09},
+            charge_total=0,
+            mult_total=1,
+        )
+        block = s._write_qmmm_block()
+        assert "Dist_C_H 1.09" in block
+
+    def test_empty_dict_h_bond_length_produces_falsy_block_and_is_skipped(
+        self,
+    ):
+        """An empty dict is `is not None` (so the outer guard is entered)
+        but `_get_h_bond_length` then returns an empty string for it,
+        which is falsy, so nothing is appended to the qmmm block."""
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            low_level_method="ff.prms",
+            high_level_h_bond_length={},
+            charge_total=0,
+            mult_total=1,
+        )
+        block = s._write_qmmm_block()
+        assert "Dist_" not in block
+
+    def test_delete_la_bond_double_counting_atoms_line(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            low_level_method="ff.prms",
+            delete_la_bond_double_counting_atoms=True,
+            charge_total=0,
+            mult_total=1,
+        )
+        block = s._write_qmmm_block()
+        assert "DeleteLABondDoubleCounting true" in block
+
+
+class TestCrystalQmmmSubblockOptionalFields:
+    def test_all_optional_fields_written(self):
+        s = ORCAQMMMJobSettings(
+            jobtype="IONIC-CRYSTAL-QMMM",
+            low_level_method="ff.prms",
+            ecp_layer_ecp="def2-ECP",
+            ecp_layer=2,
+            conv_charges_max_n_cycles=10,
+            conv_charges_conv_thresh=1e-4,
+            scale_formal_charge_mm_atom=0.5,
+            scale_formal_charge_ecp_atom=0.75,
+        )
+        block = s._write_crystal_qmmm_subblock()
+        assert "Conv_Charges_MaxNCycles 10" in block
+        assert "Conv_Charges_ConvThresh 0.0001" in block
+        assert "Scale_FormalCharge_MMAtom 0.5" in block
+        assert "cECPs def2-ECP" in block
+        assert "ECPLayers 2" in block
+        assert "Scale_FormalCharge_ECPAtom 0.75" in block
+
 
 class TestHBondLength:
     def _settings(self, **kwargs):
@@ -522,6 +799,14 @@ class TestHBondLength:
         s = self._settings(high_level_h_bond_length=str(present))
         result = s._get_h_bond_length()
         assert result == f'H_Dist_FileName "{present}"'
+
+    def test_neither_dict_nor_str_returns_none_implicitly(self):
+        """Only dict/str forms are handled; any other type (bypassing the
+        `is not None` guard in `_write_qmmm_block` via a direct call)
+        falls through to an implicit `None` return."""
+        s = self._settings()
+        s.high_level_h_bond_length = 123
+        assert s._get_h_bond_length() is None
 
 
 class TestEmbeddingType:
@@ -642,6 +927,87 @@ class TestORCANEBJobSettings:
             solvent_id="water",
         )
         assert "CPCM(water)" in s.route_string
+
+    def test_route_string_with_numfreq(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            numfreq=True,
+        )
+        assert "NumFreq" in s.route_string
+
+    def test_route_string_scf_tol_and_algorithm(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            scf_tol="tight",
+            scf_algorithm="KDIIS",
+        )
+        route = s.route_string
+        assert "tightSCF" in route
+        assert "KDIIS" in route
+
+    def test_route_string_scf_tol_with_existing_scf_suffix_untouched(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            scf_tol="TightSCF",
+        )
+        assert "TightSCF" in s.route_string
+
+    def test_route_string_custom_solvent_with_id(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            custom_solvent="Epsilon 16.7\n",
+            solvent_id="chloroform",
+        )
+        assert "CPCM(chloroform)" in s.route_string
+
+    def test_route_string_custom_solvent_without_id(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            custom_solvent="Epsilon 16.7\n",
+        )
+        assert s.route_string.strip().endswith("CPCM")
+
+    def test_route_string_solvent_model_without_id(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            solvent_model="cpcm",
+        )
+        assert s.route_string.strip().endswith("CPCM")
+
+    def test_route_string_solvent_id_without_model_defaults_to_cpcm(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            functional="B3LYP",
+            basis="def2-SVP",
+            solvent_id="water",
+        )
+        assert "CPCM(water)" in s.route_string
+
+    def test_route_string_solvent_model_deduplicated_when_repeated(self):
+        s = ORCANEBJobSettings(
+            joboption="NEB",
+            semiempirical="CPCM",
+            solvent_model="cpcm",
+            solvent_id="water",
+        )
+        import re as _re
+
+        route = s.route_string
+        occurrences = len(_re.findall(r"\bcpcm\b", route, _re.IGNORECASE))
+        assert occurrences == 1
+        assert "CPCM(water)" in route
 
     def test_equal_settings_are_equal(self):
         kwargs = dict(joboption="NEB-TS", nimages=8)

@@ -402,6 +402,10 @@ class TestGetLevelOfTheory:
         theory = settings._get_level_of_theory()
         assert theory == "B3LYP def2-SVP def2/J extrapolate(2/3,def2)"
 
+    def test_ab_initio_only_used_when_functional_not_set(self):
+        settings = ORCAJobSettings(ab_initio="MP2", basis="def2-SVP")
+        assert settings._get_level_of_theory() == "MP2 def2-SVP"
+
 
 class TestWriteGeometry:
     def test_writes_charge_multiplicity_and_coordinates(
@@ -532,6 +536,23 @@ class TestORCApKaJobSettingsInit:
     ):
         assert pka_settings_with_reference.reference_file is not None
         assert pka_settings_with_reference.reference_proton_index == 4
+
+    def test_deprecated_thermodynamic_cycle_kwarg_sets_scheme(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            settings = ORCApKaJobSettings(
+                proton_index=1, thermodynamic_cycle="direct"
+            )
+        assert settings.scheme == "direct"
+        assert "deprecated" in caplog.text
+
+    def test_default_title_used_when_not_provided(self, pka_settings):
+        assert pka_settings.title == "ORCA pKa calculation job"
+
+    def test_custom_title_not_overridden(self):
+        settings = ORCApKaJobSettings(proton_index=1, title="My custom title")
+        assert settings.title == "My custom title"
 
 
 class TestBuildOrcaPkaSettings:
@@ -1114,6 +1135,15 @@ class TestORCAIRCJobSettings:
         assert "freq" not in route.lower()
         assert "IRC" in route
 
+    def test_route_string_without_freq_skips_substitution(self):
+        """When neither freq nor numfreq is set, the route string never
+        contains "freq" in the first place, so the re.sub substitution
+        branch is simply skipped."""
+        settings = ORCAIRCJobSettings(functional="B3LYP", basis="def2-SVP")
+        route = settings.route_string
+        assert "freq" not in route.lower()
+        assert "IRC" in route
+
     def test_write_irc_block_noop_when_all_options_none(self, tmp_path):
         settings = ORCAIRCJobSettings()
         outfile = tmp_path / "irc.inp"
@@ -1199,3 +1229,19 @@ class TestORCAIRCJobSettings:
         content = outfile.read_text()
         assert "monitor_internals" not in content
         assert "maxiter 10" in content
+
+    def test_write_irc_block_inithess_not_read_skips_hess_filename(
+        self, tmp_path
+    ):
+        """When inithess is set to something other than 'read' (e.g. one of
+        the computed-Hessian options), the Hess_Filename line and its
+        existence assertions are skipped entirely; the loop just moves on
+        to the next option."""
+        settings = ORCAIRCJobSettings(inithess="calc_anfreq", maxiter=5)
+        outfile = tmp_path / "irc.inp"
+        with open(outfile, "w") as f:
+            settings._write_irc_block(f)
+        content = outfile.read_text()
+        assert "inithess calc_anfreq" in content
+        assert "Hess_Filename" not in content
+        assert "maxiter 5" in content

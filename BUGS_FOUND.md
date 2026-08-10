@@ -3817,3 +3817,104 @@ The `if not files: raise ValueError(...)` guard is meant to give a clear error w
 **Impact:** Low -- the call still fails loudly (just with the wrong exception type/message), so callers checking for empty input via a broad `except Exception` won't notice, but ones specifically catching `ValueError` (as the docstring/API implies they should be able to) will see an uncaught `IndexError` instead.
 
 **Suggested direction:** move the `if not files: raise ValueError(...)` check to the very top of `__init__`, before the `super().__init__(filename=files[0], **kwargs)` call.
+
+---
+
+## 84. Two identical `if not route_string.startswith("!")` guards are dead code because `route_string` is always freshly initialized to `""`
+
+**Location:** `chemsmart/jobs/orca/settings.py:526-528` (`ORCAJobSettings._get_route_string_from_jobtype`) and `chemsmart/jobs/orca/settings.py:2619-2621` (`ORCANEBJobSettings._get_neb_route_string`)
+
+```python
+route_string = ""
+if not route_string.startswith("!"):
+    route_string += "! "
+```
+
+In both methods, `route_string` is assigned the literal `""` on the line immediately before this guard, and no code path modifies it in between. An empty string never starts with `"!"`, so `not route_string.startswith("!")` is always `True` and the body always executes -- the `if` is unconditionally true every time either method runs. The guard can never take its "false" arc (i.e. `route_string` already starting with `"!"`) because there is no way to reach the check with a non-empty `route_string`.
+
+**Reproduce:** Coverage of `tests/test_orca_settings_unit.py` and `tests/test_orca_qmmm_neb_settings_unit.py` (all `route_string`/`_get_neb_route_string` tests) leaves the `if`'s false branch (`527->532` and `2620->2625` in `coverage report -m`) permanently unreached no matter what settings are exercised, confirming the guard is tautological.
+
+**Impact:** None -- purely dead/defensive code; every call always takes the same path, so behavior is unaffected. It looks like a copy-paste of the pattern used in `_get_route_string_from_user_input` (where the check *is* meaningful, since there `route_string = self.route_to_be_written` can legitimately already start with `"!"`), applied to a context where it can't ever be false.
+
+**Suggested direction:** no action needed; could be simplified to unconditionally `route_string = "! "` in both places, removing the always-true `if`.
+
+---
+
+## 85. `ORCAJobSettings._get_level_of_theory`'s `elif self.basis is None` is a tautological branch that is always true when reached
+
+**Location:** `chemsmart/jobs/orca/settings.py:665-671`
+
+```python
+if self.basis is not None:
+    level_of_theory += f" {self.basis}"
+elif self.basis is None:
+    # allow missing basis for QMMM-type jobs where basis may be
+    # provided per-layer (or omitted)
+    if not is_qmmm:
+        raise ValueError("Warning: basis is missing!")
+```
+
+The `elif` branch is only ever evaluated when the preceding `if self.basis is not None` was `False`, i.e. exactly when `self.basis is None`. At that point `elif self.basis is None` is guaranteed to be `True` -- it can never be reached and evaluate to `False`, since that would require `self.basis` to be simultaneously not-None (to fail the `if`) and None (to fail the `elif`), which is impossible. The `elif`'s condition is therefore redundant; it is functionally an `else`.
+
+**Reproduce:** In `coverage report -m --include="*jobs/orca/settings.py"`, branch `667->673` (jumping from the `elif` line straight past its body to the `aux_basis` check that follows the whole `if/elif`) never appears as covered no matter what `basis`/`jobtype` combinations `tests/test_orca_settings_unit.py::TestGetLevelOfTheory` exercises, because that arc requires the impossible "basis is not None and also None" state.
+
+**Impact:** None -- purely a redundant/tautological condition; behavior is identical to writing a plain `else:`.
+
+**Suggested direction:** no action needed; could be simplified by replacing `elif self.basis is None:` with `else:` for clarity, since the condition adds no information.
+
+---
+
+## 86. `ORCAQMMMJobSettings._get_level_of_theory_string`'s `if self.low_level_of_theory is not None` check is always true because `validate_and_assign_level` unconditionally returns `"MM"` for the low-level layer
+
+**Location:** `chemsmart/jobs/orca/settings.py:2015-2016, 2091-2094`
+
+```python
+# inside validate_and_assign_level(self, functional, basis, built_in_method, level_name):
+if level_name == "low_level":
+    level_of_theory = "MM"
+return level_of_theory
+
+# inside _get_level_of_theory_string:
+self.low_level_of_theory = self.validate_and_assign_level(
+    None, None, self.low_level_method, level_name="low_level"
+)
+if self.low_level_of_theory is not None:
+    ...
+```
+
+`validate_and_assign_level` is always called with `level_name="low_level"` from this call site, and the `if level_name == "low_level": level_of_theory = "MM"` line unconditionally overwrites whatever the earlier `built_in_method`/`functional`/`basis` branches computed (including the `""` default), regardless of whether `self.low_level_method` was actually provided. So `self.low_level_of_theory` is always the string `"MM"`, never `None` or falsy, and the subsequent `if self.low_level_of_theory is not None:` check on line 2094 can never take its false branch.
+
+**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2094->2106` (skipping the entire QM/QMMM-labeling block) as unreachable across all of `tests/test_orca_qmmm_neb_settings_unit.py::TestQMMMLevelOfTheoryString`, including jobs with no `low_level_method` set at all (plain `QM/QM2` jobs).
+
+**Impact:** None observed -- the *actual* decision about whether to append an `"/MM"` suffix is separately (and correctly) gated a few lines later by `if self.low_level_method is not None:` (line 2104), which checks the real attribute rather than the always-`"MM"` `low_level_of_theory`. So a plain `QM/QM2` job (no MM layer) still produces the correct `"QM/<intermediate>"` route string without an erroneous `"/MM"` suffix, because that second, correct guard saves it. The outer `if self.low_level_of_theory is not None:` is simply vestigial dead code that happens not to matter because of the redundant, correctly-guarded check inside it.
+
+**Suggested direction:** no action needed functionally, but this is worth a closer look if `_get_level_of_theory_string` is ever refactored, since the outer condition reads as if it's meaningfully distinguishing "has an MM layer" from "doesn't" when it cannot -- a future edit that removes the inner `low_level_method` guard (trusting the outer one instead) would silently break additive-QMMM-vs-QM/QM2 formatting.
+
+---
+
+## 87. `ORCAQMMMJobSettings._write_qmmm_block`'s `if crystal_sub is not None` check is always true because `_write_crystal_qmmm_subblock` never returns `None`
+
+**Location:** `chemsmart/jobs/orca/settings.py:2427-2431, 2445-2471`
+
+```python
+crystal_sub = self._write_crystal_qmmm_subblock()
+if crystal_sub is not None:
+    full_qm_block += crystal_sub
+
+...
+
+def _write_crystal_qmmm_subblock(self):
+    crystal_qmmm_subblock = ""
+    if not self.conv_charges:
+        ...
+    ...
+    return crystal_qmmm_subblock
+```
+
+`_write_crystal_qmmm_subblock` initializes `crystal_qmmm_subblock = ""` and only ever appends to it; every code path returns this (possibly-still-empty) string, never `None`. So `crystal_sub` is always a `str` (falsy-but-not-None when no crystal fields are set), and `if crystal_sub is not None:` is always `True`. Appending an empty string to `full_qm_block` is a no-op anyway, so the check has no observable effect either way.
+
+**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2428->2431` (skipping the `full_qm_block += crystal_sub` append) as unreachable across all of `tests/test_orca_qmmm_neb_settings_unit.py::TestQmmmBlockGeneration`, including non-crystal `QMMM`/`QM/QM2` jobs where the subblock is empty.
+
+**Impact:** None -- appending `""` is a no-op, so whether the `if` guard is "true but appends nothing" or hypothetically "false and skips the append" produces byte-identical output. Purely dead/defensive code.
+
+**Suggested direction:** no action needed; could be simplified to an unconditional `full_qm_block += self._write_crystal_qmmm_subblock()`, since the `is not None` guard can never be the deciding factor.
