@@ -3918,3 +3918,26 @@ def _write_crystal_qmmm_subblock(self):
 **Impact:** None -- appending `""` is a no-op, so whether the `if` guard is "true but appends nothing" or hypothetically "false and skips the append" produces byte-identical output. Purely dead/defensive code.
 
 **Suggested direction:** no action needed; could be simplified to an unconditional `full_qm_block += self._write_crystal_qmmm_subblock()`, since the `is not None` guard can never be the deciding factor.
+
+---
+
+## 88. `GaussianQRCJob._prepare_both_qrc_jobs`'s `elif direction == "r":` is a tautological branch that is always true when reached
+
+**Location:** `chemsmart/jobs/gaussian/qrc.py:126-135`
+
+```python
+for direction in ["f", "r"]:
+    ...
+    if direction == "f":
+        mol = self.qrcf_molecule
+    elif direction == "r":
+        mol = self.qrcr_molecule
+```
+
+`direction` only ever takes the two values in the loop's own fixed iterable, `["f", "r"]`. Whenever the `if direction == "f":` branch is `False`, `direction` is guaranteed to be `"r"` (the only other value the loop produces), so `elif direction == "r":` is always `True` when evaluated -- its "false" arm (which would leave `mol` as the unmodified `self.molecule` from line 131) can never execute.
+
+**Reproduce:** `tests/test_GaussianJobs.py::TestGaussianQRCJobs` exercises both loop iterations (via `test_run_both_jobs_runs_forward_and_reverse_jobs` and the new label/jobtype tests); `coverage report -m --include="*jobs/gaussian/qrc.py"` shows arc `134->136` (the `elif`'s false arm, skipping to the `logger.debug` call after the chain) as permanently unreachable regardless of which branch combinations are exercised.
+
+**Impact:** None -- purely redundant code with no behavioral effect, since the loop's iterable is a fixed two-element list.
+
+**Suggested direction:** no action needed; could be simplified to a plain `else:` now that the two-value domain is confirmed.
