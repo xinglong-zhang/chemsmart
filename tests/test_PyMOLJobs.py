@@ -31,7 +31,10 @@ from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
     SCIENTIFIC_STYLE_CLASSES,
     ComicMetallicStyle,
     GlossyStyle,
+    NeonCoordinationCoreStyle,
+    QuasiChemDrawBoldStyle,
     ScientificStyle,
+    SoftCartoonStyle,
     StericSurfaceStyle,
     metal_pymol_selection,
     pymol_elem_selection,
@@ -2554,3 +2557,579 @@ class TestPyMOLScientificStyleVisualizationJobs:
             )
             == f"soft_ceramic {job.label}"
         )
+
+    def test_soft_cartoon_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="soft-cartoon",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"soft_cartoon {job.label}"
+        )
+
+    def test_neon_coordination_core_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="neon-coordination-core",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"neon_coordination_core {job.label}"
+        )
+
+    def test_matte_clay_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="matte-clay",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"matte_clay {job.label}"
+        )
+
+    def test_xray_wire_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="xray-wire",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"xray_wire {job.label}"
+        )
+
+    def test_steric_surface_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="steric-surface",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"steric_surface {job.label}"
+        )
+
+    def test_quasi_chemdraw_bold_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="quasi-chemdraw-bold",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(
+            os.path.join(tmpdir, "zhang_group_scientific_styles.py")
+        )
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == f"quasi_chemdraw_bold {job.label}"
+        )
+
+
+@pytest.fixture()
+def loaded_1_mer(visualized_1_mer_xyz_file):
+    """Load ``1-mer.xyz`` into a fresh, real PyMOL session (PyMOL required)."""
+    from pymol import cmd
+
+    cmd.reinitialize()
+    cmd.load(visualized_1_mer_xyz_file, "mol1mer")
+    yield "mol1mer"
+    cmd.delete("all")
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
+class TestPyMOLScientificStyleRenderDirect:
+    """Call ``ScientificStyle.render()`` in-process against a real PyMOL
+    session so ``coverage`` observes the style bodies. ``job.run()`` (used
+    in :class:`TestPyMOLScientificStyleVisualizationJobs`) shells out to a
+    ``pymol`` subprocess, so it never exercises this module's lines in the
+    test process itself.
+    """
+
+    @pytest.mark.parametrize(
+        "style_cls",
+        SCIENTIFIC_STYLE_CLASSES,
+        ids=[style_cls.command for style_cls in SCIENTIFIC_STYLE_CLASSES],
+    )
+    def test_render_each_style_directly_on_real_pymol_session(
+        self, style_cls, loaded_1_mer
+    ):
+        from pymol import cmd
+
+        style_cls().render(loaded_1_mer)
+        assert cmd.count_atoms(loaded_1_mer) > 0
+
+    def test_comic_metallic_render_bonds_highlighted_distance_pairs(
+        self, loaded_1_mer
+    ):
+        """``-c`` distance objects (``d1``, ``d2``, …) drive explicit
+        metal-donor bonding in :meth:`ComicMetallicStyle.render`."""
+        from pymol import cmd
+
+        cmd.distance(
+            "d1", f"{loaded_1_mer} and id 1", f"{loaded_1_mer} and id 2"
+        )
+        cmd.distance(
+            "d2", f"{loaded_1_mer} and id 1", f"{loaded_1_mer} and id 5"
+        )
+        assert ScientificStyle.pairs_from_distance_objects(loaded_1_mer)
+
+        ComicMetallicStyle().render(loaded_1_mer)
+
+        # `render()` consumes and removes the highlight distance objects.
+        assert ScientificStyle._distance_object_names() == []
+
+    def test_select_coordination_handles_empty_selection(self, loaded_1_mer):
+        """An empty selection short-circuits ``build_coordination_atoms``."""
+        atoms = ScientificStyle.build_coordination_atoms(
+            selection="none", prefix="empty_test"
+        )
+        from pymol import cmd
+
+        for name in atoms.values():
+            assert cmd.count_atoms(name) == 0
+
+    def test_build_coordination_atoms_accepts_explicit_metal(
+        self, loaded_1_mer
+    ):
+        """Passing ``metal=`` bypasses automatic ``is_metal`` detection."""
+        from pymol import cmd
+
+        atoms = ScientificStyle.build_coordination_atoms(
+            selection=loaded_1_mer,
+            prefix="explicit_metal_test",
+            metal="elem Mn",
+        )
+        assert cmd.count_atoms(atoms["metal"]) > 0
+
+    def test_apply_coordination_sci_palette_runs_on_real_selection(
+        self, loaded_1_mer
+    ):
+        style = ScientificStyle()
+        style.define_shared_colors()
+        atoms = style.select_coordination(loaded_1_mer)
+        style.apply_coordination_sci_palette(loaded_1_mer, atoms)
+
+    def test_frame_and_finalize_on_real_selection(self, loaded_1_mer):
+        style = ScientificStyle()
+        atoms = style.select_coordination(loaded_1_mer)
+        style.frame(loaded_1_mer, atoms["coordination_core"])
+        style.finalize()
+        style.finish_default(loaded_1_mer)
+
+    def test_apply_camera_and_lighting_helpers_on_real_session(
+        self, loaded_1_mer
+    ):
+        style = ScientificStyle()
+        style.set_transparent_background()
+        style.apply_base_quality()
+        style.apply_lighting(
+            0.5, 0.5, 0.3, 0.7, 0.2, spec_power=100, shininess=50
+        )
+        style.apply_transparent_view(
+            orthoscopic=1,
+            field_of_view=30,
+            depth_cue=1,
+            fog_start=0.5,
+            ray_trace_gain=0.1,
+        )
+        style.apply_illustrated_camera()
+        style.apply_soft_shadows()
+        style.apply_ambient_occlusion()
+        style.define_shared_colors()
+        style.finish_camera(loaded_1_mer)
+        style.safe_ray_shadows("light")
+
+        # Optional-argument branches not exercised by any style's render():
+        # `apply_lighting` without spec_power, and `apply_transparent_view`
+        # without depth_cue / fog_start / ray_shadows_mode.
+        style.apply_lighting(0.4, 0.2, 0.3, 0.6, 0.1)
+        style.apply_transparent_view(
+            orthoscopic=1,
+            field_of_view=30,
+            depth_cue=None,
+            fog_start=None,
+            ray_trace_gain=None,
+            ray_shadows_mode=None,
+        )
+
+    def test_safe_set_and_pairs_helpers_with_no_distance_objects(
+        self, loaded_1_mer
+    ):
+        style = ScientificStyle()
+        style.safe_set("orthoscopic", 1)
+        style._safe_set(
+            "sphere_scale", 0.3, selection=loaded_1_mer, category="C"
+        )
+        # No selection/category: takes the direct `safe_set` branch.
+        style._safe_set("orthoscopic", 1)
+        assert ScientificStyle.pairs_from_distance_objects(loaded_1_mer) == []
+        ScientificStyle.remove_distance_objects()
+        ScientificStyle.hide_distance_value_labels()
+
+    def test_coordination_sphere_atoms_without_hydride(self, loaded_1_mer):
+        style = ScientificStyle()
+        atoms = style.select_coordination(loaded_1_mer)
+        with_hydride = style.coordination_sphere_atoms(atoms)
+        without_hydride = style.coordination_sphere_atoms(
+            atoms, include_hydride=False
+        )
+        assert isinstance(with_hydride, str)
+        assert isinstance(without_hydride, str)
+
+    def test_base_render_raises_not_implemented(self):
+        with pytest.raises(NotImplementedError, match="must implement render"):
+            ScientificStyle().render()
+
+    def test_metal_element_label_returns_placeholder_for_empty_selection(
+        self, loaded_1_mer
+    ):
+        assert GlossyStyle.metal_element_label("none") == "?"
+
+    def test_element_category_selection_metal_uses_elem_prefixed_branch(self):
+        selection = ScientificStyle.element_category_selection("all", "metal")
+        assert selection.startswith("(all) and (elem ")
+
+    def test_comic_metallic_render_without_metal_present(self, loaded_1_mer):
+        """No metal in the rendered selection exercises the ``count_atoms
+        == 0`` branches guarding bonding/labeling in
+        :meth:`ComicMetallicStyle.render`."""
+        from pymol import cmd
+
+        non_metal_selection = f"{loaded_1_mer} and elem C+H"
+        assert cmd.count_atoms(non_metal_selection) > 0
+        ComicMetallicStyle().render(non_metal_selection)
+
+    def test_steric_surface_render_skips_spheres_when_none_are_selected(
+        self, loaded_1_mer, mocker
+    ):
+        """``select_coordination`` always returns named PyMOL selections
+        (never a literal ``"none"`` string), so ``coordination_sphere_atoms``
+        is always truthy through a real render. Force it empty directly to
+        exercise the ``if sphere_atoms:`` False branch in
+        :meth:`StericSurfaceStyle.render`."""
+        mocker.patch.object(
+            StericSurfaceStyle, "coordination_sphere_atoms", return_value=""
+        )
+        StericSurfaceStyle().render(loaded_1_mer)
+
+    def test_parse_metal_symbols_returns_empty_set_for_falsy_input(self):
+        assert ScientificStyle._parse_metal_symbols(None) == set()
+        assert ScientificStyle._parse_metal_symbols("") == set()
+
+    def test_build_coordination_atoms_lone_metal_has_no_donors(self, tmp_path):
+        """A metal with no nearby atoms exercises the ``donors -> none``
+        branch (no donor_s/donor_n/donor_p atoms found)."""
+        from pymol import cmd
+
+        xyz_path = tmp_path / "lone_metal.xyz"
+        xyz_path.write_text("1\nlone metal\nMn 0.0 0.0 0.0\n")
+        cmd.reinitialize()
+        cmd.load(str(xyz_path), "lone_metal")
+        try:
+            atoms = ScientificStyle.build_coordination_atoms(
+                selection="lone_metal", prefix="lone_metal_test"
+            )
+            assert cmd.count_atoms(atoms["metal"]) == 1
+            assert cmd.count_atoms(atoms["donors"]) == 0
+        finally:
+            cmd.delete("all")
+
+    def test_build_coordination_atoms_donor_p_primary_shell(self, tmp_path):
+        """A phosphorus donor within primary bonding range of the metal
+        exercises the ``donor_p_pymol`` branch in ``donor_parts``."""
+        from pymol import cmd
+
+        xyz_path = tmp_path / "metal_phosphine.xyz"
+        xyz_path.write_text(
+            "2\nmetal + P donor\nMn 0.0 0.0 0.0\nP 0.0 0.0 2.2\n"
+        )
+        cmd.reinitialize()
+        cmd.load(str(xyz_path), "metal_p")
+        try:
+            atoms = ScientificStyle.build_coordination_atoms(
+                selection="metal_p", prefix="metal_p_test"
+            )
+            assert cmd.count_atoms(atoms["donor_p"]) == 1
+            assert cmd.count_atoms(atoms["donors"]) == 1
+        finally:
+            cmd.delete("all")
+
+    def test_frame_swallows_origin_and_rebuild_exceptions(self, mocker):
+        """``cmd.origin``/``cmd.rebuild`` failures are swallowed so the
+        rest of ``frame()`` still runs (older PyMOL builds lack these)."""
+        mock_cmd = mocker.patch(
+            "chemsmart.jobs.mol.templates.zhang_group_scientific_styles.cmd"
+        )
+        mock_cmd.origin.side_effect = Exception("no origin support")
+        mock_cmd.rebuild.side_effect = Exception("no rebuild support")
+
+        style = ScientificStyle()
+        style.frame("all", "core_name")
+
+        mock_cmd.origin.assert_called_once_with("core_name")
+        mock_cmd.rebuild.assert_called_once()
+        mock_cmd.refresh.assert_called_once()
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
+class TestPyMOLScientificStyleDefensiveExceptionBranches:
+    """Force individual real-PyMOL API calls to fail (via targeted
+    ``mocker.patch.object`` on the actual ``pymol.cmd`` module) to exercise
+    this file's ``except Exception: pass`` guards, which real PyMOL calls
+    practically never trigger under normal, valid-selection usage."""
+
+    def test_safe_ray_shadows_swallows_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(
+            cmd.util, "ray_shadows", side_effect=Exception("boom")
+        )
+        ScientificStyle.safe_ray_shadows("light")
+
+    def test_hide_distance_value_labels_swallows_hide_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(
+            ScientificStyle, "_distance_object_names", return_value=["d1"]
+        )
+        mocker.patch.object(cmd, "hide", side_effect=Exception("boom"))
+        ScientificStyle.hide_distance_value_labels()
+
+    def test_distance_object_names_swallows_get_names_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "get_names", side_effect=Exception("boom"))
+        assert ScientificStyle._distance_object_names() == []
+
+    def test_pairs_from_distance_objects_swallows_get_state_exception(
+        self, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "get_state", side_effect=Exception("boom"))
+        assert ScientificStyle.pairs_from_distance_objects() == []
+
+    def test_pairs_from_distance_objects_swallows_iterate_state_exception(
+        self, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(
+            ScientificStyle, "_distance_object_names", return_value=["d1"]
+        )
+        mocker.patch.object(
+            cmd, "iterate_state", side_effect=Exception("boom")
+        )
+        assert ScientificStyle.pairs_from_distance_objects() == []
+
+    def test_pairs_from_distance_objects_swallows_get_session_exception(
+        self, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(
+            ScientificStyle, "_distance_object_names", return_value=["d1"]
+        )
+        mocker.patch.object(cmd, "get_session", side_effect=Exception("boom"))
+        assert ScientificStyle.pairs_from_distance_objects() == []
+
+    def test_bond_atom_index_pairs_swallows_bond_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "bond", side_effect=Exception("boom"))
+        ScientificStyle.bond_atom_index_pairs([(1, 2)])
+
+    def test_remove_distance_objects_swallows_delete_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(
+            ScientificStyle, "_distance_object_names", return_value=["d1"]
+        )
+        mocker.patch.object(cmd, "delete", side_effect=Exception("boom"))
+        ScientificStyle.remove_distance_objects()
+
+    def test_apply_element_palette_swallows_color_exceptions(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "color", side_effect=Exception("boom"))
+        ScientificStyle.apply_element_palette(
+            "all", {"C": "black"}, overrides={"some_sel": "gold"}
+        )
+
+    def test_define_colors_swallows_set_color_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "set_color", side_effect=Exception("boom"))
+        ComicMetallicStyle().define_colors()
+
+    def test_define_shared_colors_swallows_set_color_exception(self, mocker):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "set_color", side_effect=Exception("boom"))
+        ScientificStyle.define_shared_colors()
+
+    def test_soft_cartoon_render_swallows_set_bond_exception(
+        self, loaded_1_mer, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "set_bond", side_effect=Exception("boom"))
+        SoftCartoonStyle().render(loaded_1_mer)
+
+    def test_neon_coordination_core_render_swallows_set_bond_exception(
+        self, loaded_1_mer, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "set_bond", side_effect=Exception("boom"))
+        NeonCoordinationCoreStyle().render(loaded_1_mer)
+
+    def test_quasi_chemdraw_bold_render_swallows_set_bond_exception(
+        self, loaded_1_mer, mocker
+    ):
+        from pymol import cmd
+
+        mocker.patch.object(cmd, "set_bond", side_effect=Exception("boom"))
+        QuasiChemDrawBoldStyle().render(loaded_1_mer)
+
+    def test_pairs_from_distance_objects_skips_none_and_malformed_and_unmatched_points(
+        self, mocker
+    ):
+        """A ``d1``/``d2``/… session's per-object point payload can be
+        ``None`` (line-object with no visible dash points), malformed
+        (older/newer PyMOL session dict layouts), or reference coordinates
+        no longer present in ``xyz2idx`` (selection changed since the
+        distance was drawn). All three must be skipped, not raised."""
+        from pymol import cmd
+
+        mocker.patch.object(
+            ScientificStyle,
+            "_distance_object_names",
+            return_value=["d1", "d2", "d3"],
+        )
+        mocker.patch.object(cmd, "get_state", return_value=1)
+        mocker.patch.object(cmd, "iterate_state", return_value=None)
+
+        def make_session_object(points):
+            # obj[5][2][state - 1][1] == points, with state == 1.
+            inner = [None, points]
+            return [None] * 5 + [[None, None, [inner]]]
+
+        none_points_obj = make_session_object(None)
+        malformed_obj = [None] * 3  # obj[5] raises IndexError
+        unmatched_obj = make_session_object(
+            [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+        )
+        mocker.patch.object(
+            cmd,
+            "get_session",
+            return_value={
+                "names": [none_points_obj, malformed_obj, unmatched_obj]
+            },
+        )
+
+        # xyz2idx stays empty since `iterate_state` is mocked out, so the
+        # unmatched_obj's points can never resolve to an atom index.
+        assert ScientificStyle.pairs_from_distance_objects("all") == []
