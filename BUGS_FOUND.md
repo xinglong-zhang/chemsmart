@@ -3312,3 +3312,36 @@ for line in header_block:
 **Impact:** None -- purely redundant defensive code with no behavioral effect.
 
 **Suggested direction:** no action needed; could be simplified to `genecp_string += "\n".join(header_block) + "\n"` (or similar) now that the per-line truthiness check is confirmed dead.
+
+---
+
+## 67. `GaussianRoute.get_additional_solvent_options`'s trailing `return None` is unreachable dead code
+
+**Location:** `chemsmart/io/gaussian/route.py:529-571`
+
+```python
+def get_additional_solvent_options(self):
+    if "scrf" in self.route_string:
+        scrf_string = ""
+        for each_input in self.route_inputs:
+            if "scrf" in each_input:
+                scrf_string = each_input
+                ...
+                if len(scrf_line_elements) <= 2:
+                    return None
+                ...
+                return (
+                    ",".join(filtered_elements)
+                    if filtered_elements
+                    else None
+                )
+    return None
+```
+
+`self.route_inputs` is `self.route_string.split()` (whitespace-separated tokens), so any contiguous 4-character substring like `"scrf"` found in `self.route_string` must lie entirely within a single token -- whitespace can't split it apart. That means whenever the outer `if "scrf" in self.route_string:` guard passes, the `for` loop's `if "scrf" in each_input:` is guaranteed to match on at least one token. Every code path inside that inner `if` block explicitly returns (either `return None` at the length check, or the final `return (...)` expression) -- there is no path where the loop body executes without returning. Consequently the `for` loop can never complete a full pass and fall through to the function-level `return None` at line 571 while the outer guard is true; the only way to reach line 571 is when `"scrf" not in self.route_string`, which is already handled by the identical early `return None` one line 571 shares indentation with (functionally redundant with the guard's implicit "no scrf" case).
+
+**Reproduce:** confirmed by exhaustive reasoning over the tokenization invariant above (`str.split()` cannot separate a substring with no internal whitespace across two tokens); could not construct any route string where `"scrf" in self.route_string` is true but no single token in `self.route_inputs` contains `"scrf"`. See `tests/test_GaussianIO.py::TestRouteString::test_solvent_id_none_when_scrf_has_no_solvent_keyword` and `test_solvent_id_appends_read_when_read_precedes_solvent` for the reachable branches in the sibling `get_solvent_id` method, which has the identical structural pattern.
+
+**Impact:** None -- purely redundant defensive code with no behavioral effect.
+
+**Suggested direction:** no action needed; the trailing `return None` is harmless (and still correctly handles the "no scrf at all" case via the outer guard).

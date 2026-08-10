@@ -135,6 +135,111 @@ class TestRouteString:
         assert r3qmmm.functional == "mp2:hf"
         assert r3qmmm.basis == "6-31g:6-31g"
 
+    def test_read_route_string_oniom_semiempirical_high_layer(self):
+        s1 = "# oniom(am1:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.semiempirical == "AM1:UFF"
+
+    def test_read_route_string_oniom_high_layer_not_semiempirical(self):
+        s1 = "# oniom(b3lyp:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.semiempirical is None
+
+    def test_read_route_string_oniom_ab_initio_high_layer(self):
+        s1 = "# oniom(mp2/6-31g:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.ab_initio == "mp2:uff"
+
+    def test_read_route_string_oniom_missing_closing_paren(self):
+        # No closing ")" anywhere: the char-scan never finds a match at
+        # depth 0, so the oniom parser bails out via its for/else clause.
+        s1 = "# oniom(b3lyp:uff opt"
+        r1 = GaussianRoute(s1)
+        assert r1._get_oniom_layer_methods_and_bases() == (None, None)
+
+    def test_read_route_string_oniom_empty_parens(self):
+        s1 = "# oniom() opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+
+    def test_read_route_string_oniom_skips_empty_layer(self):
+        # A bare "/" between colons produces an empty method/basis split
+        # for that middle layer, which must be skipped, not appended.
+        s1 = "# oniom(am1:/:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "am1:uff"
+
+    def test_jobtype_ircf(self):
+        s1 = "# irc=forward b3lyp def2svp"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "ircf"
+
+    def test_jobtype_ircr(self):
+        s1 = "# irc=reverse b3lyp def2svp"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "ircr"
+
+    def test_jobtype_nci(self):
+        s1 = "# b3lyp def2svp output=wfn"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "nci"
+
+    def test_jobtype_resp(self):
+        s1 = "# hf 6-31g* pop=mk iop(6/33=2,6/41=10,6/42=17,6/50=1)"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "resp"
+
+    def test_jobtype_link(self):
+        s1 = "# b3lyp def2svp stable=opt"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "link"
+
+    def test_three_part_functional_basis_fit(self):
+        # A trailing token after the 3-part func/basis/fit spec is needed
+        # so the parsing loop continues past it to a further iteration.
+        s1 = "# opt tpsstpss/def2tzvp/fit nosymm"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "tpsstpss"
+        assert r1.basis == "def2tzvp/fit"
+
+    def test_slash_separated_token_with_unsupported_part_count_is_ignored(
+        self,
+    ):
+        # Neither the 2-part nor 3-part func/basis split applies for a
+        # token with 4 slash-separated parts; it's silently skipped.
+        s1 = "# opt a/b/c/d nosymm"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+
+    def test_functional_leading_hash_is_stripped(self):
+        s1 = "#mn15/def2svp opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "mn15"
+
+    def test_dispersion_with_no_matching_suffix_key_leaves_functional_as_is(
+        self,
+    ):
+        s1 = "# b3lyp def2svp empiricaldispersion=foo"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "b3lyp"
+
+    def test_dispersion_merges_into_oniom_functional_first_layer_only(self):
+        s1 = "# oniom(b3lyp:uff) empiricaldispersion=gd3bj opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "b3lyp-d3bj:uff"
+
+    def test_solvent_id_none_when_scrf_has_no_solvent_keyword(self):
+        s1 = "# opt b3lyp def2svp scrf=(pcm)"
+        r1 = GaussianRoute(s1)
+        assert r1.solvent_id is None
+
+    def test_solvent_id_appends_read_when_read_precedes_solvent(self):
+        s1 = "# opt b3lyp def2svp scrf=(cpcm,read,solvent=toluene)"
+        r1 = GaussianRoute(s1)
+        assert r1.solvent_id == "toluene,read"
+
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
         r1 = GaussianRoute(s1)
