@@ -3291,3 +3291,24 @@ The corresponding Click options (`chemsmart/cli/gaussian/gaussian.py`'s `click_g
 **Impact:** None -- purely redundant defensive code that mirrors a pattern (guards duplicating an invariant already enforced upstream, here by Click's own default-value mechanism) seen elsewhere in this file, e.g. bugs #57 and #63.
 
 **Suggested direction:** no action needed; the guards are harmless. Could be simplified by assigning these five attributes unconditionally (dropping the `is not None` checks) since Click guarantees a value, or by changing the five defaults to `None` if "unset by the user" needs to be distinguishable from "user explicitly passed the default" for merge-with-project-settings purposes -- but that would be a behavior change requiring product input, not a pure test-coverage fix.
+
+---
+
+## 66. `GenGenECPSection.from_bse_api`'s header-line falsy check is unreachable dead code
+
+**Location:** `chemsmart/io/gaussian/gengenecp.py:312-316`
+
+```python
+header_block = heavy_atoms_gengenecp_basis_blocks[0]
+for line in header_block:
+    if line:
+        genecp_string += line + "\n"
+```
+
+`heavy_atoms_gengenecp_basis_blocks` comes from `content_blocks_by_paragraph` (`chemsmart/utils/utils.py:230-247`), which groups a line list with `itertools.groupby(string_list, lambda x: x == "")` and explicitly discards groups where the key is `True` (`if not k`). By construction, no returned block can ever contain an empty-string element -- every line in `header_block` is truthy. The `if line:` check's False arm can therefore never execute.
+
+**Reproduce:** confirmed by inspecting `content_blocks_by_paragraph`'s `groupby`/`if not k` filter -- any all-blank group is filtered out before blocks are returned, so a non-blank block (like `header_block`) cannot contain a blank entry. See `tests/test_GaussianGenECP.py::TestGenGenECPSectionEdgeCases::test_string_blocks_splits_on_blank_lines` for the general splitting behavior this relies on.
+
+**Impact:** None -- purely redundant defensive code with no behavioral effect.
+
+**Suggested direction:** no action needed; could be simplified to `genecp_string += "\n".join(header_block) + "\n"` (or similar) now that the per-line truthiness check is confirmed dead.
