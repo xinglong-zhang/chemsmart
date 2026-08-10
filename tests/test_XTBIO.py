@@ -310,6 +310,115 @@ class TestXTBMainOut:
         assert np.isclose(co2_main_out.optimizer_cpu_time * 3600, 0.047)
         assert np.isclose(co2_main_out.hessian_wall_time * 3600, 0.040)
         assert np.isclose(co2_main_out.hessian_cpu_time * 3600, 0.017)
+        # Reduced masses (not exercised by any other test)
+        assert co2_main_out.reduced_masses == [13.1, 13.1, 16.0, 13.1]
+        # Solvent-off branches: co2 is a gas-phase (no solvent) calculation,
+        # so every solvent-dependent property must short-circuit to None.
+        assert not co2_main_out.solvent_on
+        assert co2_main_out.solvent_model is None
+        assert co2_main_out.solvent_id is None
+        assert co2_main_out.dielectric_constant is None
+        assert co2_main_out.free_energy_shift is None
+        assert co2_main_out.solvent_temperature is None
+        assert co2_main_out.density is None
+        assert co2_main_out.solvent_mass is None
+        assert co2_main_out.h_bond_correction is None
+        assert co2_main_out.ion_screening is None
+        assert co2_main_out.surface_tension is None
+        # Closed-shell default multiplicity (unpaired_electrons == 0)
+        assert co2_main_out.unpaired_electrons == 0
+        assert co2_main_out.multiplicity == 1
+        assert co2_main_out.spin == "restricted"
+        # Special analysis properties (--vip/--vipea/--vomega/--vfukui) are
+        # not requested for this run, so these must all be None.
+        assert co2_main_out.vertical_ionization_potential is None
+        assert co2_main_out.vertical_electron_affinity is None
+        assert co2_main_out.global_electrophilicity_index is None
+        assert co2_main_out.fukui_index is None
+        assert co2_main_out.incomplete_optimized_geometry is False
+
+    def test_main_out_acetaldehyde_hess(self, xtb_acetaldehyde_outfolder):
+        """Test parsing main output from acetaldehyde hess-only calculation
+        (no geometry optimization was performed)."""
+        xtb_main_out_file = os.path.join(
+            xtb_acetaldehyde_outfolder, "acetaldehyde_hess.out"
+        )
+        assert os.path.exists(xtb_main_out_file)
+        main_out = XTBMainOut(xtb_main_out_file)
+        assert main_out.normal_termination
+        # No geometry optimization was requested for this hess-only job.
+        assert main_out.geometry_optimization_converged is False
+        assert main_out.optimized_structure_block is None
+        assert main_out.molecular_mass is None
+        assert main_out.center_of_mass is None
+        assert main_out.moments_of_inertia is None
+        assert main_out.rotational_constants_in_wavenumbers is None
+        # No ANC optimizer timing since no optimization was run.
+        assert main_out.optimizer_wall_time is None
+        assert main_out.optimizer_cpu_time is None
+        # Partition function table (VIB/ROT/INT/TR), not exercised elsewhere.
+        partition_function = main_out.partition_function
+        assert partition_function == {
+            "vibrational": 2.23,
+            "rotational": 0.117e05,
+            "internal": 0.262e05,
+            "translational": 0.283e27,
+        }
+
+    def test_main_out_p_benzyne_sp(self, xtb_p_benzyne_sp_outfolder):
+        """Test parsing main output from a single-point calculation: no
+        geometry optimization and no (numerical) Hessian were requested,
+        so all opt-/hessian-dependent properties must be None/False."""
+        xtb_main_out_file = os.path.join(
+            xtb_p_benzyne_sp_outfolder, "p_benzyne_sp_alpb_toluene.out"
+        )
+        assert os.path.exists(xtb_main_out_file)
+        main_out = XTBMainOut(xtb_main_out_file)
+        assert main_out.normal_termination
+        # No geometry optimization was performed.
+        assert main_out.geometry_optimization_converged is False
+        assert main_out.optimized_structure_block is None
+        assert main_out.molecular_mass is None
+        assert main_out.center_of_mass is None
+        assert main_out.moments_of_inertia is None
+        assert main_out.rotational_constants_in_wavenumbers is None
+        assert main_out.optimizer_wall_time is None
+        assert main_out.optimizer_cpu_time is None
+        # No Hessian was computed for this sp job.
+        assert main_out.numerical_hessian_block is None
+        assert main_out.numfreq is False
+        assert main_out.hessian_step_length is None
+        assert main_out.scc_accuracy is None
+        assert main_out.hessian_scale_factor is None
+        assert main_out.rms_gradient is None
+        assert main_out.hessian_wall_time is None
+        assert main_out.hessian_cpu_time is None
+        # No thermochemistry section (no frequency calculation performed).
+        assert main_out.temperature_in_K is None
+        assert main_out.entropy_no_temperature_in_SI is None
+        assert main_out.electronic_entropy_no_temperature_in_SI is None
+        assert main_out.electronic_entropy is None
+        assert main_out.vibrational_entropy_no_temperature_in_SI is None
+        assert main_out.vibrational_entropy is None
+        assert main_out.rotational_entropy_no_temperature_in_SI is None
+        assert main_out.rotational_entropy is None
+        assert main_out.translational_entropy_no_temperature_in_SI is None
+        assert main_out.translational_entropy is None
+        assert main_out.entropy is None
+        assert main_out.entropy_times_temperature is None
+        # HOMO/LUMO/dispersion coefficients are still printed for sp jobs.
+        assert main_out.homo_energy == -8.4001
+        assert main_out.lumo_energy == -6.3910
+        assert main_out.c6_coefficient == 1511.991497
+        assert main_out.c8_coefficient == 38995.680442
+        assert main_out.alpha_coefficient == 63.027243
+        # No vibrational analysis at all for this sp-only job.
+        assert main_out.reduced_masses is None
+        assert main_out.ir_intensities is None
+        assert main_out.raman_intensities is None
+        # This sp job's SETUP block lacks the opt-related keys entirely.
+        assert main_out.write_all_intermediate_geometries is None
+        assert main_out.is_linear is None
 
     def test_main_out_p_benzyne_opt(self, xtb_p_benzyne_opt_outfolder):
         xtb_main_out_file = os.path.join(
@@ -361,6 +470,593 @@ class TestXTBMainOut:
             p_benzyne_opt_main_out.empirical_shift_correction_gshift
             == 0.002208143139
         )
+
+
+class TestXTBMainOutSyntheticEdgeCases:
+    """Covers XTBMainOut branches that no real fixture output naturally
+    exercises: abnormal terminations, missing route information, rarely
+    requested analyses (--vip/--vipea/--vomega/--vfukui), and malformed
+    SUMMARY/Numerical-Hessian blocks. Each synthetic file follows the
+    real xTB output formatting conventions seen in the fixtures under
+    tests/data/XTBTests/outputs/."""
+
+    def test_error_terminated_output(self, tmp_path):
+        """A run that dies mid-calculation: contents end in an [ERROR]
+        line with no '* finished run' marker, and never reaches the
+        HOMO/LUMO, dipole/quadrupole, or SUMMARY sections."""
+        content = (
+            "          program call               : xtb bad.xyz --opt\n"
+            "\n"
+            "          ...................................................\n"
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  # basis functions                  12          :\n"
+            "          :  net charge                          0          :\n"
+            "          :  unpaired electrons                  0          :\n"
+            "          ...................................................\n"
+            "\n"
+            "[ERROR] SCF did not converge\n"
+        )
+        out_file = tmp_path / "error_terminated.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.normal_termination is False
+        assert main_out.homo_energy is None
+        assert main_out.lumo_energy is None
+        assert main_out.c6_coefficient is None
+        assert main_out.c8_coefficient is None
+        assert main_out.alpha_coefficient is None
+        assert main_out.molecular_dipole_lines is None
+        assert main_out.molecular_dipole_qonly is None
+        assert main_out.molecular_dipole_full is None
+        assert main_out.total_molecular_dipole_moment is None
+        assert main_out.molecular_quadrupole_lines is None
+        assert main_out.molecular_quadrupole_qonly is None
+        assert main_out.molecular_quadrupole_q_dip is None
+        assert main_out.molecular_quadrupole_full is None
+        # No SUMMARY block at all in a run that errored out this early.
+        assert main_out.get_all_summary_blocks() is None
+        # No timing information was ever printed.
+        assert main_out.total_elapsed_walltime is None
+        assert main_out.total_core_hours is None
+        assert main_out.scf_wall_time is None
+        assert main_out.scf_cpu_time is None
+        assert main_out.optimizer_wall_time is None
+        assert main_out.optimizer_cpu_time is None
+        assert main_out.hessian_wall_time is None
+        assert main_out.hessian_cpu_time is None
+        assert main_out.partition_function is None
+
+    def test_no_termination_marker(self, tmp_path):
+        """A run that was killed/truncated: no '[ERROR]' line and no
+        '* finished run' marker anywhere -- normal_termination must
+        fall back to False after scanning the whole file."""
+        content = (
+            "          program call               : xtb water.xyz --opt\n"
+            "\n"
+            "          ...................................................\n"
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  net charge                          0          :\n"
+            "          ...................................................\n"
+        )
+        out_file = tmp_path / "no_termination_marker.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.normal_termination is False
+
+    def test_no_program_call_line(self, tmp_path):
+        """A file lacking the 'program call' line entirely -- route
+        parsing must fall back to None even though the run otherwise
+        terminated normally."""
+        content = (
+            "          ...................................................\n"
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  net charge                          0          :\n"
+            "          ...................................................\n"
+            "\n"
+            "* finished run on 2026/01/01 at 00:00:00.000\n"
+        )
+        out_file = tmp_path / "no_program_call.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.route_string is None
+        assert main_out.normal_termination is True
+
+    def test_vip_ea_omega_and_fukui_analysis(self, tmp_path):
+        """Synthetic --vip/--vipea/--vomega/--vfukui analysis printout,
+        a feature none of the real fixtures were run with."""
+        content = (
+            "          program call               : xtb mol.xyz --vfukui --vomega\n"
+            "\n"
+            "delta SCC IP (eV): 12.345\n"
+            "delta SCC EA (eV): -1.234\n"
+            "Global electrophilicity index (eV): 3.456\n"
+            "\n"
+            "Fukui functions:\n"
+            "    #        f(+)     f(-)     f(0)\n"
+            "    1O      -0.113   -0.098   -0.106\n"
+            "    2H       0.056    0.049    0.053\n"
+            "------------------------------------------------------\n"
+        )
+        out_file = tmp_path / "vip_ea_fukui.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.vertical_ionization_potential == 12.345
+        assert main_out.vertical_electron_affinity == -1.234
+        assert main_out.global_electrophilicity_index == 3.456
+        assert main_out.fukui_index == [
+            "#        f(+)     f(-)     f(0)",
+            "1O      -0.113   -0.098   -0.106",
+            "2H       0.056    0.049    0.053",
+        ]
+
+    def test_partition_function_table_absent(self, tmp_path):
+        """A file with no VIB/ROT/INT/TR partition-function table at
+        all -- partition_function must return None."""
+        content = (
+            "          program call               : xtb mol.xyz\n"
+            "\n"
+            "          ...................................................\n"
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  net charge                          0          :\n"
+            "          ...................................................\n"
+            "\n"
+            "* finished run on 2026/01/01 at 00:00:00.000\n"
+        )
+        out_file = tmp_path / "no_partition_table.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.partition_function is None
+
+    def test_partition_function_heading_without_vib_row(self, tmp_path):
+        """The 'partition function'+'entropy' heading is present, but
+        the row table breaks (hits the 'T/K'+'H(T)' marker) before any
+        VIB/ROT/INT/TR row is found -- temperature_in_K and the
+        entropy properties derived from the same scan must all fall
+        back to None."""
+        content = (
+            "   temp. (K)  partition function   enthalpy   heat capacity  entropy\n"
+            "       T/K    H(0)-H(T)+PV         H(T)/Eh          T*S/Eh         G(T)/Eh\n"
+        )
+        out_file = tmp_path / "partition_heading_no_rows.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.temperature_in_K is None
+        assert main_out.entropy_no_temperature_in_SI is None
+        assert main_out.electronic_entropy_no_temperature_in_SI is None
+        assert main_out.electronic_entropy is None
+        assert main_out.vibrational_entropy_no_temperature_in_SI is None
+        assert main_out.vibrational_entropy is None
+        assert main_out.rotational_entropy_no_temperature_in_SI is None
+        assert main_out.rotational_entropy is None
+        assert main_out.translational_entropy_no_temperature_in_SI is None
+        assert main_out.translational_entropy is None
+        assert main_out.entropy is None
+        assert main_out.entropy_times_temperature is None
+
+    def test_summary_block_with_no_trailing_blank_line(self, tmp_path):
+        """A SUMMARY block that is the very last thing in the file (no
+        trailing blank line) -- the inner block-collection loop must
+        exhaust the file's contents rather than break on a blank line."""
+        content = (
+            "         ::                     SUMMARY                     ::\n"
+            "         :::::::::::::::::::::::::::::::::::::::::::::::::::::\n"
+            "         :: SCC energy               -1.000000000000 Eh    ::\n"
+            "         :::::::::::::::::::::::::::::::::::::::::::::::::::::"
+        )
+        out_file = tmp_path / "summary_no_trailing_blank.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        blocks = main_out.get_all_summary_blocks()
+        assert blocks == [
+            [":: SCC energy               -1.000000000000 Eh    ::"]
+        ]
+        assert main_out.scc_energy == -1.0
+
+    def test_summary_block_immediately_empty(self, tmp_path):
+        """A SUMMARY heading immediately followed by a blank line (no
+        content) -- get_all_summary_blocks() must return a non-None
+        list whose last block is an empty (falsy) list, and any
+        property built on top of it must gracefully return None
+        instead of indexing into that empty block."""
+        content = (
+            "         ::                     SUMMARY                     ::\n"
+            "         :::::::::::::::::::::::::::::::::::::::::::::::::::::\n"
+            "\n"
+        )
+        out_file = tmp_path / "summary_empty_block.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        blocks = main_out.get_all_summary_blocks()
+        assert blocks == [[]]
+        assert main_out.scc_energy is None
+        assert main_out.total_charge is None
+
+    def test_numerical_hessian_block_runs_to_eof_and_step_length_not_first(
+        self, tmp_path
+    ):
+        """The Numerical Hessian block is the last thing in the file
+        (no trailing blank line), so its collection loop must exhaust
+        the file rather than break. It also places an unrelated line
+        before 'step length', so hessian_step_length's own search loop
+        must iterate past a non-matching line before it finds a match."""
+        content = (
+            "          |                Numerical Hessian                |\n"
+            "           ------------------------------------------------- \n"
+            "some other diagnostic line\n"
+            "step length          :   0.00500\n"
+            "SCC accuracy         :   0.30000\n"
+            "Hessian scale factor :   1.00000"
+        )
+        out_file = tmp_path / "hessian_block_no_trailing_blank.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.numerical_hessian_block == [
+            "some other diagnostic line",
+            "step length          :   0.00500",
+            "SCC accuracy         :   0.30000",
+            "Hessian scale factor :   1.00000",
+        ]
+        assert main_out.hessian_step_length == 0.00500
+
+    def test_failed_convergence_and_incomplete_geometry(self, tmp_path):
+        """Both the explicit 'FAILED TO CONVERGE' marker and the
+        'INCOMPLETELY OPTIMIZED GEOMETRY' warning, neither of which
+        appears in any successfully-converged real fixture."""
+        content = (
+            "some earlier output\n"
+            "FAILED TO CONVERGE GEOMETRY OPTIMIZATION\n"
+            "INCOMPLETELY OPTIMIZED GEOMETRY\n"
+        )
+        out_file = tmp_path / "failed_convergence.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.geometry_optimization_converged is False
+        assert main_out.incomplete_optimized_geometry is True
+
+    def test_converged_but_missing_derived_geometry_fields(self, tmp_path):
+        """A run that reports GEOMETRY OPTIMIZATION CONVERGED and a
+        'final structure:' block, but never prints the 'Bond Distances'
+        marker, nor the molecular mass/center-of-mass/moments-of-inertia
+        /rotational-constants lines that a real ohess fixture always
+        includes -- every one of those derived properties must fall
+        back to None (or the fully-collected block, for the structure
+        itself) instead of crashing."""
+        content = (
+            "GEOMETRY OPTIMIZATION CONVERGED\n"
+            "\n"
+            "final structure:\n"
+            "\n"
+            "3\n"
+            "xtb: 6.7.1 (edcfbbe)\n"
+            "O   0.0 0.0 0.0\n"
+            "O   1.0 0.0 0.0\n"
+        )
+        out_file = tmp_path / "converged_minimal.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.geometry_optimization_converged is True
+        assert main_out.optimized_structure_block == [
+            "3",
+            "xtb: 6.7.1 (edcfbbe)",
+            "O   0.0 0.0 0.0",
+            "O   1.0 0.0 0.0",
+        ]
+        assert main_out.molecular_mass is None
+        assert main_out.center_of_mass is None
+        assert main_out.moments_of_inertia is None
+        assert main_out.rotational_constants_in_wavenumbers is None
+
+    def test_only_rot_calc_key_never_matches_real_xtb_output(
+        self, xtb_co2_outfolder
+    ):
+        """`only_rot_calc` searches the SETUP block for the literal key
+        'only rotational calc.', but real xTB output prints 'only rotor
+        calc.' instead (see the Hessian SETUP block in co2_ohess.out).
+        The two never match, so only_rot_calc always returns None for
+        any real xTB output -- see BUGS_FOUND.md."""
+        xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        main_out = XTBMainOut(xtb_main_out_file)
+        assert any("only rotor calc." in line for line in main_out.contents)
+        assert not any(
+            "only rotational calc." in line for line in main_out.contents
+        )
+        assert main_out.only_rot_calc is None
+
+    def test_setup_information_scan_reaches_true_eof(self, tmp_path):
+        """`_get_setup_information`'s inner block-scan must exhaust the
+        file's contents (rather than break on a blank line) when the
+        SETUP block is the very last thing in the file and the
+        requested keyword isn't present in it."""
+        content = (
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  net charge                          0          :\n"
+            "          :.................................................:"
+        )
+        out_file = tmp_path / "setup_truncated_no_blank.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.num_basis_functions is None
+
+    def test_partition_function_heading_with_no_matching_rows_at_all(
+        self, tmp_path
+    ):
+        """The 'partition function'+'entropy' heading is found, but the
+        remainder of the file has neither a VIB/ROT/INT/TR row nor a
+        'T/K'+'H(T)' closing marker -- the inner row-scan must exhaust
+        the file's contents naturally instead of ever breaking."""
+        content = (
+            "   temp. (K)  partition function   enthalpy   heat capacity  entropy\n"
+            "some unrelated trailing line with no special markers\n"
+        )
+        out_file = tmp_path / "partition_heading_exhausts.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.temperature_in_K is None
+        assert main_out.vibrational_entropy_no_temperature_in_SI is None
+        assert main_out.rotational_entropy_no_temperature_in_SI is None
+        assert main_out.translational_entropy_no_temperature_in_SI is None
+        assert main_out.entropy_no_temperature_in_SI is None
+
+    def test_fukui_block_runs_to_eof_without_closing_marker(self, tmp_path):
+        """A Fukui functions block that is the last thing in the file,
+        with no closing '------' marker before EOF."""
+        content = (
+            "Fukui functions:\n"
+            "    #        f(+)     f(-)     f(0)\n"
+            "    1O      -0.113   -0.098   -0.106\n"
+        )
+        out_file = tmp_path / "fukui_no_closing.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.fukui_index == [
+            "#        f(+)     f(-)     f(0)",
+            "1O      -0.113   -0.098   -0.106",
+        ]
+
+    def test_numerical_hessian_block_present_but_all_keys_missing(
+        self, tmp_path
+    ):
+        """The Numerical Hessian block exists (non-empty) but contains
+        none of step length / SCC accuracy / Hessian scale factor / RMS
+        gradient -- each of their own search loops must exhaust the
+        block without ever matching."""
+        content = (
+            "          |                Numerical Hessian                |\n"
+            "           ------------------------------------------------- \n"
+            "some unrelated diagnostic line\n"
+            "\n"
+        )
+        out_file = tmp_path / "hessian_block_no_keys.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.numerical_hessian_block == [
+            "some unrelated diagnostic line"
+        ]
+        assert main_out.hessian_step_length is None
+        assert main_out.scc_accuracy is None
+        assert main_out.hessian_scale_factor is None
+        assert main_out.rms_gradient is None
+
+    def test_solvent_on_but_detail_lines_missing(self, tmp_path):
+        """GBSA solvation is flagged on in the SETUP block, but none of
+        the individual solvent detail lines (Dielectric constant, Free
+        energy shift, Temperature, Density, Solvent mass, H-bond
+        correction, Ion screening, Surface tension) are present -- each
+        property's own content scan must exhaust without matching."""
+        content = (
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  GBSA solvation                   true          :\n"
+            "          :.................................................:\n"
+        )
+        out_file = tmp_path / "solvent_on_no_details.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.solvent_on is True
+        assert main_out.dielectric_constant is None
+        assert main_out.free_energy_shift is None
+        assert main_out.solvent_temperature is None
+        assert main_out.density is None
+        assert main_out.solvent_mass is None
+        assert main_out.h_bond_correction is None
+        assert main_out.ion_screening is None
+        assert main_out.surface_tension is None
+
+    def test_dipole_full_and_total_none_when_full_line_truncated(
+        self, tmp_path
+    ):
+        """The dipole block is truncated right after the 'q only:' row
+        (no 'full:' row follows) -- molecular_dipole_full and
+        total_molecular_dipole_moment's own search loops must exhaust
+        the (non-empty) dipole_lines without ever matching, while
+        molecular_dipole_qonly still succeeds normally."""
+        content = (
+            "molecular dipole:\n"
+            "                 x           y           z       tot (Debye)\n"
+            " q only:        0.100       0.200       0.300\n"
+        )
+        out_file = tmp_path / "dipole_truncated.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.molecular_dipole_lines == [
+            "q only:        0.100       0.200       0.300"
+        ]
+        assert np.allclose(
+            main_out.molecular_dipole_qonly, [0.100, 0.200, 0.300]
+        )
+        assert main_out.molecular_dipole_full is None
+        assert main_out.total_molecular_dipole_moment is None
+
+    def test_quadrupole_all_none_when_block_truncated_to_labels_only(
+        self, tmp_path
+    ):
+        """The quadrupole block is truncated right after the heading
+        (only the column-labels row survives before EOF) -- none of
+        qonly/q+dip/full's search loops can find their marker, so each
+        must exhaust the non-empty quadrupole_lines without matching."""
+        content = (
+            "molecular quadrupole (traceless):\n"
+            "                xx          xy          yy          xz          yz          zz\n"
+        )
+        out_file = tmp_path / "quadrupole_truncated.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+
+        assert main_out.molecular_quadrupole_lines == [
+            "xx          xy          yy          xz          yz          zz"
+        ]
+        assert main_out.molecular_quadrupole_qonly is None
+        assert main_out.molecular_quadrupole_q_dip is None
+        assert main_out.molecular_quadrupole_full is None
+
+    def test_all_vibrational_frequencies_block_runs_to_eof(self, tmp_path):
+        """The vibrational-frequencies row is the last thing in the
+        file, with no 'reduced masses (amu)' marker ever following --
+        the frequency-collection loop must exhaust the file naturally."""
+        content = (
+            "           |               Frequency Printout                |\n"
+            "vibrational frequencies (cm⁻¹)\n"
+            "eigval :        0.00   100.00\n"
+        )
+        out_file = tmp_path / "vib_freq_no_closing.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.all_vibrational_frequencies == [0.00, 100.00]
+        assert main_out.vibrational_frequencies == [100.00]
+
+    def test_vibrational_frequencies_none_source_returns_empty_list(
+        self, tmp_path
+    ):
+        """When all_vibrational_frequencies is None (no Frequency
+        Printout section at all), vibrational_frequencies must fall
+        back to an empty list rather than None."""
+        content = "no frequency section here at all\n"
+        out_file = tmp_path / "no_freq_section.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.all_vibrational_frequencies is None
+        assert main_out.vibrational_frequencies == []
+
+    def test_reduced_masses_block_runs_to_eof(self, tmp_path):
+        """The reduced-masses row is the last thing in the file, with
+        no 'IR intensities (km·mol⁻¹)' marker ever following."""
+        content = (
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  # frequencies                       2          :\n"
+            "          :.................................................:\n"
+            "\n"
+            "reduced masses (amu)\n"
+            "   1: 12.345   2: 67.890\n"
+        )
+        out_file = tmp_path / "reduced_masses_no_closing.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.reduced_masses == [12.345, 67.890]
+
+    def test_ir_intensities_block_runs_to_eof(self, tmp_path):
+        """The IR-intensities row is the last thing in the file, with
+        no 'Raman intensities' marker ever following."""
+        content = (
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  # frequencies                       2          :\n"
+            "          :.................................................:\n"
+            "\n"
+            "IR intensities (km*mol-1)\n"
+            "   1: 10.000   2: 20.000\n"
+        )
+        out_file = tmp_path / "ir_intensities_no_closing.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.ir_intensities == [10.000, 20.000]
+
+    def test_raman_intensities_block_runs_to_eof_with_bad_token(
+        self, tmp_path
+    ):
+        """The Raman-intensities row is the last thing in the file (no
+        closing 'output can be read by thermo' marker), and it also
+        contains a non-numeric token that must be silently skipped."""
+        content = (
+            "          :                      SETUP                      :\n"
+            "          :.................................................:\n"
+            "          :  # frequencies                       2          :\n"
+            "          :.................................................:\n"
+            "\n"
+            "Raman intensities (A**4/amu)\n"
+            "   1: notanumber   2: 30.000\n"
+        )
+        out_file = tmp_path / "raman_intensities_no_closing.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.raman_intensities == [30.000]
+
+    def test_thermodynamics_block_runs_to_eof(self, tmp_path):
+        """The THERMODYNAMIC block is the last thing in the file, with
+        no blank line ever terminating it."""
+        content = (
+            "                   :::::::::::::::::::::::::::::::::::::::::::::::::\n"
+            "                   ::                THERMODYNAMIC                ::\n"
+            "                   :::::::::::::::::::::::::::::::::::::::::::::::::\n"
+            "                   :: zero point energy         0.011888572359 Eh   ::"
+        )
+        out_file = tmp_path / "thermo_block_no_blank.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out.zero_point_energy == 0.011888572359
+        # Block is present (non-empty) but doesn't contain this keyword,
+        # so the search loop must exhaust it without ever returning.
+        assert main_out.grrho_without_zpve is None
+
+    def test_thermodynamics_block_absent(self, tmp_path):
+        """No THERMODYNAMIC heading at all -- the block getter must
+        return None, and any property derived from it must gracefully
+        fall back to None as well."""
+        content = "nothing relevant in this file\n"
+        out_file = tmp_path / "no_thermo_block.out"
+        out_file.write_text(content)
+        main_out = XTBMainOut(str(out_file))
+        assert main_out._get_thermodynamics_block() is None
+        assert main_out.zero_point_energy is None
+        assert main_out.total_energy is None
+
+    def test_always_none_trivial_properties(self, xtb_co2_outfolder):
+        """A handful of XTBMainOut properties are unconditionally None
+        (placeholders kept for interface parity with other QM-program
+        parsers) -- exercise them all via any real fixture instance."""
+        xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        main_out = XTBMainOut(xtb_main_out_file)
+        assert main_out.alpha_occ_eigenvalues is None
+        assert main_out.beta_occ_eigenvalues is None
+        assert main_out.alpha_virtual_eigenvalues is None
+        assert main_out.beta_virtual_eigenvalues is None
+        assert main_out.rotational_temperatures is None
+        assert main_out.rotational_constants_in_Hz is None
+        assert main_out.thermal_vibration_correction is None
+        assert main_out.thermal_rotation_correction is None
+        assert main_out.thermal_translation_correction is None
+        assert main_out.thermal_energy_correction is None
+        assert main_out.thermal_enthalpy_correction is None
+        assert main_out.thermal_gibbs_free_energy_correction is None
+        assert main_out.internal_energy is None
+        assert main_out.pressure_in_atm is None
 
 
 class TestXTBChargesFile:
@@ -422,6 +1118,17 @@ class TestXTBChargesFile:
         ]
         assert np.isclose(p_benzyne_sp_charges.total_charge, 0, atol=1e-8)
 
+    def test_partial_charges_none_for_blank_and_invalid_lines(self, tmp_path):
+        """A charges file that has no valid numeric lines at all -- just
+        a blank line (skipped via `continue`) and a non-numeric line
+        (skipped via the `except ValueError: continue` branch) -- must
+        yield partial_charges=None and, in turn, total_charge=None."""
+        charges_file = tmp_path / "charges"
+        charges_file.write_text("\nnot_a_number\n")
+        charges = XTBChargesFile(str(charges_file))
+        assert charges.partial_charges is None
+        assert charges.total_charge is None
+
 
 class TestXTBEnergyFile:
     """Tests for XTBEnergyFile class."""
@@ -446,6 +1153,15 @@ class TestXTBEnergyFile:
         assert os.path.exists(energy_file)
         p_benzyne_opt_energy = XTBEnergyFile(energy_file)
         assert p_benzyne_opt_energy.last_energy == -14.66185695901
+
+    def test_last_energy_none_when_no_data_line(self, tmp_path):
+        """A file consisting only of $-marker and blank lines (both
+        skipped) with no actual data line -- last_energy must fall
+        back to None instead of raising."""
+        energy_file = tmp_path / "energy"
+        energy_file.write_text("$energy\n\n$end\n")
+        energy = XTBEnergyFile(str(energy_file))
+        assert energy.last_energy is None
 
 
 class TestXTBEngradFile:
@@ -521,6 +1237,69 @@ class TestXTBEngradFile:
             [0.000030673290, -0.000097710620, -0.000035539462],
         )
 
+    def test_no_headers_at_all(self, tmp_path):
+        """A file with none of the '# Number of atoms' / 'current
+        total energy' / 'current gradient' markers at all -- num_atoms,
+        total_energy, and (via num_atoms being None) forces must all
+        gracefully return None."""
+        engrad_file = tmp_path / "empty.engrad"
+        engrad_file.write_text("# nothing relevant here\n# just text\n")
+        engrad = XTBEngradFile(str(engrad_file))
+        assert engrad.num_atoms is None
+        assert engrad.total_energy is None
+        assert engrad.forces is None
+
+    def test_headers_present_but_unparseable(self, tmp_path):
+        """Both headers are present, but none of the lines following
+        them parse as numbers -- the inner per-heading scan loop must
+        exhaust its 3-line window without ever returning, so the outer
+        loop keeps searching and eventually falls back to None."""
+        engrad_file = tmp_path / "malformed.engrad"
+        engrad_file.write_text(
+            "#\n"
+            "# Number of atoms\n"
+            "#\n"
+            "not_a_number\n"
+            "also_not\n"
+            "still_not\n"
+            "#\n"
+            "# The current total energy in Eh\n"
+            "#\n"
+            "not_a_number\n"
+            "also_not\n"
+            "still_not\n"
+        )
+        engrad = XTBEngradFile(str(engrad_file))
+        assert engrad.num_atoms is None
+        assert engrad.total_energy is None
+
+    def test_gradient_component_count_mismatch(self, tmp_path):
+        """num_atoms and total_energy parse fine, but the gradient
+        section has too few numeric values for 3*num_atoms -- the
+        gradient-count validation must fail, the search loop must
+        continue past it (finding no other match) and exhaust to
+        None, and forces must fall back to None as well."""
+        engrad_file = tmp_path / "mismatch.engrad"
+        engrad_file.write_text(
+            "#\n"
+            "# Number of atoms\n"
+            "#\n"
+            "         2\n"
+            "#\n"
+            "# The current total energy in Eh\n"
+            "#\n"
+            "     -1.234567890123\n"
+            "#\n"
+            "# The current gradient in Eh/bohr\n"
+            "#\n"
+            "       0.000000000100\n"
+            "      -0.000000000050\n"
+        )
+        engrad = XTBEngradFile(str(engrad_file))
+        assert engrad.num_atoms == 2
+        assert engrad.total_energy == -1.234567890123
+        assert engrad.forces is None
+
 
 class TestXTBGradientFile:
     """Tests for XTBGradientFile class."""
@@ -543,6 +1322,55 @@ class TestXTBGradientFile:
             [1.9065685688053e-05, 2.2340293634309e-17, -2.8568468405277e-05],
         )
         assert np.allclose(grad.forces[-1], -grad.gradients[-1])
+
+    def test_gradients_edge_cases_combined(self, tmp_path):
+        """A single synthetic $grad file exercising several branches a
+        well-formed real gradient file never takes:
+        - content before the first '$grad' marker (skipped)
+        - a junk line inside the block, before 'SCF energy', that
+          matches neither the coordinate- nor gradient-line shape
+          (loop continues without appending)
+        - a malformed coordinate line (non-numeric tokens -- caught
+          and skipped)
+        - a malformed gradient-value line (non-numeric token -- caught
+          and skipped)
+        - no closing '$end' marker at all (the file just ends), so the
+          block-collection loop must exhaust the file rather than
+          break.
+        """
+        content = (
+            "# leading comment before any $grad block\n"
+            "$grad\n"
+            " unrelated junk text here\n"
+            "  cycle =      1    SCF energy =    -1.000000000000   "
+            "|dE/dxyz| =  0.000100\n"
+            "   BAD   BAD   BAD      O\n"
+            "   -0.00000250190431     -0.00000125099553     "
+            "-0.71677514611431      O\n"
+            "   1.2982149851656E-10  -3.3293838441823E-18   BADVALUE\n"
+            "   -1.9065815509550E-05  -1.9010909790127E-17  "
+            "-2.8568564065665E-05\n"
+        )
+        gradient_file = tmp_path / "gradient"
+        gradient_file.write_text(content)
+        grad = XTBGradientFile(str(gradient_file))
+
+        assert grad.gradients is not None
+        assert grad.gradients[0].shape == (1, 3)
+        assert np.allclose(
+            grad.gradients[0][0],
+            [-1.9065815509550e-05, -1.9010909790127e-17, -2.8568564065665e-05],
+        )
+        assert np.allclose(grad.forces[0], -grad.gradients[0])
+
+    def test_gradients_none_when_no_grad_block(self, tmp_path):
+        """No '$grad' marker anywhere -- gradients (and, in turn,
+        forces) must fall back to None."""
+        gradient_file = tmp_path / "gradient"
+        gradient_file.write_text("nothing relevant here\n")
+        grad = XTBGradientFile(str(gradient_file))
+        assert grad.gradients is None
+        assert grad.forces is None
 
 
 class TestXTBHessianFile:
@@ -584,6 +1412,25 @@ class TestXTBHessianFile:
                 ]
             ),
         )
+
+    def test_hessian_none_for_empty_file(self, tmp_path):
+        """A hessian file containing only the '$hessian' marker (and no
+        numeric values) -- hessian must be None rather than an empty
+        array or a crash."""
+        hessian_file = tmp_path / "hessian"
+        hessian_file.write_text("$hessian\n")
+        hess = XTBHessianFile(str(hessian_file))
+        assert hess.hessian is None
+
+    def test_hessian_raises_for_non_square_value_count(self, tmp_path):
+        """A hessian file whose flat value count isn't a perfect square
+        can't be reshaped into an (N, N) matrix -- must raise
+        ValueError rather than silently truncating/reshaping wrongly."""
+        hessian_file = tmp_path / "hessian"
+        hessian_file.write_text("$hessian\n1.0 2.0 3.0\n")
+        hess = XTBHessianFile(str(hessian_file))
+        with pytest.raises(ValueError, match="not a square matrix"):
+            hess.hessian
 
 
 class TestXTBVibSpectrumFile:
@@ -643,6 +1490,54 @@ class TestXTBVibSpectrumFile:
             "a",
             "a",
         ]
+        # frequencies (all_modes=True) includes the zero-frequency
+        # translational/rotational modes that vibrational_frequencies
+        # filters out.
+        assert vib.frequencies == [-0.00] * 3 + [0.00] * 3 + [
+            151.34,
+            501.81,
+            769.05,
+            947.27,
+            1045.68,
+            1107.27,
+            1355.34,
+            1389.38,
+            1446.60,
+            1447.86,
+            1798.58,
+            2748.94,
+            3018.34,
+            3026.55,
+            3059.76,
+        ]
+
+    def test_frequencies_data_none_and_malformed_row_skipped(self, tmp_path):
+        """A vibspectrum file with a comment/marker-only body (so
+        _frequencies_data collects zero rows and returns None) must
+        make every derived property return an empty list. A separate
+        file with one malformed data row (first token not an integer)
+        must have that row skipped via the except/continue branch."""
+        empty_file = tmp_path / "vibspectrum_empty"
+        empty_file.write_text(
+            "$vibrational spectrum\n"
+            "#  mode     symmetry     wave number   IR intensity\n"
+            "$end\n"
+        )
+        empty_vib = XTBVibSpectrumFile(str(empty_file))
+        assert empty_vib.vibrational_frequencies == []
+        assert empty_vib.ir_intensities == []
+        assert empty_vib.vibrational_mode_symmetries == []
+        assert empty_vib.frequencies == []
+
+        malformed_file = tmp_path / "vibspectrum_malformed"
+        malformed_file.write_text(
+            "$vibrational spectrum\n"
+            "not_a_mode_index   garbage   row\n"
+            "     1        a            151.34         0.04462         YES\n"
+            "$end\n"
+        )
+        malformed_vib = XTBVibSpectrumFile(str(malformed_file))
+        assert malformed_vib.vibrational_frequencies == [151.34]
 
 
 class TestXTBWibergBondOrderFile:
@@ -659,6 +1554,23 @@ class TestXTBWibergBondOrderFile:
         assert np.isclose(wbo.bond_order_matrix[1, 0], 0.92021379026732564)
         assert np.isclose(wbo.bond_order_matrix[0, 2], 0.92021379039282269)
         assert np.isclose(wbo.bond_order_matrix[2, 0], 0.92021379039282269)
+
+    def test_bond_orders_skips_blank_and_malformed_lines(self, tmp_path):
+        """Blank lines (too few tokens) and lines with non-numeric
+        tokens must both be silently skipped rather than raising."""
+        wbo_file = tmp_path / "wbo"
+        wbo_file.write_text("\n" "a   b   not_a_number\n" "1   2   0.5\n")
+        wbo = XTBWibergBondOrderFile(str(wbo_file))
+        assert wbo.bond_orders == [(1, 2, 0.5)]
+
+    def test_bond_order_matrix_none_when_no_bond_orders(self, tmp_path):
+        """A wbo file with no valid bond-order lines at all -- both
+        bond_orders and bond_order_matrix must be empty/None."""
+        wbo_file = tmp_path / "wbo"
+        wbo_file.write_text("\ntoo few\n")
+        wbo = XTBWibergBondOrderFile(str(wbo_file))
+        assert wbo.bond_orders == []
+        assert wbo.bond_order_matrix is None
 
 
 class TestXTBG98File:
@@ -881,6 +1793,69 @@ class TestXTBG98File:
         )
         assert acetaldehyde_g98.num_vib_modes == 15
         assert acetaldehyde_g98.num_vib_frequencies == 15
+
+    def test_standard_orientation_block_runs_to_eof(self, tmp_path):
+        """The Standard orientation table is the last thing in the
+        file, with no closing dashed-line marker -- the row-collection
+        loop must exhaust the file's contents naturally rather than
+        break."""
+        content = (
+            "                     Standard orientation:\n"
+            " --------------------------------------------------------------------\n"
+            "  Center     Atomic     Atomic              Coordinates (Angstroms)\n"
+            "  Number     Number      Type              X           Y           Z\n"
+            " --------------------------------------------------------------------\n"
+            "    1          8             0       -1.143652    0.000006    0.000004\n"
+        )
+        g98_file = tmp_path / "g98.out"
+        g98_file.write_text(content)
+        g98 = XTBG98File(str(g98_file))
+        assert g98.standard_orientation == [[-1.143652, 0.000006, 0.000004]]
+        assert g98.symbols == ["O"]
+
+    def test_standard_orientation_none_when_heading_absent(self, tmp_path):
+        """No 'Standard orientation:' heading anywhere in the file --
+        both standard_orientation and symbols must be None."""
+        g98_file = tmp_path / "g98.out"
+        g98_file.write_text("nothing relevant here\n")
+        g98 = XTBG98File(str(g98_file))
+        assert g98.standard_orientation is None
+        assert g98.symbols is None
+
+    def test_vibrational_modes_empty_when_no_matching_rows(self, tmp_path):
+        """A 'Frequencies --' line with nothing (or non-matching
+        content) in its normal-mode data window -- first_col_vib_modes
+        (and therefore the whole per-block collection) stays empty, so
+        nothing is appended to the overall modes list for that block."""
+        g98_file = tmp_path / "g98.out"
+        g98_file.write_text("Frequencies --  1539.3017\n")
+        g98 = XTBG98File(str(g98_file))
+        assert g98.vibrational_modes == []
+        assert g98.num_vib_modes == 0
+
+    def test_attach_vib_metadata_sets_all_attributes(self, xtb_co2_outfolder):
+        """Direct test of the private `_attach_vib_metadata` helper,
+        which isn't exercised by any Molecule-building code path in
+        the existing fixture-driven tests."""
+        g98_file = os.path.join(xtb_co2_outfolder, "g98.out")
+        co2_g98 = XTBG98File(g98_file)
+
+        class _DummyMolecule:
+            pass
+
+        mol = _DummyMolecule()
+        result = co2_g98._attach_vib_metadata(mol)
+
+        assert result is mol
+        assert mol.vibrational_frequencies == co2_g98.vibrational_frequencies
+        assert mol.vibrational_reduced_masses == co2_g98.reduced_masses
+        assert mol.vibrational_force_constants == co2_g98.force_constants
+        assert mol.vibrational_ir_intensities == co2_g98.ir_intensities
+        assert (
+            mol.vibrational_mode_symmetries
+            == co2_g98.vibrational_mode_symmetries
+        )
+        assert len(mol.vibrational_modes) == len(co2_g98.vibrational_modes)
 
 
 class TestXTBFolder:

@@ -3440,6 +3440,8 @@ def sort_structure_dicts_by_energy(db_file, struct_dicts):
 
 **Suggested direction:** no action needed; could be simplified by removing the `if sorted_frames: ... else: primary_mb = None` branch and unconditionally taking the `if` body, now that `sorted_frames` is confirmed always non-empty when reached.
 
+---
+
 ## 71. `ORCAOutput.final_scf_energy`'s and `final_structure`'s single-point/abnormal-termination branches, and all of `_get_sp_scf_energy`, are unreachable dead code
 
 **Location:** `chemsmart/io/orca/output.py:333-343, 973-987, 1104-1128`
@@ -3563,3 +3565,54 @@ def _get_input_structure_coordinates_block_in_output(self):
 **Impact:** None -- dead code with no runtime effect. Likely an earlier implementation (parsing the "INPUT FILE" echo section) superseded by `_get_first_structure_coordinates_block_in_output` (parsing the "CARTESIAN COORDINATES (ANGSTROEM)" section directly), with the old version left behind.
 
 **Suggested direction:** remove `_get_input_structure_coordinates_block_in_output`.
+
+---
+
+## 75. `XTBMainOut.only_rot_calc` searches for the wrong SETUP key, so it can never return anything but `None` for real xTB output
+
+**Location:** `chemsmart/io/xtb/file.py:897-904`
+
+```python
+@property
+def only_rot_calc(self):
+    """compute only rotational contributions to Hessian,
+    rather than the full vibrational analysis."""
+    only_rot = self._get_setup_information("only rotational calc.")
+    if only_rot:
+        return only_rot.lower() == "true"
+    return None
+```
+
+`_get_setup_information` does a literal substring search for `"only rotational calc."` inside the Hessian `SETUP` block. Real xTB output, however, prints this key as `only rotor calc.` (see e.g. `tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out`, which contains the line `:  only rotor calc.                    false      :` but never the string `"only rotational calc."`). Since the two strings never match, `_get_setup_information` always returns `None` for this keyword, so `only_rot` is always falsy and the property always takes the `return None` branch -- the `return only_rot.lower() == "true"` line is unreachable dead code for any real xTB output, and the property can never actually report whether a run was a rotation-only Hessian calculation.
+
+**Reproduce:** `tests/test_XTBIO.py::TestXTBMainOutSyntheticEdgeCases::test_only_rot_calc_key_never_matches_real_xtb_output` confirms that `co2_ohess.out` contains `"only rotor calc."` but not `"only rotational calc."`, and that `only_rot_calc` returns `None` rather than `False` even though the run's SETUP block explicitly states `only rotor calc. false`.
+
+**Impact:** Low but real -- any caller relying on `only_rot_calc` to distinguish a rotation-only Hessian run from a full vibrational analysis always gets `None`, never `True`/`False`, regardless of what the actual xTB output says.
+
+**Suggested direction:** change the search keyword from `"only rotational calc."` to `"only rotor calc."` to match real xTB output.
+
+---
+
+## 76. `XTBMainOut.molecular_dipole_qonly`'s search loop can never advance past its first element
+
+**Location:** `chemsmart/io/xtb/file.py:571-579`
+
+```python
+@property
+def molecular_dipole_qonly(self):
+    """Charge only dipole, computed only from atomic partial charges
+    (electrostatic contribution)."""
+    if self.molecular_dipole_lines is not None:
+        for line in self.molecular_dipole_lines:
+            if line.startswith("q only:"):
+                return np.array([float(x) for x in line.split()[-3:]])
+    return None
+```
+
+`molecular_dipole_lines` always builds its list as `self.contents[i + 2 : i + 4]`, i.e. exactly the two lines immediately following the `molecular dipole:` heading and its column-label row. Real xTB always prints the `q only:` row first and the `full:` row second within that block (see e.g. `tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out`), so whenever `molecular_dipole_lines` is non-`None` (i.e. non-empty), its very first element already starts with `"q only:"`. The `for` loop in `molecular_dipole_qonly` therefore always returns on its first iteration -- it can never advance to a second element, and the loop's own back-edge (continuing past a non-matching first line) is unreachable for any real xTB output. This differs from the sibling properties `molecular_dipole_full`/`total_molecular_dipole_moment`, which search for `"full:"` and *do* need to skip past the `q only:` row first, so their loops don't have this issue.
+
+**Reproduce:** `tests/test_XTBIO.py::TestXTBMainOutSyntheticEdgeCases::test_dipole_full_and_total_none_when_full_line_truncated` shows `molecular_dipole_qonly` matching immediately, while `molecular_dipole_full`/`total_molecular_dipole_moment` are the ones that need a full 2-line window to find their marker.
+
+**Impact:** None -- purely a coverage/dead-code observation; the loop still produces the correct result, it just never needs more than one iteration given the fixed, guaranteed line ordering.
+
+**Suggested direction:** no action needed; if desired, the loop could be simplified to a direct index into `self.molecular_dipole_lines[0]` instead of a `for`/`startswith` scan, now that the ordering invariant is confirmed.
