@@ -367,6 +367,29 @@ class TestCRESTFolder:
         assert ts1a_folder._coord() is not None
         assert os.path.basename(ts1a_folder._coord()) == "coord"
 
+    def test_folder_hexane_failed(self, crest_hexane_failed_outfolder):
+        """Test CRESTFolder with a failed hexane conformational search."""
+        assert os.path.exists(crest_hexane_failed_outfolder)
+        hexane_folder = CRESTFolder(crest_hexane_failed_outfolder)
+        assert hexane_folder.is_crest_calculation_directory
+
+        assert hexane_folder._crest_out() is not None
+        assert os.path.basename(hexane_folder._crest_out()) == "hexane.out"
+
+        assert hexane_folder._conformers_xyz() is None
+        assert hexane_folder._best_xyz() is None
+        assert hexane_folder._rotamers_xyz() is None
+        assert hexane_folder._energies() is None
+        assert hexane_folder._constraints_inp() is None
+
+        assert hexane_folder._crestopt_log() is not None
+        assert (
+            os.path.basename(hexane_folder._crestopt_log()) == "crestopt.log"
+        )
+
+        assert hexane_folder._coord() is not None
+        assert os.path.basename(hexane_folder._coord()) == "coord"
+
 
 class TestCRESTOutput:
     """Tests for CRESTOutput class."""

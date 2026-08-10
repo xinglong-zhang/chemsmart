@@ -1810,6 +1810,11 @@ def crest_ts1a_constrained_outfolder(crest_outputs_directory):
     return os.path.join(crest_outputs_directory, "TS1A_constrained_conformers")
 
 
+@pytest.fixture()
+def crest_hexane_failed_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "hexane_failed_conformers")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
