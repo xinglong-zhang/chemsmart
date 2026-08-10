@@ -3653,3 +3653,57 @@ An early guard at the top of `run_combinations` already returns `[]` when `combi
 **Impact:** None -- purely redundant defensive code with no behavioral effect.
 
 **Suggested direction:** no action needed; could be simplified by removing the `if successful_labels or timed_out_labels or failed_labels:` guard and printing the summary unconditionally, now that at least one of the three is confirmed always non-empty whenever this code runs.
+
+---
+
+## 78. `cli/orca/qmmm.py`'s `qmmm()` command has three branches unreachable through any real CLI invocation
+
+**Location:** `chemsmart/cli/orca/qmmm.py:289-297, 317-318, 394-395`
+
+```python
+if job_settings is not None:
+    try:
+        qmmm_merged = ORCAQMMMJobSettings(
+            **getattr(job_settings, "__dict__", job_settings)
+        )
+    except Exception:
+        qmmm_merged = qmmm_settings
+else:
+    qmmm_merged = qmmm_settings          # <-- line 296-297
+
+...
+if parent_jobtype is not None:            # <-- line 317-318
+    qmmm_settings.parent_jobtype = parent_jobtype
+...
+if parent_settings is not None:           # <-- line 394-395
+    inherited_keywords = [...]
+    try:
+        qmmm_settings = qmmm_settings.merge(parent_settings, keywords=inherited_keywords)
+    except Exception as exc:
+        ...
+```
+
+Two independent invariants make these guards' False arms unreachable:
+
+1. `job_settings = ctx.obj["job_settings"]` (line 273) is always populated by the parent `orca` group's callback (`chemsmart/cli/orca/orca.py`) before any subcommand -- including `qmmm` -- ever runs; every code path in that callback assigns a real `ORCAJobSettings` instance to `job_settings` (default, from-file, or from-database), never `None`. So the `else: qmmm_merged = qmmm_settings` branch (line 296-297, guarded by `job_settings is not None`'s False arm) can never execute.
+2. `create_orca_qmmm_subcommand` is attached to exactly seven parent groups: `opt`, `ts`, `sp` (singlepoint), `scan`, `qrc`, `modred`, and `neb` (`grep -rn "create_orca_qmmm_subcommand" chemsmart/cli/orca/*.py`). Every one of these seven groups' own callback sets both `ctx.obj["parent_settings"]` and `ctx.obj["parent_jobtype"]` to a real (non-`None`) value immediately before Click dispatches to the `qmmm` subcommand (e.g. `chemsmart/cli/orca/opt.py:95-96`: `ctx.obj["parent_settings"] = opt_settings; ctx.obj["parent_jobtype"] = "opt"`). Since `qmmm` has no other attachment point, `parent_jobtype` and `parent_settings` are always non-`None` whenever the `qmmm()` callback runs through the real CLI, making both `if parent_jobtype is not None:` (317-318) and `if parent_settings is not None:` (394-395) always take their True arm.
+
+**Reproduce:** `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand` exercises the *reachable* neighboring branches (the `qmmm_merged`/`qmmm_settings` exception-fallback paths when `job_settings is not None`, via `test_qmmm_merge_failure_falls_back_to_settings_reconstruction` and related tests); confirmed unreachability for the three branches above by exhaustively checking all seven `create_orca_qmmm_subcommand` call sites and the `orca` group's `job_settings` assignment paths.
+
+**Impact:** None -- purely redundant defensive code with no behavioral effect through any real CLI invocation.
+
+**Suggested direction:** no action needed; could be simplified by removing the `job_settings is not None` / `parent_jobtype is not None` / `parent_settings is not None` guards (trusting the invariants above), or left as-is as cheap insurance against a future eighth attachment point that might not set `parent_settings`/`parent_jobtype`.
+
+---
+
+## 79. `cli/orca/qmmm.py`'s `-h`/`--high-level-h-bond-length` option can never successfully reach `ast.literal_eval` (extends bug #28)
+
+**Location:** `chemsmart/cli/orca/qmmm.py:438-442`
+
+Bug #28 already documents that Click's `type=dict` declaration for `-h` rejects any non-empty CLI value before the callback body ever runs. This entry adds the missing piece: the *one* value that does survive Click's `dict(value)` conversion -- the empty string `""`, which becomes `{}` -- still can't reach a successful `ast.literal_eval` call. `high_level_h_bond_length` ends up as the dict `{}` (not a string), and `ast.literal_eval({})` raises `ValueError: malformed node or string: {}` (confirmed via `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently`). So line 442 (`molecule.scale_factors = high_level_h_bond_length_dict`, reached only after a *successful* `ast.literal_eval`) is unreachable for literally any value `-h` can take through the real CLI -- not just the "typical" values bug #28 already covers, but even the one edge case that gets past Click's broken converter.
+
+**Reproduce:** `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently` -- `-h ""` reaches `chemsmart/cli/orca/qmmm.py:439` (`ast.literal_eval(high_level_h_bond_length)`) and raises `ValueError: malformed node or string: {}` rather than completing.
+
+**Impact:** Same as bug #28 -- the `-h` option is completely unusable for its documented purpose through any real CLI input, not just typical ones.
+
+**Suggested direction:** same as bug #28: fix the option's `type=` declaration (e.g. `type=str`, parsed with `ast.literal_eval` in the callback as clearly intended) so a real dict-literal string like `"{1: 1.1}"` can actually reach line 439-442 successfully.
