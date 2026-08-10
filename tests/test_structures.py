@@ -2187,6 +2187,30 @@ $$$$"""
 
         assert np.all(sdf_molecule.positions == structure_coords)
 
+    def test_get_molecule_no_matching_lines_raises(self, tmpdir):
+        """SDF text with no lines matching sdf_pattern raises ValueError."""
+        from chemsmart.io.file import SDFFile
+
+        tmpfile = os.path.join(tmpdir, "no_coords.sdf")
+        with open(tmpfile, "w") as f:
+            f.write("just some text\nno coordinate lines here\n$$$$")
+        sdf_file = SDFFile(filename=tmpfile)
+        with pytest.raises(ValueError, match="No coordinates found"):
+            sdf_file.get_molecule()
+
+
+class TestFindElementParent:
+    """Tests for the module-level _find_element_parent helper."""
+
+    def test_returns_none_when_target_not_under_root(self):
+        import xml.etree.ElementTree as ET
+
+        from chemsmart.io.file import _find_element_parent
+
+        root = ET.fromstring("<a><b/></a>")
+        target = ET.fromstring("<c/>")
+        assert _find_element_parent(root, target) is None
+
 
 class TestCDXFile:
     """Tests for ChemDraw file reading functionality."""
@@ -2446,6 +2470,256 @@ class TestCDXFile:
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C6H10MnO6"
         assert mol.num_atoms == 23
+
+
+class TestCDXFileInternalBranches:
+    """Direct/mocked tests for CDXFile private helpers and edge-case branches
+    that are hard to reach through end-to-end fixture files alone.
+
+    NOTE: `_combine_metal_and_ligand_fragments.has_metal(None)`'s
+    `return False` is dead code -- its only call site (`has_metal(mol)`
+    inside the main while-loop) is always preceded by a `mol is None`
+    guard that already `continue`s, so `has_metal` is never invoked with
+    `None`. Left uncovered rather than forcing an artificial direct call.
+    """
+
+    # ------------------------------------------------------------------
+    # get_molecules
+    # ------------------------------------------------------------------
+
+    def test_get_molecules_with_slice_object(self, mocker):
+        """Passing an actual slice object hits the isinstance(..., slice)
+        branch directly rather than going through string2index_1based."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        fake_mols = [1, 2, 3, 4, 5]
+        mocker.patch.object(
+            CDXFile,
+            "molecules",
+            new_callable=mocker.PropertyMock,
+            return_value=fake_mols,
+        )
+        result = cdx_file.get_molecules(index=slice(1, 3))
+        assert result == [2, 3]
+
+    # ------------------------------------------------------------------
+    # _parse_chemdraw_file
+    # ------------------------------------------------------------------
+
+    def test_parse_chemdraw_file_rdkit_exception_is_logged(
+        self, tmp_path, mocker
+    ):
+        """RDKit raising inside the try block hits the debug-log except
+        branch; since no molecules are produced, the final ValueError
+        is also raised."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+        mocker.patch(
+            "rdkit.Chem.MolsFromCDXML", side_effect=RuntimeError("boom")
+        )
+        cdx_file = CDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="No molecules could be read"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_cdx_obabel_fallback_raises(
+        self, tmp_path, mocker
+    ):
+        """A .cdx file RDKit can't parse falls back to the Open Babel
+        helper; forcing shutil.which to report no obabel makes that
+        helper raise too, exercising the fallback except branch and the
+        final 'no molecules could be read' ValueError."""
+        mocker.patch("chemsmart.utils.io.shutil.which", return_value=None)
+        bogus = tmp_path / "bogus.cdx"
+        bogus.write_bytes(b"not a real cdx file \x00\x01\x02")
+        cdx_file = CDXFile(filename=str(bogus))
+        with pytest.raises(ValueError, match="No molecules could be read"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_none_entry_and_processing_exception(
+        self, tmp_path, mocker
+    ):
+        """A None entry in the RDKit mol list is skipped (both in the
+        property-cache loop and after fragment combining), and when the
+        only real molecule fails processing, the final 'no valid
+        molecules' ValueError is raised."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+
+        real_mol = Chem.MolFromSmiles("C", sanitize=False)
+        mocker.patch("rdkit.Chem.MolsFromCDXML", return_value=[None, real_mol])
+        mocker.patch.object(
+            CDXFile, "_process_cdx_molecule", side_effect=Exception("boom")
+        )
+
+        cdx_file = CDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="No valid molecules"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_skips_none_after_combining(
+        self, tmp_path, mocker
+    ):
+        """`_combine_metal_and_ligand_fragments` normally filters out None
+        entries itself, so mock it directly to return a list containing a
+        None to exercise the 'if rdkit_mol is None: continue' branch in
+        the processing loop that follows it."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+
+        real_mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.MolsFromCDXML", return_value=[real_mol])
+        mocker.patch.object(
+            CDXFile,
+            "_combine_metal_and_ligand_fragments",
+            return_value=[None, real_mol],
+        )
+
+        cdx_file = CDXFile(filename=str(p))
+        molecules = cdx_file.molecules
+        assert len(molecules) == 1
+
+    # ------------------------------------------------------------------
+    # _process_cdx_molecule
+    # ------------------------------------------------------------------
+
+    def test_process_cdx_molecule_embed_retry_succeeds(self, mocker):
+        """First EmbedMolecule call fails (-1); the retry with
+        useRandomCoords succeeds."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.AllChem.EmbedMolecule", side_effect=[-1, 0])
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        result = cdx_file._process_cdx_molecule(mol)
+        assert result is not None
+
+    def test_process_cdx_molecule_embed_retry_fails_raises(self, mocker):
+        """Both the initial embed and the retry fail (-1), raising
+        ValueError."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.AllChem.EmbedMolecule", side_effect=[-1, -1])
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        with pytest.raises(
+            ValueError, match="Could not generate 3D coordinates"
+        ):
+            cdx_file._process_cdx_molecule(mol)
+
+    def test_process_cdx_molecule_mmff_optimize_exception_logged(self, mocker):
+        """MMFFOptimizeMolecule raising is caught and logged; the
+        molecule is still returned."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch(
+            "rdkit.Chem.AllChem.MMFFOptimizeMolecule",
+            side_effect=RuntimeError("boom"),
+        )
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        result = cdx_file._process_cdx_molecule(mol)
+        assert result is not None
+
+    # ------------------------------------------------------------------
+    # _combine_metal_and_ligand_fragments
+    # ------------------------------------------------------------------
+
+    def test_combine_metal_ligand_fragments_none_lookahead_and_none_entry(
+        self,
+    ):
+        """A None fragment used as look-ahead ligand candidate is treated
+        as 'not a ligand ring' (is_small_ligand_ring(None) -> False), and
+        a later standalone None entry in the main loop is skipped via
+        i += 1; continue without being appended."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, None]
+        )
+        # metal fragment appended unmodified (no ligands found);
+        # the trailing None is skipped, not appended.
+        assert result == [metal_mol]
+
+    def test_combine_metal_ligand_fragments_wrong_ring_size(self):
+        """A metal fragment followed by a 4-membered carbocycle is not a
+        valid Cp/benzene ring, so it is left uncombined."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("C1CCC1")  # cyclobutane, ring size 4
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 2
+        assert result[0] is metal_mol
+        assert result[1] is ligand
+
+    def test_combine_metal_ligand_fragments_heteroatom_ring(self):
+        """A metal fragment followed by a 6-membered ring containing a
+        heteroatom (pyridine) is not an all-carbon ring, so it is left
+        uncombined."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("c1ccncc1")  # pyridine
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 2
+        assert result[0] is metal_mol
+        assert result[1] is ligand
+
+    def test_combine_metal_ligand_fragments_no_stub_atoms(self):
+        """A metal fragment with no degree-1 carbon stub neighbours still
+        combines correctly with a valid ligand ring (the stub-removal
+        block is simply skipped)."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("c1ccccc1")
+        ligand.UpdatePropertyCache(strict=False)
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 1
+        combined = result[0]
+        assert (
+            combined.GetNumAtoms()
+            == metal_mol.GetNumAtoms() + ligand.GetNumAtoms()
+        )
+
+    # ------------------------------------------------------------------
+    # _preprocess_cdxml_remove_multi_attachments
+    # ------------------------------------------------------------------
+
+    def test_preprocess_remove_multi_attachments_missing_and_present_id(
+        self, tmp_path
+    ):
+        """A MultiAttachment node without an id attribute is still
+        removed (the multi_ids.add call is simply skipped), alongside one
+        with an id (the main path)."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/>'
+            '<n NodeType="MultiAttachment"/>'
+            '<n id="4" NodeType="MultiAttachment"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "multi.cdxml"
+        p.write_text(content)
+        cleaned = CDXFile._preprocess_cdxml_remove_multi_attachments(str(p))
+        assert "MultiAttachment" not in cleaned
+        assert 'id="4"' not in cleaned
+        assert 'id="2"' in cleaned
 
 
 class TestpKaCDXFile:
@@ -2786,6 +3060,619 @@ class TestpKaCDXFile:
             assert a["cdxml_id"] == b["cdxml_id"]
             assert a["color"] == b["color"]
             assert a["symbol"] == b["symbol"]
+
+
+class TestPKaCDXFileInternalBranches:
+    """Direct/mocked tests for PKaCDXFile private helpers and edge-case
+    branches that are hard to reach through end-to-end fixture files
+    alone."""
+
+    # ------------------------------------------------------------------
+    # _resolve_proton_from_cdxml
+    # ------------------------------------------------------------------
+
+    def test_resolve_proton_from_cdxml_reraises_value_error(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "get_pka_molecules", side_effect=ValueError("bad")
+        )
+        with pytest.raises(ValueError, match="Could not auto-detect proton"):
+            pka._resolve_proton_from_cdxml()
+
+    def test_resolve_proton_from_cdxml_single_molecule_success(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        fake_pka_mol = mocker.MagicMock(proton_index=5)
+        mocker.patch.object(
+            pka, "get_pka_molecules", return_value=[fake_pka_mol]
+        )
+        idx, mols = pka._resolve_proton_from_cdxml()
+        assert idx == 5
+        assert mols is None
+
+    # ------------------------------------------------------------------
+    # resolve_reference_proton
+    # ------------------------------------------------------------------
+
+    def test_resolve_reference_proton_none_reference(self):
+        result = PKaCDXFile.resolve_reference_proton(None, None, None)
+        assert result is None
+
+    def test_resolve_reference_proton_explicit_index_bypasses(self):
+        result = PKaCDXFile.resolve_reference_proton("something", 5, None)
+        assert result == 5
+
+    def test_resolve_reference_proton_cdxml_file(
+        self, colored_proton_cdxml_file
+    ):
+        result = PKaCDXFile.resolve_reference_proton(
+            colored_proton_cdxml_file, None, None
+        )
+        assert result == 8
+
+    def test_resolve_reference_proton_non_cdx_with_color_code_raises(self):
+        with pytest.raises(ValueError, match="reference-color-code"):
+            PKaCDXFile.resolve_reference_proton("something.xyz", None, 3)
+
+    def test_resolve_reference_proton_non_cdx_without_color_code_returns_none(
+        self,
+    ):
+        """A non-cdx/cdxml reference with no reference_color_code falls
+        through to the final `return None`."""
+        result = PKaCDXFile.resolve_reference_proton(
+            "something.xyz", None, None
+        )
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # _parse_cdxml_root
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_root_invalid_xml_raises(self, tmp_path):
+        p = tmp_path / "broken.cdxml"
+        p.write_text("<CDXML><fragment></CDXML>")  # mismatched tags
+        pka = PKaCDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="Failed to parse CDXML"):
+            pka._parse_cdxml_root()
+
+    # ------------------------------------------------------------------
+    # _parse_fragment_nodes
+    # ------------------------------------------------------------------
+
+    def test_parse_fragment_nodes_edge_cases(self, tmp_path):
+        """Covers: ExternalConnectionPoint skip, whitespace-only span
+        text skip, and an invalid Element number falling back to '?'."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" NodeType="ExternalConnectionPoint"/>'
+            '<n id="3" Element="6"><t><s color="0">   </s></t></n>'
+            '<n id="4" Element="999"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "edge.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+        atoms = pka.parse_cdxml_element_colors()
+
+        assert len(atoms) == 2
+        assert atoms[0]["cdxml_id"] == "3"
+        assert atoms[1]["cdxml_id"] == "4"
+        assert atoms[1]["symbol"] == "?"
+
+    # ------------------------------------------------------------------
+    # _rdkit_atom_idx_by_cdxml_id
+    # ------------------------------------------------------------------
+
+    def test_rdkit_atom_idx_by_cdxml_id_none_mol(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        assert pka._rdkit_atom_idx_by_cdxml_id(None, "1") is None
+
+    # ------------------------------------------------------------------
+    # _nested_deprotonatable_cdxml_ids
+    # ------------------------------------------------------------------
+
+    def test_nested_deprotonatable_cdxml_ids_various(self, tmp_path):
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="10" NodeType="Fragment">'
+            '<fragment id="11">'
+            '<n id="12" NumHydrogens="0" Element="8"/>'
+            '<n NumHydrogens="1" Element="8"/>'
+            '<n id="14" NumHydrogens="1" Element="6"/>'
+            '<n id="15" NumHydrogens="1" Element="7"/>'
+            '<n id="16" NodeType="ExternalConnectionPoint" '
+            'NumHydrogens="1" Element="8"/>'
+            "</fragment>"
+            "</n>"
+            '<n id="20" NodeType="Unspecified"/>'
+            '<n id="30" NodeType="Fragment"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "nested.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+
+        # No node with this id exists at all -> loop exhausts, node is None.
+        assert pka._nested_deprotonatable_cdxml_ids("999") == []
+
+        # Node exists but is not a Fragment node.
+        assert pka._nested_deprotonatable_cdxml_ids("20") == []
+
+        # Node is a Fragment but has no nested <fragment> child.
+        assert pka._nested_deprotonatable_cdxml_ids("30") == []
+
+        # Node 10: id=12 has NumHydrogens=0 (skip); the id-less child
+        # has NumHydrogens=1/Element=8 but no id (skip append); id=14 is
+        # carbon (not in 1/7/8/16, skip); id=15 is nitrogen with H and an
+        # id (kept); id=16 is an ExternalConnectionPoint (skip).
+        result = pka._nested_deprotonatable_cdxml_ids("10")
+        assert result == ["15"]
+
+    # ------------------------------------------------------------------
+    # _rdkit_heavy_idx_for_implicit_h
+    # ------------------------------------------------------------------
+
+    def test_rdkit_heavy_idx_for_implicit_h_nested_match(self, mocker):
+        """Two nested candidate ids: the first fails to resolve (loop
+        continues back to the top), the second succeeds (loop breaks)."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", side_effect=[None, None, 7]
+        )
+        mocker.patch.object(
+            pka,
+            "_nested_deprotonatable_cdxml_ids",
+            return_value=["98", "99"],
+        )
+        atom = {"cdxml_id": "5"}
+        result = pka._rdkit_heavy_idx_for_implicit_h(
+            mocker.MagicMock(), atom, local_idx=None
+        )
+        assert result == 7
+
+    def test_rdkit_heavy_idx_for_implicit_h_local_idx_fallback(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        rdkit_mol_h = mocker.MagicMock()
+        rdkit_mol_h.GetNumAtoms.return_value = 10
+        atom = {"cdxml_id": "5"}
+        result = pka._rdkit_heavy_idx_for_implicit_h(
+            rdkit_mol_h, atom, local_idx=3
+        )
+        assert result == 3
+
+    def test_rdkit_heavy_idx_for_implicit_h_no_fallback_returns_none(
+        self, mocker
+    ):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        rdkit_mol_h = mocker.MagicMock()
+        rdkit_mol_h.GetNumAtoms.return_value = 10
+        atom = {"cdxml_id": "5"}
+
+        assert (
+            pka._rdkit_heavy_idx_for_implicit_h(
+                rdkit_mol_h, atom, local_idx=None
+            )
+            is None
+        )
+        # Out-of-range local_idx also falls through to None.
+        assert (
+            pka._rdkit_heavy_idx_for_implicit_h(
+                rdkit_mol_h, atom, local_idx=99
+            )
+            is None
+        )
+
+    # ------------------------------------------------------------------
+    # _proton_index_from_rdkit_heavy
+    # ------------------------------------------------------------------
+
+    def test_proton_index_from_rdkit_heavy_no_hydrogen_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mol = Chem.MolFromSmiles("C(F)(F)(F)F")
+        mol = Chem.AddHs(mol)
+        atom = {"symbol": "C", "cdxml_id": "1"}
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka._proton_index_from_rdkit_heavy(mol, 0, atom)
+
+    # ------------------------------------------------------------------
+    # get_colored_proton_index / _proton_index_by_color / _proton_index_auto
+    # ------------------------------------------------------------------
+
+    def test_get_colored_proton_index_empty_atoms_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(pka, "parse_cdxml_element_colors", return_value=[])
+        with pytest.raises(ValueError, match="No atoms found"):
+            pka.get_colored_proton_index()
+
+    def test_proton_index_by_color_multiple_explicit_h_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="Multiple explicit H atoms"):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_by_color_non_hydrogen_match_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 8,
+                "color": 4,
+                "symbol": "O",
+                "num_hydrogens": 0,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_by_color_multiple_fg_matches_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 8,
+                "color": 0,
+                "symbol": "O",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 7,
+                "color": 0,
+                "symbol": "N",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple functional-group H spans"
+        ):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_auto_single_functional_group_candidate(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 8,
+                "color": 0,
+                "symbol": "O",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+        ]
+        mocker.patch.object(pka, "_resolve_implicit_h_index", return_value=42)
+        result = pka._proton_index_auto(atoms)
+        assert result == 42
+
+    def test_proton_index_auto_multiple_candidates_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "3",
+                "element": 1,
+                "color": 5,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple uniquely coloured hydrogen atoms"
+        ):
+            pka._proton_index_auto(atoms)
+
+    # NOTE: `_proton_index_auto`'s "No uniquely coloured atom found"
+    # branch (total_candidates == 0 and not unique_atoms) appears to be
+    # dead code: any colour value beyond the majority necessarily comes
+    # from either an atom's own `color` (which makes it a member of
+    # `unique_atoms`) or its `implicit_h_color` (which makes it a member
+    # of `fg_h`, so total_candidates > 0). Unlike `_detect_proton_in_fragment`
+    # (see below), this method's `fg_h` has no `symbol != "H"` guard, so
+    # there is no way to have a second colour value that avoids both
+    # sets simultaneously. Left uncovered after this analysis rather than
+    # forcing an artificial/inconsistent atoms list.
+
+    # ------------------------------------------------------------------
+    # _resolve_implicit_h_index
+    # ------------------------------------------------------------------
+
+    def test_resolve_implicit_h_index_no_num_h_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": None}
+        with pytest.raises(
+            ValueError, match="Cannot identify an implicit hydrogen"
+        ):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    def test_resolve_implicit_h_index_rdkit_no_mols_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=["2"]
+        )
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[])
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        with pytest.raises(ValueError, match="RDKit could not read"):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    def test_resolve_implicit_h_index_skips_none_and_failed_candidates(
+        self, mocker
+    ):
+        """Covers: a None entry in the RDKit mol list is skipped; a
+        candidate heavy atom that can't be mapped is skipped; success on
+        a later candidate."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        real_mol1 = Chem.MolFromSmiles("CO")
+        real_mol2 = Chem.MolFromSmiles("CO")
+        mocker.patch(
+            "rdkit.Chem.MolsFromCDXMLFile",
+            return_value=[None, real_mol1, real_mol2],
+        )
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", side_effect=[None, 1]
+        )
+        mocker.patch.object(
+            pka, "_proton_index_from_rdkit_heavy", return_value=99
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        result = pka._resolve_implicit_h_index([atom], 0, atom)
+        assert result == 99
+
+    def test_resolve_implicit_h_index_exhausts_candidates_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        real_mol = Chem.MolFromSmiles("CO")
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[real_mol])
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", return_value=0
+        )
+        mocker.patch.object(
+            pka,
+            "_proton_index_from_rdkit_heavy",
+            side_effect=ValueError("no h"),
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    # ------------------------------------------------------------------
+    # parse_cdxml_fragment_colors
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_fragment_colors_skips_empty_fragment(self, tmp_path):
+        content = (
+            '<?xml version="1.0"?>\n'
+            "<CDXML><page>"
+            '<fragment id="1">'
+            '<n id="2" NodeType="ExternalConnectionPoint"/>'
+            "</fragment>"
+            '<fragment id="3">'
+            '<n id="4" Element="6"/>'
+            "</fragment>"
+            "</page></CDXML>"
+        )
+        p = tmp_path / "empty_frag.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+        fragments = pka.parse_cdxml_fragment_colors()
+        assert len(fragments) == 1
+        assert fragments[0][0]["cdxml_id"] == "4"
+
+    # ------------------------------------------------------------------
+    # _detect_proton_in_fragment
+    # ------------------------------------------------------------------
+
+    def test_detect_proton_in_fragment_non_hydrogen_unique_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 8,
+                "color": 4,
+                "symbol": "O",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            pka._detect_proton_in_fragment(atoms, fragment_index=2)
+
+    def test_detect_proton_in_fragment_multiple_candidates_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "3",
+                "element": 1,
+                "color": 5,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple uniquely coloured H atoms"
+        ):
+            pka._detect_proton_in_fragment(atoms, fragment_index=3)
+
+    def test_detect_proton_in_fragment_no_unique_atom_at_all(self):
+        """Unlike `_proton_index_auto`, `_detect_proton_in_fragment`'s
+        `fg_h` excludes atoms whose own symbol is "H". This lets an H
+        atom contribute a second colour via `implicit_h_color` while its
+        own `color` still equals the majority colour, so it lands in
+        neither `explicit_h` nor `fg_h` nor `unique_atoms` -- reaching
+        the true "No uniquely coloured atom found" branch."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 0,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": 5,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="No uniquely coloured atom found"
+        ):
+            pka._detect_proton_in_fragment(atoms, fragment_index=1)
+
+    # ------------------------------------------------------------------
+    # get_pka_molecules_auto
+    # ------------------------------------------------------------------
+
+    def test_get_pka_molecules_auto_fragment_count_mismatch_fallback(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka, "parse_cdxml_fragment_colors", return_value=[[], []]
+        )
+        result = pka.get_pka_molecules_auto()
+        assert len(result) == 1
+        assert result[0].proton_index == 8
+
+    def test_get_pka_molecules_auto_none_rdkit_mol_raises(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[None])
+        with pytest.raises(ValueError, match="is None"):
+            pka.get_pka_molecules_auto()
+
+    def test_get_pka_molecules_auto_explicit_fallback_to_local_idx(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka,
+            "_detect_proton_in_fragment",
+            return_value={
+                "type": "explicit",
+                "local_idx": 7,
+                "atom": {"cdxml_id": "999", "symbol": "H"},
+            },
+        )
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        result = pka.get_pka_molecules_auto()
+        assert len(result) == 1
+        assert result[0].proton_index == 8  # local_idx(7) + 1, the H atom
+
+    def test_get_pka_molecules_auto_implicit_no_heavy_idx_raises(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka,
+            "_detect_proton_in_fragment",
+            return_value={
+                "type": "implicit",
+                "local_idx": 2,
+                "atom": {"cdxml_id": "999", "symbol": "O"},
+            },
+        )
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", return_value=None
+        )
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka.get_pka_molecules_auto()
 
 
 class TestQMMMMolecule:
