@@ -177,10 +177,10 @@ directly (for example ``crest_best.xyz`` or ``crest_conformers.xyz``).
 
 .. code:: bash
 
-   # From CREST best conformer XYZ
+   # Using Gaussian via the gaussian subcommand: CREST best conformer XYZ
    chemsmart sub -s server gaussian -p project -f crest_best.xyz -c 0 -m 1 opt
 
-   # Run TS optimization on CREST conformer ensemble
+   # Using Gaussian via the gaussian subcommand: TS optimization on CREST conformer ensemble
    chemsmart sub -s server gaussian -p project -f crest_conformers.xyz -c 0 -m 1 crest -j ts
 
 ChemDraw Files
