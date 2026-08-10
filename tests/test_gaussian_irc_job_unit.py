@@ -128,6 +128,47 @@ class TestSubJobLabelDerivation:
         assert job.label == expected_label
         assert job._ircf_job().label == f"{expected_label}_ircf"
 
+    def test_ircf_label_none_skips_label_derivation(
+        self, a_molecule, irc_settings
+    ):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        job.label = None
+        # Sub-job label derivation is skipped entirely; the sub-job's own
+        # GaussianJob.__init__ then defaults the None label to the
+        # molecule's chemical formula (no "_ircf" suffix applied).
+        expected_label = a_molecule.get_chemical_formula(empirical=True)
+        assert job._ircf_job().label == expected_label
+
+    def test_ircr_label_none_skips_label_derivation(
+        self, a_molecule, irc_settings
+    ):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        job.label = None
+        expected_label = a_molecule.get_chemical_formula(empirical=True)
+        assert job._ircr_job().label == expected_label
+
+    def test_ircr_label_flat_irc_appends_suffix(
+        self, a_molecule, irc_settings
+    ):
+        irc_settings.flat_irc = True
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        assert job._ircr_job().label == "mymol_ircr_flat"
+
     def test_ircf_jobtype_set_on_sub_settings(self, a_molecule, irc_settings):
         job = GaussianIRCJob(
             molecule=a_molecule,
@@ -137,6 +178,66 @@ class TestSubJobLabelDerivation:
         )
         assert job._ircf_job().settings.jobtype == "ircf"
         assert job._ircr_job().settings.jobtype == "ircr"
+
+
+class TestRunAndCompleteHelpers:
+    def test_run_forward_runs_the_ircf_job(self, a_molecule, irc_settings):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        mock_ircf_job = MagicMock()
+        job._ircf_job = MagicMock(return_value=mock_ircf_job)
+
+        job._run_forward()
+
+        mock_ircf_job.run.assert_called_once()
+
+    def test_run_reverse_runs_the_ircr_job(self, a_molecule, irc_settings):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        mock_ircr_job = MagicMock()
+        job._ircr_job = MagicMock(return_value=mock_ircr_job)
+
+        job._run_reverse()
+
+        mock_ircr_job.run.assert_called_once()
+
+    def test_run_forward_is_complete_delegates_to_ircf_job(
+        self, a_molecule, irc_settings
+    ):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        mock_ircf_job = MagicMock()
+        mock_ircf_job.is_complete.return_value = True
+        job._ircf_job = MagicMock(return_value=mock_ircf_job)
+
+        assert job._run_forward_is_complete() is True
+
+    def test_run_reverse_is_complete_delegates_to_ircr_job(
+        self, a_molecule, irc_settings
+    ):
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        mock_ircr_job = MagicMock()
+        mock_ircr_job.is_complete.return_value = False
+        job._ircr_job = MagicMock(return_value=mock_ircr_job)
+
+        assert job._run_reverse_is_complete() is False
 
 
 class TestRunDirectionDispatch:
@@ -258,6 +359,21 @@ class TestBackupFiles:
         # inputfile, outputfile, chkfile -> 3 calls for forward only
         assert job.backup_file.call_count == 3
 
+    def test_forward_direction_without_chk_skips_chkfile(
+        self, a_molecule, irc_settings
+    ):
+        irc_settings.direction = "forward"
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        job.backup_file = MagicMock()
+        job.backup_files(backup_chk=False)
+        # inputfile, outputfile only (no chk) -> 2 calls
+        assert job.backup_file.call_count == 2
+
     def test_reverse_direction_backs_up_only_reverse_files(
         self, a_molecule, irc_settings
     ):
@@ -273,6 +389,21 @@ class TestBackupFiles:
         # inputfile, outputfile only (no chk) -> 2 calls
         assert job.backup_file.call_count == 2
 
+    def test_reverse_direction_with_chk_backs_up_chkfile(
+        self, a_molecule, irc_settings
+    ):
+        irc_settings.direction = "reverse"
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        job.backup_file = MagicMock()
+        job.backup_files(backup_chk=True)
+        # inputfile, outputfile, chkfile -> 3 calls for reverse only
+        assert job.backup_file.call_count == 3
+
     def test_no_direction_backs_up_both_directions(
         self, a_molecule, irc_settings
     ):
@@ -287,3 +418,18 @@ class TestBackupFiles:
         job.backup_files(backup_chk=True)
         # input+output for both directions (4) + chk for both (2) = 6
         assert job.backup_file.call_count == 6
+
+    def test_no_direction_without_chk_skips_chkfiles(
+        self, a_molecule, irc_settings
+    ):
+        irc_settings.direction = None
+        job = GaussianIRCJob(
+            molecule=a_molecule,
+            settings=irc_settings,
+            label="mymol_irc",
+            jobrunner=MagicMock(),
+        )
+        job.backup_file = MagicMock()
+        job.backup_files(backup_chk=False)
+        # input+output for both directions only -> 4 calls
+        assert job.backup_file.call_count == 4
