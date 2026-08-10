@@ -3755,3 +3755,65 @@ Three separate `if`/`elif` chains in this file check a value against a fixed, sm
 **Impact:** None -- purely redundant code paths with no behavioral effect (each `elif`'s condition is always true whenever control reaches it, and the `else` case in #3 can never be entered at all).
 
 **Suggested direction:** no action needed; harmless as defensive coding, though the final `elif` in each chain could be simplified to a plain `else` now that exhaustiveness is confirmed.
+
+---
+
+## 82. `Thermochemistry.qrrho_vibrational_entropy` silently returns `0.0` instead of raising when `entropy_method` isn't `"grimme"` or `"truhlar"`
+
+**Location:** `chemsmart/analysis/thermochemistry.py:901-940`
+
+```python
+@property
+def qrrho_vibrational_entropy(self):
+    ...
+    if self.s_freq_cutoff is None or self.v is None:
+        return None
+    vib_entropy = []
+    if self.entropy_method == "grimme":
+        ...
+        for j in range(0, len(self.v)):
+            vib_entropy.append(...)
+    elif self.entropy_method == "truhlar":
+        ...
+        for j in range(0, len(self.v)):
+            vib_entropy.append(...)
+    return sum(vib_entropy)
+```
+
+`entropy_method` defaults to `None` in both `Thermochemistry.__init__` (`chemsmart/analysis/thermochemistry.py:73`) and `ThermochemistryJobSettings.__init__` (`chemsmart/jobs/thermochemistry/settings.py:48`), and neither class validates that `entropy_method` is set (or is one of the two supported values) whenever `s_freq_cutoff` is provided. If a caller sets `s_freq_cutoff` without also setting `entropy_method` to `"grimme"` or `"truhlar"` -- e.g. by constructing `Thermochemistry` or `ThermochemistryJobSettings` directly rather than going through the CLI's `resolve_entropy_cutoff` helper (`chemsmart/cli/thermochemistry/thermochemistry.py:62-76`), which always pairs a supplied cutoff with the matching method -- then neither `if` nor `elif` branch is taken, `vib_entropy` stays `[]`, and the property returns `sum([])`, i.e. `0.0`. This silently propagates: `qrrho_total_entropy` becomes translational + rotational + electronic entropy only (vibrational contribution dropped to zero), and `qrrho_gibbs_free_energy*` variants become correspondingly wrong -- with no error, warning, or `None` to signal that anything is off. A typo in `entropy_method` (e.g. `"Grimme"` with capital G, since the comparison is case-sensitive) hits the same silent-zero path.
+
+**Reproduce:** `tests/test_thermochemistry.py::TestThermochemistryRemainingBranches::test_qrrho_vibrational_entropy_unknown_method_returns_zero` constructs a mock with `s_freq_cutoff=100.0`, real `v`, and `entropy_method=None` and shows `qrrho_vibrational_entropy` returns `0` rather than raising.
+
+**Impact:** Low-to-moderate -- unreachable through the documented CLI entry points (which always pair `s_freq_cutoff` with a valid `entropy_method`), but reachable via any direct/programmatic use of `Thermochemistry`, `ThermochemistryJobSettings`, or `BoltzmannAverageThermochemistry` (e.g. scripting against the library, or a future caller that forgets the pairing). The failure mode is silent and physically wrong (vibrational entropy dropped entirely) rather than a loud error, which is the worse kind of bug to have in a thermochemistry engine.
+
+**Suggested direction:** raise a `ValueError` (e.g. in `__init__`, mirroring the existing `energy_type` validation in `BoltzmannAverageThermochemistry`) when `s_freq_cutoff` is set but `entropy_method` is not `"grimme"` or `"truhlar"`, instead of letting `qrrho_vibrational_entropy` fall through to an empty list.
+
+---
+
+## 83. `BoltzmannAverageThermochemistry.__init__`'s empty-file-list guard is unreachable -- an empty list raises `IndexError`, not the documented `ValueError`
+
+**Location:** `chemsmart/analysis/thermochemistry.py:1535-1554`
+
+```python
+def __init__(self, files, energy_type="gibbs", **kwargs):
+    super().__init__(
+        filename=files[
+            0
+        ],  # No single file, we will take molecule from first filename
+        **kwargs,
+    )
+    """
+    Initialize with a list of Gaussian or ORCA output files.
+    ...
+    """
+    if not files:
+        raise ValueError("List of files cannot be empty.")
+```
+
+The `if not files: raise ValueError(...)` guard is meant to give a clear error when `files=[]` is passed. However, `files[0]` is evaluated as part of the `super().__init__(...)` call *before* that guard is ever reached -- so an empty `files` list raises a bare `IndexError: list index out of range` from the `files[0]` subscript, and the guard clause a few lines later is dead code that can never execute for this input. (The docstring placed between the `super().__init__()` call and the guard is itself also somewhat telling -- it reads like the guard was originally intended to run first, ahead of `super().__init__()`, and got left behind after a reorder.)
+
+**Reproduce:** `tests/test_thermochemistry.py::TestBoltzmannAverageThermochemistryRemainingBranches::test_empty_files_raises_indexerror_before_reaching_guard` confirms `BoltzmannAverageThermochemistry(files=[], temperature=298.15)` raises `IndexError`, not `ValueError`. This is also the sole remaining coverage gap in `chemsmart/analysis/thermochemistry.py` (line 1554) after this effort's test additions -- the `ValueError` branch is provably unreachable as the code is currently ordered.
+
+**Impact:** Low -- the call still fails loudly (just with the wrong exception type/message), so callers checking for empty input via a broad `except Exception` won't notice, but ones specifically catching `ValueError` (as the docstring/API implies they should be able to) will see an uncaught `IndexError` instead.
+
+**Suggested direction:** move the `if not files: raise ValueError(...)` check to the very top of `__init__`, before the `super().__init__(filename=files[0], **kwargs)` call.
