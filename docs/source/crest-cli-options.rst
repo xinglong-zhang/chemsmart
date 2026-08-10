@@ -179,8 +179,8 @@ Examples:
    # GFN2-xTB//GFN-FF composite method
    chemsmart sub -s server crest -p test -f molecule.xyz -g gfn2//gfnff conformers
 
-Route and Calculation Options
-=============================
+Calculation Options
+===================
 
 .. list-table::
    :header-rows: 1
