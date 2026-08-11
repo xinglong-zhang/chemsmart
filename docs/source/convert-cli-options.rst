@@ -70,9 +70,9 @@ Single-file conversion infers the output format from the ``--output`` extension:
    chemsmart run convert -i molecule.pdb -o molecule.xyz
    chemsmart run convert -i molecule.log -o molecule.mol2
 
-***************************
+****************************
  Batch Directory Conversion
-***************************
+****************************
 
 Convert all matching files in a directory:
 
