@@ -374,6 +374,17 @@ class TestValidation:
         features = calculate_soap(water_molecule, n_max=4, l_max=2)
         assert features.shape[0] == 3
 
+    def test_rejects_translation_vectors_without_len(self, water_molecule):
+        # Non-sized TV containers still count as periodic/cell-bearing.
+        class _UnsizedTV:
+            def __len__(self):
+                raise TypeError("unsized")
+
+        water_molecule.pbc_conditions = None
+        water_molecule.translation_vectors = _UnsizedTV()
+        with pytest.raises(ValueError, match="Periodic SOAP is not supported"):
+            calculate_soap(water_molecule, n_max=4, l_max=2)
+
     def test_rejects_zero_pbc_flags_as_inactive(self, water_molecule):
         # Explicit all-false PBC should still be treated as finite.
         water_molecule.pbc_conditions = [0, 0, 0]
@@ -406,6 +417,13 @@ class TestValidation:
         with pytest.raises(TypeError, match="l_max"):
             calculate_soap(water_molecule, l_max=1.5)
 
+    def test_lmax0_and_lmax1_smoke(self, water_molecule):
+        # Exercise solid-harmonics early-return path (l_max < 2).
+        for l_max in (0, 1):
+            features = calculate_soap(water_molecule, n_max=4, l_max=l_max)
+            assert features.shape[0] == water_molecule.num_atoms
+            assert np.isfinite(features).all()
+
     def test_solid_harmonics_survives_cos_theta_roundoff(self):
         # Float noise can push |z/r| slightly outside [-1, 1]; lpmv needs clip.
         from chemsmart.analysis.soap import _solid_harmonics_polynomial
@@ -416,6 +434,46 @@ class TestValidation:
         harm = _solid_harmonics_polynomial(x, y, z, l_max=4)
         assert harm.shape == (2, 25)
         assert np.isfinite(harm).all()
+
+    def test_solid_harmonics_early_return_empty_or_low_l(self):
+        from chemsmart.analysis.soap import _solid_harmonics_polynomial
+
+        empty = _solid_harmonics_polynomial(
+            np.array([]), np.array([]), np.array([]), l_max=4
+        )
+        assert empty.shape == (0, 25)
+        low_l = _solid_harmonics_polynomial(
+            np.array([1.0]), np.array([0.0]), np.array([0.0]), l_max=1
+        )
+        assert low_l.shape == (1, 4)
+        assert np.all(low_l == 0.0)
+
+    def test_validate_positions_shape_and_count(self, water_molecule):
+        from chemsmart.analysis.soap import _validate_positions
+
+        with pytest.raises(ValueError, match=r"shape \(N, 3\)"):
+            _validate_positions(np.array([0.0, 0.0, 0.0]), 1)
+        with pytest.raises(ValueError, match="does not match"):
+            _validate_positions(water_molecule.positions, num_atoms=1)
+
+    def test_rejects_none_or_empty_symbols(self, water_molecule):
+        water_molecule.symbols = None
+        with pytest.raises(ValueError, match="no atoms"):
+            calculate_soap(water_molecule, n_max=4, l_max=2)
+
+        water_molecule.symbols = []
+        with pytest.raises(ValueError, match="no atoms"):
+            calculate_soap(water_molecule, n_max=4, l_max=2)
+
+    def test_gto_basis_rejects_complex_normalization(self, monkeypatch):
+        import chemsmart.analysis.soap as soap_mod
+
+        def _complex_sqrtm(_matrix):
+            return np.array([[1.0 + 1.0j]], dtype=np.complex128)
+
+        monkeypatch.setattr(soap_mod, "sqrtm", _complex_sqrtm)
+        with pytest.raises(ValueError, match="normalization factors"):
+            soap_mod._gto_basis(r_cut=6.0, n_max=1, l_max=0)
 
     def test_invalid_sigma(self, water_molecule):
         with pytest.raises(ValueError, match="sigma"):

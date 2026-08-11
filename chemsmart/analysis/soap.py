@@ -366,7 +366,9 @@ def _soap_gto_features(
         deltas = positions - center
         r2_all = np.sum(deltas * deltas, axis=1)
         neighbor_idx = np.flatnonzero(r2_all <= neighbor_cut_sq)
-        if neighbor_idx.size == 0:
+        # The center itself has r=0, so this is empty only for empty geometries
+        # that are already rejected upstream; keep the guard for safety.
+        if neighbor_idx.size == 0:  # pragma: no cover
             continue
 
         x = deltas[neighbor_idx, 0]
