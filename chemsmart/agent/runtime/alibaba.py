@@ -1,4 +1,4 @@
-"""Alibaba Token Plan Qwen 3.8 Max streaming reasoning adapter."""
+"""Alibaba Token Plan streaming reasoning adapter."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from chemsmart.agent._contracts import ContractError
+from chemsmart.agent._contracts import ContractError, require_identifier
 from chemsmart.agent.provider_config import (
     ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS,
     ALIBABA_TOKEN_PLAN_ENDPOINT,
@@ -27,8 +27,8 @@ from chemsmart.agent.runtime.deepseek import (
 
 
 @dataclass(frozen=True)
-class Qwen38MaxConfigV1:
-    """Exact production Qwen 3.8 Max Token Plan wire contract."""
+class AlibabaTokenPlanConfigV1:
+    """One model selected from the Alibaba Token Plan catalog."""
 
     provider: str = ALIBABA_TOKEN_PLAN_PROVIDER
     model: str = ALIBABA_TOKEN_PLAN_MODEL
@@ -41,19 +41,43 @@ class Qwen38MaxConfigV1:
 
     def __post_init__(self) -> None:
         if self.provider != ALIBABA_TOKEN_PLAN_PROVIDER:
-            raise ContractError("Qwen adapter provider identity is immutable")
-        if self.model != ALIBABA_TOKEN_PLAN_MODEL:
-            raise ContractError("Qwen adapter requires production qwen3.8-max")
+            raise ContractError(
+                "Alibaba Token Plan provider identity is immutable"
+            )
+        require_identifier(self.model, "Alibaba Token Plan model")
         if not _is_token_plan_endpoint(self.endpoint):
-            raise ContractError("Qwen adapter requires the Token Plan endpoint")
-        if self.reasoning_effort != "xhigh":
-            raise ContractError("Qwen 3.8 Max reasoning effort must be xhigh")
+            raise ContractError(
+                "Alibaba adapter requires the Token Plan endpoint"
+            )
+        if self.reasoning_effort not in {"high", "max", "xhigh"}:
+            raise ContractError(
+                "Alibaba Token Plan reasoning effort must be high, max or "
+                "xhigh"
+            )
         if not self.preserve_thinking:
-            raise ContractError("Qwen tool continuation must preserve thinking")
-        if self.max_output_tokens != ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS:
-            raise ContractError("Qwen provider maximum must remain uncapped on wire")
+            raise ContractError(
+                "Alibaba tool continuation must preserve thinking"
+            )
+        if not 1 <= self.max_output_tokens <= (
+            ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
+        ):
+            raise ContractError(
+                "max_output_tokens exceeds Alibaba Token Plan capability"
+            )
         if self.sdk_max_retries < 0:
             raise ContractError("provider retries must be non-negative")
+
+
+@dataclass(frozen=True)
+class Qwen38MaxConfigV1(AlibabaTokenPlanConfigV1):
+    """Backward-compatible production Qwen 3.8 Max configuration."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.model != ALIBABA_TOKEN_PLAN_MODEL:
+            raise ContractError("Qwen adapter requires production qwen3.8-max")
+        if self.reasoning_effort != "xhigh":
+            raise ContractError("Qwen 3.8 Max reasoning effort must be xhigh")
 
 
 class AlibabaTokenPlanHttpsTransport:
@@ -104,7 +128,9 @@ class AlibabaTokenPlanHttpsTransport:
         )
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                return _assemble_sse_response(response)
+                return _assemble_sse_response(
+                    response, expected_model=str(payload.get("model") or "")
+                )
         except HTTPError as exc:
             raise DeepSeekTransportError(
                 _http_error_class(exc), http_status=exc.code
@@ -123,20 +149,20 @@ class AlibabaTokenPlanHttpsTransport:
         self._closed = True
 
 
-class Qwen38MaxToolSession(DeepSeekV4ToolSession):
-    """Provider-native Qwen continuation with private reasoning held in RAM."""
+class AlibabaTokenPlanToolSession(DeepSeekV4ToolSession):
+    """Provider-native continuation with private reasoning held in RAM."""
 
     def __init__(
         self,
         *,
         transport,
         messages: list[dict[str, Any]],
-        config: Qwen38MaxConfigV1 | None = None,
+        config: AlibabaTokenPlanConfigV1 | None = None,
     ) -> None:
         super().__init__(
             transport=transport,
             messages=messages,
-            config=config or Qwen38MaxConfigV1(),
+            config=config or AlibabaTokenPlanConfigV1(),
         )
 
     @property
@@ -164,7 +190,26 @@ class Qwen38MaxToolSession(DeepSeekV4ToolSession):
         return payload
 
 
-def _assemble_sse_response(response) -> dict[str, Any]:
+class Qwen38MaxToolSession(AlibabaTokenPlanToolSession):
+    """Backward-compatible production Qwen 3.8 Max session."""
+
+    def __init__(
+        self,
+        *,
+        transport,
+        messages: list[dict[str, Any]],
+        config: Qwen38MaxConfigV1 | None = None,
+    ) -> None:
+        super().__init__(
+            transport=transport,
+            messages=messages,
+            config=config or Qwen38MaxConfigV1(),
+        )
+
+
+def _assemble_sse_response(
+    response, *, expected_model: str = ALIBABA_TOKEN_PLAN_MODEL
+) -> dict[str, Any]:
     response_id = ""
     observed_model = ""
     finish_reason = ""
@@ -211,9 +256,9 @@ def _assemble_sse_response(response) -> dict[str, Any]:
 
     if not saw_event:
         raise DeepSeekProtocolError("Alibaba stream returned no events")
-    if observed_model != ALIBABA_TOKEN_PLAN_MODEL:
+    if observed_model != expected_model:
         raise DeepSeekProtocolError(
-            "Alibaba stream did not confirm production qwen3.8-max"
+            "Alibaba stream did not confirm the requested model"
         )
     message: dict[str, Any] = {
         "role": role,
@@ -299,7 +344,9 @@ def _http_error_class(exc: HTTPError) -> str:
 
 
 __all__ = [
+    "AlibabaTokenPlanConfigV1",
     "AlibabaTokenPlanHttpsTransport",
+    "AlibabaTokenPlanToolSession",
     "Qwen38MaxConfigV1",
     "Qwen38MaxToolSession",
 ]
