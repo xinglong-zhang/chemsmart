@@ -84,7 +84,7 @@ class UnifiedSessionRunner:
             elif bound_config.provider == "alibaba-token-plan":
                 from chemsmart.agent.runtime.alibaba import (
                     AlibabaTokenPlanHttpsTransport,
-                    Qwen38MaxToolSession,
+                    AlibabaTokenPlanToolSession,
                 )
 
                 transport = AlibabaTokenPlanHttpsTransport(
@@ -92,7 +92,7 @@ class UnifiedSessionRunner:
                     endpoint=bound_config.endpoint,
                     timeout_seconds=network_budget.task_wall_time_seconds,
                 )
-                session = Qwen38MaxToolSession(
+                session = AlibabaTokenPlanToolSession(
                     transport=transport,
                     messages=messages,
                     config=bound_config,

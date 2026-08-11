@@ -59,9 +59,11 @@ class AgentProviderProfileV1:
         """Build the provider-native ephemeral continuation configuration."""
 
         if self.provider == ALIBABA_TOKEN_PLAN_PROVIDER:
-            from chemsmart.agent.runtime.alibaba import Qwen38MaxConfigV1
+            from chemsmart.agent.runtime.alibaba import (
+                AlibabaTokenPlanConfigV1,
+            )
 
-            return Qwen38MaxConfigV1(
+            return AlibabaTokenPlanConfigV1(
                 model=self.model,
                 endpoint=self.endpoint,
                 reasoning_effort=self.reasoning_effort,
@@ -265,17 +267,28 @@ def _build_profile(
 
     if endpoint == ALIBABA_TOKEN_PLAN_ENDPOINT:
         provider = ALIBABA_TOKEN_PLAN_PROVIDER
-        if model != ALIBABA_TOKEN_PLAN_MODEL:
+        if not model:
+            raise ContractError("Alibaba Token Plan profile requires a model")
+        if model == "qwen3.8-max-preview":
             raise ContractError(
                 "Alibaba Token Plan profile requires production qwen3.8-max"
             )
         require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or "xhigh"
-        if reasoning_effort != "xhigh":
-            raise ContractError("qwen3.8-max maximum reasoning requires xhigh")
+        reasoning_effort = reasoning_effort or (
+            "xhigh" if model == ALIBABA_TOKEN_PLAN_MODEL else "max"
+        )
+        if model == ALIBABA_TOKEN_PLAN_MODEL and reasoning_effort != "xhigh":
+            raise ContractError(
+                "qwen3.8-max maximum reasoning requires xhigh"
+            )
+        if reasoning_effort not in {"high", "max", "xhigh"}:
+            raise ContractError(
+                "Alibaba Token Plan reasoning effort must be high, max or "
+                "xhigh"
+            )
         if not preserve_thinking:
             raise ContractError(
-                "qwen3.8-max tool continuation must be preserved"
+                "Alibaba Token Plan tool continuation must be preserved"
             )
         context_tokens = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
         max_output_tokens = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS

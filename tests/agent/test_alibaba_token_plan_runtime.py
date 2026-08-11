@@ -9,6 +9,8 @@ import pytest
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.api_access import load_secret_lease
 from chemsmart.agent.runtime.alibaba import (
+    AlibabaTokenPlanConfigV1,
+    AlibabaTokenPlanToolSession,
     Qwen38MaxConfigV1,
     Qwen38MaxToolSession,
     _assemble_sse_response,
@@ -41,6 +43,23 @@ def test_qwen_payload_uses_xhigh_and_omits_conflicting_limits():
     assert "thinking" not in payload
     assert "max_tokens" not in payload
     assert "max_completion_tokens" not in payload
+
+
+def test_token_plan_payload_uses_profile_selected_deepseek_model():
+    session = AlibabaTokenPlanToolSession(
+        transport=lambda payload: payload,
+        messages=[{"role": "user", "content": "Plan."}],
+        config=AlibabaTokenPlanConfigV1(
+            model="deepseek-v4-flash-0731",
+            reasoning_effort="max",
+        ),
+    )
+
+    payload = session.request_payload(tools=[{"type": "function"}])
+
+    assert payload["model"] == "deepseek-v4-flash-0731"
+    assert payload["reasoning_effort"] == "max"
+    assert payload["preserve_thinking"] is True
 
 
 def test_qwen_config_rejects_preview_and_reduced_reasoning():
@@ -258,7 +277,9 @@ def test_unified_runner_selects_qwen_and_passes_feedback_projection(
             return "normal-session-result"
 
     monkeypatch.setattr(alibaba, "AlibabaTokenPlanHttpsTransport", FakeTransport)
-    monkeypatch.setattr(alibaba, "Qwen38MaxToolSession", FakeSession)
+    monkeypatch.setattr(
+        alibaba, "AlibabaTokenPlanToolSession", FakeSession
+    )
     monkeypatch.setattr(unified, "ToolLoopRunner", FakeLoop)
     lease = load_secret_lease(
         provider="alibaba-token-plan", path=secret_file

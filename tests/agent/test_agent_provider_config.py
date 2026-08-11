@@ -8,7 +8,15 @@ from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.provider_config import load_agent_provider_selection
 
 
-def _write_config(path: Path, *, model: str = "qwen3.8-max") -> Path:
+def _write_config(
+    path: Path,
+    *,
+    model: str = "qwen3.8-max",
+    reasoning_effort: str | None = None,
+) -> Path:
+    reasoning_effort = reasoning_effort or (
+        "xhigh" if model == "qwen3.8-max" else "max"
+    )
     path.write_text(
         f"""
 active: alibaba-token-plan
@@ -28,7 +36,7 @@ providers:
     api_key_env: ALIBABA_TOKEN_PLAN_KEY
     model: {model}
     base_url: https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
-    reasoning_effort: xhigh
+    reasoning_effort: {reasoning_effort}
     preserve_thinking: true
   deepseek:
     type: openai
@@ -71,6 +79,24 @@ def test_agent_yaml_rejects_preview_alias(tmp_path):
         load_agent_provider_selection(
             _write_config(tmp_path / "agent.yaml", model="qwen3.8-max-preview")
         )
+
+
+def test_agent_yaml_accepts_catalog_model_on_token_plan(tmp_path):
+    selection = load_agent_provider_selection(
+        _write_config(
+            tmp_path / "agent.yaml",
+            model="deepseek-v4-flash-0731",
+            reasoning_effort="max",
+        )
+    )
+
+    profile = selection.active_profile
+    assert profile.provider == "alibaba-token-plan"
+    assert profile.model == "deepseek-v4-flash-0731"
+    assert profile.reasoning_effort == "max"
+    runtime = profile.runtime_config()
+    assert runtime.model == profile.model
+    assert runtime.reasoning_effort == profile.reasoning_effort
 
 
 def test_selected_agent_profile_rejects_literal_secret(tmp_path):
