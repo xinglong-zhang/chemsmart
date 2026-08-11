@@ -50,7 +50,7 @@ Use ``-s`` / ``--server`` to update one existing YAML file from ``~/.chemsmart/s
 without ``.yaml``. Without ``-s``, all existing ``*.yaml`` files in the server directory are checked. The command does
 not create missing server YAML files.
 
-The update is non-interactive. It never prompts for input and never creates missing server YAML files.
+The update is non-interactive and never prompts for input.
 
 Configuration Structure
 =======================
