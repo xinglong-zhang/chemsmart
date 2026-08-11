@@ -37,6 +37,7 @@ computational chemistry software.
 
    cli-overview
    molecule-input-formats
+   convert-cli-options
    chemdraw-organometallic
 
 .. toctree::
