@@ -1793,6 +1793,19 @@ class FolderMixin:
         """
         return os.path.abspath(self.folder)
 
+    @staticmethod
+    def _normalize_file_suffix(filetype):
+        """
+        Normalize a file-type argument to a dotted suffix.
+
+        Callers may pass ``\"xyz\"`` or ``\".xyz\"``. Matching always uses a
+        leading-dot suffix so ``filetype=\"xyz\"`` matches ``foo.xyz`` but not
+        ``foo.extxyz``.
+        """
+        if not filetype:
+            return filetype
+        return filetype if filetype.startswith(".") else f".{filetype}"
+
     def _get_all_output_files_by_program(self, program=None, recursive=False):
         """
         Obtain a list of quantum chemistry output files by program.
@@ -1947,21 +1960,24 @@ class FolderMixin:
         Obtain a list of files of specified type in the current folder.
 
         Non-recursively lists files in `self.folder` whose names end with
-        `filetype`. Empty files are excluded.
+        the normalized dotted suffix (see ``_normalize_file_suffix``).
+        Empty files are excluded.
 
         Args:
-            filetype (str): File name suffix to match (e.g., '.log', '.out').
+            filetype (str): File name suffix to match (e.g., ``'log'``,
+                ``'.log'``, ``'out'``).
 
         Returns:
             list[str]: Full file paths matching the suffix.
         """
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for file in os.listdir(self.folder):
             # Check that the file is not empty:
             if os.stat(os.path.join(self.folder, file)).st_size == 0:
                 continue
             # Collect files of specified type
-            if file.endswith(filetype):
+            if file.endswith(suffix):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
 
@@ -1972,20 +1988,23 @@ class FolderMixin:
         Obtain files of specified type in folder and all subfolders.
 
         Recursively searches `self.folder` for files whose names end with
-        `filetype`. Unlike the non-recursive variant, empty files are not
-        filtered out here.
+        the normalized dotted suffix. Unlike the non-recursive variant,
+        empty files are not filtered out here.
 
         Args:
-            filetype (str): File name suffix to match.
+            filetype (str): File name suffix to match (e.g., ``'xyz'`` or
+                ``'.xyz'``). ``'xyz'`` matches ``foo.xyz`` but not
+                ``foo.extxyz``.
 
         Returns:
             list[str]: Full file paths matching the suffix.
         """
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
             # subdir is the full path to the subdirectory
             for file in files:
-                if file.endswith(filetype):
+                if file.endswith(suffix):
                     all_files.append(os.path.join(subdir, file))
         return all_files
 
@@ -1996,8 +2015,8 @@ class FolderMixin:
         Obtain files of specified type in the current folder matching a program.
 
         Non-recursively lists files in `self.folder` whose names end with
-        `filetype` and are detected as output files from the specified
-        program. Empty files are excluded.
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Empty files are excluded.
 
         Args:
             program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
@@ -2005,6 +2024,7 @@ class FolderMixin:
         """
         from chemsmart.utils.io import get_program_type_from_file
 
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for file in os.listdir(self.folder):
             filepath = os.path.join(self.folder, file)
@@ -2012,7 +2032,7 @@ class FolderMixin:
             if not os.path.isfile(filepath) or os.stat(filepath).st_size == 0:
                 continue
             # Collect files of specified type and program
-            if file.endswith(filetype):
+            if file.endswith(suffix):
                 detected_program = get_program_type_from_file(filepath)
                 if detected_program == program:
                     all_files.append(filepath)
@@ -2025,9 +2045,9 @@ class FolderMixin:
         Obtain files of specified type in folder and subfolders matching a program.
 
         Recursively searches `self.folder` for files whose names end with
-        `filetype` and are detected as output files from the specified
-        program. Unlike the non-recursive variant, empty files are not
-        filtered out here.
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Unlike the non-recursive variant, empty files
+        are not filtered out here.
 
         Args:
             program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
@@ -2035,11 +2055,12 @@ class FolderMixin:
         """
         from chemsmart.utils.io import get_program_type_from_file
 
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
             # subdir is the full path to the subdirectory
             for file in files:
-                if file.endswith(filetype):
+                if file.endswith(suffix):
                     filepath = os.path.join(subdir, file)
                     detected_program = get_program_type_from_file(filepath)
                     if detected_program == program:
