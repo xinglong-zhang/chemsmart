@@ -1,0 +1,11 @@
+active: alibaba-token-plan
+fallback: []
+
+providers:
+  alibaba-token-plan:
+    type: openai
+    api_key_env: ALIBABA_TOKEN_PLAN_KEY
+    model: deepseek-v4-flash-0731
+    base_url: https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
+    reasoning_effort: max
+    preserve_thinking: true

@@ -1,0 +1,1 @@
+Using the approved neutral-singlet water geometry, plan a PySCF CPU B3LYP/def2-SVP single point on the initial geometry, an optimization from that geometry, and a Hessian/frequency calculation on the optimized geometry. Express the work through ChemSmart project YAML and CLI operations. Do not execute calculations or author native PySCF code.

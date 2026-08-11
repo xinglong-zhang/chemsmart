@@ -1,0 +1,269 @@
+name: Build private CPU research image candidate
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cpu-image-candidate
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/hongjiseung-rok/chemsmart
+  CANDIDATE_TAG: cpu-24e4a0e
+  CHEMSMART_SOURCE_REVISION: 24e4a0e89700c88fb49bfcd673003f59a2d9cf69
+
+jobs:
+  build-qualify-publish:
+    name: Build, qualify, observe, and publish candidate
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'Hongjiseung-ROK/chemsmart'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    environment: cpu-image-candidate
+    permissions:
+      contents: read
+      packages: write # Final private GHCR push after qualification only.
+
+    steps:
+      - name: Check out the exact recipe revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the pinned ChemSmart source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$CHEMSMART_SOURCE_REVISION" "$GITHUB_SHA"
+          if ! git diff --quiet \
+            "$CHEMSMART_SOURCE_REVISION" "$GITHUB_SHA" \
+            -- chemsmart pyproject.toml; then
+            echo "::error::ChemSmart application source differs from the source revision encoded by $CANDIDATE_TAG."
+            exit 1
+          fi
+
+      - name: Set up native Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the linux/amd64 candidate locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --tag "$IMAGE_NAME:$CANDIDATE_TAG" \
+            --build-arg "CHEMSMART_SOURCE_REVISION=$CHEMSMART_SOURCE_REVISION" \
+            --build-arg "CONTAINER_RECIPE_REVISION=$GITHUB_SHA" \
+            --file Containerfile \
+            .
+
+      - name: Smoke-test the read-only runtime and YAML previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          preview_dir="$RUNNER_TEMP/chemsmart-preview"
+          scratch_dir="$RUNNER_TEMP/chemsmart-preview-scratch"
+          install -d -m 0777 "$preview_dir" "$scratch_dir"
+
+          common=(
+            --rm
+            --read-only
+            --ulimit stack=-1:-1
+            --cpus 2
+            --memory 8g
+            --tmpfs '/tmp:rw,nosuid,nodev,size=2g'
+            --mount "type=bind,src=$preview_dir,dst=/workspace"
+            --mount "type=bind,src=$scratch_dir,dst=/scratch"
+          )
+
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart --help >/dev/null
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart --version
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            python -c 'import h5py, openbabel.openbabel, pymol; print(h5py.version.hdf5_version)'
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart run --fake --server local --num-cores 2 \
+            --num-gpus 0 --mem-gb 6 --no-scratch pyscf \
+            --project /opt/chemsmart/qualification/pyscf-water.yaml \
+            --filename /opt/chemsmart/qualification/water.xyz \
+            --label preview_pyscf_water sp
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart run --fake --server local --num-cores 2 \
+            --num-gpus 0 --mem-gb 6 xtb \
+            --project /opt/chemsmart/qualification/xtb-water.yaml \
+            --filename /opt/chemsmart/qualification/water.xyz \
+            --label preview_xtb_water sp
+
+      - name: Run real PySCF and xTB CPU qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualification_dir="$RUNNER_TEMP/chemsmart-qualification"
+          scratch_dir="$RUNNER_TEMP/chemsmart-qualification-scratch"
+          public_dir="$RUNNER_TEMP/chemsmart-public"
+          install -d -m 0777 "$qualification_dir" "$scratch_dir"
+          install -d -m 0755 "$public_dir"
+
+          docker run --rm \
+            --read-only \
+            --ulimit stack=-1:-1 \
+            --cpus 2 \
+            --memory 8g \
+            --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            --mount "type=bind,src=$qualification_dir,dst=/workspace" \
+            --mount "type=bind,src=$scratch_dir,dst=/scratch" \
+            "$IMAGE_NAME:$CANDIDATE_TAG" \
+            python /opt/chemsmart/qualification/qualify.py
+
+          cp "$qualification_dir/qualification-summary.json" \
+            "$public_dir/qualification-summary.json"
+
+      - name: Run one preview-only Alibaba Token Plan agent observation
+        shell: bash
+        env:
+          ALIBABA_TOKEN_PLAN_KEY: ${{ secrets.ALIBABA_TOKEN_PLAN_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ALIBABA_TOKEN_PLAN_KEY:-}" ]]; then
+            echo "::error::ALIBABA_TOKEN_PLAN_KEY is not configured for the candidate environment."
+            exit 1
+          fi
+
+          agent_dir="$RUNNER_TEMP/chemsmart-agent-workspace"
+          public_dir="$RUNNER_TEMP/chemsmart-public"
+          secret_file="$RUNNER_TEMP/chemsmart-alibaba-token-plan.env"
+          stdout_file="$RUNNER_TEMP/chemsmart-agent-stdout.log"
+          stderr_file="$RUNNER_TEMP/chemsmart-agent-stderr.log"
+          public_json="$public_dir/agent-public-observation.json"
+          scratch_dir="$RUNNER_TEMP/chemsmart-agent-scratch"
+          install -d -m 0777 "$agent_dir" "$scratch_dir"
+          cp containers/cpu/qualification/water.xyz "$agent_dir/water.xyz"
+
+          cleanup() {
+            rm -f "$secret_file" "$stdout_file" "$stderr_file"
+          }
+          trap cleanup EXIT
+          sudo install -o 1000 -g 1000 -m 0400 /dev/null "$secret_file"
+          printf 'ALIBABA_TOKEN_PLAN_KEY=%s\n' "$ALIBABA_TOKEN_PLAN_KEY" \
+            | sudo tee "$secret_file" >/dev/null
+          unset ALIBABA_TOKEN_PLAN_KEY
+
+          if ! docker run --rm \
+            --read-only \
+            --ulimit stack=-1:-1 \
+            --cpus 2 \
+            --memory 8g \
+            --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            --mount "type=bind,src=$agent_dir,dst=/workspace" \
+            --mount "type=bind,src=$scratch_dir,dst=/scratch" \
+            --mount "type=bind,src=$secret_file,dst=/run/secrets/provider.env,readonly" \
+            "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart agent plan \
+            --provider alibaba-token-plan \
+            --task-file /opt/chemsmart/qualification/agent-task.txt \
+            --secret-file /run/secrets/provider.env \
+            --workspace /workspace \
+            >"$stdout_file" 2>"$stderr_file"; then
+            echo "::error::The preview-only live agent observation failed."
+            exit 1
+          fi
+
+          python - "$stdout_file" "$public_json" <<'PY'
+          import json
+          import sys
+
+          stdout_path, public_path = sys.argv[1:]
+          with open(stdout_path, encoding="utf-8") as handle:
+              lines = handle.read().splitlines()
+
+          result = None
+          for line in reversed(lines):
+              try:
+                  candidate = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(candidate, dict):
+                  result = candidate
+                  break
+          if result is None:
+              raise SystemExit("agent stdout has no public JSON summary")
+          if result.get("execution_requested") is not False:
+              raise SystemExit("agent observation was not preview-only")
+          if not str(result.get("final_text", "")).strip():
+              raise SystemExit("agent observation has no visible answer")
+          def mapping_keys(value):
+              if isinstance(value, dict):
+                  for key, nested in value.items():
+                      yield str(key).lower()
+                      yield from mapping_keys(nested)
+              elif isinstance(value, list):
+                  for nested in value:
+                      yield from mapping_keys(nested)
+
+          exposed_keys = set(mapping_keys(result))
+          for forbidden in ("reasoning_content", "chain_of_thought"):
+              if forbidden in exposed_keys:
+                  raise SystemExit(f"private reasoning field exposed: {forbidden}")
+          with open(public_path, "w", encoding="utf-8") as handle:
+              json.dump(result, handle, indent=2, sort_keys=True)
+              handle.write("\n")
+          PY
+
+      - name: Upload public qualification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cpu-24e4a0e-public-qualification
+          path: |
+            ${{ runner.temp }}/chemsmart-public/qualification-summary.json
+            ${{ runner.temp }}/chemsmart-public/agent-public-observation.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Log in to private GHCR publication scope
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the immutable candidate tag
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          reference="$IMAGE_NAME:$CANDIDATE_TAG"
+          if docker manifest inspect "$reference" >/dev/null 2>&1; then
+            echo "::error::$reference already exists; immutable candidates are never overwritten."
+            exit 1
+          fi
+          docker push "$reference"
+          digest="$(
+            docker buildx imagetools inspect "$reference" \
+              --format '{{json .Manifest}}' \
+              | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))'
+          )"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Record publication boundary
+        shell: bash
+        env:
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            echo "## CPU research image candidate"
+            echo
+            echo "- Candidate: \`$IMAGE_NAME:$CANDIDATE_TAG\`"
+            echo "- Digest: \`$PUBLISHED_DIGEST\`"
+            echo "- ChemSmart source: \`$CHEMSMART_SOURCE_REVISION\`"
+            echo "- Container recipe: \`$GITHUB_SHA\`"
+            echo
+            echo "The package owner must verify that this GHCR package is private, remove inherited public-repository access if GitHub exposes it, and grant only the intended Actions/package access before promotion."
+            echo "Production tags require direct human scientific review of the uploaded visible agent answer; this workflow does not machine-grade it."
+          } >> "$GITHUB_STEP_SUMMARY"

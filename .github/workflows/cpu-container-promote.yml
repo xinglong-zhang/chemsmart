@@ -1,0 +1,112 @@
+name: Promote private CPU research image
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_digest:
+        description: Exact sha256 digest of the human-reviewed cpu-24e4a0e candidate
+        required: true
+        type: string
+      human_scientific_reviewed:
+        description: I directly reviewed the visible agent answer and accept the candidate
+        required: true
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: cpu-image-production-promotion
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/hongjiseung-rok/chemsmart
+  CANDIDATE_TAG: cpu-24e4a0e
+
+jobs:
+  promote:
+    name: Promote an existing tested digest without rebuilding
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'Hongjiseung-ROK/chemsmart' &&
+      inputs.human_scientific_reviewed == true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    environment: cpu-image-production
+    permissions:
+      contents: read
+      packages: write # Add tags to the reviewed private GHCR digest only.
+
+    steps:
+      - name: Validate candidate digest
+        shell: bash
+        env:
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::candidate_digest must be an exact sha256 digest."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote the reviewed digest without rebuilding
+        shell: bash
+        env:
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        run: |
+          set -euo pipefail
+          descriptor_digest() {
+            docker buildx imagetools inspect "$1" \
+              --format '{{json .Manifest}}' \
+              | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))'
+          }
+
+          candidate_ref="$IMAGE_NAME:$CANDIDATE_TAG"
+          candidate_observed="$(descriptor_digest "$candidate_ref")"
+          if [[ "$candidate_observed" != "$CANDIDATE_DIGEST" ]]; then
+            echo "::error::$candidate_ref resolves to $candidate_observed, not the reviewed $CANDIDATE_DIGEST."
+            exit 1
+          fi
+
+          source_ref="$IMAGE_NAME@$CANDIDATE_DIGEST"
+          stable_ref="$IMAGE_NAME:3.1.4-cpu"
+          tags=(--tag "$IMAGE_NAME:cpu-main")
+          if docker buildx imagetools inspect "$stable_ref" >/dev/null 2>&1; then
+            stable_observed="$(descriptor_digest "$stable_ref")"
+            if [[ "$stable_observed" != "$CANDIDATE_DIGEST" ]]; then
+              echo "::error::$stable_ref is immutable and already resolves to $stable_observed."
+              exit 1
+            fi
+          else
+            tags+=(--tag "$stable_ref")
+          fi
+
+          docker buildx imagetools create --prefer-index=false \
+            "${tags[@]}" \
+            "$source_ref"
+
+          for tag in 3.1.4-cpu cpu-main; do
+            observed="$(descriptor_digest "$IMAGE_NAME:$tag")"
+            if [[ "$observed" != "$CANDIDATE_DIGEST" ]]; then
+              echo "::error::$tag resolved to $observed, expected $CANDIDATE_DIGEST."
+              exit 1
+            fi
+          done
+
+          {
+            echo "## CPU image promoted"
+            echo
+            echo "- Digest: \`$CANDIDATE_DIGEST\`"
+            echo "- Tags: \`3.1.4-cpu\`, \`cpu-main\`"
+            echo "- Rebuilt: no"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,15 @@
+sp:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+
+opt:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1
+  optimization_level: vtight
+
+hess:
+  gfn_version: gfn2
+  charge: 0
+  multiplicity: 1

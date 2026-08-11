@@ -1,0 +1,37 @@
+sp:
+  functional: b3lyp
+  basis: def2-svp
+  charge: 0
+  multiplicity: 1
+  dispersion: null
+  density_fit: true
+  engine: cpu
+  freq: false
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  charge: 0
+  multiplicity: 1
+  dispersion: null
+  density_fit: true
+  engine: cpu
+  freq: false
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  opt_solver: geometric
+  opt_maxsteps: 100
+
+hess:
+  functional: b3lyp
+  basis: def2-svp
+  charge: 0
+  multiplicity: 1
+  dispersion: null
+  density_fit: true
+  engine: cpu
+  freq: true
+  scf_tol: 1.0e-9
+  scf_maxiter: 100

@@ -60,9 +60,47 @@ model API.
 | GPU4PySCF | PySCF execution engine, not a separate program | compatible NVIDIA driver, CUDA, CuPy, cuTENSOR and GPU4PySCF stack |
 | NCIPLOT | input generation and execution integration | NCIPLOT installation |
 
-Program licenses and binaries are not distributed with CHEMSMART.
+The Python package does not distribute external program binaries. The private
+CPU research image described below intentionally includes the redistributable,
+pinned PySCF and xTB runtimes; it does not include Gaussian, ORCA, GPU4PySCF,
+or CUDA.
 
-## Ubuntu x86 CPU server quick start
+## Private Ubuntu x86 CPU research image
+
+The reference CPU-server environment is the private ``linux/amd64`` image:
+
+```text
+ghcr.io/hongjiseung-rok/chemsmart:3.1.4-cpu
+```
+
+It contains ChemSmart 3.1.4, Python 3.10, PySCF 2.14.0, xTB 6.7.1,
+geomeTRIC 1.1.1, pyscf-dispersion 1.5.0, NumPy 1.26.4, h5py 3.16.0,
+PyMOL open source 3.1.0, Open Babel, and the locked runtime dependencies.
+GPU4PySCF, CUDA, Gaussian, and ORCA are intentionally excluded.
+
+Authenticate to private GHCR with a token carrying ``read:packages`` and run
+the non-root image with explicit workspace, scratch, temporary storage, and
+xTB stack limits:
+
+```bash
+printf '%s' "$GHCR_READ_TOKEN" | \
+  docker login ghcr.io -u Hongjiseung-ROK --password-stdin
+docker pull ghcr.io/hongjiseung-rok/chemsmart:3.1.4-cpu
+
+mkdir -p "$PWD/workspace" "$PWD/scratch"
+docker run --rm -it --read-only --ulimit stack=-1:-1 \
+  --cpus 8 --memory 32g --tmpfs /tmp:rw,size=4g \
+  --mount "type=bind,src=$PWD/workspace,dst=/workspace" \
+  --mount "type=bind,src=$PWD/scratch,dst=/scratch" \
+  ghcr.io/hongjiseung-rok/chemsmart:3.1.4-cpu \
+  chemsmart --help
+```
+
+See [the CPU image guide](containers/cpu/README.md) for exact package pins,
+CLI examples, read-only operation, configuration and secret mounts, image
+qualification, and promotion policy.
+
+## Source installation on an Ubuntu x86 CPU server
 
 The recommended benchmark host is an x86-64 Ubuntu server with Conda or
 Mamba. Start from a clean clone of the maintained fork:
@@ -102,8 +140,8 @@ chemsmart run --fake --no-scratch xtb \
   -p test -f examples/xtb/water.xyz sp
 ```
 
-For full server installation, external program setup, PySCF compute
-environment separation, and staged benchmark execution, see
+For private-container deployment, source installation, PySCF/xTB execution,
+and staged benchmark work, see
 [Ubuntu CPU server installation](docs/source/installation-ubuntu-cpu-server.rst).
 
 ## Project YAML
@@ -250,6 +288,7 @@ builds should pass before a release branch is published. See
 
 - [Documentation index](docs/source/index.rst)
 - [Ubuntu CPU server installation](docs/source/installation-ubuntu-cpu-server.rst)
+- [Private CPU research image](containers/cpu/README.md)
 - [CLI overview](docs/source/cli-overview.rst)
 - [Project configuration](docs/source/configuration-project-settings.rst)
 - [Server configuration](docs/source/configuration-server-settings.rst)
