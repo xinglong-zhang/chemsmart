@@ -180,16 +180,6 @@ These options are only available with ``chemsmart sub``:
 -  ``grouper``: Run structure grouping jobs
 -  ``convert``: Convert molecular structure files between formats
 
-Single-file conversion infers the output format from the ``--output`` extension:
-
-.. code:: bash
-
-   chemsmart run convert -i molecule.pdb -o molecule.xyz
-   chemsmart run convert -i molecule.log -o molecule.mol2
-
-Native writers support ``xyz``, ``extxyz``, ``com``, and ``pdb``. Other output formats fall back to Open Babel when it
-is installed. See :doc:`molecule-input-formats` for supported inputs and the Open Babel write fallback.
-
 ************
  Next Steps
 ************
@@ -202,6 +192,7 @@ For specific job types, see the detailed tutorials:
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`
+-  :doc:`convert-cli-options`
 -  :doc:`molecule-input-formats`
 
 .. note::
