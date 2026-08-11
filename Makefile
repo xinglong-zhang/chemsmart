@@ -235,6 +235,16 @@ test-soap: coverage-clean ## Branch coverage for SOAP analysis.
 		--cov-fail-under=90 \
 		-v
 
+.PHONY: test-cov-io
+test-cov-io: coverage-clean ## Branch coverage for converter.py + structure.py (target ≥90% each).
+	$(ENV_PREFIX)pytest tests/ \
+		--cov=chemsmart.io.converter \
+		--cov=chemsmart.io.molecules.structure \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage-io-target.xml \
+		-q
+
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
 
