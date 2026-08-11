@@ -1,5 +1,4 @@
-#########################
- chemsmart.cli.xtb package
+chemsmart.cli.xtb package
 #########################
 
 .. automodule:: chemsmart.cli.xtb.xtb

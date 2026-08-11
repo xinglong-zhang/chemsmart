@@ -141,3 +141,24 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# Local agent research and diagnostic outputs. Maintained user documentation
+# belongs in docs/source; experiment transcripts and one-off reviews do not.
+docs/design/
+docs/research/
+docs/review/
+docs/validation/
+docs/evaluation/
+docs/goals/
+docs/maintenance/
+benchmarks/
+agent-runs/
+qa_*.md
+expert_review*.md
+frontier_improvement_plan.md
+
+# Provider credentials and root-level generated chemistry previews.
+api.env
+/*.com
+/*_fake.inp
+/*_fake.out

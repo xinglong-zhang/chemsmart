@@ -2,5 +2,9 @@ include LICENSE
 include LICENSE.LESSER
 include README.md
 include CHANGELOG.md
-recursive-include chemsmart/data *
 recursive-include chemsmart/settings *
+prune tests
+prune docs/build
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude .DS_Store

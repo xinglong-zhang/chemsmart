@@ -26,8 +26,16 @@ from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 #: Declared parameters that reach the generated input through a block rather
 #: than the ``!`` route line, so the route parser is the wrong place to look.
 #: ``reference`` becomes ``%scf HFTyp``; ``frozen_core`` becomes
-#: ``%method FrozenCore``.
-_BLOCK_EMITTED = {"frozen_core", "reference"}
+#: ``%method FrozenCore``; and the coupled excited-state settings become a
+#: ``%tddft`` block.  Those settings cannot be instantiated or parsed as
+#: independent route tokens.
+_BLOCK_EMITTED = {
+    "frozen_core",
+    "nstates",
+    "reference",
+    "response_method",
+    "state_manifold",
+}
 
 #: Declared values the writer refuses on a non-relativistic basis, by design.
 #: Pairing them with a recontracted basis is a separate concern from whether

@@ -22,6 +22,7 @@ execution state, and deterministic validation.
    :caption: Getting Started
 
    introduction
+   installation-ubuntu-cpu-server
    installation-linux-macos
    installation-windows-wsl
    installation-windows-gitbash
@@ -43,6 +44,7 @@ execution state, and deterministic validation.
    :caption: CLI Reference
 
    cli-overview
+   agent-workflows
    molecule-input-formats
    chemdraw-organometallic
 
@@ -76,23 +78,6 @@ execution state, and deterministic validation.
    pyscf-cli-options
    xtb-cli-options
 
-..
-   .. toctree::
-
-..
-   :maxdepth: 2
-
-..
-   :caption: ITERATE
-
-..
-
-..
-   iterate-cli-options
-
-..
-   iterate-structure-generation
-
 .. toctree::
    :maxdepth: 2
    :caption: pKa Calculations
@@ -105,17 +90,23 @@ execution state, and deterministic validation.
 
    thermochemistry-analysis
 
-..
-   .. toctree::
-      :maxdepth: 2
-      :caption: Database
+.. toctree::
+   :maxdepth: 2
+   :caption: Molecular Database
 
-      database-overview
-      database-assemble
-      database-query
-      database-inspect
-      database-export
-      database-workflow
+   database-overview
+   database-workflow
+   database-assemble
+   database-inspect
+   database-query
+   database-export
+
+.. toctree::
+   :maxdepth: 2
+   :caption: ITERATE Workflows
+
+   iterate-cli-options
+   iterate-structure-generation
 
 .. toctree::
    :maxdepth: 2

@@ -32,7 +32,7 @@ This guide covers installing CHEMSMART on Windows using the Anaconda or Minicond
 
    .. code:: powershell
 
-      git clone https://github.com/xinglong-zhang/chemsmart.git
+      git clone https://github.com/Hongjiseung-ROK/chemsmart.git
 
 #. Create the conda environment:
 

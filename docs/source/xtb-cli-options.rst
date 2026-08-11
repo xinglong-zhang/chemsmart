@@ -19,9 +19,8 @@ narrower than the xTB output parser and rejects unsupported native features.
 A project is optional because GFN2 is a complete default method.  If a project
 is provided, it may be a configured name or an explicit YAML path.
 
-*********************
- Program-Level Options
-*********************
+Program-Level Options
+=====================
 
 .. list-table::
    :header-rows: 1

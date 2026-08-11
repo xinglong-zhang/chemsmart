@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSmart Evidence Audit"
+  short_description: "Audit chemistry claims without suppressing valid routes"
+  default_prompt: "Use $chemsmart-evidence-audit to assess whether this ChemSmart result supports the scientific claim."

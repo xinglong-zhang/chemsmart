@@ -14,6 +14,10 @@ CHEMSMART offers two main execution modes:
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
+The provider-neutral ``chemsmart agent`` command plans through these same
+project loaders and Click commands. It is not a second chemistry execution
+interface; see :doc:`agent-workflows`.
+
 The basic command structure is:
 
 .. code:: bash
@@ -182,6 +186,9 @@ These options are only available with ``chemsmart sub``:
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
+
+Top-level ``chemsmart agent`` additionally exposes ``plan``, ``run``, and
+deterministic approved ``execute`` operations.
 
 ************
  Next Steps

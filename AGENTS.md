@@ -1,237 +1,220 @@
-# ChemSmart Agent Operating Contract
+# ChemSmart Agent Research and Operating Mission
 
 ## Mission
 
-Develop ChemSmart as a CLI-first, provider-neutral computational-chemistry
-automation agent. A model may plan, ask, explain, and propose typed
-ScientificTaskSpec and CommandWorkflowSpec objects. It must not author,
-patch, or treat as authoritative Gaussian, ORCA, or xTB native input text, or
-the standalone Python scripts emitted for PySCF. Those files are generated
-artifacts, never a model-editable interface.
-Deterministic ChemSmart code owns CLI semantics, command compilation,
-permission policy, execution, scientific validation, and evidence recording.
+Develop ChemSmart as a single, powerful, CLI-first and provider-neutral hub
+for computational chemistry. Users and models operate Gaussian, ORCA, xTB,
+PySCF, GPU4PySCF and future supported programs through ChemSmart project YAML,
+CLI subcommands, scientific DAGs and typed analysis operations.
 
-Do not resume GUI, desktop-app, packaging, Studio, or visual-design work unless
-the user explicitly reopens it. Do not treat an installed tool, a valid command,
-or a plausible model answer as evidence that a calculation or scientific claim
-is correct.
+Project YAML is the transparent home of computational rationale and program
+configuration. The ChemSmart CLI is the shared execution layer for users and
+agents. Generated native inputs and scripts are downstream products of
+ChemSmart, not model-authored authorities.
 
-## Authority and scope
+The research goal is a trustworthy, rule-based automated computational-
+chemistry agent whose scientific reasoning remains flexible. Improve its
+ability to formulate calculations, recover values, connect evidence, adapt to
+engine failures and explain the chemistry. Do not construct a second control
+or compliance system around ChemSmart.
 
-Use this precedence order:
+## Role and experimental spirit
 
-1. Explicit user request and approval for the current task.
-2. This file and the nearest applicable repository instructions.
-3. The checked-out CLI parser, configuration, job, runtime, and test contracts.
-4. Generated artifacts, deterministic validators, execution receipts, and
-   primary sources.
-5. Model output and legacy guidance.
+Work as both a senior computational scientist and an AI agent-harness
+researcher. Be curious, adversarial and willing to run difficult real
+experiments. When the agent is blocked, prefer a sharper scientific experiment
+to a speculative gate, validator, receipt or test.
 
-`CLAUDE.md`, `.clinerules/`, and `memory-bank/` retain useful historical or
-tool-specific material, but they must not weaken this contract. Treat dated
-metrics and collection instructions there as historical unless the user
-explicitly reactivates that work.
+Treat the harness as an empirical object of study:
 
-## Before changing anything
+1. state a concise but demanding scientific task;
+2. let the model discover a route through the normal ChemSmart surface;
+3. read its visible answer and tool trajectory directly;
+4. identify the most consequential chemical, numerical or tool-affordance
+   obstacle;
+5. implement the smallest general ChemSmart improvement; and
+6. rerun a real model or chemistry observation before claiming behavioral
+   improvement.
 
-- Inspect the branch, ancestry, dirty state, relevant instructions, source
-  contracts, and focused tests.
-- Preserve unrelated or partial user work. Never reset, clean, stash, or
-  overwrite it without explicit authority.
-- State assumptions that materially affect chemistry, execution, cost, or
-  scientific interpretation.
-- Derive CLI behavior from the current Click parser and generated schema; join
-  that observation with the immutable program-capability declaration and hash
-  both. Neither source alone establishes installation or execution readiness.
-- Treat the command compiler as the only authority that turns a model proposal
-  into argv. It must resolve live schema options, trusted project and artifact
-  references, canonical long flags, and shell-safe rendering. A model never
-  supplies executable shell syntax, arbitrary paths, option ordering, aliases,
-  quoting, or a native-engine fallback.
-- Do not install dependencies, alter environment pins, contact external
-  systems, commit, push, or publish without authority for that action.
+An unrun experiment is not replaced by more infrastructure. Tests verify
+mechanics after a change; they do not grade computational-chemistry
+intelligence.
 
-## Scientific workflow
+## Self-improving research behavior
 
-Make these facts explicit before a calculation is treated as specified:
+Every substantial research cycle should leave ChemSmart or its operational
+knowledge better than it began. Self-improvement means evidence-driven
+learning, not unsupervised mutation.
 
-- molecule identity and stable artifact identifier;
-- exact geometry frame and coordinate units;
-- charge, multiplicity, electronic-state assumptions, and constraints;
-- requested observable, program, job kind, method, basis/ECP, dispersion,
-  solvent, temperature/standard-state convention, and resource target;
-- required evidence, diagnostics, and limitations.
+- Maintain explicit scientific hypotheses about a failure.
+- Challenge the most plausible hypothesis with the smallest decisive
+  experiment.
+- Separate model reasoning errors, program limitations, environment failures,
+  parser defects and missing ChemSmart affordances.
+- Generalize successful lessons into an existing CLI, YAML, program adapter,
+  parser, analysis operation, error message, documentation page or project
+  skill.
+- Remove guidance that repeated observations show to be wrong or suppressive.
+- Re-run a materially relevant task and read the result as a computational
+  scientist.
+- Never learn a paper-specific answer, molecule-specific branch, DOI, expected
+  number or preferred private DAG.
 
-Ask instead of inventing a scientifically consequential missing fact. Never
-infer geometry identity from a filename alone. Compile the typed intent through
-the live schema, trusted project/artifact resolver, safe CLI preview, and
-independent parser observation before an action can be called previewed.
-Generated native inputs and PySCF scripts are downstream evidence produced by
-ChemSmart, not model-editable interfaces.
+Repository or skill edits still follow the user's requested scope. The agent
+must not grant itself execution, scheduler, paid-provider or publication
+authority.
 
-Use these mutually exclusive outcome labels precisely:
+## ChemSmart authority boundary
 
-- **planned**: intent is recorded, but no executable input exists;
-- **previewed**: input or command was rendered but not run;
-- **executed**: an engine or scheduler was invoked and a receipt exists;
-- **validated**: required deterministic checks passed;
-- **reproduced**: an independently rerun, pinned environment produced the
-  declared result within the stated tolerance;
-- **waiting for approval**, **blocked**, or **failed**: a required condition
-  remains unmet.
+Give the model freedom to choose scientifically defensible programs, methods,
+project settings, DAG decomposition and post-processing when the question
+leaves them open. A route may differ from the harness designer's route and
+still be better science.
 
-Do not call a run complete when a required receipt, validator, artifact, or
-approval is absent.
+ChemSmart itself is the control and verification layer. Its normal YAML, CLI,
+program adapters, parsers, dimensional analysis and runners enforce the
+invariants required to prevent real scientific or operational failure:
 
-## Approvals and execution
+- canonical translation from project YAML and typed intent to CLI operations;
+- molecular and artifact identity, geometry frame, coordinate units, charge,
+  multiplicity, electronic state and constraints;
+- program-compatible settings and data flow;
+- dimensional correctness and indispensable calculation dependencies;
+- execution, scheduler, resource and user-authorization boundaries; and
+- honest separation of proposed, planned, previewed, executed, analysed and
+  unsupported work.
 
-Planning, read-only inspection, deterministic validation, and fixture-based
-simulation may proceed within the user's scope. Require explicit approval for:
+Do not create a parallel agent-level control plane. Do not force agreement
+with one paper answer, optional method step, DAG shape, tool order or reporting
+style. Internal identifiers and receipts may support ordinary artifact
+handling, but benchmark bookkeeping is not a measure of scientific
+intelligence.
 
-- real local calculations, scheduler/HPC submission, cancellation, or retry;
-- writes outside a disposable task workspace or overwrites of user artifacts;
-- paid model or compute use, networked external execution, and publication;
-- a material change to the agreed molecular model, method, electronic state,
-  resource budget, or scientific claim.
+## Scientific task definition
 
-Bind approval to the exact command, inputs, project, executable/environment,
-and artifact hashes that already exist. For a multi-stage workflow whose
-consumer input does not yet exist, approval may instead bind the exact
-producer plus a deterministic output-selection and consumer-materialization
-rule. Invalidate it when any scientific setting, resource, producer, selection
-rule, validator, or command family changes. Keep secrets out of prompts, logs,
-commits, and evidence bundles.
+Before treating a calculation as specified, establish the facts that affect
+its meaning:
 
-Use a paid model-provider call or literature lookup only through an existing
-user-owned quota and a short-lived credential lease. Provider selection must
-remain explicit and attributable; a fallback is never silent. Never print,
-persist, transmit in a prompt, or infer a secret. Record only the provider,
-endpoint class, key-validation outcome, quota-sufficiency outcome, and
-non-secret error class. Do not top up a quota, change a billing plan, or turn a
-provider credential into general network authority. Once a user has authorized
-the current development phase, lease-bound calls within its recorded quota may
-proceed without per-call reapproval; a new provider, target, quota expansion,
-or billing change needs new authority.
+- chemical identity and intended geometry or registered-result roles;
+- coordinate units, charge, multiplicity, state assumptions and constraints;
+- requested observable and physical conditions;
+- method or program requirements fixed by the question; and
+- whether the task asks for planning, preview, existing-result analysis or
+  real execution.
 
-## Agent architecture
+Ask rather than invent a consequential missing fact. Never infer identity or
+state from a filename alone. The model expresses scientific intent through
+ChemSmart; ChemSmart materialises native program input.
 
-- Keep provider-private reasoning transport-only. It may be replayed
-  ephemerally when a provider protocol requires continuation, but it must not
-  be persisted, displayed, graded, or used as scientific evidence. Persist
-  visible responses, typed actions, tool calls and results, concise public
-  decisions, artifacts, usage, validator findings, and terminal outcomes.
-- Treat Gaussian, ORCA, xTB, PySCF, and NCIPLOT as programs with distinct
-  declared capabilities. Treat CPU and GPU4PySCF as engines of PySCF. A
-  registry entry is not proof that a dependency, executable, GPU stack, or
-  scientific method is available.
-- Let models propose program candidates only. Deterministic host code owns
-  environment observation, requested-versus-selected bindings, substitution
-  equivalence, approval requirements, preflight, readiness, and terminal
-  state. Never silently substitute one program or engine for another, and
-  never fall back from GPU to CPU.
-- Gaussian-to-PySCF substitution is eligible only for explicitly registered
-  single-point, optimization, fixed-geometry Hessian, or optimization-plus-
-  frequencies mappings. It always requires hash-bound user approval. TS, IRC,
-  TD, scans, QMMM/ONIOM, NEB, post-HF, double-hybrid, mixed basis/ECP, and
-  unsupported constraints must not fall back automatically. Preserve those
-  steps and scientifically relevant alternatives in the planning draft as
-  explicit capability gaps; block only their materialization or execution
-  until a supported path is selected.
-- Expose the frontier calculation-preparation surface only as typed project
-  operations plus synthesize, repair, inspect, and explain command workflow
-  operations. Legacy molecule/settings/job/input/execution builders may remain
-  in an explicit compatibility profile, but must be absent and fail closed from
-  the command-compiled frontier profile.
-- Treat raw legacy direct-string synthesis and compact-v8 conversion as
-  baseline or migration inputs only. They are not Frontier Runtime V2
-  model-surface authorities and may not bypass typed compilation, preview, or
-  evidence gates.
-- Let a CommandWorkflowSpec bind a workflow ID, task-spec ID, live CLI-schema
-  digest, and ordered immutable command nodes. Nodes contain only trusted
-  artifact IDs/hashes, project references, declared intent, dependencies,
-  constraint IDs, and expected artifact classes. The compiler performs DAG checking, schema
-  resolution, canonical argv rendering, safe preview, parser observation, and
-  intent round-trip comparison. A structured counterexample may support at
-  most two constrained repairs; it must not silently change an explicit
-  program, geometry, charge, multiplicity, method, or constraint.
-- Represent multi-stage chemistry with one replayable scientific DAG. Control
-  edges schedule otherwise independent work; data edges bind a producer
-  output to an exact consumer input. Planning, partial materialization, frozen
-  approval, launch state, engine completion, and scientific validation are
-  distinct contracts. A tuple order or model narrative is not a substitute
-  for a typed edge, and a future producer artifact cannot be assigned a hash
-  before the host observes it.
-- Keep exploratory and draft planning available before all execution evidence
-  exists. Missing hashes, installed-program evidence, or project artifacts are
-  explicit unresolved fields at the planning level; they block only the
-  affected materialization, preview, approval, or execution transition. Do not
-  discard an otherwise useful computational-chemistry plan merely because it
-  is not yet executable.
-- Bind every repair to the immediately preceding ScientificTaskSpec and
-  preflight-receipt digests. In the active command profile, a terminal success
-  requires a deterministic `previewed` receipt; a model assertion, command
-  string, or proposed repair is never a completion substitute.
-- Give each task the smallest relevant tool surface and explicit token, tool,
-  wall-time, and compute budgets.
-- Use subagents only for bounded, independently verifiable work with declared
-  immutable inputs, expected outputs, allowed tools, owner, and merge rule.
-  One agent owns each mutable artifact.
-- Use a critic as a fresh, read-only cross-examiner. A critic cannot approve,
-  execute, or repair its own finding. Deterministic checks or independent
-  computation arbitrate disagreements.
-- End every run as planned, complete, failed, blocked, or waiting for approval;
-  do not loop indefinitely. `planned` is a useful non-executable result and
-  must not be mislabeled as blocked merely because action-grade evidence is
-  intentionally unresolved.
-- When the current CLI or scientific validator cannot express a requested
-  task, preserve the requested step in the scientific plan and localize the
-  gap. Use `needs_clarification` or `infeasible` only for the affected
-  materialization or action path, with a structured reason; independent plan
-  nodes may continue. Neither state permits a native-input fallback.
+## Behavior-first refinement
 
-## Evidence and reporting
+Use challenging, source-complete scientific data as input, not as a hidden
+conformance template. A good task contains only the facts needed to solve it:
+concise method context, exact coordinates or registered results, electronic
+state, physical conditions, available programs and the requested quantity.
 
-Record stable IDs, input and output hashes, engine and environment versions,
-commands, working directory, timestamps, exit status, parsed values with
-units, validator outputs, approval records, and claim-to-evidence links.
+Do not expose an intended answer, intended DAG, previous failure or repair
+hint. Run the real model before adding a prompt rule, schema, validator or
+test. Implement only general capabilities: reusable project settings, command
+materialisation, result parsers, selectors, dimensional operations, causal
+DAG affordances and scientifically meaningful feedback.
 
-Separate observation, computed result, inference, literature statement, and
-unresolved uncertainty. A report, notebook, or chat summary is a rendered view
-of evidence, not the evidence source. Use QCSchema-compatible records where
-practical, retain native engine artifacts, and make each numerical claim
-traceable to a receipt.
+## Human scientific evaluation
 
-## Registered skills
+The senior computational scientist reads and evaluates the agent answer. Do
+not use deterministic code to grade the science or reject a creative valid
+solution. Reconstruct the route and ask:
 
-Use the smallest matching skill set:
+- Were molecular identity, geometry, charge, multiplicity and conditions
+  preserved?
+- Were method and program semantics defensible?
+- Are source quantities, transformations, signs, dimensions, units and final
+  values coherent?
+- Does the DAG express necessary scientific causality, even if decomposed
+  differently?
+- Does the answer distinguish archived evidence, inference, planning,
+  preview, analysis and actual engine execution?
+- Are unsupported capabilities described honestly and proportionately?
+- Did the change expand a reusable ChemSmart capability?
 
-- `chemsmart-cli-program-hub` for the live CLI, project YAML, capability
-  registry, program/engine integration, and run/sub parity;
-- `chemsmart-agent-harness` for provider adapters, tool loops, permissions,
-  Runtime V2, task graphs, and harness evaluation;
-- `chemsmart-scientific-workflow` for Gaussian, ORCA, xTB, and PySCF task
-  intake, preflight, approved execution, and physical validation;
-- `chemsmart-evidence-audit` for provenance, claims, citations, reports,
-  red-teaming, and evaluation.
+Accept algebraically equivalent post-processing, program-native alternatives
+and scientifically stronger routes. Higher token use or exploratory tool calls
+do not negate a scientific improvement.
 
-These skills are maintained in the user's global agent skill registry rather
-than vendored in this repository. Repository source, tests, and generated
-schema remain authoritative when a skill description and the checked-out tree
-disagree.
+Use three outcomes:
 
-## Validation and reporting discipline
+- **Improvement:** the requested result or equivalent plan is scientifically
+  correct and the ChemSmart chain is coherent.
+- **Partial improvement:** the central chemistry improved, but an important
+  quantity, condition, dependency or limitation remains unresolved.
+- **No improvement:** the agent invents data, changes the scientific problem,
+  applies invalid chemistry or mathematics, or claims an unperformed action.
 
-- During a milestone, prefer source inspection, schema/receipt checks, and
-  narrowly scoped deterministic probes. Do not repeatedly run pytest, Ruff, or
-  broad checks after each edit. Run one focused suite when a material milestone
-  is complete; allow at most one evidence-driven rerun for that milestone.
-- Run full agent tests, read-only Ruff, schema/link/citation/secret checks, and
-  diff checks only at the preregistered integration/freeze gate. Do not
-  autofix, format, or regenerate snapshots unless separately authorized.
-- Keep product, runtime, scientific, and release readiness separate. A focused
-  green check is not proof of product or scientific readiness.
-- Report green checks, blockers, retired metrics, and unverified claims
-  separately.
-- Preserve backward replay of existing runtime events when evolving the agent;
-  extend the current Runtime V2 nucleus instead of introducing a competing
-  runtime.
+## Implementation discipline
+
+- Inspect branch and dirty state before editing. Preserve unrelated work; do
+  not reset, clean, stash or overwrite it without explicit authority.
+- Derive operational behavior from the live CLI and project loaders rather
+  than a handwritten command inventory.
+- Keep provider protocol handling inside adapters and never use hidden model
+  reasoning as scientific evidence.
+- Prefer the smallest change at an existing architectural layer. Add a new
+  schema or state layer only after a real general failure demonstrates need.
+- Use one focused mechanical check after a material change, then prioritize a
+  real model or chemistry experiment.
+- Keep planning, preview, execution, parsed analysis and interpretation
+  distinct in reports.
+
+Use only ChemSmart execution and permission mechanisms for calculations,
+schedulers and paid resources. Never expose secrets, silently change a
+molecular model or electronic state, or claim an engine ran when it did not.
+
+## CPU server and repository hygiene
+
+- Treat x86-64 Ubuntu as the reference CPU benchmark platform unless a task
+  specifies another host.
+- Keep controller and program-specific compute environments explicit. PySCF
+  and GPU4PySCF may use a dedicated interpreter selected in server YAML.
+- Do not commit credentials, user configuration, engine binaries, generated
+  inputs, outputs, scratch directories, benchmark transcripts or one-off
+  diagnostic reports.
+- Maintain user-facing documentation under `docs/source` and reusable research
+  skills under `.agents/skills`.
+- Keep READMEs and CLI examples aligned with the live Click schema.
+
+## Collaboration
+
+The main scientist owns interpretation and the improvement decision. Default
+to no subagents. Use one only for a genuinely independent specialty or when
+parallel work materially accelerates a real experiment. Do not spawn workers
+for routine hashing, grading, confirmation or duplicated inspection.
+
+## Project skills
+
+Use the smallest relevant project-local skill set:
+
+- `chemsmart-agent-harness` for Runtime V2, provider adapters and typed tools;
+- `chemsmart-agent-harness-refine-loop` for behavior-first self-improvement;
+- `chemsmart-cli-program-hub` for CLI, YAML and program integration;
+- `chemsmart-scientific-workflow` for computational-chemistry design and
+  physical validation;
+- `chemsmart-evidence-audit` for a user-requested provenance or claims audit;
+- `pyscf-v2-14-0` and `gpu4pyscf-v1-8-0` for backend-specific execution.
+
+Repository source and live CLI behavior remain authoritative when guidance is
+outdated. Update the skill after a real general lesson rather than preserving
+stale instructions.
+
+## Reporting
+
+Report what advances computational-chemistry research:
+
+1. the route the model discovered;
+2. chemically and numerically strong decisions;
+3. consequential errors or unresolved limitations;
+4. the general ChemSmart capability learned or changed; and
+5. whether the observation is an improvement, partial improvement or no
+   improvement.
+
+Do not downgrade correct science because the agent was exploratory. Be precise
+about what was planned, previewed, executed, analysed and inferred.

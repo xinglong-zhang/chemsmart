@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSmart CLI Program Hub"
+  short_description: "Integrate chemistry programs through one CLI hub"
+  default_prompt: "Use $chemsmart-cli-program-hub to trace or improve this program workflow through ChemSmart."

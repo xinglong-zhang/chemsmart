@@ -513,6 +513,18 @@ Transition State Search
    -  -  ``neb``
       -  Nudged Elastic Band calculations
 
+Electronic Excitation
+=====================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   -  -  Subcommand
+      -  Description
+   -  -  ``td``
+      -  Fixed-geometry TDA or full TDDFT excitation calculation
+
 Direct Input
 ============
 

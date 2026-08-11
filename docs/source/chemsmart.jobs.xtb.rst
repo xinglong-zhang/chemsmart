@@ -1,5 +1,4 @@
-##########################
- chemsmart.jobs.xtb package
+chemsmart.jobs.xtb package
 ##########################
 
 .. automodule:: chemsmart.jobs.xtb.job

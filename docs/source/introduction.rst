@@ -19,6 +19,10 @@ Performance Computing (HPC) cluster.
 Users can customize their own HPC server settings and project settings to run different jobs without modifying the
 source code.
 
+For a clean x86-64 Ubuntu CPU benchmark deployment, begin with
+:doc:`installation-ubuntu-cpu-server`. For model-driven research using the
+same CLI and project layer, see :doc:`agent-workflows`.
+
 ******************************
  Provider-neutral agent usage
 ******************************

@@ -1,97 +1,33 @@
-############################
- chemsmart.settings package
-############################
+chemsmart.settings package
+##########################
 
-************
- Submodules
-************
+The settings package resolves user, server and project YAML into validated
+objects shared by CLI users and agents.
 
-**************************************
- chemsmart.settings.executable module
-**************************************
+Configuration modules
+=====================
 
-.. automodule:: chemsmart.settings.executable
-   :members:
-   :undoc-members:
-   :show-inheritance:
+``chemsmart.settings.user``
+   User-level locations and defaults under ``~/.chemsmart``.
 
-****************************************
- chemsmart.settings.capabilities module
-****************************************
+``chemsmart.settings.server``
+   Local and scheduler resource descriptions.
 
-.. automodule:: chemsmart.settings.capabilities
-   :members:
-   :undoc-members:
-   :show-inheritance:
+``chemsmart.settings.submitters``
+   SLURM, PBS/Torque, LSF and related submission adapters.
 
-************************************
- chemsmart.settings.gaussian module
-************************************
+``chemsmart.settings.executable``
+   Program executable discovery and selection.
 
-.. automodule:: chemsmart.settings.gaussian
-   :members:
-   :undoc-members:
-   :show-inheritance:
+``chemsmart.settings.capabilities``
+   Maintained program/job capability metadata.
 
-********************************
- chemsmart.settings.orca module
-********************************
+Program project modules
+=======================
 
-.. automodule:: chemsmart.settings.orca
-   :members:
-   :undoc-members:
-   :show-inheritance:
+``gaussian``, ``orca``, ``pyscf`` and ``xtb`` load program-specific project
+sections while preserving a common ChemSmart configuration model. Unknown or
+incompatible fields fail before native input generation.
 
-*********************************
- chemsmart.settings.pyscf module
-*********************************
-
-.. automodule:: chemsmart.settings.pyscf
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-******************************
- chemsmart.settings.xtb module
-******************************
-
-.. automodule:: chemsmart.settings.xtb
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-**********************************
- chemsmart.settings.server module
-**********************************
-
-.. automodule:: chemsmart.settings.server
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-**************************************
- chemsmart.settings.submitters module
-**************************************
-
-.. automodule:: chemsmart.settings.submitters
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-********************************
- chemsmart.settings.user module
-********************************
-
-.. automodule:: chemsmart.settings.user
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-*****************
- Module contents
-*****************
-
-.. automodule:: chemsmart.settings
-   :members:
-   :undoc-members:
-   :show-inheritance:
+See :doc:`configuration-overview`, :doc:`configuration-server-settings` and
+:doc:`configuration-project-settings` for the supported user-facing formats.

@@ -6,4 +6,3 @@
    :maxdepth: 4
 
    chemsmart
-   tests

@@ -222,17 +222,19 @@ For full details on organometallic complex support and its restrictions, see :do
 *********************
 
 CHEMSMART Database Files (.db)
-==============================
+===============================
 
-CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
-:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, CHEMSMART first selects the requested
-record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
+CHEMSMART ``.db`` files are produced by the database workflow, typically with
+``chemsmart run database assemble`` (see :doc:`database-assemble`). When a
+CHEMSMART database is used as molecular input, CHEMSMART first selects the
+requested record, molecule, or structure, then passes the selected geometry,
+charge, and multiplicity to a supported calculation or visualization command
 (see :doc:`database-workflow`).
 
 .. tip::
 
-   Use ``chemsmart run database query -f chemsmart.db`` to list available record indices and IDs before selecting
-   structures from a database.
+   Use ``chemsmart run database query -f chemsmart.db`` to list available
+   record indices and IDs before selecting structures from a database.
 
 .. code:: bash
 
@@ -247,6 +249,9 @@ record, molecule, or structure, then passes the selected geometry, charge, and m
 
    # By molecule ID (all structures in the molecule)
    chemsmart run mol -f chemsmart.db --mid ABCDEFGHIJKLMN-U visualize
+
+External Molecular Sources
+==========================
 
 PubChem Integration
 ===================

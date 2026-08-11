@@ -39,18 +39,24 @@ class CallableProbe:
 
 
 def test_host_reference_derivation_preserves_one_electron_hf_semantics():
-    assert pyscf_reference_family(
-        symbols=("H",),
-        charge=0,
-        multiplicity=2,
-        xc=None,
-    ) == "rohf"
-    assert pyscf_reference_family(
-        symbols=("O", "H", "H"),
-        charge=0,
-        multiplicity=1,
-        xc="b3lypg",
-    ) == "rks"
+    assert (
+        pyscf_reference_family(
+            symbols=("H",),
+            charge=0,
+            multiplicity=2,
+            xc=None,
+        )
+        == "rohf"
+    )
+    assert (
+        pyscf_reference_family(
+            symbols=("O", "H", "H"),
+            charge=0,
+            multiplicity=1,
+            xc="b3lypg",
+        )
+        == "rks"
+    )
 
 
 @pytest.fixture
@@ -86,9 +92,7 @@ def test_preflight_accepts_valid_evidence_without_calling_solver(water):
         "solver_callables": {"geometric": solver},
         "dependencies": {"pyscf-dispersion": True},
         "dispersion_conformance": {
-            "schema_version": (
-                "chemsmart.pyscf-dispersion-conformance.v1"
-            ),
+            "schema_version": ("chemsmart.pyscf-dispersion-conformance.v1"),
             "requested_method": "pbe",
             "requested_literal": "d4",
             "parsed_method": "pbe",
@@ -282,9 +286,7 @@ def test_preflight_returns_typed_missing_method_basis_and_grid(water):
 
 
 @pytest.mark.parametrize("response_method", ["tda", "tddft"])
-def test_td_preflight_accepts_only_bounded_cpu_preview(
-    water, response_method
-):
+def test_td_preflight_accepts_only_bounded_cpu_preview(water, response_method):
     settings = {
         "functional": "b3lyp",
         "basis": "def2-svp",
@@ -576,9 +578,7 @@ def _write_complete_result(
         spec["applied_settings_sha256"] = PySCFScriptWriter.settings_digest(
             {field: spec.get(field) for field in APPLIED_SPEC_FIELDS}
         )
-    stages = {
-        stage: {"converged": True} for stage in spec["stages"]
-    }
+    stages = {stage: {"converged": True} for stage in spec["stages"]}
     if "opt" in stages:
         stages["opt"].update(
             {
@@ -586,6 +586,8 @@ def _write_complete_result(
                 "final_scf_converged": True,
             }
         )
+    if "hess" in stages:
+        stages["hess"]["raw_max_abs_antisymmetry_eh_per_bohr2"] = 0.0
     values = {
         "energies": np.asarray([-76.3]),
         "positions": np.asarray(spec["positions"]),
@@ -626,9 +628,7 @@ def _write_complete_result(
         "libxc_version": "7.0.0",
         "environment_receipt_sha256": "e" * 64,
         "settings_digest": spec["settings_digest"],
-        "requested_settings_sha256": spec[
-            "requested_settings_sha256"
-        ],
+        "requested_settings_sha256": spec["requested_settings_sha256"],
         "applied_settings_sha256": spec["applied_settings_sha256"],
         "runtime": {
             "mean_field_class": reference_class,
@@ -650,9 +650,7 @@ def _write_complete_result(
             "failure": None,
         }
     )
-    status.setdefault(
-        "properties", {"spin_square": {"status": "ok"}}
-    )
+    status.setdefault("properties", {"spin_square": {"status": "ok"}})
     write_pyscf_h5(
         path,
         spec=spec,
@@ -771,12 +769,13 @@ def test_shared_hessian_validator_uses_approved_imaginary_cutoff(tmp_path):
     )
 
     assert receipt["state"] == "validated"
-    assert receipt["frequency_validation"][
-        "stationary_point_classification"
-    ] == "classified"
-    assert receipt["frequency_validation"][
-        "observed_imaginary_mode_count"
-    ] == 0
+    assert (
+        receipt["frequency_validation"]["stationary_point_classification"]
+        == "classified"
+    )
+    assert (
+        receipt["frequency_validation"]["observed_imaginary_mode_count"] == 0
+    )
     assert receipt["hessian_validation"]["symmetric"] is True
 
 
@@ -792,9 +791,10 @@ def test_hessian_without_policy_is_intact_but_not_scientifically_validated(
     assert receipt["stationary_point_policy"]["classification_state"] == (
         "unclassified"
     )
-    assert receipt["frequency_validation"][
-        "stationary_point_classification"
-    ] == "unclassified"
+    assert (
+        receipt["frequency_validation"]["stationary_point_classification"]
+        == "unclassified"
+    )
     assert receipt["hessian_validation"]["consistency"]["state"] == (
         "verified"
     )
@@ -821,7 +821,9 @@ def test_result_validator_rejects_nonnumeric_native_physical_arrays(
 
     receipt = _validate_complete_result(path)
 
-    assert expected_rule in {finding.rule_id for finding in receipt["findings"]}
+    assert expected_rule in {
+        finding.rule_id for finding in receipt["findings"]
+    }
 
 
 def test_result_validator_requires_units_on_physical_arrays(tmp_path):
@@ -870,12 +872,14 @@ def test_result_validator_accepts_unrestricted_alpha_beta_orbitals(tmp_path):
     )
 
     assert receipt["state"] == "validated"
-    assert receipt["electronic_state_validation"][
-        "orbital_representation"
-    ] == "unrestricted"
-    assert receipt["electronic_state_validation"][
-        "observed_alpha_beta"
-    ] == (6.0, 4.0)
+    assert (
+        receipt["electronic_state_validation"]["orbital_representation"]
+        == "unrestricted"
+    )
+    assert receipt["electronic_state_validation"]["observed_alpha_beta"] == (
+        6.0,
+        4.0,
+    )
     assert receipt["spin_diagnostic_validation"]["state"] == "available"
     assert receipt["spin_diagnostic_validation"]["observed_spin_square"] == 2.0
 
@@ -1027,9 +1031,10 @@ def test_spin_contamination_is_advisory_without_universal_cutoff(tmp_path):
     assert receipt["spin_diagnostic_validation"]["interpretation"] == (
         "deviation_observed_without_universal_threshold"
     )
-    assert receipt["spin_diagnostic_validation"][
-        "scientific_threshold_applied"
-    ] is False
+    assert (
+        receipt["spin_diagnostic_validation"]["scientific_threshold_applied"]
+        is False
+    )
     assert {item["rule_id"] for item in receipt["advisories"]} >= {
         "pyscf.spin_diagnostic.deviation_observed"
     }
@@ -1138,7 +1143,10 @@ def test_result_validator_rejects_occupation_total_and_spin_mismatch(
         {
             "engine_complete": True,
             "normal_termination": True,
-            "stages": {"scf": {"converged": True}, "extra": {"converged": True}},
+            "stages": {
+                "scf": {"converged": True},
+                "extra": {"converged": True},
+            },
             "failure": None,
         },
         {
@@ -1376,9 +1384,10 @@ def test_functional_v3_rejects_target_environment_mismatch(
 
     receipt = _validate_complete_result(path)
 
-    assert receipt["materialization_validation"]["functional_definition"][
-        "state"
-    ] == "invalid"
+    assert (
+        receipt["materialization_validation"]["functional_definition"]["state"]
+        == "invalid"
+    )
     assert "pyscf.provenance.materialization_invalid" in {
         finding.rule_id for finding in receipt["findings"]
     }
@@ -1386,9 +1395,7 @@ def test_functional_v3_rejects_target_environment_mismatch(
 
 def test_legacy_functional_v2_is_readable_but_environment_unbound(tmp_path):
     path = tmp_path / "functional-v2-legacy.h5"
-    legacy = copy.deepcopy(
-        _complete_result_spec("sp")["materializations"]
-    )
+    legacy = copy.deepcopy(_complete_result_spec("sp")["materializations"])
     definition = legacy["functional_definition"]
     definition["schema_version"] = "chemsmart.pyscf-functional-definition.v2"
     definition.pop("pyscf_version")
@@ -1399,12 +1406,14 @@ def test_legacy_functional_v2_is_readable_but_environment_unbound(tmp_path):
 
     assert receipt["state"] == "qualified_legacy"
     assert receipt["contract_validation"]["new_execution_admissible"] is False
-    assert receipt["materialization_validation"]["functional_definition"][
-        "state"
-    ] == "legacy_environment_unbound"
+    assert (
+        receipt["materialization_validation"]["functional_definition"]["state"]
+        == "legacy_environment_unbound"
+    )
     assert {item["rule_id"] for item in receipt["advisories"]} >= {
         "pyscf.functional_definition.legacy_environment_unbound"
     }
+
 
 def test_fixed_geometry_stages_match_input_but_opt_may_move(tmp_path):
     shifted = np.asarray(_complete_result_spec("sp")["positions"], dtype=float)
@@ -1754,7 +1763,6 @@ def test_verify_provenance_requires_applied_digest_for_real_run(tmp_path):
     )
 
     assert any(
-        finding.rule_id
-        == "pyscf.provenance.applied_settings_digest_mismatch"
+        finding.rule_id == "pyscf.provenance.applied_settings_digest_mismatch"
         for finding in findings
     )

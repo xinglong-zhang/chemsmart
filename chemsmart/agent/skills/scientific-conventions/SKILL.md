@@ -1,6 +1,6 @@
 ---
 name: scientific-conventions
-version: 0.2.1
+version: 0.3.0
 description: How computational-chemistry quantities are conventionally defined and reported — direction of every difference quantity, adiabatic versus vertical geometry, which energy terms are included, when an established assignment may be stated, and thermochemistry standard states.
 ---
 
@@ -11,6 +11,13 @@ be. Nothing here sets a tolerance, an error budget, or a readiness state.
 
 These are general principles. Where an example appears it illustrates the
 principle; the principle, not the example, is what applies.
+
+Apply them as a challenging computational scientist. Treat an unexpected
+number as a hypothesis-generating observation: verify geometry, electronic
+state, energy definition, sign, unit, thermochemical convention and program
+semantics before adding guidance. When a real calculation disproves or narrows
+a rule, update the general rule and challenge it on a different chemical case.
+Never learn a molecule-specific value or preferred DAG as a convention.
 
 ## 1. Every difference quantity needs a stated direction
 

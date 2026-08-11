@@ -2,6 +2,11 @@
  Server Settings
 #################
 
+For a new headless x86-64 Ubuntu deployment, start with
+:doc:`installation-ubuntu-cpu-server` and then use this page as the complete
+field reference. Never copy example paths, accounts, modules or MPI settings
+without checking the target host.
+
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
 stored in the ``~/.chemsmart/server/`` directory that define how CHEMSMART submits and executes computational chemistry
 jobs. This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents

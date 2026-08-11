@@ -1,0 +1,4 @@
+interface:
+  display_name: "GPU4PySCF 1.8 for ChemSmart"
+  short_description: "Qualify and improve the ChemSmart PySCF GPU engine"
+  default_prompt: "Use $gpu4pyscf-v1-8-0 to qualify or diagnose this ChemSmart GPU4PySCF workflow."

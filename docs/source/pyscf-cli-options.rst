@@ -3,9 +3,11 @@
 ###################
 
 ChemSmart exposes PySCF 2.14.0 through the same ``run`` and ``sub`` command
-families as its executable-backed programs.  The maintained surface is
-deliberately limited to ``sp``, ``opt``, and ``hess``.  GPU4PySCF 1.8.0 is an
-execution engine of the PySCF program; it is not a separate program.
+families as its executable-backed programs. The executable CPU surface is
+``sp``, ``opt``, and ``hess``. A bounded fixed-geometry, closed-shell,
+gas-phase singlet ``td`` surface is available for safe TDA/TDDFT preview but is
+not authorised for execution. GPU4PySCF 1.8.0 is an execution engine of the
+PySCF program; it is not a separate program.
 
 *************************
  Basic Command Structure
@@ -16,6 +18,7 @@ execution engine of the PySCF program; it is not a separate program.
    chemsmart run [RUN_OPTIONS] pyscf -p PROJECT -f GEOMETRY [PYSCF_OPTIONS] sp
    chemsmart run [RUN_OPTIONS] pyscf -p PROJECT -f GEOMETRY [PYSCF_OPTIONS] opt
    chemsmart run [RUN_OPTIONS] pyscf -p PROJECT -f GEOMETRY [PYSCF_OPTIONS] hess
+   chemsmart run [RUN_OPTIONS] pyscf -p PROJECT -f GEOMETRY [PYSCF_OPTIONS] td
 
 The same program and leaf commands are available below ``chemsmart sub``.
 PySCF requires a validated project YAML; ChemSmart does not invent a default
@@ -32,8 +35,9 @@ method or basis.
  Project YAML Contract
 **********************
 
-A PySCF project has exactly three stage-specific sections.  A stage does not
-inherit scientific settings from another stage.
+A PySCF project uses stage-specific ``sp``, ``opt``, ``hess``, and optional
+preview-only ``td`` sections. A stage does not inherit scientific settings
+from another stage.
 
 .. code:: yaml
 
@@ -57,15 +61,22 @@ inherit scientific settings from another stage.
      basis: def2-svp
      density_fit: false
      freq: true
+   td:
+     functional: b3lyp
+     basis: def2-svp
+     density_fit: true
+     response_method: tda
+     state_manifold: singlet
+     nstates: 10
+     freq: false
 
 Use either ``functional`` or ``ab_initio`` in a stage, never both.  Unknown
 keys and inherited Gaussian/ORCA-only settings are rejected.  In particular,
 native route text, ``modred``, semiempirical settings, arbitrary mixed-basis
 text, and unsupported forces are not silently ignored.
 
-*********************
- Program-Level Options
-*********************
+Program-Level Options
+=====================
 
 .. list-table::
    :header-rows: 1
@@ -165,7 +176,8 @@ validated ``opt`` node rather than reusing the initial geometry.
  Unsupported Requests
 *********************
 
-The initial integration does not offer transition-state search, IRC, TDDFT,
-scan, QMMM/ONIOM, NEB, post-HF correlation, double hybrids, arbitrary mixed
-basis/ECP input, or unsupported constraints.  These requests must block; they
-must not be rewritten as a superficially similar PySCF calculation.
+The executable integration does not offer transition-state search, IRC, scan,
+QMMM/ONIOM, NEB, post-HF correlation, double hybrids, arbitrary mixed
+basis/ECP input, unsupported constraints, or real TD/TDA execution. These
+requests must block; they must not be rewritten as a superficially similar
+PySCF calculation.
