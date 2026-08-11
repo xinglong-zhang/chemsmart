@@ -7,12 +7,14 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
-from chemsmart.settings.user import ChemsmartUserSettings
-from chemsmart.settings.workspace_project import (
-    workspace_project_names,
-    workspace_project_path,
+from chemsmart.settings.project_resolution import (
+    project_settings_from_path,
+    require_jobtype_settings,
 )
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
+
+user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 project_settings_registry: list[str] = []
@@ -173,15 +175,16 @@ class GaussianProjectSettings(RegistryMixin):
     @classmethod
     def from_project(cls, project):
         """
-        Create project settings instance based on project name.
+        Create project settings instance from a YAML path or project name.
 
         Searches for project configuration in the following order:
-        1. Current workspace project settings
-        2. Existing user project settings directory
-        3. Chemsmart test project configurations
+        1. An exact project YAML file
+        2. User-defined project settings directory
+        3. CHEMSMART test project configurations
 
         Args:
-            project (str): Name of the project configuration to load.
+            project (str): Path to a project YAML file, or the name of an
+                installed project configuration.
 
         Returns:
             GaussianProjectSettings: Configured settings instance.
@@ -190,35 +193,31 @@ class GaussianProjectSettings(RegistryMixin):
             FileNotFoundError: If no configuration
             is found for the specified project.
         """
-        # First try the current workspace. This keeps project settings tied to
-        # the directory where chemsmart was launched instead of silently using
-        # a global ~/.chemsmart project with the same name.
-        workspace_project_settings = cls._from_workspace_project_name(project)
-        if workspace_project_settings is not None:
-            return workspace_project_settings
+        explicit_settings = project_settings_from_path(
+            project, GaussianProjectSettingsManager
+        )
+        if explicit_settings is not None:
+            return explicit_settings
 
-        # Preserve the established CLI contract. Agent auto-selection is
-        # workspace-only, but an explicitly named legacy project remains
-        # loadable when no workspace project shadows it.
+        # Then try user-defined project settings
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
-
-        chemsmart_test_project_settings = cls._from_chemsmart_test_projects(
-            project
-        )
-        if chemsmart_test_project_settings is not None:
-            return chemsmart_test_project_settings
+        else:
+            # Fall back to chemsmart test project settings
+            chemsmart_test_project_settings = (
+                cls._from_chemsmart_test_projects(project)
+            )
+            if chemsmart_test_project_settings is not None:
+                return chemsmart_test_project_settings
 
         # Generate helpful error message with available options
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            "Place new gaussian project settings .yaml file in "
-            f"{workspace_project_path(project, 'gaussian').parent}.\n\n"
+            f"Pass an explicit YAML path, or place a new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            "Currently available projects: "
-            f"{_available_gaussian_projects()}"
+            f"Currently available projects: {user_settings.all_available_gaussian_projects}"
         )
 
     @classmethod
@@ -251,26 +250,13 @@ class GaussianProjectSettings(RegistryMixin):
             settings instance if found, None otherwise.
         """
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_gaussian_settings_dir,
+            CHEMSMARTUserSettings().user_gaussian_settings_dir,
             f"{project_name}.yaml",
         )
         user_settings_manager = GaussianProjectSettingsManager(
             filename=project_name_yaml_path
         )
         settings = cls._from_projects_manager(user_settings_manager)
-
-        if settings is not None:
-            return settings
-
-    @classmethod
-    def _from_workspace_project_name(cls, project_name):
-        project_name_yaml_path = workspace_project_path(
-            project_name, "gaussian"
-        )
-        project_settings_manager = GaussianProjectSettingsManager(
-            filename=str(project_name_yaml_path)
-        )
-        settings = cls._from_projects_manager(project_settings_manager)
 
         if settings is not None:
             return settings
@@ -302,11 +288,6 @@ class GaussianProjectSettings(RegistryMixin):
 
         if settings is not None:
             return settings
-
-
-def _available_gaussian_projects() -> list[str]:
-    legacy = ChemsmartUserSettings().all_available_gaussian_projects
-    return sorted(set(workspace_project_names("gaussian")) | set(legacy))
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):
@@ -362,34 +343,84 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
-        return self._opt_settings
+        return require_jobtype_settings(
+            self._opt_settings,
+            program="gaussian",
+            jobtype="opt",
+            project=self,
+        )
 
     def modred_settings(self):
-        return self._modred_settings
+        return require_jobtype_settings(
+            self._modred_settings,
+            program="gaussian",
+            jobtype="modred",
+            project=self,
+        )
 
     def ts_settings(self):
-        return self._ts_settings
+        return require_jobtype_settings(
+            self._ts_settings,
+            program="gaussian",
+            jobtype="ts",
+            project=self,
+        )
 
     def irc_settings(self):
-        return self._irc_settings
+        return require_jobtype_settings(
+            self._irc_settings,
+            program="gaussian",
+            jobtype="irc",
+            project=self,
+        )
 
     def scan_settings(self):
-        return self._scan_settings
+        return require_jobtype_settings(
+            self._scan_settings,
+            program="gaussian",
+            jobtype="scan",
+            project=self,
+        )
 
     def nci_settings(self):
-        return self._nci_settings
+        return require_jobtype_settings(
+            self._nci_settings,
+            program="gaussian",
+            jobtype="nci",
+            project=self,
+        )
 
     def sp_settings(self):
-        return self._sp_settings
+        return require_jobtype_settings(
+            self._sp_settings,
+            program="gaussian",
+            jobtype="sp",
+            project=self,
+        )
 
     def td_settings(self):
-        return self._td_settings
+        return require_jobtype_settings(
+            self._td_settings,
+            program="gaussian",
+            jobtype="td",
+            project=self,
+        )
 
     def wbi_settings(self):
-        return self._wbi_settings
+        return require_jobtype_settings(
+            self._wbi_settings,
+            program="gaussian",
+            jobtype="wbi",
+            project=self,
+        )
 
     def qmmm_settings(self):
-        return self._qmmm_settings
+        return require_jobtype_settings(
+            self._qmmm_settings,
+            program="gaussian",
+            jobtype="qmmm",
+            project=self,
+        )
 
     @classmethod
     def from_yaml(cls, filename):

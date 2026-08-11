@@ -34,6 +34,7 @@ from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
 
@@ -58,11 +59,12 @@ class BaseAssembler:
     @property
     def molecules_list(self):
         if self.FOLDER_BASED:
-            return Molecule.from_directorypath(
+            molecules = Molecule.from_directorypath(
                 self.folder,
                 program=self.PROGRAM.lower(),
                 index=self.index,
             )
+            return molecules if isinstance(molecules, list) else [molecules]
         return Molecule.from_filepath(
             self.filename, index=self.index, return_list=True
         )
@@ -366,6 +368,45 @@ class ORCAAssembler(BaseAssembler):
         return calculation_results
 
 
+class PySCFAssembler(BaseAssembler):
+    """Assemble a database record from a PySCF calculation.
+
+    Short because ``BaseAssembler`` already does the work and ``PySCFOutput``
+    exposes the same property surface as the log-parsing readers -- the
+    difference is that its numbers come from a structured results file rather
+    than from regex over printed text.
+    """
+
+    OUTPUT_CLASS = PySCFOutput
+    PROGRAM = "PySCF"
+
+    def build_provenance(self):
+        """Bind database provenance to HDF5 bytes, never the sibling log."""
+        provenance = super().build_provenance()
+        provenance.update(
+            {
+                "source": self.output.resultsfile,
+                "source_file_hash": self.output.result_sha256,
+                "source_size": file_size(self.output.resultsfile),
+                "requested_source": self.target,
+            }
+        )
+        return provenance
+
+    def get_meta_data(self):
+        meta_data = super().get_meta_data()
+        meta_data.update(
+            {
+                "num_shells": self.output.num_shells,
+                # GPU and CPU results are not bit-identical, so which engine
+                # produced a record has to survive into the database.
+                "engine": self.output.engine,
+                "settings_digest": self.output.settings_digest,
+            }
+        )
+        return meta_data
+
+
 class XTBAssembler(BaseAssembler):
     OUTPUT_CLASS = XTBOutput
     PROGRAM = "xTB"
@@ -429,9 +470,15 @@ class SingleFileAssembler:
                 index=self.index,
                 include_failed=self.include_failed,
             )
+        if program == "pyscf":
+            return PySCFAssembler(
+                filename=path,
+                index=self.index,
+                include_failed=self.include_failed,
+            )
         raise ValueError(
             f"Unsupported file '{path}'. "
-            "Only 'gaussian' and 'orca' output files are supported."
+            "Only 'gaussian', 'orca' and 'pyscf' output files are supported."
         )
 
 

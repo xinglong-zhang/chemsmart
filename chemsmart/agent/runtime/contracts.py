@@ -1,11 +1,11 @@
-"""Stable public contracts between providers, tools, and runtime policy."""
+"""Dependency-free Runtime V2 nucleus for the v3.1.4 agent port."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from chemsmart.agent._contracts import ContractError, canonical_sha256
 
 
 class RuntimeV2Mode(str, Enum):
@@ -24,116 +24,111 @@ class RuntimeV2Mode(str, Enum):
             return cls.ACTIVE
         if normalized == "shadow":
             return cls.SHADOW
-        raise ValueError(f"Unsupported agent runtime v2 mode: {value!r}")
-
-
-class ProviderRole(str, Enum):
-    CONTROLLER = "controller"
-    SYNTHESIS_SPECIALIST = "synthesis_specialist"
+        raise ContractError(f"unsupported Runtime V2 mode: {value!r}")
 
 
 class TaskPhase(str, Enum):
     ROUTE = "route"
+    SPECIFY = "specify"
     PROJECT = "project"
-    PROJECT_READ = "project_read"
-    PROJECT_WRITE = "project_write"
-    SYNTHESIS = "synthesis"
-    VALIDATION = "validation"
-    REPAIR = "repair"
+    COMPILE = "compile"
+    PREFLIGHT = "preflight"
+    WAITING_APPROVAL = "waiting_approval"
     EXECUTION = "execution"
-    DIAGNOSTICS = "diagnostics"
-    WAITING_USER = "waiting_user"
+    VALIDATION = "validation"
+    REVIEW = "review"
+    REPORT = "report"
+    TERMINAL = "terminal"
+
+
+class TerminalState(str, Enum):
     COMPLETE = "complete"
+    FAILED = "failed"
     BLOCKED = "blocked"
+    WAITING_APPROVAL = "waiting_for_approval"
 
 
-class AgentAction(str, Enum):
-    ANSWER = "answer"
-    ASK_USER = "ask_user"
-    BUILD_PROJECT = "build_project"
-    READ_PROJECT = "read_project"
-    UPDATE_PROJECT = "update_project"
-    SYNTHESIZE_COMMAND = "synthesize_command"
-    REPAIR_COMMAND = "repair_command"
-    VALIDATE = "validate"
-    EXECUTE = "execute"
-    INSPECT_CALCULATION = "inspect_calculation"
+@dataclass(frozen=True)
+class ResourceBudgetV1:
+    max_input_tokens_per_request: int
+    max_output_tokens_per_request: int
+    max_tool_calls: int
+    wall_time_seconds: float
+    max_cost_usd: float | None = None
+    chemistry_engine_calls: int = 0
+    hpc_calls: int = 0
+
+    def __post_init__(self) -> None:
+        if min(
+            self.max_input_tokens_per_request,
+            self.max_output_tokens_per_request,
+            self.max_tool_calls,
+        ) < 1:
+            raise ContractError("token, tool, and wall-time budgets must be positive")
+        if self.wall_time_seconds <= 0:
+            raise ContractError("wall_time_seconds must be positive")
+        if self.max_cost_usd is not None and self.max_cost_usd < 0:
+            raise ContractError("max_cost_usd must be non-negative")
+        if self.chemistry_engine_calls < 0 or self.hpc_calls < 0:
+            raise ContractError("compute call budgets must be non-negative")
 
 
-class ExecutionMode(str, Enum):
-    NONE = "none"
-    TEST_FAKE = "test_fake"
-    LOCAL = "local"
-    HPC = "hpc"
-
-
-class RuntimeContract(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class ArtifactRef(RuntimeContract):
-    artifact_id: str
-    kind: str
-    path: str
-    sha256: str
-    size_bytes: int = Field(ge=0)
-    producer_tool: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class WorkspaceRef(RuntimeContract):
-    name: str
-    program: str = ""
-    path: str
-    sha256: str
-
-
-class TaskEnvelope(RuntimeContract):
+@dataclass(frozen=True)
+class TaskEnvelopeV1:
+    schema_version: str
     task_id: str
     session_id: str
     turn_id: str
-    request: str
-    cwd: str
-    provider_role: ProviderRole
+    request_sha256: str
+    cwd_sha256: str
     phase: TaskPhase
-    execution_mode: ExecutionMode = ExecutionMode.NONE
-    project: WorkspaceRef | None = None
-    server: WorkspaceRef | None = None
-    previous_command: str = ""
-    unresolved_slots: tuple[str, ...] = ()
+    budget: ResourceBudgetV1
+    tool_schema_sha256: str
+    envelope_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.task-envelope.v1":
+            raise ContractError("unsupported task envelope schema")
+        body = {
+            "schema_version": self.schema_version,
+            "task_id": self.task_id,
+            "session_id": self.session_id,
+            "turn_id": self.turn_id,
+            "request_sha256": self.request_sha256,
+            "cwd_sha256": self.cwd_sha256,
+            "phase": self.phase,
+            "budget": self.budget,
+            "tool_schema_sha256": self.tool_schema_sha256,
+        }
+        if self.envelope_sha256 != canonical_sha256(body):
+            raise ContractError("task envelope digest mismatch")
 
 
-class AgentDecision(RuntimeContract):
-    """Auditable provider decision; private chain-of-thought is excluded."""
+@dataclass(frozen=True)
+class ProviderStateRefV1:
+    """Opaque, adapter-owned continuation identity with no evidence authority."""
 
-    action: AgentAction
-    phase: TaskPhase
-    confidence: Literal["low", "medium", "high"] = "medium"
-    summary: str
-    evidence: tuple[str, ...] = ()
-    required_slots: tuple[str, ...] = ()
-    requested_tools: tuple[str, ...] = ()
+    schema_version: str
+    provider: str
+    session_id: str
+    turn_id: str
+    state_id: str
+    sanitized_history_sha256: str
+    tool_schema_sha256: str
+    evidentiary: bool = False
 
-
-class ToolReceipt(RuntimeContract):
-    request_id: str
-    tool_name: str
-    status: Literal["ok", "error", "denied", "skipped"]
-    normalized_args: dict[str, Any] = Field(default_factory=dict)
-    artifacts: tuple[ArtifactRef, ...] = ()
-    rule_ids: tuple[str, ...] = ()
-    state_delta: dict[str, Any] = Field(default_factory=dict)
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.provider-state-ref.v1":
+            raise ContractError("unsupported provider state ref schema")
+        if self.evidentiary:
+            raise ContractError("provider continuation state is non-evidentiary")
 
 
 __all__ = [
-    "AgentAction",
-    "AgentDecision",
-    "ArtifactRef",
-    "ExecutionMode",
-    "ProviderRole",
+    "ProviderStateRefV1",
+    "ResourceBudgetV1",
     "RuntimeV2Mode",
-    "TaskEnvelope",
+    "TaskEnvelopeV1",
     "TaskPhase",
-    "ToolReceipt",
-    "WorkspaceRef",
+    "TerminalState",
 ]

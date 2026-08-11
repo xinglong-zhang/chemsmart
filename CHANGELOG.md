@@ -4,6 +4,22 @@ Changelog
 
 (unreleased)
 ------------
+- Consolidated CHEMSMART 3.1.4 as the canonical project-YAML and CLI hub for
+  Gaussian, ORCA, xTB, PySCF, GPU4PySCF, and provider-neutral agent workflows.
+- Added x86 Ubuntu CPU-server deployment guidance, staged real-engine
+  qualification, and project-local computational-research skills.
+- Extended ORCA workflow support and result analysis for TS/IRC/NEB, TD/TDA,
+  VPT2, final stationary structures, semantic normal termination, basis and
+  reference parsing, and unit-aware quantities.
+- Added executable PySCF CPU SP/OPT/HESS workflows with structured HDF5
+  results, optimized-geometry handoff, linear-molecule frequency handling,
+  and bounded TD preview.
+- Added xTB CPU SP/OPT/HESS project and result integration.
+- Expanded cross-program scientific DAG and post-processing operations for
+  thermochemistry, energy differences, spectra, rotational properties,
+  isotope substitution, dipoles, and composite methods.
+- Removed one-off agent research, benchmark, diagnostic, and integration
+  snapshot documents from the release tree.
 - Clean up make fmt and make lint in Makefile. [xinglong-zhang]
 - Added comments to the codes. [xinglong-zhang]
 - Further fix. [xinglong-zhang]
@@ -900,5 +916,4 @@ Changelog
 - Initial commit. [Xinglong Zhang]
 - ✅ Ready to clone and code. [xinglong-zhang]
 - Initial commit. [Xinglong Zhang]
-
 

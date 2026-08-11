@@ -25,12 +25,12 @@ class ThermochemistryJob(Job):
 
     This class handles the calculation of thermodynamic properties such as
     enthalpy, entropy, and Gibbs free energy from frequency calculations
-    in Gaussian or ORCA output files.
+    in Gaussian, ORCA, or xTB output files.
 
     Attributes:
         PROGRAM (str): Program identifier ('Thermochemistry').
         TYPE (str): Job type identifier ('thermochemistry').
-        filename (str | None): Path to the QC output file (.log/.out).
+        filename (str): Path to the QC output file (.log/.out).
         molecule (Molecule | None): Molecular structure used for context.
         settings (ThermochemistryJobSettings): Thermochemistry configuration.
         label (str): Job identifier used for file naming.
@@ -44,7 +44,6 @@ class ThermochemistryJob(Job):
     def __init__(
         self,
         filename=None,
-        foldername=None,
         molecule=None,
         settings=None,
         label=None,
@@ -56,7 +55,6 @@ class ThermochemistryJob(Job):
 
         Args:
             filename (str, optional): Path to quantum chemistry output file
-            foldername (str, optional): Path to xTB calculation folder
             molecule (Molecule, optional): Molecule object for the calculation
             settings (ThermochemistryJobSettings, optional): Job configuration
             label (str, optional): Custom label for the job
@@ -71,17 +69,11 @@ class ThermochemistryJob(Job):
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
 
-        if filename is None and foldername is None:
-            raise ValueError(
-                "Either 'filename' or 'foldername' must be provided."
-            )
-        if filename is not None and foldername is not None:
-            raise ValueError(
-                "Cannot specify both 'filename' and 'foldername'. Choose one."
-            )
+        if filename is None:
+            raise ValueError("'filename' must be provided.")
 
         # Validate file extension
-        if filename is not None and not filename.endswith((".log", ".out")):
+        if not filename.endswith((".log", ".out")):
             raise ValueError(
                 f"Unsupported file extension for '{filename}'. "
                 f"Only .log or .out files are accepted."
@@ -111,14 +103,11 @@ class ThermochemistryJob(Job):
             else ThermochemistryJobSettings()
         )
         self.filename = filename
-        self.foldername = foldername
 
         # Generate label if not provided
         if label is None:
             if filename is not None:
                 label = os.path.splitext(os.path.basename(filename))[0]
-            elif foldername is not None:
-                label = os.path.basename(os.path.normpath(foldername))
             elif molecule is not None:
                 label = molecule.get_chemical_formula(empirical=True)
             else:
@@ -281,61 +270,6 @@ class ThermochemistryJob(Job):
             **kwargs,
         )
 
-    @classmethod
-    def from_folder(
-        cls,
-        foldername,
-        settings=None,
-        label=None,
-        jobrunner=None,
-        **kwargs,
-    ):
-        """
-        Create a thermochemistry job from an xTB calculation folder.
-
-        Args:
-            foldername (str): Path to xTB calculation folder
-            settings (ThermochemistryJobSettings, optional): Job configuration
-            label (str, optional): Custom label for the job
-            jobrunner (JobRunner, optional): Job execution manager
-            **kwargs: Additional keyword arguments for job configuration
-
-        Returns:
-            ThermochemistryJob: Configured thermochemistry job instance
-        """
-        molecule = Molecule.from_directorypath(foldername, program="xtb")
-
-        if settings is None:
-            settings = ThermochemistryJobSettings()
-
-        if label is None:
-            label = os.path.basename(os.path.normpath(foldername))
-
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    foldername=foldername,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            foldername=foldername,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
-
     def compute_thermochemistry(self):
         """
         Perform thermochemistry calculation and save results.
@@ -348,11 +282,6 @@ class ThermochemistryJob(Job):
             ValueError: If no input file is provided
             Exception: If calculation fails during processing
         """
-        if not self.filename and not self.foldername:
-            raise ValueError(
-                "No input file or folder provided for thermochemistry calculation."
-            )
-
         # Set default output file if not specified
         if self.settings.outputfile is None:
             self.settings.outputfile = self.outputfile
@@ -360,7 +289,6 @@ class ThermochemistryJob(Job):
         try:
             thermochemistry = Thermochemistry(
                 filename=self.filename,
-                folder=self.foldername,
                 temperature=self.settings.temperature,
                 concentration=self.settings.concentration,
                 pressure=self.settings.pressure,
@@ -403,8 +331,7 @@ class ThermochemistryJob(Job):
             )
 
         except Exception as e:
-            target = self.filename if self.filename else self.foldername
-            logger.error(f"Error processing {target}: {e}")
+            logger.error(f"Error processing {self.filename}: {e}")
             raise
 
     def show_results(self):

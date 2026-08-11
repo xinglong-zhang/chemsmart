@@ -1,240 +1,325 @@
-"""Configuration loader for chemsmart agent providers."""
+"""Provider-neutral ``agent.yaml`` configuration for Runtime V2."""
 
 from __future__ import annotations
 
-import os
-import warnings
 from dataclasses import dataclass
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-import yaml
-
+from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent.api_access import require_provider_key_label
+from chemsmart.agent.runtime.deepseek import (
+    DEEPSEEK_OFFICIAL_ENDPOINT,
+    DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
+    DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
+    DEEPSEEK_V4_FLASH_MODEL,
+    DeepSeekV4FlashConfigV1,
+)
 from chemsmart.io.yaml import YAMLFile
 
-_SUPPORTED_PROVIDER_TYPES = frozenset({"openai", "anthropic", "local"})
+ALIBABA_TOKEN_PLAN_PROVIDER = "alibaba-token-plan"
+ALIBABA_TOKEN_PLAN_ENDPOINT = (
+    "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+)
+ALIBABA_TOKEN_PLAN_MODEL = "qwen3.8-max"
+ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS = 1_000_000
+ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS = 262_144
 
 
-@dataclass
-class AgentProviderConfig:
-    """Resolved agent provider configuration."""
+@dataclass(frozen=True)
+class AgentProviderProfileV1:
+    """One public provider profile; credentials remain in the secret file."""
 
-    name: str
-    type: str
-    api_key: str
+    schema_version: str
+    profile_name: str
+    provider: str
+    wire_protocol: str
+    api_key_env: str
     model: str
-    base_url: str
-    extra_headers: dict[str, str]
-    base_model_id: str = ""
-    hf_token: str = ""
-    runtime: str = ""
-    project: str = ""
+    endpoint: str
+    reasoning_effort: str
+    preserve_thinking: bool
+    context_tokens: int
+    max_output_tokens: int
+    profile_sha256: str
 
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.agent-provider-profile.v1":
+            raise ContractError("unsupported agent provider profile schema")
+        body = {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "profile_sha256"
+        }
+        if self.profile_sha256 != canonical_sha256(body):
+            raise ContractError("agent provider profile digest mismatch")
 
-class AgentProviderConfigError(Exception):
-    """Raised when ``~/.chemsmart/agent/agent.yaml`` is invalid."""
+    def runtime_config(self):
+        """Build the provider-native ephemeral continuation configuration."""
 
+        if self.provider == ALIBABA_TOKEN_PLAN_PROVIDER:
+            from chemsmart.agent.runtime.alibaba import Qwen38MaxConfigV1
 
-def _load_legacy_env(path: Path) -> None:
-    """Load the one-release ``api.env`` compatibility path lazily."""
-    try:
-        from dotenv import load_dotenv
-    except ImportError as exc:
-        raise AgentProviderConfigError(
-            "Legacy api.env loading requires the agent extra. Install with "
-            "`pip install 'chemsmart[agent]'`, or move the provider settings "
-            "to ~/.chemsmart/agent/agent.yaml."
-        ) from exc
-    load_dotenv(path, override=False)
-
-
-def _default_yaml_path() -> Path:
-    """Return the default agent provider YAML path."""
-    return Path.home() / ".chemsmart" / "agent" / "agent.yaml"
-
-
-def _load_provider_environment() -> Path | None:
-    """Load the first configured agent environment file, if one exists."""
-    explicit = os.environ.get("CHEMSMART_API_ENV", "").strip()
-    candidates = (
-        Path(explicit) if explicit else None,
-        Path.home() / ".chemsmart" / "api.env",
-        Path.cwd() / "api.env",
-    )
-    for candidate in candidates:
-        if candidate is not None and candidate.is_file():
-            warnings.warn(
-                "api.env credential loading is deprecated and will be removed "
-                "after this compatibility release; keep provider selection in "
-                "~/.chemsmart/agent/agent.yaml and migrate secrets to the "
-                "environment or an external secret store.",
-                DeprecationWarning,
-                stacklevel=3,
+            return Qwen38MaxConfigV1(
+                model=self.model,
+                endpoint=self.endpoint,
+                reasoning_effort=self.reasoning_effort,
+                preserve_thinking=self.preserve_thinking,
+                max_output_tokens=self.max_output_tokens,
             )
-            _load_legacy_env(candidate)
-            return candidate
-    return None
+        if self.provider == "deepseek":
+            return DeepSeekV4FlashConfigV1(
+                model=self.model,
+                endpoint=self.endpoint,
+                reasoning_effort=self.reasoning_effort,
+                max_output_tokens=self.max_output_tokens,
+            )
+        raise ContractError("provider profile has no runtime adapter")
 
 
-def load_active_provider_config(
-    yaml_path: str | os.PathLike[str] | None = None,
-) -> AgentProviderConfig | None:
-    """Load and resolve the active agent provider configuration.
+@dataclass(frozen=True)
+class AgentProviderSelectionV1:
+    """Active profile plus ordered, explicitly attributed fallbacks."""
 
-    Args:
-        yaml_path: Optional path to an ``agent.yaml`` file. Defaults to
-            ``~/.chemsmart/agent/agent.yaml``.
+    schema_version: str
+    active_profile: AgentProviderProfileV1
+    fallback_profiles: tuple[AgentProviderProfileV1, ...]
+    selection_sha256: str
 
-    Returns:
-        The resolved active provider config, or ``None`` when the YAML file is
-        absent.
-
-    Raises:
-        AgentProviderConfigError: If the YAML is malformed, lacks an active
-            provider, uses an unknown provider type, or does not resolve an API
-            key.
-    """
-    path = Path(yaml_path) if yaml_path is not None else _default_yaml_path()
-    if not path.is_file():
-        return None
-
-    try:
-        payload = YAMLFile(str(path)).yaml_contents_dict
-    except (OSError, yaml.YAMLError) as exc:
-        raise AgentProviderConfigError(
-            f"Failed to read agent provider config {path}: {exc}"
-        ) from exc
-
-    if not isinstance(payload, dict):
-        raise AgentProviderConfigError(
-            f"agent provider config {path} must be a YAML mapping"
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.agent-provider-selection.v1":
+            raise ContractError("unsupported agent provider selection schema")
+        names = (
+            self.active_profile.profile_name,
+            *(item.profile_name for item in self.fallback_profiles),
         )
+        if len(names) != len(set(names)):
+            raise ContractError(
+                "provider selection contains duplicate profiles"
+            )
+        body = {
+            "schema_version": self.schema_version,
+            "active_profile_sha256": self.active_profile.profile_sha256,
+            "fallback_profile_sha256s": tuple(
+                item.profile_sha256 for item in self.fallback_profiles
+            ),
+        }
+        if self.selection_sha256 != canonical_sha256(body):
+            raise ContractError("agent provider selection digest mismatch")
 
-    active = payload.get("active")
-    if not isinstance(active, str) or not active.strip():
-        raise AgentProviderConfigError(
-            f"agent provider config {path} is missing non-empty 'active'"
+
+def default_agent_config_path() -> Path:
+    explicit = os.environ.get("CHEMSMART_AGENT_CONFIG", "").strip()
+    return (
+        Path(explicit).expanduser()
+        if explicit
+        else Path.home() / ".chemsmart" / "agent" / "agent.yaml"
+    )
+
+
+def load_agent_provider_selection(
+    path: str | Path | None = None,
+    *,
+    requested_profile: str | None = None,
+) -> AgentProviderSelectionV1:
+    """Load one active profile without reading or embedding its credential."""
+
+    config_path = (
+        Path(path).expanduser() if path else default_agent_config_path()
+    )
+    if not config_path.is_file() or config_path.is_symlink():
+        raise ContractError(
+            "agent provider config must be a regular YAML file"
         )
-    active = active.strip()
-
+    payload = YAMLFile(str(config_path)).yaml_contents_dict
+    if not isinstance(payload, Mapping):
+        raise ContractError("agent provider config must be a YAML mapping")
     providers = payload.get("providers")
-    if not isinstance(providers, dict):
-        raise AgentProviderConfigError(
-            f"agent provider config {path} is missing 'providers' mapping"
+    if not isinstance(providers, Mapping) or not providers:
+        raise ContractError("agent provider config requires providers")
+
+    selected_name = str(
+        requested_profile or payload.get("active") or ""
+    ).strip()
+    if not selected_name:
+        raise ContractError("agent provider config requires an active profile")
+    if selected_name not in providers or not isinstance(
+        providers[selected_name], Mapping
+    ):
+        raise ContractError(
+            "requested agent provider profile is not configured"
         )
 
-    provider_entry = providers.get(active)
-    if not isinstance(provider_entry, dict):
-        raise AgentProviderConfigError(
-            f"active provider {active!r} is not defined in {path}"
+    raw_fallbacks = payload.get("fallback", payload.get("fallbacks", ()))
+    if raw_fallbacks is None:
+        fallback_names: tuple[str, ...] = ()
+    elif isinstance(raw_fallbacks, str):
+        fallback_names = (
+            (raw_fallbacks.strip(),) if raw_fallbacks.strip() else ()
         )
-
-    provider_type = _string_field(provider_entry, "type").lower()
-    if provider_type not in _SUPPORTED_PROVIDER_TYPES:
-        raise AgentProviderConfigError(
-            f"provider {active!r} has unsupported type {provider_type!r}; "
-            f"supported: {sorted(_SUPPORTED_PROVIDER_TYPES)}"
-        )
-
-    model = _string_field(provider_entry, "model")
-    base_url = _optional_string_field(provider_entry, "base_url")
-    extra_headers = _extra_headers(provider_entry, active)
-    base_model_id = _optional_string_field(provider_entry, "base_model_id")
-    if "adapter_repo_id" in provider_entry:
-        raise AgentProviderConfigError(
-            "provider field 'adapter_repo_id' is no longer supported; publish "
-            "or select a merged model with 'base_model_id'"
-        )
-    runtime = _optional_string_field(provider_entry, "runtime")
-    project = _optional_string_field(provider_entry, "project")
-
-    if provider_type == "local":
-        api_key = _resolve_local_hf_token(provider_entry)
+    elif isinstance(raw_fallbacks, (list, tuple)) and all(
+        isinstance(item, str) and item.strip() for item in raw_fallbacks
+    ):
+        fallback_names = tuple(item.strip() for item in raw_fallbacks)
     else:
-        try:
-            api_key = _resolve_api_key(provider_entry, active)
-        except AgentProviderConfigError:
-            if _load_provider_environment() is None:
-                raise
-            api_key = _resolve_api_key(provider_entry, active)
-
-    return AgentProviderConfig(
-        name=active,
-        type=provider_type,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        extra_headers=extra_headers,
-        base_model_id=base_model_id,
-        hf_token=api_key if provider_type == "local" else "",
-        runtime=runtime,
-        project=project,
+        raise ContractError("agent provider fallbacks must be profile names")
+    missing = tuple(
+        name
+        for name in fallback_names
+        if name not in providers or not isinstance(providers[name], Mapping)
+    )
+    if missing:
+        raise ContractError(
+            "agent provider fallback profile is not configured"
+        )
+    # Only profiles that can enter this selection are part of the Runtime V2
+    # trust boundary.  Idle profiles may belong to another client or legacy
+    # workflow; inspecting them made a valid explicitly selected profile fail
+    # for unrelated configuration.  Selected and fallback profiles still fail
+    # closed on literal credentials.
+    selected_entries = {
+        name: providers[name]
+        for name in (selected_name, *fallback_names)
+        if name in providers
+    }
+    _reject_literal_secrets(selected_entries)
+    selected_profile = _build_profile(selected_name, providers[selected_name])
+    fallback_profiles = tuple(
+        _build_profile(name, providers[name])
+        for name in fallback_names
+        if name != selected_name
+    )
+    body = {
+        "schema_version": "chemsmart.agent-provider-selection.v1",
+        "active_profile_sha256": selected_profile.profile_sha256,
+        "fallback_profile_sha256s": tuple(
+            item.profile_sha256 for item in fallback_profiles
+        ),
+    }
+    return AgentProviderSelectionV1(
+        schema_version=body["schema_version"],
+        active_profile=selected_profile,
+        fallback_profiles=fallback_profiles,
+        selection_sha256=canonical_sha256(body),
     )
 
 
-def _resolve_local_hf_token(entry: dict[str, Any]) -> str:
-    """Return the HF token for a ``type: local`` provider.
+def _reject_literal_secrets(providers: Mapping[str, Any]) -> None:
+    """Reject credentials in profiles selected for the active fallback chain.
 
-    Order: literal ``hf_token`` → ``hf_token_env`` → ``HF_TOKEN`` env var →
-    empty string (loader will raise if the model is not already cached).
+    The check intentionally inspects field names and presence only; a secret
+    value is never copied into an exception or receipt.  Unselected profiles
+    are outside this loader's authority and are not parsed as Runtime V2 data.
     """
-    literal = _optional_string_field(entry, "hf_token")
-    if literal:
-        return literal
-    token_env = _optional_string_field(entry, "hf_token_env") or "HF_TOKEN"
-    return os.environ.get(token_env, "").strip()
+
+    secret_fields = {
+        "api_key",
+        "access_token",
+        "token",
+        "secret",
+        "password",
+        "hf_token",
+    }
+    secret_headers = {"authorization", "api-key", "x-api-key"}
+    for profile_name, raw_profile in providers.items():
+        if not isinstance(raw_profile, Mapping):
+            continue
+        if any(
+            str(raw_profile.get(field) or "").strip()
+            for field in secret_fields
+        ):
+            raise ContractError(
+                "agent.yaml must not contain literal API keys or other "
+                "secrets; use an environment label in every provider profile"
+            )
+        headers = raw_profile.get("extra_headers")
+        if isinstance(headers, Mapping) and any(
+            str(name).strip().lower() in secret_headers
+            and str(value or "").strip()
+            for name, value in headers.items()
+        ):
+            raise ContractError(
+                "agent.yaml contains a credential header; use a short-lived "
+                "provider lease"
+            )
 
 
-def _string_field(entry: dict[str, Any], key: str) -> str:
-    value = entry.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise AgentProviderConfigError(
-            f"provider entry is missing non-empty {key!r}"
-        )
-    return value.strip()
+def _build_profile(
+    profile_name: str, entry: Mapping[str, Any]
+) -> AgentProviderProfileV1:
+    provider_type = str(entry.get("type") or "").strip().lower()
+    if provider_type not in {"openai", "openai-chat-completions"}:
+        raise ContractError("active Runtime V2 profiles require OpenAI chat")
+    if str(entry.get("api_key") or "").strip():
+        raise ContractError("agent.yaml must not contain literal API keys")
+    api_key_env = str(entry.get("api_key_env") or "").strip()
+    model = str(entry.get("model") or "").strip()
+    endpoint = str(
+        entry.get("base_url") or entry.get("endpoint") or ""
+    ).rstrip("/")
+    reasoning_effort = str(entry.get("reasoning_effort") or "").strip().lower()
+    preserve_thinking = entry.get("preserve_thinking", True)
+    if not isinstance(preserve_thinking, bool):
+        raise ContractError("preserve_thinking must be boolean")
 
+    if endpoint == ALIBABA_TOKEN_PLAN_ENDPOINT:
+        provider = ALIBABA_TOKEN_PLAN_PROVIDER
+        if model != ALIBABA_TOKEN_PLAN_MODEL:
+            raise ContractError(
+                "Alibaba Token Plan profile requires production qwen3.8-max"
+            )
+        require_provider_key_label(api_key_env, provider=provider)
+        reasoning_effort = reasoning_effort or "xhigh"
+        if reasoning_effort != "xhigh":
+            raise ContractError("qwen3.8-max maximum reasoning requires xhigh")
+        if not preserve_thinking:
+            raise ContractError(
+                "qwen3.8-max tool continuation must be preserved"
+            )
+        context_tokens = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
+        max_output_tokens = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
+    elif endpoint == DEEPSEEK_OFFICIAL_ENDPOINT:
+        provider = "deepseek"
+        if model != DEEPSEEK_V4_FLASH_MODEL:
+            raise ContractError("DeepSeek fallback requires deepseek-v4-flash")
+        require_provider_key_label(api_key_env, provider=provider)
+        reasoning_effort = reasoning_effort or "max"
+        if reasoning_effort not in {"high", "max"}:
+            raise ContractError(
+                "DeepSeek reasoning effort must be high or max"
+            )
+        context_tokens = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
+        max_output_tokens = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
+    else:
+        raise ContractError("agent provider endpoint is not registered")
 
-def _optional_string_field(entry: dict[str, Any], key: str) -> str:
-    value = entry.get(key, "")
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise AgentProviderConfigError(f"provider field {key!r} must be text")
-    return value.strip()
-
-
-def _resolve_api_key(entry: dict[str, Any], provider_name: str) -> str:
-    literal_api_key = _optional_string_field(entry, "api_key")
-    if literal_api_key:
-        return literal_api_key
-
-    api_key_env = _optional_string_field(entry, "api_key_env")
-    if api_key_env:
-        env_api_key = os.environ.get(api_key_env, "").strip()
-        if env_api_key:
-            return env_api_key
-
-    raise AgentProviderConfigError(
-        f"provider {provider_name!r} must set api_key or api_key_env"
+    body = {
+        "schema_version": "chemsmart.agent-provider-profile.v1",
+        "profile_name": profile_name,
+        "provider": provider,
+        "wire_protocol": "openai-chat-completions",
+        "api_key_env": api_key_env,
+        "model": model,
+        "endpoint": endpoint,
+        "reasoning_effort": reasoning_effort,
+        "preserve_thinking": preserve_thinking,
+        "context_tokens": context_tokens,
+        "max_output_tokens": max_output_tokens,
+    }
+    return AgentProviderProfileV1(
+        **body, profile_sha256=canonical_sha256(body)
     )
 
 
-def _extra_headers(
-    entry: dict[str, Any], provider_name: str
-) -> dict[str, str]:
-    raw_headers = entry.get("extra_headers", {})
-    if raw_headers is None:
-        return {}
-    if not isinstance(raw_headers, dict):
-        raise AgentProviderConfigError(
-            f"provider {provider_name!r} extra_headers must be a mapping"
-        )
-    headers: dict[str, str] = {}
-    for key, value in raw_headers.items():
-        if not isinstance(key, str) or not isinstance(value, str):
-            raise AgentProviderConfigError(
-                f"provider {provider_name!r} extra_headers keys and values "
-                "must be strings"
-            )
-        headers[key] = value
-    return headers
+__all__ = [
+    "ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS",
+    "ALIBABA_TOKEN_PLAN_ENDPOINT",
+    "ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS",
+    "ALIBABA_TOKEN_PLAN_MODEL",
+    "ALIBABA_TOKEN_PLAN_PROVIDER",
+    "AgentProviderProfileV1",
+    "AgentProviderSelectionV1",
+    "default_agent_config_path",
+    "load_agent_provider_selection",
+]

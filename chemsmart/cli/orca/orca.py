@@ -22,7 +22,7 @@ from chemsmart.cli.job import (
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
+from chemsmart.utils.io import clean_label, get_program_type_from_file
 from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
@@ -115,11 +115,25 @@ def click_orca_settings_options(f):
         "-d",
         "--defgrid",
         type=click.Choice(
-            ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
+            [
+                "defgrid1",
+                "defgrid2",
+                "defgrid3",
+                "grid1",
+                "grid2",
+                "grid3",
+                "grid4",
+                "grid5",
+                "grid6",
+                "grid7",
+            ],
+            case_sensitive=False,
         ),
         default=None,
-        help="Grid for numerical integration. Choices are "
-        "['defgrid1', 'defgrid2', 'defgrid3'].",
+        help=(
+            "Grid for numerical integration. When omitted, preserve the "
+            "project setting or let ORCA use its DEFGRID2 default."
+        ),
     )
     @click.option(
         "--scf-tol",
@@ -192,12 +206,7 @@ def click_orca_settings_options(f):
         "--additional-route-parameters",
         type=str,
         default=None,
-        help=(
-            "Extra keywords appended to the ORCA simple-input ('!') line. "
-            "ORCA has no separate frequency subcommand or flag: to run an "
-            "optimization + frequency job, pass 'freq' here (the opt job then "
-            "renders '! Opt Freq ...'). Example: --additional-route-parameters freq."
-        ),
+        help="Additional route parameters.",
     )
     @click.option(
         "--forces/--no-forces",
@@ -512,6 +521,17 @@ def orca(
     # obtain ORCA Settings from filename, if supplied; otherwise return
     # defaults
 
+    # Defer filetype validation if the pka subcommand is being invoked,
+    # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
+    from chemsmart.utils.datasets import PKaTableEntry
+
+    is_pka_subcommand = ctx.invoked_subcommand == "pka"
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    )
+
     if filename is None:
         # for cases where filename is not supplied, eg, get structure from
         # pubchem
@@ -523,8 +543,27 @@ def orca(
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and
         # do not use any defaults!
-        job_settings = ORCAJobSettings.from_filepath(filename)
-        logger.info(f"Loaded ORCA settings from file: {filename}")
+        if filename.endswith(".out") and (
+            get_program_type_from_file(filename) == "xtb"
+        ):
+            # xTB output is only a geometry source; its route/method do not
+            # map onto ORCA settings. Start from defaults (like .xyz) but
+            # inherit charge/multiplicity from the xTB calculation so the new
+            # ORCA job is fully specified. CLI -c/-m still override below.
+            job_settings = ORCAJobSettings.default()
+            xtb_molecule = Molecule.from_filepath(filename)
+            if xtb_molecule.charge is not None:
+                job_settings.charge = xtb_molecule.charge
+            if xtb_molecule.multiplicity is not None:
+                job_settings.multiplicity = xtb_molecule.multiplicity
+            logger.info(
+                f"Detected xTB output {filename}; using default ORCA "
+                f"settings with geometry and charge/multiplicity from the "
+                f"xTB calculation."
+            )
+        else:
+            job_settings = ORCAJobSettings.from_filepath(filename)
+            logger.info(f"Loaded ORCA settings from file: {filename}")
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
@@ -543,20 +582,37 @@ def orca(
                 f"File {filename} is not a valid chemsmart database file."
             )
             job_settings = ORCAJobSettings.default()
+    elif is_pka_table_input or (
+        is_pka_subcommand and is_pka_cdxml_input(filename)
+    ):
+        job_settings = ORCAJobSettings.default()
+        logger.info(
+            "pka subcommand invoked with table or CDXML file; "
+            "skipping filetype validation and using default ORCA settings"
+        )
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
         )
 
     # Update keywords based on command-line arguments
-    keywords = (
-        "charge",
-        "multiplicity",
-    )  # default keywords to merge filename charge and multiplicity
+    # A plain XYZ has no electronic-state metadata.  Do not let its default
+    # ``None`` values erase an explicit project charge/multiplicity during the
+    # subcommand merge.  Parsed input/output state and explicit CLI overrides
+    # still take precedence when they are actually present.
+    keywords = ()
+    if job_settings.charge is not None:
+        keywords += ("charge",)
+    if job_settings.multiplicity is not None:
+        keywords += ("multiplicity",)
     if charge is not None:
         job_settings.charge = charge
+        if "charge" not in keywords:
+            keywords += ("charge",)
     if multiplicity is not None:
         job_settings.multiplicity = multiplicity
+        if "multiplicity" not in keywords:
+            keywords += ("multiplicity",)
     if title is not None:
         job_settings.title = title
         keywords += ("title",)
@@ -643,18 +699,26 @@ def orca(
 
     # obtain molecule structure from file or PubChem
     molecules = None
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\n"
-            "Please specify one of them!"
-        )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\n"
-            "Please specify only one of them."
-        )
 
-    if filename:
+    # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
+    if is_pka_table_input:
+        logger.debug(
+            f"Skipping molecule loading for pKa table/CDXML file: {filename}"
+        )
+        molecules = None
+    else:
+        if filename is None and pubchem is None:
+            raise ValueError(
+                "[filename] or [pubchem] has not been specified!\n"
+                "Please specify one of them!"
+            )
+        if filename and pubchem:
+            raise ValueError(
+                "Both [filename] and [pubchem] have been specified!\n"
+                "Please specify only one of them."
+            )
+
+    if filename and not is_pka_table_input:
         if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
@@ -685,7 +749,7 @@ def orca(
             ), f"Could not obtain molecule from {filename}!"
             logger.debug(f"Obtained molecules {molecules} from {filename}")
 
-    if pubchem:
+    if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
@@ -711,6 +775,12 @@ def orca(
         logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
+        if ctx.invoked_subcommand:
+            label = f"{label}_{ctx.invoked_subcommand}"
         if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"

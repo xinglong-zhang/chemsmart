@@ -1,61 +1,67 @@
 SERVER:
     SCHEDULER: null
     QUEUE_NAME: null
-    NUM_HOURS: null
-    MEM_GB: 40
-    NUM_CORES: 12
+    NUM_HOURS: 1
+    MEM_GB: 32
+    NUM_CORES: 4
     NUM_GPUS: 0
-    NUM_THREADS: 12
+    NUM_THREADS: 4
     SUBMIT_COMMAND: null
-    # HOST: localhost
-    # explicit local host; avoids SSH-by-filename behavior
-    PROJECT: 13003611
-    ## PROJECT: 13002374
+    PROJECT: null
     SCRATCH_DIR: null
-    USE_HOSTS: true
+    USE_HOSTS: false
     EXTRA_COMMANDS: |
-        #extra commands to activate chemsmart environment in submission script
+        # Add only host commands required before local execution.
+
 GAUSSIAN:
-    EXEFOLDER: ~/bin/g16
-    LOCAL_RUN: True  # local run True to use serial_command
-    SCRATCH: True  # set scratch to True to run in scratch folder
-    CONDA_ENV: |   # program-specific conda env
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda activate chemsmart
+    # Licensed Gaussian installation root; replace or leave unused.
+    EXEFOLDER: null
+    LOCAL_RUN: true
+    SCRATCH: true
+    CONDA_ENV: |
+        # Activate a program environment when required.
     MODULES: |
-        module purge
-        module load craype-x86-rome
-        module load libfabric/1.11.0.4.125
+        # Load host modules when required.
     SCRIPTS: |
-        tcsh -c "source ~/bin/g16/bsd/g16.login"
+        # Source the Gaussian profile when required.
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
-        export GAUSS_EXEDIR=~/bin/g16
-        export g16root=~/bin/g16
+        # Define GAUSS_EXEDIR, g16root, and scratch for this host.
 
 ORCA:
-    EXEFOLDER: ~/bin/orca_6_0_0
-    LOCAL_RUN: False  # local run False to use parallel_command
-    SCRATCH: True  # set scratch to False to run in job folder
-    CONDA_ENV: |   # program-specific conda env
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda activate ~/miniconda3/envs/chemsmart
+    # Directory containing the authorised ORCA binary.
+    EXEFOLDER: null
+    LOCAL_RUN: true
+    SCRATCH: true
+    CONDA_ENV: |
+        # Activate a program environment when required.
     MODULES: |
-        module purge
-        module load libfabric
-        module load openmpi
+        # Load the MPI implementation compatible with this ORCA build.
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
+        # Add the matching MPI bin/lib paths when parallel execution is used.
+
+PYSCF:
+    # Optional bin directory whose python owns PySCF 2.14.0.
+    EXEFOLDER: null
+    LOCAL_RUN: true
+    SCRATCH: false
+    CONDA_ENV: |
+        conda activate chemsmart-pyscf
+
+XTB:
+    # Optional directory containing xtb; omit to resolve it from PATH.
+    EXEFOLDER: null
+    LOCAL_RUN: true
+    SCRATCH: true
+    CONDA_ENV: |
+        # Activate the xTB environment when required.
 
 NCIPLOT:
-    EXEFOLDER: ~/bin/nciplot
-    LOCAL_RUN: False  # local run True to use serial_command
-    SCRATCH: True  # set scratch to True to run in scratch folder
-    CONDA_ENV: |   # program-specific conda env
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda activate ~/miniconda3/envs/chemsmart
+    EXEFOLDER: null
+    LOCAL_RUN: true
+    SCRATCH: true
+    CONDA_ENV: |
+        # Activate the NCIPLOT environment when required.
     MODULES: |
-        module purge
+        # Load host modules when required.
     ENVARS: |
-        export SCRATCH=~/scratch  # required if scratch is true
-        export NCIPLOT_HOME=~/bin/nciplot
+        # Define NCIPLOT_HOME and scratch for this host.

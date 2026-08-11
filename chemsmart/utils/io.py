@@ -3,7 +3,7 @@ Input/output utility functions for molecular structure processing.
 
 This module provides helper functions for creating molecule objects,
 cleaning duplicate structures, and text processing operations commonly
-used in computational chemistry file I/O operations.
+used in computational chemistry file I/O.
 
 Key functionality includes:
 - Molecule object creation from coordinate data
@@ -31,6 +31,7 @@ from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
 
+
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 PROGRAM_INFO = {
@@ -57,10 +58,24 @@ PROGRAM_INFO = {
             "Your ORCA version",
             "ORCA versions",
         ],
-        "suffixes": [".out"],
+        "suffixes": [".out", ".log"],
     },
     "xtb": {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
+        "suffixes": [".out"],
+    },
+    "pyscf": {
+        # "ChemSmart PySCF driver" is the second line of the generated
+        # driver script, which PySCF echoes into the log before anything
+        # else. It is listed first because PySCF's own "PySCF version"
+        # banner is printed *after* that echo, and a large molecule can push
+        # it past the 200-line window this detection reads. The native
+        # banners still match a hand-run PySCF log.
+        "keywords": [
+            "ChemSmart PySCF driver",
+            "PySCF version",
+            "PySCF path",
+        ],
         "suffixes": [".out"],
     },
 }
@@ -70,6 +85,11 @@ ALL_SUFFIXES = tuple(
 )
 # Folder-level detection is currently supported only for these programs
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
+
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))
 
 
 def create_molecule_list(
@@ -339,12 +359,31 @@ def get_program_type_from_file(filepath):
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name ("gaussian", "orca", "xtb", "crest") or "unknown"
-             if the format cannot be detected.
+        str: Program name ("gaussian", "orca", "xtb", "crest", "pyscf")
+             or "unknown" if the format cannot be detected.
     """
+    if os.path.splitext(os.fspath(filepath))[1].lower() == ".h5":
+        try:
+            import h5py
+
+            with h5py.File(filepath, "r") as handle:
+                version = handle.attrs.get("schema_version")
+                if isinstance(version, bytes):
+                    version = version.decode("utf-8")
+                required = {"spec", "provenance", "status", "results"}
+                if str(version) in {"1.0", "2.0"} and required.issubset(
+                    handle.keys()
+                ):
+                    return "pyscf"
+        except (ImportError, OSError, TypeError, ValueError):
+            logger.debug(
+                "Could not identify HDF5 artifact '%s' as PySCF.", filepath
+            )
+        return "unknown"
+
     max_lines = 200
     try:
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for i, line in enumerate(f):
                 if i >= max_lines:
                     break
@@ -367,13 +406,38 @@ def get_program_type_from_file(filepath):
     return "unknown"
 
 
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.datasets import (
+        discover_pka_output_path,
+        pka_output_basename_from_path,
+    )
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
+
+
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
     supported in CHEMMART."""
-    if program_name.lower() not in {"gaussian", "orca", "xtb"}:
+    if program_name.lower() not in {"gaussian", "orca", "pyscf", "xtb"}:
         raise ValueError(
             f"Unsupported program '{program_name}' for thermochemistry.\n"
-            f"Please choose one of ['gaussian', 'orca', 'xtb']."
+            "Please choose one of ['gaussian', 'orca', 'pyscf', 'xtb']."
         )
 
 

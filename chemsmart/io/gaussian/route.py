@@ -1,4 +1,5 @@
 import logging
+import re
 
 from chemsmart.io.gaussian import (
     GAUSSIAN_AB_INITIO,
@@ -14,6 +15,121 @@ from chemsmart.io.gaussian import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+GAUSSIAN_EMPIRICAL_DISPERSIONS = frozenset({"pfd", "gd2", "gd3", "gd3bj"})
+
+
+def normalize_gaussian_dispersion(value):
+    """Return the Gaussian-native empirical-dispersion value."""
+
+    if value is None:
+        return None
+    literal = str(value).strip().lower()
+    if literal.startswith("empiricaldispersion="):
+        literal = literal.split("=", 1)[1].strip()
+    aliases = {
+        "d2": "gd2",
+        "d3": "gd3",
+        "d3zero": "gd3",
+        "d3bj": "gd3bj",
+    }
+    literal = aliases.get(literal, literal)
+    if not literal or not re.fullmatch(r"[a-z0-9_-]+", literal):
+        raise ValueError(f"Invalid Gaussian dispersion literal: {value!r}")
+    if literal not in GAUSSIAN_EMPIRICAL_DISPERSIONS:
+        supported = ", ".join(sorted(GAUSSIAN_EMPIRICAL_DISPERSIONS))
+        raise ValueError(
+            f"Unsupported Gaussian dispersion {value!r}; supported: {supported}"
+        )
+    return literal
+
+
+def split_gaussian_dispersion_tokens(route_text):
+    """Remove route-level dispersion tokens and return their one meaning."""
+
+    if route_text is None:
+        return None, None
+    original = str(route_text)
+    retained = []
+    observed = []
+    for token in original.split():
+        if token.lower().startswith("empiricaldispersion="):
+            observed.append(normalize_gaussian_dispersion(token))
+        else:
+            retained.append(token)
+    if not observed:
+        return original, None
+    if len(set(observed)) != 1:
+        raise ValueError(
+            "Conflicting Gaussian EmpiricalDispersion declarations: "
+            + ", ".join(observed)
+        )
+    return " ".join(retained), observed[0]
+
+
+_FUNCTIONAL_SUFFIX_DISPERSION = (
+    ("d3zero", "gd3"),
+    ("d3bj", "gd3bj"),
+    ("d3", "gd3"),
+    ("d2", "gd2"),
+)
+
+
+def split_gaussian_functional_dispersion_shorthand(functional):
+    """Split a common ``functional-Dn`` shorthand into native settings."""
+
+    if functional is None:
+        return None, None
+    layers = str(functional).split(":")
+    for layer in layers[1:]:
+        lowered_layer = layer.lower()
+        if any(
+            lowered_layer.endswith(f"-{suffix}")
+            for suffix, _dispersion in _FUNCTIONAL_SUFFIX_DISPERSION
+        ):
+            raise ValueError(
+                "Gaussian dispersion shorthand is supported only on the "
+                "first functional layer"
+            )
+    first = layers[0]
+    lowered = first.lower()
+    for suffix, dispersion in _FUNCTIONAL_SUFFIX_DISPERSION:
+        marker = f"-{suffix}"
+        if lowered.endswith(marker):
+            without_shorthand = first[: -len(marker)]
+            lowered_without = without_shorthand.lower()
+            if any(
+                lowered_without.endswith(f"-{other_suffix}")
+                for other_suffix, _other_dispersion
+                in _FUNCTIONAL_SUFFIX_DISPERSION
+            ):
+                raise ValueError(
+                    "Multiple Gaussian functional dispersion shorthands "
+                    "are not allowed"
+                )
+            layers[0] = without_shorthand
+            return ":".join(layers), dispersion
+    return functional, None
+
+
+def gaussian_functional_without_dispersion_shorthand(functional, dispersion):
+    """Strip only the parser shorthand bound to the same dispersion."""
+
+    if functional is None or dispersion is None:
+        return functional
+    native_dispersion = normalize_gaussian_dispersion(dispersion)
+    without_shorthand, shorthand_dispersion = (
+        split_gaussian_functional_dispersion_shorthand(functional)
+    )
+    if shorthand_dispersion is not None:
+        if shorthand_dispersion != native_dispersion:
+            raise ValueError(
+                "Gaussian functional dispersion shorthand conflicts with "
+                f"dispersion={native_dispersion}"
+            )
+        return without_shorthand
+    return functional
 
 
 class GaussianRoute:
@@ -122,6 +238,13 @@ class GaussianRoute:
         return basis
 
     @property
+    def dispersion(self):
+        """Extract the independent empirical-dispersion setting."""
+
+        _, dispersion = split_gaussian_dispersion_tokens(self.route_string)
+        return dispersion
+
+    @property
     def method(self):
         """
         Extract the computational method (functional or ab initio).
@@ -209,22 +332,28 @@ class GaussianRoute:
         """
         Extract job type from route specification.
         """
-        # get job type: opt/ts/sp/ircf/ircr
-        if "ts" in self.route_string:
+        # Match whole route keywords and resolve IRC before TS.  A raw
+        # substring check misclassified ``maxpoints`` in every IRC route as
+        # the two letters ``ts``.
+        if "irc" in self.route_string and "forward" in self.route_string:
+            jobtype = "ircf"
+        elif "irc" in self.route_string and "reverse" in self.route_string:
+            jobtype = "ircr"
+        elif re.search(r"(?<![a-z0-9_])irc(?![a-z0-9_])", self.route_string):
+            jobtype = "irc"
+        elif re.search(r"(?<![a-z0-9_])ts(?![a-z0-9_])", self.route_string):
             jobtype = "ts"
         elif (
             "opt" in self.route_string
-            and "ts" not in self.route_string
+            and not re.search(
+                r"(?<![a-z0-9_])ts(?![a-z0-9_])", self.route_string
+            )
             and "modred" not in self.route_string
             and "stable=opt" not in self.route_string
         ):
             jobtype = "opt"
         elif "opt=modred" in self.route_string:
             jobtype = "modred"  # would include scan jobs too
-        elif "irc" in self.route_string and "forward" in self.route_string:
-            jobtype = "ircf"
-        elif "irc" in self.route_string and "reverse" in self.route_string:
-            jobtype = "ircr"
         elif "output=wfn" in self.route_string:
             jobtype = "nci"
         elif (
@@ -361,7 +490,10 @@ class GaussianRoute:
                 if "empiricaldispersion" in each_input:
                     dispersion = each_input
                 if (
-                    any(basisset in each_input for basisset in GAUSSIAN_BASES)
+                    any(
+                        each_input.startswith(basisset)
+                        for basisset in GAUSSIAN_BASES
+                    )
                     and "generic" not in each_input
                 ):
                     basis = each_input

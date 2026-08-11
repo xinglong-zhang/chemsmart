@@ -10,12 +10,7 @@ from chemsmart.utils.utils import search_file
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
 
-# Only set up default console logging on import when nothing else has
-# configured logging yet — otherwise this clobbers handlers already
-# attached to root by upstream callers (e.g. the agent's quiet-mode
-# silencer). See ``create_logger``: ``logger.handlers = []``.
-if not logging.getLogger().handlers:
-    create_logger()
+create_logger()
 
 
 class FileOrganizer:

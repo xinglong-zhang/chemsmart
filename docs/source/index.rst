@@ -6,15 +6,23 @@
    :width: 400
    :align: center
 
-CHEMSMART is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
-files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, and other computational
-chemistry software.
+CHEMSMART is the canonical command-line and project-YAML hub for automating
+computational-chemistry workflows across Gaussian, ORCA, PySCF, xTB, and
+related tools. It centralizes scientific configuration, backend input
+generation, local or scheduled execution, and result inspection so users and
+agents can operate supported programs through one transparent interface.
+
+The provider-neutral ``chemsmart agent plan`` and ``chemsmart agent run``
+entrypoints use the same project loaders and command compiler. Models propose
+typed scientific intent; CHEMSMART owns executable commands, approvals,
+execution state, and deterministic validation.
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
    introduction
+   installation-ubuntu-cpu-server
    installation-linux-macos
    installation-windows-wsl
    installation-windows-gitbash
@@ -36,6 +44,7 @@ chemistry software.
    :caption: CLI Reference
 
    cli-overview
+   agent-workflows
    molecule-input-formats
    chemdraw-organometallic
 
@@ -62,22 +71,18 @@ chemistry software.
    orca-direct-input
    orca-multiscale-calculations
 
-..
-   .. toctree::
-
-..
+.. toctree::
    :maxdepth: 2
+   :caption: PySCF and xTB Jobs
 
-..
-   :caption: ITERATE
+   pyscf-cli-options
+   xtb-cli-options
 
-..
+.. toctree::
+   :maxdepth: 2
+   :caption: pKa Calculations
 
-..
-   iterate-cli-options
-
-..
-   iterate-structure-generation
+   pka-calculations
 
 .. toctree::
    :maxdepth: 2
@@ -85,17 +90,23 @@ chemistry software.
 
    thermochemistry-analysis
 
-..
-   .. toctree::
-      :maxdepth: 2
-      :caption: Database
+.. toctree::
+   :maxdepth: 2
+   :caption: Molecular Database
 
-      database-overview
-      database-assemble
-      database-query
-      database-inspect
-      database-export
-      database-workflow
+   database-overview
+   database-workflow
+   database-assemble
+   database-inspect
+   database-query
+   database-export
+
+.. toctree::
+   :maxdepth: 2
+   :caption: ITERATE Workflows
+
+   iterate-cli-options
+   iterate-structure-generation
 
 .. toctree::
    :maxdepth: 2
@@ -107,24 +118,12 @@ chemistry software.
    pymol-electronic-structure
    pymol-interaction-analysis
 
-..
-   .. toctree::
-
-..
+.. toctree::
    :maxdepth: 2
-
-..
    :caption: Grouper Tool
 
-..
-
-..
    grouper-cli-options
-
-..
    grouper-strategies
-
-..
    grouper-crest-or-traj-workflow
 
 .. toctree::

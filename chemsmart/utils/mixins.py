@@ -90,7 +90,7 @@ class FileMixin:
         Returns:
             list: List of strings, each representing a line from the file.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
@@ -101,7 +101,7 @@ class FileMixin:
         Returns:
             str: Complete file contents as a single string.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return f.read()
 
     @cached_property
@@ -401,6 +401,55 @@ class FileMixin:
             return self.beta_lumo_energy - self.beta_homo_energy
         else:
             return None
+
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
 
 
 class GaussianFileMixin(FileMixin):
@@ -761,6 +810,12 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def dispersion(self):
+        """Get the independently parsed Gaussian dispersion setting."""
+
+        return self.route_object.dispersion
+
+    @property
     def method(self):
         """Get the computational method from route string."""
         return self.route_object.method
@@ -901,6 +956,7 @@ class GaussianFileMixin(FileMixin):
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
+            dispersion=self.dispersion,
             basis=self.basis,
             semiempirical=self.semiempirical,
             charge=self.charge,
@@ -984,6 +1040,9 @@ class ORCAFileMixin(FileMixin):
         Returns:
             str or None: MDCI cutoff value or None if not found.
         """
+        route_value = self.route_object.mdci_cutoff
+        if route_value is not None:
+            return route_value
         for i, line in enumerate(self.contents):
             if "%mdci" in line.lower():
                 # mdci cutoff in %mdci block
@@ -1185,6 +1244,12 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.ab_initio
 
     @property
+    def semiempirical(self):
+        """Get the parsed ORCA semiempirical or native xTB method."""
+
+        return self.route_object.semiempirical
+
+    @property
     def method(self):
         """Get the computational method from ORCA route string."""
         return self.route_object.method
@@ -1255,6 +1320,17 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.defgrid
 
     @property
+    def ri_approximation(self):
+        """Get the requested resolution-of-identity mode from the ORCA route.
+
+        The project setting is emitted as a simple route keyword.  Preserve
+        the parsed value when reconstructing :class:`ORCAJobSettings` so the
+        generated-input validator observes the same setting that ChemSmart
+        materialized.
+        """
+        return self.route_object.ri_approximation
+
+    @property
     def scf_tol(self):
         """
         Get SCF convergence tolerance from ORCA route.
@@ -1281,6 +1357,24 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.scf_algorithm
 
     @property
+    def reference(self):
+        """Read the determinant choice written in an ORCA ``%scf`` block."""
+
+        from chemsmart.jobs.orca.settings import ORCA_REFERENCE_DETERMINANTS
+
+        by_keyword = {
+            keyword.casefold(): name
+            for name, keyword in ORCA_REFERENCE_DETERMINANTS.items()
+        }
+        for raw_line in self.contents:
+            fields = raw_line.split("#", 1)[0].split()
+            for index, field in enumerate(fields[:-1]):
+                if field.casefold() != "hftyp":
+                    continue
+                return by_keyword.get(fields[index + 1].casefold())
+        return None
+
+    @property
     def jobtype(self):
         """
         Get job type from ORCA route string.
@@ -1291,7 +1385,14 @@ class ORCAFileMixin(FileMixin):
         Returns:
             str: Job type specification.
         """
-        return self.route_object.jobtype
+        route_jobtype = self.route_object.jobtype
+        # A fixed-geometry ORCA TD calculation has no simple-input ``TD``
+        # keyword: the calculation is activated by a %tddft/%cis block, so the
+        # route alone looks like an SP.  Preserve explicit structural jobs
+        # such as Opt/OptTS, but classify a block-driven single point as TD.
+        if route_jobtype == "sp" and self._orca_tddft_values:
+            return "td"
+        return route_jobtype
 
     @property
     def freq(self):
@@ -1319,6 +1420,118 @@ class ORCAFileMixin(FileMixin):
         """
         return self.route_object.numfreq
 
+    @property
+    def vpt2(self):
+        """Return whether the ORCA input requests VPT2."""
+
+        if self.route_object.vpt2:
+            return True
+        in_block = False
+        for raw_line in self.contents:
+            line = raw_line.split("#", 1)[0].strip().casefold()
+            if line.startswith("%vpt2"):
+                in_block = True
+                continue
+            if in_block and line == "end":
+                break
+            if in_block and line.split()[:2] == ["vpt2", "on"]:
+                return True
+        return False
+
+    def _vpt2_float(self, keyword):
+        in_block = False
+        for raw_line in self.contents:
+            line = raw_line.split("#", 1)[0].strip()
+            folded = line.casefold()
+            if folded.startswith("%vpt2"):
+                in_block = True
+                continue
+            if in_block and folded == "end":
+                break
+            fields = line.split()
+            if in_block and len(fields) >= 2 and fields[0].casefold() == keyword:
+                return float(fields[1])
+        return None
+
+    @property
+    def vpt2_anharmonic_displacement(self):
+        return self._vpt2_float("anharmdisp")
+
+    @property
+    def vpt2_hessian_cutoff(self):
+        return self._vpt2_float("hessiancutoff")
+
+    @cached_property
+    def _orca_tddft_values(self):
+        """Read the last echoed or native %tddft/%cis input block.
+
+        ORCA output prefixes the original input with ``| n>``.  Stripping only
+        that presentation prefix keeps input and output parsing on one
+        semantic path and avoids searching unrelated TD-DFT diagnostic text.
+        """
+
+        blocks = []
+        current = None
+        echo_pattern = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo_pattern.match(stripped)
+            if match is not None:
+                stripped = match.group(1).strip()
+            stripped = stripped.split("#", 1)[0].strip()
+            if not stripped:
+                continue
+            fields = stripped.split()
+            first = fields[0].casefold()
+            if first in {"%tddft", "%cis"}:
+                current = []
+                blocks.append(current)
+                fields = fields[1:]
+            if current is None:
+                continue
+            for field in fields:
+                if field.casefold() == "end":
+                    current = None
+                    break
+                current.append(field)
+
+        if not blocks:
+            return {}
+        fields = blocks[-1]
+        values = {}
+        for index, field in enumerate(fields[:-1]):
+            key = field.casefold()
+            if key in {"nroots", "tda", "triplets"}:
+                values[key] = fields[index + 1]
+        return values
+
+    @property
+    def response_method(self):
+        values = self._orca_tddft_values
+        if not values:
+            return None
+        # TDA is ORCA's default.  It must be explicitly disabled for full
+        # linear-response TD-DFT.
+        tda = str(values.get("tda", "true")).strip().casefold()
+        return "tddft" if tda in {"false", "0", "no", "off"} else "tda"
+
+    @property
+    def nstates(self):
+        value = self._orca_tddft_values.get("nroots")
+        return None if value is None else int(value)
+
+    @property
+    def state_manifold(self):
+        if not self._orca_tddft_values:
+            return None
+        triplets = str(
+            self._orca_tddft_values.get("triplets", "false")
+        ).strip().casefold()
+        if triplets in {"true", "1", "yes", "on"}:
+            # ORCA includes spin-adapted triplets in addition to singlets.
+            return "singlet_triplet"
+        return "singlet"
+
     def read_settings(self):
         """
         Create ORCAJobSettings from file parameters.
@@ -1335,20 +1548,31 @@ class ORCAFileMixin(FileMixin):
         return ORCAJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
+            semiempirical=self.semiempirical,
             dispersion=self.dispersion,
             basis=self.basis,
             aux_basis=self.aux_basis,
             extrapolation_basis=self.extrapolation_basis,
             defgrid=self.defgrid,
+            ri_approximation=self.ri_approximation,
             scf_tol=self.scf_tol,
             scf_algorithm=self.scf_algorithm,
             scf_maxiter=self.scf_maxiter,
             scf_convergence=self.scf_convergence,
+            reference=self.reference,
             charge=self.charge,
             multiplicity=self.multiplicity,
             gbw=dv.gbw,
             freq=self.freq,
             numfreq=self.numfreq,
+            vpt2=self.vpt2,
+            vpt2_anharmonic_displacement=(
+                self.vpt2_anharmonic_displacement
+            ),
+            vpt2_hessian_cutoff=self.vpt2_hessian_cutoff,
+            response_method=self.response_method,
+            nstates=self.nstates,
+            state_manifold=self.state_manifold,
             dipole=self.dipole,
             quadrupole=self.quadrupole,
             mdci_cutoff=self.mdci_cutoff,

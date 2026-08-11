@@ -240,6 +240,8 @@ Examples:
    # Add route parameters
    chemsmart sub gaussian -p test -f molecule.com -r nosymm opt
 
+.. _gaussian-cli-options:solvent options:
+
 Solvent Options
 ===============
 

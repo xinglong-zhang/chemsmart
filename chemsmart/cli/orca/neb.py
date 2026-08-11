@@ -5,6 +5,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.io.orca import ORCA_NEB_JOBOPTIONS
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -15,18 +16,7 @@ logger = logging.getLogger(__name__)
     "-j",
     "--joboption",
     type=click.Choice(
-        [
-            "NEB",
-            "NEB-CI",
-            "NEB-TS",
-            "FAST-NEB-TS",
-            "TIGHT-NEB-TS",
-            "LOOSE-NEB",
-            "ZOOM-NEB",
-            "ZOOM-NEB-CI",
-            "ZOOM-NEB-TS",
-            "NEB-IDPP",
-        ],
+        ORCA_NEB_JOBOPTIONS,
         case_sensitive=False,
     ),
     help="NEB calculation type (e.g., NEB-TS for transition state search).",
@@ -57,11 +47,12 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-o",
-    "--pre-optimization",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Whether to optimize the input geometries.",
+    "--pre-optimization/--no-pre-optimization",
+    default=None,
+    help=(
+        "Override whether to optimize the endpoint geometries; when omitted, "
+        "retain the project YAML value."
+    ),
 )
 @click.option(
     "-s",
@@ -158,8 +149,8 @@ def neb(
         neb_settings.intermediate_xyzfile = intermediate_xyzfile
     if restarting_xyzfile:
         neb_settings.restarting_xyzfile = restarting_xyzfile
-    # Always set pre_optimization since it's now a proper boolean flag
-    neb_settings.preopt_ends = pre_optimization
+    if pre_optimization is not None:
+        neb_settings.preopt_ends = pre_optimization
     if semiempirical:
         neb_settings.semiempirical = semiempirical
 

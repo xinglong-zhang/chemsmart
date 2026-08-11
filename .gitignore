@@ -6,6 +6,8 @@ __pycache__/
 .idea/*
 *.idea/
 *.idea/*
+*.vscode/
+*.vscode/*
 
 
 # C extensions
@@ -140,14 +142,23 @@ dmypy.json
 .DS_Store
 .idea/
 
-# Agent QA / benchmark / evaluation reports (local only, not for version control)
+# Local agent research and diagnostic outputs. Maintained user documentation
+# belongs in docs/source; experiment transcripts and one-off reviews do not.
+docs/design/
+docs/research/
+docs/review/
+docs/validation/
+docs/evaluation/
+docs/goals/
+docs/maintenance/
+benchmarks/
+agent-runs/
 qa_*.md
 expert_review*.md
 frontier_improvement_plan.md
-agent_qa_report*.md
-benchmarks/
-api.env
 
-# Generated Gaussian/ORCA input files at repo root (agent dry-run artifacts)
+# Provider credentials and root-level generated chemistry previews.
+api.env
 /*.com
-/*.inp
+/*_fake.inp
+/*_fake.out

@@ -1,4 +1,0 @@
-# conda environments:
-#
-base                  /opt/miniforge3
-chemsmart             /opt/miniforge3/envs/chemsmart

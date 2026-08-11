@@ -1,10 +1,10 @@
-# xTB Examples
+# xTB CPU examples
 
-Small XYZ inputs for xTB job submission smoke tests. These examples exercise
-the same xTB job creation path used by `run` and `sub`; fake runs do not need
-the external `xtb` executable.
+These small, fixed XYZ files exercise ChemSmart's command path without asking
+a model to author native xTB input. The `test` project uses GFN2-xTB and the
+project loader rejects unknown sections or settings.
 
-Fake local generation checks:
+Safe fake local previews:
 
 ```bash
 chemsmart run --fake --no-scratch xtb -p test -f examples/xtb/water.xyz sp
@@ -12,22 +12,28 @@ chemsmart run --fake --no-scratch xtb -p test -f examples/xtb/water.xyz opt
 chemsmart run --fake --no-scratch xtb -p test -f examples/xtb/methane.xyz hess
 ```
 
-Submission-script generation without queue submission:
+Submission-script previews (no scheduler submission):
 
 ```bash
-chemsmart sub -s path/to/server.yaml --test xtb -p test -f examples/xtb/water.xyz sp
-chemsmart sub -s path/to/server.yaml --test xtb -p test -f examples/xtb/water.xyz opt
-chemsmart sub -s path/to/server.yaml --test xtb -p test -f examples/xtb/methane.xyz hess
+chemsmart sub -s configured_server --test --fake xtb -p test -f examples/xtb/water.xyz sp
+chemsmart sub -s configured_server --test --fake xtb -p test -f examples/xtb/water.xyz opt
+chemsmart sub -s configured_server --test --fake xtb -p test -f examples/xtb/methane.xyz hess
 ```
 
-If `xtb` is available on `PATH` or configured under the server `XTB` section,
-one small real smoke test can be run with:
+Real execution is a separate approval boundary. The runner resolves `xtb` from
+the configured server block or `PATH`, uses argv rather than shell syntax, and
+refuses to overwrite stale output artifacts.
+
+After qualifying xTB on the target CPU server, run one small job at a time:
 
 ```bash
-chemsmart run --no-scratch xtb -p test -f examples/xtb/water.xyz -l water_real_sp sp
-chemsmart run --no-scratch xtb -p test -f examples/xtb/water.xyz -l water_real_hess hess
+xtb --version
+chemsmart run --no-scratch -n 1 xtb \
+  -p test -f examples/xtb/water.xyz sp
+chemsmart run --no-scratch -n 1 xtb \
+  -p test -f examples/xtb/water.xyz opt
 ```
 
-Expected generated artifacts are per-label folders containing the copied
-`<label>.xyz`, `<label>.out`, and transient `<label>.err` files for local runs;
-`sub --test` also writes scheduler/run scripts without submitting to the queue.
+Confirm the selected GFN method, charge, multiplicity, atom order, normal
+termination, energy and optimized geometry before increasing resources or
+using the result in a downstream Hessian or thermochemistry workflow.

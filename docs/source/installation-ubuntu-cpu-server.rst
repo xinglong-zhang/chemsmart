@@ -1,0 +1,231 @@
+Ubuntu x86 CPU Server Setup
+###########################
+
+This page describes the reference deployment path for real CHEMSMART benchmark
+work on an x86-64 Ubuntu CPU server. It separates the CHEMSMART controller from
+external chemistry programs and introduces real execution in stages.
+
+CHEMSMART does not distribute Gaussian, ORCA, xTB, NCIPLOT, PySCF, MPI, or
+provider credentials. Install and license each required backend separately.
+
+Recommended host baseline
+=========================
+
+- Ubuntu 22.04 or 24.04 on x86-64;
+- at least 8 CPU cores and 32 GB RAM for small benchmark molecules;
+- local SSD scratch space sized for the selected methods;
+- outbound HTTPS for package installation and authorised model providers; and
+- a non-root account for all calculations.
+
+Large post-HF, numerical Hessian, IRC, NEB, or conformer workflows may require
+substantially more memory, time, and scratch space. Resource requirements are
+part of the scientific plan, not universal defaults.
+
+System packages
+===============
+
+.. code-block:: bash
+
+   sudo apt-get update
+   sudo apt-get install -y build-essential ca-certificates curl git \
+     libegl1 libgl1 libsm6 libxext6 libxrender1
+
+Install Miniforge, Mambaforge, Miniconda, or Anaconda for Linux x86-64 if the
+host does not already provide Conda.
+
+Install the CHEMSMART controller
+================================
+
+.. code-block:: bash
+
+   git clone https://github.com/Hongjiseung-ROK/chemsmart.git
+   cd chemsmart
+   make env
+   conda activate chemsmart
+   make install-dev
+   make configure
+
+The repository requires Python 3.10. ``make env`` uses ``environment.yml``;
+``make configure`` creates local configuration under ``~/.chemsmart``. Never
+commit that directory because it contains host paths and scheduler settings.
+
+Verify the controller before configuring engines:
+
+.. code-block:: bash
+
+   chemsmart --version
+   chemsmart --help
+   chemsmart run --help
+   chemsmart agent --help
+
+Configure a local CPU server file
+=================================
+
+Start from the generated ``~/.chemsmart/server/local.yaml`` and replace every
+example path with a path observed on the server. A minimal shape is:
+
+.. code-block:: yaml
+
+   SERVER:
+     SCHEDULER: null
+     QUEUE_NAME: null
+     NUM_HOURS: 1
+     MEM_GB: 32
+     NUM_CORES: 4
+     NUM_GPUS: 0
+     NUM_THREADS: 4
+     SUBMIT_COMMAND: null
+     SCRATCH_DIR: /scratch/USER/chemsmart
+     USE_HOSTS: false
+
+   ORCA:
+     EXEFOLDER: /opt/orca
+     LOCAL_RUN: true
+     SCRATCH: true
+     ENVARS: |
+       export PATH=/opt/openmpi/bin:$PATH
+       export LD_LIBRARY_PATH=/opt/openmpi/lib:$LD_LIBRARY_PATH
+
+   XTB:
+     EXEFOLDER: /opt/xtb/bin
+     LOCAL_RUN: true
+     SCRATCH: true
+
+   PYSCF:
+     EXEFOLDER: /opt/conda/envs/chemsmart-pyscf/bin
+     LOCAL_RUN: true
+     SCRATCH: false
+
+Use the actual username or a user-owned path in ``SCRATCH_DIR``. Do not paste
+``USER`` literally. Create the directory and verify write permission before
+execution.
+
+ORCA and MPI compatibility
+==========================
+
+Install ORCA from its authorised distribution. Parallel ORCA builds require a
+compatible MPI implementation; a binary linked to Open MPI must not be launched
+with MPICH tools. Check the binary and launcher on the target server:
+
+.. code-block:: bash
+
+   /opt/orca/orca --version
+   /opt/openmpi/bin/mpirun --version
+   ldd /opt/orca/orca | grep -i mpi
+
+First qualify ORCA with one core. Increase the core count only after serial
+normal termination, parsing, and a small parallel calculation are all green.
+A zero process exit status is not enough; CHEMSMART also checks ORCA's normal
+termination and job-specific convergence.
+
+xTB CPU backend
+===============
+
+Install the maintained xTB release in a dedicated program environment or a
+server-managed location. Confirm the exact executable that server YAML selects:
+
+.. code-block:: bash
+
+   /opt/xtb/bin/xtb --version
+
+The maintained CHEMSMART xTB surface is CPU ``sp``, ``opt``, and ``hess``.
+Unknown native features are not silently added to generated commands.
+
+PySCF CPU compute environment
+=============================
+
+PySCF is a Python library backend. Keep its compute interpreter separate from
+the controller when binary or scientific dependencies differ:
+
+.. code-block:: bash
+
+   conda create -n chemsmart-pyscf python=3.10 pip -y
+   conda activate chemsmart-pyscf
+   python -m pip install \
+     "pyscf==2.14.0" "h5py>=3.10,<4" "numpy<2" \
+     "geometric==1.1.0" "pyscf-dispersion==1.5.0"
+   python -c "import h5py, pyscf; print(pyscf.__version__, h5py.__version__)"
+
+Point ``PYSCF.EXEFOLDER`` at this environment's ``bin`` directory. CHEMSMART
+generates a standalone Python calculation and reads its structured HDF5 result;
+the compute environment does not need to import the CHEMSMART source tree.
+
+GPU4PySCF requires a separately qualified NVIDIA/CUDA stack. It is outside the
+CPU benchmark path and must never be selected as an automatic fallback.
+
+Staged server qualification
+===========================
+
+Run stages in order and stop on the first scientific or environment failure.
+
+1. **Controller and schema**
+
+   .. code-block:: bash
+
+      chemsmart --version
+      chemsmart run orca --help
+      chemsmart run pyscf --help
+      chemsmart run xtb --help
+
+2. **Program-free previews**
+
+   .. code-block:: bash
+
+      chemsmart run --fake --no-scratch xtb \
+        -p test -f examples/xtb/water.xyz sp
+      chemsmart run --fake --no-scratch orca \
+        -p test -f examples/xtb/water.xyz sp
+      chemsmart run --fake --no-scratch pyscf \
+        -p test -f examples/xtb/water.xyz sp
+
+3. **Small real single points**
+
+   Execute one backend at a time with one core and a small closed-shell
+   molecule. Inspect generated input, selected program version, normal
+   termination, parsed energy, charge, multiplicity, atom order and units.
+
+4. **Geometry and frequencies**
+
+   Qualify OPT and HESS/FREQ separately, then verify the downstream frequency
+   calculation consumes the validated optimized geometry.
+
+5. **Advanced workflows**
+
+   Introduce TS, IRC, NEB, numerical derivatives, post-HF composites and
+   thermochemistry only after the underlying methods and resources are known to
+   work on this host.
+
+6. **Agent benchmark**
+
+   Run ``chemsmart agent plan`` first. Permit real engine execution only through
+   the normal approval and runner path after reviewing the generated YAML and
+   preview.
+
+Provider configuration
+======================
+
+Keep provider profiles in ``~/.chemsmart/agent/agent.yaml`` and credentials in
+a permission-restricted file outside the repository. The secret assignment
+file is parsed as data and must never be sourced or committed.
+
+.. code-block:: bash
+
+   chmod 600 /secure/path/api.env
+   chemsmart agent plan \
+     --provider PROFILE \
+     --task-file task.md \
+     --secret-file /secure/path/api.env \
+     --workspace ./agent-workspace
+
+See :doc:`agent-workflows` for the scientific and execution boundary.
+
+Scheduler hosts
+===============
+
+For SLURM, PBS/Torque, or LSF, create a separate server YAML and use
+``chemsmart sub``. Generate a script with ``--test`` before any submission.
+Scheduler modules, accounts, queues, wall time and scratch policy are host
+facts and must be confirmed with the administrator.
+
+See :doc:`installation-hpc-cluster` and
+:doc:`configuration-server-settings` for the submission model.

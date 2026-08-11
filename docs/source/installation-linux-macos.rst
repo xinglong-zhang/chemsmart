@@ -4,6 +4,10 @@
 
 This guide covers installing CHEMSMART on Linux and macOS systems.
 
+For a headless x86-64 Ubuntu benchmark server, use the staged instructions in
+:doc:`installation-ubuntu-cpu-server`. The steps below cover general developer
+and workstation installation.
+
 ********************
  Create Environment
 ********************
@@ -16,7 +20,7 @@ more information.
 
    .. code:: bash
 
-      git clone https://github.com/xinglong-zhang/chemsmart.git
+      git clone https://github.com/Hongjiseung-ROK/chemsmart.git
 
 #. Change to the chemsmart directory and create the environment:
 

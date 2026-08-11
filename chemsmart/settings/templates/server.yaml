@@ -52,17 +52,31 @@ ORCA:
         export PATH=~/programs/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 
+PYSCF:
+    # PySCF is a Python library, not a binary, so EXEFOLDER names the bin/ of
+    # the environment that has PySCF installed and the "executable" is its
+    # python interpreter. Omit EXEFOLDER entirely to use the same interpreter
+    # ChemSmart is running in, which is correct when PySCF shares its env.
+    #
+    # Point this at a CUDA environment to run GPU4PySCF jobs (--gpu) without
+    # putting cupy into ChemSmart's own env, whose numpy is pinned to 1.x by
+    # rdkit and pymol.
+    # EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin
+    LOCAL_RUN: True
+    SCRATCH: False  # a PySCF job writes three small files; scratch adds no value
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+
 XTB:
-    EXEFOLDER: null  # use xtb from activated conda environment/PATH
+    # xTB is an external executable. Set EXEFOLDER to its containing bin/
+    # directory, or omit it to resolve an existing binary from PATH.
+    # EXEFOLDER: ~/bin
     LOCAL_RUN: True
     SCRATCH: True
     CONDA_ENV: |
-        source ~/anaconda3/etc/profile.d/conda.sh
-        conda activate ~/anaconda3/envs/chemsmart
-    MODULES: null
-    SCRIPTS: null
-    ENVARS: |
-        export SCRATCH=~/scratch
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot

@@ -11,6 +11,8 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca.settings import (
+    ORCA_FROZEN_CORE_POLICIES,
+    ORCA_REFERENCE_DETERMINANTS,
     ORCAIRCJobSettings,
     ORCANEBJobSettings,
     ORCAQMMMJobSettings,
@@ -99,6 +101,35 @@ class ORCAInputWriter(InputWriter):
                         f"Copied solventfilename file {file_to_copy} to {dest}."
                     )
 
+        # ORCA's %NEB block intentionally contains basenames so the input is
+        # portable into scratch or a scheduler workspace.  Materialize every
+        # referenced geometry beside the generated input; otherwise a valid
+        # absolute CLI argument is shortened in the input but the file itself
+        # remains elsewhere and a real ORCA run cannot open it.
+        if isinstance(self.job.settings, ORCANEBJobSettings):
+            for field_name in (
+                "ending_xyzfile",
+                "intermediate_xyzfile",
+                "restarting_xyzfile",
+            ):
+                source = getattr(self.job.settings, field_name, None)
+                if source is None:
+                    continue
+                source = os.path.abspath(source)
+                if not os.path.isfile(source):
+                    raise FileNotFoundError(
+                        f"ORCA NEB {field_name} does not exist: {source}"
+                    )
+                destination = os.path.join(folder, os.path.basename(source))
+                if source != os.path.abspath(destination):
+                    shutil.copy2(source, destination)
+                    logger.info(
+                        "Copied ORCA NEB %s file %s to %s.",
+                        field_name,
+                        source,
+                        destination,
+                    )
+
     def _write_all(self, f):
         """
         Write the complete input file with all sections.
@@ -110,7 +141,11 @@ class ORCAInputWriter(InputWriter):
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
+        self._write_basis_block(f)
+        self._write_method_block(f)
         self._write_scf_block(f)
+        self._write_tddft_block(f)
+        self._write_vpt2_block(f)
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
@@ -199,11 +234,93 @@ class ORCAInputWriter(InputWriter):
         """
         logger.debug("Writing SCF block")
 
-        if self.settings.scf_convergence or self.settings.scf_maxiter:
+        reference = getattr(self.settings, "reference", None)
+        if (
+            self.settings.scf_convergence
+            or self.settings.scf_maxiter
+            or reference is not None
+        ):
             f.write("%scf\n")
+            if reference is not None:
+                # The reference determinant is an electronic-structure choice,
+                # not a convergence knob: ROHF/UHF describe an open shell that
+                # RHF cannot represent at all.
+                f.write(f"  HFTyp {ORCA_REFERENCE_DETERMINANTS[reference]}\n")
             self._write_scf_maxiter(f)
             self._write_scf_convergence(f)
             f.write("end\n")
+
+    def _write_tddft_block(self, f):
+        """Write a vertical CIS/TD-DFT request from typed project settings.
+
+        ORCA uses the same ``%tddft`` block for the Tamm-Dancoff
+        approximation and full linear-response TD-DFT.  Keeping the switch in
+        the project settings lets ChemSmart, rather than the model, own the
+        native keyword grammar.
+        """
+
+        if getattr(self.settings, "jobtype", None) != "td":
+            return
+        response_method = getattr(self.settings, "response_method", None)
+        nstates = getattr(self.settings, "nstates", None)
+        state_manifold = getattr(self.settings, "state_manifold", None)
+        if response_method not in {"tda", "tddft"}:
+            raise ValueError(
+                "ORCA td response_method must be 'tda' or 'tddft'"
+            )
+        if nstates is None or int(nstates) <= 0:
+            raise ValueError("ORCA td nstates must be a positive integer")
+        if state_manifold not in {"singlet", "singlet_triplet"}:
+            raise ValueError(
+                "ORCA td supports singlet roots or singlet roots together "
+                "with spin-adapted triplets"
+            )
+        f.write("%tddft\n")
+        f.write(f"  NRoots {int(nstates)}\n")
+        f.write(f"  TDA {'true' if response_method == 'tda' else 'false'}\n")
+        f.write(
+            "  Triplets "
+            f"{'true' if state_manifold == 'singlet_triplet' else 'false'}\n"
+        )
+        f.write("end\n")
+
+    def _write_basis_block(self, f):
+        """Write per-element basis assignments as an ORCA ``%basis`` block.
+
+        The route carries the general basis; elements listed as heavy get an
+        explicit ``NewGTO`` override.  Mixed heavy/light basis sets are routine
+        for transition-metal complexes and for any study that needs a larger
+        set on one centre than on its ligands.
+        """
+
+        heavy_elements = getattr(self.settings, "heavy_elements", None) or ()
+        heavy_basis = getattr(self.settings, "heavy_elements_basis", None)
+        if not heavy_elements or not heavy_basis:
+            return
+        logger.debug("Writing ORCA %basis block")
+        f.write("%basis\n")
+        for element in heavy_elements:
+            f.write(f'  NewGTO {element} "{heavy_basis}" end\n')
+        f.write("end\n")
+
+    def _write_method_block(self, f):
+        """Write the ``%method`` block carrying the frozen-core policy.
+
+        Which orbitals are correlated is part of the method definition; a
+        correlated energy computed with a different core treatment is a
+        different quantity, not a less converged one.
+        """
+
+        frozen_core = getattr(self.settings, "frozen_core", None)
+        if frozen_core is None:
+            return
+        logger.debug("Writing ORCA %method block")
+        f.write("%method\n")
+        f.write(f"  FrozenCore {ORCA_FROZEN_CORE_POLICIES[frozen_core]}\n")
+        electrons = getattr(self.settings, "frozen_core_electrons", None)
+        if electrons is not None:
+            f.write(f"  NCore {int(electrons)}\n")
+        f.write("end\n")
 
     def _write_scf_maxiter(self, f):
         """
@@ -242,6 +359,23 @@ class ORCAInputWriter(InputWriter):
                         f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
                     )
             f.write(f"  convergence {scf_conv}\n")
+
+    def _write_vpt2_block(self, f):
+        """Write the typed ORCA anharmonic vibrational settings."""
+
+        if not getattr(self.settings, "vpt2", False):
+            return
+        f.write("%vpt2\n")
+        f.write("  VPT2 On\n")
+        displacement = getattr(
+            self.settings, "vpt2_anharmonic_displacement", None
+        )
+        if displacement is not None:
+            f.write(f"  AnharmDisp {displacement:g}\n")
+        cutoff = getattr(self.settings, "vpt2_hessian_cutoff", None)
+        if cutoff is not None:
+            f.write(f"  HessianCutoff {cutoff:g}\n")
+        f.write("end\n")
 
     def _write_solvent_block(self, f):
         """
@@ -428,52 +562,24 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If invalid MDCI options are specified
         """
-        mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
 
-        if mdci_cutoff is not None:
-            logger.debug("Writing MDCI block")
-            # check that mdci_cutoff is one of the
-            # allowed values: ["loose", "normal", "tight"]
-            assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
-                "mdci_cutoff must be one of the allowed values: "
-                "['loose', 'normal', 'tight']"
+        # Accuracy presets are emitted on the simple-input line by
+        # ORCAJobSettings.  A %mdci block is needed only for the independent
+        # density request; reproducing a subset of preset thresholds here can
+        # silently override other parts of ORCA's Loose/Normal/TightPNO model.
+        if mdci_density is None:
+            return
+        normalized = str(mdci_density).strip().lower()
+        if normalized not in {"none", "unrelaxed", "relaxed"}:
+            raise ValueError(
+                "mdci_density must be one of "
+                "['none', 'unrelaxed', 'relaxed']"
             )
-            f.write("%mdci\n")
-            if mdci_cutoff.lower() == "loose":
-                f.write("  # loose cutoff\n")
-                f.write("  TCutPairs 1e-3\n")
-                f.write("  TCutPNO 1e-6\n")
-                f.write("  TCutMKN 1e-3\n")
-            elif mdci_cutoff.lower() == "normal":
-                f.write("  # normal cutoff\n")
-                f.write("  TCutPairs 1e-4\n")
-                f.write("  TCutPNO 3.33e-7\n")
-                f.write("  TCutMKN 1e-3\n")
-            elif mdci_cutoff.lower() == "tight":
-                f.write("  # tight cutoff\n")
-                f.write("  TCutPairs 1e-5\n")
-                f.write("  TCutPNO 1e-7\n")
-                f.write("  TCutMKN 1e-4\n")
-
-            if mdci_density is not None:
-                # check that mdci_density is one of the allowed
-                # values: ["none", "unrelaxed", "relaxed"]
-                assert mdci_density.lower() in [
-                    "none",
-                    "unrelaxed",
-                    "relaxed",
-                ], (
-                    "mdci_density must be one of the allowed values: "
-                    "['none', 'unrelaxed', 'relaxed']"
-                )
-                if mdci_density.lower() == "none":
-                    f.write("  Density None  # no density\n")
-                elif mdci_density.lower() == "unrelaxed":
-                    f.write("  Density Unrelaxed  # unrelaxed density\n")
-                elif mdci_density.lower() == "relaxed":
-                    f.write("  Density Relaxed  # relaxed density\n")
-            f.write("end\n")
+        logger.debug("Writing MDCI density block")
+        f.write("%mdci\n")
+        f.write(f"  Density {normalized.capitalize()}\n")
+        f.write("end\n")
 
     def _write_elprop_block(self, f):
         """

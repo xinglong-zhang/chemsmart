@@ -5,6 +5,8 @@ from chemsmart.cli.iterate import iterate
 from chemsmart.cli.mol import mol
 from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
+from chemsmart.cli.pka import pka
+from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.thermochemistry import thermochemistry
 from chemsmart.cli.xtb import xtb
 
@@ -12,9 +14,11 @@ subcommands = [
     gaussian,
     grouper,
     orca,
-    xtb,
+    pka,
     mol,
     nciplot,
+    pyscf,
+    xtb,
     thermochemistry,
     database,
     iterate,

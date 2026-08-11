@@ -1,318 +1,328 @@
+"""Hash-bound permission decisions for agent actions."""
+
 from __future__ import annotations
 
-import os
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from threading import Lock
 
-from chemsmart.agent.provider_adapter import ToolRequest
-
-
-class PermissionMode(str, Enum):
-    PERMISSION = "permission"
-    DRIVING = "driving"
-
-
-class RuntimePermissionMode(str, Enum):
-    READ_ONLY = "read_only"
-    ACCEPT_EDITS = "accept_edits"
-    BYPASS = "bypass"
-    PLAN = "plan"
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_sha256,
+    require_sha256,
+)
 
 
-class ApprovalDecision(str, Enum):
+class PermissionDecision(str, Enum):
+    AUTO_ALLOW = "auto_allow"
+    NEEDS_USER = "needs_user"
     ALLOW_ONCE = "allow_once"
-    ALLOW_SESSION = "allow_session"
     DENY = "deny"
 
 
-class ResolvedDecision(str, Enum):
-    AUTO_ALLOW = "auto_allow"
-    NEEDS_USER = "needs_user"
-    AUTO_DENY = "auto_deny"
+_READ_ONLY_ACTIONS = frozenset(
+    {
+        "capability_query",
+        "environment_query",
+        "project_read",
+        "project_render",
+        "project_validate",
+        "command_compile",
+        "command_inspect",
+        "artifact_inspect",
+        "result_extract",
+        "thermochemistry_derive",
+        "quantity_evaluate",
+        "fixture_safe_preview",
+    }
+)
 
-
-DRIVING_DEFAULT_DENY = {"run_local", "submit_hpc", "remote_probe"}
-ALWAYS_REQUIRE_APPROVAL = {
-    "wizard_write",
-    "write_project_yaml",
-    "update_project_yaml",
-    "execute_chemsmart_command",
-    "run_local",
-    "submit_hpc",
-    "save_geometry",
-    "write_behavior_rules",
-}
-READ_ONLY_TOOLS = {
-    "read",
-    "list_workspace",
-    "read_behavior_rules",
-    "ssh_probe",
-    "scheduler_query",
-    "log_tail",
-    "synthesize_command",
-    "repair_command",
-    "read_project_yaml",
-    "extract_project_protocol",
-    "render_project_yaml",
-    "validate_project_yaml",
-    "critic_project_yaml",
-    "search_basis_sets",
-}
-EDIT_SAFE_TOOLS = {"edit", "write"}
-PLAN_MODE_REASON = "plan mode active"
-
-# Rule-based policy for REAL local xTB execution. Semiempirical xTB runs are
-# seconds-cheap, so a user may opt in to unattended pre-optimizations; the
-# guards below keep that opt-in narrow. Gaussian/ORCA run_local, submit_hpc,
-# and execute_chemsmart_command always require approval regardless of this
-# policy.
-XTB_REAL_RUN_MODES = ("auto", "ask", "never")
-XTB_REAL_RUNS_DEFAULT = "ask"
-XTB_REAL_RUNS_ENV_VAR = "CHEMSMART_XTB_REAL_RUNS"
-XTB_AUTO_MAX_ATOMS = 200
-
-
-def normalize_xtb_real_runs(value: Any) -> str:
-    """Coerce a configured xtb_real_runs value to a known mode."""
-
-    text = str(value or "").strip().lower()
-    return text if text in XTB_REAL_RUN_MODES else XTB_REAL_RUNS_DEFAULT
-
-
-def default_xtb_real_runs() -> str:
-    return normalize_xtb_real_runs(os.environ.get(XTB_REAL_RUNS_ENV_VAR))
-
-
-def resolve_xtb_run_local(
-    policy_value: Any,
-    *,
-    job_program: str | None,
-    atom_count: int | None,
-) -> ResolvedPermission | None:
-    """Apply the xtb_real_runs policy to one run_local request.
-
-    Returns None whenever the generic approval flow should decide instead:
-    ask mode, a non-xTB job, or an auto request that fails a guard (unknown
-    or oversized system).
-    """
-
-    mode = normalize_xtb_real_runs(policy_value)
-    if mode == "ask" or (job_program or "").lower() != "xtb":
-        return None
-    if mode == "never":
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_DENY,
-            reason="xtb_real_runs_never",
-        )
-    if atom_count is not None and 0 < atom_count <= XTB_AUTO_MAX_ATOMS:
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_ALLOW,
-            reason="xtb_real_runs_auto",
-        )
-    return None
-
-
-NEVER_AUTO_ALLOW_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("pip_install", re.compile(r"\bpip3?\s+(install|uninstall)\b")),
-    ("apt_install", re.compile(r"\bapt(-get)?\s+install\b")),
-    ("brew_install", re.compile(r"\bbrew\s+install\b")),
-    (
-        "npm_install_global",
-        re.compile(r"\bnpm\s+install\s+(-g|--global)\b"),
-    ),
-    ("sudo", re.compile(r"\bsudo\b")),
-    ("rm_root", re.compile(r"\brm\s+-[rf]+\s+/(?:\s|$)")),
-    (
-        "curl_pipe_shell",
-        re.compile(r"\b(curl|wget)\b[^|]*\|\s*(bash|sh|zsh)\b"),
-    ),
-    ("chmod_777", re.compile(r"\bchmod\s+(-R\s+)?777\b")),
-]
-
-PermissionPolicyMode = PermissionMode | RuntimePermissionMode
+_MATERIAL_ACTIONS = frozenset(
+    {
+        "project_write",
+        "execute_local",
+        "submit_hpc",
+        "cancel",
+        "retry",
+        "paid_network",
+        "publish",
+        "overwrite",
+    }
+)
 
 
 @dataclass(frozen=True)
-class ResolvedPermission:
-    decision: ResolvedDecision
-    reason: str
+class PermissionRequestV1:
+    schema_version: str
+    request_id: str
+    action: str
+    scope_sha256: str
+    command_sha256: str = ""
+    input_sha256s: tuple[str, ...] = ()
+    project_sha256: str = ""
+    environment_sha256: str = ""
+    provider: str = ""
+    quota_scope: str = ""
+    request_sha256: str = ""
 
-
-@dataclass
-class PermissionPolicy:
-    mode: PermissionPolicyMode
-    yolo: bool = False
-    prompt_risky: bool = False
-    session_allow: set[str] = field(default_factory=set)
-    driving_denylist: set[str] = field(
-        default_factory=lambda: set(DRIVING_DEFAULT_DENY)
-    )
-    # auto|ask|never for REAL local xTB runs; sourced from CHEMSMART.md or
-    # the CHEMSMART_XTB_REAL_RUNS env var. Consulted by the tool loop, which
-    # can see the target job; resolve() itself never auto-allows run_local.
-    xtb_real_runs: str = field(default_factory=default_xtb_real_runs)
-
-    def resolve(self, req: ToolRequest) -> ResolvedPermission:
-        return resolve(
-            req,
-            mode=self.mode,
-            yolo=self.yolo,
-            prompt_risky=self.prompt_risky,
-            session_allow=self.session_allow,
-            driving_denylist=self.driving_denylist,
-        )
-
-    def record(self, tool: str, decision: ApprovalDecision) -> None:
-        if tool in ALWAYS_REQUIRE_APPROVAL:
-            return
-        if decision == ApprovalDecision.ALLOW_SESSION:
-            self.session_allow.add(tool)
-
-
-def _decision_keys(req: ToolRequest) -> set[str]:
-    keys = {req.name}
-    if req.name == "wizard_probe":
-        ssh_host_hint = req.arguments.get("ssh_host_hint")
-        keys.add("remote_probe" if ssh_host_hint else "local_probe")
-    return keys
-
-
-def legacy_to_runtime(mode: PermissionMode) -> RuntimePermissionMode:
-    return {
-        PermissionMode.PERMISSION: RuntimePermissionMode.READ_ONLY,
-        PermissionMode.DRIVING: RuntimePermissionMode.ACCEPT_EDITS,
-    }[mode]
-
-
-def _matches_never_auto_allow(
-    req: ToolRequest,
-) -> tuple[str, str] | None:
-    def iter_string_values(value: Any) -> list[str]:
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, dict):
-            return [
-                nested
-                for item in value.values()
-                for nested in iter_string_values(item)
-            ]
-        if isinstance(value, list):
-            return [
-                nested for item in value for nested in iter_string_values(item)
-            ]
-        return []
-
-    string_values = iter_string_values(req.arguments)
-    for pattern_id, pattern in NEVER_AUTO_ALLOW_PATTERNS:
-        for value in string_values:
-            match = pattern.search(value)
-            if match is not None:
-                return pattern_id, match.group(0)
-    return None
-
-
-def resolve(
-    req: ToolRequest,
-    mode: PermissionPolicyMode,
-    *,
-    yolo: bool = False,
-    prompt_risky: bool = False,
-    session_allow: set[str] | None = None,
-    driving_denylist: set[str] | None = None,
-) -> ResolvedPermission:
-    never_auto_allow_match = _matches_never_auto_allow(req)
-    if never_auto_allow_match is not None:
-        pattern_id, _ = never_auto_allow_match
-        return ResolvedPermission(
-            decision=ResolvedDecision.NEEDS_USER,
-            reason=f"never_auto_allow:{pattern_id}",
-        )
-
-    if mode == RuntimePermissionMode.PLAN:
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_DENY,
-            reason=PLAN_MODE_REASON,
-        )
-
-    if _is_safe_fake_or_preview(req):
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_ALLOW,
-            reason="safe_fake_or_preview",
-        )
-
-    if req.name in ALWAYS_REQUIRE_APPROVAL:
-        return ResolvedPermission(
-            decision=ResolvedDecision.NEEDS_USER,
-            reason="always_require_approval",
-        )
-
-    if isinstance(mode, RuntimePermissionMode):
-        tool = req.name
-        if mode == RuntimePermissionMode.BYPASS:
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="bypass_mode",
-            )
-        if tool in READ_ONLY_TOOLS:
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="read_only_tool",
-            )
-        if (
-            mode == RuntimePermissionMode.ACCEPT_EDITS
-            and tool in READ_ONLY_TOOLS | EDIT_SAFE_TOOLS
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.permission-request.v1":
+            raise ContractError("unsupported permission request schema")
+        if self.action not in _READ_ONLY_ACTIONS | _MATERIAL_ACTIONS:
+            raise ContractError("unknown permission action")
+        if not self.scope_sha256:
+            raise ContractError("permission scope binding must not be empty")
+        require_sha256(self.scope_sha256, "permission scope")
+        for field_name, digest in (
+            ("command_sha256", self.command_sha256),
+            ("project_sha256", self.project_sha256),
+            ("environment_sha256", self.environment_sha256),
         ):
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="edit_safe_tool",
+            if digest:
+                require_sha256(digest, field_name)
+        for digest in self.input_sha256s:
+            require_sha256(digest, "input_sha256")
+        if self.action in {"execute_local", "submit_hpc", "retry"}:
+            required = (
+                self.command_sha256,
+                self.input_sha256s,
+                self.project_sha256,
+                self.environment_sha256,
             )
-        return ResolvedPermission(
-            decision=ResolvedDecision.NEEDS_USER,
-            reason="needs_user",
-        )
-
-    tool = req.name
-    decision_keys = _decision_keys(req)
-    denylist = (
-        DRIVING_DEFAULT_DENY if driving_denylist is None else driving_denylist
-    )
-    if mode == PermissionMode.DRIVING:
-        if denylist.intersection(decision_keys):
-            if yolo:
-                return ResolvedPermission(
-                    decision=ResolvedDecision.AUTO_ALLOW,
-                    reason="yolo",
+            if not all(required):
+                raise ContractError(
+                    "calculation permission requires command, input, project, "
+                    "and environment bindings"
                 )
-            if prompt_risky:
-                return ResolvedPermission(
-                    decision=ResolvedDecision.NEEDS_USER,
-                    reason="risky_tool_requires_approval",
-                )
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_DENY,
-                reason="missing_yolo",
+        if self.action == "paid_network" and not (
+            self.provider and self.quota_scope
+        ):
+            raise ContractError(
+                "paid-network permission requires provider and quota scope"
             )
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_ALLOW,
-            reason="driving_mode",
-        )
+        body = {
+            "schema_version": self.schema_version,
+            "request_id": self.request_id,
+            "action": self.action,
+            "scope_sha256": self.scope_sha256,
+            "command_sha256": self.command_sha256,
+            "input_sha256s": self.input_sha256s,
+            "project_sha256": self.project_sha256,
+            "environment_sha256": self.environment_sha256,
+            "provider": self.provider,
+            "quota_scope": self.quota_scope,
+        }
+        if self.request_sha256 != canonical_sha256(body):
+            raise ContractError("permission request digest mismatch")
 
-    if tool in (session_allow or set()):
-        return ResolvedPermission(
-            decision=ResolvedDecision.AUTO_ALLOW,
-            reason="session_rule",
-        )
-    return ResolvedPermission(
-        decision=ResolvedDecision.NEEDS_USER,
-        reason="needs_user",
+
+@dataclass(frozen=True)
+class ApprovalResolutionV1:
+    schema_version: str
+    approval_id: str
+    permission_request_sha256: str
+    decision: PermissionDecision
+    actor: str
+    one_shot: bool
+    consumed: bool
+    resolution_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.approval-resolution.v1":
+            raise ContractError("unsupported approval resolution schema")
+        if self.decision is PermissionDecision.ALLOW_ONCE and not self.one_shot:
+            raise ContractError("material approval must be one-shot")
+        body = {
+            "schema_version": self.schema_version,
+            "approval_id": self.approval_id,
+            "permission_request_sha256": self.permission_request_sha256,
+            "decision": self.decision,
+            "actor": self.actor,
+            "one_shot": self.one_shot,
+            "consumed": self.consumed,
+        }
+        if self.resolution_sha256 != canonical_sha256(body):
+            raise ContractError("approval resolution digest mismatch")
+
+
+@dataclass(frozen=True)
+class PermissionReceiptV1:
+    schema_version: str
+    permission_request_sha256: str
+    approval_resolution_sha256: str
+    decision: PermissionDecision
+    reason: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.permission-receipt.v1":
+            raise ContractError("unsupported permission receipt schema")
+        body = {
+            "schema_version": self.schema_version,
+            "permission_request_sha256": self.permission_request_sha256,
+            "approval_resolution_sha256": self.approval_resolution_sha256,
+            "decision": self.decision,
+            "reason": self.reason,
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("permission receipt digest mismatch")
+
+
+def build_permission_request(
+    *, request_id: str, action: str, scope_sha256: str, **bindings: object
+) -> PermissionRequestV1:
+    body = {
+        "schema_version": "chemsmart.permission-request.v1",
+        "request_id": request_id,
+        "action": action,
+        "scope_sha256": scope_sha256,
+        "command_sha256": str(bindings.get("command_sha256", "")),
+        "input_sha256s": tuple(bindings.get("input_sha256s", ())),
+        "project_sha256": str(bindings.get("project_sha256", "")),
+        "environment_sha256": str(bindings.get("environment_sha256", "")),
+        "provider": str(bindings.get("provider", "")),
+        "quota_scope": str(bindings.get("quota_scope", "")),
+    }
+    return PermissionRequestV1(
+        **body, request_sha256=canonical_sha256(body)
     )
 
 
-def _is_safe_fake_or_preview(req: ToolRequest) -> bool:
-    if req.name == "execute_chemsmart_command":
-        return req.arguments.get("test") is True
-    if req.name == "submit_hpc":
-        return req.arguments.get("execute", False) is False
-    return False
+def resolve_permission(
+    request: PermissionRequestV1,
+    *,
+    approval: ApprovalResolutionV1 | None = None,
+) -> PermissionReceiptV1:
+    if request.action in _MATERIAL_ACTIONS and approval is not None:
+        raise ContractError(
+            "material approvals must be consumed by the persistent event store"
+        )
+    return _evaluate_permission(request, approval=approval)
+
+
+def _evaluate_permission(
+    request: PermissionRequestV1,
+    *,
+    approval: ApprovalResolutionV1 | None = None,
+) -> PermissionReceiptV1:
+    if request.action in _READ_ONLY_ACTIONS:
+        decision = PermissionDecision.AUTO_ALLOW
+        reason = "policy.read_only_or_fixture"
+        approval_sha = ""
+    elif approval is None:
+        decision = PermissionDecision.NEEDS_USER
+        reason = "policy.explicit_approval_required"
+        approval_sha = ""
+    elif approval.permission_request_sha256 != request.request_sha256:
+        decision = PermissionDecision.DENY
+        reason = "policy.approval_binding_mismatch"
+        approval_sha = approval.resolution_sha256
+    elif approval.consumed:
+        decision = PermissionDecision.DENY
+        reason = "policy.approval_already_consumed"
+        approval_sha = approval.resolution_sha256
+    elif approval.decision is PermissionDecision.ALLOW_ONCE:
+        decision = PermissionDecision.ALLOW_ONCE
+        reason = "policy.exact_one_shot_approval"
+        approval_sha = approval.resolution_sha256
+    else:
+        decision = PermissionDecision.DENY
+        reason = "policy.user_denied"
+        approval_sha = approval.resolution_sha256
+    body = {
+        "schema_version": "chemsmart.permission-receipt.v1",
+        "permission_request_sha256": request.request_sha256,
+        "approval_resolution_sha256": approval_sha,
+        "decision": decision,
+        "reason": reason,
+    }
+    return PermissionReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+def build_approval_resolution(
+    *,
+    approval_id: str,
+    request: PermissionRequestV1,
+    allow: bool,
+    actor: str,
+) -> ApprovalResolutionV1:
+    body = {
+        "schema_version": "chemsmart.approval-resolution.v1",
+        "approval_id": approval_id,
+        "permission_request_sha256": request.request_sha256,
+        "decision": (
+            PermissionDecision.ALLOW_ONCE if allow else PermissionDecision.DENY
+        ),
+        "actor": actor,
+        "one_shot": bool(allow),
+        "consumed": False,
+    }
+    return ApprovalResolutionV1(
+        **body, resolution_sha256=canonical_sha256(body)
+    )
+
+
+class PermissionLedgerV1:
+    """Compatibility ledger; material consumption moved to RuntimeEventStore."""
+
+    def __init__(self) -> None:
+        self._consumed_approval_ids: set[str] = set()
+        self._lock = Lock()
+
+    def resolve(
+        self,
+        request: PermissionRequestV1,
+        *,
+        approval: ApprovalResolutionV1 | None = None,
+    ) -> PermissionReceiptV1:
+        if request.action in _READ_ONLY_ACTIONS or approval is None:
+            return resolve_permission(request, approval=approval)
+        raise ContractError(
+            "material approvals require persistent, crash-stable "
+            "RuntimeEventStore consumption"
+        )
+
+    def _unsafe_legacy_resolve(
+        self,
+        request: PermissionRequestV1,
+        *,
+        approval: ApprovalResolutionV1,
+    ) -> PermissionReceiptV1:
+        """Unexported historical behavior for migration-only replay tests."""
+
+        with self._lock:
+            if approval.approval_id in self._consumed_approval_ids:
+                consumed_body = {
+                    "schema_version": "chemsmart.approval-resolution.v1",
+                    "approval_id": approval.approval_id,
+                    "permission_request_sha256": (
+                        approval.permission_request_sha256
+                    ),
+                    "decision": approval.decision,
+                    "actor": approval.actor,
+                    "one_shot": approval.one_shot,
+                    "consumed": True,
+                }
+                consumed = ApprovalResolutionV1(
+                    **consumed_body,
+                    resolution_sha256=canonical_sha256(consumed_body),
+                )
+                return _evaluate_permission(request, approval=consumed)
+            receipt = _evaluate_permission(request, approval=approval)
+            if receipt.decision is PermissionDecision.ALLOW_ONCE:
+                self._consumed_approval_ids.add(approval.approval_id)
+            return receipt
+
+
+__all__ = [
+    "ApprovalResolutionV1",
+    "PermissionDecision",
+    "PermissionReceiptV1",
+    "PermissionRequestV1",
+    "PermissionLedgerV1",
+    "build_approval_resolution",
+    "build_permission_request",
+    "resolve_permission",
+]

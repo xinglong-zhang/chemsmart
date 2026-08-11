@@ -7,10 +7,10 @@ from functools import lru_cache
 
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin, cached_property
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +85,6 @@ class Server(RegistryMixin):
             str: Detailed server representation for debugging.
         """
         return f"Server(name={self.name})"
-
-    @property
-    def config(self):
-        """Return the underlying server configuration dictionary."""
-        return self.kwargs
 
     @classmethod
     def from_dict(cls, d):
@@ -555,18 +550,9 @@ class Server(RegistryMixin):
         self._check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
-        # Submit the job and propagate the scheduler return code.  Previously
-        # a failed qsub/sbatch process was discarded, making `chemsmart sub`
-        # look successful to an agent even though no job entered the queue.
-        if test:
-            return 0
-        returncode = self._submit_job(job)
-        if returncode != 0:
-            raise RuntimeError(
-                f"Job submission failed on {self.name} "
-                f"with return code {returncode}."
-            )
-        return returncode
+        # Submit the job
+        if not test:
+            self._submit_job(job)
 
     @staticmethod
     def _check_running_jobs(job):
@@ -636,6 +622,70 @@ class Server(RegistryMixin):
             )
         command += f" {submitter.submit_script}"
         logger.info(f"Submitting job with command: {command}")
+        if "<" in command or ">" in command or "|" in command:
+            # Use shell=True if the command has shell operators
+            p = subprocess.Popen(command, shell=True, cwd=job.folder)
+        else:
+            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+        return p.wait()
+
+    def submit_array_job(
+        self, jobs, num_nodes=None, test=False, cli_args=None, **kwargs
+    ):
+        """
+        Submit a list of jobs as an array job to the scheduler.
+
+        Creates and submits an array job where independent jobs are distributed
+        across multiple nodes for parallel execution.
+
+        Args:
+            jobs (list): List of Job instances to submit as an array.
+            num_nodes (int): Number of nodes to request for parallel execution.
+            test (bool): If True, only creates scripts without actual submission.
+                Defaults to False.
+            cli_args: Command line arguments for the jobs.
+            **kwargs: Additional submission parameters.
+        """
+        if not jobs:
+            logger.warning("No jobs to submit")
+            return
+
+        # Use first job as template for submission
+        first_job = jobs[0]
+
+        # Check for duplicate/running jobs for each job in the array
+        for job in jobs:
+            self._check_running_jobs(job)
+
+        # Write array job submission script
+        submitter = self.get_submitter(first_job, **kwargs)
+        submitter.write_array_job(
+            jobs=jobs, num_nodes=num_nodes, cli_args=cli_args
+        )
+
+        # Submit the array job
+        if not test:
+            self._submit_array_job(first_job, submitter)
+
+    def _submit_array_job(self, job, submitter):
+        """
+        Submit an array job to the scheduler.
+
+        Args:
+            job: Template job instance.
+            submitter: Submitter instance with array job script.
+
+        Returns:
+            int: Exit code from the submission command.
+        """
+        command = self.submit_command
+        if command is None:
+            raise ValueError(
+                f"Cannot submit job on {self} "
+                f"since no submit command is defined."
+            )
+        command += f" {submitter.array_submit_script}"
+        logger.info(f"Submitting array job with command: {command}")
         if "<" in command or ">" in command or "|" in command:
             # Use shell=True if the command has shell operators
             p = subprocess.Popen(command, shell=True)

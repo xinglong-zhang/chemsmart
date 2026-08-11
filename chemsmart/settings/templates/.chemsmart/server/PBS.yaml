@@ -7,8 +7,6 @@ SERVER:
     NUM_GPUS: 0
     NUM_THREADS: 64
     SUBMIT_COMMAND: qsub
-    # HOST: login.cluster.example.edu
-    # explicit SSH alias; defaults to filename stem
     PROJECT: 13003611
     ##PROJECT: 13002374
     SCRATCH_DIR: null
@@ -48,6 +46,24 @@ ORCA:
         module load openmpi
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
+
+PYSCF:
+    # Optional: EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin
+    # It names the bin/ directory whose python owns PySCF/GPU4PySCF.
+    LOCAL_RUN: True
+    SCRATCH: False
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+
+XTB:
+    # Optional: EXEFOLDER: ~/bin
+    # Omit EXEFOLDER to resolve an existing xTB binary from PATH.
+    LOCAL_RUN: True
+    SCRATCH: True
+    CONDA_ENV: |
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot

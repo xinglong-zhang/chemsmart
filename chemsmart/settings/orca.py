@@ -8,12 +8,15 @@ from chemsmart.jobs.orca.settings import (
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
-from chemsmart.settings.user import ChemsmartUserSettings
-from chemsmart.settings.workspace_project import (
-    workspace_project_names,
-    workspace_project_path,
+from chemsmart.settings.project_resolution import (
+    project_settings_from_path,
+    require_jobtype_settings,
 )
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
+
+user_settings = CHEMSMARTUserSettings()
+
 
 logger = logging.getLogger(__name__)
 project_settings_registry: list[str] = []
@@ -195,6 +198,20 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def td_settings(self):
+        """Create settings for a fixed-geometry electronic spectrum.
+
+        Project YAML normally supplies the response method, root count, and
+        manifold explicitly.  This method keeps programmatic projects on the
+        same job-type path without inventing those scientifically consequential
+        choices.
+        """
+
+        settings = self.main_settings().copy()
+        settings.jobtype = "td"
+        settings.freq = False
+        return settings
+
     def neb_settings(self):
         """
         Create default ORCA NEB job settings.
@@ -224,14 +241,15 @@ class ORCAProjectSettings(RegistryMixin):
     @classmethod
     def from_project(cls, project):
         """
-        Get project settings based on project name.
+        Get project settings from an exact YAML path or a project name.
 
-        Loads project settings from various sources including user-defined
-        settings and built-in test projects. Provides detailed error messages
-        if the requested project is not found.
+        Loads project settings from various sources including an explicit
+        file, user-defined settings, and built-in test projects. Provides
+        detailed error messages if the requested project is not found.
 
         Args:
-            project (str): Name of the project to load settings for.
+            project (str): Path to a project YAML file, or the name of an
+                installed project.
 
         Returns:
             YamlORCAProjectSettings: Configured
@@ -241,30 +259,28 @@ class ORCAProjectSettings(RegistryMixin):
             FileNotFoundError: If no project settings are found for the
                 specified project name, with guidance on creating new settings.
         """
-        workspace_project_settings = cls._from_workspace_project_name(project)
-        if workspace_project_settings is not None:
-            return workspace_project_settings
+        explicit_settings = project_settings_from_path(
+            project, ORCAProjectSettingsManager
+        )
+        if explicit_settings is not None:
+            return explicit_settings
 
-        # Keep explicit legacy CLI projects working while agent auto-selection
-        # remains restricted to the current workspace.
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
-
-        chemsmart_test_project_settings = cls._from_chemsmart_test_projects(
-            project
-        )
-        if chemsmart_test_project_settings is not None:
-            return chemsmart_test_project_settings
+        else:
+            chemsmart_test_project_settings = (
+                cls._from_chemsmart_test_projects(project)
+            )
+            if chemsmart_test_project_settings is not None:
+                return chemsmart_test_project_settings
 
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            "Place new ORCA project settings .yaml file in "
-            f"{workspace_project_path(project, 'orca').parent}.\n\n"
+            f"Pass an explicit YAML path, or place a new ORCA project settings .yaml file in {user_settings.user_orca_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            "Currently available projects: "
-            f"{_available_orca_projects()}"
+            f"Currently available projects: {user_settings.all_available_orca_projects}"
         )
 
     @classmethod
@@ -304,24 +320,13 @@ class ORCAProjectSettings(RegistryMixin):
             loaded settings or None if not found.
         """
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_orca_settings_dir,
+            CHEMSMARTUserSettings().user_orca_settings_dir,
             f"{project_name}.yaml",
         )
         user_settings_manager = ORCAProjectSettingsManager(
             filename=project_name_yaml_path
         )
         settings = cls._from_projects_manager(user_settings_manager)
-
-        if settings is not None:
-            return settings
-
-    @classmethod
-    def _from_workspace_project_name(cls, project_name):
-        project_name_yaml_path = workspace_project_path(project_name, "orca")
-        project_settings_manager = ORCAProjectSettingsManager(
-            filename=str(project_name_yaml_path)
-        )
-        settings = cls._from_projects_manager(project_settings_manager)
 
         if settings is not None:
             return settings
@@ -356,11 +361,6 @@ class ORCAProjectSettings(RegistryMixin):
 
         if settings is not None:
             return settings
-
-
-def _available_orca_projects() -> list[str]:
-    legacy = ChemsmartUserSettings().all_available_orca_projects
-    return sorted(set(workspace_project_names("orca")) | set(legacy))
 
 
 class YamlORCAProjectSettings(ORCAProjectSettings):
@@ -434,7 +434,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured optimization settings.
         """
-        return self._opt_settings
+        return require_jobtype_settings(
+            self._opt_settings,
+            program="orca",
+            jobtype="opt",
+            project=self,
+        )
 
     def modred_settings(self):
         """
@@ -443,7 +448,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured modredundant settings.
         """
-        return self._modred_settings
+        return require_jobtype_settings(
+            self._modred_settings,
+            program="orca",
+            jobtype="modred",
+            project=self,
+        )
 
     def ts_settings(self):
         """
@@ -452,7 +462,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCATSJobSettings: Pre-configured TS optimization settings.
         """
-        return self._ts_settings
+        return require_jobtype_settings(
+            self._ts_settings,
+            program="orca",
+            jobtype="ts",
+            project=self,
+        )
 
     def irc_settings(self):
         """
@@ -461,7 +476,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAIRCJobSettings: Pre-configured IRC calculation settings.
         """
-        return self._irc_settings
+        return require_jobtype_settings(
+            self._irc_settings,
+            program="orca",
+            jobtype="irc",
+            project=self,
+        )
 
     def scan_settings(self):
         """
@@ -470,7 +490,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured scan calculation settings.
         """
-        return self._scan_settings
+        return require_jobtype_settings(
+            self._scan_settings,
+            program="orca",
+            jobtype="scan",
+            project=self,
+        )
 
     def nci_settings(self):
         """
@@ -479,7 +504,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured NCI analysis settings.
         """
-        return self._nci_settings
+        return require_jobtype_settings(
+            self._nci_settings,
+            program="orca",
+            jobtype="nci",
+            project=self,
+        )
 
     def sp_settings(self):
         """
@@ -488,7 +518,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured single point settings.
         """
-        return self._sp_settings
+        return require_jobtype_settings(
+            self._sp_settings,
+            program="orca",
+            jobtype="sp",
+            project=self,
+        )
 
     def td_settings(self):
         """
@@ -497,7 +532,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured TD-DFT settings.
         """
-        return self._td_settings
+        return require_jobtype_settings(
+            self._td_settings,
+            program="orca",
+            jobtype="td",
+            project=self,
+        )
 
     def wbi_settings(self):
         """
@@ -506,10 +546,20 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         Returns:
             ORCAJobSettings: Pre-configured WBI calculation settings.
         """
-        return self._wbi_settings
+        return require_jobtype_settings(
+            self._wbi_settings,
+            program="orca",
+            jobtype="wbi",
+            project=self,
+        )
 
     def qmmm_settings(self):
-        return self._qmmm_settings
+        return require_jobtype_settings(
+            self._qmmm_settings,
+            program="orca",
+            jobtype="qmmm",
+            project=self,
+        )
 
     def neb_settings(self):
         """

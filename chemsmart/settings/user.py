@@ -1,5 +1,5 @@
 """
-User configuration management for ChemSmart computational chemistry software.
+User configuration management for CHEMSMART computational chemistry software.
 
 This module provides comprehensive user
 settings management including configuration
@@ -10,7 +10,7 @@ for computational chemistry software
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:
-    ChemsmartUserSettings: Main class for user configuration management
+    CHEMSMARTUserSettings: Main class for user configuration management
 
 Dependencies:
     - chemsmart.io.yaml: YAML file handling utilities
@@ -36,9 +36,9 @@ from chemsmart.io.yaml import YAMLFile
 logger = logging.getLogger(__name__)
 
 
-class ChemsmartUserSettings:
+class CHEMSMARTUserSettings:
     """
-    User configuration settings manager for ChemSmart.
+    User configuration settings manager for CHEMSMART.
 
     Manages user-specific configuration files, directories, and settings for
     computational chemistry software. Provides access to configuration paths,
@@ -55,6 +55,14 @@ class ChemsmartUserSettings:
     USER_YAML_FILE = "usersettings.yaml"
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
+    @classmethod
+    def resolve_config_dir(cls):
+        """Resolve user config directory with optional env override."""
+        configured_dir = os.environ.get(
+            "CHEMSMART_CONFIG_DIR", cls.USER_CONFIG_DIR
+        )
+        return os.path.expanduser(configured_dir)
+
     def __init__(self):
         """
         Initialize user settings manager.
@@ -62,8 +70,8 @@ class ChemsmartUserSettings:
         Loads user configuration from YAML file if it exists, otherwise
         initializes with empty configuration.
         """
-        self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
-        self.config_dir = self.USER_CONFIG_DIR
+        self.config_dir = self.resolve_config_dir()
+        self.yaml = os.path.join(self.config_dir, self.USER_YAML_FILE)
         try:
             self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
         except FileNotFoundError:
@@ -162,13 +170,19 @@ class ChemsmartUserSettings:
         return os.path.join(self.config_dir, "orca")
 
     @property
-    def user_xtb_settings_dir(self):
+    def user_pyscf_settings_dir(self):
         """
-        Get the user xTB settings directory.
+        Get the user PySCF settings directory.
 
         Returns:
-            str: Path to the directory containing xTB-specific settings.
+            str: Path to the directory containing PySCF-specific settings.
         """
+        return os.path.join(self.config_dir, "pyscf")
+
+    @property
+    def user_xtb_settings_dir(self):
+        """Directory containing user xTB project YAML files."""
+
         return os.path.join(self.config_dir, "xtb")
 
     @cached_property
@@ -204,13 +218,19 @@ class ChemsmartUserSettings:
         return glob.glob(os.path.join(self.user_orca_settings_dir, "*.yaml"))
 
     @cached_property
-    def xtb_project_yaml_files(self):
+    def pyscf_project_yaml_files(self):
         """
-        Get list of xTB project YAML configuration files.
+        Get list of PySCF project YAML configuration files.
 
         Returns:
-            list: List of paths to xTB project configuration files.
+            list: List of paths to PySCF project configuration YAML files.
         """
+        return glob.glob(os.path.join(self.user_pyscf_settings_dir, "*.yaml"))
+
+    @cached_property
+    def xtb_project_yaml_files(self):
+        """Return user xTB project YAML files."""
+
         return glob.glob(os.path.join(self.user_xtb_settings_dir, "*.yaml"))
 
     @cached_property
@@ -289,15 +309,24 @@ class ChemsmartUserSettings:
         ]
 
     @cached_property
-    def all_available_xtb_projects(self):
+    def all_available_pyscf_projects(self):
         """
-        Get list of all available xTB project configurations.
+        Get list of all available PySCF project configurations.
 
         Returns:
-            list: List of xTB project names (without .yaml extension)
-                  available in the user xTB settings directory.
+            list: List of PySCF project names (without .yaml extension)
+                  available in the user PySCF settings directory.
         """
         return [
-            os.path.basename(x).removesuffix(".yaml")
-            for x in self.xtb_project_yaml_files
+            os.path.basename(p).removesuffix(".yaml")
+            for p in self.pyscf_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_xtb_projects(self):
+        """Return user xTB project names without their YAML suffix."""
+
+        return [
+            os.path.basename(path).removesuffix(".yaml")
+            for path in self.xtb_project_yaml_files
         ]

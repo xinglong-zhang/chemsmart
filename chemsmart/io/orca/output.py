@@ -2,13 +2,18 @@ import logging
 import math
 import os
 import re
+from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.constants import au_to_debye, joule_per_mol_to_hartree
+from chemsmart.utils.constants import (
+    au_to_debye,
+    energy_conversion,
+    joule_per_mol_to_hartree,
+)
 from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
@@ -33,6 +38,34 @@ from chemsmart.utils.utils import (
 p = PeriodicTable()
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _ORCAThermochemistrySection:
+    """One complete, internally consistent ORCA frequency result.
+
+    ORCA compound and transition-state jobs may print several Hessian and
+    thermochemistry blocks into one output.  Keeping the local route, state,
+    energy, geometry, frequencies, and thermochemistry together prevents a
+    downstream analysis from combining values produced by different jobs or
+    optimization stages.
+    """
+
+    start_index: int
+    end_index: int
+    job_number: int
+    route_string: str | None
+    electronic_energy: float
+    charge: int | None
+    multiplicity: int | None
+    coordinate_lines: tuple[str, ...]
+    frequencies: tuple[float, ...]
+    temperature_k: float | None
+    pressure_atm: float | None
+    point_group: str | None
+    rotational_symmetry_number: int | None
+    entropy_times_temperature: float
+    gibbs_free_energy: float
 
 
 class ORCAOutput(ORCAFileMixin):
@@ -347,6 +380,222 @@ class ORCAOutput(ORCAFileMixin):
             if line.startswith("|  1> !") or line.startswith("|  2> !"):
                 return line.lower().split("> ")[-1]
         return None
+
+    @cached_property
+    def _input_route_strings(self):
+        """Return the echoed route for each job in a compound input."""
+        routes = []
+        pattern = re.compile(r"^\|\s*\d+>\s*(!.*)$")
+        for line in self.contents:
+            match = pattern.match(line)
+            if match is not None:
+                routes.append(match.group(1).strip().lower())
+        return tuple(routes)
+
+    @cached_property
+    def _orca_job_markers(self):
+        markers = []
+        pattern = re.compile(r"JOB NUMBER\s+(\d+)")
+        for index, line in enumerate(self.contents):
+            match = pattern.search(line)
+            if match is not None:
+                markers.append((index, int(match.group(1))))
+        return tuple(markers)
+
+    @cached_property
+    def _vibrational_frequency_blocks(self):
+        """Parse frequency tables without joining different Hessians."""
+        starts = [
+            index
+            for index, line in enumerate(self.contents)
+            if line == "VIBRATIONAL FREQUENCIES"
+        ]
+        blocks = []
+        frequency_pattern = re.compile(
+            r"^\s*\d+:\s*"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+cm"
+        )
+        job_marker_indices = tuple(
+            index for index, _ in self._orca_job_markers
+        )
+        for position, start in enumerate(starts):
+            boundaries = [len(self.contents)]
+            if position + 1 < len(starts):
+                boundaries.append(starts[position + 1])
+            boundaries.extend(
+                index for index in job_marker_indices if index > start
+            )
+            end = min(boundaries)
+            values = []
+            for line in self.contents[start + 1 : end]:
+                match = frequency_pattern.match(line)
+                if match is not None:
+                    values.append(float(match.group(1)))
+            if values:
+                blocks.append((start, end, tuple(values)))
+        return tuple(blocks)
+
+    def _job_context_for_index(self, index):
+        job_number = 1
+        job_start = 0
+        for marker_index, marker_number in self._orca_job_markers:
+            if marker_index > index:
+                break
+            job_number = marker_number
+            job_start = marker_index
+        return job_number, job_start
+
+    @cached_property
+    def _complete_thermochemistry_sections(self):
+        """Return complete frequency/thermochemistry sections in file order."""
+        sections = []
+        charge_pattern = re.compile(r"Total Charge\s+Charge")
+        multiplicity_pattern = re.compile(r"Multiplicity\s+Mult")
+        point_group_pattern = re.compile(
+            r"Point Group:\s*([^,]+),\s*Symmetry Number:\s*(\d+)"
+        )
+        coordinate_pattern = re.compile(standard_coord_pattern)
+
+        for start, end, frequencies in self._vibrational_frequency_blocks:
+            local_lines = self.contents[start:end]
+            if not any("THERMOCHEMISTRY AT" in line for line in local_lines):
+                continue
+            gibbs_lines = [
+                line
+                for line in local_lines
+                if "Final Gibbs free energy" in line
+            ]
+            entropy_lines = [
+                line
+                for line in local_lines
+                if "Final entropy term" in line
+            ]
+            if not gibbs_lines or not entropy_lines:
+                continue
+
+            job_number, job_start = self._job_context_for_index(start)
+            preceding = self.contents[job_start:start]
+            energy_lines = [
+                line for line in preceding if "FINAL SINGLE POINT ENERGY" in line
+            ]
+            if not energy_lines:
+                continue
+            electronic_energy = float(energy_lines[-1].split()[-1])
+
+            charge = None
+            multiplicity = None
+            for line in preceding:
+                if charge_pattern.search(line):
+                    charge = int(line.split()[-1])
+                if multiplicity_pattern.search(line):
+                    multiplicity = int(line.split()[-1])
+
+            coordinate_lines = ()
+            coordinate_starts = [
+                offset
+                for offset, line in enumerate(preceding)
+                if "CARTESIAN COORDINATES (ANGSTROEM)" in line
+            ]
+            if coordinate_starts:
+                rows = []
+                for line in preceding[coordinate_starts[-1] + 1 :]:
+                    if coordinate_pattern.match(line):
+                        rows.append(line)
+                    elif rows:
+                        break
+                coordinate_lines = tuple(rows)
+
+            temperature_k = None
+            pressure_atm = None
+            point_group = None
+            symmetry_number = None
+            for line in local_lines:
+                if line.startswith("Temperature"):
+                    temperature_k = float(line.split()[-2])
+                elif line.startswith("Pressure"):
+                    pressure_atm = float(line.split()[-2])
+                match = point_group_pattern.search(line)
+                if match is not None:
+                    point_group = match.group(1).strip().upper()
+                    symmetry_number = int(match.group(2))
+
+            route_string = None
+            if self._input_route_strings:
+                route_index = min(
+                    job_number - 1, len(self._input_route_strings) - 1
+                )
+                route_string = self._input_route_strings[route_index]
+
+            sections.append(
+                _ORCAThermochemistrySection(
+                    start_index=start,
+                    end_index=end,
+                    job_number=job_number,
+                    route_string=route_string,
+                    electronic_energy=electronic_energy,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    coordinate_lines=coordinate_lines,
+                    frequencies=frequencies,
+                    temperature_k=temperature_k,
+                    pressure_atm=pressure_atm,
+                    point_group=point_group,
+                    rotational_symmetry_number=symmetry_number,
+                    entropy_times_temperature=float(
+                        entropy_lines[-1].split()[-4]
+                    ),
+                    gibbs_free_energy=float(gibbs_lines[-1].split()[-2]),
+                )
+            )
+        return tuple(sections)
+
+    @property
+    def _last_complete_thermochemistry_section(self):
+        if self._complete_thermochemistry_sections:
+            return self._complete_thermochemistry_sections[-1]
+        return None
+
+    @property
+    def thermochemistry_jobtype(self):
+        section = self._last_complete_thermochemistry_section
+        if section is None or section.route_string is None:
+            return self.jobtype
+        from chemsmart.io.orca.route import ORCARoute
+
+        return ORCARoute(section.route_string).jobtype
+
+    @property
+    def thermochemistry_electronic_energy(self):
+        section = self._last_complete_thermochemistry_section
+        if section is not None:
+            return section.electronic_energy
+        return self.energies[-1]
+
+    @property
+    def thermochemistry_charge(self):
+        section = self._last_complete_thermochemistry_section
+        if section is not None and section.charge is not None:
+            return section.charge
+        return self.charge
+
+    @property
+    def thermochemistry_multiplicity(self):
+        section = self._last_complete_thermochemistry_section
+        if section is not None and section.multiplicity is not None:
+            return section.multiplicity
+        return self.multiplicity
+
+    @cached_property
+    def thermochemistry_molecule(self):
+        section = self._last_complete_thermochemistry_section
+        if section is None or not section.coordinate_lines:
+            return self.molecule
+        molecule = CoordinateBlock(
+            coordinate_block=list(section.coordinate_lines)
+        ).molecule
+        molecule.charge = section.charge
+        molecule.multiplicity = section.multiplicity
+        return molecule
 
     @property
     def num_atoms(self):
@@ -2179,6 +2428,12 @@ class ORCAOutput(ORCAFileMixin):
         """
         Obtain the rotational symmetry number from the output file.
         """
+        section = self._last_complete_thermochemistry_section
+        if (
+            section is not None
+            and section.rotational_symmetry_number is not None
+        ):
+            return section.rotational_symmetry_number
         for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
                 for line_j in self.contents[i:]:
@@ -2196,6 +2451,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def point_group(self):
         """Obtain the molecular point group from the ORCA output file."""
+        section = self._last_complete_thermochemistry_section
+        if section is not None and section.point_group is not None:
+            return section.point_group
         for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
                 for line_j in self.contents[i:]:
@@ -2289,15 +2547,11 @@ class ORCAOutput(ORCAFileMixin):
         Get vibrational frequencies from the ORCA output file.
         Including translational and rotational modes.
         """
-        vibrational_frequencies = []
-        for i, line_i in enumerate(self.contents):
-            if line_i == "VIBRATIONAL FREQUENCIES":
-                for line_j in self.contents[i + 5 :]:
-                    if len(line_j) == 0:
-                        break
-                    # if 'Rotational constants in MHz :' in line_j:
-                    line_j_elements = line_j.split()
-                    vibrational_frequencies.append(float(line_j_elements[1]))
+        vibrational_frequencies = (
+            list(self._vibrational_frequency_blocks[-1][2])
+            if self._vibrational_frequency_blocks
+            else []
+        )
         logger.debug(
             f"Vibrational frequencies, including translations and rotations: "
             f"{vibrational_frequencies}"
@@ -2313,6 +2567,67 @@ class ORCAOutput(ORCAFileMixin):
         if self.all_vibrational_frequencies is None:
             return []
         return [x for x in self.all_vibrational_frequencies if x != 0.0]
+
+    @cached_property
+    def _vpt2_fundamental_table(self):
+        """Return the last complete ORCA VPT2 fundamental-transition table.
+
+        Rows contain ``(harmonic, fundamental, shift)`` in cm^-1.  Selecting
+        the last complete table follows the same result-local convention used
+        for repeated ORCA thermochemistry sections.
+        """
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?"
+        row_pattern = re.compile(
+            rf"^\s*\d+\s+({number})\s+({number})\s+({number})\s*$"
+        )
+        tables = []
+        for index, line in enumerate(self.contents):
+            if "Fundamental transitions [1/cm]" not in line:
+                continue
+            rows = []
+            for candidate in self.contents[index + 1 :]:
+                match = row_pattern.match(candidate)
+                if match:
+                    rows.append(tuple(float(value) for value in match.groups()))
+                    continue
+                if rows:
+                    break
+            if rows:
+                tables.append(tuple(rows))
+        return tables[-1] if tables else ()
+
+    @property
+    def vpt2_harmonic_frequencies(self):
+        """Harmonic frequencies printed in the VPT2 transition table."""
+
+        return [row[0] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_fundamental_frequencies(self):
+        """Anharmonic VPT2 fundamental transitions in cm^-1."""
+
+        return [row[1] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_anharmonic_shifts(self):
+        """VPT2 fundamental-minus-harmonic shifts in cm^-1."""
+
+        return [row[2] for row in self._vpt2_fundamental_table]
+
+    @property
+    def vpt2_zero_point_rovibrational_energy(self):
+        """Total VPT2 zero-point ro-vibrational energy in cm^-1."""
+
+        totals = []
+        for index, line in enumerate(self.contents):
+            if "Zero-point ro-vibrational energy [1/cm]" not in line:
+                continue
+            for candidate in self.contents[index + 1 : index + 20]:
+                if candidate.strip().casefold().startswith("total:"):
+                    totals.append(float(candidate.split()[-1]))
+                    break
+        return totals[-1] if totals else None
 
     @property
     def normal_modes(self):
@@ -2404,6 +2719,80 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-3])
         return None
+
+    @cached_property
+    def electronic_absorption_spectra(self):
+        """Return complete electric-dipole absorption tables in file order.
+
+        ORCA 6 prints transition labels followed by energy in eV and cm-1,
+        wavelength in nm, and the length-gauge oscillator strength.  A job may
+        contain more than one electronic-spectrum evaluation; callers asking
+        for the final result use the last complete table rather than joining
+        roots from different geometries.
+        """
+
+        header = "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
+        row_pattern = re.compile(
+            r"^\s*\S+\s+->\s+\S+\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)"
+        )
+        tables = []
+        for index, line in enumerate(self.contents):
+            if header not in line:
+                continue
+            rows = []
+            started = False
+            for candidate in self.contents[index + 1 :]:
+                match = row_pattern.match(candidate)
+                if match is not None:
+                    started = True
+                    energy_ev, energy_cm1, wavelength_nm, oscillator = (
+                        float(value) for value in match.groups()
+                    )
+                    rows.append(
+                        {
+                            "energy_eV": energy_ev,
+                            "energy_cm^-1": energy_cm1,
+                            "wavelength_nm": wavelength_nm,
+                            "oscillator_strength": oscillator,
+                        }
+                    )
+                    continue
+                if started and candidate.strip().startswith("-"):
+                    break
+            if rows:
+                tables.append(tuple(rows))
+        return tuple(tables)
+
+    @property
+    def excitation_energies_eV(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["energy_eV"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
+
+    @property
+    def absorption_wavelengths(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["wavelength_nm"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
+
+    @property
+    def oscillator_strengths(self):
+        if not self.electronic_absorption_spectra:
+            return None
+        return [
+            row["oscillator_strength"]
+            for row in self.electronic_absorption_spectra[-1]
+        ]
 
     @property
     def molar_absorption_coefficients(self):
@@ -2568,6 +2957,9 @@ class ORCAOutput(ORCAFileMixin):
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def temperature_in_K(self):
+        section = self._last_complete_thermochemistry_section
+        if section is not None and section.temperature_k is not None:
+            return section.temperature_k
         for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
                 for line_j in self.contents[i + 3 :]:
@@ -2578,6 +2970,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def pressure_in_atm(self):
+        section = self._last_complete_thermochemistry_section
+        if section is not None and section.pressure_atm is not None:
+            return section.pressure_atm
         for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
                 for line_j in self.contents[i + 3 :]:
@@ -3019,6 +3414,9 @@ class ORCAOutput(ORCAFileMixin):
         The entropies will be listed as multiplied by the temperature
         to get units of energy, in Hartree.
         """
+        section = self._last_complete_thermochemistry_section
+        if section is not None:
+            return section.entropy_times_temperature
         for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
                 for line_j in self.contents[i + 10 :]:
@@ -3070,6 +3468,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         The Gibbs free energy is G = H - T*S.
         """
+        section = self._last_complete_thermochemistry_section
+        if section is not None:
+            return section.gibbs_free_energy
         for i, line_i in enumerate(self.contents):
             if line_i == "GIBBS FREE ENERGY":
                 for line_j in self.contents[i:]:
@@ -3526,11 +3927,23 @@ class ORCANEBOutput(ORCAOutput):
         self.filename = filename
 
     @property
-    def ci_converged(self):
+    def neb_converged(self):
+        """Whether the NEB path optimization itself converged.
+
+        ORCA uses the same completion banner for plain NEB, climbing-image
+        NEB, and the path stage of NEB-TS.  This is distinct from normal
+        process termination and from the optional follow-up TS optimization.
+        """
         for line in self.contents:
             if "THE NEB OPTIMIZATION HAS CONVERGED" in line:
                 return True
         return False
+
+    @property
+    def ci_converged(self):
+        """Backward-compatible alias for :attr:`neb_converged`."""
+
+        return self.neb_converged
 
     @property
     def ts_converged(self):
@@ -3679,3 +4092,284 @@ class ORCANEBOutput(ORCAOutput):
                     ts_rms_force,
                 )
         return None, None, None, None
+
+
+class ORCApKaOutput(ORCAOutput):
+    """
+    Extended ORCAOutput for pKa calculations with thermochemistry support.
+
+    Mirrors Gaussian16pKaOutput but operates on ORCA output files. Uses the
+    same Thermochemistry analysis engine, which auto-detects file format via
+    Molecule.from_filepath.
+
+    Attributes:
+        temperature (float): Temperature in K. Default 298.15.
+        concentration (float): Concentration in mol/L. Default 1.0.
+        pressure (float): Pressure in atm. Default 1.0.
+        cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.
+        cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.
+        energy_units (str): Energy units for output. Default 'hartree'.
+    """
+
+    def __init__(
+        self,
+        filename,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        energy_units="hartree",
+    ):
+        super().__init__(filename=filename)
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.entropy_method = entropy_method
+        self.energy_units = energy_units.lower()
+        self._thermochemistry = None
+
+    @property
+    def thermochemistry(self):
+        """Get or create the Thermochemistry analysis object."""
+        if self._thermochemistry is None:
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
+            self._thermochemistry = Thermochemistry(
+                filename=self.filename,
+                temperature=self.temperature,
+                concentration=self.concentration,
+                pressure=self.pressure,
+                use_weighted_mass=False,
+                alpha=4,
+                s_freq_cutoff=self.cutoff_entropy_grimme,
+                entropy_method=self.entropy_method,
+                h_freq_cutoff=self.cutoff_enthalpy,
+                energy_units=self.energy_units,
+                check_imaginary_frequencies=True,
+            )
+        return self._thermochemistry
+
+    @property
+    def electronic_energy_in_units(self):
+        """Electronic energy (E) in specified units."""
+        return energy_conversion(
+            "j/mol",
+            self.energy_units,
+            self.thermochemistry.electronic_energy,
+        )
+
+    @property
+    def qh_gibbs_free_energy(self):
+        """Quasi-harmonic Gibbs free energy qh-G(T) in specified units."""
+        qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
+        if qh_gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_gibbs_j_mol)
+
+    @property
+    def zero_point_energy_in_units(self):
+        zpe = self.thermochemistry.zero_point_energy
+        if zpe is None:
+            raise ValueError(f"Cannot compute ZPE for {self.filename}.")
+        return energy_conversion("j/mol", self.energy_units, zpe)
+
+    @property
+    def enthalpy_in_units(self):
+        h = self.thermochemistry.enthalpy
+        if h is None:
+            raise ValueError(f"Cannot compute enthalpy for {self.filename}.")
+        return energy_conversion("j/mol", self.energy_units, h)
+
+    @property
+    def qh_enthalpy_in_units(self):
+        qh_h = self.thermochemistry.qrrho_enthalpy
+        if qh_h is None:
+            raise ValueError(
+                f"Cannot compute qh-enthalpy for {self.filename}."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_h)
+
+    @property
+    def gibbs_free_energy_in_units(self):
+        g = self.thermochemistry.gibbs_free_energy
+        if g is None:
+            raise ValueError(
+                f"Cannot compute Gibbs free energy for {self.filename}."
+            )
+        return energy_conversion("j/mol", self.energy_units, g)
+
+    @property
+    def thermochemical_properties(self):
+        return {
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    def compute_thermochemistry(self):
+        """Compute all thermochemistry properties."""
+        import os
+
+        thermo = self.thermochemistry
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+
+        return {
+            "structure": structure,
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.entropy_times_temperature,
+                )
+                if thermo.entropy_times_temperature
+                else None
+            ),
+            "qh_entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.qrrho_entropy_times_temperature,
+                )
+                if thermo.qrrho_entropy_times_temperature
+                else None
+            ),
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    # ------------------------------------------------------------------
+    # Multi-species pKa thermochemistry
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def compute_pka_thermochemistry(
+        ha_file=None,
+        a_file=None,
+        href_file=None,
+        ref_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
+
+        return compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            href_file=href_file,
+            ref_file=ref_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+    # ------------------------------------------------------------------
+    # Dual-level pKa computation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def compute_pka(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file=None,
+        ref_gas_file=None,
+        ha_solv_file=None,
+        a_solv_file=None,
+        href_solv_file=None,
+        ref_solv_file=None,
+        pka_reference=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """Compute pKa using a dual-level thermodynamic cycle."""
+        from chemsmart.cli.pka import compute_pka
+
+        return compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )
+
+    @staticmethod
+    def print_pka_summary(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file,
+        ref_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        href_solv_file,
+        ref_solv_file,
+        pka_reference,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """Print formatted pKa summary."""
+        from chemsmart.cli.pka import print_pka_summary as _print_pka_summary
+
+        return _print_pka_summary(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )

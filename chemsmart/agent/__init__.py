@@ -1,64 +1,139 @@
-"""Public agent exports for chemsmart."""
+"""Command-compiled, capability-driven ChemSmart agent foundation."""
 
-from __future__ import annotations
-
-from importlib import import_module
+from chemsmart.agent.capabilities import (
+    AgentProgramSupportOverlayV1,
+    ProgramCandidateProposalV1,
+    ProgramCapabilityQueryV1,
+    ProgramCapabilityReceiptV1,
+    ProgramEnvironmentQueryV1,
+    ProgramEnvironmentReceiptV1,
+    ProgramComponentConformanceReceiptV1,
+    ResolvedEngineBindingV1,
+    ResolvedProgramEngineBindingV1,
+    ResolvedProgramBindingV1,
+)
+from chemsmart.agent.analysis_nodes import (
+    AnalysisExecutionReceiptV1,
+    AnalysisNodeSpecV1,
+    ResultParserAdapterV1,
+    ResultQuantitySelectorV1,
+    ScientificAnalysisPlanV1,
+)
+from chemsmart.agent.preflight import (
+    ProgramNodePreflightReceiptV1,
+    ProgramNodePreflightRequestV1,
+)
+from chemsmart.agent.scientific_toolchain import (
+    AnalysisInputIntentV1,
+    AnalysisNodeIntentV1,
+    AnalysisOutputIntentV1,
+    AnalysisSelectorIntentV1,
+    ScientificToolchainPlanV1,
+)
+from chemsmart.agent.execution import (
+    FrozenMaterializedNodePreviewV1,
+    FrozenProducerEdgeRuleV1,
+    FrozenWorkflowApprovalV1,
+    ProgramResultValidationReceiptV1,
+    WorkflowRunStateV1,
+    ValidatedDataEdgeBindingV1,
+)
+from chemsmart.agent.dependency_context import (
+    ContextManifestV2,
+    ContextSelectionReceiptV1,
+    HarnessContextArmV1,
+    PredecessorEvidenceRefV1,
+    SpecialistTaskPacketV2,
+    TaskDependencyContextPolicyV1,
+    TaskDependencyContextV1,
+    bind_selected_public_records,
+    build_dependency_context_public_projection,
+)
+from chemsmart.agent.specialists import (
+    BoundedSpecialistOrchestratorV1,
+    CoordinatorMergeReceiptV1,
+    CriticSessionOutcomeV1,
+    SpecialistBudgetV1,
+    SpecialistSessionOutcomeV1,
+)
+from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+from chemsmart.agent.workflows import (
+    ArtifactInputIntentV1,
+    ArtifactOutputIntentV1,
+    ArtifactBindingV1,
+    CommandNodeIntentV1,
+    CommandNodeV1,
+    CommandWorkflowDraftV1,
+    CommandWorkflowSpecV1,
+    CausalToolFeedbackV1,
+    ContextManifestV1,
+    HarnessExperimentConfigV1,
+    MaterializedWorkflowV1,
+    ScientificReviewFindingV1,
+    ScientificWorkflowPlanV2,
+    SpecialistResultPacketV1,
+    SpecialistTaskPacketV1,
+    StationaryPointValidationPolicyV1,
+)
 
 __all__ = [
-    "AgentSession",
-    "run_agent",
-    "build_molecule",
-    "build_gaussian_settings",
-    "build_orca_settings",
-    "build_job",
-    "dry_run_input",
-    "recommend_method",
-    "validate_runtime",
-    "run_local",
-    "submit_hpc",
-    "SubmitTransport",
-    "LocalDryRunTransport",
-    "SshQsubTransport",
-    "MockTransport",
+    "AgentProgramSupportOverlayV1",
+    "AnalysisExecutionReceiptV1",
+    "AnalysisInputIntentV1",
+    "AnalysisNodeIntentV1",
+    "AnalysisNodeSpecV1",
+    "AnalysisOutputIntentV1",
+    "AnalysisSelectorIntentV1",
+    "ArtifactInputIntentV1",
+    "ArtifactOutputIntentV1",
+    "ArtifactBindingV1",
+    "BoundedSpecialistOrchestratorV1",
+    "CommandCompiledToolHostV1",
+    "CommandNodeIntentV1",
+    "CommandNodeV1",
+    "CommandWorkflowDraftV1",
+    "CommandWorkflowSpecV1",
+    "CausalToolFeedbackV1",
+    "ContextManifestV1",
+    "ContextManifestV2",
+    "ContextSelectionReceiptV1",
+    "CoordinatorMergeReceiptV1",
+    "CriticSessionOutcomeV1",
+    "FrozenWorkflowApprovalV1",
+    "FrozenMaterializedNodePreviewV1",
+    "FrozenProducerEdgeRuleV1",
+    "HarnessExperimentConfigV1",
+    "HarnessContextArmV1",
+    "MaterializedWorkflowV1",
+    "ProgramCandidateProposalV1",
+    "ProgramCapabilityQueryV1",
+    "ProgramCapabilityReceiptV1",
+    "ProgramEnvironmentQueryV1",
+    "ProgramEnvironmentReceiptV1",
+    "ProgramComponentConformanceReceiptV1",
+    "ProgramNodePreflightReceiptV1",
+    "ProgramNodePreflightRequestV1",
+    "PredecessorEvidenceRefV1",
+    "ProgramResultValidationReceiptV1",
+    "ResolvedEngineBindingV1",
+    "ResolvedProgramEngineBindingV1",
+    "ResolvedProgramBindingV1",
+    "ResultParserAdapterV1",
+    "ResultQuantitySelectorV1",
+    "ScientificAnalysisPlanV1",
+    "ScientificToolchainPlanV1",
+    "ScientificReviewFindingV1",
+    "ScientificWorkflowPlanV2",
+    "SpecialistResultPacketV1",
+    "SpecialistBudgetV1",
+    "SpecialistSessionOutcomeV1",
+    "SpecialistTaskPacketV1",
+    "SpecialistTaskPacketV2",
+    "StationaryPointValidationPolicyV1",
+    "TaskDependencyContextPolicyV1",
+    "TaskDependencyContextV1",
+    "WorkflowRunStateV1",
+    "ValidatedDataEdgeBindingV1",
+    "bind_selected_public_records",
+    "build_dependency_context_public_projection",
 ]
-
-_EXPORTS = {
-    "AgentSession": ("chemsmart.agent.core", "AgentSession"),
-    "run_agent": ("chemsmart.agent.core", "run_agent"),
-    "build_molecule": ("chemsmart.agent.tools", "build_molecule"),
-    "build_gaussian_settings": (
-        "chemsmart.agent.tools",
-        "build_gaussian_settings",
-    ),
-    "build_orca_settings": (
-        "chemsmart.agent.tools",
-        "build_orca_settings",
-    ),
-    "build_job": ("chemsmart.agent.tools", "build_job"),
-    "dry_run_input": ("chemsmart.agent.tools", "dry_run_input"),
-    "recommend_method": ("chemsmart.agent.tools", "recommend_method"),
-    "validate_runtime": ("chemsmart.agent.tools", "validate_runtime"),
-    "run_local": ("chemsmart.agent.tools", "run_local"),
-    "submit_hpc": ("chemsmart.agent.tools", "submit_hpc"),
-    "SubmitTransport": ("chemsmart.agent.transport", "SubmitTransport"),
-    "LocalDryRunTransport": (
-        "chemsmart.agent.transport",
-        "LocalDryRunTransport",
-    ),
-    "SshQsubTransport": ("chemsmart.agent.transport", "SshQsubTransport"),
-    "MockTransport": ("chemsmart.agent.transport", "MockTransport"),
-}
-
-
-def __getattr__(name: str):
-    try:
-        module_name, attr_name = _EXPORTS[name]
-    except KeyError as exc:  # pragma: no cover - import protocol guard
-        raise AttributeError(name) from exc
-    value = getattr(import_module(module_name), attr_name)
-    globals()[name] = value
-    return value
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(__all__))

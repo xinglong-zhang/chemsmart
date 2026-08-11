@@ -224,7 +224,7 @@ def entry_point(
             logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
 
-    # Display ChemSmart ASCII banner
+    # Display CHEMSMART ASCII banner
     logger.info("\n")
     logger.info(
         "   "

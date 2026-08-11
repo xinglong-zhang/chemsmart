@@ -1,4 +1,3 @@
-import functools
 import logging
 import os
 
@@ -23,71 +22,113 @@ from chemsmart.utils.io import (
 logger = logging.getLogger(__name__)
 
 
-def click_thermochemistry_options(f):
-    """
-    Common click options for Thermochemistry.
-    """
-
-    @click.option(
+def thermochemistry_cutoff_options(
+    f,
+    entropy_grimme_default=None,
+    entropy_truhlar_default=None,
+    enthalpy_default=None,
+):
+    """Reusable quasi-RRHO cutoff options."""
+    f = click.option(
         "-csg",
         "--cutoff-entropy-grimme",
-        default=None,
+        default=entropy_grimme_default,
         type=float,
         show_default=True,
         help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
         "quasi-RRHO method.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-cst",
         "--cutoff-entropy-truhlar",
-        default=None,
+        default=entropy_truhlar_default,
         type=float,
         show_default=True,
         help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
         "quasi-RRHO method.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-ch",
         "--cutoff-enthalpy",
-        default=None,
+        default=enthalpy_default,
         type=float,
         show_default=True,
         help="Cutoff frequency for enthalpy in wavenumbers, using "
         "Head-Gordon's quasi-RRHO method.",
-    )
-    @click.option(
-        "-c",
+    )(f)
+    return f
+
+
+def resolve_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
+    """Resolve entropy cutoff and method from CLI options."""
+    if (
+        cutoff_entropy_grimme is not None
+        and cutoff_entropy_truhlar is not None
+    ):
+        raise ValueError(
+            "Cannot specify both --cutoff-entropy-grimme and "
+            "--cutoff-entropy-truhlar. Please choose one."
+        )
+    if cutoff_entropy_truhlar is not None:
+        return cutoff_entropy_truhlar, "truhlar"
+    if cutoff_entropy_grimme is not None:
+        return cutoff_entropy_grimme, "grimme"
+    return None, None
+
+
+def thermochemistry_temp_pressure_conc_options(
+    f,
+    temperature_required=True,
+    temperature_default=None,
+    concentration_default=None,
+    pressure_default=1.0,
+    include_pressure=True,
+    concentration_short="-c",
+):
+    """Reusable temperature, pressure, and concentration options."""
+    f = click.option(
+        concentration_short,
         "--concentration",
-        default=None,
+        default=concentration_default,
         type=float,
         show_default=True,
         help="Concentration in mol/L.",
-    )
-    @click.option(
-        "-P",
-        "--pressure",
-        default=1.0,
-        type=float,
-        show_default=True,
-        help="Pressure in atm.",
-    )
-    @click.option(
+    )(f)
+    if include_pressure:
+        f = click.option(
+            "-P",
+            "--pressure",
+            default=pressure_default,
+            type=float,
+            show_default=True,
+            help="Pressure in atm.",
+        )(f)
+    f = click.option(
         "-T",
         "--temperature",
-        required=True,
-        default=None,
+        required=temperature_required,
+        default=temperature_default,
         type=float,
         help="Temperature in Kelvin.",
-    )
-    @click.option(
+    )(f)
+    return f
+
+
+def click_thermochemistry_options(f):
+    """
+    Common click options for Thermochemistry.
+    """
+    f = thermochemistry_temp_pressure_conc_options(f)
+    f = thermochemistry_cutoff_options(f)
+    f = click.option(
         "-a",
         "--alpha",
         default=4,
         type=int,
         show_default=True,
         help="Interpolator exponent used in the quasi-RRHO approximation.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-w/",
         "--weighted/--no-weighted",
         default=True,
@@ -95,8 +136,8 @@ def click_thermochemistry_options(f):
         help="Use natural abundance weighted masses (True) or use most abundant "
         "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
         "abundance weighted masses, which is the real world scenario.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-u",
         "--energy-units",
         default="hartree",
@@ -105,8 +146,8 @@ def click_thermochemistry_options(f):
             ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
         ),
         help="Units of energetic values.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-o",
         "--outputfile",
         default=None,
@@ -114,27 +155,23 @@ def click_thermochemistry_options(f):
         help="Output file to save the thermochemistry results. Defaults to "
         "None, which will save results to file_basename.dat.\nIf "
         "specified, it will save all thermochemistry results to this file.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-O",
         "--overwrite",
         is_flag=True,
         default=False,
         show_default=True,
         help="Overwrite existing output files if they already exist.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-i/",
         "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
         default=True,
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
+    )(f)
+    return f
 
 
 # use MyGroup to allow potential subcommands in the future
@@ -184,9 +221,21 @@ def thermochemistry(
     will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
 
-    `chemsmart run thermochemistry -d /path/to/xtb_folders -p xtb -T 298.15`
-    will compute thermochemistry for xTB calculations in directories or
-    subdirectories.
+    `chemsmart run thermochemistry -f water_opt/water_opt.out -T 298.15`
+    will compute thermochemistry for one xTB output file.
+
+    `chemsmart run thermochemistry -d xtb_calculations/ -p xtb -T 298.15
+    -o thermo.dat`
+    will compute thermochemistry for valid xTB calculation directories located
+    directly below `xtb_calculations/` and save the combined results to
+    `thermo.dat`.
+
+    Directory discovery is non-recursive. For Gaussian and ORCA,
+    only matching output files directly inside the specified directory are
+    processed. For xTB, each immediate child directory is treated as one
+    candidate calculation because an xTB calculation consists of one main
+    output plus associated auxiliary files. The parent directory itself and
+    nested calculation directories at greater depths are not searched.
     """
     # validate input
     if directory and filenames:
@@ -200,29 +249,9 @@ def thermochemistry(
     if program:
         check_program_availability_in_chemsmart(program)
 
-    if program and program.lower() == "xtb" and filenames:
-        raise ValueError(
-            "For xTB thermochemistry, use --directory (-d) instead of "
-            "--filenames (-f). Each subdirectory should contain one xTB "
-            "calculation."
-        )
-
-    if cutoff_entropy_grimme and cutoff_entropy_truhlar:
-        raise ValueError(
-            "Cannot specify both --cutoff-entropy-grimme and "
-            "--cutoff-entropy-truhlar. Please choose one."
-        )
-
-    # choose entropy cutoff
-    if cutoff_entropy_grimme is not None:
-        cutoff_entropy = cutoff_entropy_grimme
-        entropy_method = "grimme"
-    elif cutoff_entropy_truhlar is not None:
-        cutoff_entropy = cutoff_entropy_truhlar
-        entropy_method = "truhlar"
-    else:
-        cutoff_entropy = None
-        entropy_method = None
+    cutoff_entropy, entropy_method = resolve_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
 
     # Create job settings
     job_settings = ThermochemistryJobSettings(
@@ -246,33 +275,37 @@ def thermochemistry(
 
     if directory:
         if program and program.lower() == "xtb":
-            folders = []
-            if XTBFolder(folder=directory).is_xtb_calculation_directory:
-                folders.append(directory)
-            else:
-                for entry in os.listdir(directory):
-                    subdir = os.path.join(directory, entry)
-                    if XTBFolder(folder=subdir).is_xtb_calculation_directory:
-                        folders.append(subdir)
-            if not folders:
+            directory = os.path.abspath(directory)
+            # Each immediate subdirectory represents one xTB calculation.
+            # Do not recurse, matching Gaussian and ORCA directory handling.
+            for entry in os.listdir(directory):
+                subdir = os.path.join(directory, entry)
+                if os.path.isdir(subdir):
+                    output_files = BaseFolder(
+                        folder=subdir
+                    ).get_all_output_files_in_current_folder_by_program(
+                        program="xtb"
+                    )
+                    if not output_files:
+                        continue
+                    try:
+                        is_calculation_directory = XTBFolder(
+                            folder=subdir
+                        ).is_xtb_calculation_directory
+                    except ValueError as e:
+                        logger.error(
+                            f"Skipping invalid xTB calculation directory "
+                            f"'{subdir}': {e}"
+                        )
+                        continue
+                    if is_calculation_directory:
+                        files.extend(output_files)
+            if not files:
                 raise ValueError(
-                    f"No xTB calculation folders found in '{directory}'.\n"
-                    "Expected to find directories containing xTB output files."
+                    f"No xTB output files found in calculation subdirectories "
+                    f"of '{directory}'. Use --filenames (-f) for a single xTB "
+                    f"output file."
                 )
-            for folder_path in folders:
-                job = ThermochemistryJob.from_folder(
-                    foldername=folder_path,
-                    settings=job_settings,
-                    skip_completed=skip_completed,
-                )
-                if outputfile is not None:
-                    job_settings.overwrite = False
-                    job_settings.write_header = False
-                jobs.append(job)
-                logger.info(
-                    f"Created thermochemistry job for folder: {folder_path}"
-                )
-                logger.debug(f"Job settings: {job_settings.__dict__}")
         elif program and not filetype:
             # obtain all output files belonging to a program
             files = BaseFolder(
@@ -297,12 +330,28 @@ def thermochemistry(
             )
 
         files = sorted(files)
-        for file in files:
-            job = ThermochemistryJob.from_filename(
-                filename=file,
-                settings=job_settings,
-                skip_completed=skip_completed,
+        if not files:
+            selector = (
+                f"program '{program}'"
+                if program is not None
+                else f"file type '{filetype}'"
             )
+            raise ValueError(
+                f"No output files matching {selector} found in '{directory}'."
+            )
+        for file in files:
+            try:
+                job = ThermochemistryJob.from_filename(
+                    filename=file,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Skipping invalid thermochemistry output file "
+                    f"'{file}': {e}"
+                )
+                continue
             if outputfile is not None:
                 job_settings.overwrite = False
                 job_settings.write_header = False
@@ -312,10 +361,14 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if get_program_type_from_file(file) not in {"gaussian", "orca"}:
+            if get_program_type_from_file(file) not in {
+                "gaussian",
+                "orca",
+                "xtb",
+            }:
                 raise ValueError(
-                    f"Unsupported output file type for '{file}'. Use Gaussian or "
-                    f"ORCA output files."
+                    f"Unsupported output file type for '{file}'. Use Gaussian, "
+                    f"ORCA, or xTB output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,

@@ -35,7 +35,19 @@ class GaussianRefs:
     ]
 
     # Basis set families and prefixes
-    g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
+    g_bases = [
+        "3-",
+        "6-",
+        "def",
+        "def2",
+        "lan",
+        "cc",
+        "aug",
+        "gen",
+        "genecp",
+        "sv",
+        "tzv",
+    ]
 
     # Semi-empirical methods
     g_semiempirical = [

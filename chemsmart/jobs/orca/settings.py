@@ -13,7 +13,11 @@ import logging
 import os
 import re
 
-from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
+from chemsmart.io.orca import (
+    ORCA_ALL_SOLVENT_MODELS,
+    ORCA_SCF_CONVERGENCE,
+    normalize_orca_neb_joboption,
+)
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
@@ -23,29 +27,215 @@ from chemsmart.utils.utils import (
 
 logger = logging.getLogger(__name__)
 
-_ORCA_FREQ_RE = re.compile(r"\b(?:num|an)?freq\b", re.IGNORECASE)
 
 
-def _drop_duplicate_route_freq(
-    additional_route_parameters: str,
-    route_string: str,
-    *,
-    has_frequency: bool = False,
-) -> str:
-    """Strip a redundant ``freq`` token from ORCA extra route parameters.
+def _normalize_choice(value, allowed, field_name):
+    """Return the canonical lower-case choice or raise on an unknown value.
 
-    Mirrors the Gaussian helper: if the jobtype route already carries a
-    frequency keyword (``Freq``/``NumFreq`` from ``self.freq``/``self.numfreq``),
-    remove a duplicate ``freq`` token from ``additional_route_parameters`` so it
-    is not written twice. When the route has no frequency keyword yet (the agent
-    adapter injects freq for ``*.freq`` jobs purely via route params), the token
-    is preserved so the frequency calculation is actually requested.
+    Refusing an unrecognised value keeps these fields from degenerating into a
+    free-text channel into the ORCA route, which is what the harness forbids the
+    model from writing directly.
     """
-    if not has_frequency and not _ORCA_FREQ_RE.search(route_string):
-        return additional_route_parameters
-    tokens = additional_route_parameters.split()
-    filtered = [t for t in tokens if not _ORCA_FREQ_RE.fullmatch(t)]
-    return " ".join(filtered)
+
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in allowed:
+        raise ValueError(
+            f"Unsupported {field_name} {value!r}; "
+            f"expected one of {sorted(allowed)}."
+        )
+    return normalized
+
+
+def _normalize_orca_grid(value):
+    """Normalize modern DEFGRID and legacy GridN project literals.
+
+    Published ORCA protocols often report the pre-5.0 ``Grid4``--``Grid7``
+    vocabulary, while current protocols use ``DEFGRID1``--``DEFGRID3``.  A
+    YAML number such as ``6`` therefore has an unambiguous program-relative
+    meaning and is materialized as ``Grid6`` rather than emitted as an invalid
+    bare token.
+
+    Validation is case-insensitive but emission is not: ORCA reads its route
+    case-insensitively, so rewriting a project's own casing would change every
+    generated input file for no scientific reason.  A token that is already a
+    member of the vocabulary is therefore returned unchanged.
+    """
+
+    if value is None:
+        return None
+    literal = str(value).strip()
+    normalized = literal.lower()
+    if normalized.isdigit() and 1 <= int(normalized) <= 7:
+        # A bare integer is not an ORCA keyword, so this form has no casing
+        # of its own to preserve; use the vocabulary the manual prints.
+        return f"Grid{normalized}"
+    allowed = {
+        "defgrid1",
+        "defgrid2",
+        "defgrid3",
+        "grid1",
+        "grid2",
+        "grid3",
+        "grid4",
+        "grid5",
+        "grid6",
+        "grid7",
+    }
+    if normalized not in allowed:
+        raise ValueError(
+            f"Unsupported defgrid {value!r}; expected one of {sorted(allowed)}."
+        )
+    return literal
+
+
+def _normalize_orca_scf_convergence(value):
+    """Normalize human and simple-input spellings of ORCA SCF convergence.
+
+    Methods sections commonly say "extremely tight SCF" while ORCA names the
+    preset ``ExtremeSCF`` (and the corresponding ``%scf`` value ``extreme``).
+    Keep that program spelling in the adapter instead of asking project authors
+    or agents to guess it.
+    """
+
+    if value is None:
+        return None
+    normalized = str(value).strip().casefold().replace("-", "").replace("_", "")
+    normalized = normalized.replace(" ", "")
+    if normalized.endswith("scf"):
+        normalized = normalized[:-3]
+    aliases = {
+        "extremelytight": "extreme",
+        "extremetight": "extreme",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in ORCA_SCF_CONVERGENCE:
+        raise ValueError(
+            f"Unsupported scf_convergence {value!r}; expected one of "
+            f"{sorted(ORCA_SCF_CONVERGENCE)} or the phrase "
+            "'extremely tight'."
+        )
+    return normalized
+
+
+def _normalize_additional_route_parameters(value):
+    """Normalize the legacy ORCA route escape hatch without Python repr text."""
+
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        if not all(isinstance(item, str) and item.strip() for item in value):
+            raise ValueError(
+                "additional_route_parameters must contain non-empty strings"
+            )
+        return " ".join(item.strip() for item in value)
+    raise ValueError(
+        "additional_route_parameters must be a string or a sequence of strings"
+    )
+
+
+#: Scalar-relativistic Hamiltonians ORCA accepts as simple route keywords.
+#: The value is the keyword written to the ``!`` line.
+ORCA_RELATIVISTIC_KEYWORDS = {
+    "dkh": "DKH",
+    "dkh2": "DKH2",
+    "zora": "ZORA",
+}
+
+#: Basis-set name fragments that mark a relativistically recontracted set.
+#: DKH/ZORA Hamiltonians are only meaningful with such a basis; pairing one
+#: with a non-relativistic contraction is a methodological error, not a
+#: tolerance question.
+ORCA_RELATIVISTIC_BASIS_MARKERS = ("-dk", "dkh", "sarc", "zora", "-x2c", "x2c-")
+
+#: Reference determinants ORCA exposes through ``%scf HFTyp``.
+ORCA_REFERENCE_DETERMINANTS = {
+    "rhf": "RHF",
+    "rohf": "ROHF",
+    "uhf": "UHF",
+}
+
+#: Frozen-core policies ORCA exposes through ``%method FrozenCore``.
+ORCA_FROZEN_CORE_POLICIES = {
+    "fc_none": "FC_NONE",
+    "fc_electrons": "FC_ELECTRONS",
+    "fc_ewin": "FC_EWIN",
+}
+
+#: Resolution-of-identity choices written as simple route keywords.
+#: ``none`` emits ``NoRI``: benchmark-quality energetics often need the
+#: approximation switched off explicitly rather than left to a program default.
+ORCA_RI_KEYWORDS = {
+    "none": "NoRI",
+    "ri": "RI",
+    "rijcosx": "RIJCOSX",
+    "rijk": "RIJK",
+}
+
+#: Recommended simple-input presets for domain-based local correlation.
+#: ORCA explicitly recommends these keywords over manually reproducing a
+#: partial set of numeric ``%mdci`` thresholds.  The project-facing values
+#: remain short, stable choices while the writer owns the native spelling.
+ORCA_MDCI_CUTOFF_KEYWORDS = {
+    "loose": "LoosePNO",
+    "normal": "NormalPNO",
+    "tight": "TightPNO",
+}
+
+# ORCA spells the GFN-xTB family as XTB0/XTB1/XTB2 in its simple input.
+# Project authors naturally use either vocabulary, so keep that translation in
+# the program adapter rather than requiring users or agents to memorize the
+# native spelling.
+ORCA_SEMIEMPIRICAL_ALIASES = {
+    "xtb": "XTB",
+    "gfn0-xtb": "XTB0",
+    "gfn0xtb": "XTB0",
+    "xtb0": "XTB0",
+    "gfn1-xtb": "XTB1",
+    "gfn1xtb": "XTB1",
+    "xtb1": "XTB1",
+    "gfn2-xtb": "XTB2",
+    "gfn2xtb": "XTB2",
+    "xtb2": "XTB2",
+    "am1": "AM1",
+    "pm3": "PM3",
+}
+
+
+# ORCA does not use every punctuation-rich name printed in papers.  In
+# particular, the Truhlar functional normally written ``M06-2X`` in Methods
+# sections is the native simple-input keyword ``M062X``.  Keep that translation
+# in the ORCA adapter so project authors and agents can use the scientific name
+# while ChemSmart owns the program grammar.
+ORCA_FUNCTIONAL_ALIASES = {
+    "m06-2x": "M062X",
+    "m06_2x": "M062X",
+}
+
+ORCA_TD_RESPONSE_METHODS = ("tda", "tddft")
+ORCA_TD_STATE_MANIFOLDS = ("singlet", "singlet_triplet")
+
+
+def _normalize_orca_functional(value):
+    """Return the native ORCA keyword for a recognized functional alias."""
+
+    if value is None:
+        return None
+    literal = str(value).strip()
+    if not literal:
+        return None
+    return ORCA_FUNCTIONAL_ALIASES.get(literal.casefold(), literal)
+
+
+def _normalize_orca_semiempirical(value):
+    if value is None:
+        return None
+    literal = str(value).strip()
+    if not literal:
+        return None
+    key = literal.lower().replace("_", "-")
+    return ORCA_SEMIEMPIRICAL_ALIASES.get(key, literal)
 
 
 class ORCAJobSettings(MolecularJobSettings):
@@ -119,6 +309,7 @@ class ORCAJobSettings(MolecularJobSettings):
         functional=None,
         dispersion=None,
         basis=None,
+        semiempirical=None,
         aux_basis=None,
         extrapolation_basis=None,
         defgrid=None,
@@ -131,10 +322,21 @@ class ORCAJobSettings(MolecularJobSettings):
         gbw=True,
         freq=False,
         numfreq=False,
+        vpt2=False,
+        vpt2_anharmonic_displacement=None,
+        vpt2_hessian_cutoff=None,
+        response_method=None,
+        nstates=None,
+        state_manifold=None,
         dipole=False,
         quadrupole=False,
         mdci_cutoff=None,
         mdci_density=None,
+        relativistic=None,
+        reference=None,
+        frozen_core=None,
+        frozen_core_electrons=None,
+        ri_approximation=None,
         jobtype=None,
         title=None,
         solvent_model=None,
@@ -174,6 +376,11 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw: Whether to write GBW file
             freq: Whether to calculate frequencies
             numfreq: Whether to use numerical frequencies
+            response_method: Excited-state response approximation for a
+                fixed-geometry calculation (``tda`` or full ``tddft``)
+            nstates: Number of requested electronic excited-state roots
+            state_manifold: Requested spin manifold.  The initial ORCA
+                implementation supports closed-shell singlet roots.
             dipole: Whether to calculate dipole moment
             quadrupole: Whether to calculate quadrupole moment
             mdci_cutoff: MDCI cutoff
@@ -201,12 +408,27 @@ class ORCAJobSettings(MolecularJobSettings):
             invert_constraints: Whether to invert constraints
             **kwargs: Additional keyword arguments
         """
+        # ``NumFreq`` is a frequency mode, not an independent request that
+        # conflicts with ``freq``.  Project authors (and agents) naturally
+        # write ``freq: true`` together with ``numfreq: true`` to mean
+        # "calculate frequencies numerically".  Normalize that intent here so
+        # the effective settings and the native ORCA route both contain one
+        # unambiguous frequency keyword.
+        if vpt2 is True:
+            # ORCA VPT2 constructs the harmonic and displaced Hessians itself;
+            # a separate Freq/NumFreq keyword would request a second analysis.
+            freq = False
+            numfreq = False
+        elif numfreq is True:
+            freq = False
+
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
             dispersion=dispersion,
             basis=basis,
-            defgrid=defgrid,
+            semiempirical=_normalize_orca_semiempirical(semiempirical),
+            defgrid=_normalize_orca_grid(defgrid),
             charge=charge,
             multiplicity=multiplicity,
             freq=freq,
@@ -215,7 +437,9 @@ class ORCAJobSettings(MolecularJobSettings):
             title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
-            additional_route_parameters=additional_route_parameters,
+            additional_route_parameters=_normalize_additional_route_parameters(
+                additional_route_parameters
+            ),
             route_to_be_written=route_to_be_written,
             modred=modred,
             gen_genecp_file=gen_genecp_file,
@@ -234,15 +458,110 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_tol = scf_tol
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
-        self.scf_convergence = scf_convergence
+        self.scf_convergence = _normalize_orca_scf_convergence(
+            scf_convergence
+        )
         self.gbw = gbw
-        self.mdci_cutoff = mdci_cutoff
+        self.mdci_cutoff = _normalize_choice(
+            mdci_cutoff, ORCA_MDCI_CUTOFF_KEYWORDS, "mdci_cutoff"
+        )
         self.mdci_density = mdci_density
+        self.relativistic = _normalize_choice(
+            relativistic, ORCA_RELATIVISTIC_KEYWORDS, "relativistic"
+        )
+        self.reference = _normalize_choice(
+            reference, ORCA_REFERENCE_DETERMINANTS, "reference"
+        )
+        self.frozen_core = _normalize_choice(
+            frozen_core, ORCA_FROZEN_CORE_POLICIES, "frozen_core"
+        )
+        self.frozen_core_electrons = frozen_core_electrons
+        self.ri_approximation = _normalize_choice(
+            ri_approximation, ORCA_RI_KEYWORDS, "ri_approximation"
+        )
         self.dipole = dipole
         self.quadrupole = quadrupole
+        self.vpt2 = bool(vpt2)
+        self.vpt2_anharmonic_displacement = (
+            None
+            if vpt2_anharmonic_displacement is None
+            else float(vpt2_anharmonic_displacement)
+        )
+        self.vpt2_hessian_cutoff = (
+            None
+            if vpt2_hessian_cutoff is None
+            else float(vpt2_hessian_cutoff)
+        )
+        if not self.vpt2 and (
+            self.vpt2_anharmonic_displacement is not None
+            or self.vpt2_hessian_cutoff is not None
+        ):
+            raise ValueError(
+                "VPT2 numerical settings require vpt2: true"
+            )
+        if (
+            self.vpt2_anharmonic_displacement is not None
+            and self.vpt2_anharmonic_displacement <= 0
+        ):
+            raise ValueError("VPT2 anharmonic displacement must be positive")
+        if (
+            self.vpt2_hessian_cutoff is not None
+            and self.vpt2_hessian_cutoff <= 0
+        ):
+            raise ValueError("VPT2 Hessian cutoff must be positive")
+        self.response_method = (
+            None
+            if response_method is None
+            else _normalize_choice(
+                response_method,
+                ORCA_TD_RESPONSE_METHODS,
+                "response_method",
+            )
+        )
+        self.nstates = None if nstates is None else int(nstates)
+        self.state_manifold = (
+            None
+            if state_manifold is None
+            else _normalize_choice(
+                state_manifold,
+                ORCA_TD_STATE_MANIFOLDS,
+                "state_manifold",
+            )
+        )
+        td_values = (self.response_method, self.nstates, self.state_manifold)
+        if self.jobtype == "td" and any(
+            value is not None for value in td_values
+        ):
+            if any(value is None for value in td_values):
+                raise ValueError(
+                    "ORCA td requires response_method, nstates, and "
+                    "state_manifold"
+                )
+            if self.nstates <= 0:
+                raise ValueError("ORCA td nstates must be a positive integer")
+            if self.state_manifold in ORCA_TD_STATE_MANIFOLDS and (
+                self.multiplicity is not None
+                and int(self.multiplicity) != 1
+            ):
+                raise ValueError(
+                    "ORCA singlet TD roots require a singlet reference "
+                    "multiplicity"
+                )
+            if self.freq or self.numfreq:
+                raise ValueError(
+                    "ChemSmart ORCA td is a fixed-geometry vertical response "
+                    "calculation and does not accept freq or numfreq"
+                )
+        elif any(value is not None for value in td_values):
+            raise ValueError(
+                "ORCA response_method, nstates, and state_manifold are only "
+                "supported for fixed-geometry jobtype 'td'"
+            )
         self.invert_constraints = invert_constraints
         self.additional_solvent_options = additional_solvent_options
         self.solventfilename = solventfilename
+
+        self._validate_electronic_structure_consistency()
 
         # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):
@@ -251,6 +570,55 @@ class ORCAJobSettings(MolecularJobSettings):
                 "Orca at the same time!\n"
                 'Such an input file will give "Illegal IType or MSType '
                 'generated by parse." error.'
+            )
+
+    def _validate_electronic_structure_consistency(self):
+        """Refuse electronic-structure settings that cannot describe the state.
+
+        These are correctness pairings, not accuracy judgements: each one names
+        a combination that is wrong for any system, not one that is merely
+        inaccurate for some.
+        """
+
+        if (
+            self.reference == "rhf"
+            and self.multiplicity is not None
+            and int(self.multiplicity) > 1
+        ):
+            raise ValueError(
+                "reference='rhf' cannot represent multiplicity "
+                f"{self.multiplicity}; a restricted closed-shell determinant "
+                "has no open shell. Use 'rohf' or 'uhf'."
+            )
+
+        if self.relativistic is not None:
+            bases = [
+                value
+                for value in (
+                    self.basis,
+                    self.heavy_elements_basis,
+                    self.light_elements_basis,
+                )
+                if value
+            ]
+            for value in bases:
+                if not any(
+                    marker in str(value).lower()
+                    for marker in ORCA_RELATIVISTIC_BASIS_MARKERS
+                ):
+                    raise ValueError(
+                        f"relativistic={self.relativistic!r} requires a "
+                        f"relativistically recontracted basis, but {value!r} "
+                        "is not one. Use a -DK, SARC, ZORA, or X2C set."
+                    )
+
+        if (
+            self.frozen_core_electrons is not None
+            and self.frozen_core != "fc_electrons"
+        ):
+            raise ValueError(
+                "frozen_core_electrons applies only to "
+                "frozen_core='fc_electrons'."
             )
 
     def merge(
@@ -396,12 +764,13 @@ class ORCAJobSettings(MolecularJobSettings):
             ORCAJobSettings: Settings object from input file
         """
         inp_path = os.path.abspath(inp_path)
-        from chemsmart.io.orca.input import ORCAInput
+        from chemsmart.io.orca.input import ORCAInput, ORCANEBInput
 
         logger.info(f"Return settings object from {inp_path}")
-        orca_settings_from_inpfile = ORCAInput(
-            filename=inp_path
-        ).read_settings()
+        parser = ORCAInput(filename=inp_path)
+        if parser.jobtype == "neb":
+            parser = ORCANEBInput(filename=inp_path)
+        orca_settings_from_inpfile = parser.read_settings()
         logger.info(f"with settings: {orca_settings_from_inpfile.__dict__}")
         return orca_settings_from_inpfile
 
@@ -487,6 +856,9 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw=True,
             freq=True,
             numfreq=False,
+            response_method=None,
+            nstates=None,
+            state_manifold=None,
             dipole=False,
             quadrupole=False,
             mdci_cutoff=None,
@@ -564,20 +936,60 @@ class ORCAJobSettings(MolecularJobSettings):
         elif self.jobtype == "sp":
             route_string += ""
 
-        # add frequency calculation
-        # not okay if both freq and numfreq are True
-        if self.freq and self.numfreq:
-            raise ValueError("Cannot specify both freq and numfreq!")
-
-        if self.freq:
-            route_string += " Freq"
-        elif self.numfreq:
+        # Numerical frequency mode takes precedence over analytic frequency.
+        # The constructor already normalizes the common YAML spelling with
+        # both booleans true, while this ordering also keeps direct mutation
+        # from producing two contradictory native keywords.
+        if self.numfreq:
             route_string += " NumFreq"  # requires numerical frequency,
             # e.g., in SMD model where analytic Hessian is not available
+        elif self.freq:
+            route_string += " Freq"
 
-        # write level of theory
-        level_of_theory = self._get_level_of_theory()
+        if self.vpt2:
+            route_string += " VPT2"
+
+        # Built-in semiempirical methods do not take an orbital basis.  The
+        # same project field is used by NEB and ordinary ORCA jobs such as
+        # IRC, so materialize it here instead of dropping it outside NEB.
+        if self.semiempirical is not None:
+            if any(
+                value is not None
+                for value in (self.ab_initio, self.functional, self.basis)
+            ):
+                raise ValueError(
+                    "semiempirical ORCA methods cannot be combined with "
+                    "ab_initio, functional, or basis settings"
+                )
+            level_of_theory = self.semiempirical
+        else:
+            level_of_theory = self._get_level_of_theory()
         route_string += f" {level_of_theory}"
+
+        # Empirical dispersion is a first-class project setting.  Keeping it
+        # only on the Python object made loader-valid B3LYP-D3BJ projects emit
+        # plain B3LYP inputs, which changes the requested Hamiltonian.
+        if self.dispersion is not None:
+            route_string += f" {self.dispersion}"
+
+        # Use ORCA's own Loose/Normal/TightPNO presets.  These control more
+        # than the three thresholds the old handwritten %mdci block copied,
+        # so the preset is the scientifically faithful representation.
+        if self.mdci_cutoff is not None:
+            route_string += (
+                f" {ORCA_MDCI_CUTOFF_KEYWORDS[self.mdci_cutoff]}"
+            )
+
+        # scalar-relativistic Hamiltonian; belongs with the method because it
+        # changes the operator, not just the numerics
+        if self.relativistic is not None:
+            route_string += (
+                f" {ORCA_RELATIVISTIC_KEYWORDS[self.relativistic]}"
+            )
+
+        # resolution-of-identity choice, including switching it off explicitly
+        if self.ri_approximation is not None:
+            route_string += f" {ORCA_RI_KEYWORDS[self.ri_approximation]}"
 
         # write grid information
         if self.defgrid is not None:
@@ -627,6 +1039,16 @@ class ORCAJobSettings(MolecularJobSettings):
         else:
             pass
 
+        # Keep the long-standing project-YAML escape hatch effective.  These
+        # tokens are configuration owned by the validated project, not shell
+        # text or a model-authored native input.  Previously the loader stored
+        # ``additional_route_parameters`` but the ORCA writer silently dropped
+        # it, so a project could validate while omitting method-defining
+        # keywords from the generated input.
+        additional = str(self.additional_route_parameters or "").strip()
+        if additional:
+            route_string += f" {additional}"
+
         # Deduplication: if solvent model appears twice,
         # the first time it appears is removed
         if (
@@ -643,19 +1065,6 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string = deduplicate_string_keywords(
                 route_string, self.solvent_model
             )
-
-        # Append user/agent-supplied extra route parameters (e.g. a route-level
-        # ``freq`` the agent adapter injects for ``orca.freq`` jobs). ORCA's
-        # jobtype route never rendered these, so a route-param freq silently
-        # vanished; mirror Gaussian's append + freq de-duplication.
-        if self.additional_route_parameters is not None:
-            extra = _drop_duplicate_route_freq(
-                str(self.additional_route_parameters),
-                route_string,
-                has_frequency=bool(self.freq or self.numfreq),
-            ).strip()
-            if extra:
-                route_string += f" {extra}"
 
         return route_string
 
@@ -697,7 +1106,7 @@ class ORCAJobSettings(MolecularJobSettings):
         if self.ab_initio is not None:
             level_of_theory += f"{self.ab_initio}"
         elif self.functional is not None:
-            level_of_theory += f"{self.functional}"
+            level_of_theory += f"{_normalize_orca_functional(self.functional)}"
 
         if self.basis is not None:
             level_of_theory += f" {self.basis}"
@@ -785,6 +1194,567 @@ class ORCAJobSettings(MolecularJobSettings):
                 f"The specified solvent model {solvent_model} is not in \n"
                 f"the available solvent models: {ORCA_ALL_SOLVENT_MODELS}"
             )
+
+
+class ORCApKaJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA pKa calculations using the dual-level proton exchange scheme.
+
+    Inherits from ORCAJobSettings and adds pKa-specific parameters for
+    creating gas-phase optimization and solution-phase single-point sub-jobs,
+    as well as handling reference acid settings for the proton exchange cycle.
+
+    The workflow mirrors GaussianpKaJobSettings:
+    1. Gas phase optimization + frequency for HA and A-
+    2. Solution phase single point for HA and A- at the same level of theory
+    3. (Optional) Same for reference acid HB and B-
+
+    Attributes:
+        proton_index (int): 1-based index of the proton to remove.
+        scheme (str): 'proton exchange' or 'direct'.
+        conjugate_base_charge (int): Charge of A-. Defaults to charge - 1.
+        conjugate_base_multiplicity (int): Multiplicity of A-.
+        solvent_model (str): Solvation model for SP (default 'CPCM').
+        solvent_id (str): Solvent for SP (default 'water').
+        temperature (float): Temperature in K for thermochemistry.
+        reference_file (str): Path to reference acid geometry file.
+        delta_G_proton (float): Absolute free energy of H+ in water (kcal/mol).
+    """
+
+    DEFAULT_DELTA_G_PROTON = -265.9
+
+    def __init__(
+        self,
+        proton_index=None,
+        scheme="proton exchange",
+        reference_file=None,
+        reference_proton_index=None,
+        reference_charge=None,
+        reference_multiplicity=None,
+        reference_conjugate_base_charge=None,
+        reference_conjugate_base_multiplicity=None,
+        reference_pka=None,
+        delta_G_proton=None,
+        solvent_model="CPCM",
+        solvent_id="water",
+        conjugate_base_charge=None,
+        conjugate_base_multiplicity=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+        **kwargs,
+    ):
+        if "thermodynamic_cycle" in kwargs:
+            scheme = kwargs.pop("thermodynamic_cycle")
+            logger.warning(
+                "The 'thermodynamic_cycle' argument is deprecated, use 'scheme' instead."
+            )
+
+        super().__init__(**kwargs)
+        self.proton_index = proton_index
+        self.scheme = scheme
+        self.solvent_model = solvent_model
+        self.solvent_id = solvent_id
+        self.conjugate_base_charge = conjugate_base_charge
+        self.conjugate_base_multiplicity = conjugate_base_multiplicity
+
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.energy_units = energy_units
+        self.reference_pka = reference_pka
+
+        if not self.title:
+            self.title = "ORCA pKa calculation job"
+
+        if scheme == "proton exchange":
+            self.reference_file = reference_file
+            self.reference_proton_index = reference_proton_index
+            self.reference_charge = reference_charge
+            self.reference_multiplicity = reference_multiplicity
+            self.reference_conjugate_base_charge = (
+                reference_conjugate_base_charge
+            )
+            self.reference_conjugate_base_multiplicity = (
+                reference_conjugate_base_multiplicity
+            )
+        else:
+            self.reference_file = None
+            self.reference_proton_index = None
+            self.reference_charge = None
+            self.reference_multiplicity = None
+            self.reference_conjugate_base_charge = None
+            self.reference_conjugate_base_multiplicity = None
+
+        if delta_G_proton is not None:
+            self.delta_G_proton = delta_G_proton
+        else:
+            self.delta_G_proton = self.DEFAULT_DELTA_G_PROTON
+
+    @classmethod
+    def build_orca_pka_settings(cls, proton_index, shared, opt_settings):
+        """Build settings from CLI shared options and merged opt settings."""
+        solvent_model = shared["solvent_model"]
+        if solvent_model is None:
+            try:
+                solvent_model = opt_settings.solvent_model
+            except AttributeError:
+                solvent_model = None
+        solvent_id = shared["solvent_id"]
+        if solvent_id is None:
+            try:
+                solvent_id = opt_settings.solvent_id
+            except AttributeError:
+                solvent_id = None
+        if solvent_model is None:
+            solvent_model = "CPCM"
+        if solvent_id is None:
+            solvent_id = "water"
+
+        return cls(
+            proton_index=proton_index,
+            scheme=shared["scheme"],
+            reference_file=shared["reference"],
+            reference_proton_index=shared["reference_proton_index"],
+            reference_charge=shared["reference_charge"],
+            reference_multiplicity=shared["reference_multiplicity"],
+            reference_conjugate_base_charge=shared[
+                "reference_conjugate_base_charge"
+            ],
+            reference_conjugate_base_multiplicity=shared[
+                "reference_conjugate_base_multiplicity"
+            ],
+            delta_G_proton=shared["delta_g_proton"],
+            conjugate_base_charge=shared["conjugate_base_charge"],
+            conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=shared["temperature"],
+            concentration=shared["concentration"],
+            pressure=shared["pressure"],
+            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
+            cutoff_enthalpy=shared["cutoff_enthalpy"],
+            charge=opt_settings.charge,
+            multiplicity=opt_settings.multiplicity,
+            functional=opt_settings.functional,
+            basis=opt_settings.basis,
+            ab_initio=opt_settings.ab_initio,
+            dispersion=opt_settings.dispersion,
+            aux_basis=opt_settings.aux_basis,
+            defgrid=opt_settings.defgrid,
+            semiempirical=opt_settings.semiempirical,
+            additional_route_parameters=opt_settings.additional_route_parameters,
+            gen_genecp_file=opt_settings.gen_genecp_file,
+            heavy_elements=opt_settings.heavy_elements,
+            heavy_elements_basis=opt_settings.heavy_elements_basis,
+            light_elements_basis=opt_settings.light_elements_basis,
+        )
+
+    # ------------------------------------------------------------------
+    # Reference helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def has_reference_file(self):
+        """Check if a reference acid geometry file is provided."""
+        return (
+            self.scheme == "proton exchange"
+            and self.reference_file is not None
+        )
+
+    def validate_reference_settings(self):
+        """Validate reference acid settings are complete."""
+        if not self.has_reference_file:
+            raise ValueError(
+                "Reference acid file must be provided for proton exchange cycle."
+            )
+        missing = []
+        if self.reference_proton_index is None:
+            missing.append("reference_proton_index")
+        if self.reference_charge is None:
+            missing.append("reference_charge")
+        if self.reference_multiplicity is None:
+            missing.append("reference_multiplicity")
+        if missing:
+            raise ValueError(
+                f"Missing required reference acid settings: {', '.join(missing)}"
+            )
+
+    def get_reference_molecule(self):
+        """Load the reference acid (HB) molecule from file."""
+        self.validate_reference_settings()
+        from chemsmart.io.molecules.structure import Molecule
+
+        ref_mol = Molecule.from_filepath(self.reference_file)
+        ref_mol.charge = self.reference_charge
+        ref_mol.multiplicity = self.reference_multiplicity
+        return ref_mol
+
+    def get_reference_conjugate_base_molecule(self):
+        """Create the reference conjugate base (B-) molecule."""
+        ref_mol = self.get_reference_molecule()
+        return self._create_reference_conjugate_base_molecule(ref_mol)
+
+    def _create_reference_conjugate_base_molecule(self, reference_molecule):
+        """Remove proton from reference acid to create B-."""
+        if self.reference_proton_index is None:
+            raise ValueError(
+                "reference_proton_index must be specified to create reference "
+                "conjugate base molecule. Use 1-based indexing."
+            )
+
+        # Validate reference_proton_index range (1-based)
+        if (
+            self.reference_proton_index < 1
+            or self.reference_proton_index > len(reference_molecule)
+        ):
+            raise ValueError(
+                f"reference_proton_index {self.reference_proton_index} is out "
+                f"of range. Reference molecule has "
+                f"{len(reference_molecule)} atoms "
+                f"(1-indexed: 1 to {len(reference_molecule)})."
+            )
+
+        # Convert to 0-based index for internal use
+        proton_idx_0based = self.reference_proton_index - 1
+
+        # Validate that the atom is a hydrogen
+        atom_symbol = reference_molecule.symbols[proton_idx_0based]
+        if atom_symbol not in ("H", "h"):
+            raise ValueError(
+                f"Reference atom at index {self.reference_proton_index} is "
+                f"'{atom_symbol}', not hydrogen."
+            )
+
+        ref_cb_mol = reference_molecule.delete_atoms_by_indices(
+            self.reference_proton_index, one_based=True
+        )
+
+        if self.reference_conjugate_base_charge is not None:
+            ref_cb_mol.charge = self.reference_conjugate_base_charge
+        else:
+            ref_cb_mol.charge = self.reference_charge - 1
+
+        if self.reference_conjugate_base_multiplicity is not None:
+            ref_cb_mol.multiplicity = (
+                self.reference_conjugate_base_multiplicity
+            )
+        else:
+            ref_cb_mol.multiplicity = self.reference_multiplicity
+
+        return ref_cb_mol
+
+    # ------------------------------------------------------------------
+    # Conjugate base creation
+    # ------------------------------------------------------------------
+
+    @property
+    def protonated_charge(self):
+        """Charge of the protonated form (alias for inherited charge)."""
+        return self.charge
+
+    @protonated_charge.setter
+    def protonated_charge(self, value):
+        self.charge = value
+
+    @property
+    def protonated_multiplicity(self):
+        """Multiplicity of the protonated form."""
+        return self.multiplicity
+
+    @protonated_multiplicity.setter
+    def protonated_multiplicity(self, value):
+        self.multiplicity = value
+
+    def conjugate_base_molecule(self, molecule):
+        """Create and return the conjugate base molecule."""
+        return self._create_conjugate_base_molecule(molecule)
+
+    def conjugate_pair_molecules(self, molecule):
+        """Create and return both protonated and conjugate base molecules."""
+        return molecule, self._create_conjugate_base_molecule(molecule)
+
+    def conjugate_pair_job_settings(self, molecule):
+        """Create ORCAJobSettings for gas phase optimization."""
+        return self._create_gas_phase_job_settings(molecule)
+
+    def conjugate_pair_sp_job_settings(self, molecule):
+        """Create ORCAJobSettings for solution phase SP."""
+        return self._create_solution_phase_sp_settings(molecule)
+
+    def reference_pair_molecules(self):
+        """Create and return reference acid (HB) and conjugate base (B-)."""
+        ref_mol = self.get_reference_molecule()
+        ref_cb_mol = self._create_reference_conjugate_base_molecule(ref_mol)
+        return ref_mol, ref_cb_mol
+
+    def reference_pair_job_settings(self):
+        """Create ORCAJobSettings for reference acid gas phase optimization."""
+        return self._create_reference_gas_phase_job_settings()
+
+    def reference_pair_sp_job_settings(self):
+        """Create ORCAJobSettings for reference acid solution phase SP."""
+        return self._create_reference_solution_phase_sp_settings()
+
+    def _create_conjugate_base_molecule(self, molecule):
+        """Remove the specified proton to create the conjugate base (A-)."""
+        if self.proton_index is None:
+            raise ValueError(
+                "proton_index must be specified to create conjugate base "
+                "molecule. Use 1-based indexing."
+            )
+        if self.proton_index < 1 or self.proton_index > len(molecule):
+            raise ValueError(
+                f"proton_index {self.proton_index} is out of range. "
+                f"Molecule has {len(molecule)} atoms."
+            )
+
+        proton_idx_0based = self.proton_index - 1
+        atom_symbol = molecule.symbols[proton_idx_0based]
+        if atom_symbol not in ("H", "h"):
+            raise ValueError(
+                f"Atom at index {self.proton_index} is '{atom_symbol}', "
+                "not hydrogen."
+            )
+
+        conjugate_base_mol = molecule.delete_atoms_by_indices(
+            self.proton_index, one_based=True
+        )
+
+        original_charge = molecule.charge if molecule.charge is not None else 0
+        original_mult = (
+            molecule.multiplicity if molecule.multiplicity is not None else 1
+        )
+
+        if self.conjugate_base_charge is not None:
+            conjugate_base_mol.charge = self.conjugate_base_charge
+        else:
+            conjugate_base_mol.charge = original_charge - 1
+
+        if self.conjugate_base_multiplicity is not None:
+            conjugate_base_mol.multiplicity = self.conjugate_base_multiplicity
+        else:
+            conjugate_base_mol.multiplicity = original_mult
+
+        return conjugate_base_mol
+
+    # ------------------------------------------------------------------
+    # Sub-job settings factories
+    # ------------------------------------------------------------------
+
+    def _orca_settings_kwargs(self):
+        """Return the shared ORCA-specific keyword arguments."""
+        return dict(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            dispersion=self.dispersion,
+            basis=self.basis,
+            aux_basis=self.aux_basis,
+            defgrid=self.defgrid,
+            scf_tol=self.scf_tol,
+            scf_algorithm=self.scf_algorithm,
+            scf_maxiter=self.scf_maxiter,
+            scf_convergence=self.scf_convergence,
+            semiempirical=self.semiempirical,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+    def _create_gas_phase_job_settings(self, molecule):
+        """Create GAS PHASE optimization settings for HA and A-."""
+        prot_charge = (
+            self.charge
+            if self.charge is not None
+            else (molecule.charge if molecule.charge is not None else 0)
+        )
+        prot_mult = (
+            self.multiplicity
+            if self.multiplicity is not None
+            else (
+                molecule.multiplicity
+                if molecule.multiplicity is not None
+                else 1
+            )
+        )
+
+        shared = self._orca_settings_kwargs()
+
+        protonated_settings = ORCAJobSettings(
+            charge=prot_charge,
+            multiplicity=prot_mult,
+            jobtype="opt",
+            title="ORCA pKa calculation job",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            **shared,
+        )
+
+        cb_charge = (
+            self.conjugate_base_charge
+            if self.conjugate_base_charge is not None
+            else prot_charge - 1
+        )
+        cb_mult = (
+            self.conjugate_base_multiplicity
+            if self.conjugate_base_multiplicity is not None
+            else prot_mult
+        )
+
+        conjugate_base_settings = ORCAJobSettings(
+            charge=cb_charge,
+            multiplicity=cb_mult,
+            jobtype="opt",
+            title="ORCA pKa calculation job",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            **shared,
+        )
+
+        return protonated_settings, conjugate_base_settings
+
+    def _create_solution_phase_sp_settings(self, molecule):
+        """Create SOLUTION PHASE single point settings for HA and A-."""
+        prot_charge = (
+            self.charge
+            if self.charge is not None
+            else (molecule.charge if molecule.charge is not None else 0)
+        )
+        prot_mult = (
+            self.multiplicity
+            if self.multiplicity is not None
+            else (
+                molecule.multiplicity
+                if molecule.multiplicity is not None
+                else 1
+            )
+        )
+
+        shared = self._orca_settings_kwargs()
+
+        protonated_sp_settings = ORCAJobSettings(
+            charge=prot_charge,
+            multiplicity=prot_mult,
+            jobtype="sp",
+            title="ORCA pKa calculation job",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            **shared,
+        )
+
+        cb_charge = (
+            self.conjugate_base_charge
+            if self.conjugate_base_charge is not None
+            else prot_charge - 1
+        )
+        cb_mult = (
+            self.conjugate_base_multiplicity
+            if self.conjugate_base_multiplicity is not None
+            else prot_mult
+        )
+
+        conjugate_base_sp_settings = ORCAJobSettings(
+            charge=cb_charge,
+            multiplicity=cb_mult,
+            jobtype="sp",
+            title="ORCA pKa calculation job",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            **shared,
+        )
+
+        return protonated_sp_settings, conjugate_base_sp_settings
+
+    def _create_reference_gas_phase_job_settings(self):
+        """Create GAS PHASE optimization settings for HB and B-."""
+        self.validate_reference_settings()
+        shared = self._orca_settings_kwargs()
+
+        ref_acid_settings = ORCAJobSettings(
+            charge=self.reference_charge,
+            multiplicity=self.reference_multiplicity,
+            jobtype="opt",
+            title="ORCA pKa calculation job",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            **shared,
+        )
+
+        ref_cb_charge = (
+            self.reference_conjugate_base_charge
+            if self.reference_conjugate_base_charge is not None
+            else self.reference_charge - 1
+        )
+        ref_cb_mult = (
+            self.reference_conjugate_base_multiplicity
+            if self.reference_conjugate_base_multiplicity is not None
+            else self.reference_multiplicity
+        )
+
+        ref_cb_settings = ORCAJobSettings(
+            charge=ref_cb_charge,
+            multiplicity=ref_cb_mult,
+            jobtype="opt",
+            title="ORCA pKa calculation job",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            **shared,
+        )
+
+        return ref_acid_settings, ref_cb_settings
+
+    def _create_reference_solution_phase_sp_settings(self):
+        """Create SOLUTION PHASE SP settings for HB and B-."""
+        self.validate_reference_settings()
+        shared = self._orca_settings_kwargs()
+
+        ref_acid_sp_settings = ORCAJobSettings(
+            charge=self.reference_charge,
+            multiplicity=self.reference_multiplicity,
+            jobtype="sp",
+            title="ORCA pKa calculation job",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            **shared,
+        )
+
+        ref_cb_charge = (
+            self.reference_conjugate_base_charge
+            if self.reference_conjugate_base_charge is not None
+            else self.reference_charge - 1
+        )
+        ref_cb_mult = (
+            self.reference_conjugate_base_multiplicity
+            if self.reference_conjugate_base_multiplicity is not None
+            else self.reference_multiplicity
+        )
+
+        ref_cb_sp_settings = ORCAJobSettings(
+            charge=ref_cb_charge,
+            multiplicity=ref_cb_mult,
+            jobtype="sp",
+            title="ORCA pKa calculation job",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            **shared,
+        )
+
+        return ref_acid_sp_settings, ref_cb_sp_settings
 
 
 class ORCATSJobSettings(ORCAJobSettings):
@@ -970,6 +1940,14 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
+        # ORCA IRC consumes an initial Hessian through the %irc InitHess
+        # semantics; it is not an IRC-plus-Freq compound job.  The generic
+        # ORCA settings default is freq=True, so YAML construction otherwise
+        # advertised a frequency calculation that this class's writer
+        # deliberately removes from the native route.  Keep the in-memory
+        # scientific settings aligned with the input that ChemSmart writes.
+        self.freq = False
+        self.numfreq = False
         self.maxiter = maxiter
         self.printlevel = printlevel
         self.direction = direction
@@ -1283,16 +2261,11 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.intermediate_level_functional = intermediate_level_functional
         self.intermediate_level_basis = intermediate_level_basis
         self.intermediate_level_method = intermediate_level_method
-        # Accept the historical project-YAML spelling as well as the CLI
-        # spelling.  Without this alias, ``qmmm.mm_force_field`` survives
-        # YAML loading but is silently ignored by the QMMM input writer.
-        legacy_low_level_method = kwargs.pop("low_level_force_field", None)
-        if legacy_low_level_method is None:
-            legacy_low_level_method = kwargs.pop("mm_force_field", None)
+        # allow legacy kwarg name from older configs
         self.low_level_method = (
             low_level_method
             if low_level_method is not None
-            else legacy_low_level_method
+            else kwargs.pop("low_level_force_field", None)
         )
         self.high_level_atoms = high_level_atoms
         self.intermediate_level_atoms = intermediate_level_atoms
@@ -2040,13 +3013,13 @@ class ORCANEBJobSettings(ORCAJobSettings):
             from the main molecule input file.
         """
         super().__init__(**kwargs)
-        self.joboption = joboption
+        self.joboption = normalize_orca_neb_joboption(joboption)
         self.nimages = nimages
         self.ending_xyzfile = ending_xyzfile
         self.intermediate_xyzfile = intermediate_xyzfile
         self.restarting_xyzfile = restarting_xyzfile
         self.preopt_ends = preopt_ends
-        self.semiempirical = semiempirical
+        self.semiempirical = _normalize_orca_semiempirical(semiempirical)
 
     def __eq__(self, other):
         """
@@ -2075,6 +3048,35 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         return self_dict == other_dict
 
+    def validate(self):
+        """Check the project-owned inputs needed to materialize an ORCA NEB.
+
+        Endpoint filenames are command inputs and are deliberately checked by
+        the CLI/writer.  The algorithm and image count, however, are part of
+        the scientific project.  Surfacing their absence while validating the
+        YAML keeps a missing ``NEB-TS`` choice from appearing later as an
+        unexplained zero-byte native input.
+        """
+
+        if not self.joboption or not str(self.joboption).strip():
+            raise ValueError(
+                "ORCA NEB project section requires 'joboption' "
+                "(for example NEB, NEB-CI, or NEB-TS)"
+            )
+        self.joboption = normalize_orca_neb_joboption(self.joboption)
+        if isinstance(self.nimages, bool) or not isinstance(self.nimages, int):
+            raise ValueError(
+                "ORCA NEB project section requires integer 'nimages'"
+            )
+        if self.nimages <= 0:
+            raise ValueError("ORCA NEB 'nimages' must be greater than zero")
+        if not isinstance(self.preopt_ends, bool):
+            raise ValueError("ORCA NEB 'preopt_ends' must be true or false")
+
+        # Exercise the same native route materializer used by the writer.  It
+        # catches method combinations that a loader-only check cannot see.
+        self._get_neb_route_string()
+
     # populate attribute from parent class (optional)
     @property
     def route_string(self):
@@ -2097,93 +3099,14 @@ class ORCANEBJobSettings(ORCAJobSettings):
             "! XTB2 NEB-TS" (with semiempirical)
             "! B3LYP def2-SVP NEB-CI" (with DFT)
         """
-        route_string = ""
-        if not route_string.startswith("!"):
-            route_string += "! "
+        if not self.joboption:
+            raise ValueError("ORCA NEB requires a joboption such as NEB-TS")
+        self.joboption = normalize_orca_neb_joboption(self.joboption)
 
-        # add frequency calculation
-        # not okay if both freq and numfreq are True
-        if self.freq and self.numfreq:
-            raise ValueError("Cannot specify both freq and numfreq!")
-
-        if self.freq:
-            route_string += " Freq"
-        elif self.numfreq:
-            route_string += " NumFreq"  # requires numerical frequency,
-            # e.g., in SMD model where analytic Hessian is not available
-
-        # write level of theory
-        if self.semiempirical:
-            route_string += f" {self.semiempirical} {self.joboption}"
-        else:
-            route_string += f" {self._get_level_of_theory()} {self.joboption}"
-
-        # write grid information
-        if self.defgrid is not None:
-            route_string += (
-                f" {self.defgrid}"  # default is 'defgrid2', if not specified
-            )
-
-        # write convergence criteria in simple input/route
-        if self.scf_tol is not None:
-            if not self.scf_tol.lower().endswith("scf"):
-                self.scf_tol += "SCF"
-            route_string += f" {self.scf_tol}"
-
-        # write convergence algorithm if not default
-        if self.scf_algorithm is not None:
-            route_string += f" {self.scf_algorithm}"
-
-        # write solvent if solvation is turned on
-        route_kw = self._get_solvent_route_keyword()
-        if self.custom_solvent is not None:
-            # Custom solvent parameters will be written in the appropriate
-            # solvent block.  The route keyword depends on the model.
-            if self.solvent_id is not None:
-                route_string += f" {route_kw}({self.solvent_id})"
-            else:
-                route_string += f" {route_kw}"
-        elif self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {route_kw}({self.solvent_id})"
-        elif self.solvent_model is not None and self.solvent_id is None:
-            route_string += f" {route_kw}"
-        elif self.solvent_model is None and self.solvent_id is not None:
-            logger.warning(
-                "Warning: Solvent identity is specified but solvent model "
-                "is missing!\nDefaulting to CPCM model."
-            )
-            route_string += f" CPCM({self.solvent_id})"
-        else:
-            pass
-
-        # Deduplication: if solvent model appears twice,
-        # the first time it appears is removed
-        if (
-            self.solvent_model is not None
-            and len(
-                re.findall(
-                    rf"\b{re.escape(self.solvent_model)}\b",
-                    route_string,
-                    re.IGNORECASE,
-                )
-            )
-            > 1
-        ):
-            route_string = deduplicate_string_keywords(
-                route_string, self.solvent_model
-            )
-
-        # Append user/agent-supplied extra route parameters (e.g. a route-level
-        # ``freq`` the agent adapter injects for ``orca.freq`` jobs). ORCA's
-        # jobtype route never rendered these, so a route-param freq silently
-        # vanished; mirror Gaussian's append + freq de-duplication.
-        if self.additional_route_parameters is not None:
-            extra = _drop_duplicate_route_freq(
-                str(self.additional_route_parameters),
-                route_string,
-                has_frequency=bool(self.freq or self.numfreq),
-            ).strip()
-            if extra:
-                route_string += f" {extra}"
-
-        return route_string
+        # A NEB job changes the path-optimization keyword, not the electronic
+        # structure semantics.  Reuse the ordinary ORCA route materializer so
+        # dispersion, RI/RIJCOSX, reference, relativistic treatment, grids,
+        # SCF controls, solvent, and future general settings cannot disappear
+        # merely because the job is NEB.
+        route_string = super()._get_route_string_from_jobtype()
+        return f"{route_string} {self.joboption}"

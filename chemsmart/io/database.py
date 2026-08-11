@@ -10,7 +10,7 @@ from chemsmart.utils.utils import string2index_1based
 
 
 class DatabaseFile(FileMixin):
-    """Chemsmart database file object."""
+    """CHEMSMART database file object."""
 
     def __init__(self, filename):
         self.filename = filename

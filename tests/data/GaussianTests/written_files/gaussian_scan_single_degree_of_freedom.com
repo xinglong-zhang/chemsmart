@@ -1,7 +1,7 @@
 %chk=gaussian_scan_single_degree_of_freedom.chk
 %nprocshared=64
 %mem=375GB
-# opt=modredundant b3lyp empiricaldispersion=gd3bj def2svp
+# opt=modredundant b3lyp def2svp empiricaldispersion=gd3bj
 
 Gaussian job
 

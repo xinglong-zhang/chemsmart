@@ -1,3 +1,5 @@
+"""Click group for ChemSmart-managed xTB calculations."""
+
 import functools
 import logging
 import os
@@ -9,6 +11,7 @@ from chemsmart.cli.job import (
     click_filename_options,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.xtb import XTB_ALL_METHODS, XTB_ALL_SOLVENT_MODELS
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import return_objects_and_indices_from_string_index
@@ -16,73 +19,88 @@ from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 logger = logging.getLogger(__name__)
 
 
-def require_xtb_filename(ctx):
-    """Reject real xTB executions started without -f/--filename.
+def _root_num_gpus_was_explicit(ctx):
+    """Return whether a parent CLI explicitly supplied ``--num-gpus``."""
 
-    The group callback defers this check so that `chemsmart run xtb <job>
-    --help` still renders; the leaf commands call this once to enforce it.
-    """
+    current = ctx
+    while current is not None:
+        try:
+            source = current.get_parameter_source("num_gpus")
+        except (KeyError, TypeError):
+            source = None
+        if source is not None:
+            return source == click.core.ParameterSource.COMMANDLINE
+        current = current.parent
+    return False
+
+
+def _bind_cpu_only_runner(ctx):
+    """Use CPU xTB on GPU-capable hosts; reject an explicit GPU request."""
+
+    jobrunner = ctx.obj.get("jobrunner")
+    if jobrunner is None:
+        return
+    explicit = _root_num_gpus_was_explicit(ctx)
+    requested = getattr(jobrunner, "num_gpus", None)
+    if explicit and (
+        isinstance(requested, bool)
+        or not isinstance(requested, int)
+        or requested != 0
+    ):
+        raise click.UsageError(
+            "ChemSmart's xTB execution plane is CPU-only; an explicit "
+            "--num-gpus request must be 0."
+        )
+    setattr(jobrunner, "xtb_gpu_request_explicit", explicit)
+    if not explicit and isinstance(requested, int) and not isinstance(
+        requested, bool
+    ):
+        # Generic runners inherit the server inventory.  That inventory is
+        # not an xTB resource request, so normalize this program node to CPU.
+        jobrunner.num_gpus = 0
+
+
+def require_xtb_filename(ctx):
+    """Reject real commands without input while preserving leaf help."""
     if ctx.obj.get("xtb_missing_filename"):
         raise ValueError("xTB jobs require -f/--filename.")
 
 
-def click_xtb_options(f):
+def click_xtb_options(function):
     @click.option(
-        "--project", "-p", type=str, default=None, help="Project settings."
+        "--project",
+        "-p",
+        type=str,
+        default=None,
+        help="Named xTB project or explicit project-YAML path.",
     )
-    @functools.wraps(f)
+    @functools.wraps(function)
     def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
+        return function(*args, **kwargs)
 
     return wrapper_common_options
 
 
-def click_xtb_settings_options(f):
-    @click.option(
-        "-c",
-        "--charge",
-        type=int,
-        default=None,
-        help="Charge of the molecule.",
-    )
-    @click.option(
-        "-m",
-        "--multiplicity",
-        type=int,
-        default=None,
-        help="Multiplicity of the molecule.",
-    )
+def click_xtb_settings_options(function):
+    @click.option("-c", "--charge", type=int, default=None)
+    @click.option("-m", "--multiplicity", type=int, default=None)
     @click.option(
         "-g",
         "--gfn-version",
-        type=click.Choice(
-            ["gfn0", "gfn1", "gfn2", "gfnff"], case_sensitive=False
-        ),
+        type=click.Choice(XTB_ALL_METHODS, case_sensitive=False),
         default=None,
-        help="GFN-xTB method version.",
     )
     @click.option(
         "-sm",
         "--solvent-model",
-        type=str,
+        type=click.Choice(XTB_ALL_SOLVENT_MODELS, case_sensitive=False),
         default=None,
-        help="xTB implicit solvent model.",
     )
-    @click.option(
-        "-si",
-        "--solvent-id",
-        type=str,
-        default=None,
-        help="xTB implicit solvent identifier.",
-    )
-    @click.option(
-        "--grad/--no-grad",
-        default=None,
-        help="Enable gradient output.",
-    )
-    @functools.wraps(f)
+    @click.option("-si", "--solvent-id", type=str, default=None)
+    @click.option("--grad/--no-grad", default=None)
+    @functools.wraps(function)
     def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
+        return function(*args, **kwargs)
 
     return wrapper_common_options
 
@@ -107,57 +125,76 @@ def xtb(
     solvent_id,
     grad,
 ):
-    """CLI subcommand for xTB semiempirical quantum chemistry jobs."""
+    """Prepare an xTB sp, opt, or hess job through ChemSmart."""
     from chemsmart.jobs.xtb.settings import XTBJobSettings
     from chemsmart.settings.xtb import XTBProjectSettings
 
     ctx.ensure_object(dict)
     if filename is None:
-        # Let `chemsmart run xtb <job> --help` render without requiring
-        # molecular input. Real executions are rejected once in the leaf
-        # command via require_xtb_filename() so the check lives in one place.
         ctx.obj["xtb_missing_filename"] = True
         return
 
-    project_settings = XTBProjectSettings.from_project(project)
-    if filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
+    _bind_cpu_only_runner(ctx)
+
+    if (solvent_model is None) != (solvent_id is None):
+        raise click.UsageError(
+            "--solvent-model and --solvent-id must be supplied together."
+        )
+
+    if project is not None and os.path.isfile(project):
+        project_reference = os.path.abspath(project)
+    else:
+        project_reference = project
+    filename = os.path.abspath(filename)
+    project_settings = XTBProjectSettings.from_project(project_reference)
+    project_explicit_fields = project_settings.explicit_fields(
+        ctx.invoked_subcommand
+    )
+    lower_filename = filename.lower()
+    if lower_filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         job_settings = XTBJobSettings.from_filepath(filename)
     else:
         job_settings = XTBJobSettings.default()
 
-    keywords = ["charge", "multiplicity"]
+    # Only explicit CLI/project fields may replace source electronic state.
+    # build_xtb_jobs resolves omitted fields independently for every selected
+    # molecule and re-runs the electron-count parity check.
+    keywords = []
+    explicit_state_fields = set(
+        project_explicit_fields & {"charge", "multiplicity"}
+    )
     if charge is not None:
         job_settings.charge = charge
+        keywords.append("charge")
+        explicit_state_fields.add("charge")
     if multiplicity is not None:
         job_settings.multiplicity = multiplicity
+        keywords.append("multiplicity")
+        explicit_state_fields.add("multiplicity")
     if gfn_version is not None:
         job_settings.gfn_version = gfn_version.lower()
         keywords.append("gfn_version")
     if solvent_model is not None:
         job_settings.solvent_model = solvent_model.lower()
-        keywords.append("solvent_model")
-    if solvent_id is not None:
-        job_settings.solvent_id = solvent_id.lower()
-        keywords.append("solvent_id")
+        job_settings.solvent_id = solvent_id.strip().lower()
+        keywords.extend(("solvent_model", "solvent_id"))
     if grad is not None:
         job_settings.grad = grad
         keywords.append("grad")
+    job_settings.validate()
 
-    # Project YAML provides the xTB defaults; CLI/file-derived settings are
-    # merged in the leaf command so opt/sp/hess each keep their jobtype.
     molecules = Molecule.from_filepath(
         filepath=filename, index=":", return_list=True
     )
-    assert molecules is not None, f"Could not obtain molecule from {filename}!"
+    if not molecules:
+        raise ValueError(f"Could not obtain a molecule from {filename!r}.")
 
     if label is not None and append_label is not None:
-        raise ValueError(
-            "Only give xTB input filename or name to be appended, but not both!"
-        )
+        raise ValueError("Give --label or --append-label, not both.")
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{append_label}"
-    if label is None and append_label is None:
+    if label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
     label = clean_label(label)
@@ -169,7 +206,6 @@ def xtb(
                 list_of_objects=molecules, index=index
             )
         )
-
     if not isinstance(molecules, list):
         molecules = [molecules]
         if molecule_indices is not None and not isinstance(
@@ -177,20 +213,23 @@ def xtb(
         ):
             molecule_indices = [molecule_indices]
 
-    logger.debug(f"xTB project settings: {project_settings}")
-    logger.debug(f"xTB job settings before merge: {job_settings.__dict__}")
-    logger.debug(f"xTB merge keywords: {keywords}")
-    logger.debug(f"xTB selected molecule count: {len(molecules)}")
-    logger.debug(f"xTB selected molecule indices: {molecule_indices}")
-    logger.debug(f"xTB job label: {label}")
+    ctx.obj.update(
+        {
+            "project_settings": project_settings,
+            "job_settings": job_settings,
+            "keywords": tuple(keywords),
+            "molecules": molecules,
+            "molecule_indices": molecule_indices,
+            "label": label,
+            "filename": filename,
+            "project_reference": project_reference,
+            "project_source_file": project_settings.source_file,
+            "explicit_state_fields": frozenset(explicit_state_fields),
+        }
+    )
 
-    ctx.obj["project_settings"] = project_settings
-    ctx.obj["job_settings"] = job_settings
-    ctx.obj["keywords"] = tuple(keywords)
-    ctx.obj["molecules"] = molecules
-    ctx.obj["molecule_indices"] = molecule_indices
-    ctx.obj["label"] = label
-    ctx.obj["filename"] = filename
+
+xtb.semantic_required_options = (("filename", "file"),)
 
 
 @xtb.result_callback()

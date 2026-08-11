@@ -11,8 +11,12 @@ from chemsmart.utils.geometry import (
     calculate_vdw_volume,
     canonicalize_positions,
     clean_rotational_constants_by_geometry,
+    get_coordinating_atoms,
     is_collinear,
 )
+from chemsmart.utils.periodictable import PeriodicTable
+
+_pt = PeriodicTable()
 
 
 class TestIsCollinear:
@@ -419,3 +423,97 @@ class TestCanonicalizePositions:
         canon_original = canonicalize_positions(masses, coords)
         canon_rotated = canonicalize_positions(masses, rotated)
         assert np.allclose(canon_original, canon_rotated, atol=1e-6)
+
+
+class TestGetCoordinatingAtoms:
+    """Tests for covalent-radius-ratio coordination spheres."""
+
+    def test_primary_donor_and_secondary_ligand(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_n = _pt.covalent_radius("N")
+        r_c = _pt.covalent_radius("C")
+        primary_dist = 1.05 * (r_mn + r_n)
+        secondary_dist = 1.25 * (r_mn + r_c)
+        elements = ["Mn", "N", "C"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [primary_dist, 0.0, 0.0],
+                [secondary_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_hydride_within_cutoff_is_primary(self):
+        elements = ["Mn", "H"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == []
+
+    def test_distant_atom_excluded(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        far_dist = 1.50 * (r_mn + r_c)
+        elements = ["Mn", "C"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [far_dist, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == []
+        assert secondary == []
+
+    def test_geometric_expansion_captures_terminal_co_oxygen(self):
+        """XYZ-safe expansion: CO oxygen near primary C, even if far from Mn."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        co_bond = 1.15
+        o_dist = c_dist + co_bond
+        # Terminal O should sit outside the secondary radius-ratio shell.
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_can_be_disabled(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(
+            0, elements, coordinates, expand_cutoff=0
+        )
+
+        assert primary == [1]
+        assert secondary == []

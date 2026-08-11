@@ -64,9 +64,11 @@ class ORCAJobRunner(JobRunner):
         "orcascan",
         "orcats",
         "orcasp",
+        "orcatd",
         "orcairc",
         "orcaqmmm",
         "orcaneb",
+        "orcapka",
     ]
 
     PROGRAM = "orca"
@@ -82,12 +84,14 @@ class ORCAJobRunner(JobRunner):
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory (default: True)
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``ORCA.SCRATCH`` may apply
+                there).
             fake: Whether to use fake runner for testing
             scratch_dir: Path to scratch directory
             **kwargs: Additional keyword arguments
         """
-        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(
@@ -454,6 +458,17 @@ class ORCAJobRunner(JobRunner):
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
 
+        # Some ORCA launchers return zero even when an embedded MPI process
+        # aborts and the ORCA output explicitly reports error termination.
+        # Check the program's own completion semantics only after scratch
+        # artifacts have been copied back so the failed output remains
+        # available for diagnosis.
+        if not job.is_complete():
+            raise RuntimeError(
+                "ORCA did not report normal termination in "
+                f"{job.outputfile}"
+            )
+
 
 class FakeORCAJobRunner(ORCAJobRunner):
     """
@@ -486,7 +501,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
         Args:
             server: Server configuration object
-            scratch: Whether to use scratch directory
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """

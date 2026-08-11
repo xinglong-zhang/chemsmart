@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSmart Agent Harness"
+  short_description: "Improve the computational chemistry agent harness"
+  default_prompt: "Use $chemsmart-agent-harness to investigate and improve this ChemSmart agent behavior."

@@ -340,9 +340,7 @@ class Gaussian16Input(GaussianFileMixin):
         for line in self.contents:
             line_elements = line.split()
             if (
-                all(
-                    element.lstrip("+-").isdigit() for element in line_elements
-                )
+                all(element.isdigit() for element in line_elements)
                 and len(line_elements) > 0
             ):
                 break
@@ -373,14 +371,12 @@ class Gaussian16Input(GaussianFileMixin):
         for j in range(0, int(full_line) - len(line_elements)):
             line_elements.append("Not specified, will use default value.")
         for charge in range(0, len(charge_multiplicity_list), 2):
-            value = line_elements[charge]
-            oniom_charge[charge_multiplicity_list[charge]] = (
-                int(value) if value.lstrip("+-").isdigit() else value
-            )
+            oniom_charge[charge_multiplicity_list[charge]] = line_elements[
+                charge
+            ]
         for multiplicity in range(1, len(charge_multiplicity_list), 2):
-            value = line_elements[multiplicity]
             oniom_multiplicity[charge_multiplicity_list[multiplicity]] = (
-                int(value) if value.lstrip("+-").isdigit() else value
+                line_elements[multiplicity]
             )
         return oniom_charge, oniom_multiplicity
 

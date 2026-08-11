@@ -247,10 +247,6 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             from chemsmart.settings.orca import ORCAJobSettings
 
             default_config = ORCAJobSettings.default().__dict__
-        elif program == "xtb":
-            from chemsmart.jobs.xtb.settings import XTBJobSettings
-
-            default_config = XTBJobSettings.default().__dict__
         else:
             # other programs may be implemented in future
             pass
@@ -297,17 +293,48 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     gas_config = project_config.get("gas", None)
     qmmm_config = project_config.get("qmmm", None)
 
+    direct_stage_present = any(
+        project_config.get(job) is not None
+        for job in all_jobs + qmmm_job
+    )
+    if (
+        gas_config is None
+        and solv_config is None
+        and not direct_stage_present
+    ):
+        # Neither a phase section nor a direct calculation stage is present,
+        # so there is nothing to merge.  A standalone ``td:`` project is a
+        # complete fixed-geometry calculation and must not need a dummy
+        # ``gas:`` section merely to satisfy the historical phase layout.
+        found = (
+            ", ".join(sorted(str(key) for key in project_config))
+            if isinstance(project_config, dict) and project_config
+            else "nothing"
+        )
+        raise ValueError(
+            f"{program} project settings in {filename} define neither a "
+            "'gas'/'solv' section nor a supported direct job section; "
+            f"found: {found}."
+        )
+
     if gas_config is None:
         # no settings for gas phase; using
         # implicit solvation model for all jobs
         # (except td and qmmm, which will use their own configurations)
+        shared_config = solv_config or {}
         for job in all_jobs:
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
+            if job == "sp":
+                # A single-point project must not acquire the route-building
+                # program's historical default frequency job merely because
+                # only the solv phase was declared.  An explicit ``freq`` in
+                # the section still overrides this below.
+                all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], solv_config
+                all_project_configs[job], shared_config
             )
     else:
         # settings for gas phase exist - also solv settings exist
@@ -333,6 +360,18 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 all_project_configs[job] = update_dict_with_existing_keys(
                     all_project_configs[job], qmmm_config
                 )
+        # ``sp`` reads ``solv:`` because the canonical workflow optimises in
+        # gas phase and takes the single point in solvent.  When a project
+        # describes *only* gas phase, the phase that single point belongs to is
+        # not ambiguous -- it is gas phase, and it inherits ``gas:``.  Without
+        # this the fallback is one-sided: a ``solv:``-only project feeds every
+        # job type, while a ``gas:``-only project feeds ``sp`` nothing, so the
+        # settings reach the writer carrying no level of theory and the run
+        # dies with "neither ab initio nor DFT is specified" and a zero-byte
+        # input.  No working project can depend on that, because a
+        # ``gas:``-only ``sp`` is an unconditional failure today.
+        sp_inherits_gas = solv_config is None
+        sp_config = gas_config if sp_inherits_gas else solv_config
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
@@ -341,8 +380,26 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], solv_config
+                all_project_configs[job], sp_config or {}
             )
+            if sp_inherits_gas:
+                # An explicit ``freq:`` under ``solv:`` overrides sp's default,
+                # because ``solv:`` is sp's own section and an author writing
+                # it there means it.  ``gas:`` is not sp's section -- it is
+                # being borrowed for its level of theory -- and it carries
+                # ``freq: true`` in most projects because it describes the
+                # optimisation.  Inheriting that would turn a requested single
+                # point into an opt+freq, so freq stays off on this path.
+                all_project_configs[job]["freq"] = False
+
+    if program == "orca" and "neb" in all_project_configs:
+        # ``gas:`` supplies the electronic-structure settings shared by the
+        # path calculation, but its historical default ``freq=True`` belongs
+        # to ordinary optimizations.  A NEB job should not silently acquire a
+        # frequency calculation from that borrowed phase section.  A chemist
+        # can still request one explicitly under the job's own ``neb:``
+        # section, which is applied below.
+        all_project_configs["neb"]["freq"] = False
 
     # check if td settings exist (optional)
     if "td" in project_config:
@@ -351,6 +408,15 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
+            if program == "orca":
+                # ChemSmart's ORCA ``td`` stage is a vertical spectrum at the
+                # supplied geometry.  The shared molecular-settings default
+                # predates that stage and requests a frequency calculation;
+                # inheriting it makes project validation expect Freq even
+                # though the TD writer correctly materializes a fixed-geometry
+                # response calculation.  An explicit incompatible request is
+                # rejected by ORCAJobSettings rather than silently ignored.
+                all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config
@@ -370,5 +436,35 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             for k, v in qmmm_config.items():
                 logger.debug(f"Updating qmmm job settings: {k} with {v}")
                 all_project_configs[job][k] = v
+
+    # Canonical ChemSmart projects may describe a stage directly (``opt:``,
+    # ``sp:``, and so on) instead of routing every job through the historical
+    # ``gas:``/``solv:`` pair.  Build the legacy defaults first, then let an
+    # explicit stage override only that stage.  This keeps old projects
+    # readable while allowing a model to express a paper workflow without
+    # inventing settings for unrelated jobs.
+    for job in all_jobs + qmmm_job:
+        stage_config = project_config.get(job)
+        if stage_config is None:
+            continue
+        if not isinstance(stage_config, dict):
+            raise TypeError(f"Project section `{job}` must be a mapping")
+        if job not in all_project_configs:
+            all_project_configs[job] = default_config.copy()
+            all_project_configs[job]["jobtype"] = job
+        if program == "orca" and job == "neb":
+            # The shared ORCA defaults describe one-geometry jobs and
+            # therefore do not contain the canonical NEB project keys.  Lift
+            # this stage into its real settings class before applying the
+            # explicit ``neb:`` section so joboption/nimages/preopt_ends are
+            # owned by normal YAML loading rather than forced into CLI text.
+            from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+
+            all_project_configs[job] = ORCANEBJobSettings(
+                **all_project_configs[job]
+            ).__dict__.copy()
+        all_project_configs[job] = update_dict_with_existing_keys(
+            all_project_configs[job], stage_config
+        )
 
     return all_project_configs

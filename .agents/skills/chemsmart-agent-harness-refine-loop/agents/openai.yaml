@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChemSmart Refine Loop"
+  short_description: "Run behavior-first self-improving agent experiments"
+  default_prompt: "Use $chemsmart-agent-harness-refine-loop to run a bounded ChemSmart behavior experiment."

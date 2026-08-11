@@ -1,25 +1,36 @@
-"""Provider-independent runtime contracts for the ChemSmart agent."""
+"""Public Runtime V2 contracts for the v3.1.4 command-compiled agent."""
 
 from chemsmart.agent.runtime.contracts import (
-    AgentAction,
-    AgentDecision,
-    ArtifactRef,
-    ExecutionMode,
-    ProviderRole,
+    ProviderStateRefV1,
+    ResourceBudgetV1,
     RuntimeV2Mode,
-    TaskEnvelope,
+    TaskEnvelopeV1,
     TaskPhase,
+    TerminalState,
 )
-from chemsmart.agent.runtime.orchestrator import RuntimeController
+from chemsmart.agent.runtime.events import RuntimeEvent
+from chemsmart.agent.execution import ValidatedDataEdgeBindingV1
+from chemsmart.agent.runtime.records import (
+    LaunchFenceResultV1,
+    ReconstructedWorkflowFrontierV1,
+    WorkflowNodeLaunchReservationV1,
+    reconstruct_workflow_frontier,
+)
+from chemsmart.agent.runtime.reducer import RuntimeState, replay_events
 
 __all__ = [
-    "AgentAction",
-    "AgentDecision",
-    "ArtifactRef",
-    "ExecutionMode",
-    "ProviderRole",
-    "RuntimeController",
+    "ProviderStateRefV1",
+    "LaunchFenceResultV1",
+    "ReconstructedWorkflowFrontierV1",
+    "ResourceBudgetV1",
+    "RuntimeEvent",
+    "RuntimeState",
     "RuntimeV2Mode",
-    "TaskEnvelope",
+    "TaskEnvelopeV1",
     "TaskPhase",
+    "TerminalState",
+    "WorkflowNodeLaunchReservationV1",
+    "ValidatedDataEdgeBindingV1",
+    "reconstruct_workflow_frontier",
+    "replay_events",
 ]

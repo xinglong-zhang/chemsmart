@@ -25,4 +25,4 @@ Example configuration:
    EMAIL: user@example.com
 
 To request additional features, submit an issue on the `GitHub repository
-<https://github.com/xinglong-zhang/chemsmart/issues>`_.
+<https://github.com/Hongjiseung-ROK/chemsmart/issues>`_.

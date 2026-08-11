@@ -1,18 +1,21 @@
 import inspect
 import logging
+import os
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import (
+from chemsmart.settings.executable import (  # noqa: F401
+    Executable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    PySCFExecutable,
     XTBExecutable,
 )
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +35,9 @@ class RunScript:
         cli_args: Command line arguments to pass to the job.
     """
 
-    def __init__(self, filename, cli_args, batch=False):
+    def __init__(
+        self, filename, cli_args, batch=False, execution_cwd=None
+    ):
         """
         Initialize the run script generator.
 
@@ -44,6 +49,11 @@ class RunScript:
         self.filename = filename
         self.batch = batch
         self.cli_args = cli_args
+        self.execution_cwd = (
+            None
+            if execution_cwd is None
+            else os.path.abspath(os.fspath(execution_cwd))
+        )
 
     def write(self):
         """
@@ -65,18 +75,29 @@ class RunScript:
         Args:
             f: File handle to write the script contents to.
         """
+        cwd_statement = (
+            f"os.chdir({self.execution_cwd!r})"
+            if self.execution_cwd
+            else "pass"
+        )
         contents = f"""\
         #!/usr/bin/env python
         import os
+        import subprocess
+        import sys
         os.environ['OMP_NUM_THREADS'] = '1'
-        
+
         from chemsmart.cli.run import run
 
         def run_job():
+            {cwd_statement}
             run({self.cli_args!r})
 
         if __name__ == '__main__':
-            run_job()
+            try:
+                run_job()
+            except subprocess.CalledProcessError as error:
+                sys.exit(error.returncode)
         """
 
         # Needed to remove leading whitespace in the docstring
@@ -219,6 +240,18 @@ class Submitter(RegistryMixin):
         return "chemsmart_sub.sh"
 
     @property
+    def array_submit_script(self):
+        """
+        Get the array job submission script filename.
+
+        Returns:
+            str: Filename for the array job submission script.
+        """
+        if self.job.label is not None:
+            return f"chemsmart_sub_array_{self.job.label}.sh"
+        return "chemsmart_sub_array.sh"
+
+    @property
     def run_script(self):
         """
         Get the run script filename.
@@ -236,27 +269,28 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, XTBExecutable, or
-            NCIPLOTExecutable) based on `job.PROGRAM`.
+            Executable: Instance of the ``Executable`` subclass whose
+            ``PROGRAM`` matches ``job.PROGRAM``.
 
         Raises:
-            ValueError: If the job's program is not supported.
-        """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "xtb":
-            executable = XTBExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
+            ValueError: If no executable is registered for the job's program.
 
-        else:
-            # Need to add programs here to be
-            # supported for other types of programs
-            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        Resolved from the ``Executable`` registry rather than a hardcoded
+        if/elif chain, so a newly registered program works under ``sub`` as
+        soon as it works under ``run``. The previous chain silently limited
+        submission to Gaussian, ORCA and NCIPLOT, which broke run/sub parity
+        for any program added later.
+        """
+        program = str(self.job.PROGRAM or "").upper()
+        for executable_class in Executable.subclasses():
+            if str(executable_class.PROGRAM or "").upper() == program:
+                return executable_class.from_servername(self.server.name)
+        raise ValueError(
+            f"Program {self.job.PROGRAM} not supported: no Executable "
+            f"subclass registered with PROGRAM={program!r}. Registered "
+            f"programs: "
+            f"{sorted(str(c.PROGRAM) for c in Executable.subclasses())}"
+        )
 
     def write(self, cli_args):
         """
@@ -270,8 +304,124 @@ class Submitter(RegistryMixin):
         """
         if self.job.is_complete():
             logger.warning("Submitting an already complete job.")
+        os.makedirs(self.submit_folder, exist_ok=True)
         self._write_runscript(cli_args)
         self._write_submitscript()
+
+    def write_array_job(self, jobs, num_nodes=None, cli_args=None):
+        """
+        Write submission scripts for an array job.
+
+        Creates scripts for submitting multiple independent jobs as a
+        scheduler array job, enabling parallel execution across nodes.
+
+        Args:
+            jobs (list): List of Job instances to run as an array.
+            num_nodes (int): Number of nodes to request.
+            cli_args: Command line arguments for job execution.
+        """
+        if not jobs:
+            logger.warning("No jobs provided for array job")
+            return
+
+        # Store job list for array processing
+        self.jobs = jobs
+        self.num_nodes = num_nodes
+
+        # Write run scripts for each job
+        self._write_array_runscripts(jobs, cli_args)
+
+        # Write array submit script
+        self._write_array_submitscript(num_nodes)
+
+    def _write_array_runscripts(self, jobs, cli_args):
+        """
+        Write individual run scripts for each job in the array.
+
+        Args:
+            jobs (list): List of jobs in the array.
+            cli_args: Command line arguments. This may be either:
+                - a single argument list shared by all jobs (backward-compatible), or
+                - a sequence (e.g., list or tuple) of per-job argument lists,
+                  where ``cli_args[i]`` contains the args for ``jobs[i]``.
+        """
+        for i, job in enumerate(jobs):
+            # Determine CLI args for this specific job/index.
+            # If cli_args looks like a per-job sequence (same length as jobs and
+            # elements are themselves sequences), use cli_args[i]. Otherwise,
+            # fall back to using cli_args for all jobs (backward-compatible).
+            job_cli_args = cli_args
+            if isinstance(cli_args, (list, tuple)):
+                if len(cli_args) == len(jobs) and isinstance(
+                    cli_args[i], (list, tuple)
+                ):
+                    job_cli_args = cli_args[i]
+
+            # Create a run script for each job using a 0-based index so the
+            # filenames align with scheduler array task IDs and task-based
+            # execution of chemsmart_run_array_${TASK_ID}.py.
+            runscript_name = f"chemsmart_run_array_{i}.py"
+            runscript = RunScript(runscript_name, job_cli_args)
+            logger.debug(f"Writing array run script {i}: {runscript_name}")
+            runscript.write()
+
+    def _write_array_submitscript(self, num_nodes):
+        """
+        Write the array job submission script.
+
+        Must be implemented by subclasses to provide scheduler-specific
+        array job directives.
+
+        Args:
+            num_nodes (int): Number of nodes to request.
+        """
+        with open(self.array_submit_script, "w") as f:
+            logger.debug(
+                f"Writing array submission script: {self.array_submit_script}"
+            )
+            self._write_bash_header(f)
+            self._write_array_scheduler_options(f, num_nodes)
+            self._write_program_specifics(f)
+            self._write_extra_commands(f)
+            self._write_change_to_job_directory(f)
+            self._write_array_job_command(f)
+
+    def _write_array_scheduler_options(self, f, num_nodes):
+        """
+        Write scheduler options for array job submission.
+
+        Must be implemented by subclasses.
+
+        Args:
+            f: File handle.
+            num_nodes (int): Number of nodes.
+        """
+        # Default implementation - subclasses should override
+        self._write_scheduler_options(f)
+
+    def _write_array_job_command(self, f):
+        """
+        Write the command to execute array jobs.
+
+        Args:
+            f: File handle.
+        """
+        # Default implementation - map scheduler task ids to the
+        # 1-based array runscript filenames.
+        f.write("# Array job execution\n")
+        f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
+        f.write("  TASK_ID=$((SLURM_ARRAY_TASK_ID + 1))\n")
+        f.write('elif [ -n "$PBS_ARRAYID" ]; then\n')
+        f.write("  TASK_ID=$PBS_ARRAYID\n")
+        f.write('elif [ -n "$LSB_JOBINDEX" ]; then\n')
+        f.write("  TASK_ID=$LSB_JOBINDEX\n")
+        f.write("else\n")
+        f.write(
+            '  echo "Error: no supported array task environment variable found." >&2\n'
+        )
+        f.write("  exit 1\n")
+        f.write("fi\n\n")
+        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -283,7 +433,13 @@ class Submitter(RegistryMixin):
         Args:
             cli_args: Command line arguments for the job.
         """
-        runscript = RunScript(self.run_script, cli_args)
+        runscript = RunScript(
+            os.path.join(self.submit_folder, self.run_script),
+            cli_args,
+            execution_cwd=getattr(
+                self.job, "submission_execution_cwd", self.job.folder
+            ),
+        )
         logger.debug(f"Writing run script to: {runscript.filename}")
         runscript.write()
 
@@ -294,8 +450,13 @@ class Submitter(RegistryMixin):
         Creates a shell script with scheduler directives and job execution
         commands appropriate for the target cluster management system.
         """
-        with open(self.submit_script, "w") as f:
-            logger.debug(f"Writing submission script to: {self.submit_script}")
+        submit_script_path = os.path.join(
+            self.submit_folder, self.submit_script
+        )
+        with open(submit_script_path, "w") as f:
+            logger.debug(
+                f"Writing submission script to: {submit_script_path}"
+            )
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
@@ -473,15 +634,16 @@ class Submitter(RegistryMixin):
         """
         Write the final job execution commands.
 
-        Makes the run script executable and executes it in the background,
-        then waits for completion.
+        Make the run script executable and replace the scheduler shell with
+        that process. ``exec`` preserves the exact child exit status; the old
+        background-plus-operandless-``wait`` sequence could report scheduler
+        success after the ChemSmart child had failed.
 
         Args:
             f: File handle for writing job execution commands.
         """
         f.write(f"chmod +x ./{self.run_script}\n")
-        f.write(f"./{self.run_script} &\n")
-        f.write("wait\n")
+        f.write(f"exec ./{self.run_script}\n")
 
     @classmethod
     def from_scheduler_type(cls, scheduler_type, **kwargs):
@@ -656,6 +818,60 @@ class SLURMSubmitter(Submitter):
         f.write("\n")
         f.write("\n")
 
+    def _write_array_scheduler_options(self, f, num_nodes):
+        """
+        Write SLURM-specific array job scheduler directives.
+
+        Each array task runs exactly one independent Gaussian job on a single
+        node. Gaussian is a shared-memory program and cannot span multiple
+        nodes, so ``--nodes=1`` is always correct per task. Parallelism across
+        jobs is achieved by SLURM scheduling multiple ``--nodes=1`` tasks
+        simultaneously on separate nodes — not by one task using multiple nodes.
+
+        ``num_nodes`` controls the maximum number of concurrently running array
+        tasks (the ``%N`` throttle on ``--array``). When *None*, all tasks may
+        run at the same time.
+
+        Args:
+            f: File handle for writing SLURM directives.
+            num_nodes (int): Number of nodes for the array job.
+        """
+        # Get number of jobs in array
+        num_jobs = len(self.jobs) if hasattr(self, "jobs") else 1
+
+        f.write(f"#SBATCH --job-name={self.job.label}_array\n")
+        f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
+        f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
+
+        # Array directive: 1 to num_jobs, optionally throttled so that at
+        # most num_nodes tasks run concurrently (useful for resource limits).
+        # This matches the 1-based array runscript filenames
+        # (for example, chemsmart_run_array_1.py ... chemsmart_run_array_N.py).
+        if num_nodes is not None:
+            f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
+        else:
+            f.write(f"#SBATCH --array=1-{num_jobs}\n")
+
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        # Each array task runs one Gaussian job → always 1 node per task.
+        # Gaussian uses shared memory only and cannot use MPI across nodes.
+        f.write(
+            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
+        )
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
+        f.write("\n")
+        f.write("\n")
+
     def _write_change_to_job_directory(self, f):
         """
         Write SLURM-specific directory change command.
@@ -809,50 +1025,3 @@ class FUGAKUSubmitter(Submitter):
             f: File handle for writing directory change command.
         """
         f.write("cd $PJM_O_WORKDIR\n\n")
-
-
-class SGESubmitter(Submitter):
-    """Sun/Univa Grid Engine (SGE/UGE) job submitter.
-
-    Creates SGE-specific submission scripts using #$ directives.
-    The parallel environment name is taken from server config key
-    ``SGE_PE`` (default ``"smp"``).
-    """
-
-    NAME = "SGE"
-
-    def __init__(self, name="SGE", job=None, server=None, **kwargs):
-        super().__init__(name=name, job=job, server=server, **kwargs)
-
-    def _write_scheduler_options(self, f):
-        f.write(f"#$ -N {self.job.label}\n")
-        f.write(f"#$ -o {self.job.label}.sgeout\n")
-        f.write(f"#$ -e {self.job.label}.sgeerr\n")
-        f.write("#$ -cwd\n")
-        f.write("#$ -V\n")
-        if self.server.queue_name:
-            f.write(f"#$ -q {self.server.queue_name}\n")
-        num_cores = self.server.num_cores or 1
-        if num_cores > 1:
-            sge_pe = None
-            server_kwargs = getattr(self.server, "kwargs", {}) or {}
-            sge_pe = server_kwargs.get("SGE_PE") or "smp"
-            f.write(f"#$ -pe {sge_pe} {num_cores}\n")
-        mem_gb = self.server.mem_gb or 4
-        f.write(f"#$ -l h_vmem={mem_gb}G\n")
-        if self.server.num_hours:
-            h = int(self.server.num_hours)
-            f.write(f"#$ -l h_rt={h:02d}:00:00\n")
-        if self.server.num_gpus and self.server.num_gpus > 0:
-            f.write(f"#$ -l gpu={self.server.num_gpus}\n")
-        if user_settings is not None:
-            if user_settings.data.get("PROJECT"):
-                f.write(f"#$ -P {user_settings.data['PROJECT']}\n")
-            if user_settings.data.get("EMAIL"):
-                f.write(f"#$ -M {user_settings.data['EMAIL']}\n")
-                f.write("#$ -m abe\n")
-        f.write("\n")
-
-    def _write_change_to_job_directory(self, f):
-        # #$ -cwd already sets the working directory; explicit cd is harmless
-        f.write("# working directory set by #$ -cwd\n\n")

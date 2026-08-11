@@ -1,686 +1,708 @@
+"""Active Runtime V2 model/tool loop for command-compiled planning."""
+
 from __future__ import annotations
 
-import json
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Callable
+import json
+import time
+from typing import Any, Callable, Mapping
 
-from chemsmart.agent.handles import (
-    HandleStore,
-    is_handle_id,
-    json_safe,
-    store_result_handle,
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_data,
+    canonical_sha256,
+    canonical_json,
 )
-from chemsmart.agent.permissions import (
-    ApprovalDecision,
-    PermissionMode,
-    PermissionPolicy,
-    ResolvedDecision,
-    ResolvedPermission,
-    RuntimePermissionMode,
-    resolve_xtb_run_local,
+from chemsmart.agent.adaptive_api_campaign import (
+    AdaptiveHypothesisV1,
+    AdaptiveNetworkBudgetV1,
+    ApiAttemptReceiptV1,
+    build_api_attempt_receipt,
 )
-from chemsmart.agent.provider_adapter import (
-    ToolOutcome,
-    ToolRequest,
+from chemsmart.agent.analysis_completion import AnalysisIncompleteError
+from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
+from chemsmart.agent.runtime.deepseek import (
+    DeepSeekProtocolError,
+    DeepSeekTransportError,
+    ProviderTurnReceiptV1,
+    public_payload,
 )
-from chemsmart.agent.registry import ToolRegistry
-from chemsmart.agent.services.tool_loop_runner import ToolLoopRunner
-
-ASK_USER_TOOL_NAME = "ask_user"
-ASK_USER_TOOL_DEF: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": ASK_USER_TOOL_NAME,
-        "description": (
-            "Ask the user a clarifying question when truly ambiguous "
-            "(no concrete target / multiple candidates / unclear intent)."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "The clarifying question to ask the user.",
-                },
-                "options": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Optional candidate answers to help the user choose."
-                    ),
-                },
-            },
-            "required": ["question"],
-            "additionalProperties": False,
-        },
-    },
-}
+from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+from chemsmart.agent.feedback import (
+    FEEDBACK_MODES,
+    FULL_FEEDBACK_V1,
+    project_tool_feedback,
+)
 
 
 @dataclass(frozen=True)
-class ToolLoopBudgets:
-    max_model_steps_per_turn: int = 12
-    max_total_tool_calls_per_turn: int = 32
-    max_consecutive_tool_errors: int = 4
-    max_same_signature_retries: int = 2
-    max_provider_errors_per_turn: int = 2
-    log_provider_turn_raw: bool = False
+class ToolLoopResultV1:
+    schema_version: str
+    session_id: str
+    turn_id: str
+    terminal_state: str
+    final_text: str
+    public_transcript: tuple[dict[str, Any], ...]
+    public_transcript_sha256: str
+    public_transcript_artifact_id: str
+    public_transcript_artifact_sha256: str
+    provider_receipt_sha256s: tuple[str, ...]
+    api_attempt_receipt_sha256s: tuple[str, ...]
+    successful_tool_calls: int
+    failed_tool_calls: int
+    event_stream_head_sha256: str
+    result_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.tool-loop-result.v1":
+            raise ContractError("unsupported tool-loop result schema")
+        if self.terminal_state not in {
+            "complete",
+            "planned",
+            "failed",
+            "blocked",
+            "waiting_for_approval",
+        }:
+            raise ContractError("invalid tool-loop terminal state")
+        if _contains_private_reasoning(self.public_transcript):
+            raise ContractError("public transcript contains private reasoning")
+        if self.public_transcript_sha256 != canonical_sha256(
+            self.public_transcript
+        ):
+            raise ContractError("public transcript digest mismatch")
+        body = {
+            "schema_version": self.schema_version,
+            "session_id": self.session_id,
+            "turn_id": self.turn_id,
+            "terminal_state": self.terminal_state,
+            "final_text": self.final_text,
+            "public_transcript": self.public_transcript,
+            "public_transcript_sha256": self.public_transcript_sha256,
+            "public_transcript_artifact_id": (
+                self.public_transcript_artifact_id
+            ),
+            "public_transcript_artifact_sha256": (
+                self.public_transcript_artifact_sha256
+            ),
+            "provider_receipt_sha256s": self.provider_receipt_sha256s,
+            "api_attempt_receipt_sha256s": (
+                self.api_attempt_receipt_sha256s
+            ),
+            "successful_tool_calls": self.successful_tool_calls,
+            "failed_tool_calls": self.failed_tool_calls,
+            "event_stream_head_sha256": self.event_stream_head_sha256,
+        }
+        if self.result_sha256 != canonical_sha256(body):
+            raise ContractError("tool-loop result digest mismatch")
 
 
-class ToolLoop:
+#: Characters per token for the conservative pre-request size estimate.  Real
+#: tokenizers vary by model and are not available to the host, so this is
+#: deliberately an estimate used only to refuse a request that would clearly be
+#: rejected -- never to decide anything scientific.
+_CHARS_PER_TOKEN = 3.5
+
+
+def estimate_request_input_tokens(request: Mapping[str, Any]) -> int:
+    """Estimate the input size of a provider request before sending it.
+
+    Underestimating lets a doomed request through, which is the status quo.
+    Overestimating refuses a request that would have worked.  The ratio is
+    therefore chosen on the low side of typical byte-per-token figures so the
+    guard fires only when the conversation is clearly past the limit.
+    """
+
+    total = 0
+    for message in request.get("messages") or ():
+        if not isinstance(message, Mapping):
+            continue
+        for value in message.values():
+            total += len(value) if isinstance(value, str) else len(str(value))
+    for tool in request.get("tools") or ():
+        total += len(str(tool))
+    return int(total / _CHARS_PER_TOKEN)
+
+
+class ToolLoopRunner:
+    """Drive provider-native turns through the only approved dispatcher."""
+
     def __init__(
         self,
-        provider: Any,
-        registry: ToolRegistry,
-        handle_store: HandleStore | None,
-        decision_log: Any,
-        budgets: ToolLoopBudgets | None = None,
-        policy: PermissionPolicy | None = None,
-        approver: Callable[[ToolRequest], ApprovalDecision] | None = None,
-        lifecycle: Any | None = None,
+        *,
+        host: CommandCompiledToolHostV1,
+        event_store: RuntimeEventStore,
+        clock: Callable[[], float] = time.monotonic,
+        feedback_projection: str = FULL_FEEDBACK_V1,
     ) -> None:
-        self.provider = provider
-        self.registry = registry
-        self.handle_store = handle_store
-        self.decision_log = decision_log
-        self.budgets = budgets or ToolLoopBudgets()
-        self.policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
-        self.approver = approver
-        self.lifecycle = lifecycle
+        self.host = host
+        self.event_store = event_store
+        self.clock = clock
+        self.feedback_projection = str(feedback_projection).strip().lower()
+        if self.feedback_projection not in FEEDBACK_MODES:
+            raise ContractError("unsupported tool-feedback projection")
 
-    def run_turn(
+    def run(
         self,
-        messages: list[dict[str, Any]],
-        tool_defs: list[dict[str, Any]] | None = None,
-        mode: RuntimePermissionMode | None = None,
-        allowed_tool_names: set[str] | None = None,
-    ) -> dict[str, Any]:
-        return ToolLoopRunner(self).run(
-            messages, tool_defs, mode, allowed_tool_names
+        *,
+        session: Any,
+        envelope: TaskEnvelopeV1,
+        hypothesis: AdaptiveHypothesisV1,
+        network_budget: AdaptiveNetworkBudgetV1,
+    ) -> ToolLoopResultV1:
+        self._validate_run_contract(
+            envelope=envelope,
+            hypothesis=hypothesis,
+            network_budget=network_budget,
+            provider=str(session.config.provider),
         )
-
-    def _run_one_request(
-        self,
-        step: int,
-        request: ToolRequest,
-    ) -> tuple[ToolOutcome, bool]:
-        resolved = self.policy.resolve(request)
-        if (
-            request.name == "run_local"
-            and resolved.reason == "always_require_approval"
-        ):
-            override = self._xtb_run_policy_override(request)
-            if override is not None:
-                resolved = override
-        if resolved.decision == ResolvedDecision.AUTO_DENY:
-            self._runtime_permission(
-                request,
-                decision="denied",
-                reason=resolved.reason,
-            )
-            return (
-                self._deny_request(
-                    step,
-                    request,
-                    reason=resolved.reason,
+        approved_output_limit = min(
+            envelope.budget.max_output_tokens_per_request,
+            network_budget.max_output_tokens_per_request,
+        )
+        if session.config.max_output_tokens > approved_output_limit:
+            raise ContractError("provider max_tokens exceeds approved budget")
+        self.event_store.append(
+            turn_id=envelope.turn_id,
+            kind=EventKind.SESSION_STARTED.value,
+            payload={
+                "phase": envelope.phase.value,
+                "task_id": envelope.task_id,
+                "tool_schema_sha256": envelope.tool_schema_sha256,
+            },
+            idempotency_key="session-started",
+        )
+        self.event_store.append(
+            turn_id=envelope.turn_id,
+            kind=EventKind.TURN_STARTED.value,
+            payload={
+                "request_sha256": envelope.request_sha256,
+                "phase": envelope.phase.value,
+            },
+            idempotency_key="turn-started:" + envelope.turn_id,
+        )
+        self.event_store.append(
+            turn_id=envelope.turn_id,
+            kind=EventKind.EXPOSURE_PLANNED.value,
+            payload={
+                "tools": tuple(
+                    item["function"]["name"]
+                    for item in self.host.surface.tool_definitions
                 ),
-                False,
-            )
-
-        if resolved.decision == ResolvedDecision.NEEDS_USER:
-            self._runtime_permission(
-                request,
-                decision="needs_user",
-                reason=resolved.reason,
-            )
-            if self.approver is None:
-                self._runtime_permission(
-                    request,
-                    decision="denied",
-                    reason="no_approver",
-                )
-                return (
-                    self._deny_request(
-                        step,
-                        request,
-                        reason="no_approver",
-                    ),
-                    False,
-                )
-
-            approval = self.approver(request)
-            if approval == ApprovalDecision.DENY:
-                self._runtime_permission(
-                    request,
-                    decision="denied",
-                    reason="user_denied",
-                )
-                return (
-                    self._deny_request(
-                        step,
-                        request,
-                        reason="user_denied",
-                    ),
-                    False,
-                )
-
-            self.policy.record(request.name, approval)
-            self._runtime_permission(
-                request,
-                decision="approved",
-                reason=(
-                    "user_session_approval"
-                    if approval == ApprovalDecision.ALLOW_SESSION
-                    else "user_once_approval"
-                ),
-            )
-            self._log_approved(
-                step,
-                request,
-                scope=(
-                    "session"
-                    if approval == ApprovalDecision.ALLOW_SESSION
-                    else "once"
-                ),
-                source="approver",
-            )
-            return self._execute_request(step, request), True
-
-        self._runtime_permission(
-            request,
-            decision="approved",
-            reason=resolved.reason,
-        )
-        self._log_approved(
-            step,
-            request,
-            scope="session" if resolved.reason == "session_rule" else "auto",
-            source=resolved.reason,
-        )
-        return self._execute_request(step, request), True
-
-    def _execute_request(
-        self,
-        step: int,
-        request: ToolRequest,
-    ) -> ToolOutcome:
-        if self.lifecycle is not None:
-            try:
-                self.lifecycle.before_tool(
-                    request_id=request.request_id,
-                    tool_name=request.name,
-                    arguments=request.arguments,
-                )
-            except Exception as exc:
-                return self._error_outcome(
-                    step,
-                    request,
-                    error_type=exc.__class__.__name__,
-                    error_message=str(exc),
-                )
-        try:
-            resolved_args = _resolve_handles(
-                request.arguments,
-                handle_store=self.handle_store,
-            )
-        except KeyError as exc:
-            return self._error_outcome(
-                step,
-                request,
-                error_type="UnknownHandle",
-                error_message=f"Unknown handle {exc.args[0]!r}",
-            )
-
-        try:
-            result = self.registry.call(request.name, resolved_args)
-        except Exception as exc:
-            return self._error_outcome(
-                step,
-                request,
-                error_type=exc.__class__.__name__,
-                error_message=str(exc),
-            )
-        if _is_tool_error(result):
-            error = result.get("error") or {}
-            if not isinstance(error, dict):
-                error = {
-                    "type": "ToolError",
-                    "message": str(error or f"{request.name} failed"),
-                }
-            return self._error_outcome(
-                step,
-                request,
-                error_type=str(error.get("type") or "ToolError"),
-                error_message=str(
-                    error.get("message") or f"{request.name} failed"
-                ),
-                raw_result=result,
-            )
-
-        handle_id = self._store_result_handle(request.name, result)
-        display_result = _display_result(result, handle_id=handle_id)
-        outcome = ToolOutcome(
-            request_id=request.request_id,
-            provider_call_id=request.provider_call_id,
-            name=request.name,
-            status="ok",
-            result=result,
-            display_result=display_result,
-            raw_result=result,
-            handle_id=handle_id,
-        )
-        self.decision_log.write(
-            "tool_use_result",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "status": outcome.status,
-                "description": self._tool_description(request.name),
-                "payload": display_result,
-                "handle_id": handle_id,
+                "tool_schema_sha256": self.host.surface.tool_schema_sha256,
             },
+            idempotency_key="tool-exposure:" + envelope.turn_id,
         )
-        if self.lifecycle is not None:
-            self.lifecycle.after_tool(
-                request_id=request.request_id,
-                tool_name=request.name,
-                result=result,
+        self.host.record_seeded_evidence(envelope.turn_id)
+        start = self.clock()
+        attempts: list[ApiAttemptReceiptV1] = []
+        provider_receipts: list[ProviderTurnReceiptV1] = []
+        successful_tools = 0
+        failed_tools = 0
+        final_text = ""
+        terminal_state = "failed"
+        terminal_reason = "tool loop failed"
+        completion_required: tuple[str, ...] = ()
+        transport_ordinal = 0
+        while True:
+            elapsed = self.clock() - start
+            remaining_wall_time = (
+                network_budget.task_wall_time_seconds - elapsed
             )
-        return outcome
-
-    def _xtb_run_policy_override(
-        self,
-        request: ToolRequest,
-    ) -> ResolvedPermission | None:
-        """Apply the rule-based xtb_real_runs policy to a run_local request.
-
-        Permission resolution happens before handle resolution, so the loop
-        (which owns the handle store) is the earliest point that can tell
-        whether the requested job is an xTB job and how large it is. Returns
-        None for ask mode, non-xTB jobs, unknown handles, or failed guards —
-        all of which fall back to the normal approval flow.
-        """
-
-        policy_value = getattr(self.policy, "xtb_real_runs", "ask")
-        handle_id = (request.arguments or {}).get("job")
-        if not isinstance(handle_id, str) or self.handle_store is None:
-            return None
-        try:
-            job = self.handle_store.get(handle_id)
-        except KeyError:
-            return None
-        molecule = getattr(job, "molecule", None)
-        symbols = getattr(molecule, "symbols", None)
-        return resolve_xtb_run_local(
-            policy_value,
-            job_program=getattr(job, "PROGRAM", None),
-            atom_count=len(symbols) if symbols is not None else None,
-        )
-
-    def _deny_request(
-        self,
-        step: int,
-        request: ToolRequest,
-        *,
-        reason: str,
-    ) -> ToolOutcome:
-        self.decision_log.write(
-            "tool_use_denied",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "description": self._tool_description(request.name),
-                "mode": self.policy.mode.value,
-                "reason": reason,
-            },
-        )
-        outcome = ToolOutcome(
-            request_id=request.request_id,
-            provider_call_id=request.provider_call_id,
-            name=request.name,
-            status="denied",
-            error_type="PermissionDenied",
-            error_message=reason,
-        )
-        self.decision_log.write(
-            "tool_use_result",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "status": outcome.status,
-                "description": self._tool_description(request.name),
-                "reason": reason,
-                "payload": {
-                    "ok": False,
-                    "error": {
-                        "type": outcome.error_type,
-                        "message": reason,
-                        "tool": request.name,
-                    },
-                },
-                "handle_id": None,
-            },
-        )
-        return outcome
-
-    def _log_approved(
-        self,
-        step: int,
-        request: ToolRequest,
-        *,
-        scope: str,
-        source: str,
-    ) -> None:
-        self.decision_log.write(
-            "tool_use_approved",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "description": self._tool_description(request.name),
-                "scope": scope,
-                "source": source,
-            },
-        )
-
-    def _error_outcome(
-        self,
-        step: int,
-        request: ToolRequest,
-        *,
-        error_type: str,
-        error_message: str,
-        raw_result: Any = None,
-    ) -> ToolOutcome:
-        if self.lifecycle is not None:
-            self.lifecycle.tool_failed(
-                request_id=request.request_id,
-                tool_name=request.name,
-                error_type=error_type,
-                error_message=error_message,
-                result=raw_result,
+            if remaining_wall_time <= 0:
+                terminal_state = "failed"
+                final_text = "provider wall-time budget exhausted"
+                terminal_reason = final_text
+                break
+            timeout_setter = getattr(
+                session, "set_turn_timeout_seconds", None
             )
-        outcome = ToolOutcome(
-            request_id=request.request_id,
-            provider_call_id=request.provider_call_id,
-            name=request.name,
-            status="error",
-            error_type=error_type,
-            error_message=error_message,
-            raw_result=raw_result,
-        )
-        self.decision_log.write(
-            "tool_use_result",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "status": outcome.status,
-                "description": self._tool_description(request.name),
-                "payload": {
-                    "ok": False,
-                    "error": {
-                        "type": error_type,
-                        "message": error_message,
-                        "tool": request.name,
-                    },
-                },
-                "handle_id": None,
-            },
-        )
-        return outcome
-
-    def _runtime_permission(
-        self,
-        request: ToolRequest,
-        *,
-        decision: str,
-        reason: str,
-    ) -> None:
-        if self.lifecycle is None:
-            return
-        self.lifecycle.permission(
-            request_id=request.request_id,
-            tool_name=request.name,
-            decision=decision,
-            reason=reason,
-        )
-
-    def _skipped_outcome(
-        self,
-        step: int,
-        request: ToolRequest,
-        *,
-        reason: str,
-    ) -> ToolOutcome:
-        self.decision_log.write(
-            "tool_use_skipped",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "reason": reason,
-            },
-        )
-        outcome = ToolOutcome(
-            request_id=request.request_id,
-            provider_call_id=request.provider_call_id,
-            name=request.name,
-            status="skipped",
-            error_type="ToolSkipped",
-            error_message=reason,
-        )
-        self.decision_log.write(
-            "tool_use_result",
-            {
-                "step": step,
-                "provider_call_id": request.provider_call_id,
-                "tool": request.name,
-                "status": outcome.status,
-                "description": self._tool_description(request.name),
-                "reason": reason,
-                "payload": {
-                    "ok": False,
-                    "error": {
-                        "type": "ToolSkipped",
-                        "message": reason,
-                        "tool": request.name,
-                    },
-                },
-                "handle_id": None,
-            },
-        )
-        return outcome
-
-    def _normalized_args(self, request: ToolRequest) -> dict[str, Any]:
-        if hasattr(self.registry, "normalize_args"):
-            return self.registry.normalize_args(
-                request.name, request.arguments
+            if timeout_setter is not None:
+                timeout_setter(remaining_wall_time)
+            transport_ordinal += 1
+            request = session.request_payload(
+                tools=list(self.host.surface.tool_definitions)
             )
-        return dict(request.arguments)
-
-    def _tool_description(self, tool_name: str) -> str:
-        if hasattr(self.registry, "describe_tool"):
-            return self.registry.describe_tool(tool_name)
-        return tool_name
-
-    def _tool_defs_for_mode(
-        self,
-        provider_name: str,
-        mode: RuntimePermissionMode,
-    ) -> list[dict[str, Any]]:
-        if hasattr(self.registry, "assemble_tool_pool"):
-            tool_pool = self.registry.assemble_tool_pool(mode)
-            if hasattr(self.registry, "tool_defs_for_provider"):
-                try:
-                    return with_virtual_tool_defs(
-                        provider_name,
-                        self.registry.tool_defs_for_provider(
-                            provider_name, tool_pool
+            # Provider-private reasoning continuation must not influence any
+            # persisted evidence, including request digests.
+            request_sha256 = canonical_sha256(public_payload(request))
+            context_limit = min(
+                envelope.budget.max_input_tokens_per_request,
+                network_budget.max_input_tokens_per_request,
+            )
+            projected = estimate_request_input_tokens(request)
+            if projected > context_limit:
+                # The existing budget check runs on the provider receipt, which
+                # means the request has already been sent and charged before
+                # anyone notices it was too large.  The session history grows
+                # on every turn and is never pruned, so a long workflow reaches
+                # this point by construction rather than by accident: measured
+                # across fourteen live sessions, input tokens rose monotonically
+                # on every single turn and total cost scaled with the square of
+                # the turn count.  Refusing here spends nothing and says why.
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=EventKind.TURN_BLOCKED.value,
+                    payload={
+                        "reason": (
+                            "the conversation would exceed the provider "
+                            f"context budget: about {projected} input tokens "
+                            f"against a limit of {context_limit}. The session "
+                            "history grows every turn and is never pruned, so "
+                            "this is reached by accumulation, not by one large "
+                            "message."
                         ),
-                    )
-                except TypeError:
-                    pass
-            if provider_name == "anthropic":
-                return with_virtual_tool_defs(
-                    provider_name,
-                    [tool.anthropic_tool_def() for tool in tool_pool],
+                        "rule_ids": ("budget.context_would_be_exceeded",),
+                        "projected_input_tokens": projected,
+                        "context_limit": context_limit,
+                    },
+                    idempotency_key="context-budget:" + request_sha256,
                 )
-            return with_virtual_tool_defs(
-                provider_name,
-                [tool.openai_tool_def() for tool in tool_pool],
+                terminal_state = "blocked"
+                final_text = "conversation exceeds the provider context budget"
+                terminal_reason = "context budget would be exceeded"
+                break
+            attempt_start = self.clock()
+            try:
+                response, provider_receipt = session.turn(
+                    tools=list(self.host.surface.tool_definitions)
+                )
+            except (DeepSeekTransportError, DeepSeekProtocolError) as exc:
+                attempt = self._failed_attempt(
+                    envelope=envelope,
+                    hypothesis=hypothesis,
+                    network_budget=network_budget,
+                    ordinal=transport_ordinal,
+                    request_sha256=request_sha256,
+                    started=attempt_start,
+                    error=exc,
+                    provider=session.config.provider,
+                )
+                attempts.append(attempt)
+                self._emit_attempt(envelope.turn_id, attempt)
+                terminal_state = "failed"
+                final_text = str(exc)
+                terminal_reason = "provider transport or protocol failed"
+                break
+            provider_receipts.append(provider_receipt)
+            attempt = build_api_attempt_receipt(
+                attempt_id=f"{envelope.turn_id}.provider.{transport_ordinal}",
+                provider=session.config.provider,
+                endpoint_origin=network_budget.endpoint_origin,
+                hypothesis_sha256=hypothesis.hypothesis_sha256,
+                budget_sha256=network_budget.budget_sha256,
+                request_sha256=request_sha256,
+                response_sha256=canonical_sha256(response),
+                status="succeeded",
+                latency_ms=max(
+                    0, int((self.clock() - attempt_start) * 1000)
+                ),
+                input_tokens=provider_receipt.input_tokens,
+                output_tokens=provider_receipt.output_tokens,
+                reasoning_tokens=provider_receipt.reasoning_tokens,
+                reported_cost_usd="",
+                retry_ordinal=0,
+                nonsecret_error_class="",
             )
-        return self._tool_defs_for_provider(provider_name)
+            attempts.append(attempt)
+            self._emit_attempt(envelope.turn_id, attempt)
+            self.event_store.append(
+                turn_id=envelope.turn_id,
+                kind=EventKind.PROVIDER_TURN_OBSERVED.value,
+                payload={
+                    "receipt_sha256": provider_receipt.receipt_sha256,
+                    "provider": provider_receipt.provider,
+                    "requested_model": provider_receipt.requested_model,
+                    "observed_model": provider_receipt.observed_model,
+                    "finish_reason": provider_receipt.finish_reason,
+                    "tool_calls_present": (
+                        provider_receipt.tool_calls_present
+                    ),
+                    "reasoning_continuation_present": (
+                        provider_receipt.reasoning_continuation_present
+                    ),
+                },
+                idempotency_key=(
+                    "provider-turn:" + provider_receipt.receipt_sha256
+                ),
+            )
+            budget_findings = []
+            if provider_receipt.input_tokens > min(
+                envelope.budget.max_input_tokens_per_request,
+                network_budget.max_input_tokens_per_request,
+            ):
+                budget_findings.append("budget.provider_input_tokens_exceeded")
+            if provider_receipt.output_tokens > approved_output_limit:
+                budget_findings.append("budget.provider_output_tokens_exceeded")
+            if budget_findings:
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=EventKind.TURN_BLOCKED.value,
+                    payload={
+                        "reason": "provider token budget exceeded",
+                        "rule_ids": tuple(budget_findings),
+                        "provider_receipt_sha256": (
+                            provider_receipt.receipt_sha256
+                        ),
+                    },
+                    idempotency_key=(
+                        "token-budget:" + provider_receipt.receipt_sha256
+                    ),
+                )
+                final_text = "provider token budget exceeded"
+                terminal_state = "failed"
+                terminal_reason = final_text
+                break
+            assistant = _public_assistant_message(response)
+            tool_calls = assistant.get("tool_calls") or []
+            if not tool_calls:
+                final_text = str(assistant.get("content") or "")
+                analysis_policy = self.host.analysis_completion_policy
+                if analysis_policy is not None:
+                    try:
+                        completion_required = (
+                            self.host.completion_receipts_for_analysis(
+                                turn_id=envelope.turn_id
+                            )
+                        )
+                        final_text = self.host.render_completed_analysis_report(
+                            completion_required[0]
+                        )
+                        terminal_state = "complete"
+                        terminal_reason = (
+                            "task-owned analysis completion policy passed"
+                        )
+                    except AnalysisIncompleteError:
+                        try:
+                            completion_required = (
+                                self.host.latest_workflow_draft_receipt(),
+                            )
+                            terminal_state = "planned"
+                            terminal_reason = (
+                                "workflow draft recorded; required analysis "
+                                "stages remain incomplete"
+                            )
+                        except ContractError:
+                            terminal_state = "blocked"
+                            terminal_reason = (
+                                "model stopped before the required analysis "
+                                "completion policy passed"
+                            )
+                    except ContractError as exc:
+                        final_text = (
+                            "analysis completion evaluator failed: " + str(exc)
+                        )
+                        terminal_state = "failed"
+                        terminal_reason = final_text
+                else:
+                    try:
+                        completion_required = (
+                            self.host.completion_receipts_for_latest_preflight()
+                        )
+                        terminal_state = "complete"
+                        terminal_reason = "host readiness gates passed"
+                    except ContractError:
+                        try:
+                            completion_required = (
+                                self.host.latest_workflow_draft_receipt(),
+                            )
+                            terminal_state = "planned"
+                            terminal_reason = (
+                                "workflow draft recorded; action-grade gates "
+                                "remain"
+                            )
+                        except ContractError:
+                            terminal_state = "blocked"
+                            terminal_reason = (
+                                "model stopped before a workflow or readiness gate"
+                            )
+                break
+            if successful_tools + failed_tools + len(tool_calls) > (
+                envelope.budget.max_tool_calls
+            ):
+                final_text = "tool-call budget exhausted"
+                terminal_state = "failed"
+                terminal_reason = final_text
+                break
+            tool_results = []
+            for tool_call in tool_calls:
+                call_id, tool_name, arguments = _decode_tool_call(tool_call)
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=EventKind.TOOL_STARTED.value,
+                    payload={
+                        "request_id": call_id,
+                        "tool": tool_name,
+                        "arguments_sha256": canonical_sha256(arguments),
+                    },
+                    idempotency_key="tool-started:" + call_id,
+                )
+                try:
+                    result = self.host.dispatch(
+                        turn_id=envelope.turn_id,
+                        tool_name=tool_name,
+                        arguments=arguments,
+                    )
+                    successful_tools += 1
+                    tool_event_kind = EventKind.TOOL_SUCCEEDED.value
+                    tool_event_payload = {
+                        "request_id": call_id,
+                        "tool": tool_name,
+                        "result_sha256": canonical_sha256(result),
+                        "verdict": "host_observed",
+                        "typed_receipt_status": "present",
+                    }
+                    tool_event_key = "tool-succeeded:" + call_id
+                except Exception as exc:
+                    failed_tools += 1
+                    public_message = (
+                        str(exc)
+                        if isinstance(
+                            exc,
+                            (
+                                ContractError,
+                                ValueError,
+                                TypeError,
+                                KeyError,
+                                AttributeError,
+                            ),
+                        )
+                        else "tool host operation failed"
+                    )
+                    result = {
+                        "schema_version": "chemsmart.tool-result.v1",
+                        "tool": tool_name,
+                        "status": "rejected",
+                        "error_class": type(exc).__name__,
+                        "message": public_message,
+                    }
+                    tool_event_kind = EventKind.TOOL_FAILED.value
+                    tool_event_payload = {
+                        "request_id": call_id,
+                        "tool": tool_name,
+                        "rule_ids": ("tool.dispatch.rejected",),
+                        "error_class": type(exc).__name__,
+                    }
+                    tool_event_key = "tool-failed:" + call_id
+                projected = project_tool_feedback(
+                    tool=tool_name,
+                    result=result,
+                    mode=self.feedback_projection,
+                )
+                # The complete public result remains evidence even when the
+                # provider receives only the compact causal projection.
+                tool_event_payload.update(
+                    {
+                        "canonical_result": canonical_data(result),
+                        "feedback_projection": self.feedback_projection,
+                        "feedback_equivalence_receipt": canonical_data(
+                            projected.receipt
+                        ),
+                    }
+                )
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=tool_event_kind,
+                    payload=tool_event_payload,
+                    idempotency_key=tool_event_key,
+                )
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": canonical_json(projected.content),
+                    }
+                )
+            session.append_tool_results(tool_results)
+        public_transcript = tuple(session.public_history())
+        if _contains_private_reasoning(public_transcript):
+            raise ContractError("provider sanitizer left private reasoning")
+        transcript_artifact = self.event_store.persist_public_transcript(
+            turn_id=envelope.turn_id, transcript=public_transcript
+        )
+        self.event_store.append(
+            turn_id=envelope.turn_id,
+            kind=EventKind.ARTIFACT_RECORDED.value,
+            payload={
+                "artifact_id": transcript_artifact["artifact_id"],
+                "kind": "public_transcript",
+                "artifact_sha256": transcript_artifact["artifact_sha256"],
+                "transcript_sha256": transcript_artifact["transcript_sha256"],
+            },
+            idempotency_key=(
+                "public-transcript:" + transcript_artifact["transcript_sha256"]
+            ),
+        )
+        if not self.event_store.state().terminal_state:
+            self.event_store.terminate(
+                turn_id=envelope.turn_id,
+                terminal_state=terminal_state,
+                reason=terminal_reason,
+                required_receipt_sha256s=completion_required,
+            )
+        state = self.event_store.state()
+        body = {
+            "schema_version": "chemsmart.tool-loop-result.v1",
+            "session_id": envelope.session_id,
+            "turn_id": envelope.turn_id,
+            "terminal_state": state.terminal_state,
+            "final_text": final_text,
+            "public_transcript": public_transcript,
+            "public_transcript_sha256": canonical_sha256(public_transcript),
+            "public_transcript_artifact_id": transcript_artifact["artifact_id"],
+            "public_transcript_artifact_sha256": transcript_artifact[
+                "artifact_sha256"
+            ],
+            "provider_receipt_sha256s": tuple(
+                item.receipt_sha256 for item in provider_receipts
+            ),
+            "api_attempt_receipt_sha256s": tuple(
+                item.receipt_sha256 for item in attempts
+            ),
+            "successful_tool_calls": successful_tools,
+            "failed_tool_calls": failed_tools,
+            "event_stream_head_sha256": state.latest_event_hash,
+        }
+        return ToolLoopResultV1(
+            **body, result_sha256=canonical_sha256(body)
+        )
 
-    def _tool_defs_for_provider(
+    def _validate_run_contract(
         self,
-        provider_name: str,
-    ) -> list[dict[str, Any]]:
-        return registry_tool_defs_for_provider(self.registry, provider_name)
+        *,
+        envelope: TaskEnvelopeV1,
+        hypothesis: AdaptiveHypothesisV1,
+        network_budget: AdaptiveNetworkBudgetV1,
+        provider: str,
+    ) -> None:
+        if envelope.session_id != self.event_store.session_id:
+            raise ContractError("task envelope belongs to another event stream")
+        if envelope.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
+            raise ContractError("task envelope uses another tool schema")
+        if hypothesis.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
+            raise ContractError("hypothesis uses another tool schema")
+        if provider not in {"deepseek", "alibaba-token-plan"}:
+            raise ContractError("active tool loop provider is not registered")
+        if network_budget.allowed_provider != provider:
+            raise ContractError("network budget belongs to another provider")
+        if network_budget.engine_calls or network_budget.hpc_calls:
+            raise ContractError("active planning loop cannot run chemistry")
+        execution_profile = (
+            self.host.surface.profile == "command_compiled_approved_execution"
+        )
+        if envelope.budget.hpc_calls:
+            raise ContractError("active local tool loop cannot authorize HPC")
+        if envelope.budget.chemistry_engine_calls and not execution_profile:
+            raise ContractError(
+                "chemistry calls require the approved-execution tool profile"
+            )
+        if (
+            envelope.budget.max_output_tokens_per_request
+            > network_budget.max_output_tokens_per_request
+        ):
+            raise ContractError("task output budget exceeds network budget")
 
-    def _filter_tool_defs(
-        self,
-        provider_name: str,
-        tool_defs: list[dict[str, Any]],
-        allowed_tool_names: set[str],
-    ) -> list[dict[str, Any]]:
-        return _filter_tool_defs(provider_name, tool_defs, allowed_tool_names)
+    def _emit_attempt(self, turn_id: str, attempt: ApiAttemptReceiptV1) -> None:
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.API_ATTEMPT_OBSERVED.value,
+            payload={
+                "receipt_sha256": attempt.receipt_sha256,
+                "provider": attempt.provider,
+                "endpoint_origin": attempt.endpoint_origin,
+                "status": attempt.status,
+                "hypothesis_sha256": attempt.hypothesis_sha256,
+                "budget_sha256": attempt.budget_sha256,
+                "latency_ms": attempt.latency_ms,
+                "input_tokens": attempt.input_tokens,
+                "output_tokens": attempt.output_tokens,
+                "reasoning_tokens": attempt.reasoning_tokens,
+                "nonsecret_error_class": attempt.nonsecret_error_class,
+            },
+            idempotency_key="api-attempt:" + attempt.attempt_id,
+        )
 
-    def _store_result_handle(
+    def _failed_attempt(
         self,
-        tool_name: str,
-        result: Any,
-    ) -> str | None:
-        return store_result_handle(
-            self.handle_store,
-            tool_name,
-            result,
-            summary=json_safe(result),
+        *,
+        envelope: TaskEnvelopeV1,
+        hypothesis: AdaptiveHypothesisV1,
+        network_budget: AdaptiveNetworkBudgetV1,
+        ordinal: int,
+        request_sha256: str,
+        started: float,
+        error: Exception,
+        provider: str,
+    ) -> ApiAttemptReceiptV1:
+        error_class = getattr(error, "error_class", type(error).__name__)
+        status = {
+            "quota_exhausted": "quota_exhausted",
+            "credential_invalid": "credential_invalid",
+            "rate_limited": "rate_limited",
+            "timeout": "timeout",
+        }.get(
+            str(error_class),
+            "protocol_failed"
+            if isinstance(error, DeepSeekProtocolError)
+            else "transport_failed",
+        )
+        return build_api_attempt_receipt(
+            attempt_id=f"{envelope.turn_id}.provider.{ordinal}",
+            provider=provider,
+            endpoint_origin=network_budget.endpoint_origin,
+            hypothesis_sha256=hypothesis.hypothesis_sha256,
+            budget_sha256=network_budget.budget_sha256,
+            request_sha256=request_sha256,
+            response_sha256="",
+            status=status,
+            latency_ms=max(0, int((self.clock() - started) * 1000)),
+            retry_ordinal=0,
+            nonsecret_error_class=str(error_class),
         )
 
 
-def _assistant_message(
-    provider_name: str,
-    response_dict: dict[str, Any],
-) -> dict[str, Any]:
-    if provider_name == "anthropic":
-        return {
-            "role": "assistant",
-            "content": deepcopy(response_dict.get("content") or []),
-        }
-
-    choice = (response_dict.get("choices") or [{}])[0] or {}
-    message = deepcopy(choice.get("message") or {})
-    message.setdefault("role", "assistant")
-    return message
+def _public_assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise DeepSeekProtocolError("public response has no choices")
+    choice = choices[0]
+    message = choice.get("message") if isinstance(choice, Mapping) else None
+    if not isinstance(message, Mapping):
+        raise DeepSeekProtocolError("public response has no assistant message")
+    return dict(message)
 
 
-def _canonical_args_json(request: ToolRequest) -> str:
-    return json.dumps(request.arguments, sort_keys=True)
+def _decode_tool_call(
+    value: Mapping[str, Any],
+) -> tuple[str, str, dict[str, Any]]:
+    call_id = str(value.get("id") or "")
+    function = value.get("function")
+    if not call_id or not isinstance(function, Mapping):
+        raise DeepSeekProtocolError("malformed tool call")
+    name = str(function.get("name") or "")
+    try:
+        arguments = json.loads(str(function.get("arguments") or ""))
+    except json.JSONDecodeError as exc:
+        raise DeepSeekProtocolError("malformed tool arguments") from exc
+    if not name or not isinstance(arguments, dict):
+        raise DeepSeekProtocolError("tool call lacks name or object arguments")
+    return call_id, name, arguments
 
 
-def _display_result(result: Any, *, handle_id: str | None) -> Any:
-    if handle_id is None:
-        return json_safe(result)
-    payload: dict[str, Any] = {"handle_id": handle_id}
-    summary = json_safe(result)
-    if isinstance(summary, dict):
-        payload["summary"] = summary
-    return payload
-
-
-def with_virtual_tool_defs(
-    provider_name: str,
-    tool_defs: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    defs = [deepcopy(tool_def) for tool_def in tool_defs]
-    if any(
-        _tool_def_name(tool_def) == ASK_USER_TOOL_NAME for tool_def in defs
-    ):
-        return defs
-    defs.append(_ask_user_tool_def_for_provider(provider_name))
-    return defs
-
-
-def registry_tool_defs_for_provider(
-    registry: ToolRegistry,
-    provider_name: str,
-) -> list[dict[str, Any]]:
-    """Return provider-native registry definitions plus virtual tools."""
-
-    if hasattr(registry, "tool_defs_for_provider"):
-        tool_defs = registry.tool_defs_for_provider(provider_name)
-    else:
-        tool_defs = registry.openai_tool_defs()
-    return with_virtual_tool_defs(provider_name, tool_defs)
-
-
-def _filter_tool_defs(
-    provider_name: str,
-    tool_defs: list[dict[str, Any]],
-    allowed_tool_names: set[str],
-) -> list[dict[str, Any]]:
-    filtered = [
-        tool_def
-        for tool_def in tool_defs
-        if _tool_def_name(tool_def) in allowed_tool_names
-    ]
-    return with_virtual_tool_defs(provider_name, filtered)
-
-
-def _ask_user_tool_def_for_provider(provider_name: str) -> dict[str, Any]:
-    if provider_name != "anthropic":
-        return deepcopy(ASK_USER_TOOL_DEF)
-
-    function: dict[str, Any] = ASK_USER_TOOL_DEF.get("function") or {}
-    return {
-        "name": function.get("name"),
-        "description": function.get("description"),
-        "input_schema": deepcopy(function.get("parameters") or {}),
-    }
-
-
-def _tool_def_name(tool_def: dict[str, Any]) -> str | None:
-    if not isinstance(tool_def, dict):
-        return None
-    function = tool_def.get("function")
-    if isinstance(function, dict):
-        name = function.get("name")
-        return name if isinstance(name, str) else None
-    name = tool_def.get("name")
-    return name if isinstance(name, str) else None
-
-
-def _resolve_handles(
-    value: Any,
-    *,
-    handle_store: HandleStore | None,
-) -> Any:
-    if (
-        isinstance(value, str)
-        and handle_store is not None
-        and is_handle_id(value)
-    ):
-        return handle_store.get(value)
-    if isinstance(value, list):
-        return [
-            _resolve_handles(item, handle_store=handle_store) for item in value
-        ]
-    if isinstance(value, dict):
-        return {
-            key: _resolve_handles(item, handle_store=handle_store)
+def _contains_private_reasoning(value: Any) -> bool:
+    forbidden = {"reasoning_content", "thinking", "analysis", "<think>"}
+    if isinstance(value, Mapping):
+        return any(
+            str(key).lower() in forbidden
+            or _contains_private_reasoning(item)
             for key, item in value.items()
-        }
-    return value
+        )
+    if isinstance(value, (tuple, list)):
+        return any(_contains_private_reasoning(item) for item in value)
+    if isinstance(value, str):
+        return "<think" in value.lower()
+    return False
 
 
-def _is_tool_error(result: Any) -> bool:
-    return (
-        isinstance(result, dict)
-        and result.get("ok") is False
-        and "error" in result
-    )
+__all__ = ["ToolLoopResultV1", "ToolLoopRunner"]

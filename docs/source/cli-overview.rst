@@ -14,6 +14,10 @@ CHEMSMART offers two main execution modes:
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
+The provider-neutral ``chemsmart agent`` command plans through these same
+project loaders and Click commands. It is not a second chemistry execution
+interface; see :doc:`agent-workflows`.
+
 The basic command structure is:
 
 .. code:: bash
@@ -76,8 +80,9 @@ Execution Control Options
       -  Enable simulation mode with fake job runners (default: disabled)
 
    -  -  ``--scratch/--no-scratch``
-      -  bool
-      -  Run in scratch space or working directory (default: scratch)
+      -  bool or None
+      -  Force scratch on (``--scratch``) or off (``--no-scratch``). Omit both (``None``) to use program YAML
+         ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
 .. note::
 
@@ -85,10 +90,34 @@ Execution Control Options
 
 .. note::
 
+   **CLI (``chemsmart run`` / ``chemsmart sub``)**
+
+   When both ``--scratch`` and ``--no-scratch`` are omitted, scratch mode is decided in ``JobRunner.from_job`` before
+   the typed runner is built:
+
+   #. Explicit ``--scratch`` or ``--no-scratch`` wins.
+   #. Else program ``SCRATCH`` in server YAML when the selected runner has a registered executable/library configuration
+      (including Gaussian, ORCA, NCIPLOT, PySCF, and xTB).
+   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for PyMOL, thermochemistry,
+      etc.).
+
+   **Programmatic API (direct constructor)**
+
+   If you construct a runner yourself with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
+   default only. That can differ from the CLI path when YAML would override the class default.
+
+   Scratch **path** (when mode is on) is resolved separately from program ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then
+   user settings. See :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
+
+.. note::
+
    ``--fake`` automatically selects the program-matched fake runner based on the command group:
 
    -  ``chemsmart run --fake gaussian ...`` / ``chemsmart sub --fake gaussian ...`` uses the Gaussian fake runner.
    -  ``chemsmart run --fake orca ...`` / ``chemsmart sub --fake orca ...`` uses the ORCA fake runner.
+   -  ``chemsmart run --fake pyscf ...`` / ``chemsmart sub --fake pyscf ...`` generates a PySCF preview artifact without
+      importing or running PySCF.
+   -  ``chemsmart run --fake xtb ...`` / ``chemsmart sub --fake xtb ...`` generates an xTB preview without invoking xTB.
 
    In these fake modes, executable-path checks for the corresponding real program are not required and the corresponding
    fake runner will be used without needing to specify its path.
@@ -152,9 +181,14 @@ These options are only available with ``chemsmart sub``:
 
 -  ``gaussian``: Run or submit Gaussian jobs
 -  ``orca``: Run or submit ORCA jobs
+-  ``pyscf``: Run or submit structured PySCF ``sp``, ``opt``, and ``hess`` jobs
+-  ``xtb``: Run or submit bounded xTB ``sp``, ``opt``, and ``hess`` jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
+
+Top-level ``chemsmart agent`` additionally exposes ``plan``, ``run``, and
+deterministic approved ``execute`` operations.
 
 ************
  Next Steps
@@ -164,6 +198,8 @@ For specific job types, see the detailed tutorials:
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`pyscf-cli-options`
+-  :doc:`xtb-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`

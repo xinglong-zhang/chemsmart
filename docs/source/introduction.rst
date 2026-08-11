@@ -7,13 +7,48 @@
    :align: center
 
 CHEMSMART is a Python-based toolkit for the automatic creation of input files, submission scripts, and analysis of
-quantum chemistry simulation jobs.
+quantum chemistry simulation jobs. It is designed as a canonical hub for
+controlling multiple computational-chemistry programs through one command-line
+interface and validated project YAML files. Scientific settings remain visible
+and reusable while CHEMSMART translates them into each backend's generated
+artifacts.
 
 It uses the same submission command regardless of the queueing system (SLURM, Torque, or PBS) used by any High
 Performance Computing (HPC) cluster.
 
 Users can customize their own HPC server settings and project settings to run different jobs without modifying the
 source code.
+
+For a clean x86-64 Ubuntu CPU benchmark deployment, begin with
+:doc:`installation-ubuntu-cpu-server`. For model-driven research using the
+same CLI and project layer, see :doc:`agent-workflows`.
+
+******************************
+ Provider-neutral agent usage
+******************************
+
+The agent surface uses the same project loaders and CLI compiler as direct
+CHEMSMART commands. A model proposes typed scientific intent rather than
+authoring backend-native input or shell commands.
+
+``chemsmart agent plan`` creates a project-backed workflow and safe previews
+without invoking a chemistry engine. ``chemsmart agent run`` follows the same
+path and may execute host-compiled nodes only when an explicit approval file is
+provided. Both commands require a provider, a disposable workspace, a provider
+credential file, and exactly one of ``--task`` or ``--task-file``.
+
+.. code-block:: bash
+
+   chemsmart agent plan --provider deepseek --task-file research-task.txt \
+     --secret-file provider.env --workspace ./agent-workspace
+
+   chemsmart agent run --provider deepseek --task-file research-task.txt \
+     --secret-file provider.env --workspace ./agent-workspace \
+     --approval-file workflow-approval.json
+
+Omitting ``--approval-file`` from ``agent run`` keeps the session preview-only.
+CHEMSMART, not the model, resolves project artifacts, canonical commands,
+environment availability, approvals, terminal state, and validation.
 
 **********
  Citation

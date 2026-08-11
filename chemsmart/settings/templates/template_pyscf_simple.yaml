@@ -1,0 +1,45 @@
+# Canonical PySCF output uses stage sections. The loader also accepts legacy
+# gas/solv input and renders it back to this explicit form.
+sp:
+  functional: b3lyp
+  basis: def2-tzvp
+  freq: false
+  density_fit: true
+  aux_basis: null
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  solvent_model: smd
+  solvent_id: water
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: true
+  aux_basis: null
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  opt_solver: geometric
+  opt_maxsteps: 100
+hess:
+  functional: b3lyp
+  basis: def2-svp
+  freq: true
+  density_fit: true
+  aux_basis: null
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+td:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: true
+  aux_basis: null
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  scf_maxiter: 100
+  response_method: tda
+  state_manifold: singlet
+  nstates: 10

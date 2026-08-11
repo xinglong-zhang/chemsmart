@@ -12,6 +12,8 @@
    chemsmart.cli.gaussian
    chemsmart.cli.mol
    chemsmart.cli.orca
+   chemsmart.cli.pyscf
+   chemsmart.cli.xtb
 
 ************
  Submodules

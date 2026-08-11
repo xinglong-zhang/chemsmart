@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
-from _pytest.monkeypatch import MonkeyPatch
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
@@ -27,11 +26,11 @@ from chemsmart.jobs.mol.runner import (
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
-from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 
 thermochemistry_cli_module = importlib.import_module(
@@ -41,41 +40,12 @@ thermochemistry_cli_module = importlib.import_module(
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
-class _HomeAwareMonkeyPatch(MonkeyPatch):
-    """``MonkeyPatch`` that keeps ``~`` consistent with a patched ``HOME``.
-
-    ``Path.home()`` and ``os.path.expanduser`` read ``HOME`` on POSIX but
-    ``USERPROFILE`` on Windows. Dozens of tests redirect the user
-    configuration tree with ``monkeypatch.setenv("HOME", tmp_path)``; on
-    Windows those tests silently escaped the sandbox and wrote into the real
-    profile, which both corrupted the developer/runner home and made the
-    assertions fail. Mirroring the value keeps one call site honest on every
-    platform, including tests written later.
-    """
-
-    _HOME_ALIASES = ("USERPROFILE",)
-
-    def setenv(self, name, value, prepend=None):
-        super().setenv(name, value, prepend=prepend)
-        if name == "HOME" and prepend is None:
-            for alias in self._HOME_ALIASES:
-                super().setenv(alias, value)
-
-    def delenv(self, name, raising=True):
-        super().delenv(name, raising=raising)
-        if name == "HOME":
-            for alias in self._HOME_ALIASES:
-                super().delenv(alias, raising=False)
-
-
+############ IO Fixtures ####################################
 @pytest.fixture
-def monkeypatch():
-    """Replace pytest's builtin fixture with the home-aware variant."""
-    patcher = _HomeAwareMonkeyPatch()
-    try:
-        yield patcher
-    finally:
-        patcher.undo()
+def temporary_working_dir(tmp_path, monkeypatch):
+    """Run a test in an isolated temporary working directory."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 ############ Thermochemistry Mock Fixtures ##################
@@ -178,19 +148,24 @@ def invoke_folder_command():
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
-    def _run(extra_args=None, ctx_obj=None):
+    def _run(
+        extra_args=None,
+        ctx_obj=None,
+        filename="dummy.log",
+        detected_program="gaussian",
+    ):
         runner = CliRunner()
         captured_settings = None
         mock_job = MagicMock()
 
-        base_args = ["-f", "dummy.log", "-T", "298.15"]
+        base_args = ["-f", filename, "-T", "298.15"]
         cli_args = base_args + (extra_args or [])
 
         with (
             patch.object(
                 thermochemistry_cli_module,
                 "get_program_type_from_file",
-                return_value="gaussian",
+                return_value=detected_program,
             ),
             patch.object(
                 thermochemistry_cli_module.ThermochemistryJob,
@@ -255,6 +230,9 @@ def run_thermochemistry_with_directory():
             mock_folder = MagicMock()
             # Configure every discovery method to return the caller-supplied list
             mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.return_value = (
                 mock_files
             )
             mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (
@@ -411,14 +389,14 @@ def chemsmart_templates_config(mocker):
 
     # Patch the Class attribute
     mocker.patch(
-        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        "chemsmart.settings.user.CHEMSMARTUserSettings.USER_CONFIG_DIR",
         str(template_dir),
     )
 
     # Patch the global instance in runner.py
-    from chemsmart.settings.user import ChemsmartUserSettings
+    from chemsmart.settings.user import CHEMSMARTUserSettings
 
-    new_settings = ChemsmartUserSettings()
+    new_settings = CHEMSMARTUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
     # Patch other module-level user_settings singletons used by the CLI path
     mocker.patch("chemsmart.settings.server.user_settings", new_settings)
@@ -881,6 +859,73 @@ def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "failed_oniom_b3lypd3_in_uff.log"
     )
     return gaussian_oniom_outfile
+
+
+# Gaussian output files for pKa calculations
+@pytest.fixture()
+def gaussian_pKa_HA_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_no_pd_opt.log"
+    )
+    return gaussian_pka_ha_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_b_no_pd_opt.log"
+    )
+    return gaussian_pka_a_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HA_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_no_pd_opt_sp_smd_generic.log",
+    )
+    return gaussian_pka_ha_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_b_no_pd_opt_sp_smd_generic.log",
+    )
+    return gaussian_pka_a_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt.log"
+    )
+    return gaussian_pka_hb_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt.log"
+    )
+    return gaussian_pka_b_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt_sp_smd_generic.log"
+    )
+    return gaussian_pka_hb_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt_sp_smd_generic.log"
+    )
+    return gaussian_pka_b_single_point_outputfile
 
 
 # Gaussian pbc input files
@@ -1763,6 +1808,11 @@ def dna_hybrid_visualized_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def visualized_1_mer_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "1-mer.xyz")
+
+
+@pytest.fixture()
 def chemdraw_directory(structure_test_directory):
     return os.path.join(structure_test_directory, "chemdraw")
 
@@ -1853,6 +1903,28 @@ def metal_ligand_molecules_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def colored_proton_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "phenol.cdxml")
+
+
+@pytest.fixture()
+def colored_implicit_proton_cdxml_file(chemdraw_directory):
+    """Returns the path to a CDXML file with a colored implicit proton, which should be treated as a colored explicit proton."""
+    return os.path.join(chemdraw_directory, "phenol_implicit_proton.cdxml")
+
+
+@pytest.fixture()
+def colored_proton_two_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "phenol_two_molecule.cdxml")
+
+
+@pytest.fixture()
+def pka_scale_cdxml_file(chemdraw_directory):
+    """Multi-fragment CDXML with nested groups and coloured acidic protons."""
+    return os.path.join(chemdraw_directory, "pka_scale.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -1863,6 +1935,20 @@ def server_yaml_file(utils_test_directory):
 
 
 ### Server and JobRunner fixtures
+
+
+@pytest.fixture()
+def gaussian_project_config_dir(tmp_path):
+    """Minimal Gaussian project config under a temporary CHEMSMART config root."""
+    config_root = tmp_path / "chemsmart_cfg"
+    gaussian_cfg = config_root / "gaussian"
+    gaussian_cfg.mkdir(parents=True)
+    (gaussian_cfg / "test.yaml").write_text(
+        "gas:\n  functional: B3LYP\n  basis: def2-SVP\n"
+        "solv:\n  functional: B3LYP\n  basis: def2-SVP\n"
+        "  solvent_model: smd\n  solvent_id: water\n"
+    )
+    return config_root
 
 
 @pytest.fixture()
@@ -1895,18 +1981,6 @@ def orca_jobrunner_scratch(tmpdir, pbs_server):
 
 
 @pytest.fixture()
-def xtb_jobrunner_no_scratch(pbs_server):
-    return FakeXTBJobRunner(server=pbs_server, scratch=False, fake=True)
-
-
-@pytest.fixture()
-def xtb_jobrunner_scratch(tmpdir, pbs_server):
-    return FakeXTBJobRunner(
-        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
-    )
-
-
-@pytest.fixture()
 def pymol_visualization_jobrunner(pbs_server):
     return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
 
@@ -1914,6 +1988,13 @@ def pymol_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_hybrid_visualization_jobrunner(pbs_server):
     return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_scientific_style_visualization_jobrunner(pbs_server):
+    return PyMOLScientificStyleVisualizationJobRunner(
+        server=pbs_server, scratch=False
+    )
 
 
 @pytest.fixture()
@@ -2794,6 +2875,11 @@ def database_test_directory(test_data_directory):
 @pytest.fixture()
 def database_chemsmart_file(database_test_directory):
     return os.path.join(database_test_directory, "chemsmart.db")
+
+
+@pytest.fixture()
+def database_chemsmart_xtb_file(database_test_directory):
+    return os.path.join(database_test_directory, "chemsmart_xtb.db")
 
 
 @pytest.fixture()
