@@ -609,8 +609,8 @@ def test_orca_sp_grading_compares_effective_settings_not_section_spelling():
             nodes=(model_node,),
         ),
     )
-    misplaced = WorkflowProjectAnswerV1(
-        project_id="misplaced-sp",
+    phase_keyed = WorkflowProjectAnswerV1(
+        project_id="phase-keyed-sp",
         document=project_document(
             program="orca",
             sections={
@@ -621,24 +621,24 @@ def test_orca_sp_grading_compares_effective_settings_not_section_spelling():
             },
         ),
     )
-    misplaced_node = WorkflowSemanticNodeV1(
-        node_id="misplaced-node",
+    phase_keyed_node = WorkflowSemanticNodeV1(
+        node_id="phase-keyed-node",
         node_kind="calculation",
         program="orca",
         jobtype="sp",
-        project_id=misplaced.project_id,
+        project_id=phase_keyed.project_id,
         input_geometry_sha256s=("a" * 64,),
         output_semantics=("program_result",),
     )
-    wrong = grade_paper_workflow_answer(
+    phase_equivalent = grade_paper_workflow_answer(
         case=case,
         answer_key=key,
         observation=PaperWorkflowObservationV1(
             schema_version="chemsmart.paper-workflow-observation.v1",
-            projects=(misplaced,),
-            nodes=(misplaced_node,),
+            projects=(phase_keyed,),
+            nodes=(phase_keyed_node,),
         ),
     )
 
     assert equivalent.strict_pass
-    assert not wrong.strict_pass
+    assert phase_equivalent.strict_pass

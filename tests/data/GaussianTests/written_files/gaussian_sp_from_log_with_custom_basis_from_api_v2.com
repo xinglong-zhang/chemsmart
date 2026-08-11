@@ -1,7 +1,7 @@
 %chk=gaussian_sp_from_log_with_custom_basis_from_api.chk
 %nprocshared=64
 %mem=375GB
-# opt=(ts,calcfc,noeigentest) freq b3lyp empiricaldispersion=gd3bj def2svp
+# opt=(ts,calcfc,noeigentest) freq b3lyp def2svp empiricaldispersion=gd3bj
 
 Job prepared from Gaussian file pd_genecp_ts.log
 
@@ -134,4 +134,3 @@ d-f potential
 2      4.1397811             11.75086158
 2     13.2700000             31.92955431
 2      6.6300000              5.39821694
-

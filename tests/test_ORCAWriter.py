@@ -389,17 +389,22 @@ class TestORCAInputWriter:
         product_xyz_file = tmpdir.join("product.xyz")
         ts_xyz_file = tmpdir.join("ts.xyz")
         shutil.copy(orca_input_nebts_reactant_xyz_file, reactant_xyz_file)
-        product_xyz_file = os.path.basename(
-            shutil.copy(orca_input_nebts_product_xyz_file, product_xyz_file)
+        product_xyz_file = shutil.copy(
+            orca_input_nebts_product_xyz_file, product_xyz_file
         )
-        ts_xyz_file = os.path.basename(
-            shutil.copy(orca_input_nebts_ts_xyz_file, ts_xyz_file)
+        ts_xyz_file = shutil.copy(
+            orca_input_nebts_ts_xyz_file, ts_xyz_file
         )
         # get project settings
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_gas_solv_project_name
         )
         settings = project_settings.neb_settings()
+        # This fixture exercises a semiempirical NEB.  Clear the DFT method
+        # inherited from the generic gas section rather than relying on an
+        # ambiguous native route that names two electronic-structure methods.
+        settings.functional = None
+        settings.basis = None
         settings.semiempirical = "GFN2-xTB"
         settings.joboption = "NEB-TS"
         settings.jobtype = "neb"

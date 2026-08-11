@@ -680,13 +680,23 @@ class GaussianJobSettings(MolecularJobSettings):
             if self.dispersion is not None
             else None
         )
+        # A semiempirical override intentionally makes the loaded DFT
+        # functional inactive.  Do not leak a dispersion token embedded in
+        # that inactive functional into the semiempirical route.  Independent
+        # typed or additional-route dispersion remains explicit and is kept.
+        functional_dispersions = (
+            (functional_dispersion, shorthand_dispersion)
+            if self.semiempirical is None
+            and self.functional is not None
+            and self.ab_initio is None
+            else ()
+        )
         declared_dispersions = {
             value
             for value in (
                 typed_dispersion,
-                functional_dispersion,
-                shorthand_dispersion,
                 additional_dispersion,
+                *functional_dispersions,
             )
             if value is not None
         }

@@ -231,7 +231,10 @@ _GAUSSIAN_PROJECT_PARAMETERS = tuple(
             "forces",
             "freq",
             "heavy_elements_basis",
+            "nstates",
             "numfreq",
+            "response_method",
+            "state_manifold",
         )
     )
 )

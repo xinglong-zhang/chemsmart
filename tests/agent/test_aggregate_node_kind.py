@@ -140,7 +140,7 @@ def test_the_aggregate_program_is_absent_from_the_executable_registry():
     assert AGGREGATE_NODE_PROGRAM not in EXECUTABLE_PROGRAMS
 
 
-def test_the_tool_schema_offers_the_aggregate_kind():
+def test_the_command_tool_schema_keeps_aggregate_in_the_analysis_plane():
     from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
 
     surface = build_command_compiled_tool_surface()
@@ -150,4 +150,5 @@ def test_the_tool_schema_offers_the_aggregate_kind():
         if item["function"]["name"] == "plan_command_workflow"
     )
     node = plan["function"]["parameters"]["properties"]["nodes"]["items"]
-    assert "aggregate" in node["properties"]["node_kind"]["enum"]
+    assert "aggregate" not in node["properties"]["node_kind"]["enum"]
+    assert node["properties"]["node_kind"]["enum"] == ["program_call"]

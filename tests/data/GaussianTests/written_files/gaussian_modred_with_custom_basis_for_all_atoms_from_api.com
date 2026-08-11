@@ -1,7 +1,7 @@
 %chk=gaussian_modred_with_custom_basis_for_all_atoms_from_api.chk
 %nprocshared=64
 %mem=375GB
-# opt=modredundant freq b3lyp empiricaldispersion=gd3bj genecp
+# opt=modredundant freq b3lyp genecp empiricaldispersion=gd3bj
 
 Job prepared from Gaussian file modred_genecp.com
 
@@ -27,7 +27,7 @@ A 3 4 5 F
 
 !----------------------------------------------------------------------
 ! Basis Set Exchange
-! Version v0.9.1
+! Version 0.11
 ! https://www.basissetexchange.org
 !----------------------------------------------------------------------
 !   Basis set: def2-TZVPPD
@@ -195,4 +195,3 @@ d-f potential
 2      4.1397811             11.75086158
 2     13.2700000             31.92955431
 2      6.6300000              5.39821694
-

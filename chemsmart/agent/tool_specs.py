@@ -316,6 +316,12 @@ def build_command_compiled_tool_surface(
                 "workflow_id": _public_identifier(),
                 "replacements": {
                     "type": "array",
+                    "description": (
+                        "Project-only repairs. Each item binds one existing "
+                        "calculation node to a newly promoted project role; "
+                        "all scientific inputs, outputs, and dependencies are "
+                        "preserved by the host."
+                    ),
                     "minItems": 1,
                     "maxItems": 64,
                     "items": {

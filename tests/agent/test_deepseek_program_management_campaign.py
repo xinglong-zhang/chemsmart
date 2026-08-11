@@ -9,6 +9,9 @@ from chemsmart.agent.experiments.deepseek_program_management import (
     load_campaign_definition,
     sanitize_public_record,
 )
+from chemsmart.agent.experiments.program_management_context import (
+    build_campaign_public_context,
+)
 from chemsmart.agent.runtime.deepseek import (
     DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
     DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
@@ -18,16 +21,43 @@ from chemsmart.agent.runtime.deepseek import (
 def _definition_path() -> Path:
     return (
         Path(__file__).resolve().parents[2]
-        / "docs"
-        / "maintenance"
-        / "deepseek-v4-flash-validation-v1.json"
+        / "tests"
+        / "data"
+        / "agent"
+        / "deepseek_program_management"
+        / "campaign-definition.json"
     )
+
+
+def _public_contexts(definition):
+    digest = "a" * 64
+    return {
+        case.case_id: build_campaign_public_context(
+            case_id=case.case_id,
+            task_spec_sha256=digest,
+            registry_sha256=digest,
+            live_cli_schema_sha256=digest,
+            joined_capability_sha256=digest,
+            support_overlay_sha256=digest,
+            scientific_facts={},
+            artifacts=(),
+            artifact_slots=(),
+            receipts=(),
+            next_actions=(),
+            expected_artifact_classes=(),
+            missing_evidence=(),
+            host_state_sha256=digest,
+        )
+        for case in definition.cases
+    }
 
 
 def test_campaign_builds_counterbalanced_unique_h0_h1_plans():
     definition = load_campaign_definition(_definition_path())
     config = build_campaign_run_config(workspace_identity="integration-tree")
-    plans = build_episode_plans(definition, config)
+    plans = build_episode_plans(
+        definition, config, public_contexts=_public_contexts(definition)
+    )
 
     assert len(plans) == len(definition.cases) * 2
     assert len({plan.plan_sha256 for plan in plans}) == len(plans)
@@ -46,7 +76,9 @@ def test_campaign_builds_counterbalanced_unique_h0_h1_plans():
 def test_campaign_uses_provider_maxima_without_attempt_count_cap():
     definition = load_campaign_definition(_definition_path())
     config = build_campaign_run_config(workspace_identity="integration-tree")
-    plans = build_episode_plans(definition, config)
+    plans = build_episode_plans(
+        definition, config, public_contexts=_public_contexts(definition)
+    )
 
     assert config.max_input_tokens_per_request == DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
     assert config.max_output_tokens_per_request == DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
@@ -57,7 +89,9 @@ def test_campaign_uses_provider_maxima_without_attempt_count_cap():
 def test_h0_and_h1_differ_only_in_registered_tool_surface():
     definition = load_campaign_definition(_definition_path())
     config = build_campaign_run_config(workspace_identity="integration-tree")
-    first, second = build_episode_plans(definition, config)[:2]
+    first, second = build_episode_plans(
+        definition, config, public_contexts=_public_contexts(definition)
+    )[:2]
 
     assert first.case.case_sha256 == second.case.case_sha256
     assert first.pairing_sha256 == second.pairing_sha256

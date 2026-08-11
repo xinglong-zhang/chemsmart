@@ -138,9 +138,9 @@ def test_a_fixture_declares_every_stage_it_claims_to_cover(declared_server):
 def test_a_fixture_carries_only_project_owned_keys(declared_server):
     """An unknown project key raises, so one bad key breaks every stage."""
 
-    from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+    from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
-    allowed = set(GaussianJobSettings.default().__dict__)
+    allowed = set(PROGRAM_CAPABILITIES["gaussian"].project_owned_parameters)
     for settings in live_session._conformance_project_sections(
         "gaussian"
     ).values():

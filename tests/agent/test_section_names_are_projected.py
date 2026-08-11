@@ -37,7 +37,12 @@ def test_a_phase_keyed_program_and_a_stage_keyed_one_are_distinguishable():
 
     records = _agent_records()
     assert records["gaussian"].project_section_names == ("gas", "solv")
-    assert records["orca"].project_section_names == ("gas", "solv")
+    assert records["orca"].project_section_names == (
+        "gas",
+        "neb",
+        "solv",
+        "td",
+    )
     assert "sp" in records["pyscf"].project_section_names
     assert "opt" in records["xtb"].project_section_names
 

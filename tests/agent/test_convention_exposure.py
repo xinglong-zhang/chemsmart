@@ -53,6 +53,9 @@ _NOT_MODEL_SELECTABLE = {
         "exposed as correlation_inverse_power_cbs_limit"
     ),
     "extrapolate_scf_exponential": "exposed as scf_exponential_cbs_limit",
+    "extrapolate_scf_inverse_power": (
+        "exposed as scf_inverse_power_cbs_limit"
+    ),
     "extrapolate_exponential_three_point": "exposed as exponential_cbs_limit",
     "state_energy_difference": (
         "a typed record around a subtraction the evaluator already performs "

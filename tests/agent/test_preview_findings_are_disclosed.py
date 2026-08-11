@@ -141,6 +141,11 @@ def test_disclosure_does_not_change_receipt_identity():
     body = {
         key: value
         for key, value in with_bodies.__dict__.items()
-        if key not in {"receipt_sha256", "critical_findings"}
+        if key
+        not in {
+            "receipt_sha256",
+            "critical_findings",
+            "auxiliary_input_bindings",
+        }
     }
     assert with_bodies.receipt_sha256 == canonical_sha256(body)

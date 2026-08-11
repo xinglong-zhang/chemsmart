@@ -1,7 +1,7 @@
 %chk=gaussian_ts.chk
 %nprocshared=64
 %mem=375GB
-# opt=(ts,calcfc,noeigentest) freq b3lyp empiricaldispersion=gd3bj def2svp
+# opt=(ts,calcfc,noeigentest) freq b3lyp def2svp empiricaldispersion=gd3bj
 
 Gaussian job
 
