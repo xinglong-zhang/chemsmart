@@ -25,6 +25,7 @@ import sys
 import numpy as np
 from ase.io import read as ase_read
 
+from chemsmart.agent.skills import resolve_skill
 from chemsmart.io.pyscf.output import read_pyscf_h5
 from chemsmart.io.xtb.output import XTBOutput
 
@@ -148,6 +149,12 @@ def import_runtime_dependencies() -> dict[str, str]:
     import h5py
 
     imported["hdf5"] = h5py.version.hdf5_version
+    conventions = resolve_skill("scientific-conventions")
+    require(
+        conventions is not None and conventions.origin == "builtin",
+        "The packaged scientific-conventions skill is unavailable.",
+    )
+    imported["scientific-conventions"] = conventions.skill_version
     return imported
 
 

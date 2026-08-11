@@ -194,6 +194,13 @@ jobs:
                   break
           if result is None:
               raise SystemExit("agent stdout has no public JSON summary")
+          if result.get("schema_version") != "chemsmart.live-agent-session-result.v1":
+              raise SystemExit("agent stdout ended with an unrelated JSON object")
+          if result.get("terminal_state") not in {"complete", "planned"}:
+              raise SystemExit(
+                  "agent observation did not complete planning: "
+                  f"{result.get('terminal_state')!r}"
+              )
           if result.get("execution_requested") is not False:
               raise SystemExit("agent observation was not preview-only")
           if not str(result.get("final_text", "")).strip():

@@ -3,6 +3,7 @@ include LICENSE.LESSER
 include README.md
 include CHANGELOG.md
 recursive-include chemsmart/settings *
+recursive-include chemsmart/agent/skills *.md
 prune tests
 prune docs/build
 global-exclude *.py[cod]
