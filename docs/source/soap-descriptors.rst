@@ -42,24 +42,24 @@ there is no hard exclusion at exactly ``r_cut``.
 +==================+==========================================================+
 | ``r_cut``        | Cutoff radius of the local atomic environment (Å). Must  |
 |                  | be greater than 1 Å for the default GTO basis. Typical   |
-|                  | values are about 3–8 Å. Matching DScribe 2.1.2, atoms   |
-|                  | out to ``r_cut + ~3.72·sigma`` also contribute.         |
+|                  | values are about 3–8 Å. Matching DScribe 2.1.2, atoms    |
+|                  | out to ``r_cut + ~3.72·sigma`` also contribute.          |
 +------------------+----------------------------------------------------------+
 | ``n_max``        | Number of radial basis functions.                        |
 +------------------+----------------------------------------------------------+
 | ``l_max``        | Maximum angular momentum (spherical harmonics degree).   |
-|                  | Must be between 0 and 20 inclusive.                       |
+|                  | Must be between 0 and 20 inclusive.                      |
 +------------------+----------------------------------------------------------+
 | ``sigma``        | Gaussian width / standard deviation in Å.                |
 +------------------+----------------------------------------------------------+
 | ``species``      | Elemental basis of the SOAP feature space.               |
 +------------------+----------------------------------------------------------+
 | ``centers``      | Optional 1-based atom indices used as SOAP centers.      |
-|                  | Order is preserved; duplicate indices are kept and      |
+|                  | Order is preserved; duplicate indices are kept and       |
 |                  | overweight ``"mean"`` / ``"sum"`` aggregations.          |
 +------------------+----------------------------------------------------------+
-| ``aggregation``  | ``None`` (local), ``"mean"``, or ``"sum"``. Mean/sum     |
-|                  | are post-hoc over local power spectra (outer-average /   |
+| ``aggregation``  | ``None`` (local), ``"mean"``, or ``"sum"``. Mean/sum are |
+|                  | post-hoc over local power spectra (outer-average /       |
 |                  | extensive-sum equivalent).                               |
 +------------------+----------------------------------------------------------+
 
