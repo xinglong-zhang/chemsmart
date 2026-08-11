@@ -8,8 +8,9 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+import chemsmart.cli.update as update_module
 from chemsmart.cli.main import entry_point
-from chemsmart.cli.update import update
+from chemsmart.cli.update import ConfigurationUpdater, update
 
 
 def _server_dir(config_root: Path) -> Path:
@@ -246,14 +247,12 @@ def test_update_config_copies_multiple_missing_programs(tmp_path):
 def test_update_config_future_template_program_is_discovered(
     tmp_path, monkeypatch
 ):
-    from chemsmart.cli import update_config as update_config_module
-
     slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
-    templates = update_config_module._load_server_templates()
+    templates = ConfigurationUpdater()._load_server_templates()
     for template_data in templates.values():
         template_data["CREST"] = {"EXEFOLDER": None, "LOCAL_RUN": True}
     monkeypatch.setattr(
-        update_config_module, "_load_server_templates", lambda: templates
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
     )
 
     result = _invoke_update_config(tmp_path)
@@ -367,7 +366,7 @@ def test_update_config_missing_ruamel_shows_install_hint(
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "chemsmart.cli.update_config":
+        if name == "ruamel.yaml":
             raise ModuleNotFoundError(name="ruamel")
         return original_import(name, globals, locals, fromlist, level)
 
@@ -388,7 +387,7 @@ def test_update_config_unrelated_import_error_is_not_mislabeled(
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "chemsmart.cli.update_config":
+        if name == "ruamel.yaml":
             raise ModuleNotFoundError(name="unexpected_dependency")
         return original_import(name, globals, locals, fromlist, level)
 
@@ -432,19 +431,17 @@ def test_update_config_user_yaml_read_error_is_clean(tmp_path, monkeypatch):
 def test_load_server_templates_rejects_invalid_template(
     tmp_path, monkeypatch, template_content, expected
 ):
-    from chemsmart.cli import update_config as update_config_module
-
     template_dir = tmp_path / "templates" / ".chemsmart" / "server"
     template_dir.mkdir(parents=True)
     (template_dir / "INVALID.yaml").write_text(
         template_content, encoding="utf-8"
     )
     monkeypatch.setattr(
-        update_config_module.resources, "files", lambda package: tmp_path
+        update_module.resources, "files", lambda package: tmp_path
     )
 
-    with pytest.raises(update_config_module.ConfigUpdateError, match=expected):
-        update_config_module._load_server_templates()
+    with pytest.raises(update_module.ConfigUpdateError, match=expected):
+        ConfigurationUpdater()._load_server_templates()
 
 
 def test_update_config_unknown_scheduler_errors_when_selected(tmp_path):
@@ -536,8 +533,6 @@ def test_update_config_refuses_symlink_without_partial_writes(tmp_path):
 def test_update_config_mkstemp_error_is_clean_click_error(
     tmp_path, monkeypatch
 ):
-    from chemsmart.cli import update_config as update_config_module
-
     slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
     before = slurm.read_text(encoding="utf-8")
 
@@ -545,7 +540,7 @@ def test_update_config_mkstemp_error_is_clean_click_error(
         raise PermissionError("Permission denied")
 
     monkeypatch.setattr(
-        update_config_module.tempfile, "mkstemp", raise_permission_error
+        update_module.tempfile, "mkstemp", raise_permission_error
     )
 
     result = _invoke_update_config(tmp_path)
@@ -557,17 +552,13 @@ def test_update_config_mkstemp_error_is_clean_click_error(
 
 
 def test_update_config_replace_error_cleans_temp_file(tmp_path, monkeypatch):
-    from chemsmart.cli import update_config as update_config_module
-
     slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
     before = slurm.read_text(encoding="utf-8")
 
     def raise_permission_error(*args, **kwargs):
         raise PermissionError("Permission denied")
 
-    monkeypatch.setattr(
-        update_config_module.os, "replace", raise_permission_error
-    )
+    monkeypatch.setattr(update_module.os, "replace", raise_permission_error)
 
     result = _invoke_update_config(tmp_path)
     assert result.exit_code != 0
