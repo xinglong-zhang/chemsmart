@@ -54,6 +54,15 @@ def _task_options(function):
                 "completion."
             ),
         ),
+        click.option(
+            "--identity-manifest",
+            type=click.Path(exists=True, dir_okay=False, path_type=Path),
+            default=None,
+            help=(
+                "User-approved names, roles, states, and workspace-relative "
+                "geometry bindings for one or more molecular inputs."
+            ),
+        ),
     )
     for option in reversed(options):
         function = option(function)
@@ -85,10 +94,20 @@ def plan(
     secret_file,
     workspace,
     analysis_completion_file,
+    identity_manifest,
 ):
     """Create and safely preview a command-compiled research workflow."""
 
     from chemsmart.agent.live_session import run_live_agent_session
+    from chemsmart.agent.identity import load_approved_molecular_input_manifest
+
+    approved_inputs = (
+        load_approved_molecular_input_manifest(
+            identity_manifest, workspace=workspace
+        )
+        if identity_manifest is not None
+        else ()
+    )
 
     result = run_live_agent_session(
         task=_read_task(task, task_file),
@@ -99,6 +118,7 @@ def plan(
         execution_enabled=False,
         approval_file=None,
         analysis_completion_file=analysis_completion_file,
+        approved_molecular_inputs=approved_inputs,
     )
     click.echo(result.public_summary_json())
 
@@ -111,6 +131,15 @@ def plan(
     default=None,
     help="Host workflow approval. Omission keeps the session preview-only.",
 )
+@click.option(
+    "--execution-envelope",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Science-free local resource/program bounds for one continuous "
+        "plan, preview, execute, and analysis session."
+    ),
+)
 def run(
     task,
     task_file,
@@ -119,11 +148,27 @@ def run(
     secret_file,
     workspace,
     analysis_completion_file,
+    identity_manifest,
     approval_file,
+    execution_envelope,
 ):
     """Plan and, when approved, execute host-compiled workflow nodes."""
 
     from chemsmart.agent.live_session import run_live_agent_session
+    from chemsmart.agent.identity import load_approved_molecular_input_manifest
+
+    if approval_file is not None and execution_envelope is not None:
+        raise click.UsageError(
+            "--approval-file and --execution-envelope are mutually exclusive"
+        )
+
+    approved_inputs = (
+        load_approved_molecular_input_manifest(
+            identity_manifest, workspace=workspace
+        )
+        if identity_manifest is not None
+        else ()
+    )
 
     result = run_live_agent_session(
         task=_read_task(task, task_file),
@@ -131,9 +176,13 @@ def run(
         provider_config_file=provider_config,
         secret_file=secret_file,
         workspace=workspace,
-        execution_enabled=approval_file is not None,
+        execution_enabled=(
+            approval_file is not None or execution_envelope is not None
+        ),
         approval_file=approval_file,
+        execution_envelope_file=execution_envelope,
         analysis_completion_file=analysis_completion_file,
+        approved_molecular_inputs=approved_inputs,
     )
     click.echo(result.public_summary_json())
 

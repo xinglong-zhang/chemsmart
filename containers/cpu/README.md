@@ -3,10 +3,9 @@
 This directory defines the private, portable `linux/amd64` ChemSmart research
 runtime used for Ubuntu CPU-server qualification and benchmark work.
 
-The image is built from ChemSmart source commit
-`24e4a0e89700c88fb49bfcd673003f59a2d9cf69`. Container recipes and
-documentation may advance independently, so OCI metadata records both the
-ChemSmart source revision and the recipe revision.
+The candidate workflow builds the exact selected `main` commit. Container
+recipes and application source therefore share one Git revision, which is
+recorded in the OCI metadata and immutable candidate tag.
 
 ## Included scientific runtime
 
@@ -36,7 +35,7 @@ The private package is:
 ghcr.io/hongjiseung-rok/chemsmart
 ```
 
-- `cpu-24e4a0e` is the immutable candidate tag.
+- `cpu-<12-character-main-commit>` is the immutable candidate tag.
 - `3.1.4-cpu` and `cpu-main` are promotion tags applied to the already-tested
   candidate digest. Promotion never rebuilds the image.
 

@@ -321,24 +321,26 @@ def click_gaussian_td_options(f):
         type=click.Choice(
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
-        default="singlets",
+        default=None,
         help="States for closed-shell singlet systems. "
-        'Options: ["Singlets", "Triplets", "50-50"].',
+        'Options: ["Singlets", "Triplets", "50-50"]. Defaults to the '
+        "project value (singlets when omitted there).",
     )
     @click.option(
         "-r",
         "--root",
         type=int,
-        default=1,
+        default=None,
         help='Specifies the "state of interest". '
-        "The default is the first excited state (N=1).",
+        "Defaults to the project value (N=1 when omitted there).",
     )
     @click.option(
         "-n",
         "--nstates",
         type=int,
-        default=3,
-        help="Number of states to solve for (default is 3). "
+        default=None,
+        help="Number of states to solve for. Defaults to the project value "
+        "(3 when omitted there). "
         "If 50-50, this gives the number of each type of state to solve "
         "(i.e., 3 singlets and 3 triplets).",
     )
@@ -739,9 +741,9 @@ def gaussian(
                     record_id=record_id,
                 )
 
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from database {filename}!"
+            assert molecules is not None, (
+                f"Could not obtain molecule from database {filename}!"
+            )
             logger.debug(
                 f"Obtained database molecule {molecules} from {filename}"
             )
@@ -749,18 +751,18 @@ def gaussian(
             molecules = Molecule.from_filepath(
                 filepath=filename, index=":", return_list=True
             )
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from {filename}!"
+            assert molecules is not None, (
+                f"Could not obtain molecule from {filename}!"
+            )
             logger.debug(
                 f"Obtained {len(molecules)} molecule {molecules} from {filename}"
             )
 
     if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from PubChem {pubchem}!"
+        assert molecules is not None, (
+            f"Could not obtain molecule from PubChem {pubchem}!"
+        )
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
     # update labels

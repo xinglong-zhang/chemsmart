@@ -254,6 +254,18 @@ def _validate_native_input(expectation, paths):
     parsed_candidates = [
         (path, settings_cls.from_filepath(str(path))) for path in candidates
     ]
+    if expectation.program == "gaussian" and expectation.jobtype == "link":
+        return _validate_gaussian_link_input(
+            expectation,
+            parsed_candidates,
+            expected_settings=expected_settings,
+        )
+    if expectation.program == "gaussian" and expectation.jobtype == "td":
+        return _validate_gaussian_td_input(
+            expectation,
+            parsed_candidates,
+            expected_settings=expected_settings,
+        )
     if expectation.program == "gaussian" and expectation.jobtype == "irc":
         return _validate_gaussian_irc_bundle(
             expectation,
@@ -283,6 +295,186 @@ def _validate_native_input(expectation, paths):
             )
         ]
     return []
+
+
+def _validate_gaussian_td_input(
+    expectation,
+    parsed_candidates,
+    *,
+    expected_settings,
+):
+    """Validate Gaussian TD semantics from the generated native route."""
+
+    if len(parsed_candidates) != 1:
+        return [
+            _mismatch(
+                "native_input_count",
+                1,
+                len(parsed_candidates),
+                "generated:native_input_bundle",
+            )
+        ]
+    import re
+
+    path, parsed = parsed_candidates[0]
+    route = str(getattr(parsed, "route_string", "") or "").casefold()
+    match = re.search(r"\btd\s*\(([^)]*)\)", route)
+    if match is None:
+        return [_missing("td_route", "TD(...) route", path.name)]
+    tokens = tuple(
+        item.strip().casefold()
+        for item in match.group(1).split(",")
+        if item.strip()
+    )
+    values = {}
+    flags = set()
+    for token in tokens:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            values[key.strip()] = value.strip()
+        else:
+            flags.add(token)
+    findings = []
+    states = str(expected_settings.get("states") or "").strip().casefold()
+    if states and states not in flags:
+        findings.append(
+            _mismatch("states", states, tuple(sorted(flags)), path.name)
+        )
+    for field in ("nstates", "root"):
+        expected = expected_settings.get(field)
+        if expected is not None and values.get(field) != str(expected):
+            findings.append(
+                _mismatch(field, int(expected), values.get(field), path.name)
+            )
+    eqsolv = str(expected_settings.get("eqsolv") or "").strip().casefold()
+    if eqsolv and eqsolv not in flags:
+        findings.append(
+            _mismatch("eqsolv", eqsolv, tuple(sorted(flags)), path.name)
+        )
+    target_settings = dict(expected_settings)
+    for field in ("eqsolv", "nstates", "root", "states"):
+        target_settings.pop(field, None)
+    # Gaussian's base parser calls a TD route an SP; the TD leaf itself is
+    # established by the explicit route semantics above.
+    target_settings.pop("jobtype", None)
+    findings.extend(_settings_match(parsed, target_settings))
+    if not _geometry_sets_equal(expectation.input_artifact.path, [path]):
+        findings.append(
+            PreviewValidationFindingV1(
+                "preview.geometry.mismatch",
+                "geometry",
+                expectation.input_artifact.sha256,
+                "generated geometry differs",
+                "generated:native_input",
+            )
+        )
+    return findings
+
+
+def _validate_gaussian_link_input(
+    expectation,
+    parsed_candidates,
+    *,
+    expected_settings,
+):
+    """Validate both scientific route sections of one Gaussian link input."""
+
+    if len(parsed_candidates) != 1:
+        return [
+            _mismatch(
+                "native_input_count",
+                1,
+                len(parsed_candidates),
+                "generated:native_input_bundle",
+            )
+        ]
+    path, parsed_target = parsed_candidates[0]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if "--Link1--" not in text:
+        return [
+            _mismatch(
+                "link_sections",
+                "stability route followed by --Link1-- target route",
+                "single route",
+                path.name,
+            )
+        ]
+    first_text, second_text = text.split("--Link1--", 1)
+
+    def _route_block(value):
+        lines = value.splitlines()
+        for index, line in enumerate(lines):
+            if not line.lstrip().startswith("#"):
+                continue
+            block = [line.strip()]
+            for continuation in lines[index + 1 :]:
+                if not continuation.strip():
+                    break
+                block.append(continuation.strip())
+            return " ".join(" ".join(block).casefold().split())
+        return ""
+
+    first_route = _route_block(first_text)
+    second_route = _route_block(second_text)
+    findings = []
+    stable = str(expected_settings.get("stable") or "").strip().casefold()
+    if stable and f"stable={stable}" not in first_route:
+        findings.append(
+            _mismatch(
+                "stable",
+                stable,
+                first_route or "missing route",
+                path.name,
+            )
+        )
+    guess = str(expected_settings.get("guess") or "").strip().casefold()
+    normalized_guess = guess.strip("()")
+    if guess and not any(
+        token in first_route
+        for token in (
+            f"guess={guess}",
+            f"guess=({normalized_guess})",
+        )
+    ):
+        findings.append(
+            _mismatch(
+                "guess",
+                guess,
+                first_route or "missing route",
+                path.name,
+            )
+        )
+    link_route = str(expected_settings.get("link_route") or "").strip()
+    if link_route:
+        required_tokens = {
+            token.casefold() for token in link_route.split() if token.strip()
+        }
+        observed_tokens = set(second_route.split())
+        if not required_tokens.issubset(observed_tokens):
+            findings.append(
+                _mismatch(
+                    "link_route",
+                    tuple(sorted(required_tokens)),
+                    tuple(sorted(observed_tokens)),
+                    path.name,
+                )
+            )
+
+    target_settings = dict(expected_settings)
+    for field in ("guess", "link_route", "stable"):
+        target_settings.pop(field, None)
+    findings.extend(_settings_match(parsed_target, target_settings))
+    if not _geometry_sets_equal(expectation.input_artifact.path, [path]):
+        findings.append(
+            PreviewValidationFindingV1(
+                "preview.geometry.mismatch",
+                "geometry",
+                expectation.input_artifact.sha256,
+                "generated geometry differs",
+                "generated:native_input",
+            )
+        )
+    return findings
 
 
 def _validate_gaussian_irc_bundle(
@@ -393,9 +585,7 @@ def _validate_xtb_preview(expectation, paths):
             "size"
         ) != generated_xyz.stat().st_size or input_record.get(
             "sha256"
-        ) != file_sha256(
-            generated_xyz
-        ):
+        ) != file_sha256(generated_xyz):
             findings.append(
                 _mismatch(
                     "input_artifact",
@@ -615,6 +805,7 @@ def _settings_match(parsed, expected, *, native_input=None):
             ):
                 continue
         if is_orca and field == "scf_tol":
+
             def _orca_scf_preset(item):
                 preset = str(item or "").strip().casefold()
                 return preset[:-3] if preset.endswith("scf") else preset
@@ -711,17 +902,13 @@ def _settings_match(parsed, expected, *, native_input=None):
                     )
                 )
                 continue
-            expected_base = (
-                gaussian_functional_without_dispersion_shorthand(
-                    expected_functional,
-                    parsed_dispersion,
-                )
+            expected_base = gaussian_functional_without_dispersion_shorthand(
+                expected_functional,
+                parsed_dispersion,
             )
-            observed_base = (
-                gaussian_functional_without_dispersion_shorthand(
-                    observed,
-                    parsed_dispersion,
-                )
+            observed_base = gaussian_functional_without_dispersion_shorthand(
+                observed,
+                parsed_dispersion,
             )
             if (
                 str(expected_base).strip().casefold()

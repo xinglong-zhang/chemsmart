@@ -83,6 +83,7 @@ _OPERATIONS = frozenset(
         "principal_moments_of_inertia",
         "linear_rotor_constant",
         "rigid_rotor_constants",
+        "connectivity_difference_count",
     }
 )
 
@@ -200,6 +201,14 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "moments of a nonlinear molecule; owns h/(8*pi^2*I) and the "
         "spectroscopic unit conversion"
     ),
+    "connectivity_difference_count": (
+        "number of undirected edges present in exactly one of two "
+        "geometry-perceived connectivity matrices. Takes four inputs ordered "
+        "as first connectivity, first symbols, second connectivity, second "
+        "symbols; requires identical atom identity and order, square symmetric "
+        "binary matrices, and zero diagonals. Connectivity is inferred from "
+        "geometry and covalent radii, not an electronic bond-order claim"
+    ),
 }
 
 if set(OPERATION_DESCRIPTIONS) != set(_OPERATIONS):  # pragma: no cover
@@ -228,6 +237,7 @@ CONVENTION_OPERATIONS = frozenset(
         "principal_moments_of_inertia",
         "linear_rotor_constant",
         "rigid_rotor_constants",
+        "connectivity_difference_count",
         "exponential_cbs_limit",
         "linear_fit_intercept",
         "linear_fit_slope",
@@ -1039,6 +1049,55 @@ def _numeric(quantity: QuantityValueV1) -> np.ndarray:
     return array
 
 
+def _connectivity_observation(
+    matrix_quantity: QuantityValueV1,
+    symbols_quantity: QuantityValueV1,
+    label: str,
+) -> tuple[np.ndarray, tuple[str, ...]]:
+    """Validate one geometry-perceived adjacency and its atom-order witness."""
+
+    if matrix_quantity.dimension != DIMENSIONLESS:
+        raise QuantityExpressionError(
+            f"{label} connectivity must be dimensionless"
+        )
+    try:
+        matrix = np.asarray(matrix_quantity.value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise QuantityExpressionError(
+            f"{label} connectivity must be a numeric matrix"
+        ) from exc
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise QuantityExpressionError(
+            f"{label} connectivity must be a square matrix; got {matrix.shape}"
+        )
+    if matrix.shape[0] == 0 or not np.all(np.isfinite(matrix)):
+        raise QuantityExpressionError(
+            f"{label} connectivity is empty or non-finite"
+        )
+    if not np.all(np.isin(matrix, (0.0, 1.0))):
+        raise QuantityExpressionError(
+            f"{label} connectivity must contain only binary 0/1 values"
+        )
+    if not np.array_equal(matrix, matrix.T):
+        raise QuantityExpressionError(
+            f"{label} connectivity must be symmetric for undirected edges"
+        )
+    if np.any(np.diag(matrix) != 0.0):
+        raise QuantityExpressionError(
+            f"{label} connectivity must have a zero diagonal"
+        )
+    if symbols_quantity.data_kind != "text_vector":
+        raise QuantityExpressionError(
+            f"{label} symbols must be a text-vector atom-order witness"
+        )
+    symbols = tuple(str(item) for item in symbols_quantity.value)
+    if len(symbols) != matrix.shape[0] or any(not item for item in symbols):
+        raise QuantityExpressionError(
+            f"{label} symbol count must equal connectivity size"
+        )
+    return matrix, symbols
+
+
 def _payload(array: np.ndarray | float) -> Any:
     value = np.asarray(array, dtype=float)
     if value.size == 0 or not np.all(np.isfinite(value)):
@@ -1131,6 +1190,37 @@ def _node_value(
         raise QuantityExpressionError(
             f"node references an unavailable prior value: {exc.args[0]!r}"
         ) from exc
+
+    if operation == "connectivity_difference_count":
+        if len(inputs) != 4:
+            raise QuantityExpressionError(
+                "connectivity_difference_count requires first connectivity, "
+                "first symbols, second connectivity, and second symbols"
+            )
+        first, first_symbols = _connectivity_observation(
+            inputs[0], inputs[1], "first"
+        )
+        second, second_symbols = _connectivity_observation(
+            inputs[2], inputs[3], "second"
+        )
+        if first.shape != second.shape:
+            raise QuantityExpressionError(
+                "connectivity matrices have different atom counts"
+            )
+        if first_symbols != second_symbols:
+            raise QuantityExpressionError(
+                "connectivity inputs differ in atom identity or atom order"
+            )
+        changed_edges = int(np.count_nonzero(np.triu(first != second, k=1)))
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=changed_edges,
+            source_unit="1",
+            value=changed_edges,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
 
     if operation in {"add", "subtract", "multiply", "divide"}:
         if len(inputs) != 2:
@@ -1427,7 +1517,9 @@ def _node_value(
                 "rigid_rotor_constants requires three positive moments for "
                 "a nonlinear molecule"
             )
-        moments_si = moments * ase_units._amu * (ase_units.Ang / ase_units.m) ** 2
+        moments_si = (
+            moments * ase_units._amu * (ase_units.Ang / ase_units.m) ** 2
+        )
         frequencies_hz = ase_units._hplanck / (8.0 * np.pi**2 * moments_si)
         rotational_constants = frequencies_hz / (ase_units._c * 100.0)
         payload = (

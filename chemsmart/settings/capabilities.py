@@ -61,9 +61,7 @@ class ProgramCapability:
     jobtypes: tuple[str, ...]
     project_owned_parameters: tuple[str, ...]
     engines: tuple[str, ...]
-    project_parameter_domains: tuple[
-        tuple[str, tuple[str, ...]], ...
-    ] = ()
+    project_parameter_domains: tuple[tuple[str, tuple[str, ...]], ...] = ()
     engine_job_capabilities: tuple[EngineJobCapability, ...] = ()
     #: Top-level section names this program's project YAML accepts. The
     #: route-building programs group settings by phase (``gas`` for most job
@@ -228,13 +226,18 @@ _GAUSSIAN_PROJECT_PARAMETERS = tuple(
         + (
             "additional_opt_options_in_route",
             "additional_solvent_options",
+            "eqsolv",
             "forces",
             "freq",
             "heavy_elements_basis",
+            "guess",
+            "jobtype",
+            "link_route",
             "nstates",
             "numfreq",
-            "response_method",
-            "state_manifold",
+            "root",
+            "stable",
+            "states",
         )
     )
 )
@@ -301,12 +304,16 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             engines=("cpu",),
             engine_job_capabilities=(
                 EngineJobCapability(engine="cpu", jobtype="irc"),
+                EngineJobCapability(engine="cpu", jobtype="link"),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
             project_section_names=("gas", "solv"),
+            project_parameter_domains=(
+                ("states", ("50-50", "singlets", "triplets")),
+            ),
         ),
         "nciplot": ProgramCapability(
             program="nciplot",

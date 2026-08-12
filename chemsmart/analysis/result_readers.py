@@ -52,13 +52,23 @@ SELECTOR_UNITS = {
     "energies": "Eh",
     "entropy_times_temperature": "Eh",
     "excitation_energies": "eV",
+    "singlet_excitation_energies": "eV",
+    "triplet_excitation_energies": "eV",
+    "excited_state_indices": "",
+    "excited_state_manifold_roots": "",
+    "excited_state_multiplicities": "",
+    "excited_state_labels": "",
+    "excited_state_spin_square": "",
     "gibbs_free_energy": "Eh",
     "oscillator_strengths": "",
+    "singlet_oscillator_strengths": "",
+    "triplet_oscillator_strengths": "",
     "vibrational_frequencies": "cm^-1",
     "vpt2_harmonic_frequencies": "cm^-1",
     "vpt2_fundamental_frequencies": "cm^-1",
     "vpt2_zero_point_rovibrational_energy": "cm^-1",
     "positions": "Angstrom",
+    "connectivity": "",
     "symbols": "",
     "charge": "",
     "multiplicity": "",
@@ -66,6 +76,23 @@ SELECTOR_UNITS = {
     "correlation_energy": "Eh",
     "dipole_moment": "Debye",
     "dipole_moment_magnitude": "Debye",
+    "homo": "eV",
+    "lumo": "eV",
+    "gap": "eV",
+    "spin_square": "",
+    "spin_square_after_annihilation": "",
+    "spin_square_target": "",
+    "spin_square_deviation": "",
+    "effective_multiplicity": "",
+    "wavefunction_stability_verdict": "",
+    "wavefunction_stability_history": "",
+    "trajectory_frame_count": "",
+    "trajectory_start_positions": "Angstrom",
+    "trajectory_end_positions": "Angstrom",
+    "trajectory_start_connectivity": "",
+    "trajectory_end_connectivity": "",
+    "trajectory_connectivity_changed": "",
+    "irc_direction": "",
 }
 
 
@@ -88,6 +115,147 @@ def _positions(output: Any) -> list[list[float]]:
 
 def _symbols(output: Any) -> list[str]:
     return [str(item) for item in output.molecule.chemical_symbols]
+
+
+def _required_record_values(
+    records: list[dict[str, Any]], key: str, description: str
+) -> list[Any]:
+    if not records or any(record.get(key) is None for record in records):
+        raise MissingQuantityError(
+            f"result does not establish {description} for every excited state"
+        )
+    return [record[key] for record in records]
+
+
+def _orca_excitation_energies(output: Any) -> list[float]:
+    records = list(output.excited_state_records or ())
+    if records:
+        return [float(item["energy_eV"]) for item in records]
+    # ORCA 6 spectrum-only fragments remain useful for the legacy aggregate
+    # selector, but they cannot support multiplicity-specific selectors.
+    return [float(item) for item in output.excitation_energies_eV]
+
+
+def _spin_square_target(output: Any) -> float:
+    multiplicity = getattr(output, "multiplicity", None)
+    if not isinstance(multiplicity, int) or multiplicity <= 0:
+        raise MissingQuantityError(
+            "result does not establish a positive integer multiplicity"
+        )
+    return (float(multiplicity) ** 2 - 1.0) / 4.0
+
+
+def _effective_multiplicity(spin_square: float) -> float:
+    if spin_square < 0.0:
+        raise MissingQuantityError("negative <S^2> cannot define multiplicity")
+    return float((1.0 + 4.0 * spin_square) ** 0.5)
+
+
+def _connectivity_matrix(molecule: Any) -> list[list[int]]:
+    """Return geometry-perceived covalent connectivity in source atom order.
+
+    This is intentionally a binary connectivity observation rather than an
+    asserted electronic bond order.  IRC endpoints are not fully optimized,
+    and covalent-radius perception is appropriate for deciding whether two
+    path ends have different molecular graphs while leaving chemical
+    interpretation to the scientist.
+    """
+
+    graph = molecule.to_graph(bond_cutoff_buffer=0.05, adjust_H=True)
+    size = int(molecule.num_atoms)
+    matrix = [[0 for _ in range(size)] for _ in range(size)]
+    for first, second in graph.edges:
+        matrix[int(first)][int(second)] = 1
+        matrix[int(second)][int(first)] = 1
+    return matrix
+
+
+def _irc_structures(output: Any) -> list[Any]:
+    jobtype = str(getattr(output, "jobtype", "") or "").casefold()
+    if jobtype not in {"irc", "ircf", "ircr"}:
+        raise MissingQuantityError(
+            "trajectory selectors require an IRC program result"
+        )
+    structures = list(getattr(output, "all_structures", ()) or ())
+    if len(structures) < 2:
+        raise MissingQuantityError(
+            "IRC output does not contain at least two parsed trajectory frames"
+        )
+    symbols = tuple(structures[0].chemical_symbols)
+    if any(tuple(item.chemical_symbols) != symbols for item in structures[1:]):
+        raise MissingQuantityError(
+            "IRC trajectory changes atom identity or order"
+        )
+    return structures
+
+
+def _irc_direction(output: Any) -> str:
+    jobtype = str(getattr(output, "jobtype", "") or "").casefold()
+    directions = {"ircf": "forward", "ircr": "reverse", "irc": "combined"}
+    if jobtype not in directions:
+        raise MissingQuantityError(
+            "result does not establish an IRC direction"
+        )
+    return directions[jobtype]
+
+
+def _orca_irc_direction(output: Any) -> str:
+    """Return the direction explicitly echoed by an ORCA IRC input block."""
+
+    if str(getattr(output, "jobtype", "") or "").casefold() != "irc":
+        raise MissingQuantityError("result is not an ORCA IRC calculation")
+    pattern = re.compile(
+        r"\bDirection\s+(both|forward|backward|down)\b", re.IGNORECASE
+    )
+    observed = []
+    for line in getattr(output, "contents", ()):
+        match = pattern.search(str(line))
+        if match is not None:
+            observed.append(match.group(1).casefold())
+    if not observed:
+        raise MissingQuantityError(
+            "ORCA output does not explicitly establish the IRC direction"
+        )
+    return observed[-1]
+
+
+def _trajectory_connectivity_changed(output: Any) -> int:
+    structures = _irc_structures(output)
+    return int(
+        _connectivity_matrix(structures[0])
+        != _connectivity_matrix(structures[-1])
+    )
+
+
+def _xyz_trajectory_structures(output: Any) -> list[Any]:
+    """Return a multi-frame XYZ trajectory without assigning program meaning.
+
+    ORCA writes IRC paths to XYZ sidecars, which already enter Runtime V2 as
+    ``geometry_xyz`` artifacts.  The file itself establishes ordered frames,
+    but not whether a path is forward, reverse, or the combined IRC.  Generic
+    trajectory selectors therefore expose only observations available from
+    the registered bytes; ``irc_direction`` remains a program-log selector.
+    """
+
+    structures = list(output.get_molecules(index=":", return_list=True) or ())
+    if len(structures) < 2:
+        raise MissingQuantityError(
+            "XYZ artifact does not contain at least two trajectory frames"
+        )
+    symbols = tuple(structures[0].chemical_symbols)
+    if any(tuple(item.chemical_symbols) != symbols for item in structures[1:]):
+        raise MissingQuantityError(
+            "XYZ trajectory changes atom identity or order"
+        )
+    return structures
+
+
+def _xyz_trajectory_connectivity_changed(output: Any) -> int:
+    structures = _xyz_trajectory_structures(output)
+    return int(
+        _connectivity_matrix(structures[0])
+        != _connectivity_matrix(structures[-1])
+    )
 
 
 @dataclass(frozen=True)
@@ -156,6 +324,7 @@ def _text_output_accessors(
             float(item) for item in output.vibrational_frequencies
         ],
         "positions": _positions,
+        "connectivity": lambda output: _connectivity_matrix(output.molecule),
         "symbols": _symbols,
         "charge": lambda output: int(output.charge),
         "multiplicity": lambda output: int(output.multiplicity),
@@ -233,8 +402,7 @@ def _orca_positions(output: Any) -> list[list[float]]:
 
 def _orca_symbols(output: Any) -> list[str]:
     return [
-        str(item)
-        for item in output.thermochemistry_molecule.chemical_symbols
+        str(item) for item in output.thermochemistry_molecule.chemical_symbols
     ]
 
 
@@ -245,17 +413,58 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             "absorption_wavelengths": lambda output: [
                 float(item) for item in output.absorption_wavelengths
             ],
-            "excitation_energies": lambda output: [
-                float(item) for item in output.excitation_energies_eV
-            ],
+            "excitation_energies": _orca_excitation_energies,
             "oscillator_strengths": lambda output: [
                 float(item) for item in output.oscillator_strengths
+            ],
+            "excited_state_indices": lambda output: [
+                int(item["state_index"])
+                for item in output.excited_state_records
+            ],
+            "excited_state_manifold_roots": lambda output: [
+                int(item["manifold_root"])
+                for item in output.excited_state_records
+            ],
+            "excited_state_multiplicities": lambda output: [
+                int(item)
+                for item in _required_record_values(
+                    output.excited_state_records,
+                    "multiplicity",
+                    "a spin multiplicity",
+                )
+            ],
+            "excited_state_spin_square": lambda output: [
+                float(item["spin_square"])
+                for item in output.excited_state_records
+            ],
+            "singlet_excitation_energies": lambda output: [
+                float(item["energy_eV"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 1
+            ],
+            "triplet_excitation_energies": lambda output: [
+                float(item["energy_eV"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 3
+            ],
+            "singlet_oscillator_strengths": lambda output: [
+                float(item["oscillator_strength"])
+                for item in output.electronic_absorption_transition_records
+                if item["multiplicity"] == 1
+            ],
+            "triplet_oscillator_strengths": lambda output: [
+                float(item["oscillator_strength"])
+                for item in output.electronic_absorption_transition_records
+                if item["multiplicity"] == 3
             ],
             "energy": _orca_total_energy,
             "entropy_times_temperature": lambda output: float(
                 output.entropy_times_temperature
             ),
             "positions": _orca_positions,
+            "connectivity": lambda output: _connectivity_matrix(
+                output.thermochemistry_molecule
+            ),
             "symbols": _orca_symbols,
             "charge": lambda output: int(output.thermochemistry_charge),
             "multiplicity": lambda output: int(
@@ -279,6 +488,37 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             "vpt2_zero_point_rovibrational_energy": lambda output: float(
                 output.vpt2_zero_point_rovibrational_energy
             ),
+            "spin_square": lambda output: float(
+                output.spin_square_history[-1]
+            ),
+            "spin_square_target": _spin_square_target,
+            "spin_square_deviation": lambda output: float(
+                output.spin_square_history[-1] - _spin_square_target(output)
+            ),
+            "effective_multiplicity": lambda output: _effective_multiplicity(
+                float(output.spin_square_history[-1])
+            ),
+            "trajectory_frame_count": lambda output: len(
+                _irc_structures(output)
+            ),
+            "trajectory_start_positions": lambda output: [
+                [float(value) for value in row]
+                for row in _irc_structures(output)[0].positions
+            ],
+            "trajectory_end_positions": lambda output: [
+                [float(value) for value in row]
+                for row in _irc_structures(output)[-1].positions
+            ],
+            "trajectory_start_connectivity": lambda output: (
+                _connectivity_matrix(_irc_structures(output)[0])
+            ),
+            "trajectory_end_connectivity": lambda output: _connectivity_matrix(
+                _irc_structures(output)[-1]
+            ),
+            "trajectory_connectivity_changed": (
+                _trajectory_connectivity_changed
+            ),
+            "irc_direction": _orca_irc_direction,
         }
     )
     return accessors
@@ -298,10 +538,65 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
                 float(item) for item in output.absorptions_in_nm
             ],
             "excitation_energies": lambda output: [
-                float(item) for item in output.excitation_energies_eV
+                float(item["energy_eV"])
+                for item in output.excited_state_records
             ],
             "oscillator_strengths": lambda output: [
                 float(item) for item in output.oscillatory_strengths
+            ],
+            "excited_state_indices": lambda output: [
+                int(item["state_index"])
+                for item in output.excited_state_records
+            ],
+            "excited_state_manifold_roots": lambda output: [
+                int(item)
+                for item in _required_record_values(
+                    output.excited_state_records,
+                    "manifold_root",
+                    "a manifold-local root index",
+                )
+            ],
+            "excited_state_multiplicities": lambda output: [
+                int(item)
+                for item in _required_record_values(
+                    output.excited_state_records,
+                    "multiplicity",
+                    "a source-labelled spin multiplicity",
+                )
+            ],
+            "excited_state_labels": lambda output: [
+                str(item["state_label"])
+                for item in output.excited_state_records
+            ],
+            "excited_state_spin_square": lambda output: [
+                float(item)
+                for item in _required_record_values(
+                    output.excited_state_records,
+                    "spin_square",
+                    "a printed excited-state <S^2>",
+                )
+            ],
+            "singlet_excitation_energies": lambda output: [
+                float(item["energy_eV"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 1
+            ],
+            "triplet_excitation_energies": lambda output: [
+                float(item["energy_eV"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 3
+            ],
+            "singlet_oscillator_strengths": lambda output: [
+                float(item["oscillator_strength"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 1
+                and item["oscillator_strength"] is not None
+            ],
+            "triplet_oscillator_strengths": lambda output: [
+                float(item["oscillator_strength"])
+                for item in output.excited_state_records
+                if item["multiplicity"] == 3
+                and item["oscillator_strength"] is not None
             ],
             "dipole_moment": lambda output: [
                 float(item) for item in output.all_dipole_moments[-1]
@@ -309,6 +604,47 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
             "dipole_moment_magnitude": lambda output: float(
                 output.all_dipole_moment_magnitudes[-1]
             ),
+            "spin_square": lambda output: float(
+                output.spin_square_history[-1]["before_annihilation"]
+            ),
+            "spin_square_after_annihilation": lambda output: float(
+                output.spin_square_history[-1]["after_annihilation"]
+            ),
+            "spin_square_target": _spin_square_target,
+            "spin_square_deviation": lambda output: float(
+                output.spin_square_history[-1]["before_annihilation"]
+                - _spin_square_target(output)
+            ),
+            "effective_multiplicity": lambda output: _effective_multiplicity(
+                float(output.spin_square_history[-1]["before_annihilation"])
+            ),
+            "wavefunction_stability_verdict": lambda output: str(
+                output.wavefunction_stability_history[-1]
+            ),
+            "wavefunction_stability_history": lambda output: [
+                str(item) for item in output.wavefunction_stability_history
+            ],
+            "trajectory_frame_count": lambda output: len(
+                _irc_structures(output)
+            ),
+            "trajectory_start_positions": lambda output: [
+                [float(value) for value in row]
+                for row in _irc_structures(output)[0].positions
+            ],
+            "trajectory_end_positions": lambda output: [
+                [float(value) for value in row]
+                for row in _irc_structures(output)[-1].positions
+            ],
+            "trajectory_start_connectivity": lambda output: (
+                _connectivity_matrix(_irc_structures(output)[0])
+            ),
+            "trajectory_end_connectivity": lambda output: _connectivity_matrix(
+                _irc_structures(output)[-1]
+            ),
+            "trajectory_connectivity_changed": (
+                _trajectory_connectivity_changed
+            ),
+            "irc_direction": _irc_direction,
         }
     )
     return accessors
@@ -334,6 +670,7 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
             float(item) for item in output.vibrational_frequencies
         ],
         "positions": _positions,
+        "connectivity": lambda output: _connectivity_matrix(output.molecule),
         "symbols": _symbols,
         "dipole_moment": lambda output: [
             float(item) for item in output.molecular_dipole_full
@@ -341,6 +678,9 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         "dipole_moment_magnitude": lambda output: float(
             output.total_molecular_dipole_moment
         ),
+        "homo": lambda output: float(output.homo_energy),
+        "lumo": lambda output: float(output.lumo_energy),
+        "gap": lambda output: float(output.fmo_gap),
     }
 
 
@@ -385,7 +725,28 @@ def _xyz_accessors() -> dict[str, Callable[[Any], Any]]:
     return {
         "energy": _xyz_energy,
         "positions": _positions,
+        "connectivity": lambda output: _connectivity_matrix(output.molecule),
         "symbols": _symbols,
+        "trajectory_frame_count": lambda output: len(
+            _xyz_trajectory_structures(output)
+        ),
+        "trajectory_start_positions": lambda output: [
+            [float(value) for value in row]
+            for row in _xyz_trajectory_structures(output)[0].positions
+        ],
+        "trajectory_end_positions": lambda output: [
+            [float(value) for value in row]
+            for row in _xyz_trajectory_structures(output)[-1].positions
+        ],
+        "trajectory_start_connectivity": lambda output: _connectivity_matrix(
+            _xyz_trajectory_structures(output)[0]
+        ),
+        "trajectory_end_connectivity": lambda output: _connectivity_matrix(
+            _xyz_trajectory_structures(output)[-1]
+        ),
+        "trajectory_connectivity_changed": (
+            _xyz_trajectory_connectivity_changed
+        ),
     }
 
 
@@ -432,13 +793,23 @@ _SELECTOR_DIMENSIONS = {
     "energies": "ENERGY",
     "entropy_times_temperature": "ENERGY",
     "excitation_energies": "ENERGY",
+    "singlet_excitation_energies": "ENERGY",
+    "triplet_excitation_energies": "ENERGY",
+    "excited_state_indices": "DIMENSIONLESS",
+    "excited_state_manifold_roots": "DIMENSIONLESS",
+    "excited_state_multiplicities": "DIMENSIONLESS",
+    "excited_state_labels": "DIMENSIONLESS",
+    "excited_state_spin_square": "DIMENSIONLESS",
     "gibbs_free_energy": "ENERGY",
     "oscillator_strengths": "DIMENSIONLESS",
+    "singlet_oscillator_strengths": "DIMENSIONLESS",
+    "triplet_oscillator_strengths": "DIMENSIONLESS",
     "vibrational_frequencies": "FREQUENCY",
     "vpt2_harmonic_frequencies": "FREQUENCY",
     "vpt2_fundamental_frequencies": "FREQUENCY",
     "vpt2_zero_point_rovibrational_energy": "FREQUENCY",
     "positions": "LENGTH",
+    "connectivity": "DIMENSIONLESS",
     "symbols": "DIMENSIONLESS",
     "charge": "DIMENSIONLESS",
     "multiplicity": "DIMENSIONLESS",
@@ -446,7 +817,39 @@ _SELECTOR_DIMENSIONS = {
     "correlation_energy": "ENERGY",
     "dipole_moment": "DIPOLE_MOMENT",
     "dipole_moment_magnitude": "DIPOLE_MOMENT",
+    "homo": "ENERGY",
+    "lumo": "ENERGY",
+    "gap": "ENERGY",
+    "spin_square": "DIMENSIONLESS",
+    "spin_square_after_annihilation": "DIMENSIONLESS",
+    "spin_square_target": "DIMENSIONLESS",
+    "spin_square_deviation": "DIMENSIONLESS",
+    "effective_multiplicity": "DIMENSIONLESS",
+    "wavefunction_stability_verdict": "DIMENSIONLESS",
+    "wavefunction_stability_history": "DIMENSIONLESS",
+    "trajectory_frame_count": "DIMENSIONLESS",
+    "trajectory_start_positions": "LENGTH",
+    "trajectory_end_positions": "LENGTH",
+    "trajectory_start_connectivity": "DIMENSIONLESS",
+    "trajectory_end_connectivity": "DIMENSIONLESS",
+    "trajectory_connectivity_changed": "DIMENSIONLESS",
+    "irc_direction": "DIMENSIONLESS",
 }
+
+_TEXT_SELECTORS = frozenset(
+    {"irc_direction", "wavefunction_stability_verdict"}
+)
+_TEXT_VECTOR_SELECTORS = frozenset(
+    {"excited_state_labels", "wavefunction_stability_history"}
+)
+_INTEGER_SELECTORS = frozenset(
+    {
+        "charge",
+        "multiplicity",
+        "trajectory_frame_count",
+        "trajectory_connectivity_changed",
+    }
+)
 
 
 def extract_logged_quantities(
@@ -487,9 +890,18 @@ def extract_logged_quantities(
         except MissingQuantityError as exc:
             raise rq.QuantityExtractionError(str(exc)) from exc
         dimension = getattr(rq, _SELECTOR_DIMENSIONS[selector.selector])
-        if selector.selector == "symbols":
+        if selector.selector in {"symbols", *_TEXT_VECTOR_SELECTORS}:
             value = source_value
             unit = source_unit
+            data_kind = "text_vector"
+        elif selector.selector in _TEXT_SELECTORS:
+            value = source_value
+            unit = source_unit
+            data_kind = "text"
+        elif selector.selector in _INTEGER_SELECTORS:
+            value = int(source_value)
+            unit = "1"
+            data_kind = "integer"
         else:
             from chemsmart.analysis.quantity_expressions import (
                 normalize_numeric_value,
@@ -503,6 +915,7 @@ def extract_logged_quantities(
                     f"selector {selector.selector!r} produced an "
                     "incompatible unit"
                 )
+            data_kind = None
         quantities.append(
             rq.make_quantity_value(
                 quantity_id=selector.quantity_id,
@@ -512,6 +925,7 @@ def extract_logged_quantities(
                 unit=unit,
                 dimension=dimension,
                 evidence_ref=evidence_ref,
+                data_kind=data_kind,
             )
         )
     if rq.result_file_sha256(artifact) != request.artifact_sha256:

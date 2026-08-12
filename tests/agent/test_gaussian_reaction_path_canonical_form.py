@@ -35,6 +35,7 @@ def _write_input(path: Path, route: str) -> None:
 def test_gaussian_declares_canonical_ts_and_irc_preview_stages():
     assert _conformance_jobtypes("gaussian", "cpu") == (
         "irc",
+        "link",
         "opt",
         "sp",
         "td",
@@ -43,12 +44,8 @@ def test_gaussian_declares_canonical_ts_and_irc_preview_stages():
 
 
 def test_irc_maxpoints_is_not_misread_as_transition_state():
-    forward = GaussianRoute(
-        "# B3LYP 6-31G* irc(calcfc,forward,maxpoints=32)"
-    )
-    reverse = GaussianRoute(
-        "# B3LYP 6-31G* irc(calcfc,reverse,maxpoints=32)"
-    )
+    forward = GaussianRoute("# B3LYP 6-31G* irc(calcfc,forward,maxpoints=32)")
+    reverse = GaussianRoute("# B3LYP 6-31G* irc(calcfc,reverse,maxpoints=32)")
     assert forward.jobtype == "ircf"
     assert reverse.jobtype == "ircr"
 

@@ -252,9 +252,7 @@ class ORCAOutput(ORCAFileMixin):
                     # x, y, z) and join with double spaces
                     coord_line = "  ".join(line.split()[-4:])
                     coordinates_block_lines_list.append(coord_line)
-                elif (
-                    coordinates_block_lines_list
-                ):  # Stop if we hit a non-matching line after collecting coords
+                elif coordinates_block_lines_list:  # Stop if we hit a non-matching line after collecting coords
                     break
 
         # Return CoordinateBlock instance
@@ -466,9 +464,7 @@ class ORCAOutput(ORCAFileMixin):
                 if "Final Gibbs free energy" in line
             ]
             entropy_lines = [
-                line
-                for line in local_lines
-                if "Final entropy term" in line
+                line for line in local_lines if "Final entropy term" in line
             ]
             if not gibbs_lines or not entropy_lines:
                 continue
@@ -476,7 +472,9 @@ class ORCAOutput(ORCAFileMixin):
             job_number, job_start = self._job_context_for_index(start)
             preceding = self.contents[job_start:start]
             energy_lines = [
-                line for line in preceding if "FINAL SINGLE POINT ENERGY" in line
+                line
+                for line in preceding
+                if "FINAL SINGLE POINT ENERGY" in line
             ]
             if not energy_lines:
                 continue
@@ -1227,9 +1225,7 @@ class ORCAOutput(ORCAFileMixin):
                 self.last_structure
             )  # for job that does not terminate normally
         except (ValueError, IndexError):
-            return (
-                self._get_molecule_from_sp_output_file()
-            )  # no structure can be created from output thus use input structure
+            return self._get_molecule_from_sp_output_file()  # no structure can be created from output thus use input structure
 
     @cached_property
     def last_structure(self):
@@ -1266,9 +1262,9 @@ class ORCAOutput(ORCAFileMixin):
                     -1
                 ]  # the lines here have all been converted to lower case
                 xyz_filepath = os.path.join(self.folder, xyz_file)
-                assert os.path.exists(
-                    xyz_filepath
-                ), f".xyz file read from {xyz_filepath} does not exist!"
+                assert os.path.exists(xyz_filepath), (
+                    f".xyz file read from {xyz_filepath} does not exist!"
+                )
                 if os.path.exists(xyz_filepath):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
@@ -2243,9 +2239,7 @@ class ORCAOutput(ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 4:
-                        dict_key = (
-                            f"{line_j_elements[1]}{int(line_j_elements[0])+1}"
-                        )
+                        dict_key = f"{line_j_elements[1]}{int(line_j_elements[0]) + 1}"
                         charge_value = float(line_j_elements[2])
                         hirshfeld_charges[dict_key] = charge_value
 
@@ -2589,7 +2583,9 @@ class ORCAOutput(ORCAFileMixin):
             for candidate in self.contents[index + 1 :]:
                 match = row_pattern.match(candidate)
                 if match:
-                    rows.append(tuple(float(value) for value in match.groups()))
+                    rows.append(
+                        tuple(float(value) for value in match.groups())
+                    )
                     continue
                 if rows:
                     break
@@ -2721,6 +2717,129 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @cached_property
+    def excited_state_records(self):
+        """Return ORCA TD/TDA roots with their printed multiplicities.
+
+        The ``STATE`` table is the numeric authority for both singlet and
+        spin-adapted triplet roots.  Absorption tables alone are insufficient:
+        oscillator strengths can be absent and their local root numbering is
+        not ORCA's global ``STATE`` index.
+        """
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+        pattern = re.compile(
+            rf"^\s*STATE\s+(\d+):\s+E=\s*({number})\s+au\s+"
+            rf"({number})\s+eV\s+({number})\s+cm\*\*-1\s+"
+            rf"<S\*\*2>\s*=\s*({number})"
+            rf"(?:\s+Sym:\s+\S+)?\s+Mult\s+(\d+)",
+            re.IGNORECASE,
+        )
+        manifold_counts = {}
+        records = []
+        for line in self.contents:
+            match = pattern.match(line)
+            if match is None:
+                continue
+            state, energy_au, energy_ev, energy_cm1, spin_square, mult = (
+                match.groups()
+            )
+            multiplicity = int(mult)
+            manifold_counts[multiplicity] = (
+                manifold_counts.get(multiplicity, 0) + 1
+            )
+            records.append(
+                {
+                    "state_index": int(state),
+                    "manifold_root": manifold_counts[multiplicity],
+                    "multiplicity": multiplicity,
+                    "energy_Eh": float(energy_au.replace("D", "E")),
+                    "energy_eV": float(energy_ev.replace("D", "E")),
+                    "energy_cm^-1": float(energy_cm1.replace("D", "E")),
+                    "spin_square": float(spin_square.replace("D", "E")),
+                }
+            )
+        return records
+
+    @cached_property
+    def spin_square_history(self):
+        """Return every explicitly printed SCF expectation value of ``S^2``."""
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+        pattern = re.compile(
+            rf"Expectation value of <S\*\*2>\s*:\s*({number})",
+            re.IGNORECASE,
+        )
+        values = []
+        for line in self.contents:
+            match = pattern.search(line)
+            if match is not None:
+                values.append(float(match.group(1).replace("D", "E")))
+        return values
+
+    @cached_property
+    def electronic_absorption_transition_records(self):
+        """Return the final ORCA absorption table with source state labels."""
+
+        header = "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+        row_pattern = re.compile(
+            rf"^\s*(\S+)\s+->\s+(\S+)\s+({number})\s+({number})\s+"
+            rf"({number})\s+({number})"
+        )
+        target_pattern = re.compile(r"^(\d+)-(\d+)")
+        tables = []
+        for index, line in enumerate(self.contents):
+            if header not in line:
+                continue
+            rows = []
+            started = False
+            for candidate in self.contents[index + 1 :]:
+                match = row_pattern.match(candidate)
+                if match is not None:
+                    started = True
+                    (
+                        source,
+                        target,
+                        energy_ev,
+                        energy_cm1,
+                        wavelength,
+                        oscillator,
+                    ) = match.groups()
+                    target_match = target_pattern.match(target)
+                    rows.append(
+                        {
+                            "source_label": source,
+                            "target_label": target,
+                            "manifold_root": (
+                                int(target_match.group(1))
+                                if target_match is not None
+                                else None
+                            ),
+                            "multiplicity": (
+                                int(target_match.group(2))
+                                if target_match is not None
+                                else None
+                            ),
+                            "energy_eV": float(energy_ev.replace("D", "E")),
+                            "energy_cm^-1": float(
+                                energy_cm1.replace("D", "E")
+                            ),
+                            "wavelength_nm": float(
+                                wavelength.replace("D", "E")
+                            ),
+                            "oscillator_strength": float(
+                                oscillator.replace("D", "E")
+                            ),
+                        }
+                    )
+                    continue
+                if started and candidate.strip().startswith("-"):
+                    break
+            if rows:
+                tables.append(rows)
+        return tables[-1] if tables else []
+
+    @cached_property
     def electronic_absorption_spectra(self):
         """Return complete electric-dipole absorption tables in file order.
 
@@ -2772,8 +2891,7 @@ class ORCAOutput(ORCAFileMixin):
         if not self.electronic_absorption_spectra:
             return None
         return [
-            row["energy_eV"]
-            for row in self.electronic_absorption_spectra[-1]
+            row["energy_eV"] for row in self.electronic_absorption_spectra[-1]
         ]
 
     @property

@@ -38,8 +38,80 @@ Without ``--approval-file``, ``agent run`` remains preview-only. Deterministic
 execution of an already approved workflow uses ``chemsmart agent execute`` and
 requires no provider credential.
 
+For a user-authorized local research episode, ``--execution-envelope`` keeps
+planning, ChemSmart preview, engine execution, result registration and typed
+analysis in one model conversation. The envelope contains operating authority,
+not a method or answer DAG:
+
+.. code-block:: yaml
+
+   schema_version: chemsmart.bounded-execution-envelope.v1
+   mode: continuous-local
+   allowed_program_engines:
+     gaussian: [cpu]
+     orca: [cpu]
+     pyscf: [cpu]
+     xtb: [cpu]
+   resources:
+     execution_target: run
+     cores: 8
+     memory_gb: 28
+     gpu_count: 0
+     scratch_policy: server
+     node_timeout_seconds: 3600
+   episode_wall_time_seconds: 5400
+   postprocess_reserve_seconds: 600
+   max_engine_calls: 8
+   scratch_root: /workspace/chemsmart-bench/scratch
+
+Use it instead of ``--approval-file``:
+
+.. code-block:: bash
+
+   chemsmart agent run \
+     --provider PROFILE \
+     --task-file task.md \
+     --secret-file /secure/path/api.env \
+     --workspace ./agent-workspace \
+     --identity-manifest identities.yaml \
+     --execution-envelope envelope.yaml
+
+Every calculation still passes through the project loader, live Click schema,
+native-input writer, preview verifier, program runner and result validator. A
+future-geometry edge may consume a validated optimized structure. When the DAG
+explicitly declares a different charge and multiplicity for its consumer,
+CHEMSMART preserves the coordinates and atom order while rebinding the target
+electronic state; this supports four-point reorganization-energy workflows
+without pretending that the producer optimized the second state.
+
 Use a disposable workspace containing only approved molecular, project and
 result artifacts. Store credentials outside the workspace and repository.
+
+When a task uses one or more named geometries, pass an approved molecular
+input manifest with ``--identity-manifest``. Each entry names a
+workspace-relative XYZ file and its exact SHA-256, approved molecular names,
+geometry role, coordinate units, charge, multiplicity and source locator.
+CHEMSMART validates the exact bytes and atom order before publishing the
+path-free identity and state records to the model. Filenames and XYZ comments
+remain non-authoritative, and the manifest must not contain an expected value,
+answer DAG or native program input.
+
+.. code-block:: yaml
+
+   schema_version: chemsmart.approved-molecular-input-manifest.v1
+   inputs:
+     - input_id: water-initial
+       identity_id: water-initial
+       approved_names: [water, H2O]
+       geometry_file: inputs/water.xyz
+       geometry_sha256: <sha256-of-exact-xyz-bytes>
+       coordinate_units: angstrom
+       geometry_role: neutral optimization start
+       charge: 0
+       multiplicity: 1
+       source_locator: https://example.org/coordinate-record
+       source_record_sha256: <sha256-of-source-record>
+       state_source_locator: benchmark-case:water#initial-state
 
 Challenge-driven scientist persona
 ===================================
@@ -94,6 +166,19 @@ Use these outcomes:
 
 Tool-call count, token use, exact DAG shape and runtime labels are operating
 observations, not scientific oracles.
+
+Current analysis boundary
+=========================
+
+Cross-program quasi-harmonic thermochemistry remains available through the
+typed analysis operation and the existing ``chemsmart run thermochemistry``
+CLI. The CLI command does not yet load project YAML or materialize as a
+result-artifact analysis node in a scientific workflow. Therefore the agent
+surface has not been removed in this release: doing so would delete the only
+model-callable route used by thermochemistry-dependent workflows. The general
+follow-up is a canonical YAML-backed analysis command node whose structured
+receipt can re-enter dimensional expressions; it is not a benchmark-specific
+repair.
 
 Project skills
 ==============

@@ -11,8 +11,6 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/hongjiseung-rok/chemsmart
-  CANDIDATE_TAG: cpu-24e4a0e
-  CHEMSMART_SOURCE_REVISION: 24e4a0e89700c88fb49bfcd673003f59a2d9cf69
 
 jobs:
   build-qualify-publish:
@@ -35,17 +33,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify the pinned ChemSmart source tree
+      - name: Establish the immutable candidate identity
+        id: identity
         shell: bash
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor "$CHEMSMART_SOURCE_REVISION" "$GITHUB_SHA"
-          if ! git diff --quiet \
-            "$CHEMSMART_SOURCE_REVISION" "$GITHUB_SHA" \
-            -- chemsmart pyproject.toml; then
-            echo "::error::ChemSmart application source differs from the source revision encoded by $CANDIDATE_TAG."
-            exit 1
-          fi
+          candidate_tag="cpu-${GITHUB_SHA:0:12}"
+          {
+            echo "CANDIDATE_TAG=$candidate_tag"
+            echo "CHEMSMART_SOURCE_REVISION=$GITHUB_SHA"
+          } >> "$GITHUB_ENV"
+          {
+            echo "candidate_tag=$candidate_tag"
+            echo "source_revision=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --exit-code --check
 
       - name: Set up native Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -86,6 +90,9 @@ jobs:
             chemsmart --help >/dev/null
           docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
             chemsmart --version
+          docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
+            chemsmart agent run --help \
+            | grep -F -- '--execution-envelope'
           docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
             python -c 'import h5py, openbabel.openbabel, pymol; print(h5py.version.hdf5_version)'
           docker run "${common[@]}" "$IMAGE_NAME:$CANDIDATE_TAG" \
@@ -170,6 +177,7 @@ jobs:
             --task-file /opt/chemsmart/qualification/agent-task.txt \
             --secret-file /run/secrets/provider.env \
             --workspace /workspace \
+            --identity-manifest /opt/chemsmart/qualification/water-identity.yaml \
             >"$stdout_file" 2>"$stderr_file"; then
             echo "::error::The preview-only live agent observation failed."
             exit 1
@@ -226,7 +234,7 @@ jobs:
       - name: Upload public qualification evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cpu-24e4a0e-public-qualification
+          name: ${{ env.CANDIDATE_TAG }}-public-qualification
           path: |
             ${{ runner.temp }}/chemsmart-public/qualification-summary.json
             ${{ runner.temp }}/chemsmart-public/agent-public-observation.json

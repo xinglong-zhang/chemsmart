@@ -3,8 +3,12 @@ name: Promote private CPU research image
 on:
   workflow_dispatch:
     inputs:
+      candidate_tag:
+        description: Immutable candidate tag produced by the candidate workflow (cpu-<commit>)
+        required: true
+        type: string
       candidate_digest:
-        description: Exact sha256 digest of the human-reviewed cpu-24e4a0e candidate
+        description: Exact sha256 digest of the human-reviewed candidate
         required: true
         type: string
       human_scientific_reviewed:
@@ -21,7 +25,6 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/hongjiseung-rok/chemsmart
-  CANDIDATE_TAG: cpu-24e4a0e
 
 jobs:
   promote:
@@ -41,9 +44,14 @@ jobs:
       - name: Validate candidate digest
         shell: bash
         env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
         run: |
           set -euo pipefail
+          if [[ ! "$CANDIDATE_TAG" =~ ^cpu-[0-9a-f]{12}$ ]]; then
+            echo "::error::candidate_tag must be cpu- followed by the 12-character source revision."
+            exit 1
+          fi
           if [[ ! "$CANDIDATE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "::error::candidate_digest must be an exact sha256 digest."
             exit 1
@@ -62,6 +70,7 @@ jobs:
       - name: Promote the reviewed digest without rebuilding
         shell: bash
         env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
         run: |
           set -euo pipefail

@@ -28,17 +28,19 @@ logger = logging.getLogger(__name__)
     "-st",
     "--stable",
     type=str,
-    default="opt",
+    default=None,
     help="Gaussian stability test. See https://gaussian.com/stable/ for "
-    'options. Defaults to "stable=opt".',
+    "options. Defaults to the project value (Gaussian link settings default "
+    'to "stable=opt").',
 )
 @click.option(
     "-g",
     "--guess",
     type=str,
-    default="mix",
+    default=None,
     help="Gaussian guess options. See https://gaussian.com/guess/ for "
-    'options. Defaults to "guess=mix".',
+    "options. Defaults to the project value (Gaussian link settings default "
+    'to "guess=mix").',
 )
 @click.option(
     "--route", type=str, default=None, help="Route for the link section."
@@ -76,9 +78,28 @@ def link(
     from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
     project_settings = ctx.obj["project_settings"]
-    link_settings = get_setting_from_jobtype_for_gaussian(
-        project_settings, jobtype, coordinates, step_size, num_steps
-    )
+    # A canonical link section owns both the stability step and the linked
+    # target calculation.  Legacy projects without that section retain the
+    # historical behavior of selecting the target job section explicitly.
+    project_link_settings = getattr(project_settings, "link_settings", None)
+    if callable(project_link_settings):
+        try:
+            link_settings = project_link_settings()
+        except ValueError:
+            link_settings = get_setting_from_jobtype_for_gaussian(
+                project_settings, jobtype, coordinates, step_size, num_steps
+            )
+    else:
+        link_settings = get_setting_from_jobtype_for_gaussian(
+            project_settings, jobtype, coordinates, step_size, num_steps
+        )
+    project_target = str(getattr(link_settings, "jobtype", "") or "")
+    if jobtype is None:
+        jobtype = project_target
+    elif project_target and jobtype.casefold() != project_target.casefold():
+        raise click.UsageError(
+            "--jobtype differs from the linked target declared in project YAML"
+        )
 
     # job setting from filename or default, with updates from user in cli
     # specified in keywords
@@ -113,8 +134,10 @@ def link(
     link_settings = GaussianLinkJobSettings(**link_kwargs)
 
     # populate GaussianLinkJobSettings
-    link_settings.stable = stable
-    link_settings.guess = guess
+    if stable is not None:
+        link_settings.stable = stable
+    if guess is not None:
+        link_settings.guess = guess
     link_settings.remove_solvent = remove_solvent
     if solvent_model is not None:
         link_settings.solvent_model = solvent_model

@@ -18,16 +18,16 @@ GPU4PySCF, CUDA, Gaussian, and ORCA are not installed. A PySCF GPU request is
 rejected rather than silently executed on the CPU. Gaussian and ORCA require a
 future separately qualified deployment.
 
-The image source is ChemSmart commit
-``24e4a0e89700c88fb49bfcd673003f59a2d9cf69``. The private package is:
+The candidate workflow builds the exact selected ``main`` commit and records
+that revision in the immutable image metadata. The private package is:
 
 .. code-block:: text
 
    ghcr.io/hongjiseung-rok/chemsmart
 
-``cpu-24e4a0e`` is an immutable candidate. After human scientific review, the
-same digest may be promoted without rebuilding to ``3.1.4-cpu`` and
-``cpu-main``.
+``cpu-<12-character-main-commit>`` is an immutable candidate. After human
+scientific review, the same digest may be promoted without rebuilding to
+``3.1.4-cpu`` and ``cpu-main``.
 
 Host requirements
 =================

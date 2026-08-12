@@ -311,6 +311,93 @@ class TestGaussianSolventCLITdCommand:
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
+    def test_td_project_root_count_and_manifold_survive_cli_defaults(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """An omitted CLI option must not replace project-owned TD science."""
+
+        project = tmp_path / "td-five-roots.yaml"
+        project.write_text(
+            "td:\n"
+            "  functional: CAM-B3LYP\n"
+            "  basis: aug-cc-pVDZ\n"
+            "  states: singlets\n"
+            "  root: 1\n"
+            "  nstates: 5\n",
+            encoding="utf-8",
+        )
+        _result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                str(project),
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert settings.states == "singlets"
+        assert settings.root == 1
+        assert settings.nstates == 5
+        assert "td(singlets,nstates=5,root=1)" in settings.route_string.lower()
+
+
+class TestGaussianLinkCLICommand:
+    def test_link_project_owns_stability_and_target_route(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        project = tmp_path / "stable-opt-freq.yaml"
+        project.write_text(
+            "link:\n"
+            "  functional: UM06-2X\n"
+            "  basis: def2-TZVP\n"
+            "  jobtype: opt\n"
+            "  freq: true\n"
+            "  stable: opt\n"
+            "  guess: mix\n",
+            encoding="utf-8",
+        )
+        _result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.link.GaussianLinkJob",
+            [
+                "-p",
+                str(project),
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "2",
+                "link",
+                "--jobtype",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert settings.jobtype == "opt"
+        assert settings.stable == "opt"
+        assert settings.guess == "mix"
+        assert settings.freq is True
+        assert "stable=opt" in settings.route_string.lower()
+        assert "opt freq" in settings.link_route_string.lower()
+
 
 class TestGaussianCLISinglePointCommand:
     """CLI tests for the ``sp`` (single point) subcommand."""

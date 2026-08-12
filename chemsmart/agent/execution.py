@@ -1385,9 +1385,8 @@ def build_program_execution_invocation(
     handoff: OptimizedGeometryHandoffV1 | None = None,
     environment_identity_sha256: str = "",
     invocation_identity_sha256: str = "",
-    auxiliary_input_artifacts: Mapping[
-        str, TrustedArtifactRefV1
-    ] | None = None,
+    auxiliary_input_artifacts: Mapping[str, TrustedArtifactRefV1]
+    | None = None,
 ) -> ProgramExecutionInvocationV1:
     """Resolve a ``node_id`` to an exact invocation using host bindings.
 
@@ -1413,7 +1412,9 @@ def build_program_execution_invocation(
     )
     require_auxiliary_artifact_bindings(auxiliary_input_bindings)
     for parameter_name, artifact in sorted(auxiliary_input_artifacts.items()):
-        _require_current_artifact(artifact, f"auxiliary input {parameter_name}")
+        _require_current_artifact(
+            artifact, f"auxiliary input {parameter_name}"
+        )
     if auxiliary_input_bindings != node.auxiliary_input_bindings:
         raise ContractError("auxiliary inputs differ from workflow approval")
     if resources.resource_sha256 != approval.resource_sha256:
@@ -1453,12 +1454,27 @@ def build_program_execution_invocation(
             )
         if handoff.geometry_artifact_sha256 != input_artifact.sha256:
             raise ContractError("handoff bytes differ from execution input")
-        if (handoff.charge, handoff.multiplicity) != (
+        if handoff.consumer_state != (
             node.charge,
             node.multiplicity,
         ):
             raise ContractError(
                 "handoff electronic state differs from approval"
+            )
+        # A geometry edge transfers coordinates, not electronic state.  Bind
+        # the downstream target state to these exact bytes before an invocation
+        # can claim the corresponding scientific identity.
+        from chemsmart.agent.commands import build_scientific_identity_binding
+
+        expected_identity = build_scientific_identity_binding(
+            task_spec_sha256=approval.task_spec_sha256,
+            geometry_artifact=input_artifact,
+            charge=node.charge,
+            multiplicity=node.multiplicity,
+        )
+        if identity_sha256 != expected_identity.binding_sha256:
+            raise ContractError(
+                "handoff scientific identity differs from target state and geometry"
             )
     environment_sha256 = require_sha256(
         environment_receipt_sha256, "environment_receipt_sha256"
@@ -1475,9 +1491,7 @@ def build_program_execution_invocation(
         "argv": argv_tuple,
     }
     if auxiliary_input_bindings:
-        idempotency_body["auxiliary_input_bindings"] = (
-            auxiliary_input_bindings
-        )
+        idempotency_body["auxiliary_input_bindings"] = auxiliary_input_bindings
     idempotency_key = canonical_sha256(idempotency_body)
     body = {
         "schema_version": "chemsmart.program-execution-invocation.v1",
@@ -2010,7 +2024,7 @@ def build_program_execution_receipt(
 
 @dataclass(frozen=True)
 class OptimizedGeometryHandoffV1:
-    """Validated PySCF OPT result converted to one immutable XYZ frame."""
+    """Validated program OPT result converted to one immutable XYZ frame."""
 
     schema_version: str
     producer_node_id: str
@@ -2028,6 +2042,12 @@ class OptimizedGeometryHandoffV1:
     multiplicity: int
     status: str
     receipt_sha256: str
+    #: The source ``charge``/``multiplicity`` above remain the state on which
+    #: the geometry was optimized.  These optional fields name a deliberately
+    #: different state for the consumer while preserving the exact coordinates
+    #: and atom order.  They are omitted for legacy same-state handoffs.
+    consumer_charge: int | None = None
+    consumer_multiplicity: int | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.optimized-geometry-handoff.v1":
@@ -2052,6 +2072,29 @@ class OptimizedGeometryHandoffV1:
         _require_nonempty_rows(self.symbols, "symbols")
         if self.multiplicity < 1:
             raise ContractError("multiplicity must be positive")
+        if (self.consumer_charge is None) != (
+            self.consumer_multiplicity is None
+        ):
+            raise ContractError(
+                "handoff consumer charge and multiplicity must be declared together"
+            )
+        if self.consumer_charge is not None:
+            if isinstance(self.consumer_charge, bool) or not isinstance(
+                self.consumer_charge, int
+            ):
+                raise ContractError(
+                    "handoff consumer charge must be an integer"
+                )
+            if isinstance(self.consumer_multiplicity, bool) or not isinstance(
+                self.consumer_multiplicity, int
+            ):
+                raise ContractError(
+                    "handoff consumer multiplicity must be an integer"
+                )
+            if self.consumer_multiplicity < 1:
+                raise ContractError(
+                    "handoff consumer multiplicity must be positive"
+                )
         if self.status != "validated_handoff":
             raise ContractError("optimized geometry handoff must be validated")
         body = {
@@ -2073,8 +2116,54 @@ class OptimizedGeometryHandoffV1:
             "multiplicity": self.multiplicity,
             "status": self.status,
         }
+        if self.consumer_charge is not None:
+            body["consumer_charge"] = self.consumer_charge
+            body["consumer_multiplicity"] = self.consumer_multiplicity
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("optimized geometry handoff digest mismatch")
+
+    @property
+    def consumer_state(self) -> tuple[int, int]:
+        """Electronic state applied by the downstream calculation."""
+
+        if self.consumer_charge is None:
+            return self.charge, self.multiplicity
+        return self.consumer_charge, self.consumer_multiplicity
+
+
+def _handoff_consumer_fields(
+    *,
+    producer_charge: int,
+    producer_multiplicity: int,
+    consumer_charge: int | None,
+    consumer_multiplicity: int | None,
+) -> dict[str, int]:
+    """Validate and canonically encode an optional state rebind."""
+
+    if (consumer_charge is None) != (consumer_multiplicity is None):
+        raise ContractError(
+            "handoff consumer charge and multiplicity must be declared together"
+        )
+    if consumer_charge is None:
+        return {}
+    if isinstance(consumer_charge, bool) or not isinstance(
+        consumer_charge, int
+    ):
+        raise ContractError("handoff consumer charge must be an integer")
+    if isinstance(consumer_multiplicity, bool) or not isinstance(
+        consumer_multiplicity, int
+    ):
+        raise ContractError("handoff consumer multiplicity must be an integer")
+    if consumer_multiplicity < 1:
+        raise ContractError("handoff consumer multiplicity must be positive")
+    target = (consumer_charge, consumer_multiplicity)
+    if target == (producer_charge, producer_multiplicity):
+        # An explicit no-op has the same canonical record as legacy inheritance.
+        return {}
+    return {
+        "consumer_charge": consumer_charge,
+        "consumer_multiplicity": consumer_multiplicity,
+    }
 
 
 def handoff_optimized_pyscf_geometry(
@@ -2086,6 +2175,8 @@ def handoff_optimized_pyscf_geometry(
     geometry_artifact_id: str,
     expected_charge: int,
     expected_multiplicity: int,
+    consumer_charge: int | None = None,
+    consumer_multiplicity: int | None = None,
 ) -> tuple[TrustedArtifactRefV1, OptimizedGeometryHandoffV1]:
     """Extract the validated final OPT frame and materialize exact XYZ text."""
 
@@ -2149,6 +2240,12 @@ def handoff_optimized_pyscf_geometry(
         int(expected_multiplicity),
     ):
         raise ContractError("optimized electronic state differs from approval")
+    consumer_fields = _handoff_consumer_fields(
+        producer_charge=charge,
+        producer_multiplicity=multiplicity,
+        consumer_charge=consumer_charge,
+        consumer_multiplicity=consumer_multiplicity,
+    )
 
     normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
     workspace = _absolute_workspace(approved_workspace)
@@ -2197,6 +2294,327 @@ def handoff_optimized_pyscf_geometry(
         "charge": charge,
         "multiplicity": multiplicity,
         "status": "validated_handoff",
+        **consumer_fields,
+    }
+    return geometry_artifact, OptimizedGeometryHandoffV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+def _read_exact_xyz_geometry(
+    artifact: TrustedArtifactRefV1,
+    *,
+    label: str,
+) -> tuple[tuple[str, ...], tuple[tuple[float, float, float], ...]]:
+    """Read one immutable XYZ frame without accepting trailing frames."""
+
+    source = _require_current_artifact(artifact, label)
+    if source.suffix.lower() != ".xyz" or artifact.kind != "geometry_xyz":
+        raise ContractError(f"{label} must be an XYZ geometry artifact")
+    before = file_sha256(source)
+    try:
+        lines = source.read_text(encoding="utf-8").splitlines()
+        atom_count = int(lines[0].strip())
+    except (IndexError, OSError, UnicodeDecodeError, ValueError) as exc:
+        raise ContractError(f"{label} is not readable XYZ") from exc
+    if atom_count < 1 or len(lines) != atom_count + 2:
+        raise ContractError(f"{label} must contain exactly one XYZ frame")
+    symbols = []
+    positions = []
+    try:
+        for line in lines[2:]:
+            fields = line.split()
+            if len(fields) != 4:
+                raise ValueError
+            symbol = str(fields[0]).strip()
+            position = tuple(float(value) for value in fields[1:])
+            if not symbol or any(
+                not math.isfinite(value) for value in position
+            ):
+                raise ValueError
+            symbols.append(symbol)
+            positions.append(position)
+    except ValueError as exc:
+        raise ContractError(
+            f"{label} has invalid symbols or coordinates"
+        ) from exc
+    after = file_sha256(source)
+    if before != artifact.sha256 or after != before:
+        raise ContractError(f"{label} changed while it was read")
+    return tuple(symbols), tuple(positions)
+
+
+def handoff_optimized_xtb_geometry(
+    *,
+    producer_receipt: ProgramExecutionReceiptV1,
+    result_artifact: TrustedArtifactRefV1,
+    input_artifact: TrustedArtifactRefV1,
+    producer_edge: ProducerEdgeRuleV1,
+    approved_workspace: str | Path,
+    geometry_artifact_id: str,
+    expected_charge: int,
+    expected_multiplicity: int,
+    consumer_charge: int | None = None,
+    consumer_multiplicity: int | None = None,
+) -> tuple[TrustedArtifactRefV1, OptimizedGeometryHandoffV1]:
+    """Bind validated xTB ``xtbopt.xyz`` to the normal geometry edge."""
+
+    if not producer_receipt.validated:
+        raise ContractError("optimized geometry requires a validated producer")
+    if producer_receipt.node_id != producer_edge.producer_node_id:
+        raise ContractError("execution receipt does not match producer edge")
+    if producer_edge.selection_rule != "validated_optimized_geometry":
+        raise ContractError("unsupported optimized geometry selection rule")
+    if Path(result_artifact.path).name != "xtbopt.xyz":
+        raise ContractError("xTB optimized handoff requires exact xtbopt.xyz")
+    if not any(
+        item.artifact_id == result_artifact.artifact_id
+        and item.sha256 == result_artifact.sha256
+        for item in producer_receipt.output_artifacts
+    ):
+        raise ContractError("xTB geometry is not bound to producer receipt")
+    expected_symbols, _initial_positions = _read_exact_xyz_geometry(
+        input_artifact, label="xTB optimization input"
+    )
+    symbols, positions = _read_exact_xyz_geometry(
+        result_artifact, label="xTB optimized geometry"
+    )
+    if symbols != expected_symbols:
+        raise ContractError(
+            "xTB optimized geometry changed atom identity or atom order"
+        )
+
+    charge = int(expected_charge)
+    multiplicity = int(expected_multiplicity)
+    if multiplicity < 1:
+        raise ContractError(
+            "optimized electronic-state multiplicity is invalid"
+        )
+    consumer_fields = _handoff_consumer_fields(
+        producer_charge=charge,
+        producer_multiplicity=multiplicity,
+        consumer_charge=consumer_charge,
+        consumer_multiplicity=consumer_multiplicity,
+    )
+    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
+    workspace = _absolute_workspace(approved_workspace)
+    target = _target_below(
+        workspace,
+        "artifacts",
+        (
+            f"{producer_edge.producer_node_id}--"
+            f"{producer_edge.consumer_node_id}.xyz"
+        ),
+    )
+    comment = (
+        "ChemSmart validated xTB OPT handoff; "
+        f"charge={charge}; multiplicity={multiplicity}; "
+        f"source_sha256={result_artifact.sha256}"
+    )
+    lines = [str(len(symbols)), comment]
+    for symbol, (x, y, z) in zip(symbols, positions):
+        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
+    _write_exact_once(target, ("\n".join(lines) + "\n").encode("utf-8"))
+    geometry_artifact = TrustedArtifactRefV1(
+        artifact_id=normalized_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    positions_sha256 = canonical_sha256(
+        {"symbols": symbols, "positions_angstrom": positions}
+    )
+    body = {
+        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
+        "producer_node_id": producer_edge.producer_node_id,
+        "consumer_node_id": producer_edge.consumer_node_id,
+        "producer_edge_sha256": producer_edge.edge_sha256,
+        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
+        "result_artifact_id": result_artifact.artifact_id,
+        "result_artifact_sha256": result_artifact.sha256,
+        "geometry_artifact_id": geometry_artifact.artifact_id,
+        "geometry_artifact_sha256": geometry_artifact.sha256,
+        "atom_count": len(symbols),
+        "symbols": symbols,
+        "positions_sha256": positions_sha256,
+        "charge": charge,
+        "multiplicity": multiplicity,
+        "status": "validated_handoff",
+        **consumer_fields,
+    }
+    return geometry_artifact, OptimizedGeometryHandoffV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+def handoff_optimized_native_geometry(
+    *,
+    program: str,
+    producer_receipt: ProgramExecutionReceiptV1,
+    result_artifact: TrustedArtifactRefV1,
+    input_artifact: TrustedArtifactRefV1,
+    producer_edge: ProducerEdgeRuleV1,
+    approved_workspace: str | Path,
+    geometry_artifact_id: str,
+    expected_charge: int,
+    expected_multiplicity: int,
+    consumer_charge: int | None = None,
+    consumer_multiplicity: int | None = None,
+) -> tuple[TrustedArtifactRefV1, OptimizedGeometryHandoffV1]:
+    """Extract a validated ORCA/Gaussian OPT or TS final geometry."""
+
+    normalized_program = require_identifier(program, "program")
+    if normalized_program not in {"gaussian", "orca"}:
+        raise ContractError(
+            "native optimized handoff supports Gaussian or ORCA"
+        )
+    if not producer_receipt.validated:
+        raise ContractError("optimized geometry requires a validated producer")
+    if producer_receipt.node_id != producer_edge.producer_node_id:
+        raise ContractError("execution receipt does not match producer edge")
+    if producer_edge.selection_rule != "validated_optimized_geometry":
+        raise ContractError("unsupported optimized geometry selection rule")
+    expected_kind = f"{normalized_program}_output"
+    source = _require_current_artifact(
+        result_artifact, f"{normalized_program} result artifact"
+    )
+    if result_artifact.kind != expected_kind:
+        raise ContractError(
+            f"optimized handoff requires a {expected_kind} artifact"
+        )
+    if not any(
+        item.artifact_id == result_artifact.artifact_id
+        and item.sha256 == result_artifact.sha256
+        for item in producer_receipt.output_artifacts
+    ):
+        raise ContractError("result artifact is not bound to producer receipt")
+    expected_symbols, _initial_positions = _read_exact_xyz_geometry(
+        input_artifact, label=f"{normalized_program} optimization input"
+    )
+    before = file_sha256(source)
+    try:
+        if normalized_program == "gaussian":
+            from chemsmart.io.gaussian.output import Gaussian16Output
+
+            output = Gaussian16Output(str(source))
+            jobtype = str(output.jobtype or "").lower()
+            normal_termination = bool(output.normal_termination)
+            converged = (
+                any(
+                    "Optimization completed." in line
+                    for line in output.contents
+                )
+                and not output.convergence_criterion_not_met
+            )
+            molecule = output.optimized_structure
+            charge = output.charge
+            multiplicity = output.multiplicity
+        else:
+            from chemsmart.io.orca.output import ORCAOutput
+
+            output = ORCAOutput(str(source))
+            jobtype = str(output.jobtype or "").lower()
+            normal_termination = bool(output.normal_termination)
+            converged = output.converged is True
+            molecule = output.molecule
+            charge = output.charge
+            multiplicity = output.multiplicity
+    except (AttributeError, IndexError, OSError, TypeError, ValueError) as exc:
+        raise ContractError(
+            f"{normalized_program} optimized result is not readable"
+        ) from exc
+    after = file_sha256(source)
+    if before != result_artifact.sha256 or after != before:
+        raise ContractError(
+            f"{normalized_program} result changed while extracting geometry"
+        )
+    if not normal_termination or not converged or jobtype not in {"opt", "ts"}:
+        raise ContractError(
+            f"{normalized_program} result is not a converged OPT or TS"
+        )
+    if (charge, multiplicity) != (
+        int(expected_charge),
+        int(expected_multiplicity),
+    ):
+        raise ContractError("optimized electronic state differs from approval")
+    consumer_fields = _handoff_consumer_fields(
+        producer_charge=int(charge),
+        producer_multiplicity=int(multiplicity),
+        consumer_charge=consumer_charge,
+        consumer_multiplicity=consumer_multiplicity,
+    )
+    symbols = tuple(str(item) for item in molecule.chemical_symbols)
+    try:
+        positions = tuple(
+            tuple(float(component) for component in row)
+            for row in molecule.positions
+        )
+    except (TypeError, ValueError) as exc:
+        raise ContractError(
+            "optimized final positions are not numeric"
+        ) from exc
+    if symbols != expected_symbols:
+        raise ContractError(
+            f"{normalized_program} optimized geometry changed atom identity "
+            "or atom order"
+        )
+    if any(
+        len(row) != 3 or any(not math.isfinite(value) for value in row)
+        for row in positions
+    ):
+        raise ContractError(
+            "optimized final positions must be finite Nx3 values"
+        )
+
+    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
+    workspace = _absolute_workspace(approved_workspace)
+    target = _target_below(
+        workspace,
+        "artifacts",
+        (
+            f"{producer_edge.producer_node_id}--"
+            f"{producer_edge.consumer_node_id}.xyz"
+        ),
+    )
+    comment = (
+        f"ChemSmart validated {normalized_program} {jobtype.upper()} handoff; "
+        f"charge={charge}; multiplicity={multiplicity}; "
+        f"source_sha256={result_artifact.sha256}"
+    )
+    lines = [str(len(symbols)), comment]
+    for symbol, (x, y, z) in zip(symbols, positions):
+        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
+    _write_exact_once(target, ("\n".join(lines) + "\n").encode("utf-8"))
+    geometry_artifact = TrustedArtifactRefV1(
+        artifact_id=normalized_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    positions_sha256 = canonical_sha256(
+        {"symbols": symbols, "positions_angstrom": positions}
+    )
+    body = {
+        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
+        "producer_node_id": producer_edge.producer_node_id,
+        "consumer_node_id": producer_edge.consumer_node_id,
+        "producer_edge_sha256": producer_edge.edge_sha256,
+        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
+        "result_artifact_id": result_artifact.artifact_id,
+        "result_artifact_sha256": result_artifact.sha256,
+        "geometry_artifact_id": geometry_artifact.artifact_id,
+        "geometry_artifact_sha256": geometry_artifact.sha256,
+        "atom_count": len(symbols),
+        "symbols": symbols,
+        "positions_sha256": positions_sha256,
+        "charge": int(charge),
+        "multiplicity": int(multiplicity),
+        "status": "validated_handoff",
+        **consumer_fields,
     }
     return geometry_artifact, OptimizedGeometryHandoffV1(
         **body, receipt_sha256=canonical_sha256(body)
@@ -2264,9 +2682,7 @@ def _frozen_preview_binding_body(
             binding.invocation_identity_sha256,
             "invocation_identity_sha256",
         )
-        body["invocation_identity_sha256"] = (
-            binding.invocation_identity_sha256
-        )
+        body["invocation_identity_sha256"] = binding.invocation_identity_sha256
     if binding.auxiliary_input_bindings:
         body["auxiliary_input_bindings"] = binding.auxiliary_input_bindings
     return body
@@ -2961,6 +3377,7 @@ def build_validated_data_edge_binding(
             "producer scientific identity differs from execution invocation"
         )
     atom_order_sha256 = canonical_sha256({"symbols": handoff.symbols})
+    consumer_charge, consumer_multiplicity = handoff.consumer_state
     body = {
         "schema_version": "chemsmart.validated-data-edge-binding.v1",
         "run_id": require_identifier(run_id, "run_id"),
@@ -2992,8 +3409,8 @@ def build_validated_data_edge_binding(
         ),
         "atom_order_sha256": atom_order_sha256,
         "positions_sha256": handoff.positions_sha256,
-        "charge": handoff.charge,
-        "multiplicity": handoff.multiplicity,
+        "charge": consumer_charge,
+        "multiplicity": consumer_multiplicity,
         "handoff_receipt_sha256": handoff.receipt_sha256,
         "status": "validated",
     }
@@ -3432,7 +3849,9 @@ __all__ = [
     "build_workflow_execution_approval",
     "build_workflow_run_state",
     "derive_ready_node_ids",
+    "handoff_optimized_native_geometry",
     "handoff_optimized_pyscf_geometry",
+    "handoff_optimized_xtb_geometry",
     "promote_project_candidate",
     "transition_workflow_node",
     "workflow_execution_approval_json",

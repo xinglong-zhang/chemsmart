@@ -49,10 +49,17 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
 
     # populate cli options
-    td_settings.states = states
-    td_settings.root = root
-    td_settings.nstates = nstates
-    td_settings.eqsolv = eqsolv
+    # ``None`` means the project YAML remains authoritative.  Historically
+    # Click defaults overwrote a valid project (for example 5 roots became 3)
+    # even when the user or agent supplied no CLI override.
+    if states is not None:
+        td_settings.states = states
+    if root is not None:
+        td_settings.root = root
+    if nstates is not None:
+        td_settings.nstates = nstates
+    if eqsolv is not None:
+        td_settings.eqsolv = eqsolv
 
     logger.info(f"TDDFT job settings from project: {td_settings.__dict__}")
 

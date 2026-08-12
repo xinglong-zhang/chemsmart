@@ -105,9 +105,7 @@ def test_derived_views_are_exact_registry_projections():
     assert ENGINE_CAPABILITIES is PROGRAM_CAPABILITIES
     assert EngineCapability is ProgramCapability
     assert EXECUTABLE_PROGRAMS is KNOWN_PROGRAMS
-    assert PROJECT_PROGRAMS == frozenset(
-        {"gaussian", "orca", "pyscf", "xtb"}
-    )
+    assert PROJECT_PROGRAMS == frozenset({"gaussian", "orca", "pyscf", "xtb"})
     assert PROJECT_REQUIRED_PROGRAMS == frozenset(
         {"gaussian", "orca", "pyscf"}
     )
@@ -144,6 +142,9 @@ def test_declared_capabilities_preserve_project_ownership_contract():
         )
     assert "relativistic" in PROJECT_OWNED_PARAMETERS["orca"]
     assert "relativistic" not in PROJECT_OWNED_PARAMETERS["gaussian"]
+    assert "states" in PROJECT_OWNED_PARAMETERS["gaussian"]
+    assert "response_method" not in PROJECT_OWNED_PARAMETERS["gaussian"]
+    assert "state_manifold" not in PROJECT_OWNED_PARAMETERS["gaussian"]
     assert PROJECT_OWNED_PARAMETERS["nciplot"] == ()
     assert PROJECT_OWNED_PARAMETERS["pyscf"] == (
         "ab_initio",

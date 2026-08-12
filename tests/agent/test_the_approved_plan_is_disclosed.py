@@ -25,6 +25,7 @@ cannot show the session one plan while approving another.
 """
 
 import inspect
+from types import SimpleNamespace
 
 from chemsmart.agent import live_session
 
@@ -51,6 +52,8 @@ _NODE_FIELDS = {
     "produces_observables",
     "support_state",
     "blocked_reason",
+    "charge",
+    "multiplicity",
 }
 _EDGE_FIELDS = {
     "edge_id",
@@ -148,3 +151,56 @@ def test_the_approved_plan_is_registered_for_execution_resolution():
         "registration is keyed by plan_sha256; if the lookup key changes, "
         "this wiring must change with it"
     )
+
+
+def test_public_plan_omits_absent_node_state_but_keeps_explicit_state():
+    """The disclosed body must itself be accepted by the model tool schema."""
+
+    from chemsmart.agent.workflows import (
+        ScientificWorkflowNodeV2,
+        build_scientific_workflow_plan,
+    )
+
+    approval = SimpleNamespace(
+        workflow_id="state-disclosure",
+        node_bindings=(
+            SimpleNamespace(
+                node_id="vertical-energy",
+                program="pyscf",
+                engine="cpu",
+                jobtype="sp",
+                input_mode="initial",
+            ),
+        ),
+        producer_edges=(),
+        status="approved",
+    )
+
+    def disclosed_node(*, charge=None, multiplicity=None):
+        plan = build_scientific_workflow_plan(
+            workflow_id="state-disclosure",
+            task_spec_sha256="a" * 64,
+            scientific_identity_sha256="b" * 64,
+            nodes=(
+                ScientificWorkflowNodeV2(
+                    node_id="vertical-energy",
+                    stage="sp",
+                    requested_program="pyscf",
+                    program="pyscf",
+                    engine="cpu",
+                    project_role="project.vertical",
+                    unresolved_fields=(),
+                    charge=charge,
+                    multiplicity=multiplicity,
+                ),
+            ),
+        )
+        return live_session._public_workflow_approval(
+            approval, approved_plan=plan
+        )["approved_scientific_plan"]["nodes"][0]
+
+    inherited = disclosed_node()
+    assert "charge" not in inherited
+    assert "multiplicity" not in inherited
+    explicit = disclosed_node(charge=-1, multiplicity=2)
+    assert (explicit["charge"], explicit["multiplicity"]) == (-1, 2)

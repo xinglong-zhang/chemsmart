@@ -47,7 +47,7 @@ RUN python -m pip install \
 
 FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f AS runtime
 
-ARG CHEMSMART_SOURCE_REVISION=24e4a0e89700c88fb49bfcd673003f59a2d9cf69
+ARG CHEMSMART_SOURCE_REVISION=unknown
 ARG CONTAINER_RECIPE_REVISION=unknown
 
 LABEL org.opencontainers.image.title="ChemSmart CPU Research Runtime" \

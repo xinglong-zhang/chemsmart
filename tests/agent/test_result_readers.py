@@ -42,9 +42,7 @@ _GAUSSIAN_LOG_C4 = (
 _GAUSSIAN_TD_LOG = (
     "tests/data/GaussianTests/tddft/tddft_r1s50_gas_radical_anion.log"
 )
-_ORCA_DLPNO_LOG = (
-    "tests/data/ORCATests/outputs/water_dlpno_ccsdt_sp.out"
-)
+_ORCA_DLPNO_LOG = "tests/data/ORCATests/outputs/water_dlpno_ccsdt_sp.out"
 _ORCA_ERROR_LOG = "tests/data/ORCATests/error_files/GTOInt_error.out"
 
 
@@ -73,9 +71,16 @@ def _extract(path, program, selector, quantity_id="q"):
 def test_the_log_parsing_programs_are_registered():
     assert registered_reader_programs() == ("gaussian", "orca", "xtb", "xyz")
     assert registered_reader_selectors()["xyz"] == (
+        "connectivity",
         "energy",
         "positions",
         "symbols",
+        "trajectory_connectivity_changed",
+        "trajectory_end_connectivity",
+        "trajectory_end_positions",
+        "trajectory_frame_count",
+        "trajectory_start_connectivity",
+        "trajectory_start_positions",
     )
 
 
@@ -94,14 +99,22 @@ def test_model_tool_surface_exposes_the_registered_result_plane():
         "xtb",
         "xyz",
     ]
-    assert "xyz: energy, positions, symbols" in properties["program"][
-        "description"
-    ]
+    assert (
+        "xyz: connectivity, energy, positions, symbols"
+        in properties["program"]["description"]
+    )
     selectors = properties["selectors"]["items"]["properties"]["selector"][
         "enum"
     ]
     assert "excitation_energies" in selectors
     assert "oscillator_strengths" in selectors
+    assert "connectivity" in selectors
+    assert (
+        "not an electronic bond-order"
+        in properties["selectors"]["items"]["properties"]["selector"][
+            "description"
+        ]
+    )
 
 
 def test_registered_xyz_geometry_enters_the_typed_quantity_plane(tmp_path):
@@ -120,6 +133,7 @@ def test_registered_xyz_geometry_enters_the_typed_quantity_plane(tmp_path):
         program="xyz",
         selectors=(
             QuantitySelectorV1(quantity_id="e", selector="energy"),
+            QuantitySelectorV1(quantity_id="c", selector="connectivity"),
             QuantitySelectorV1(quantity_id="r", selector="positions"),
             QuantitySelectorV1(quantity_id="z", selector="symbols"),
         ),
@@ -127,6 +141,11 @@ def test_registered_xyz_geometry_enters_the_typed_quantity_plane(tmp_path):
 
     values = {item.quantity_id: item for item in receipt.quantities}
     assert values["e"].value == pytest.approx(-1.632059341860)
+    assert values["c"].value == (
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0),
+    )
     assert values["r"].value[1][0] == pytest.approx(0.5609660462)
     assert values["z"].value == ("H", "H", "H")
 
@@ -371,3 +390,296 @@ def test_two_extracted_energies_drive_a_real_expression():
     assert receipt.outputs[0].value == pytest.approx(
         second.value - first.value, abs=1e-12
     )
+
+
+@pytest.mark.parametrize(
+    ("selector", "expected"),
+    (("homo", -14.5428), ("lumo", -6.0942), ("gap", 8.448655866329)),
+)
+def test_xtb_frontier_orbitals_enter_the_shared_quantity_plane(
+    selector, expected
+):
+    path = "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+    quantity = _extract(path, "xtb", selector, selector).quantities[0]
+    assert quantity.source_value == pytest.approx(expected)
+    assert quantity.source_unit == "eV"
+    assert quantity.unit == "hartree"
+
+
+def test_gaussian_does_not_infer_multiplicity_from_open_shell_td_labels():
+    output = reader_for("gaussian").open_output(Path(_GAUSSIAN_TD_LOG))
+    labels, _ = reader_for("gaussian").read(output, "excited_state_labels")
+    assert labels[0] == "2.316-A"
+    with pytest.raises(MissingQuantityError, match="source-labelled"):
+        reader_for("gaussian").read(output, "excited_state_multiplicities")
+
+
+def test_orca_tda_roots_are_filtered_only_by_printed_multiplicity(tmp_path):
+    output_path = tmp_path / "singlets-and-triplets.out"
+    output_path.write_text(
+        "STATE  1:  E= 0.123456 au  3.3594 eV  27096.0 cm**-1 "
+        "<S**2> = 0.000000 Mult 1\n"
+        "STATE  2:  E= 0.100000 au  2.7211 eV  21947.0 cm**-1 "
+        "<S**2> = 2.000000 Sym: A' Mult 3\n"
+        "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS\n"
+        "  0-1A -> 1-1A 3.3594 27096.0 369.1 0.010000000 0.0 0.0\n"
+        "  0-1A -> 1-3A 2.7211 21947.0 455.6 0.000000000 0.0 0.0\n"
+        "------------------------------------------------------------\n",
+        encoding="utf-8",
+    )
+    output = reader_for("orca").open_output(output_path)
+    reader = reader_for("orca")
+
+    assert reader.read(output, "singlet_excitation_energies") == (
+        [3.3594],
+        "eV",
+    )
+    assert reader.read(output, "triplet_excitation_energies") == (
+        [2.7211],
+        "eV",
+    )
+    assert reader.read(output, "excited_state_multiplicities") == (
+        [1, 3],
+        "",
+    )
+    assert reader.read(output, "triplet_oscillator_strengths") == (
+        [0.0],
+        "",
+    )
+
+
+def test_stability_and_spin_diagnostics_remain_distinct_observations():
+    gaussian = reader_for("gaussian").open_output(
+        Path("tests/data/GaussianTests/outputs/link/dna_link_sp.log")
+    )
+    verdict, _ = reader_for("gaussian").read(
+        gaussian, "wavefunction_stability_verdict"
+    )
+    history, _ = reader_for("gaussian").read(
+        gaussian, "wavefunction_stability_history"
+    )
+    assert history == [
+        "internal_instability",
+        "stable_under_considered_perturbations",
+    ]
+    assert verdict == "stable_under_considered_perturbations"
+
+    orca = reader_for("orca").open_output(
+        Path("tests/data/ORCATests/outputs/fe3_sextet.out")
+    )
+    observed, _ = reader_for("orca").read(orca, "spin_square")
+    target, _ = reader_for("orca").read(orca, "spin_square_target")
+    deviation, _ = reader_for("orca").read(orca, "spin_square_deviation")
+    assert observed == pytest.approx(8.759007)
+    assert target == pytest.approx(8.75)
+    assert deviation == pytest.approx(observed - target)
+    with pytest.raises(ValueError, match="does not provide"):
+        reader_for("orca").read(orca, "wavefunction_stability_verdict")
+
+
+def test_pyscf_spin_diagnostics_preserve_observation_target_and_deviation():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.analysis.result_quantities import _extract_selector
+
+    output = SimpleNamespace(
+        multiplicity=2,
+        results={
+            "spin_square": np.asarray(0.80),
+            "spin_square_effective_multiplicity": np.asarray(
+                (1.0 + 4.0 * 0.80) ** 0.5
+            ),
+        },
+    )
+
+    def value(selector):
+        return _extract_selector(
+            output,
+            QuantitySelectorV1(quantity_id=selector, selector=selector),
+            "artifact:spin#" + "a" * 64,
+        ).value
+
+    assert value("spin_square") == pytest.approx(0.80)
+    assert value("spin_square_target") == pytest.approx(0.75)
+    assert value("spin_square_deviation") == pytest.approx(0.05)
+    assert value("effective_multiplicity") == pytest.approx(
+        (1.0 + 4.0 * 0.80) ** 0.5
+    )
+
+
+def test_pyscf_connectivity_uses_the_structured_final_geometry():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.analysis.result_quantities import _extract_selector
+    from chemsmart.io.molecules.structure import Molecule
+
+    molecule = Molecule(
+        symbols=["H", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [0.7, 0.0, 0.0], [3.0, 0.0, 0.0]]
+        ),
+    )
+    output = SimpleNamespace(
+        positions=molecule.positions,
+        symbols=molecule.chemical_symbols,
+        get_molecule=lambda: molecule,
+    )
+    quantity = _extract_selector(
+        output,
+        QuantitySelectorV1(quantity_id="graph", selector="connectivity"),
+        "artifact:geometry#" + "a" * 64,
+    )
+    assert quantity.value == (
+        (0.0, 1.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+    )
+
+
+def test_irc_trajectory_selectors_report_observed_endpoint_topology():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.io.molecules.structure import Molecule
+
+    start = Molecule(
+        symbols=["H", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [0.7, 0.0, 0.0], [3.0, 0.0, 0.0]]
+        ),
+    )
+    end = Molecule(
+        symbols=["H", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [3.7, 0.0, 0.0]]
+        ),
+    )
+    output = SimpleNamespace(jobtype="ircf", all_structures=[start, end])
+    reader = reader_for("gaussian")
+
+    assert reader.read(output, "trajectory_frame_count") == (2, "")
+    assert reader.read(output, "irc_direction") == ("forward", "")
+    assert reader.read(output, "trajectory_connectivity_changed") == (1, "")
+    start_graph, _ = reader.read(output, "trajectory_start_connectivity")
+    end_graph, _ = reader.read(output, "trajectory_end_connectivity")
+    assert start_graph != end_graph
+
+    orca = SimpleNamespace(
+        jobtype="irc",
+        contents=["|  7>   Direction both"],
+        all_structures=[start, end],
+    )
+    assert reader_for("orca").read(orca, "irc_direction") == ("both", "")
+    orca.contents = []
+    with pytest.raises(MissingQuantityError, match="explicitly establish"):
+        reader_for("orca").read(orca, "irc_direction")
+
+
+def test_multiframe_xyz_sidecar_exposes_trajectory_without_inferred_direction(
+    tmp_path,
+):
+    trajectory = tmp_path / "reaction_IRC_Full_trj.xyz"
+    trajectory.write_text(
+        "3\nframe 1\n"
+        "H 0.0 0.0 0.0\nH 0.7 0.0 0.0\nH 3.0 0.0 0.0\n"
+        "3\nframe 2\n"
+        "H 0.0 0.0 0.0\nH 3.0 0.0 0.0\nH 3.7 0.0 0.0\n",
+        encoding="utf-8",
+    )
+    frame_count = _extract(
+        trajectory, "xyz", "trajectory_frame_count", "frames"
+    ).quantities[0]
+    changed = _extract(
+        trajectory,
+        "xyz",
+        "trajectory_connectivity_changed",
+        "changed",
+    ).quantities[0]
+    assert frame_count.value == 2
+    assert changed.value == 1
+    with pytest.raises(ValueError, match="does not provide"):
+        reader_for("xyz").read(
+            reader_for("xyz").open_output(trajectory), "irc_direction"
+        )
+
+
+def test_connectivity_difference_count_matches_endpoints_by_atom_order():
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionError,
+        QuantityExpressionNodeV1,
+        QuantityExpressionRequestV1,
+        evaluate_quantity_expression,
+    )
+    from chemsmart.analysis.result_quantities import (
+        DIMENSIONLESS,
+        make_quantity_value,
+    )
+
+    def numeric(quantity_id, value):
+        return make_quantity_value(
+            quantity_id=quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=f"receipt:{'a' * 64};quantity:{quantity_id}",
+        )
+
+    def symbols(quantity_id, value):
+        return make_quantity_value(
+            quantity_id=quantity_id,
+            source_value=value,
+            source_unit="",
+            value=value,
+            unit="",
+            dimension=DIMENSIONLESS,
+            evidence_ref=f"receipt:{'b' * 64};quantity:{quantity_id}",
+            data_kind="text_vector",
+        )
+
+    first = numeric("first-graph", ((0, 1, 0), (1, 0, 0), (0, 0, 0)))
+    second = numeric("second-graph", ((0, 0, 0), (0, 0, 1), (0, 1, 0)))
+    first_symbols = symbols("first-symbols", ("C", "O", "H"))
+    second_symbols = symbols("second-symbols", ("C", "O", "H"))
+
+    def evaluate(inputs):
+        return evaluate_quantity_expression(
+            QuantityExpressionRequestV1(
+                schema_version="chemsmart.quantity-expression-request.v1",
+                expression_id="compare-endpoints",
+                inputs=inputs,
+                nodes=(
+                    QuantityExpressionNodeV1(
+                        node_id="changed-edges",
+                        operation="connectivity_difference_count",
+                        input_ids=tuple(item.quantity_id for item in inputs),
+                    ),
+                ),
+                output_node_ids=("changed-edges",),
+            )
+        )
+
+    receipt = evaluate((first, first_symbols, second, second_symbols))
+    assert receipt.outputs[0].value == 2
+    assert receipt.outputs[0].unit == "1"
+
+    reordered = symbols("second-symbols", ("C", "H", "O"))
+    with pytest.raises(
+        QuantityExpressionError, match="identity or atom order"
+    ):
+        evaluate((first, first_symbols, second, reordered))
+
+    asymmetric = numeric("first-graph", ((0, 1, 0), (0, 0, 0), (0, 0, 0)))
+    with pytest.raises(QuantityExpressionError, match="must be symmetric"):
+        evaluate((asymmetric, first_symbols, second, second_symbols))
+
+    smaller = numeric("second-graph", ((0, 1), (1, 0)))
+    smaller_symbols = symbols("second-symbols", ("C", "O"))
+    with pytest.raises(QuantityExpressionError, match="different atom counts"):
+        evaluate((first, first_symbols, smaller, smaller_symbols))

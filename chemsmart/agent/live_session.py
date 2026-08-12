@@ -18,6 +18,7 @@ import inspect
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import uuid
@@ -41,7 +42,7 @@ from chemsmart.agent.adaptive_api_campaign import (
     AdaptiveNetworkBudgetV1,
 )
 from chemsmart.agent.analysis_completion import load_analysis_completion_policy
-from chemsmart.agent.api_access import load_secret_lease
+from chemsmart.agent.api_access import DEFAULT_KEY_LABELS, load_secret_lease
 from chemsmart.agent.bootstrap import (
     bootstrap_program_conformance,
     probe_python_compute_environment,
@@ -58,6 +59,7 @@ from chemsmart.agent.cli_schema import (
     LiveClickSchemaV1,
     build_live_click_schema,
 )
+from chemsmart.agent.commands import build_scientific_identity_binding
 from chemsmart.agent.dependency_context import (
     ContextSelectionReceiptV1,
     TaskDependencyContextV1,
@@ -73,6 +75,10 @@ from chemsmart.agent.execution import (
     WorkflowExecutionApprovalV1,
     build_execution_resource_spec,
 )
+from chemsmart.agent.execution_envelope import (
+    BoundedExecutionEnvelopeV1,
+    load_bounded_execution_envelope,
+)
 from chemsmart.agent.experiments.host_oracle import (
     HostOracleInputBundleV1,
     build_host_oracle_input_bundle,
@@ -84,6 +90,7 @@ from chemsmart.agent.experiments.qwen_pyscf_dfc import (
     build_qwen_experiment_preparation,
 )
 from chemsmart.agent.identity import (
+    ApprovedMolecularInputV1,
     ApprovedMolecularIdentityV1,
     validate_identity_for_geometry,
 )
@@ -643,6 +650,7 @@ def run_live_agent_session(
     workspace: str | Path,
     execution_enabled: bool,
     approval_file: str | Path | None,
+    execution_envelope_file: str | Path | None = None,
     analysis_completion_file: str | Path | None = None,
     experiment_arm: QwenDfcArmV1 | None = None,
     experiment_case: QwenPyscfCaseSpecV1 | None = None,
@@ -650,6 +658,7 @@ def run_live_agent_session(
     experiment_config: HarnessExperimentConfigV1 | None = None,
     approved_molecular_identity: ApprovedMolecularIdentityV1 | None = None,
     approved_molecular_identities: Iterable[ApprovedMolecularIdentityV1] = (),
+    approved_molecular_inputs: Iterable[ApprovedMolecularInputV1] = (),
     campaign_preparation_snapshot: (
         CampaignPreparationHostSnapshotV1 | None
     ) = None,
@@ -715,6 +724,19 @@ def run_live_agent_session(
     task = str(task).strip()
     if not task:
         raise ContractError("live agent task must not be empty")
+    if approval_file is not None and execution_envelope_file is not None:
+        raise ContractError(
+            "approval_file and execution_envelope_file are mutually exclusive"
+        )
+    bounded_envelope = (
+        load_bounded_execution_envelope(execution_envelope_file)
+        if execution_envelope_file is not None
+        else None
+    )
+    if execution_enabled != bool(approval_file or bounded_envelope):
+        raise ContractError(
+            "execution_enabled must match an approval file or bounded envelope"
+        )
     if experiment_arm is not None and experiment_case is not None:
         _validate_experiment_request(
             task=task,
@@ -728,8 +750,23 @@ def run_live_agent_session(
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
     result_observations = _scan_result_artifacts(workspace_path)
-    identities = _coerce_approved_identities(
-        approved_molecular_identity, approved_molecular_identities
+    molecular_inputs = _coerce_approved_molecular_inputs(
+        approved_molecular_inputs
+    )
+    direct_identities = tuple(approved_molecular_identities)
+    if molecular_inputs and (
+        approved_molecular_identity is not None or direct_identities
+    ):
+        raise ContractError(
+            "use approved molecular inputs or direct molecular identities, "
+            "not both"
+        )
+    identities = (
+        tuple(item.molecular_identity for item in molecular_inputs)
+        if molecular_inputs
+        else _coerce_approved_identities(
+            approved_molecular_identity, direct_identities
+        )
     )
     identity_records = _validated_identity_records(observations, identities)
     task_spec_sha256 = _task_spec_sha256(
@@ -737,6 +774,12 @@ def run_live_agent_session(
         observations,
         identities,
         result_observations=result_observations,
+        approved_molecular_inputs=molecular_inputs,
+    )
+    prebound_scientific_identities = _approved_input_state_bindings(
+        molecular_inputs,
+        observations=observations,
+        task_spec_sha256=task_spec_sha256,
     )
     analysis_completion_policy = (
         load_analysis_completion_policy(
@@ -825,7 +868,9 @@ def run_live_agent_session(
 
     execution_profile_ready = _execution_composition_available()
     use_execution_surface = bool(
-        execution_enabled and approval_file and execution_profile_ready
+        execution_enabled
+        and (approval_file is not None or bounded_envelope is not None)
+        and execution_profile_ready
     )
     approved_project_records: tuple[dict[str, Any], ...] = ()
     approved_workflow_record: dict[str, Any] = {}
@@ -859,6 +904,7 @@ def run_live_agent_session(
         "approved_molecular_identities": (
             {identity.identity_sha256: identity for identity in identities}
         ),
+        "scientific_identities": prebound_scientific_identities,
         # Preview candidates stay inside this session's private workspace.
         # The execution composition below replaces this with the exact
         # user-approved workflow workspace.
@@ -875,7 +921,7 @@ def run_live_agent_session(
             dependency_context_selection_receipt
         ),
     }
-    if use_execution_surface:
+    if use_execution_surface and approval_file is not None:
         execution_inputs = _execution_composition_inputs(
             host_type=CommandCompiledToolHostV1,
             workspace=workspace_path,
@@ -922,6 +968,33 @@ def run_live_agent_session(
             for item in approved_projects
         )
         host_kwargs.update(execution_inputs)
+    elif use_execution_surface and bounded_envelope is not None:
+        _validate_bounded_envelope_against_registry(
+            bounded_envelope, registry=registry
+        )
+        host_kwargs.update(
+            _bounded_execution_composition_inputs(
+                workspace=workspace_path,
+                run_directory=run_directory,
+                envelope=bounded_envelope,
+            )
+        )
+        approved_workflow_record = {
+            "authorization_mode": "bounded_continuous",
+            "operating_bounds": bounded_envelope.public_record(),
+        }
+    if use_execution_surface:
+        provider_secret_labels = {
+            profile.api_key_env,
+            *(
+                label
+                for labels in DEFAULT_KEY_LABELS.values()
+                for label in labels
+            ),
+        }
+        host_kwargs["execution_environment_remove"] = tuple(
+            sorted(provider_secret_labels)
+        )
     host = CommandCompiledToolHostV1(**host_kwargs)
 
     context = _public_context(
@@ -951,6 +1024,9 @@ def run_live_agent_session(
             else None
         ),
         approved_identity_records=identity_records,
+        approved_input_records=tuple(
+            item.public_record() for item in molecular_inputs
+        ),
         analysis_completion_record=(
             analysis_completion_policy.public_record()
             if analysis_completion_policy is not None
@@ -1048,6 +1124,11 @@ def run_live_agent_session(
         max_concurrency=(
             experiment_arm.max_concurrency if experiment_arm is not None else 1
         ),
+        wall_time_seconds=(
+            bounded_envelope.episode_wall_time_seconds
+            if bounded_envelope is not None
+            else _SESSION_WALL_TIME_SECONDS
+        ),
     )
     hypothesis = _hypothesis(
         session_id=session_id,
@@ -1076,6 +1157,18 @@ def run_live_agent_session(
         tool_schema_sha256=surface.tool_schema_sha256,
         execution_enabled=use_execution_surface,
         provider_profile=profile,
+        wall_time_seconds=(
+            bounded_envelope.episode_wall_time_seconds
+            if bounded_envelope is not None
+            else _SESSION_WALL_TIME_SECONDS
+        ),
+        chemistry_engine_calls=(
+            bounded_envelope.max_engine_calls
+            if bounded_envelope is not None
+            else 4
+            if use_execution_surface
+            else 0
+        ),
     )
     lease = load_secret_lease(
         provider=normalized_provider,
@@ -1084,7 +1177,12 @@ def run_live_agent_session(
         # one here is how a second key for the same provider gets charged by
         # accident.
         label=profile.api_key_env,
-        ttl_seconds=_SESSION_WALL_TIME_SECONDS + 60,
+        ttl_seconds=(
+            bounded_envelope.episode_wall_time_seconds
+            if bounded_envelope is not None
+            else _SESSION_WALL_TIME_SECONDS
+        )
+        + 60,
     )
     loop_result = UnifiedSessionRunner(
         host=host,
@@ -1172,7 +1270,11 @@ def run_live_agent_session(
         )
 
     execution_status = (
-        "approved_profile_active"
+        (
+            "bounded_profile_active"
+            if bounded_envelope is not None
+            else "approved_profile_active"
+        )
         if use_execution_surface
         else (
             "not_requested"
@@ -1513,9 +1615,11 @@ def _require_exact_experiment_config(
         "wall_time_seconds",
         "config_sha256",
     )
-    for field in fields:
-        if getattr(frozen, field) != getattr(observed, field):
-            raise ContractError(f"frozen experiment config mismatch: {field}")
+    for field_name in fields:
+        if getattr(frozen, field_name) != getattr(observed, field_name):
+            raise ContractError(
+                f"frozen experiment config mismatch: {field_name}"
+            )
 
 
 def _bind_preparation_observation(
@@ -1869,7 +1973,9 @@ def _scan_xtb_result_artifacts(
                 continue
             artifacts = receipt["artifacts"]
             output_names = tuple(
-                sorted(name for name in artifacts if str(name).endswith(".out"))
+                sorted(
+                    name for name in artifacts if str(name).endswith(".out")
+                )
             )
             if len(output_names) != 1:
                 continue
@@ -1908,10 +2014,16 @@ def _scan_xtb_result_artifacts(
                     engine="cpu",
                     charge=charge,
                     multiplicity=multiplicity,
-                    project_yaml_sha256=str(project_record.get("sha256") or ""),
-                    input_artifact_sha256=str(source_record.get("sha256") or ""),
+                    project_yaml_sha256=str(
+                        project_record.get("sha256") or ""
+                    ),
+                    input_artifact_sha256=str(
+                        source_record.get("sha256") or ""
+                    ),
                     validation_receipt_sha256=validation_receipt_sha256,
-                    scientific_validation_state=str(receipt["validation_state"]),
+                    scientific_validation_state=str(
+                        receipt["validation_state"]
+                    ),
                 ),
             )
         except (
@@ -1925,7 +2037,9 @@ def _scan_xtb_result_artifacts(
         ):
             continue
     return tuple(
-        sorted(observations.values(), key=lambda item: item.artifact.artifact_id)
+        sorted(
+            observations.values(), key=lambda item: item.artifact.artifact_id
+        )
     )
 
 
@@ -2013,7 +2127,9 @@ def _scan_orca_result_artifacts(
             ),
         )
     return tuple(
-        sorted(observations.values(), key=lambda item: item.artifact.artifact_id)
+        sorted(
+            observations.values(), key=lambda item: item.artifact.artifact_id
+        )
     )
 
 
@@ -2069,6 +2185,7 @@ def _task_spec_sha256(
     ) = None,
     *,
     result_observations: Iterable[_ResultObservation] = (),
+    approved_molecular_inputs: Iterable[ApprovedMolecularInputV1] = (),
 ) -> str:
     identities = _coerce_approved_identities(
         (
@@ -2118,7 +2235,62 @@ def _task_spec_sha256(
         body["approved_molecular_identity_sha256s"] = tuple(
             identity.identity_sha256 for identity in identities
         )
+    molecular_inputs = _coerce_approved_molecular_inputs(
+        approved_molecular_inputs
+    )
+    if molecular_inputs:
+        body["approved_molecular_input_sha256s"] = tuple(
+            item.assignment_sha256 for item in molecular_inputs
+        )
     return canonical_sha256(body)
+
+
+def _coerce_approved_molecular_inputs(
+    values: Iterable[ApprovedMolecularInputV1],
+) -> tuple[ApprovedMolecularInputV1, ...]:
+    approved = tuple(values)
+    if any(
+        not isinstance(item, ApprovedMolecularInputV1) for item in approved
+    ):
+        raise ContractError("approved molecular inputs must be typed records")
+    input_ids = tuple(item.input_id for item in approved)
+    assignment_sha256s = tuple(item.assignment_sha256 for item in approved)
+    if len(input_ids) != len(set(input_ids)) or len(assignment_sha256s) != len(
+        set(assignment_sha256s)
+    ):
+        raise ContractError("approved molecular inputs must be unique")
+    return tuple(sorted(approved, key=lambda item: item.input_id))
+
+
+def _approved_input_state_bindings(
+    molecular_inputs: tuple[ApprovedMolecularInputV1, ...],
+    *,
+    observations: tuple[_XyzObservation, ...],
+    task_spec_sha256: str,
+) -> dict[str, Any]:
+    """Prebind only states explicitly approved for exact input bytes."""
+
+    observations_by_sha256 = {
+        item.artifact.sha256: item for item in observations
+    }
+    bindings = {}
+    for molecular_input in molecular_inputs:
+        observation = observations_by_sha256.get(
+            molecular_input.molecular_identity.geometry_sha256
+        )
+        if observation is None:
+            raise ContractError(
+                f"approved molecular input {molecular_input.input_id!r} has no "
+                "matching coordinate artifact"
+            )
+        binding = build_scientific_identity_binding(
+            task_spec_sha256=task_spec_sha256,
+            geometry_artifact=observation.artifact,
+            charge=molecular_input.charge,
+            multiplicity=molecular_input.multiplicity,
+        )
+        bindings[binding.binding_sha256] = binding
+    return bindings
 
 
 def _coerce_approved_identities(
@@ -2253,7 +2425,7 @@ def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
 #: scientific settings that a user supplies in a normal project YAML; the
 #: conformance preview must exercise that canonical path rather than rely on
 #: hidden command-specific defaults.
-_ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"neb", "td"})
+_ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"link", "neb", "td"})
 
 
 def _conformance_project_sections(
@@ -2283,12 +2455,19 @@ def _conformance_project_sections(
                         "nimages": 2,
                         "preopt_ends": False,
                     }
+                elif stage == "link":
+                    sections[stage] = {
+                        **common,
+                        "freq": False,
+                        "guess": "mix",
+                        "jobtype": "opt",
+                        "stable": "opt",
+                    }
                 elif stage == "td":
                     sections[stage] = {
                         **common,
-                        "response_method": "tda",
                         "nstates": 3,
-                        "state_manifold": "singlet",
+                        "states": "singlets",
                     }
         return sections
     return None
@@ -2589,6 +2768,42 @@ def _declared_server_programs() -> tuple[tuple[str, str], ...]:
     return tuple(sorted(set(rows)))
 
 
+def _active_server_program_blocks() -> dict[str, dict[str, Any]]:
+    """Read complete program blocks from the active user server YAML.
+
+    Bounded real execution must retain ORCA MPI and Gaussian environment
+    setup, not reduce an installed program to its executable directory.
+    Scheduler keys remain host-owned and are deliberately excluded.
+    """
+
+    from chemsmart.io.yaml import YAMLFile
+    from chemsmart.settings.user import CHEMSMARTUserSettings
+
+    settings = CHEMSMARTUserSettings()
+    available = list(settings.all_available_servers or ())
+    preferred = os.environ.get("CHEMSMART_AGENT_SERVER") or "local"
+    name = (
+        preferred
+        if preferred in available
+        else (available[0] if available else "")
+    )
+    if not name:
+        return {}
+    path = Path(settings.user_server_dir) / f"{name}.yaml"
+    if not path.is_file() or path.is_symlink():
+        return {}
+    try:
+        content = YAMLFile(filename=str(path)).yaml_contents_dict
+    except Exception as exc:
+        raise ContractError("active ChemSmart server YAML is invalid") from exc
+    return {
+        str(key).upper(): dict(value)
+        for key, value in (content or {}).items()
+        if str(key).upper() not in _NON_PROGRAM_SERVER_KEYS
+        and isinstance(value, dict)
+    }
+
+
 def _preview_server_profile() -> str:
     """Scheduler-shaped profile for non-submitting run/sub conformance."""
 
@@ -2608,8 +2823,47 @@ def _preview_server_profile() -> str:
     )
 
 
-def _local_program_server_blocks() -> str:
+def _local_program_server_blocks(
+    *, preserve_active: bool = False, scratch_root: Path | None = None
+) -> str:
     """Return the installed-program blocks shared by preview and execution."""
+
+    if preserve_active:
+        active = _active_server_program_blocks()
+        pyscf = active.setdefault("PYSCF", {})
+        pyscf["EXEFOLDER"] = str(_PYSCF_INTERPRETER.parent)
+        pyscf.setdefault("LOCAL_RUN", True)
+        pyscf.setdefault("SCRATCH", False)
+        xtb = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which("xtb")
+        if xtb:
+            block = active.setdefault("XTB", {})
+            block["EXEFOLDER"] = str(Path(xtb).expanduser().parent)
+            block.setdefault("LOCAL_RUN", True)
+        if scratch_root is not None:
+            scratch_assignment = re.compile(
+                r"^\s*export\s+(?:SCRATCH|GAUSS_SCRDIR)\s*="
+            )
+            for program, block in active.items():
+                raw_envars = str(block.get("ENVARS") or "")
+                lines = tuple(
+                    line
+                    for line in raw_envars.splitlines()
+                    if not scratch_assignment.match(line)
+                )
+                if program == "GAUSSIAN":
+                    lines = (
+                        *lines,
+                        f"export GAUSS_SCRDIR={scratch_root}",
+                    )
+                if lines:
+                    block["ENVARS"] = "\n".join(lines) + "\n"
+                else:
+                    block.pop("ENVARS", None)
+        # Safe dumping preserves multiline ENVARS/MODULES/SCRIPTS/CONDA_ENV
+        # as data and never evaluates them in this controller.
+        import yaml
+
+        return yaml.safe_dump(active, sort_keys=True)
 
     declared = dict(_declared_server_programs())
     xtb = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which("xtb")
@@ -2844,6 +3098,7 @@ def _public_context(
     provider_record: Mapping[str, Any] | None = None,
     experiment_record: Mapping[str, Any] | None = None,
     approved_identity_records: tuple[dict[str, Any], ...] = (),
+    approved_input_records: tuple[dict[str, Any], ...] = (),
     analysis_completion_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     public_workflow = dict(approved_workflow_record or {})
@@ -2858,6 +3113,7 @@ def _public_context(
             for item in (*observations, *result_observations)
         ),
         "approved_molecular_identities": approved_identity_records,
+        "approved_molecular_inputs": approved_input_records,
         "approved_project_artifacts": approved_project_records,
         "approved_workflow": public_workflow,
         "provider": dict(provider_record or {}),
@@ -3025,6 +3281,15 @@ def _approved_execution_context(
 ) -> dict[str, Any]:
     """Describe execution mechanics without inventing scientific settings."""
 
+    if public_workflow.get("authorization_mode") == "bounded_continuous":
+        return {
+            "authorization_mode": "bounded_continuous",
+            "scientific_settings_authority": "task_and_project_yaml",
+            "producer_input_policy": "validated_exact_data_edge_only",
+            "operating_bounds": dict(
+                public_workflow.get("operating_bounds") or {}
+            ),
+        }
     nodes = tuple(public_workflow.get("nodes", ()))
     if not nodes:
         return {}
@@ -3068,8 +3333,22 @@ def _system_prompt(
     skill_index: tuple[str, ...] = (),
 ) -> str:
     execution_available = bool(approved_workflow)
+    bounded_execution = bool(
+        approved_workflow
+        and approved_workflow.get("authorization_mode") == "bounded_continuous"
+    )
     execution_sentence = (
-        "Execution is exposed only as execute_approved_program_node(node_id). "
+        "Execution is exposed as execute_approved_program_node(node_id) under "
+        "science-free operating bounds. First express the complete scientific "
+        "DAG through the normal workflow tools. Validate projects and obtain a "
+        "green preview/preflight for every initial calculation node before the "
+        "first execution request. The host then freezes only that current "
+        "ChemSmart plan and its exact evidence; it refuses programs, engines, "
+        "resources, dependencies, or calls outside operating_bounds. Execute "
+        "producer nodes before their consumers and use only validated returned "
+        "handoffs. Continue parsing and postprocessing in this same conversation."
+        if bounded_execution
+        else "Execution is exposed only as execute_approved_program_node(node_id). "
         "Use the exact approved_workflow node IDs and listed order, and stop on "
         "any red result. When an approved producer edge exists, execute its "
         "producer first; after validation, consume the returned produced_handoffs "
@@ -3156,7 +3435,10 @@ def _system_prompt(
         "decision. File names, "
         "XYZ comments, element lists, project settings, and preview artifacts do "
         "not establish molecular identity. An approved molecular identity never "
-        "establishes charge or multiplicity. "
+        "establishes charge or multiplicity. A public approved_molecular_input "
+        "record separately establishes its stated geometry_role, charge, and "
+        "multiplicity only for the exact geometry_sha256 it names. The host has "
+        "already bound that declared state; do not infer another initial state. "
         "Preserve explicit scientific dependencies, but do not convert a "
         "presentation sequence into a control edge. SP(initial geometry) and "
         "OPT(initial geometry) are siblings unless the request supplies a separate "
@@ -3248,6 +3530,7 @@ def _network_budget(
     provider_profile: AgentProviderProfileV1,
     *,
     max_concurrency: int = 1,
+    wall_time_seconds: float = _SESSION_WALL_TIME_SECONDS,
 ) -> AdaptiveNetworkBudgetV1:
     body = {
         "schema_version": "chemsmart.adaptive-network-budget.v1",
@@ -3257,7 +3540,7 @@ def _network_budget(
         "max_concurrency": int(max_concurrency),
         "max_input_tokens_per_request": provider_profile.context_tokens,
         "max_output_tokens_per_request": provider_profile.max_output_tokens,
-        "task_wall_time_seconds": float(_SESSION_WALL_TIME_SECONDS),
+        "task_wall_time_seconds": float(wall_time_seconds),
         "quota_scope": "current_user_account",
         "top_up_allowed": False,
         "engine_calls": 0,
@@ -3392,13 +3675,20 @@ def _task_envelope(
     tool_schema_sha256: str,
     execution_enabled: bool,
     provider_profile: AgentProviderProfileV1,
+    wall_time_seconds: float = _SESSION_WALL_TIME_SECONDS,
+    chemistry_engine_calls: int | None = None,
 ) -> TaskEnvelopeV1:
+    engine_calls = (
+        int(chemistry_engine_calls)
+        if chemistry_engine_calls is not None
+        else (4 if execution_enabled else 0)
+    )
     resource = ResourceBudgetV1(
         max_input_tokens_per_request=provider_profile.context_tokens,
         max_output_tokens_per_request=provider_profile.max_output_tokens,
         max_tool_calls=_MAX_TOOL_CALLS,
-        wall_time_seconds=float(_SESSION_WALL_TIME_SECONDS),
-        chemistry_engine_calls=4 if execution_enabled else 0,
+        wall_time_seconds=float(wall_time_seconds),
+        chemistry_engine_calls=engine_calls,
         hpc_calls=0,
     )
     body = {
@@ -3425,6 +3715,91 @@ def _execution_composition_available() -> bool:
         "execution_environment",
     }
     return required.issubset(parameters)
+
+
+def _validate_bounded_envelope_against_registry(
+    envelope: BoundedExecutionEnvelopeV1,
+    *,
+    registry: ProgramCapabilityRegistryV1,
+) -> None:
+    """Reject an allowlist that the installed ChemSmart cannot represent."""
+
+    result_validators = {"gaussian", "orca", "pyscf", "xtb"}
+    for program, engines in envelope.allowed_program_engines:
+        capability = registry.get(program)
+        if capability is None:
+            raise ContractError(
+                f"bounded execution allows unknown program {program!r}"
+            )
+        unknown = sorted(set(engines).difference(capability.engines))
+        if unknown:
+            raise ContractError(
+                f"bounded execution allows unsupported {program} engine(s): "
+                + ", ".join(unknown)
+            )
+        if program not in result_validators:
+            raise ContractError(
+                "bounded continuous execution lacks a result validator for "
+                f"program {program!r}"
+            )
+        executable_engines = {
+            engine
+            for engine, _jobtype in capability.execution_engine_job_pairs
+        }
+        unavailable = sorted(set(engines).difference(executable_engines))
+        if unavailable:
+            raise ContractError(
+                f"bounded execution has no executable jobs for {program} "
+                "engine(s): " + ", ".join(unavailable)
+            )
+
+
+def _bounded_execution_composition_inputs(
+    *,
+    workspace: Path,
+    run_directory: Path,
+    envelope: BoundedExecutionEnvelopeV1,
+) -> dict[str, Any]:
+    """Compose a deferred execution host from user-owned operating bounds."""
+
+    requested_scratch_root = Path(envelope.scratch_root)
+    if requested_scratch_root.is_symlink():
+        raise ContractError(
+            "bounded execution scratch root cannot be a symlink"
+        )
+    scratch_root = requested_scratch_root.resolve()
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    server_profile = _write_execution_server_profile(
+        run_directory,
+        envelope.resources,
+        scratch_root=scratch_root,
+    )
+    path_value = os.environ.get("PATH", "")
+    xtb_executable = os.environ.get(
+        "CHEMSMART_XTB_EXECUTABLE"
+    ) or shutil.which("xtb")
+    executable_directory = (
+        str(Path(xtb_executable).expanduser().parent) if xtb_executable else ""
+    )
+    environment = {
+        "PATH": (
+            path_value
+            if not executable_directory
+            else (
+                executable_directory
+                if not path_value
+                else executable_directory + os.pathsep + path_value
+            )
+        ),
+        "PYTHONNOUSERSITE": "1",
+    }
+    return {
+        "approved_workspace": workspace,
+        "execution_resources": envelope.resources,
+        "execution_server": str(server_profile),
+        "execution_environment": environment,
+        "bounded_execution_envelope": envelope,
+    }
 
 
 def _execution_composition_inputs(
@@ -3694,9 +4069,18 @@ def _public_workflow_approval(
     """
 
     if approved_plan is not None:
+        public_plan = canonical_data(approved_plan)
+        for node in public_plan["nodes"]:
+            if node.get("charge") is None:
+                # The model-facing schema accepts an omitted optional state,
+                # not JSON null.  The plan digest projection likewise omits
+                # both fields when absent, so this remains an exact and
+                # sufficient reproduction of a legacy/inherited-state node.
+                node.pop("charge", None)
+                node.pop("multiplicity", None)
         return {
             **_public_workflow_approval(approval),
-            "approved_scientific_plan": canonical_data(approved_plan),
+            "approved_scientific_plan": public_plan,
             "approved_plan_sha256": approved_plan.plan_sha256,
             "plan_reproduction_rule": (
                 "plan_scientific_workflow must reproduce "
@@ -3828,20 +4212,30 @@ def _parse_execution_resources(value: Any) -> ExecutionResourceSpecV1:
 def _write_execution_server_profile(
     run_directory: Path,
     resources: ExecutionResourceSpecV1,
+    *,
+    scratch_root: Path | None = None,
 ) -> Path:
     """Write the local CPU profile from the user-approved allocation."""
 
     profile = run_directory / "execution-server.yaml"
+    num_hours = max(1, math.ceil(resources.node_timeout_seconds / 3600))
     text = (
         "SERVER:\n"
         "  SCHEDULER: null\n"
-        "  NUM_HOURS: 2\n"
+        f"  NUM_HOURS: {num_hours}\n"
         f"  MEM_GB: {resources.memory_gb:g}\n"
         f"  NUM_CORES: {resources.cores}\n"
         f"  NUM_GPUS: {resources.gpu_count}\n"
         f"  NUM_THREADS: {resources.cores}\n"
-        "  SCRATCH_DIR: null\n"
-        + _local_program_server_blocks()
+        + (
+            f"  SCRATCH_DIR: {str(scratch_root)!r}\n"
+            if scratch_root is not None
+            else "  SCRATCH_DIR: null\n"
+        )
+        + _local_program_server_blocks(
+            preserve_active=scratch_root is not None,
+            scratch_root=scratch_root,
+        )
     )
     _write_private_exact(profile, text.encode("utf-8"))
     return profile

@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.gaussian.settings import (
     GaussianIRCJobSettings,
     GaussianJobSettings,
+    GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
@@ -310,6 +311,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         modred_settings,
         ts_settings,
         irc_settings,
+        link_settings,
         scan_settings,
         nci_settings,
         sp_settings,
@@ -335,6 +337,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._modred_settings = modred_settings
         self._ts_settings = ts_settings
         self._irc_settings = irc_settings
+        self._link_settings = link_settings
         self._scan_settings = scan_settings
         self._nci_settings = nci_settings
         self._sp_settings = sp_settings
@@ -371,6 +374,16 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
             self._irc_settings,
             program="gaussian",
             jobtype="irc",
+            project=self,
+        )
+
+    def link_settings(self):
+        """Return the project-owned two-step Gaussian link workflow."""
+
+        return require_jobtype_settings(
+            self._link_settings,
+            program="gaussian",
+            jobtype="link",
             project=self,
         )
 
@@ -464,6 +477,7 @@ class YamlGaussianProjectSettingsBuilder:
         modred_settings = self._project_settings_for_job(jobtype="modred")
         ts_settings = self._project_settings_for_job(jobtype="ts")
         irc_settings = self._project_settings_for_job(jobtype="irc")
+        link_settings = self._project_settings_for_job(jobtype="link")
         scan_settings = self._project_settings_for_job(jobtype="scan")
         nci_settings = self._project_settings_for_job(jobtype="nci")
         sp_settings = self._project_settings_for_job(jobtype="sp")
@@ -477,6 +491,7 @@ class YamlGaussianProjectSettingsBuilder:
             modred_settings=modred_settings,
             ts_settings=ts_settings,
             irc_settings=irc_settings,
+            link_settings=link_settings,
             scan_settings=scan_settings,
             nci_settings=nci_settings,
             sp_settings=sp_settings,
@@ -521,6 +536,7 @@ class YamlGaussianProjectSettingsBuilder:
         # Map job types to their specific settings classes
         settings_mapping = {
             "irc": GaussianIRCJobSettings,
+            "link": GaussianLinkJobSettings,
             "td": GaussianTDDFTJobSettings,
             "qmmm": GaussianQMMMJobSettings,
         }

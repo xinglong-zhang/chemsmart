@@ -20,12 +20,9 @@ from chemsmart.utils.repattern import (
     basis_shell_header_pattern,
     ecp_center_header_pattern,
     ecp_term_pattern,
-    eV_pattern,
-    f_pattern,
     float_pattern,
     frozen_coordinates_pattern,
     mp2_energy_pattern,
-    nm_pattern,
     normal_mode_pattern,
     oniom_energy_pattern,
     oniom_gridpoint_pattern,
@@ -647,7 +644,13 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to drop the first item across all arrays (when present)
         def drop_first():
-            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
+            nonlocal \
+                orientations, \
+                orientations_pbc, \
+                energies, \
+                forces, \
+                rot_consts, \
+                point_groups
             if orientations:
                 orientations = orientations[1:]
             if orientations_pbc:
@@ -665,7 +668,13 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
-            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
+            nonlocal \
+                orientations, \
+                orientations_pbc, \
+                energies, \
+                forces, \
+                rot_consts, \
+                point_groups
             orientations = orientations[-1:] if orientations else []
             orientations_pbc = (
                 orientations_pbc[-1:] if orientations_pbc else []
@@ -682,7 +691,13 @@ class Gaussian16Output(GaussianFileMixin):
         # Right-trim auxiliaries to the number of
         # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
-            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
+            nonlocal \
+                orientations, \
+                orientations_pbc, \
+                energies, \
+                forces, \
+                rot_consts, \
+                point_groups
             n = len(orientations)
             if orientations_pbc and len(orientations_pbc) > n:
                 orientations_pbc = orientations_pbc[:n]
@@ -949,7 +964,6 @@ class Gaussian16Output(GaussianFileMixin):
                     "The following ModRedundant input section has been read:"
                 ):
                     for j_line in self.contents[i + 1 :]:
-
                         if len(j_line) == 0:
                             break
                         modredundant_group.append(j_line)
@@ -1846,6 +1860,72 @@ class Gaussian16Output(GaussianFileMixin):
         return standard_orientations, standard_orientations_pbc
 
     @cached_property
+    def excited_state_records(self):
+        """Return source-labelled Gaussian excited states in file order.
+
+        Gaussian writes the spin label on each ``Excited State`` line for a
+        closed-shell TD calculation (for example ``Singlet-A`` or
+        ``Triplet-A``).  Open-shell response calculations can instead print
+        labels such as ``2.316-A``; those labels do *not* establish a spin
+        multiplicity and are deliberately reported as unresolved rather than
+        inferred from ``<S**2>``.
+        """
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+        pattern = re.compile(
+            rf"^Excited State\s+(\d+):\s+(\S+)\s+({number})\s+eV\s+"
+            rf"({number})\s+nm(?:\s+f=({number}))?"
+            rf"(?:\s+<S\*\*2>=({number}))?",
+            re.IGNORECASE,
+        )
+        multiplicities = {
+            "singlet": 1,
+            "doublet": 2,
+            "triplet": 3,
+            "quartet": 4,
+            "quintet": 5,
+            "sextet": 6,
+        }
+        manifold_counts = {}
+        records = []
+        for line in self.contents:
+            match = pattern.match(line)
+            if match is None:
+                continue
+            root, label, energy_ev, wavelength_nm, oscillator, spin_square = (
+                match.groups()
+            )
+            label_family = label.split("-", 1)[0].casefold()
+            multiplicity = multiplicities.get(label_family)
+            manifold_root = None
+            if multiplicity is not None:
+                manifold_counts[multiplicity] = (
+                    manifold_counts.get(multiplicity, 0) + 1
+                )
+                manifold_root = manifold_counts[multiplicity]
+            records.append(
+                {
+                    "state_index": int(root),
+                    "manifold_root": manifold_root,
+                    "state_label": label,
+                    "multiplicity": multiplicity,
+                    "energy_eV": float(energy_ev.replace("D", "E")),
+                    "wavelength_nm": float(wavelength_nm.replace("D", "E")),
+                    "oscillator_strength": (
+                        None
+                        if oscillator is None
+                        else float(oscillator.replace("D", "E"))
+                    ),
+                    "spin_square": (
+                        None
+                        if spin_square is None
+                        else float(spin_square.replace("D", "E"))
+                    ),
+                }
+            )
+        return records
+
+    @cached_property
     def tddft_transitions(self):
         """
         Read a excitation energies after a TD-DFT calculation.
@@ -1854,26 +1934,76 @@ class Gaussian16Output(GaussianFileMixin):
             A list: A list of tuple for each transition such as
                     [(energie (eV), lambda (nm), oscillatory strength), ... ]
         """
-        tddft_transitions = []
-        for line in self.contents:
-            if line.startswith("Excited State"):
-                eV_match = re.search(eV_pattern, line)
-                nm_match = re.search(nm_pattern, line)
-                f_match = re.search(f_pattern, line)
-                if eV_match and nm_match and f_match:
-                    # Extract and convert the matched values to float
-                    excitation_energy_eV = float(eV_match.group(1))
-                    absorption_wavelength = float(nm_match.group(1))
-                    oscillatory_strength = float(f_match.group(1))
+        return [
+            (
+                record["energy_eV"],
+                record["wavelength_nm"],
+                record["oscillator_strength"],
+            )
+            for record in self.excited_state_records
+            if record["oscillator_strength"] is not None
+        ]
 
-                    tddft_transitions.append(
-                        (
-                            excitation_energy_eV,
-                            absorption_wavelength,
-                            oscillatory_strength,
-                        )
-                    )
-        return tddft_transitions
+    @cached_property
+    def spin_square_history(self):
+        """Return explicit SCF ``<S**2>`` diagnostics, excluding TD roots."""
+
+        number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+        annihilation = re.compile(
+            rf"S\*\*2 before annihilation\s+({number}),\s+after\s+({number})",
+            re.IGNORECASE,
+        )
+        expectation = re.compile(
+            rf"^<Sx>=.*?<S\*\*2>=\s*({number})\s+S=",
+            re.IGNORECASE,
+        )
+        records = []
+        for line in self.contents:
+            match = annihilation.search(line)
+            if match is not None:
+                before, after = match.groups()
+                records.append(
+                    {
+                        "before_annihilation": float(before.replace("D", "E")),
+                        "after_annihilation": float(after.replace("D", "E")),
+                    }
+                )
+                continue
+            match = expectation.match(line)
+            if match is not None:
+                records.append(
+                    {
+                        "before_annihilation": float(
+                            match.group(1).replace("D", "E")
+                        ),
+                        "after_annihilation": None,
+                    }
+                )
+        return records
+
+    @cached_property
+    def wavefunction_stability_history(self):
+        """Return only explicit Gaussian stability-analysis verdicts.
+
+        SCF convergence and small ``<S**2>`` deviation are not substitutes for
+        a stability calculation.  A linked job can first find an instability
+        and later optimize to a stable solution, so the full ordered history
+        remains available and the result reader selects the final verdict.
+        """
+
+        history = []
+        for line in self.contents:
+            text = line.casefold()
+            if "wavefunction has an internal instability" in text:
+                history.append("internal_instability")
+            elif "wavefunction has an external instability" in text:
+                history.append("external_instability")
+            elif (
+                "wavefunction is stable under the perturbations considered"
+                in text
+            ):
+                history.append("stable_under_considered_perturbations")
+        return history
 
     @cached_property
     def excitation_energies_eV(self):
@@ -2991,9 +3121,9 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
             if "Periodicity:" in line:
                 pbc_conditions = line.split("Periodicity:")[-1]
                 pbc_conditions = pbc_conditions.split()
-                assert (
-                    len(pbc_conditions) == 3
-                ), "Periodicity given for 3 dimensions."
+                assert len(pbc_conditions) == 3, (
+                    "Periodicity given for 3 dimensions."
+                )
                 return np.array(
                     [
                         int(pbc_conditions[0]),

@@ -55,6 +55,7 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "energy",
         "energies",
         "positions",
+        "connectivity",
         "symbols",
         "vibrational_frequencies",
         "homo",
@@ -68,6 +69,10 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "dipole_moment_magnitude",
         "excitation_energies",
         "oscillator_strengths",
+        "spin_square",
+        "spin_square_target",
+        "spin_square_deviation",
+        "effective_multiplicity",
     }
 )
 
@@ -78,10 +83,33 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
 SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
     {
         "absorption_wavelengths",
+        "excited_state_indices",
+        "excited_state_labels",
+        "excited_state_manifold_roots",
+        "excited_state_multiplicities",
+        "excited_state_spin_square",
         "excitation_energies",
         "entropy_times_temperature",
         "gibbs_free_energy",
         "oscillator_strengths",
+        "singlet_excitation_energies",
+        "triplet_excitation_energies",
+        "singlet_oscillator_strengths",
+        "triplet_oscillator_strengths",
+        "spin_square",
+        "spin_square_after_annihilation",
+        "spin_square_target",
+        "spin_square_deviation",
+        "effective_multiplicity",
+        "wavefunction_stability_verdict",
+        "wavefunction_stability_history",
+        "trajectory_frame_count",
+        "trajectory_start_positions",
+        "trajectory_end_positions",
+        "trajectory_start_connectivity",
+        "trajectory_end_connectivity",
+        "trajectory_connectivity_changed",
+        "irc_direction",
         "scf_energy",
         "correlation_energy",
         "vpt2_harmonic_frequencies",
@@ -118,18 +146,20 @@ _SELECTOR_RESULT_UNITS = {
     "energy": {"results/energies": "Eh"},
     "energies": {"results/energies": "Eh"},
     "excitation_energies": {"results/excitation_energies": "Eh"},
-    "oscillator_strengths": {
-        "results/oscillator_strengths": "dimensionless"
-    },
+    "oscillator_strengths": {"results/oscillator_strengths": "dimensionless"},
     "dipole_moment": {"results/dipole_moment": "Debye"},
     "dipole_moment_magnitude": {"results/dipole_moment": "Debye"},
     "positions": {"results/positions": "Angstrom"},
-    "vibrational_frequencies": {
-        "results/vibrational_frequencies": "cm^-1"
-    },
+    "connectivity": {"results/positions": "Angstrom"},
+    "vibrational_frequencies": {"results/vibrational_frequencies": "cm^-1"},
     "homo": {"results/mo_energy": "Eh"},
     "lumo": {"results/mo_energy": "Eh"},
     "gap": {"results/mo_energy": "Eh"},
+    "spin_square": {"results/spin_square": "dimensionless"},
+    "spin_square_deviation": {"results/spin_square": "dimensionless"},
+    "effective_multiplicity": {
+        "results/spin_square_effective_multiplicity": "dimensionless"
+    },
 }
 
 
@@ -153,7 +183,9 @@ def _freeze(value: Any) -> Any:
     if isinstance(value, dict):
         return tuple(
             (str(key), _freeze(item))
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(
+                value.items(), key=lambda pair: str(pair[0])
+            )
         )
     if isinstance(value, float) and not math.isfinite(value):
         raise QuantityContractError("quantity values must be finite")
@@ -170,7 +202,9 @@ def _canonical_data(value: Any) -> Any:
     if isinstance(value, dict):
         return {
             str(key): _canonical_data(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(
+                value.items(), key=lambda pair: str(pair[0])
+            )
         }
     if isinstance(value, (tuple, list)):
         return [_canonical_data(item) for item in value]
@@ -213,7 +247,9 @@ def _require_identifier(value: str, field: str) -> str:
 def _require_sha256(value: str) -> str:
     normalized = str(value).strip().lower()
     if len(normalized) != 64:
-        raise QuantityContractError("artifact_sha256 must contain 64 hex digits")
+        raise QuantityContractError(
+            "artifact_sha256 must contain 64 hex digits"
+        )
     try:
         int(normalized, 16)
     except ValueError as exc:
@@ -256,7 +292,9 @@ class ResultQuantityExtractionRequestV1:
     def __post_init__(self) -> None:
         object.__setattr__(self, "selectors", tuple(self.selectors))
         if self.schema_version != "chemsmart.quantity-extraction-request.v1":
-            raise QuantityContractError("unsupported extraction request schema")
+            raise QuantityContractError(
+                "unsupported extraction request schema"
+            )
         _require_identifier(self.artifact_id, "artifact_id")
         _require_sha256(self.artifact_sha256)
         if self.program != "pyscf":
@@ -267,7 +305,9 @@ class ResultQuantityExtractionRequestV1:
                     f"no result reader is registered for {self.program!r}"
                 )
         if not self.selectors:
-            raise QuantityContractError("at least one quantity selector is required")
+            raise QuantityContractError(
+                "at least one quantity selector is required"
+            )
         quantity_ids = [selector.quantity_id for selector in self.selectors]
         if len(quantity_ids) != len(set(quantity_ids)):
             raise QuantityContractError("quantity_id values must be unique")
@@ -339,7 +379,9 @@ class QuantityExtractionReceiptV1:
     def __post_init__(self) -> None:
         object.__setattr__(self, "quantities", tuple(self.quantities))
         if self.schema_version != "chemsmart.quantity-extraction-receipt.v1":
-            raise QuantityContractError("unsupported extraction receipt schema")
+            raise QuantityContractError(
+                "unsupported extraction receipt schema"
+            )
         if self.status != "extracted":
             raise QuantityContractError("invalid extraction receipt status")
         body = {
@@ -352,7 +394,9 @@ class QuantityExtractionReceiptV1:
             "status": self.status,
         }
         if self.receipt_sha256 != canonical_quantity_sha256(body):
-            raise QuantityContractError("quantity extraction receipt digest mismatch")
+            raise QuantityContractError(
+                "quantity extraction receipt digest mismatch"
+            )
 
 
 @dataclass(frozen=True)
@@ -373,7 +417,9 @@ class ThermochemistryRequestV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.thermochemistry-request.v1":
-            raise QuantityContractError("unsupported thermochemistry request schema")
+            raise QuantityContractError(
+                "unsupported thermochemistry request schema"
+            )
         _require_identifier(self.artifact_id, "artifact_id")
         _require_sha256(self.artifact_sha256)
         normalized_program = str(self.program).strip().lower()
@@ -387,9 +433,13 @@ class ThermochemistryRequestV1:
                     f"{normalized_program!r}"
                 )
         if not math.isfinite(self.temperature_k) or self.temperature_k <= 0.0:
-            raise QuantityContractError("temperature_k must be finite and positive")
+            raise QuantityContractError(
+                "temperature_k must be finite and positive"
+            )
         if not math.isfinite(self.pressure_atm) or self.pressure_atm <= 0.0:
-            raise QuantityContractError("pressure_atm must be finite and positive")
+            raise QuantityContractError(
+                "pressure_atm must be finite and positive"
+            )
         _validate_thermochemistry_controls(
             concentration_mol_l=self.concentration_mol_l,
             entropy_method=self.entropy_method,
@@ -440,9 +490,13 @@ class ThermochemistryReceiptV1:
         object.__setattr__(self, "quantities", tuple(self.quantities))
         object.__setattr__(self, "assumptions", tuple(self.assumptions))
         if self.schema_version != "chemsmart.thermochemistry-receipt.v1":
-            raise QuantityContractError("unsupported thermochemistry receipt schema")
+            raise QuantityContractError(
+                "unsupported thermochemistry receipt schema"
+            )
         if self.status != "derived":
-            raise QuantityContractError("invalid thermochemistry receipt status")
+            raise QuantityContractError(
+                "invalid thermochemistry receipt status"
+            )
         _validate_thermochemistry_controls(
             concentration_mol_l=self.concentration_mol_l,
             entropy_method=self.entropy_method,
@@ -489,7 +543,9 @@ class ThermochemistryReceiptV1:
             and self.receipt_sha256 == canonical_quantity_sha256(legacy_body)
         )
         if not extended_matches and not legacy_matches:
-            raise QuantityContractError("thermochemistry receipt digest mismatch")
+            raise QuantityContractError(
+                "thermochemistry receipt digest mismatch"
+            )
 
 
 def _validate_thermochemistry_controls(
@@ -552,7 +608,9 @@ def _numeric_kind(value: Any) -> str:
         return "vector"
     if array.ndim == 2:
         return "matrix"
-    raise QuantityExtractionError("quantities with rank greater than two are unsupported")
+    raise QuantityExtractionError(
+        "quantities with rank greater than two are unsupported"
+    )
 
 
 def _make_quantity(
@@ -610,7 +668,9 @@ def make_quantity_value(
     )
 
 
-def _verify_artifact(path: str | os.PathLike[str], expected_sha256: str) -> Path:
+def _verify_artifact(
+    path: str | os.PathLike[str], expected_sha256: str
+) -> Path:
     artifact = Path(path).expanduser().resolve()
     if not artifact.is_file():
         raise QuantityExtractionError("trusted result artifact does not exist")
@@ -659,14 +719,15 @@ def _require_analysis_ready_pyscf_result(
             "scientific quantities require a readable sibling run receipt"
         ) from exc
     if not isinstance(receipt, dict):
-        raise QuantityExtractionError("PySCF run receipt must be a JSON object")
+        raise QuantityExtractionError(
+            "PySCF run receipt must be a JSON object"
+        )
     embedded_receipt_sha256 = receipt.get("receipt_sha256")
     receipt_body = dict(receipt)
     receipt_body.pop("receipt_sha256", None)
-    if (
-        not isinstance(embedded_receipt_sha256, str)
-        or embedded_receipt_sha256 != canonical_sha256(receipt_body)
-    ):
+    if not isinstance(
+        embedded_receipt_sha256, str
+    ) or embedded_receipt_sha256 != canonical_sha256(receipt_body):
         raise QuantityExtractionError(
             "PySCF run receipt digest is absent or invalid"
         )
@@ -724,9 +785,11 @@ def _require_analysis_ready_pyscf_result(
             "applied_settings_sha256",
         ),
     }
-    for field, (receipt_source, hdf5_source, hdf5_field) in (
-        digest_bindings.items()
-    ):
+    for field, (
+        receipt_source,
+        hdf5_source,
+        hdf5_field,
+    ) in digest_bindings.items():
         expected = receipt_source.get(field)
         observed = hdf5_source.get(hdf5_field)
         # PySCF's CLI can receive an exact geometry value without a source
@@ -885,6 +948,55 @@ def _extract_selector(
             dimension=DIMENSIONLESS,
             evidence_ref=evidence_ref,
         )
+    if name in {
+        "spin_square",
+        "spin_square_target",
+        "spin_square_deviation",
+        "effective_multiplicity",
+    }:
+        multiplicity = output.multiplicity
+        if not isinstance(multiplicity, int) or multiplicity <= 0:
+            raise QuantityExtractionError(
+                "PySCF artifact does not establish a positive multiplicity"
+            )
+        target = (float(multiplicity) ** 2 - 1.0) / 4.0
+        if name == "spin_square_target":
+            value = target
+        else:
+            spin_value = output.results.get("spin_square")
+            effective_value = output.results.get(
+                "spin_square_effective_multiplicity"
+            )
+            if spin_value is None or effective_value is None:
+                raise QuantityExtractionError(
+                    "PySCF artifact has no complete <S^2> diagnostic"
+                )
+            spin_square = float(
+                np.asarray(
+                    _require_finite_numeric(spin_value, "spin_square")
+                ).reshape(-1)[0]
+            )
+            effective = float(
+                np.asarray(
+                    _require_finite_numeric(
+                        effective_value, "effective_multiplicity"
+                    )
+                ).reshape(-1)[0]
+            )
+            value = {
+                "spin_square": spin_square,
+                "spin_square_deviation": spin_square - target,
+                "effective_multiplicity": effective,
+            }[name]
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
     if name in {"dipole_moment", "dipole_moment_magnitude"}:
         if output.dipole_moment is None:
             raise QuantityExtractionError(
@@ -918,6 +1030,23 @@ def _extract_selector(
             dimension=LENGTH,
             evidence_ref=evidence_ref,
         )
+    if name == "connectivity":
+        if output.positions is None or not output.symbols:
+            raise QuantityExtractionError(
+                "PySCF artifact has no complete geometry for connectivity"
+            )
+        from chemsmart.analysis.result_readers import _connectivity_matrix
+
+        value = _connectivity_matrix(output.get_molecule())
+        return _make_quantity(
+            quantity_id=selector.quantity_id,
+            source_value=value,
+            source_unit="1",
+            value=value,
+            unit="1",
+            dimension=DIMENSIONLESS,
+            evidence_ref=evidence_ref,
+        )
     if name == "symbols":
         value = tuple(str(symbol) for symbol in output.chemical_symbols)
         if not value:
@@ -948,7 +1077,11 @@ def _extract_selector(
             evidence_ref=evidence_ref,
         )
     if name in {"homo", "lumo", "gap"}:
-        attribute = {"homo": "homo_energy", "lumo": "lumo_energy", "gap": "fmo_gap"}[name]
+        attribute = {
+            "homo": "homo_energy",
+            "lumo": "lumo_energy",
+            "gap": "fmo_gap",
+        }[name]
         value = getattr(output, attribute)
         if value is None:
             raise QuantityExtractionError(
@@ -1011,7 +1144,9 @@ def extract_pyscf_quantities(
     output = PySCFOutput(artifact)
     required_units: dict[str, str] = {}
     for selector in request.selectors:
-        required_units.update(_SELECTOR_RESULT_UNITS.get(selector.selector, {}))
+        required_units.update(
+            _SELECTOR_RESULT_UNITS.get(selector.selector, {})
+        )
     _require_analysis_ready_pyscf_result(
         artifact=artifact,
         expected_sha256=request.artifact_sha256,
@@ -1019,14 +1154,18 @@ def extract_pyscf_quantities(
         required_units=required_units,
     )
     if output.result_sha256 != request.artifact_sha256:
-        raise QuantityExtractionError("PySCF parser observed substituted bytes")
+        raise QuantityExtractionError(
+            "PySCF parser observed substituted bytes"
+        )
     evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
     quantities = tuple(
         _extract_selector(output, selector, evidence_ref)
         for selector in request.selectors
     )
     if result_file_sha256(artifact) != request.artifact_sha256:
-        raise QuantityExtractionError("result artifact changed during extraction")
+        raise QuantityExtractionError(
+            "result artifact changed during extraction"
+        )
     body = {
         "schema_version": "chemsmart.quantity-extraction-receipt.v1",
         "artifact_id": request.artifact_id,
@@ -1187,7 +1326,9 @@ def derive_result_thermochemistry(
         alpha=request.alpha,
         s_freq_cutoff=request.entropy_cutoff_cm1,
         entropy_method=(
-            None if request.entropy_method == "rrho" else request.entropy_method
+            None
+            if request.entropy_method == "rrho"
+            else request.entropy_method
         ),
         h_freq_cutoff=request.enthalpy_cutoff_cm1,
         check_imaginary_frequencies=True,
@@ -1202,12 +1343,14 @@ def derive_result_thermochemistry(
     energy_values = {
         "electronic_energy": engine.electronic_energy,
         "zero_point_energy": engine.zero_point_energy,
-        "internal_energy": engine.electronic_energy + engine.total_internal_energy,
+        "internal_energy": engine.electronic_energy
+        + engine.total_internal_energy,
         "enthalpy": engine.enthalpy,
         "entropy_times_temperature": engine.entropy_times_temperature,
         "gibbs_free_energy": engine.gibbs_free_energy,
         "thermal_internal_energy_correction": engine.total_internal_energy,
-        "thermal_enthalpy_correction": engine.enthalpy - engine.electronic_energy,
+        "thermal_enthalpy_correction": engine.enthalpy
+        - engine.electronic_energy,
         "enthalpy_increment_above_zero_point": (
             engine.enthalpy
             - engine.electronic_energy
@@ -1406,9 +1549,7 @@ def quantity_extraction_receipt_from_record(
         quantity_value_from_record(item)
         for item in values.get("quantities") or ()
     )
-    return QuantityExtractionReceiptV1(
-        **values, receipt_sha256=receipt_sha256
-    )
+    return QuantityExtractionReceiptV1(**values, receipt_sha256=receipt_sha256)
 
 
 def thermochemistry_receipt_from_record(
@@ -1422,9 +1563,7 @@ def thermochemistry_receipt_from_record(
         for item in values.get("quantities") or ()
     )
     values["assumptions"] = tuple(values.get("assumptions") or ())
-    return ThermochemistryReceiptV1(
-        **values, receipt_sha256=receipt_sha256
-    )
+    return ThermochemistryReceiptV1(**values, receipt_sha256=receipt_sha256)
 
 
 __all__ = [

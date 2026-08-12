@@ -85,7 +85,10 @@ def build_command_compiled_tool_surface(
         "description": (
             "Program-neutral semantic selector. Support is resolved by the "
             "registered parser for the bound program artifact; a selector that "
-            "the program or result does not provide remains explicitly blocked."
+            "the program or result does not provide remains explicitly blocked. "
+            "The connectivity selector returns binary geometry-perceived "
+            "adjacency in source atom order from covalent radii; it is not an "
+            "electronic bond-order assignment."
         ),
     }
     digest = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
@@ -982,7 +985,11 @@ def _constrain(name: str, schema: dict) -> dict:
         pattern = _PUBLIC_IDENTIFIER_PATTERN
     else:
         return schema
-    if schema.get("type") != "string" or schema.get("enum") or schema.get("pattern"):
+    if (
+        schema.get("type") != "string"
+        or schema.get("enum")
+        or schema.get("pattern")
+    ):
         return schema
     return {**schema, "pattern": pattern}
 
@@ -1051,7 +1058,9 @@ def _precondition_sentence(properties) -> str:
     )
 
 
-def _describe_tool_definitions(definitions: tuple[dict, ...]) -> tuple[dict, ...]:
+def _describe_tool_definitions(
+    definitions: tuple[dict, ...],
+) -> tuple[dict, ...]:
     """Describe every argument the surface exposes, by argument name."""
 
     described = []
@@ -1156,6 +1165,24 @@ def _workflow_node_schema() -> dict:
                 ),
             },
             "project_role": _string(),
+            "charge": {
+                "type": "integer",
+                "description": (
+                    "Optional explicit charge for this node. Supply it only "
+                    "together with multiplicity. On an optimized-geometry "
+                    "data-edge consumer this deliberately reuses the exact "
+                    "producer geometry on another electronic-state surface."
+                ),
+            },
+            "multiplicity": {
+                "type": "integer",
+                "minimum": 1,
+                "description": (
+                    "Optional explicit spin multiplicity for this node. "
+                    "Supply it only together with charge; omission inherits "
+                    "the task-bound state of the molecular input."
+                ),
+            },
             "dependencies": {"type": "array", "items": _string()},
             "inputs": {
                 "type": "array",

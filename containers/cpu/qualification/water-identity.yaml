@@ -1,0 +1,15 @@
+schema_version: chemsmart.approved-molecular-input-manifest.v1
+inputs:
+  - input_id: water-neutral-singlet
+    identity_id: water
+    approved_names:
+      - water
+    geometry_file: water.xyz
+    geometry_sha256: 1fcd01360837f9a470623aa506c19840590916e32876af15a80f288fd0b52606
+    coordinate_units: angstrom
+    geometry_role: qualification starting geometry
+    charge: 0
+    multiplicity: 1
+    source_locator: container-qualification:water-v1
+    source_record_sha256: b1e8fcea1a423a761a9d766ae29fd97ec267b99ec6b57ac639b301e51883b000
+    state_source_locator: container-qualification:water-neutral-singlet-v1

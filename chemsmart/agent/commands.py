@@ -24,7 +24,10 @@ from chemsmart.agent.capabilities import (
     CapabilityQueryStatus,
     ResolvedEngineBindingV1,
 )
-from chemsmart.agent.cli_schema import LiveClickSchemaV1, build_live_click_schema
+from chemsmart.agent.cli_schema import (
+    LiveClickSchemaV1,
+    build_live_click_schema,
+)
 from chemsmart.agent.projects import ProjectValidationReceiptV1
 
 
@@ -42,7 +45,9 @@ class ScientificIdentityBindingV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.scientific-identity-binding.v1":
-            raise ContractError("unsupported scientific identity binding schema")
+            raise ContractError(
+                "unsupported scientific identity binding schema"
+            )
         require_sha256(self.task_spec_sha256, "task_spec_sha256")
         if not str(self.geometry_artifact_id).strip():
             raise ContractError("geometry_artifact_id must not be empty")
@@ -203,7 +208,9 @@ class CommandInspectionReceiptV1:
         if self.status not in {"valid", "invalid"}:
             raise ContractError("invalid command inspection state")
         if self.status == "valid" and not self.parser_observation_sha256:
-            raise ContractError("valid inspection requires a Click observation")
+            raise ContractError(
+                "valid inspection requires a Click observation"
+            )
         expected = canonical_sha256(
             {
                 "schema_version": self.schema_version,
@@ -211,9 +218,7 @@ class CommandInspectionReceiptV1:
                 "observed_command_path": self.observed_command_path,
                 "observed_option_names": self.observed_option_names,
                 "live_cli_schema_sha256": self.live_cli_schema_sha256,
-                "parser_observation_sha256": (
-                    self.parser_observation_sha256
-                ),
+                "parser_observation_sha256": (self.parser_observation_sha256),
                 "status": self.status,
                 "rule_ids": self.rule_ids,
             }
@@ -278,7 +283,9 @@ def compile_command(
     if repair_attempt not in {0, 1, 2}:
         raise ContractError("command repair attempt exceeds bounded limit")
     if repair_attempt and not (repair_parent_sha256 and counterexample_sha256):
-        raise ContractError("command repair requires parent and counterexample")
+        raise ContractError(
+            "command repair requires parent and counterexample"
+        )
     if not repair_attempt and (repair_parent_sha256 or counterexample_sha256):
         raise ContractError("initial compilation cannot carry repair ancestry")
     _validate_compiler_bindings(
@@ -305,9 +312,7 @@ def compile_command(
         options.append(
             _scoped_option(live_schema, execution_scope, "server", server)
         )
-    options.append(
-        _scoped_option(live_schema, execution_scope, "fake", True)
-    )
+    options.append(_scoped_option(live_schema, execution_scope, "fake", True))
     scratch = live_schema.command(execution_scope).option("scratch")
     if scratch is not None:
         options.append(
@@ -326,11 +331,11 @@ def compile_command(
         )
     options.append(
         _scoped_option(
-                live_schema,
-                program_scope,
-                "filename",
-                input_artifact.cli_value,
-            )
+            live_schema,
+            program_scope,
+            "filename",
+            input_artifact.cli_value,
+        )
     )
     project_settings = (
         dict(project_validation.settings)
@@ -404,6 +409,21 @@ def compile_command(
                 artifact_id=artifact.artifact_id,
                 artifact_sha256=artifact.sha256,
             )
+        )
+
+    # Gaussian's canonical ``link`` leaf represents two route sections.  The
+    # project owns the scientific target of the second section (opt, ts, sp,
+    # ...), while Click exposes that target as the link command's --jobtype
+    # option.  Compile that loader-validated value through the live schema so
+    # users and agents exercise the same CLI path.
+    if proposal.program == "gaussian" and proposal.jobtype == "link":
+        linked_jobtype = str(project_settings.get("jobtype") or "").strip()
+        if not linked_jobtype:
+            raise ContractError(
+                "Gaussian link project settings must declare the linked jobtype"
+            )
+        options.append(
+            _scoped_option(live_schema, job_scope, "jobtype", linked_jobtype)
         )
 
     ordered_options = tuple(options)
@@ -513,7 +533,9 @@ def inspect_command(
             if item.values:
                 expected_values = item.values
                 if isinstance(observed_value, (tuple, list)):
-                    observed_values = tuple(str(value) for value in observed_value)
+                    observed_values = tuple(
+                        str(value) for value in observed_value
+                    )
                 else:
                     observed_values = (str(observed_value),)
                 if observed_values != expected_values:
@@ -610,17 +632,26 @@ def _validate_compiler_bindings(
     if input_artifact.artifact_id != proposal.input_artifact_id:
         raise ContractError("proposal input reference is not bound")
     _require_current_artifact(input_artifact, "input")
-    if proposal.scientific_identity_sha256 != scientific_identity.binding_sha256:
-        raise ContractError("proposal uses another scientific identity binding")
+    if (
+        proposal.scientific_identity_sha256
+        != scientific_identity.binding_sha256
+    ):
+        raise ContractError(
+            "proposal uses another scientific identity binding"
+        )
     if scientific_identity.geometry_artifact_id != input_artifact.artifact_id:
-        raise ContractError("scientific identity uses another geometry artifact")
+        raise ContractError(
+            "scientific identity uses another geometry artifact"
+        )
     if scientific_identity.geometry_artifact_sha256 != input_artifact.sha256:
         raise ContractError("scientific identity geometry digest mismatch")
     if (proposal.charge, proposal.multiplicity) != (
         scientific_identity.charge,
         scientific_identity.multiplicity,
     ):
-        raise ContractError("proposal electronic state differs from task binding")
+        raise ContractError(
+            "proposal electronic state differs from task binding"
+        )
     if project is not None:
         _require_current_artifact(project, "project")
     if project_validation is not None:
@@ -706,7 +737,9 @@ def _require_current_artifact(
     if not path.is_file() or path.stat().st_size != binding.size_bytes:
         raise ContractError(f"{label} artifact size differs from its binding")
     if file_sha256(path) != binding.sha256:
-        raise ContractError(f"{label} artifact digest differs from its binding")
+        raise ContractError(
+            f"{label} artifact digest differs from its binding"
+        )
 
 
 def _observe_click_parse(
@@ -751,7 +784,9 @@ def _observe_click_parse(
         if not unresolved:
             if current.invoke_without_command:
                 break
-            raise ContractError("Click parser expected another command segment")
+            raise ContractError(
+                "Click parser expected another command segment"
+            )
         command_name, command, remaining = current.resolve_command(
             context, unresolved
         )

@@ -116,11 +116,24 @@ class CommandNodeIntentV1:
     #: draft digest when default, so every already-recorded workflow keeps the
     #: identity it has and stays replayable.
     node_kind: str = "program_call"
+    #: Optional node-local electronic state.  Most workflows inherit the
+    #: task-bound state of their molecular input, so the fields stay absent.
+    #: A producer geometry may, however, be deliberately reused on another
+    #: charge/multiplicity surface (for example a vertical four-point energy).
+    #: The pair is explicit and indivisible: geometry transfer never implies
+    #: an electronic-state transfer.
+    charge: int | None = None
+    multiplicity: int | None = None
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
         require_identifier(self.program, "program")
         self._validate_node_kind()
+        _validate_optional_electronic_state(
+            self.charge,
+            self.multiplicity,
+            node_id=self.node_id,
+        )
         require_identifier(self.jobtype, "jobtype")
         _require_sorted_unique_in_node(
             self.dependencies, "dependencies", node_id=self.node_id
@@ -252,7 +265,36 @@ def _draft_node_digest_body(node: CommandNodeIntentV1) -> dict:
     body = canonical_data(node)
     if body.get("node_kind") == "program_call":
         body.pop("node_kind")
+    if body.get("charge") is None and body.get("multiplicity") is None:
+        # Additive state declarations must not invalidate existing workflow
+        # identities when they are unused.
+        body.pop("charge")
+        body.pop("multiplicity")
     return body
+
+
+def _validate_optional_electronic_state(
+    charge: int | None,
+    multiplicity: int | None,
+    *,
+    node_id: str,
+) -> None:
+    """Validate an explicit state without inventing one from geometry."""
+
+    if (charge is None) != (multiplicity is None):
+        raise ContractError(
+            f"node {node_id!r} must declare charge and multiplicity together"
+        )
+    if charge is None:
+        return
+    if isinstance(charge, bool) or not isinstance(charge, int):
+        raise ContractError(f"node {node_id!r} charge must be an integer")
+    if isinstance(multiplicity, bool) or not isinstance(multiplicity, int):
+        raise ContractError(
+            f"node {node_id!r} multiplicity must be an integer"
+        )
+    if multiplicity < 1:
+        raise ContractError(f"node {node_id!r} multiplicity must be positive")
 
 
 def _validate_draft_dag(nodes: tuple[CommandNodeIntentV1, ...]) -> None:
@@ -540,9 +582,20 @@ class ScientificWorkflowNodeV2:
     #: so an honest plan can be finding-free without silently dropping a stage.
     support_state: str = "resolvable"
     blocked_reason: str = ""
+    #: Explicit target state for this scientific stage.  When omitted the
+    #: state is inherited from the task-bound input, preserving the historical
+    #: plan meaning and digest.  When present on a data-edge consumer it
+    #: authorizes a state rebind on the exact producer geometry.
+    charge: int | None = None
+    multiplicity: int | None = None
 
     def __post_init__(self) -> None:
         self._validate_identity()
+        _validate_optional_electronic_state(
+            self.charge,
+            self.multiplicity,
+            node_id=self.node_id,
+        )
         if self.support_state not in WORKFLOW_NODE_SUPPORT_STATES:
             raise ContractError(
                 "support_state must be one of "
@@ -687,7 +740,9 @@ class ScientificWorkflowPlanV2:
             "workflow_id": self.workflow_id,
             "task_spec_sha256": self.task_spec_sha256,
             "scientific_identity_sha256": self.scientific_identity_sha256,
-            "nodes": self.nodes,
+            "nodes": tuple(
+                _scientific_node_digest_body(node) for node in self.nodes
+            ),
             "edges": self.edges,
             "complexity_factors": self.complexity_factors,
             "status": self.status,
@@ -736,6 +791,9 @@ def build_scientific_workflow_plan(
         sorted(set(str(item) for item in required_observables))
     )
     digest_body = dict(body)
+    digest_body["nodes"] = tuple(
+        _scientific_node_digest_body(node) for node in normalized_nodes
+    )
     if observables:
         digest_body["required_observables"] = observables
     return ScientificWorkflowPlanV2(
@@ -743,6 +801,16 @@ def build_scientific_workflow_plan(
         required_observables=observables,
         plan_sha256=canonical_sha256(digest_body),
     )
+
+
+def _scientific_node_digest_body(node: ScientificWorkflowNodeV2) -> dict:
+    """Canonical node projection with legacy-compatible optional state."""
+
+    body = canonical_data(node)
+    if body.get("charge") is None and body.get("multiplicity") is None:
+        body.pop("charge")
+        body.pop("multiplicity")
+    return body
 
 
 def _validate_scientific_dag(

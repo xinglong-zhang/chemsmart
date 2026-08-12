@@ -273,8 +273,26 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     ]
     sp_job = ["sp"]
     td_job = ["td"]
+    link_job = ["link"] if program == "gaussian" else []
     qmmm_job = ["qmmm"]
     all_jobs = gas_phase_jobs + sp_job + td_job
+
+    def stage_defaults(job):
+        """Lift a project stage into the settings class that owns its keys."""
+
+        if program == "gaussian" and job == "td":
+            from chemsmart.jobs.gaussian.settings import (
+                GaussianTDDFTJobSettings,
+            )
+
+            return GaussianTDDFTJobSettings(**default_config).__dict__.copy()
+        if program == "gaussian" and job == "link":
+            from chemsmart.jobs.gaussian.settings import (
+                GaussianLinkJobSettings,
+            )
+
+            return GaussianLinkJobSettings(**default_config).__dict__.copy()
+        return default_config.copy()
 
     # read in project config
     with open(filename) as f:
@@ -295,13 +313,9 @@ def read_molecular_job_yaml(filename, program="gaussian"):
 
     direct_stage_present = any(
         project_config.get(job) is not None
-        for job in all_jobs + qmmm_job
+        for job in all_jobs + qmmm_job + link_job
     )
-    if (
-        gas_config is None
-        and solv_config is None
-        and not direct_stage_present
-    ):
+    if gas_config is None and solv_config is None and not direct_stage_present:
         # Neither a phase section nor a direct calculation stage is present,
         # so there is nothing to merge.  A standalone ``td:`` project is a
         # complete fixed-geometry calculation and must not need a dummy
@@ -405,9 +419,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     if "td" in project_config:
         td_config = project_config["td"]
         for job in td_job:  # jobs using td config s
-            all_project_configs[job] = (
-                default_config.copy()
-            )  # populate defaults
+            all_project_configs[job] = stage_defaults(job)
             if program == "orca":
                 # ChemSmart's ORCA ``td`` stage is a vertical spectrum at the
                 # supplied geometry.  The shared molecular-settings default
@@ -443,14 +455,14 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     # explicit stage override only that stage.  This keeps old projects
     # readable while allowing a model to express a paper workflow without
     # inventing settings for unrelated jobs.
-    for job in all_jobs + qmmm_job:
+    for job in all_jobs + qmmm_job + link_job:
         stage_config = project_config.get(job)
         if stage_config is None:
             continue
         if not isinstance(stage_config, dict):
             raise TypeError(f"Project section `{job}` must be a mapping")
         if job not in all_project_configs:
-            all_project_configs[job] = default_config.copy()
+            all_project_configs[job] = stage_defaults(job)
             all_project_configs[job]["jobtype"] = job
         if program == "orca" and job == "neb":
             # The shared ORCA defaults describe one-geometry jobs and
