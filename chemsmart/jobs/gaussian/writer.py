@@ -365,6 +365,7 @@ class GaussianInputWriter(InputWriter):
                 )
             self.job.molecule.low_level_atoms = self.settings.low_level_atoms
             self.job.molecule.bonded_atoms = self.settings.bonded_atoms
+            self.job.molecule.scale_factors = self.settings.scale_factors
 
         # Log molecular information for debugging
         logger.debug(

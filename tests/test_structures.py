@@ -2824,6 +2824,23 @@ class TestQMMMMolecule:
             q._get_partition_levels()
         assert "out of range" in str(exc.value)
 
+    def test_qmmm_string_layer_specs_with_link_atoms(self, tmpdir):
+        """String layer specs must still produce link-atom lines."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[(4, 5)]",
+            scale_factors="{(4, 5): [0.709]}",
+        )
+        written_input = os.path.join(tmpdir, "tmp.com")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+
 
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""

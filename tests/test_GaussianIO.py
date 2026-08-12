@@ -308,6 +308,50 @@ class TestGaussian16Input:
         assert g16_oniom.int_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
 
+    def test_oniom_charge_multiplicity_2layer(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.oniom_charge == {
+            "charge_total": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+
+    def test_oniom_negative_charge_line(self, tmp_path):
+        com = tmp_path / "charged_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "-1 1 0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == -1
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
         g16_modred = Gaussian16Input(filename=gaussian_modred_inputfile)

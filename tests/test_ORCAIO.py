@@ -2935,6 +2935,33 @@ class TestORCAQMMMJobSettings:
         assert s2.charge == -1
         assert s2.multiplicity == 2
 
+        # re_init keeps high-first priority after overrides
+        s1.charge_high = 5
+        s1.mult_high = 1
+        s1.re_init_and_validate()
+        assert s1.charge == 5
+        assert s1.multiplicity == 1
+
+    def test_route_string_without_parent_jobtype(self):
+        """Unset parent_jobtype should not crash route generation."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings(
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            low_level_method="XTB",
+            jobtype="QMMM",
+            charge_high=0,
+            mult_high=1,
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms="1-5",
+            parent_jobtype=None,
+        )
+        route = s._get_level_of_theory_string()
+        assert "QMMM" in route
+        assert "B3LYP" in route.upper() or "b3lyp" in route.lower()
+
     def test_partition_string_empty_and_none(self):
         """Empty string or None should return empty partition block."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings

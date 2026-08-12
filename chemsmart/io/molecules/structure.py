@@ -3497,6 +3497,7 @@ class QMMMMolecule(Molecule):
         else:
             # Otherwise, let QMMM behave like a Molecule itself
             super().__init__(**kwargs)
+
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
@@ -3709,6 +3710,8 @@ class QMMMMolecule(Molecule):
                     "scale factors.\n Please specify scale factors for each required"
                     "bonded atoms."
                 )
+                if isinstance(self.scale_factors, str):
+                    self.scale_factors = ast.literal_eval(self.scale_factors)
                 for (
                     atom1,
                     atom2,
@@ -3750,20 +3753,27 @@ class QMMMMolecule(Molecule):
             f.write(line + "\n")
         return f
 
+    def _normalize_atom_indices(self, atoms):
+        """Normalize layer atom specs to a 1-based integer list."""
+        if atoms is None:
+            return None
+        if isinstance(atoms, list):
+            return atoms
+        from chemsmart.utils.utils import get_list_from_string_range
+
+        return get_list_from_string_range(atoms)
+
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of
         an atom based on its integer index."""
-        if self.high_level_atoms is not None:
-            if atom_index in self.high_level_atoms:
-                return "H"
-            elif (
-                self.medium_level_atoms
-                and atom_index in self.medium_level_atoms
-            ):
-                return "M"
-            else:
-                # if high level atoms is given, then
-                # low level atoms will be needed
-                return "L"
-        else:
+        high_level_atoms = self._normalize_atom_indices(self.high_level_atoms)
+        if high_level_atoms is None:
             return None
+        if atom_index in high_level_atoms:
+            return "H"
+        medium_level_atoms = (
+            self._normalize_atom_indices(self.medium_level_atoms) or []
+        )
+        if atom_index in medium_level_atoms:
+            return "M"
+        return "L"
