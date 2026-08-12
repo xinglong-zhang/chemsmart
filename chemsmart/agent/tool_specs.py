@@ -702,7 +702,17 @@ def build_approved_execution_tool_surface(
     """
 
     full = build_command_compiled_tool_surface(registry)
-    tools = full.tool_definitions + (
+    # ``inspect_calculation_artifact`` belongs to the legacy externally
+    # seeded verifier surface: it requires separate settings-object and run
+    # receipt IDs. Runtime V2 execution instead creates a typed program result
+    # validation receipt and registers the resulting artifact directly; it
+    # never binds those legacy IDs. Advertising the verifier here made live
+    # models guess impossible identifiers after an otherwise valid run.
+    tools = tuple(
+        item
+        for item in full.tool_definitions
+        if item["function"]["name"] != "inspect_calculation_artifact"
+    ) + (
         _tool(
             "execute_approved_program_node",
             "Execute one host-compiled node only when its workflow approval and dependencies are green.",

@@ -646,9 +646,9 @@ class GaussianFileMixin(FileMixin):
         for raw_line in modred_list_of_string:
             line = raw_line[2:-2]
             line_elems = line.split()
-            assert all(
-                line_elem.isdigit() for line_elem in line_elems
-            ), f"modred coordinates should be integers, but is {line_elems} instead."
+            assert all(line_elem.isdigit() for line_elem in line_elems), (
+                f"modred coordinates should be integers, but is {line_elems} instead."
+            )
             each_modred_list = [int(line_elem) for line_elem in line_elems]
             modred.append(each_modred_list)
         return modred
@@ -683,7 +683,9 @@ class GaussianFileMixin(FileMixin):
             each_coords_list = coords_string.split()
             assert all(
                 line_elem.isdigit() for line_elem in each_coords_list
-            ), f"modred coordinates should be integers, but is {line_elems[0]} instead."
+            ), (
+                f"modred coordinates should be integers, but is {line_elems[0]} instead."
+            )
             each_modred_list = [
                 int(line_elem) for line_elem in each_coords_list
             ]
@@ -1449,7 +1451,11 @@ class ORCAFileMixin(FileMixin):
             if in_block and folded == "end":
                 break
             fields = line.split()
-            if in_block and len(fields) >= 2 and fields[0].casefold() == keyword:
+            if (
+                in_block
+                and len(fields) >= 2
+                and fields[0].casefold() == keyword
+            ):
                 return float(fields[1])
         return None
 
@@ -1505,6 +1511,55 @@ class ORCAFileMixin(FileMixin):
                 values[key] = fields[index + 1]
         return values
 
+    @cached_property
+    def _orca_irc_values(self):
+        """Read the last native or echoed ``%irc`` input block.
+
+        ORCA outputs echo the submitted input with ``| n>`` prefixes.  The
+        same parser therefore supports generated ``.inp`` preview evidence
+        and completed ``.out`` result evidence without inferring a direction
+        from trajectory filenames or path geometry.
+        """
+
+        blocks = []
+        current = None
+        echo_pattern = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo_pattern.match(stripped)
+            if match is not None:
+                stripped = match.group(1).strip()
+            stripped = stripped.split("#", 1)[0].strip()
+            if not stripped:
+                continue
+            fields = stripped.split()
+            if fields[0].casefold() == "%irc":
+                current = []
+                blocks.append(current)
+                fields = fields[1:]
+            if current is None:
+                continue
+            for field in fields:
+                if field.casefold() == "end":
+                    current = None
+                    break
+                current.append(field)
+
+        if not blocks:
+            return {}
+        fields = blocks[-1]
+        values = {}
+        for index, field in enumerate(fields[:-1]):
+            if field.casefold() == "direction":
+                values["direction"] = fields[index + 1].casefold()
+        return values
+
+    @property
+    def irc_direction(self):
+        """Return only a direction explicitly declared in ``%irc``."""
+
+        return self._orca_irc_values.get("direction")
+
     @property
     def response_method(self):
         values = self._orca_tddft_values
@@ -1524,9 +1579,11 @@ class ORCAFileMixin(FileMixin):
     def state_manifold(self):
         if not self._orca_tddft_values:
             return None
-        triplets = str(
-            self._orca_tddft_values.get("triplets", "false")
-        ).strip().casefold()
+        triplets = (
+            str(self._orca_tddft_values.get("triplets", "false"))
+            .strip()
+            .casefold()
+        )
         if triplets in {"true", "1", "yes", "on"}:
             # ORCA includes spin-adapted triplets in addition to singlets.
             return "singlet_triplet"
@@ -1545,7 +1602,7 @@ class ORCAFileMixin(FileMixin):
         from chemsmart.jobs.orca.settings import ORCAJobSettings
 
         dv = ORCAJobSettings.default()
-        return ORCAJobSettings(
+        settings = ORCAJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
             semiempirical=self.semiempirical,
@@ -1566,9 +1623,7 @@ class ORCAFileMixin(FileMixin):
             freq=self.freq,
             numfreq=self.numfreq,
             vpt2=self.vpt2,
-            vpt2_anharmonic_displacement=(
-                self.vpt2_anharmonic_displacement
-            ),
+            vpt2_anharmonic_displacement=(self.vpt2_anharmonic_displacement),
             vpt2_hessian_cutoff=self.vpt2_hessian_cutoff,
             response_method=self.response_method,
             nstates=self.nstates,
@@ -1590,6 +1645,13 @@ class ORCAFileMixin(FileMixin):
             custom_solvent=dv.custom_solvent,
             forces=dv.forces,
         )
+        if settings.jobtype == "irc":
+            from chemsmart.jobs.orca.settings import ORCAIRCJobSettings
+
+            return ORCAIRCJobSettings(
+                **settings.__dict__, direction=self.irc_direction
+            )
+        return settings
 
 
 class XTBFileMixin(FileMixin):

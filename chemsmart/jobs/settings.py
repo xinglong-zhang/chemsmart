@@ -464,15 +464,22 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         if job not in all_project_configs:
             all_project_configs[job] = stage_defaults(job)
             all_project_configs[job]["jobtype"] = job
-        if program == "orca" and job == "neb":
-            # The shared ORCA defaults describe one-geometry jobs and
-            # therefore do not contain the canonical NEB project keys.  Lift
-            # this stage into its real settings class before applying the
-            # explicit ``neb:`` section so joboption/nimages/preopt_ends are
-            # owned by normal YAML loading rather than forced into CLI text.
-            from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+        if program == "orca" and job in {"irc", "neb"}:
+            # The shared ORCA defaults describe one-geometry jobs and do not
+            # contain the settings owned by path calculations.  Lift an
+            # explicit path stage into its real settings class before
+            # applying it.  Otherwise ``irc: {direction: both}`` and
+            # ``neb: {nimages: ...}`` are rejected as unknown keys even though
+            # their CLI jobs and native writers support them.
+            from chemsmart.jobs.orca.settings import (
+                ORCAIRCJobSettings,
+                ORCANEBJobSettings,
+            )
 
-            all_project_configs[job] = ORCANEBJobSettings(
+            settings_class = (
+                ORCAIRCJobSettings if job == "irc" else ORCANEBJobSettings
+            )
+            all_project_configs[job] = settings_class(
                 **all_project_configs[job]
             ).__dict__.copy()
         all_project_configs[job] = update_dict_with_existing_keys(

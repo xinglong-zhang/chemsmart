@@ -86,6 +86,27 @@ def test_repair_command_is_not_offered_while_it_cannot_work(build):
     assert "repair_command" not in exposed
 
 
+def test_approved_execution_does_not_offer_the_legacy_seeded_result_verifier():
+    """Runtime V2 execution has no legacy settings/run-ID producers.
+
+    Newly executed results are validated by the execution receipt and then
+    exposed through typed quantity extraction.  Offering the older verifier
+    here can only induce guesses at IDs that the live host never binds.
+    """
+
+    preview_tools = {
+        item["function"]["name"]
+        for item in build_command_compiled_tool_surface().tool_definitions
+    }
+    execution_tools = {
+        item["function"]["name"]
+        for item in build_approved_execution_tool_surface().tool_definitions
+    }
+    assert "inspect_calculation_artifact" in preview_tools
+    assert "inspect_calculation_artifact" not in execution_tools
+    assert "execute_approved_program_node" in execution_tools
+
+
 def test_the_handler_and_contract_are_kept_so_re_enabling_is_one_change():
     """Withholding the tool must not mean deleting the feature."""
 

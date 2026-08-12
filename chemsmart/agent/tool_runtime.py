@@ -1314,7 +1314,7 @@ class CommandCompiledToolHostV1:
         preview evidence.
         """
 
-        envelope = self.bounded_execution_envelope
+        envelope = getattr(self, "bounded_execution_envelope", None)
         if envelope is None:  # pragma: no cover - caller narrows this
             return ()
         nodes = []
@@ -1346,7 +1346,9 @@ class CommandCompiledToolHostV1:
                 (program, jobtype, engine)
                 for engine, jobtype in capability.execution_engine_job_pairs
                 if engine in allowed_engines
-                and (preview_pairs is None or (engine, jobtype) in preview_pairs)
+                and (
+                    preview_pairs is None or (engine, jobtype) in preview_pairs
+                )
             )
         if not nodes:
             raise ContractError(
@@ -1831,7 +1833,9 @@ class CommandCompiledToolHostV1:
             artifact, program=capability.query.program
         )
         section_application = project_section_application_observation(
-            document, jobtype=capability.query.jobtype
+            document,
+            jobtype=capability.query.jobtype,
+            applied_settings=dict(receipt.settings),
         )
         self.project_validations[receipt.receipt_sha256] = receipt
         materializations = project_scientific_materializations(receipt)
@@ -3337,49 +3341,121 @@ class CommandCompiledToolHostV1:
             and not preflight.critical_finding_sha256s
         )
 
+    def _bounded_deferred_target_ids(self, plan: Any) -> set[str]:
+        """Return causal future nodes that bounded execution can defer.
+
+        A consumer of an optimized geometry cannot be compiled or previewed
+        before its producer runs.  The continuous execution contract admits
+        that exact dependency without weakening the preview requirement for
+        any initially runnable node.  Keep the predicate here aligned with
+        the producer-edge subset accepted by ``_admit_bounded_workflow`` so
+        planning feedback does not tell the model to delete required science.
+        """
+
+        envelope = self.bounded_execution_envelope
+        if envelope is None:
+            return set()
+        nodes = {node.node_id: node for node in getattr(plan, "nodes", ())}
+        data_edges = tuple(
+            edge
+            for edge in getattr(plan, "edges", ())
+            if edge.edge_kind == "data"
+        )
+        incoming_counts: dict[str, int] = {}
+        for edge in data_edges:
+            incoming_counts[edge.target_node_id] = (
+                incoming_counts.get(edge.target_node_id, 0) + 1
+            )
+        deferred = set()
+        for edge in data_edges:
+            producer = nodes.get(edge.source_node_id)
+            target = nodes.get(edge.target_node_id)
+            if (
+                producer is None
+                or target is None
+                or incoming_counts[edge.target_node_id] != 1
+                or edge.artifact_class != "geometry_xyz"
+                or producer.stage not in {"opt", "ts"}
+                or producer.program not in {"gaussian", "orca", "pyscf", "xtb"}
+                or target.support_state
+                not in {"resolvable", "unresolved_future"}
+                or not envelope.allows(target.program, target.engine)
+            ):
+                continue
+            deferred.add(target.node_id)
+        return deferred
+
     def _approval_readiness(self, plan: Any) -> dict[str, Any]:
-        """Say which nodes still stand between this plan and an approval.
+        """Say which nodes still stand between this plan and execution.
 
-        An approval freezes a preview for *every* materialized node, so one
-        node left unpreviewed makes the entire plan unapprovable. A live
-        session hit exactly that: it abandoned two programs whose previews it
-        could not repair, left their nodes in the plan, and finished with a
-        clean termination and a plan that could never be executed. Nothing
-        told it, because the rule only spoke at freeze time -- after the
-        session had ended.
-
-        A model that knows this can do the right thing: keep the program the
-        task named while it can, and if it truly cannot preview green, drop
-        that node rather than carrying it as dead weight.
+        Exact approvals require every materialized node to hold a green
+        preview.  Bounded continuous execution additionally permits an exact
+        producer-data target to remain deferred until its optimized geometry
+        exists.  That causal future node is not a preview blocker and must not
+        be presented as a stage the model should delete.
         """
 
         nodes = []
         blocking = []
+        deferred_ids = self._bounded_deferred_target_ids(plan)
         for node in getattr(plan, "nodes", ()):
             node_id = node.node_id
             previewed = self._node_is_previewed(node_id)
-            if not previewed:
+            deferred = not previewed and node_id in deferred_ids
+            blocks_approval = not previewed and not deferred
+            if blocks_approval:
                 blocking.append(node_id)
             nodes.append(
                 {
                     "node_id": node_id,
                     "program": getattr(node, "program", ""),
                     "previewed": previewed,
-                    "blocks_approval": not previewed,
+                    "deferred_admissible": deferred,
+                    "approval_state": (
+                        "previewed"
+                        if previewed
+                        else (
+                            "deferred_admissible"
+                            if deferred
+                            else "preview_required"
+                        )
+                    ),
+                    "blocks_approval": blocks_approval,
                 }
             )
         return {
             "approvable": not blocking,
+            "authorization_mode": (
+                "bounded_continuous"
+                if getattr(self, "bounded_execution_envelope", None)
+                is not None
+                else "exact_preview"
+            ),
             "blocking_node_ids": tuple(blocking),
+            "deferred_node_ids": tuple(
+                node["node_id"]
+                for node in nodes
+                if node["deferred_admissible"]
+            ),
             "nodes": tuple(nodes),
             "rule": (
-                "every node in the plan needs a green preview before the "
-                "plan can be approved, so one unpreviewable node blocks all "
-                "of them. Prefer the program the task names and repair its "
-                "preview using the findings returned by preview_command; if "
-                "it still cannot preview green, plan the workflow again "
-                "without that node and use a program that can, rather than "
-                "leaving an abandoned node in the plan."
+                (
+                    "every initially runnable node needs a green preview "
+                    "before execution. Under bounded continuous execution, "
+                    "an exact producer-data target is deferred_admissible "
+                    "until its producer materializes the optimized geometry. "
+                    "Repair a preview_required node using the findings "
+                    "returned by preview_command; do not delete a "
+                    "scientifically required causal stage merely because "
+                    "its producer output does not exist yet."
+                )
+                if getattr(self, "bounded_execution_envelope", None)
+                is not None
+                else (
+                    "every materialized node needs a green preview before "
+                    "exact approval. Repair a preview_required node using "
+                    "the findings returned by preview_command."
+                )
             ),
         }
 
@@ -5378,23 +5454,35 @@ class CommandCompiledToolHostV1:
                 "future bounded node lacks one exact data input"
             )
         project = self._artifact(node.project_role)
-        validations = tuple(
+        capabilities = tuple(
             receipt
-            for receipt in self.project_validations.values()
-            if receipt.project_artifact_id == project.artifact_id
-            and receipt.project_sha256 == project.sha256
-            and receipt.program == planned_node.program
-            and receipt.jobtype == planned_node.stage
-            and receipt.status == "valid"
+            for receipt in self.capabilities.values()
+            if receipt.query.program == planned_node.program
+            and receipt.query.jobtype == planned_node.stage
+            and receipt.query.engine == planned_node.engine
+            and str(receipt.status.value) in {"supported", "preview_only"}
         )
+        if len(capabilities) != 1:
+            raise ContractError(
+                f"future node {planned_node.node_id!r} lacks one exact "
+                "program/stage/engine capability"
+            )
+        capability = capabilities[0]
         bindings = tuple(
             binding
             for binding in self.engine_bindings.values()
-            if binding.program == planned_node.program
+            if binding.capability_receipt_sha256 == capability.receipt_sha256
+            and binding.program == planned_node.program
             and binding.selected_engine == planned_node.engine
             and binding.execution_ready
         )
-        if len(validations) != 1 or len(bindings) != 1:
+        validation = self._resolve_project_validation(
+            project=project,
+            capability=capability,
+            program=planned_node.program,
+            jobtype=planned_node.stage,
+        )
+        if validation is None or len(bindings) != 1:
             raise ContractError(
                 f"future node {planned_node.node_id!r} lacks unique project/environment evidence"
             )
@@ -5421,15 +5509,13 @@ class CommandCompiledToolHostV1:
                 charge=producer_context.scientific_identity.charge,
                 multiplicity=producer_context.scientific_identity.multiplicity,
             ),
-            capability=self.capabilities[
-                bindings[0].capability_receipt_sha256
-            ],
+            capability=capability,
             program_binding=self.program_bindings[
                 bindings[0].program_binding_sha256
             ],
             engine_binding=bindings[0],
             project_artifact=project,
-            project_validation=validations[0],
+            project_validation=validation,
             input_artifact=producer_context.input_artifact,
             scientific_identity=producer_context.scientific_identity,
         )

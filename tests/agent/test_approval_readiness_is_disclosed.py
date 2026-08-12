@@ -1,20 +1,10 @@
-"""A plan must be told which of its nodes block its own approval.
+"""A plan must distinguish preview blockers from causal future stages.
 
-Freezing an approval requires a green preview for *every* materialized node,
-so one unpreviewable node makes the whole plan unexecutable. Until now that
-rule only spoke at freeze time -- after the session had ended.
-
-A live session hit it exactly: it planned Gaussian, ORCA and PySCF for one
-task, previewed PySCF green immediately, could not repair the other two, and
-left their nodes in place. The session terminated cleanly with 66 of 70 tool
-calls succeeding, and the plan was unfreezable:
-
-    FREEZE REFUSED -> every currently materialized approved node requires
-                      exact preview
-
-Knowing this is what makes program fallback possible rather than fatal: keep
-the program the task named while it can be repaired, and if it truly cannot
-preview green, plan again without that node instead of carrying it.
+Freezing an exact approval requires a green preview for every materialized
+node. Bounded continuous execution is intentionally different: a consumer of
+an optimized geometry cannot preview before the producer runs, so its exact
+producer-data edge is admitted as deferred rather than presented as a stage
+the model should delete.
 """
 
 import inspect
@@ -38,6 +28,8 @@ def test_the_readiness_predicate_is_the_materializers_own():
 def test_readiness_names_the_blocking_nodes_not_only_a_count():
     source = inspect.getsource(CommandCompiledToolHostV1._approval_readiness)
     assert "blocking_node_ids" in source
+    assert "deferred_node_ids" in source
+    assert "deferred_admissible" in source
     assert "approvable" in source
 
 
@@ -48,8 +40,9 @@ def test_readiness_states_the_rule_it_is_enforcing():
     assert '"rule"' in source
     for phrase in (
         "green preview",
-        "plan the workflow again",
+        "producer-data target",
         "preview_command",
+        "do not delete",
     ):
         assert phrase in source, phrase
 
@@ -61,16 +54,20 @@ def test_planning_returns_readiness_to_the_model():
     assert '"approval_readiness"' in source
 
 
-def test_the_prompt_states_program_preference_and_its_fallback():
-    """Fallback without a rule to drop the abandoned node repeats the bug."""
+def test_the_prompt_preserves_bounded_causal_future_nodes():
+    """The system prompt must not contradict bounded readiness feedback."""
 
     from chemsmart.agent import live_session
 
-    source = inspect.getsource(live_session)
+    prompt = live_session._system_prompt(
+        {"authorization_mode": "bounded_continuous"}
+    )
     for phrase in (
         "When the task names a program, plan that program",
         "cannot preview green",
-        "plan again without",
+        "deferred_admissible",
+        "keep that causal stage",
         "approval_readiness",
     ):
-        assert phrase in source, phrase
+        assert phrase in prompt, phrase
+    assert "plan again without" not in prompt

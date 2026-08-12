@@ -28,7 +28,6 @@ from chemsmart.utils.utils import (
 logger = logging.getLogger(__name__)
 
 
-
 def _normalize_choice(value, allowed, field_name):
     """Return the canonical lower-case choice or raise on an unknown value.
 
@@ -101,7 +100,9 @@ def _normalize_orca_scf_convergence(value):
 
     if value is None:
         return None
-    normalized = str(value).strip().casefold().replace("-", "").replace("_", "")
+    normalized = (
+        str(value).strip().casefold().replace("-", "").replace("_", "")
+    )
     normalized = normalized.replace(" ", "")
     if normalized.endswith("scf"):
         normalized = normalized[:-3]
@@ -147,7 +148,14 @@ ORCA_RELATIVISTIC_KEYWORDS = {
 #: DKH/ZORA Hamiltonians are only meaningful with such a basis; pairing one
 #: with a non-relativistic contraction is a methodological error, not a
 #: tolerance question.
-ORCA_RELATIVISTIC_BASIS_MARKERS = ("-dk", "dkh", "sarc", "zora", "-x2c", "x2c-")
+ORCA_RELATIVISTIC_BASIS_MARKERS = (
+    "-dk",
+    "dkh",
+    "sarc",
+    "zora",
+    "-x2c",
+    "x2c-",
+)
 
 #: Reference determinants ORCA exposes through ``%scf HFTyp``.
 ORCA_REFERENCE_DETERMINANTS = {
@@ -458,9 +466,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_tol = scf_tol
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
-        self.scf_convergence = _normalize_orca_scf_convergence(
-            scf_convergence
-        )
+        self.scf_convergence = _normalize_orca_scf_convergence(scf_convergence)
         self.gbw = gbw
         self.mdci_cutoff = _normalize_choice(
             mdci_cutoff, ORCA_MDCI_CUTOFF_KEYWORDS, "mdci_cutoff"
@@ -488,17 +494,13 @@ class ORCAJobSettings(MolecularJobSettings):
             else float(vpt2_anharmonic_displacement)
         )
         self.vpt2_hessian_cutoff = (
-            None
-            if vpt2_hessian_cutoff is None
-            else float(vpt2_hessian_cutoff)
+            None if vpt2_hessian_cutoff is None else float(vpt2_hessian_cutoff)
         )
         if not self.vpt2 and (
             self.vpt2_anharmonic_displacement is not None
             or self.vpt2_hessian_cutoff is not None
         ):
-            raise ValueError(
-                "VPT2 numerical settings require vpt2: true"
-            )
+            raise ValueError("VPT2 numerical settings require vpt2: true")
         if (
             self.vpt2_anharmonic_displacement is not None
             and self.vpt2_anharmonic_displacement <= 0
@@ -540,8 +542,7 @@ class ORCAJobSettings(MolecularJobSettings):
             if self.nstates <= 0:
                 raise ValueError("ORCA td nstates must be a positive integer")
             if self.state_manifold in ORCA_TD_STATE_MANIFOLDS and (
-                self.multiplicity is not None
-                and int(self.multiplicity) != 1
+                self.multiplicity is not None and int(self.multiplicity) != 1
             ):
                 raise ValueError(
                     "ORCA singlet TD roots require a singlet reference "
@@ -976,16 +977,12 @@ class ORCAJobSettings(MolecularJobSettings):
         # than the three thresholds the old handwritten %mdci block copied,
         # so the preset is the scientifically faithful representation.
         if self.mdci_cutoff is not None:
-            route_string += (
-                f" {ORCA_MDCI_CUTOFF_KEYWORDS[self.mdci_cutoff]}"
-            )
+            route_string += f" {ORCA_MDCI_CUTOFF_KEYWORDS[self.mdci_cutoff]}"
 
         # scalar-relativistic Hamiltonian; belongs with the method because it
         # changes the operator, not just the numerics
         if self.relativistic is not None:
-            route_string += (
-                f" {ORCA_RELATIVISTIC_KEYWORDS[self.relativistic]}"
-            )
+            route_string += f" {ORCA_RELATIVISTIC_KEYWORDS[self.relativistic]}"
 
         # resolution-of-identity choice, including switching it off explicitly
         if self.ri_approximation is not None:
@@ -1887,6 +1884,8 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         (B/A/D/I) to monitor when monitor_internals=True.
     """
 
+    DIRECTIONS = ("backward", "both", "down", "forward")
+
     def __init__(
         self,
         maxiter=None,
@@ -1950,7 +1949,16 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         self.numfreq = False
         self.maxiter = maxiter
         self.printlevel = printlevel
-        self.direction = direction
+        if direction is None:
+            self.direction = None
+        else:
+            normalized_direction = str(direction).strip().casefold()
+            if normalized_direction not in self.DIRECTIONS:
+                raise ValueError(
+                    "ORCA IRC direction must be one of "
+                    f"{self.DIRECTIONS}, not {direction!r}."
+                )
+            self.direction = normalized_direction
         self.inithess = inithess
         self.hess_filename = hess_filename
         self.hessmode = hessmode
@@ -2071,12 +2079,12 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             elif key == "inithess":
                 f.write(f"  {key} {value}\n")
                 if value.lower() == "read":  # if initial hessian is to be read
-                    assert (
-                        self.hess_filename is not None
-                    ), "No Hessian file is given!"
-                    assert os.path.exists(
-                        self.hess_filename
-                    ), f"Hessian file {self.hess_filename} is not found!"
+                    assert self.hess_filename is not None, (
+                        "No Hessian file is given!"
+                    )
+                    assert os.path.exists(self.hess_filename), (
+                        f"Hessian file {self.hess_filename} is not found!"
+                    )
                     f.write(
                         f'  Hess_Filename "{self.hess_filename}"  # Hessian file\n'
                     )
@@ -2087,9 +2095,9 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             elif key == "monitor_internals":
                 if str(value).lower() == "true":
                     f.write(f"  {key}\n")
-                    assert (
-                        self.internal_modred is not None
-                    ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
+                    assert self.internal_modred is not None, (
+                        'No internal modred is specified for IRC job "monitor_intervals" option!'
+                    )
                     prepend_string_list = (
                         get_prepend_string_list_from_modred_free_format(
                             self.internal_modred, program="orca"
@@ -2490,20 +2498,20 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             ), f"Multiplicity should not be specified for {jobtype} job!"
             self.multiplicity = 0  # avoid conflicts from parent class
             if self.conv_charges is False:
-                assert (
-                    self.low_level_method is not None
-                ), "Force field file containing convergence charges is not provided!"
+                assert self.low_level_method is not None, (
+                    "Force field file containing convergence charges is not provided!"
+                )
             if jobtype == "MOL-CRYSTAL-QMMM":
-                assert (
-                    self.n_unit_cell_atoms
-                ), f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
+                assert self.n_unit_cell_atoms, (
+                    f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
+                )
             else:
-                assert (
-                    self.ecp_layer_ecp
-                ), f"cECPs used for the boundary region for {jobtype} job must be specified! "
-                assert (
-                    self.n_unit_cell_atoms is None
-                ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
+                assert self.ecp_layer_ecp, (
+                    f"cECPs used for the boundary region for {jobtype} job must be specified! "
+                )
+                assert self.n_unit_cell_atoms is None, (
+                    "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
+                )
 
     def _get_level_of_theory_string(self):
         """
@@ -2605,9 +2613,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             return h_bond_length
         elif isinstance(self.high_level_h_bond_length, str):
             # if the user provided a file with the d0_X-H values
-            assert os.path.exists(
-                self.high_level_h_bond_length
-            ), f"File {self.high_level_h_bond_length} does not exist!"
+            assert os.path.exists(self.high_level_h_bond_length), (
+                f"File {self.high_level_h_bond_length} does not exist!"
+            )
             return f'H_Dist_FileName "{self.high_level_h_bond_length}"'
 
     def _get_embedding_type(self):
@@ -2845,9 +2853,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
         ]:
-            assert (
-                self.low_level_method is not None
-            ), f"Force field file missing for {self.jobtype} job!"
+            assert self.low_level_method is not None, (
+                f"Force field file missing for {self.jobtype} job!"
+            )
             full_qm_block += f'ORCAFFFilename "{self.low_level_method}"\n'
 
         # Fixed atoms options

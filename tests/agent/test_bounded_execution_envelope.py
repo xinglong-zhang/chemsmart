@@ -507,7 +507,13 @@ def test_program_environment_excludes_provider_secret(monkeypatch):
     assert observed["OMP_NUM_THREADS"] == "8"
 
 
-def test_future_node_context_preserves_producer_molecule_and_state():
+@pytest.mark.parametrize(
+    ("program", "consumer_stage"),
+    (("xtb", "hess"), ("gaussian", "sp")),
+)
+def test_future_node_context_joins_same_engine_stages_by_capability(
+    program, consumer_stage
+):
     identity = SimpleNamespace(
         binding_sha256="a" * 64, charge=-1, multiplicity=2
     )
@@ -529,15 +535,173 @@ def test_future_node_context_preserves_producer_molecule_and_state():
         scientific_identity=identity,
     )
     plan = build_scientific_workflow_plan(
-        workflow_id="radical-opt-hess",
+        workflow_id=f"radical-opt-{consumer_stage}",
         task_spec_sha256="f" * 64,
         scientific_identity_sha256=identity.binding_sha256,
         nodes=(
             ScientificWorkflowNodeV2(
                 node_id="opt-initial",
                 stage="opt",
-                requested_program="pyscf",
-                program="pyscf",
+                requested_program=program,
+                program=program,
+                engine="cpu",
+                project_role="project.opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id=f"{consumer_stage}-optimized",
+                stage=consumer_stage,
+                requested_program=program,
+                program=program,
+                engine="cpu",
+                project_role=f"project.{consumer_stage}",
+                unresolved_fields=(),
+                support_state="unresolved_future",
+            ),
+        ),
+        edges=(
+            ScientificWorkflowEdgeV2(
+                edge_id=f"opt-to-{consumer_stage}",
+                source_node_id="opt-initial",
+                target_node_id=f"{consumer_stage}-optimized",
+                edge_kind="data",
+                artifact_class="geometry_xyz",
+                producer_output_id="optimized-geometry",
+                consumer_input_id="geometry",
+            ),
+        ),
+    )
+    project = SimpleNamespace(
+        artifact_id=f"project.{consumer_stage}", sha256="1" * 64
+    )
+    producer_capability = SimpleNamespace(
+        receipt_sha256="2" * 64,
+        status=SimpleNamespace(value="supported"),
+        query=SimpleNamespace(program=program, jobtype="opt", engine="cpu"),
+    )
+    consumer_capability = SimpleNamespace(
+        receipt_sha256="3" * 64,
+        status=SimpleNamespace(value="supported"),
+        query=SimpleNamespace(
+            program=program, jobtype=consumer_stage, engine="cpu"
+        ),
+    )
+    alternate_capability = SimpleNamespace(
+        receipt_sha256="4" * 64,
+        status=SimpleNamespace(value="supported"),
+        query=SimpleNamespace(
+            program=program, jobtype=consumer_stage, engine="gpu"
+        ),
+    )
+    validation = SimpleNamespace(
+        project_artifact_id=project.artifact_id,
+        project_sha256=project.sha256,
+        capability_receipt_sha256=consumer_capability.receipt_sha256,
+        program=program,
+        jobtype=consumer_stage,
+        status="valid",
+    )
+    alternate_validation = SimpleNamespace(
+        project_artifact_id=project.artifact_id,
+        project_sha256=project.sha256,
+        capability_receipt_sha256=alternate_capability.receipt_sha256,
+        program=program,
+        jobtype=consumer_stage,
+        status="valid",
+    )
+    producer_engine = SimpleNamespace(
+        program=program,
+        selected_engine="cpu",
+        execution_ready=True,
+        capability_receipt_sha256=producer_capability.receipt_sha256,
+        program_binding_sha256="5" * 64,
+        environment_receipt_sha256="6" * 64,
+    )
+    consumer_engine = SimpleNamespace(
+        program=program,
+        selected_engine="cpu",
+        execution_ready=True,
+        capability_receipt_sha256=consumer_capability.receipt_sha256,
+        program_binding_sha256="7" * 64,
+        environment_receipt_sha256="8" * 64,
+    )
+    alternate_engine = SimpleNamespace(
+        program=program,
+        selected_engine="gpu",
+        execution_ready=True,
+        capability_receipt_sha256=alternate_capability.receipt_sha256,
+        program_binding_sha256="9" * 64,
+        environment_receipt_sha256="0" * 64,
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.workflow_drafts = {
+        "draft": SimpleNamespace(
+            workflow_id=plan.workflow_id,
+            nodes=(
+                SimpleNamespace(
+                    node_id=f"{consumer_stage}-optimized",
+                    project_role=project.artifact_id,
+                    inputs=(SimpleNamespace(producer_node_id="opt-initial"),),
+                ),
+            ),
+        )
+    }
+    host.artifacts = {project.artifact_id: project}
+    host.project_validations = {
+        "validation": validation,
+        "alternate-validation": alternate_validation,
+    }
+    host.engine_bindings = {
+        "producer": producer_engine,
+        "consumer": consumer_engine,
+        "alternate": alternate_engine,
+    }
+    host.capabilities = {
+        capability.receipt_sha256: capability
+        for capability in (
+            producer_capability,
+            consumer_capability,
+            alternate_capability,
+        )
+    }
+    host.program_bindings = {
+        binding.program_binding_sha256: SimpleNamespace()
+        for binding in (producer_engine, consumer_engine, alternate_engine)
+    }
+    host._latest_invocation_for_node = lambda _node_id: (
+        SimpleNamespace(),
+        producer_context,
+    )
+
+    context = host._bounded_node_context(
+        plan=plan,
+        planned_node=plan.nodes[1],
+        data_target_ids={f"{consumer_stage}-optimized"},
+    )
+
+    assert context.scientific_identity is identity
+    assert context.proposal.charge == -1
+    assert context.proposal.multiplicity == 2
+    assert (
+        context.proposal.scientific_identity_sha256 == identity.binding_sha256
+    )
+    assert context.capability is consumer_capability
+    assert context.engine_binding is consumer_engine
+    assert context.project_validation is validation
+
+
+def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
+    envelope = load_bounded_execution_envelope(_write_envelope(tmp_path))
+    plan = build_scientific_workflow_plan(
+        workflow_id="water-opt-hess",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="opt-initial",
+                stage="opt",
+                requested_program="xtb",
+                program="xtb",
                 engine="cpu",
                 project_role="project.opt",
                 unresolved_fields=(),
@@ -545,8 +709,8 @@ def test_future_node_context_preserves_producer_molecule_and_state():
             ScientificWorkflowNodeV2(
                 node_id="hess-optimized",
                 stage="hess",
-                requested_program="pyscf",
-                program="pyscf",
+                requested_program="xtb",
+                program="xtb",
                 engine="cpu",
                 project_role="project.hess",
                 unresolved_fields=(),
@@ -565,57 +729,30 @@ def test_future_node_context_preserves_producer_molecule_and_state():
             ),
         ),
     )
-    project = SimpleNamespace(artifact_id="project.hess", sha256="1" * 64)
-    validation = SimpleNamespace(
-        project_artifact_id=project.artifact_id,
-        project_sha256=project.sha256,
-        program="pyscf",
-        jobtype="hess",
-        status="valid",
-    )
-    engine = SimpleNamespace(
-        program="pyscf",
-        selected_engine="cpu",
-        execution_ready=True,
-        capability_receipt_sha256="2" * 64,
-        program_binding_sha256="3" * 64,
-        environment_receipt_sha256="4" * 64,
-    )
     host = object.__new__(CommandCompiledToolHostV1)
-    host.workflow_drafts = {
-        "draft": SimpleNamespace(
-            workflow_id=plan.workflow_id,
-            nodes=(
-                SimpleNamespace(
-                    node_id="hess-optimized",
-                    project_role=project.artifact_id,
-                    inputs=(SimpleNamespace(producer_node_id="opt-initial"),),
-                ),
-            ),
+    host.bounded_execution_envelope = envelope
+    host._preflight_by_node = {
+        "opt-initial": SimpleNamespace(
+            plan_state="previewed", critical_finding_sha256s=()
         )
     }
-    host.artifacts = {project.artifact_id: project}
-    host.project_validations = {"validation": validation}
-    host.engine_bindings = {"engine": engine}
-    host.capabilities = {engine.capability_receipt_sha256: SimpleNamespace()}
-    host.program_bindings = {engine.program_binding_sha256: SimpleNamespace()}
-    host._latest_invocation_for_node = lambda _node_id: (
-        SimpleNamespace(),
-        producer_context,
-    )
 
-    context = host._bounded_node_context(
-        plan=plan,
-        planned_node=plan.nodes[1],
-        data_target_ids={"hess-optimized"},
-    )
+    readiness = host._approval_readiness(plan)
 
-    assert context.scientific_identity is identity
-    assert context.proposal.charge == -1
-    assert context.proposal.multiplicity == 2
-    assert (
-        context.proposal.scientific_identity_sha256 == identity.binding_sha256
-    )
+    assert readiness["approvable"] is True
+    assert readiness["blocking_node_ids"] == ()
+    assert readiness["deferred_node_ids"] == ("hess-optimized",)
+    states = {node["node_id"]: node for node in readiness["nodes"]}
+    assert states["opt-initial"]["approval_state"] == "previewed"
+    assert states["hess-optimized"]["approval_state"] == "deferred_admissible"
+    assert states["hess-optimized"]["blocks_approval"] is False
+
+    host.bounded_execution_envelope = None
+    exact_readiness = host._approval_readiness(plan)
+
+    assert exact_readiness["approvable"] is False
+    assert exact_readiness["blocking_node_ids"] == ("hess-optimized",)
+    assert exact_readiness["deferred_node_ids"] == ()
 
 
 def test_bounded_server_profile_preserves_program_environment_and_timeout(

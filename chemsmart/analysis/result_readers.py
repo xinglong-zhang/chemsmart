@@ -204,19 +204,26 @@ def _orca_irc_direction(output: Any) -> str:
 
     if str(getattr(output, "jobtype", "") or "").casefold() != "irc":
         raise MissingQuantityError("result is not an ORCA IRC calculation")
-    pattern = re.compile(
-        r"\bDirection\s+(both|forward|backward|down)\b", re.IGNORECASE
-    )
-    observed = []
-    for line in getattr(output, "contents", ()):
-        match = pattern.search(str(line))
-        if match is not None:
-            observed.append(match.group(1).casefold())
-    if not observed:
+    observed = getattr(output, "irc_direction", None)
+    if observed is None:
+        # Preserve the result-reader protocol for light-weight parser fixtures
+        # while production ORCAInput/ORCAOutput objects use the shared typed
+        # ``irc_direction`` property above.
+        pattern = re.compile(
+            r"\bDirection\s+(both|forward|backward|down)\b",
+            re.IGNORECASE,
+        )
+        matches = [
+            match.group(1).casefold()
+            for line in getattr(output, "contents", ())
+            if (match := pattern.search(str(line))) is not None
+        ]
+        observed = matches[-1] if matches else None
+    if observed not in {"backward", "both", "down", "forward"}:
         raise MissingQuantityError(
             "ORCA output does not explicitly establish the IRC direction"
         )
-    return observed[-1]
+    return observed
 
 
 def _trajectory_connectivity_changed(output: Any) -> int:

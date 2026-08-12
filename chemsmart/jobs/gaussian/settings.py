@@ -626,9 +626,6 @@ class GaussianJobSettings(MolecularJobSettings):
             elif self.jobtype == "scan":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = False
-            elif self.jobtype == "sp":
-                route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
             if self.jobtype == "opt":
                 route_string += " opt"
@@ -640,11 +637,14 @@ class GaussianJobSettings(MolecularJobSettings):
             elif self.jobtype == "scan":
                 route_string += " opt=modredundant"
                 self.freq = False
-            elif self.jobtype == "sp":
-                route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
 
         # Write frequency calculation keywords
+        # ``sp`` means that the supplied geometry is not optimized; it does
+        # not prohibit evaluating a Hessian at that fixed geometry.  Project
+        # loading already keeps ordinary single points frequency-free and
+        # suppresses a ``gas.freq`` value that was inherited only for the
+        # level of theory.  Preserve an explicit ``sp.freq``/``solv.freq``
+        # request here so it materializes as Gaussian's native ``Freq``.
         if self.freq and not self.numfreq:
             route_string += " freq"
             logger.debug("Added frequency calculation")
@@ -661,14 +661,10 @@ class GaussianJobSettings(MolecularJobSettings):
         """Get level of theory string for route."""
         route_string = ""
         additional_route_parameters, additional_dispersion = (
-            split_gaussian_dispersion_tokens(
-                self.additional_route_parameters
-            )
+            split_gaussian_dispersion_tokens(self.additional_route_parameters)
         )
         functional_without_dispersion, functional_dispersion = (
-            split_gaussian_dispersion_tokens(
-                self.functional
-            )
+            split_gaussian_dispersion_tokens(self.functional)
         )
         functional_without_shorthand, shorthand_dispersion = (
             split_gaussian_functional_dispersion_shorthand(
@@ -741,8 +737,7 @@ class GaussianJobSettings(MolecularJobSettings):
             functional = functional_without_shorthand
             route_string += f" {functional} {self.basis}"
             logger.debug(
-                f"Added DFT functional: {functional} with basis: "
-                f"{self.basis}"
+                f"Added DFT functional: {functional} with basis: {self.basis}"
             )
 
         elif self.ab_initio is not None and self.functional is not None:
@@ -2389,9 +2384,9 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
             eqsolv = ""
         else:
             eqsolv_options = ["eqsolv", "noneqsolv"]
-            assert (
-                self.eqsolv.lower() in eqsolv_options
-            ), f"Possible equilibrium solvation options are: {eqsolv_options}!"
+            assert self.eqsolv.lower() in eqsolv_options, (
+                f"Possible equilibrium solvation options are: {eqsolv_options}!"
+            )
             eqsolv = f",{self.eqsolv}"
 
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
@@ -2873,9 +2868,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         Mod=Model system, and second character
         is one of: H, M and L for the High, Medium and Low levels).
         """
-        assert (
-            self.charge_total is not None and self.mult_total is not None
-        ), "Charge and multiplicity for the real system must be specified!"
+        assert self.charge_total is not None and self.mult_total is not None, (
+            "Charge and multiplicity for the real system must be specified!"
+        )
         real_low_charge = self.charge_total
         real_low_multiplicity = self.mult_total
         int_med_charge = self.charge_intermediate

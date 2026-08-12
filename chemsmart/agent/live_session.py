@@ -3373,6 +3373,23 @@ def _system_prompt(
             "previewed state."
         )
     )
+    approval_readiness_sentence = (
+        "Every initially runnable node needs a green preview before bounded "
+        "execution. An exact producer-data target may instead appear as "
+        "deferred_admissible until its validated upstream geometry exists; "
+        "keep that causal stage in the workflow and execute its producer "
+        "first. Read approval_readiness for preview_required and deferred "
+        "nodes. "
+        if bounded_execution
+        else (
+            "Every currently materialized node needs a green preview before "
+            "an exact approval can execute. Read approval_readiness for the "
+            "nodes that still require preview. If a named program remains "
+            "unsupported after repairing its preview findings, use a "
+            "scientifically defensible supported alternative while preserving "
+            "any required unavailable observable as blocked_unsupported. "
+        )
+    )
     skill_sentence = ""
     if skill_index:
         listing = " ".join(f"({item})" for item in skill_index)
@@ -3421,15 +3438,11 @@ def _system_prompt(
         "When the task names a program, plan that program. If its preview is "
         "refused, repair it from the findings preview_command returns, which "
         "name the field, the expected value and the observed one. Only when a "
-        "named program still cannot preview green should you plan the "
-        "workflow again using a program that can. Every node in the plan "
-        "needs a green preview before the plan can be approved, so one node "
-        "you have given up on blocks every other node too: plan again without "
-        "it rather than leaving it in place beside its replacement. Read "
-        "approval_readiness on the planning result for which nodes still "
-        "block approval. "
-        f"{_workflow_context_sentence()}"
-        "Never author native "
+        "named program still cannot preview green should you use a "
+        "scientifically defensible supported alternative. "
+        + approval_readiness_sentence
+        + _workflow_context_sentence()
+        + "Never author native "
         "Gaussian, ORCA, xTB, or PySCF input/script text. Never invent coordinates, "
         "paths, shell syntax, evidence, readiness, or terminal state. "
         "The execution target is host policy: preview planning compiles local run, "

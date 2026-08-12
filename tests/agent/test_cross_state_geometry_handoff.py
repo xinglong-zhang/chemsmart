@@ -447,9 +447,15 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
         ),
     )
     project = SimpleNamespace(artifact_id="project.sp", sha256="1" * 64)
+    capability = SimpleNamespace(
+        receipt_sha256="2" * 64,
+        status=SimpleNamespace(value="supported"),
+        query=SimpleNamespace(program="pyscf", jobtype="sp", engine="cpu"),
+    )
     validation = SimpleNamespace(
         project_artifact_id=project.artifact_id,
         project_sha256=project.sha256,
+        capability_receipt_sha256=capability.receipt_sha256,
         program="pyscf",
         jobtype="sp",
         status="valid",
@@ -458,7 +464,7 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
         program="pyscf",
         selected_engine="cpu",
         execution_ready=True,
-        capability_receipt_sha256="2" * 64,
+        capability_receipt_sha256=capability.receipt_sha256,
         program_binding_sha256="3" * 64,
         environment_receipt_sha256="4" * 64,
     )
@@ -488,7 +494,7 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
     host.artifacts = {project.artifact_id: project}
     host.project_validations = {"validation": validation}
     host.engine_bindings = {"engine": engine}
-    host.capabilities = {engine.capability_receipt_sha256: SimpleNamespace()}
+    host.capabilities = {capability.receipt_sha256: capability}
     host.program_bindings = {engine.program_binding_sha256: SimpleNamespace()}
     host._latest_invocation_for_node = lambda _node_id: (
         SimpleNamespace(),

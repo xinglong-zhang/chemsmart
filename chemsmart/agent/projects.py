@@ -35,7 +35,9 @@ class ProjectSectionV1:
         require_identifier(self.name, "project section")
         names = tuple(item[0] for item in self.settings)
         if names != tuple(sorted(set(names))):
-            raise ContractError("project setting names must be sorted and unique")
+            raise ContractError(
+                "project setting names must be sorted and unique"
+            )
         canonical_data(dict(self.settings))
 
 
@@ -118,7 +120,9 @@ class ProjectValidationReceiptV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.project-validation-receipt.v1":
-            raise ContractError("unsupported project validation receipt schema")
+            raise ContractError(
+                "unsupported project validation receipt schema"
+            )
         if self.status not in {"valid", "invalid", "loader_unavailable"}:
             raise ContractError("invalid project validation status")
         expected = canonical_sha256(
@@ -165,7 +169,9 @@ class PySCFFunctionalResolutionReceiptV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.pyscf-functional-resolution.v1":
-            raise ContractError("unsupported PySCF functional resolution schema")
+            raise ContractError(
+                "unsupported PySCF functional resolution schema"
+            )
         if self.requested_method_kind not in {"hf", "dft"}:
             raise ContractError("invalid PySCF functional method kind")
         if self.status not in {
@@ -225,9 +231,7 @@ def project_document(
         "sections": normalized_sections,
         "content_sha256": content_sha256,
     }
-    return ProjectDocumentV1(
-        **body, document_sha256=canonical_sha256(body)
-    )
+    return ProjectDocumentV1(**body, document_sha256=canonical_sha256(body))
 
 
 def read_project_yaml(
@@ -265,7 +269,9 @@ def project_effective_section_settings(
     """
 
     normalized_jobtype = require_identifier(jobtype, "jobtype")
-    sections = {section.name: dict(section.settings) for section in document.sections}
+    sections = {
+        section.name: dict(section.settings) for section in document.sections
+    }
     effective: dict[str, Any] = {}
     if document.program in {"gaussian", "orca"}:
         if normalized_jobtype == "sp":
@@ -297,13 +303,36 @@ def project_effective_section_settings(
     )
 
 
+def _loader_values_semantically_equal(declared: Any, applied: Any) -> bool:
+    """Treat presentation-only string normalization as an applied match."""
+
+    if isinstance(declared, str) and isinstance(applied, str):
+        return declared.strip().casefold() == applied.strip().casefold()
+    return declared == applied
+
+
 def project_section_application_observation(
-    document: ProjectDocumentV1, *, jobtype: str
+    document: ProjectDocumentV1,
+    *,
+    jobtype: str,
+    applied_settings: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Explain which public YAML sections contribute to one job."""
+    """Explain which public YAML sections contribute to one job.
+
+    ``project_effective_section_settings`` describes the public inheritance
+    route, while ``applied_settings`` is the program loader's final settings
+    object.  They are normally identical for explicitly declared values.  A
+    deliberate loader override must still be visible: otherwise a project can
+    validate successfully while the requested scientific operation has been
+    disabled.  The phase-keyed Gaussian/ORCA single-point loaders, for
+    example, borrow the level of theory from ``gas`` but intentionally do not
+    borrow that section's ``freq: true``.
+    """
 
     normalized_jobtype = require_identifier(jobtype, "jobtype")
-    sections = {section.name: dict(section.settings) for section in document.sections}
+    sections = {
+        section.name: dict(section.settings) for section in document.sections
+    }
     available = tuple(sorted(sections))
     if document.program in {"gaussian", "orca"}:
         if normalized_jobtype == "sp":
@@ -320,10 +349,14 @@ def project_section_application_observation(
             )
     else:
         candidates = (normalized_jobtype,)
-    used = tuple(dict.fromkeys(name for name in candidates if name in sections))
+    used = tuple(
+        dict.fromkeys(name for name in candidates if name in sections)
+    )
     ignored = tuple(sorted(set(available).difference(used)))
     effective = dict(
-        project_effective_section_settings(document, jobtype=normalized_jobtype)
+        project_effective_section_settings(
+            document, jobtype=normalized_jobtype
+        )
     )
     status = (
         "effective_settings_present"
@@ -337,6 +370,51 @@ def project_section_application_observation(
         "ignored_sections": ignored,
         "effective_setting_names": tuple(sorted(effective)),
     }
+    overridden_settings = ()
+    if applied_settings is not None:
+        applied = {
+            str(name): canonical_data(value)
+            for name, value in applied_settings.items()
+        }
+        overridden_settings = tuple(
+            {
+                "setting_name": name,
+                "declared_value": canonical_data(declared_value),
+                "applied_value": applied[name],
+            }
+            for name, declared_value in sorted(effective.items())
+            if name in applied
+            and not _loader_values_semantically_equal(
+                canonical_data(declared_value), applied[name]
+            )
+        )
+    if overridden_settings:
+        observation.update(
+            {
+                "status": "declared_settings_overridden",
+                "overridden_settings": overridden_settings,
+                "rule_ids": ("project.loader.declared_setting_overridden",),
+            }
+        )
+        overridden_names = {
+            item["setting_name"] for item in overridden_settings
+        }
+        if (
+            document.program in {"gaussian", "orca"}
+            and normalized_jobtype == "sp"
+            and "freq" in overridden_names
+        ):
+            observation["next_action"] = (
+                "for a fixed-geometry frequency calculation, place "
+                "'freq: true' under an explicit 'sp:' section; the 'gas:' "
+                "section supplies the inherited level of theory but its "
+                "frequency flag is intentionally not inherited by sp"
+            )
+        else:
+            observation["next_action"] = (
+                "move each overridden value into the explicit job section "
+                f"'{normalized_jobtype}:' or remove it from the project"
+            )
     if status != "effective_settings_present":
         observation["next_action"] = (
             "render settings in a section consumed by this job; Gaussian/ORCA "
@@ -576,7 +654,9 @@ def _yaml_project_loader(module: Any) -> type:
         ):
             candidates.append(value)
     if len(candidates) != 1:
-        raise ContractError("program settings module has no unique YAML loader")
+        raise ContractError(
+            "program settings module has no unique YAML loader"
+        )
     return candidates[0]
 
 
