@@ -326,6 +326,8 @@ class TestGaussian16Input:
         assert g16_oniom.model_charge == 0
         assert g16_oniom.real_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.int_charge is None
+        assert g16_oniom.int_multiplicity is None
 
     def test_oniom_negative_charge_line(self, tmp_path):
         com = tmp_path / "charged_oniom.com"

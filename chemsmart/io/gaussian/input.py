@@ -396,8 +396,12 @@ class Gaussian16QMMMInput(Gaussian16Input):
 
     @property
     def int_charge(self):
+        """Intermediate-system charge, or None for 2-layer ONIOM."""
         oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_charge["int_charge"])
+        int_charge = oniom_charge.get("int_charge")
+        if int_charge is None:
+            return None
+        return int(int_charge)
 
     @property
     def model_charge(self):
@@ -416,8 +420,12 @@ class Gaussian16QMMMInput(Gaussian16Input):
 
     @property
     def int_multiplicity(self):
+        """Intermediate-system multiplicity, or None for 2-layer ONIOM."""
         _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_multiplicity["int_multiplicity"])
+        int_multiplicity = oniom_multiplicity.get("int_multiplicity")
+        if int_multiplicity is None:
+            return None
+        return int(int_multiplicity)
 
     @property
     def model_multiplicity(self):
