@@ -235,6 +235,12 @@ class Gaussian16Input(GaussianFileMixin):
         # Update the charge and multiplicity of the molecule
         molecule.charge = self.charge
         molecule.multiplicity = self.multiplicity
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        if isinstance(molecule, QMMMMolecule):
+            mm_parameters = self._get_mm_parameters_text()
+            if mm_parameters is not None:
+                molecule.mm_parameters = mm_parameters
         return molecule
 
     @property
@@ -376,6 +382,48 @@ class Gaussian16Input(GaussianFileMixin):
         """
         if self.custom_solvent_group is not None:
             return "\n".join(self.custom_solvent_group)
+        return None
+
+    def _get_mm_parameters_text(self):
+        """Extract trailing MM parameter lines after coords/connectivity."""
+        mm_prefixes = (
+            "hrmstr",
+            "hrmbnd",
+            "ambtrs",
+            "imptrs",
+            "vdw",
+            "nonbon",
+            "bond",
+            "angle",
+            "torsion",
+            "improper",
+        )
+        for group in self.content_groups[3:]:
+            if not group:
+                continue
+            # Skip Geom=Connectivity blocks (atom index + numeric pairs).
+            is_connectivity = True
+            is_mm_params = False
+            for line in group:
+                parts = line.split()
+                if not parts:
+                    continue
+                if not parts[0].isdigit():
+                    is_connectivity = False
+                else:
+                    for value in parts[1:]:
+                        try:
+                            float(value)
+                        except ValueError:
+                            is_connectivity = False
+                            break
+                first = parts[0].lower()
+                if any(first.startswith(prefix) for prefix in mm_prefixes):
+                    is_mm_params = True
+            if is_connectivity:
+                continue
+            if is_mm_params:
+                return "\n".join(group)
         return None
 
 

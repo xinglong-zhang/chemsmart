@@ -165,6 +165,14 @@ gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
 
 gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
 
+# Gaussian ONIOM/MM atom labels: Element-Type-Charge (negative uses Type--0.65)
+gaussian_mm_element_type_charge_neg_pattern = (
+    r"^([A-Za-z][a-z]?)-(.+)--(\d+(?:\.\d+)?)$"
+)
+gaussian_mm_element_type_charge_pos_pattern = (
+    r"^([A-Za-z][a-z]?)-(.+)-(\d+(?:\.\d+)?)$"
+)
+
 # Pattern to find multiple consecutive spaces in strings
 element_partition_split_pattern = r"[\s:_-]+"
 element_non_alpha_pattern = r"[^A-Za-z]"

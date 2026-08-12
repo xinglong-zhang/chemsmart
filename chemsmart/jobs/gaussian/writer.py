@@ -107,6 +107,8 @@ class GaussianInputWriter(InputWriter):
             self._write_gaussian_title(f)
             self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._append_qmmm_connectivity(f)
 
         # Skip modredundant for link jobs (handled in link section)
         if not isinstance(self.settings, GaussianLinkJobSettings):
@@ -118,6 +120,8 @@ class GaussianInputWriter(InputWriter):
         )  # followed by user defined solvent parameters
         self._append_job_specific_info(f)
         self._append_other_additional_info(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._append_mm_parameters(f)
 
         # Write link section for multi-step calculations
         if isinstance(self.settings, GaussianLinkJobSettings):
@@ -357,15 +361,48 @@ class GaussianInputWriter(InputWriter):
         assert self.job.molecule is not None, "No molecular geometry found!"
         # populate QM/MM partition to molecule object
         if isinstance(self.settings, GaussianQMMMJobSettings):
-            self.job.molecule = QMMMMolecule(molecule=self.job.molecule)
-            self.job.molecule.high_level_atoms = self.settings.high_level_atoms
-            if self.settings.medium_level_atoms is not None:
-                self.job.molecule.medium_level_atoms = (
-                    self.settings.medium_level_atoms
+            source = self.job.molecule
+            mm_atom_info = None
+            mm_parameters = None
+            if isinstance(source, QMMMMolecule):
+                mm_atom_info = source.mm_atom_info
+                mm_parameters = source.mm_parameters
+            self.job.molecule = QMMMMolecule(
+                molecule=source,
+                high_level_atoms=self.settings.high_level_atoms,
+                medium_level_atoms=self.settings.medium_level_atoms,
+                low_level_atoms=self.settings.low_level_atoms,
+                bonded_atoms=self.settings.bonded_atoms,
+                scale_factors=self.settings.scale_factors,
+                mm_atom_info=mm_atom_info,
+                mm_parameters=mm_parameters,
+            )
+
+            if self.settings.mm_atom_info_file is not None:
+                self.job.molecule.mm_atom_info = (
+                    GaussianQMMMJobSettings.load_mm_atom_info(
+                        self.settings.mm_atom_info_file,
+                        num_atoms=self.job.molecule.num_atoms,
+                    )
                 )
-            self.job.molecule.low_level_atoms = self.settings.low_level_atoms
-            self.job.molecule.bonded_atoms = self.settings.bonded_atoms
-            self.job.molecule.scale_factors = self.settings.scale_factors
+            elif self.settings.requires_mm_atom_info():
+                mm_info = self.job.molecule.mm_atom_info
+                complete = (
+                    mm_info is not None
+                    and len(mm_info) == self.job.molecule.num_atoms
+                    and all(
+                        record is not None
+                        and record[0] is not None
+                        and record[1] is not None
+                        for record in mm_info
+                    )
+                )
+                if not complete:
+                    raise ValueError(
+                        "AMBER ONIOM requires mm_atom_info_file with atom "
+                        "types and partial charges, or an input .com that "
+                        "already contains Element-Type-Charge labels."
+                    )
 
         # Log molecular information for debugging
         logger.debug(
@@ -374,6 +411,36 @@ class GaussianInputWriter(InputWriter):
         )
 
         self.job.molecule.write_coordinates(f, program="gaussian")
+        f.write("\n")
+
+    def _append_qmmm_connectivity(self, f):
+        """Write Geom=Connectivity for built-in MM ONIOM jobs."""
+        if not self.settings.uses_builtin_mm():
+            return
+        logger.debug("Writing Gaussian connectivity for MM ONIOM job.")
+        self.job.molecule.write_gaussian_connectivity(f)
+
+    def _append_mm_parameters(self, f):
+        """Append SoftFirst/HardFirst MM parameter lines from file or input."""
+        content = None
+        params_file = self.settings.mm_parameters_file
+        if params_file is not None:
+            params_path = os.path.expanduser(params_file)
+            if not os.path.isfile(params_path):
+                raise FileNotFoundError(
+                    f"MM parameters file not found: {params_path}"
+                )
+            logger.debug(f"Appending MM parameters from {params_path}")
+            with open(params_path) as handle:
+                content = handle.read()
+        else:
+            content = self.job.molecule.__dict__.get("mm_parameters")
+
+        if not content:
+            return
+        f.write(content)
+        if not content.endswith("\n"):
+            f.write("\n")
         f.write("\n")
 
     def _append_modredundant(self, f):
