@@ -130,6 +130,10 @@ Atom Partitioning
 Charge and Multiplicity
 =======================
 
+High-level (``-ch`` / ``-mh``) charge and multiplicity are **required**. They are written to the ORCA coordinate section
+(``* xyz`` line). Total and intermediate values are written to the ``%qmmm`` block and are not used as a fallback for
+the coordinate section.
+
 .. list-table:: Charge and Multiplicity Options
    :header-rows: 1
    :widths: 30 15 55
@@ -140,27 +144,27 @@ Charge and Multiplicity
 
    -  -  ``-ch, --charge-high``
       -  int
-      -  High-level (QM) region charge
+      -  Required. High-level (QM) region charge for the ``* xyz`` line
 
    -  -  ``-mh, --mult-high``
-      -  string
-      -  High-level (QM) region multiplicity
+      -  int
+      -  Required. High-level (QM) region multiplicity for the ``* xyz`` line
 
    -  -  ``-ci, --charge-intermediate``
       -  int
-      -  Intermediate layer charge (for QM/QM2/MM)
+      -  Intermediate layer charge for the ``%qmmm`` block (QM/QM2/MM)
 
    -  -  ``-mi, --mult-intermediate``
-      -  string
-      -  Intermediate layer multiplicity
+      -  int
+      -  Intermediate layer multiplicity for the ``%qmmm`` block
 
    -  -  ``-ct, --charge-total``
       -  int
-      -  Total system charge
+      -  Total system charge for the ``%qmmm`` block
 
    -  -  ``-mt, --mult-total``
-      -  string
-      -  Total system multiplicity
+      -  int
+      -  Total system multiplicity for the ``%qmmm`` block
 
 Advanced QM/MM Options
 ======================
@@ -361,6 +365,8 @@ Basic 2-Layer QM/MM Configuration
      high_level_functional: "B3LYP"
      high_level_basis: "def2-SVP"
      low_level_force_field: "amber"
+     charge_high: 0
+     mult_high: 1
      charge_total: 0
      mult_total: 1
      embedding_type: "Electronic"
@@ -667,6 +673,10 @@ Settings Atom Partitioning
 Settings Charge and Multiplicity
 --------------------------------
 
+``charge_high`` and ``mult_high`` are required for input generation: they are written to the coordinate section.
+``charge_total`` / ``charge_intermediate`` (and their multiplicities) belong in the ``%qmmm`` block and do not
+substitute for the high-level values.
+
 .. list-table::
    :header-rows: 1
    :widths: 25 20 55
@@ -677,27 +687,27 @@ Settings Charge and Multiplicity
 
    -  -  ``charge_high``
       -  int
-      -  High-level (QM) region charge
+      -  Required. High-level (QM) region charge (``* xyz`` line)
 
    -  -  ``mult_high``
       -  int
-      -  High-level (QM) region spin multiplicity
+      -  Required. High-level (QM) region spin multiplicity (``* xyz`` line)
 
    -  -  ``charge_intermediate``
       -  int
-      -  Intermediate layer charge (QM2 layer in 3-layer ONIOM)
+      -  Intermediate layer charge in the ``%qmmm`` block (QM/QM2/MM)
 
    -  -  ``mult_intermediate``
       -  int
-      -  Intermediate layer multiplicity
+      -  Intermediate layer multiplicity in the ``%qmmm`` block
 
    -  -  ``charge_total``
       -  int
-      -  Total system charge
+      -  Total system charge in the ``%qmmm`` block
 
    -  -  ``mult_total``
       -  int
-      -  Total system multiplicity
+      -  Total system multiplicity in the ``%qmmm`` block
 
 QM/MM Advanced Options
 ======================

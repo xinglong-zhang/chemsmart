@@ -109,13 +109,13 @@ def create_orca_qmmm_subcommand(parent_command):
         "-ch",
         "--charge-high",
         type=int,
-        help="High-level region charge",
+        help="Required high-level (QM) region charge for the * xyz line",
     )
     @click.option(
         "-mh",
         "--mult-high",
         type=int,
-        help="High-level region multiplicity",
+        help="Required high-level (QM) region multiplicity for the * xyz line",
     )
     @click.option(
         "-s",
