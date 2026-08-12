@@ -232,6 +232,101 @@ def verify_xtb_provenance_binding(binding):
     return findings
 
 
+def _audit_xtb_execution_input_binding(record, *, receipt_parent, artifacts):
+    """Audit a rendered input after an optional validated scratch cleanup.
+
+    The child argv and provenance receipt remain bound to the original input
+    path.  While that path exists, it is therefore the only acceptable audit
+    source.  If cleanup removed it, the runner's durable copy may stand in for
+    the bytes only when both the artifact manifest and the live copy retain
+    the exact size and digest captured by the original binding.
+    """
+
+    findings = []
+    if record is None:
+        return findings
+    required_fields = {
+        "role",
+        "declared_path",
+        "resolved_path",
+        "size",
+        "sha256",
+    }
+    if not required_fields.issubset(record):
+        findings.append(
+            _finding(
+                "xtb.provenance.artifact_mismatch",
+                "execution_input_geometry",
+                sorted(required_fields),
+                sorted(record),
+                "binding:execution_input_artifact",
+            )
+        )
+        return findings
+
+    declared = Path(record["declared_path"])
+    # A present file, directory, or symlink is never replaced by a fallback.
+    # This keeps mutation/substitution detection strict even when an exact
+    # durable copy also happens to be available beside the receipt.
+    if declared.exists() or declared.is_symlink():
+        _verify_bound_artifact(
+            record,
+            findings=findings,
+            evidence_ref="binding:execution_input_artifact",
+        )
+        return findings
+
+    expected = {
+        "size": record["size"],
+        "sha256": record["sha256"],
+    }
+    basename = declared.name
+    manifest_record = (
+        artifacts.get(basename) if isinstance(artifacts, Mapping) else None
+    )
+    observed_manifest = (
+        {
+            "size": manifest_record.get("size"),
+            "sha256": manifest_record.get("sha256"),
+        }
+        if isinstance(manifest_record, Mapping)
+        else None
+    )
+    durable_path = Path(receipt_parent) / basename
+    durable_record = (
+        None if durable_path.is_symlink() else _artifact_record(durable_path)
+    )
+    observed_durable = (
+        {
+            "size": durable_record.get("size"),
+            "sha256": durable_record.get("sha256"),
+        }
+        if isinstance(durable_record, Mapping)
+        else None
+    )
+    if observed_manifest == expected and observed_durable == expected:
+        return findings
+
+    findings.append(
+        _finding(
+            "xtb.provenance.artifact_mismatch",
+            record["role"],
+            {
+                "original_binding": expected,
+                "artifact_manifest": expected,
+                "durable_copy": expected,
+            },
+            {
+                "original_path": None,
+                "artifact_manifest": observed_manifest,
+                "durable_copy": observed_durable,
+            },
+            f"artifact:{basename}",
+        )
+    )
+    return findings
+
+
 def _settings_payload(settings):
     return {
         name: getattr(settings, name)
@@ -1314,7 +1409,17 @@ def audit_xtb_result_receipt(
             verifiable_binding[role] = None
         else:
             verifiable_binding[role] = record
-    for finding in verify_xtb_provenance_binding(verifiable_binding):
+    strict_binding = {
+        "source_artifact": verifiable_binding["source_artifact"],
+        "project_artifact": verifiable_binding["project_artifact"],
+    }
+    for finding in verify_xtb_provenance_binding(strict_binding):
+        rule_ids.append(str(finding.get("rule_id")))
+    for finding in _audit_xtb_execution_input_binding(
+        verifiable_binding["execution_input_artifact"],
+        receipt_parent=path.parent,
+        artifacts=result.get("artifacts"),
+    ):
         rule_ids.append(str(finding.get("rule_id")))
     source = binding["source_artifact"]
     project = binding["project_artifact"]

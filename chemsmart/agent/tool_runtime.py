@@ -2162,7 +2162,6 @@ class CommandCompiledToolHostV1:
             task_spec_id=task_spec_id,
             nodes=tuple(nodes),
         )
-        self.workflow_drafts[draft.draft_sha256] = draft
         scientific_plan = (
             self._scientific_plan_from_draft(
                 draft,
@@ -2215,6 +2214,14 @@ class CommandCompiledToolHostV1:
                 canonical_data(scientific_plan) if scientific_plan else {}
             ),
         )
+        # A draft becomes host state only after every scientific constraint
+        # above accepts it and the corresponding event is durable.  In
+        # particular, a replan that differs from a frozen approval raises in
+        # ``_scientific_plan_from_draft``.  Registering that rejected draft
+        # early made it look like the latest observed workflow even though no
+        # WORKFLOW_PLANNED event existed for it, so planned termination could
+        # not bind its required receipt to the event stream.
+        self.workflow_drafts[draft.draft_sha256] = draft
         result = {
             "workflow_draft": draft,
             "scientific_workflow_plan": scientific_plan,

@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
 
 from chemsmart.agent.execution import derive_ready_node_ids
-from chemsmart.agent._contracts import canonical_sha256
+from chemsmart.agent._contracts import ContractError, canonical_sha256
 from chemsmart.agent.experiments.program_management_fixtures import (
     ProgramManagementHostFixtureFactoryV1,
 )
@@ -57,6 +58,77 @@ def test_plan_tool_projects_explicit_data_edge_into_scientific_dag(tmp_path):
     assert event.payload["scientific_plan_record"]["plan_sha256"] == (
         plan.plan_sha256
     )
+
+
+def test_rejected_replan_cannot_displace_the_latest_observed_workflow(
+    tmp_path,
+):
+    """Planned termination remains bound to the accepted immutable plan.
+
+    An execution session may try to replan after loading a frozen approval.
+    The approval correctly rejects a different scientific plan.  That failed
+    tool call must not make its unobserved command draft the host's latest
+    workflow receipt, or Runtime V2 cannot terminate honestly as ``planned``.
+    """
+
+    factory = ProgramManagementHostFixtureFactoryV1(
+        source_tree_root=".",
+        materialization_root=tmp_path / "fixture",
+    )
+    fixture = factory(SimpleNamespace(case_id="DS-PM-003"))
+    store = RuntimeEventStore(
+        tmp_path / "events" / "runtime.jsonl", session_id="session"
+    )
+    host = CommandCompiledToolHostV1(
+        event_store=store,
+        task_spec_sha256s=(fixture.public_context.task_spec_sha256,),
+        approved_workspace=tmp_path / "workspace",
+        **fixture.host_inputs,
+    )
+    action = next(
+        item
+        for item in fixture.public_context.next_actions
+        if item.tool_name == "plan_command_workflow"
+    )
+    accepted_arguments = dict(action.fields)
+    accepted = host.dispatch(
+        turn_id="turn-1",
+        tool_name=action.tool_name,
+        arguments=accepted_arguments,
+    )["result"]
+    accepted_draft_sha256 = accepted["workflow_draft"]["draft_sha256"]
+    accepted_plan_sha256 = accepted["scientific_workflow_plan"][
+        "plan_sha256"
+    ]
+    frozen_approval = SimpleNamespace(plan_sha256=accepted_plan_sha256)
+    host.frozen_workflow_approval = frozen_approval
+
+    revised_nodes = [dict(node) for node in accepted_arguments["nodes"]]
+    revised_nodes[0]["project_role"] = "different-project-role"
+    rejected_arguments = {**accepted_arguments, "nodes": revised_nodes}
+
+    with pytest.raises(
+        ContractError,
+        match="planned workflow differs from frozen execution approval",
+    ):
+        host.dispatch(
+            turn_id="turn-1",
+            tool_name=action.tool_name,
+            arguments=rejected_arguments,
+        )
+
+    assert host.frozen_workflow_approval is frozen_approval
+    assert tuple(host.workflow_drafts) == (accepted_draft_sha256,)
+    assert host.latest_workflow_draft_receipt() == accepted_draft_sha256
+    assert store.state().workflow_receipts == [accepted_draft_sha256]
+
+    store.terminate(
+        turn_id="turn-1",
+        terminal_state="planned",
+        reason="tool budget exhausted after rejected replan",
+        required_receipt_sha256s=(accepted_draft_sha256,),
+    )
+    assert store.state().terminal_state == "planned"
 
 
 def test_v1_approval_projection_does_not_invent_tuple_order_dependencies():

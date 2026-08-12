@@ -24,6 +24,7 @@ from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.xtb.validation import (
     audit_xtb_result_receipt,
     bind_xtb_execution_input,
+    canonical_sha256,
     finalize_receipt,
     probe_xtb_environment,
     sha256_file,
@@ -97,6 +98,170 @@ def test_xtb_agent_audit_rejects_status_only_receipt(tmp_path):
     assert "xtb.result.schema_version_mismatch" in findings
     assert "xtb.result.requested_settings_missing" in findings
     assert "xtb.result.environment_receipt_unavailable" in findings
+
+
+def _artifact_manifest_record(path):
+    return {
+        "path": path.name,
+        "size": path.stat().st_size,
+        "sha256": sha256_file(path),
+    }
+
+
+def _write_auditable_scratch_xtb_receipt(tmp_path, *, keep_original=False):
+    receipt_dir = tmp_path / "durable"
+    receipt_dir.mkdir()
+    scratch_dir = tmp_path / "scratch"
+    scratch_dir.mkdir()
+    original_input = scratch_dir / "case.xyz"
+    original_input.write_text("2\nhydrogen\nH 0 0 0\nH 0 0 0.7\n")
+    durable_input = receipt_dir / original_input.name
+    durable_input.write_bytes(original_input.read_bytes())
+    output = receipt_dir / "case.out"
+    output.write_text("archived xTB output\n")
+    executable = tmp_path / "xtb-6.7.1"
+    executable.write_bytes(b"synthetic pinned executable identity\n")
+    executable.chmod(0o700)
+    environment_path = receipt_dir / "case.xtb-environment-receipt.json"
+    environment = finalize_receipt(
+        environment_path,
+        {
+            "schema_version": "chemsmart.xtb-environment.v1",
+            "required_version": "6.7.1",
+            "status": "available",
+            "preflight_state": "ready",
+            "execution_ready": True,
+            "observed_version": "6.7.1",
+            "executable": str(executable.resolve()),
+            "executable_sha256": sha256_file(executable),
+            "findings": [],
+        },
+    )
+    settings = XTBJobSettings(jobtype="sp")
+    requested = {
+        name: getattr(settings, name) for name in sorted(settings.FIELDS)
+    }
+    molecule = {
+        "symbols": ["H", "H"],
+        "positions_angstrom": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]],
+        "charge": 0,
+        "multiplicity": 1,
+    }
+    execution_input = bind_xtb_execution_input(original_input)
+    provenance = {
+        "source_artifact": None,
+        "project_artifact": None,
+        "execution_input_artifact": execution_input,
+    }
+    command = [str(executable.resolve()), str(original_input.resolve())]
+    receipt_path = receipt_dir / "case.xtb-result-receipt.json"
+    receipt = finalize_receipt(
+        receipt_path,
+        {
+            "schema_version": "chemsmart.xtb-result-validation.v1",
+            "state": "validated",
+            "engine_state": "completed",
+            "validation_state": "validated",
+            "engine_completion": {
+                "state": "completed",
+                "returncode": 0,
+                "normal_termination": True,
+            },
+            "program": "xtb",
+            "jobtype": "sp",
+            "ready": True,
+            "returncode": 0,
+            "canonical_argv": command,
+            "command_sha256": canonical_sha256(command),
+            "requested_settings": requested,
+            "requested_settings_sha256": canonical_sha256(requested),
+            "requested_molecule": molecule,
+            "requested_molecule_sha256": canonical_sha256(molecule),
+            "command_settings": requested,
+            "command_settings_sha256": canonical_sha256(requested),
+            "applied_settings": requested,
+            "applied_settings_sha256": canonical_sha256(requested),
+            "results": {"final_energy_hartree": -1.0},
+            **provenance,
+            "provenance_binding_sha256": canonical_sha256(provenance),
+            "environment_receipt_sha256": environment["receipt_sha256"],
+            "artifacts": {
+                durable_input.name: _artifact_manifest_record(durable_input),
+                output.name: _artifact_manifest_record(output),
+            },
+            "findings": [],
+        },
+    )
+    if not keep_original:
+        original_input.unlink()
+    return receipt_path, receipt, original_input, durable_input
+
+
+def _audit_synthetic_xtb_receipt(receipt_path):
+    return audit_xtb_result_receipt(
+        receipt_path,
+        expected_jobtype="sp",
+        expected_charge=0,
+        expected_multiplicity=1,
+        expected_settings={
+            name: getattr(XTBJobSettings(jobtype="sp"), name)
+            for name in sorted(XTBJobSettings.FIELDS)
+        },
+    )
+
+
+def test_xtb_agent_audit_accepts_exact_durable_input_after_scratch_cleanup(
+    tmp_path,
+):
+    receipt_path, receipt, original_input, _ = (
+        _write_auditable_scratch_xtb_receipt(tmp_path)
+    )
+
+    observation, findings = _audit_synthetic_xtb_receipt(receipt_path)
+
+    assert findings == (), observation
+    assert receipt["canonical_argv"][1] == str(original_input.resolve())
+    assert receipt["execution_input_artifact"]["declared_path"] == str(
+        original_input.resolve()
+    )
+
+
+def test_xtb_agent_audit_rejects_missing_durable_input_fallback(tmp_path):
+    receipt_path, _, _, durable_input = _write_auditable_scratch_xtb_receipt(
+        tmp_path
+    )
+    durable_input.unlink()
+
+    _, findings = _audit_synthetic_xtb_receipt(receipt_path)
+
+    assert "xtb.provenance.artifact_mismatch" in findings
+    assert f"xtb.result.artifact.{durable_input.name}_mismatch" in findings
+
+
+def test_xtb_agent_audit_rejects_mutated_durable_input_fallback(tmp_path):
+    receipt_path, _, _, durable_input = _write_auditable_scratch_xtb_receipt(
+        tmp_path
+    )
+    durable_input.write_text("mutated durable input\n")
+
+    _, findings = _audit_synthetic_xtb_receipt(receipt_path)
+
+    assert "xtb.provenance.artifact_mismatch" in findings
+    assert f"xtb.result.artifact.{durable_input.name}_mismatch" in findings
+
+
+def test_xtb_agent_audit_never_falls_back_for_existing_mutated_original(
+    tmp_path,
+):
+    receipt_path, _, original_input, durable_input = (
+        _write_auditable_scratch_xtb_receipt(tmp_path, keep_original=True)
+    )
+    original_input.write_text("mutated original input\n")
+
+    _, findings = _audit_synthetic_xtb_receipt(receipt_path)
+
+    assert "xtb.provenance.artifact_mismatch" in findings
+    assert f"xtb.result.artifact.{durable_input.name}_mismatch" not in findings
 
 
 def test_xtb_executable_prefers_configured_folder(tmp_path):
