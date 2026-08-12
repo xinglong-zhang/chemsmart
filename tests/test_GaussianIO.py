@@ -2126,6 +2126,10 @@ class TestGaussian16Output:
 
     def test_read_oniom_outputfile(self, gaussian_oniom_outputfile):
         assert os.path.exists(gaussian_oniom_outputfile)
+        # Base class retains ONIOM helpers for backward compatibility.
+        g16_base = Gaussian16Output(filename=gaussian_oniom_outputfile)
+        assert g16_base.is_oniom
+        assert "high level atoms" in g16_base.oniom_partition
         g16_oniom = Gaussian16QMMMOutput(filename=gaussian_oniom_outputfile)
         assert g16_oniom.normal_termination is False
         assert g16_oniom.oniom_cutting_bonds == {
