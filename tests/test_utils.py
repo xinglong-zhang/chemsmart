@@ -2048,6 +2048,78 @@ class TestPKaTableParsing:
         )
         assert result == entries
 
+    def test_validate_pka_table_entries_without_file_check_success(self):
+        """check_file_exists=False skips actual file existence checks and
+        instead re-validates proton_index/charge/multiplicity directly
+        (no files need to exist for this to pass)."""
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [
+            PKaTableEntry("does_not_exist.xyz", 1, 0, 1),
+            PKaTableEntry("also_missing.xyz", 2, -1, 2),
+        ]
+        result = PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=False
+        )
+        assert result == entries
+
+    def test_validate_pka_table_entries_without_file_check_cdxml_allows_none_proton_index(
+        self,
+    ):
+        """A None proton_index is only an error for non-CDXML filepaths;
+        CDXML entries are allowed to omit it (auto-detected later)."""
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [PKaTableEntry("mol.cdxml", None, 0, 1)]
+        result = PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=False
+        )
+        assert result == entries
+
+    def test_validate_pka_table_entries_without_file_check_aggregates_errors(
+        self,
+    ):
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [
+            PKaTableEntry("a.xyz", None, 0, 1),  # missing proton_index
+            PKaTableEntry("b.xyz", 0, 0, 1),  # invalid proton_index (< 1)
+            PKaTableEntry("c.xyz", 1, None, 1),  # missing charge
+            PKaTableEntry("d.xyz", 1, 0, 0),  # invalid multiplicity (< 1)
+        ]
+        with pytest.raises(ValueError, match="pKa table validation failed"):
+            PKaOutputTable.validate_pka_table_entries(
+                entries, check_file_exists=False
+            )
+
+    def test_pka_output_table_validate_aggregates_entry_errors(self):
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        good_entry = PKaOutputTableEntry(
+            {
+                "basename": "sys1",
+                "ha_gas": "a.log",
+                "a_gas": "b.log",
+                "href_gas": "c.log",
+                "ref_gas": "d.log",
+                "ha_sp": "e.log",
+                "a_sp": "f.log",
+                "href_sp": "g.log",
+                "ref_sp": "h.log",
+                "pka_ref": 6.75,
+            },
+            row_number=2,
+        )
+        bad_entry = PKaOutputTableEntry({"basename": ""}, row_number=3)
+        table = PKaOutputTable(
+            entries=[good_entry, bad_entry], source_path="table.csv"
+        )
+        with pytest.raises(ValueError, match="Output table validation failed"):
+            table.validate(check_file_exists=False)
+
     def test_normalize_table_cell_pandas_na_and_whitespace(self):
         """normalize_table_cell had no direct coverage for pandas.NA,
         NaN, whitespace-only strings, or plain pass-through values."""
@@ -2536,6 +2608,66 @@ class TestPKaTableParsing:
             tmp_path / "collidine_pka_Ref_sp.log"
         )
 
+    def test_discover_pka_reference_companion_outputs_explicit_program(
+        self, tmp_path
+    ):
+        """Passing program explicitly skips the auto-detection branch."""
+        from chemsmart.utils.datasets import (
+            discover_pka_reference_companion_outputs,
+        )
+
+        href_gas = tmp_path / "collidine_pka_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+
+        discovered = discover_pka_reference_companion_outputs(
+            str(href_gas), program="gaussian"
+        )
+        assert discovered["ref"].endswith("collidine_pka_Ref_opt.log")
+
+    def test_pka_output_basename_from_path_matches_later_suffix(self):
+        """A filename that doesn't match the first candidate suffix but
+        does match a later one exercises the loop's continue arc."""
+        from chemsmart.utils.datasets import pka_output_basename_from_path
+
+        # role "ha_gas" suffixes: ["_pka_HA_opt", "_pka_HA", "_pka"]
+        # "mol_pka_HA" doesn't end with "_pka_HA_opt" but does end
+        # with "_pka_HA".
+        assert (
+            pka_output_basename_from_path("mol_pka_HA.log", "ha_gas") == "mol"
+        )
+
+    def test_pka_output_basename_from_path_no_suffix_match(self):
+        from chemsmart.utils.datasets import pka_output_basename_from_path
+
+        assert (
+            pka_output_basename_from_path("random_name.log", "ha_gas")
+            == "random_name"
+        )
+
+    def test_discover_pka_output_path_uses_filepath_hint_for_detection(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import discover_pka_output_path
+
+        hint_file = tmp_path / "hint.log"
+        hint_file.write_text("Gaussian, Inc.\n")
+        (tmp_path / "mol_pka_A_opt.log").write_text("Gaussian, Inc.\n")
+
+        result = discover_pka_output_path(
+            "mol", str(tmp_path), "a_gas", filepath_hint=str(hint_file)
+        )
+        assert result == str(tmp_path / "mol_pka_A_opt.log")
+
+    def test_discover_pka_output_path_falls_back_when_nothing_found(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import discover_pka_output_path
+
+        result = discover_pka_output_path(
+            "mol", str(tmp_path), "a_gas", program="gaussian"
+        )
+        assert result == str(tmp_path / "mol_pka_A_opt.log")
+
     def test_pka_output_table_entry_resolve_filenames_gaussian_log(
         self, tmp_path, monkeypatch
     ):
@@ -2754,6 +2886,107 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="Missing basename"):
             entry.validate(check_file_exists=False)
 
+    def test_pka_output_table_entry_validate_unsupported_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "test", "pka_ref": 6.75}, row_number=1
+        )
+        with pytest.raises(ValueError, match="Unsupported pKa analysis"):
+            entry.validate(check_file_exists=False, scheme="bogus")
+
+    def test_pka_output_table_entry_validate_direct_scheme_missing_files(
+        self,
+    ):
+        """Direct scheme requires only the 4 direct-comparison files.
+        (basename left unset so _resolve_filenames doesn't auto-fill
+        the required fields with guessed paths.)"""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry({}, row_number=1)
+        with pytest.raises(ValueError, match="Missing ha_gas"):
+            entry.validate(check_file_exists=False, scheme="direct")
+
+    def test_pka_output_table_entry_validate_missing_pka_ref(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        for name in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+            (tmp_path / f"{name}.log").write_text("dummy")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "test",
+                "ha_gas": str(tmp_path / "a.log"),
+                "a_gas": str(tmp_path / "b.log"),
+                "href_gas": str(tmp_path / "c.log"),
+                "ref_gas": str(tmp_path / "d.log"),
+                "ha_sp": str(tmp_path / "e.log"),
+                "a_sp": str(tmp_path / "f.log"),
+                "href_sp": str(tmp_path / "g.log"),
+                "ref_sp": str(tmp_path / "h.log"),
+                "pka_ref": None,
+            },
+            row_number=2,
+        )
+        with pytest.raises(ValueError, match="Missing pka_ref"):
+            entry.validate(check_file_exists=True)
+
+    def test_pka_output_table_entry_validate_invalid_pka_ref(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        for name in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+            (tmp_path / f"{name}.log").write_text("dummy")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "test",
+                "ha_gas": str(tmp_path / "a.log"),
+                "a_gas": str(tmp_path / "b.log"),
+                "href_gas": str(tmp_path / "c.log"),
+                "ref_gas": str(tmp_path / "d.log"),
+                "ha_sp": str(tmp_path / "e.log"),
+                "a_sp": str(tmp_path / "f.log"),
+                "href_sp": str(tmp_path / "g.log"),
+                "ref_sp": str(tmp_path / "h.log"),
+                "pka_ref": "not-a-number",
+            },
+            row_number=2,
+        )
+        with pytest.raises(ValueError, match="Invalid pka_ref"):
+            entry.validate(check_file_exists=True)
+
+    def test_pka_output_table_entry_detect_output_program_skips_unsupported(
+        self, tmp_path
+    ):
+        """A single consistently-detected program that isn't gaussian or
+        orca (e.g. xtb) is skipped by _detect_output_program, falling
+        through to the next path_group / eventually None."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        xtb_file = tmp_path / "a.log"
+        xtb_file.write_text("xtb version 6.6.0\n")
+
+        entry = PKaOutputTableEntry(
+            {"basename": "test", "ha_gas": str(xtb_file)}, row_number=1
+        )
+        suffix_candidates = {
+            key: PKaOutputTableEntry._OUTPUT_SUFFIX_CANDIDATES[key]
+            for key in PKaOutputTableEntry._TARGET_AUTO_DISCOVER_FIELDS
+        }
+        assert entry._detect_output_program(suffix_candidates) is None
+
+    def test_pka_output_table_entry_ignores_row_number_key_in_data(self):
+        """A "row_number" key inside the data dict itself (as opposed to
+        the separate row_number= constructor kwarg) is skipped, not
+        treated as a regular field."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "sys1", "row_number": 999}, row_number=3
+        )
+        assert entry.row_number == 3
+        assert "row_number" not in entry.to_dict()
+
     def test_pka_output_table_entry_repr(self):
         """Test PKaOutputTableEntry string representation."""
         from chemsmart.utils.datasets import PKaOutputTableEntry
@@ -2951,6 +3184,49 @@ class TestPKaTableParsing:
         assert "phenol" in stdout_text
         assert "10.12" in stdout_text
 
+    def test_echo_pka_output_table_results_without_output_file(self):
+        """output_results=None skips the export_results() file-writing
+        step entirely, only returning the formatted table text."""
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        entries = [
+            PKaOutputTableEntry(
+                {
+                    "basename": "phenol",
+                    "ha_gas": "a.log",
+                    "a_gas": "b.log",
+                    "href_gas": "c.log",
+                    "ref_gas": "d.log",
+                    "ha_sp": "e.log",
+                    "a_sp": "f.log",
+                    "href_sp": "g.log",
+                    "ref_sp": "h.log",
+                    "pka_ref": 6.75,
+                }
+            ),
+        ]
+        results = [
+            {
+                "pKa": 10.12,
+                "delta_G_soln_kcal_mol": 13.4567,
+                "basename": "phenol",
+            },
+        ]
+        table = PKaOutputTable(entries)
+
+        stdout_text = table.echo_pka_output_table_results(
+            results=results,
+            output_results=None,
+            temperature=298.15,
+            pressure=1.0,
+            scheme="proton exchange",
+        )
+
+        assert "phenol" in stdout_text
+
     def test_parse_and_resolve_multi_row_table(self, tmp_path):
         """End-to-end test: parse → resolve → validate on a multi-row table."""
         from chemsmart.utils.datasets import (
@@ -3103,3 +3379,118 @@ class TestPKaTableParsing:
                 "basename": "sys1",
             }
         ]
+
+    def test_parse_pka_output_table_missing_basename_column(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        table_file = tmp_path / "output_table.csv"
+        table_file.write_text("ha_gas,a_gas\na.log,b.log\n")
+
+        with pytest.raises(
+            ValueError, match="missing required column: basename"
+        ):
+            PKaOutputTable.parse_pka_output_table(str(table_file))
+
+    def test_compute_pka_from_output_table_direct_requires_delta_g_proton(
+        self,
+    ):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        with pytest.raises(ValueError, match="delta_G_proton is required"):
+            PKaOutputTable.compute_pka_from_output_table(
+                entries=[],
+                output_cls=lambda **kwargs: {},
+                scheme="direct",
+                delta_G_proton=None,
+            )
+
+    def test_compute_pka_from_output_table_unsupported_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        entry = {
+            "ha_gas": "a.log",
+            "a_gas": "b.log",
+            "ha_sp": "c.log",
+            "a_sp": "d.log",
+            "basename": "sys1",
+        }
+        with pytest.raises(ValueError, match="Unsupported pKa analysis"):
+            PKaOutputTable.compute_pka_from_output_table(
+                entries=[entry],
+                output_cls=lambda **kwargs: {},
+                scheme="bogus",
+            )
+
+    def test_pka_scheme_delta_g_key_none_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        assert PKaOutputTable.pka_scheme_delta_g_key(None) is None
+
+    def test_pka_scheme_delta_g_value_falls_back_to_soln_key(self):
+        """When neither an explicit scheme nor a "scheme" key on the
+        result resolves to a known ΔG key, falls back to trying
+        delta_G_diss_kcal_mol then delta_G_soln_kcal_mol directly."""
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        result = {"delta_G_soln_kcal_mol": 7.2}
+        assert (
+            PKaOutputTable.pka_scheme_delta_g_value(result, scheme=None) == 7.2
+        )
+
+    def test_format_pka_batch_results_table_infers_scheme_from_results(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        entries = [{"basename": "sys1"}]
+        results = [
+            {
+                "scheme": "direct",
+                "pKa": 4.5,
+                "delta_G_diss_kcal_mol": 6.1,
+            }
+        ]
+        table_text = PKaOutputTable.format_pka_batch_results_table(
+            entries, results, temperature=298.15, pressure=1.0, scheme=None
+        )
+        assert "Direct Dissociation" in table_text
+
+    def test_scheme_batch_header_none_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        assert PKaOutputTable._scheme_batch_header(None) == "Batch pKa Results"
+
+    def test_is_submission_table_false_for_falsy_path(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert PKaTableEntry.is_submission_table(None) is False
+        assert PKaTableEntry.is_submission_table("") is False
+
+    def test_is_submission_table_false_for_cdx_extension(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert PKaTableEntry.is_submission_table("mol.cdx") is False
+        assert PKaTableEntry.is_submission_table("mol.cdxml") is False
+
+    def test_is_submission_table_true_for_valid_table(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "molecules.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\n" "mol1.xyz 10 0 1\n"
+        )
+        assert PKaTableEntry.is_submission_table(str(table_file)) is True
+
+    def test_is_submission_table_false_on_parse_failure(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "nonexistent.txt"
+        assert PKaTableEntry.is_submission_table(str(table_file)) is False
+
+    def test_pka_output_table_iter(self):
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        entry = PKaOutputTableEntry({"basename": "sys1"})
+        table = PKaOutputTable(entries=[entry], source_path="table.csv")
+        assert list(iter(table)) == [entry]

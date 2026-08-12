@@ -4194,3 +4194,24 @@ Two separate exhaustive-but-not-recognized-as-such `if`/`elif` chains, both with
 **Impact:** None -- dead code with no effect on behavior; both chains already correctly handle every real input via their preceding branches.
 
 **Suggested direction:** for `_get_route`, drop the `else: route = None` (the final `elif` could become a plain `else`). For `energies`, drop the third condition's redundant re-check and make it a plain `else: return self.oniom_energies`.
+
+---
+
+## 96. Two `if not entries: raise ValueError(...)` empty-results guards in `utils/datasets.py` are unreachable dead code
+
+**Location:** `chemsmart/utils/datasets.py:419-422` (`PKaTableEntry.parse_pka_table`) and `:896-899` (`PKaOutputTableEntry.parse_pka_output_table`)
+
+```python
+entries = canonical_dataset.to_entries(entry_cls=PKaTableEntry, row_offset=2)
+...
+if not entries:
+    raise ValueError(f"No valid entries found in pKa table: {table_path}")
+```
+
+Both `entries` lists are built via `TabularDataset.to_entries()` (`chemsmart/io/datasets.py:82-86`), which returns exactly one entry per row of `self.dataframe` via `self.dataframe.iterrows()` -- so `len(entries) == len(dataframe)`. The `dataframe` in both cases comes from `TabularDataset.parse_table(...)` (or a same-row-count column-subset/rename of it), which already raises its own `ValueError: No valid entries found in table: ...` whenever `df.empty` (`chemsmart/io/datasets.py:60-61`) *before* either of these two functions ever reaches its own `to_entries()` call. So by the time `entries = ...to_entries(...)` executes, `dataframe` (and therefore `entries`) is already guaranteed non-empty, and the `if not entries:` guard's true arm can never fire.
+
+**Reproduce:** `tests/test_utils.py::TestPKaTableParsing::test_parse_pka_table_empty_raises` confirms a comment-only file raises `ValueError` matching "No valid entries" -- but from `TabularDataset.parse_table`'s own check (`chemsmart/io/datasets.py:60-61`, message "No valid entries found in **table**: ...") rather than either of these two message variants ("... in **pKa** table: ..." / "... in pKa **output** table: ..."), which the test's partial regex match doesn't distinguish. `coverage report -m --include="*utils/datasets.py"` confirms lines 420 and 897 remain unreached across the full test suite.
+
+**Impact:** None -- purely redundant defensive code with no behavioral effect; the earlier, differently-worded guard in `TabularDataset.parse_table` already covers this case.
+
+**Suggested direction:** no action needed; could be removed (or the message text merged into `TabularDataset.parse_table`'s guard) now that the duplication is confirmed.
