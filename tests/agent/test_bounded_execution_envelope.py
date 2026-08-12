@@ -94,6 +94,29 @@ def test_loader_accepts_science_free_resource_and_program_bounds(tmp_path):
     assert observed.max_engine_calls == 4
 
 
+def test_bounded_execution_cleans_only_runner_validated_successful_scratch(
+    tmp_path,
+):
+    envelope = load_bounded_execution_envelope(_write_envelope(tmp_path))
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.execution_resources = envelope.resources
+    host.execution_server = None
+    invocation = SimpleNamespace(
+        command_path=("run", "xtb", "sp"),
+        argv=("chemsmart", "run", "--fake", "xtb", "sp", "project.yaml"),
+    )
+
+    argv = host._real_execution_argv(invocation)
+
+    assert argv[:4] == (
+        "chemsmart",
+        "run",
+        "--no-fake",
+        "--delete-scratch",
+    )
+    assert "--scratch" in argv
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     (

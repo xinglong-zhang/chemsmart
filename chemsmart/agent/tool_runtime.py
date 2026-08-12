@@ -4570,7 +4570,8 @@ class CommandCompiledToolHostV1:
             ),
             # Identity of the *compiled* command, not of ``real_argv``: the
             # preview froze the compiled one, and the host rewrite that adds
-            # --no-fake and the resource flags is deterministic from it.
+            # --no-fake, successful-run scratch cleanup, and the resource
+            # flags is deterministic from it.
             invocation_identity_sha256=self._invocation_identity(node_id),
             auxiliary_input_artifacts=dict(context.job_artifact_options),
         )
@@ -5576,7 +5577,7 @@ class CommandCompiledToolHostV1:
                 "compiled argv does not contain its program"
             ) from exc
         resources = self.execution_resources
-        root = ["chemsmart", "run", "--no-fake"]
+        root = ["chemsmart", "run", "--no-fake", "--delete-scratch"]
         root.append(
             "--no-scratch"
             if resources.scratch_policy == "none"
