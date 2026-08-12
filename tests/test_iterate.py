@@ -23,6 +23,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from chemsmart.cli.iterate.direct_cmd import build_iterate_direct_config
 from chemsmart.cli.main import entry_point
 from chemsmart.cli.run import run
 from chemsmart.jobs.iterate.job import IterateExecutionError, IterateJob
@@ -43,6 +44,7 @@ from chemsmart.jobs.iterate.settings import (
 )
 from chemsmart.utils.iterate import (
     generate_yaml_template,
+    validate_iterate_config,
     validate_yaml_config,
 )
 
@@ -152,6 +154,28 @@ def _build_job_from_config_path(
     )
 
 
+def _build_job_from_standard_config(
+    config: dict,
+    jobrunner,
+    tmp_path: Path,
+    *,
+    combination_mode: str = "independent",
+    algorithm_config=None,
+) -> IterateJob:
+    settings = IterateJobSettings(
+        algorithm_config=algorithm_config or resolve_algorithm_config(),
+        combination_mode=combination_mode,
+    )
+    settings.skeleton_list = config["skeletons"]
+    settings.substituent_list = config["substituents"]
+    return IterateJob(
+        settings=settings,
+        jobrunner=jobrunner,
+        nprocs=1,
+        outputfile=str(tmp_path / "standard_iterate"),
+    )
+
+
 def _build_job(
     config_name: str,
     jobrunner,
@@ -176,6 +200,22 @@ def _write_iterate_config(tmp_path: Path, name: str, content: str) -> Path:
     config_path = tmp_path / name
     config_path.write_text(content)
     return config_path
+
+
+def _build_direct_config(tmp_path: Path, **overrides) -> dict:
+    kwargs = {
+        "skeleton_files": ("a.gjf",),
+        "skeleton_groups": ("[1]",),
+        "skeleton_indices": (),
+        "skeleton_labels": (),
+        "substituent_files": ("Me.gjf",),
+        "substituent_indices": (1,),
+        "substituent_groups": ("[1]",),
+        "substituent_labels": (),
+        "path_base_dir": str(tmp_path),
+    }
+    kwargs.update(overrides)
+    return build_iterate_direct_config(**kwargs)
 
 
 def _write_overlapping_slot_config(
@@ -237,7 +277,7 @@ def _assignment_signature(combo) -> tuple[tuple[int, int, int], ...]:
     )
 
 
-def _capture_iterate_cli_jobs(monkeypatch) -> list[IterateJob]:
+def _capture_iterate_jobs(monkeypatch) -> list[IterateJob]:
     captured_jobs = []
 
     def fake_run_single_job(job, jobrunner):
@@ -412,6 +452,818 @@ def test_iterate_cli_generation_matches_golden(
     assert "Number of processes:     1" in report_text
     assert "Normal termination of CHEMSMART Iterate" in report_text
     assert "Configuration SHA256" not in report_text
+
+
+def test_iterate_direct_adapter_parses_flat_skeleton_group(tmp_path: Path):
+    """Direct ``-skg [1,2,3]`` remains a link_index shorthand."""
+    # [sterp 1] : Convert a single flat skeleton group through the direct adapter.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_groups=("[1,2,3]",),
+    )
+
+    # [sterp 2] : Confirm the standard config stores link_index and raw/resolved paths.
+    skeleton = config["skeletons"][0]
+    assert skeleton["file_path_raw"] == "a.gjf"
+    assert skeleton["file_path"] == str(tmp_path / "a.gjf")
+    assert skeleton["link_index"] == [1, 2, 3]
+    assert skeleton["slots"] is None
+
+
+def test_iterate_direct_adapter_parses_nested_skeleton_groups(tmp_path: Path):
+    """Direct ``-skg [[1,2],[3,4]]`` becomes explicit numbered slots."""
+    # [sterp 1] : Convert two explicit skeleton slots through the direct adapter.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_groups=("[[1,2],[3,4]]",),
+        substituent_groups=("[1,2]",),
+    )
+
+    # [sterp 2] : Confirm groups are assigned globally and the shorthand is not used.
+    skeleton = config["skeletons"][0]
+    assert skeleton["link_index"] is None
+    assert skeleton["slots"] == [
+        {"group": 1, "link_indices": [1, 2]},
+        {"group": 2, "link_indices": [3, 4]},
+    ]
+
+
+def test_iterate_direct_adapter_preserves_single_explicit_slot(tmp_path: Path):
+    """Direct ``-skg [[1,2]]`` is one explicit slot, not link_index."""
+    # [sterp 1] : Convert one nested skeleton group through the direct adapter.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_groups=("[[1,2]]",),
+    )
+
+    # [sterp 2] : Confirm the explicit slot structure is retained.
+    skeleton = config["skeletons"][0]
+    assert skeleton["link_index"] is None
+    assert skeleton["slots"] == [
+        {"group": 1, "link_indices": [1, 2]},
+    ]
+
+
+def test_iterate_direct_adapter_assigns_global_groups_and_routes_substituents(
+    tmp_path: Path,
+):
+    """Skeleton groups are global, contiguous, and substituents route by group."""
+    # [sterp 1] : Mix explicit-slot and shorthand skeletons in one direct config.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_files=("a.gjf", "b.gjf", "c.gjf"),
+        skeleton_groups=("[[1,3],[5,7]]", "[2,4]", "[[6],[8]]"),
+        substituent_files=("Me.gjf", "OH.gjf"),
+        substituent_indices=(1, 1),
+        substituent_groups=("[1,3]", "[4,5]"),
+    )
+
+    # [sterp 2] : Confirm global numbering spans all skeleton entries in order.
+    skeletons = config["skeletons"]
+    assert [slot["group"] for slot in skeletons[0]["slots"]] == [1, 2]
+    assert skeletons[1]["link_index"] == [2, 4]
+    assert [slot["group"] for slot in skeletons[2]["slots"]] == [4, 5]
+    assert [sub["groups"] for sub in config["substituents"]] == [
+        [1, 3],
+        [4, 5],
+    ]
+
+
+def test_iterate_direct_adapter_optional_labels_and_indices(tmp_path: Path):
+    """Optional labels/indices require full pairing and support none placeholders."""
+    # [sterp 1] : Provide optional skeleton indices and labels for every entry.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_files=("a.gjf", "b.gjf"),
+        skeleton_groups=("[1]", "[2]"),
+        skeleton_indices=("[1,2]", "none"),
+        skeleton_labels=("core", "none"),
+        substituent_files=("Me.gjf", "OH.gjf"),
+        substituent_indices=(1, 1),
+        substituent_groups=("[1]", "[2]"),
+        substituent_labels=("Me", "none"),
+    )
+
+    # [sterp 2] : Confirm explicit values and default placeholders survive.
+    assert [skel["skeleton_indices"] for skel in config["skeletons"]] == [
+        [1, 2],
+        None,
+    ]
+    assert [skel["label"] for skel in config["skeletons"]] == [
+        "core",
+        None,
+    ]
+    assert [sub["label"] for sub in config["substituents"]] == [
+        "Me",
+        None,
+    ]
+
+
+def test_iterate_direct_default_labels_match_yaml_runner_behavior(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Unset direct-input labels defer to runner defaults."""
+    # [sterp 1] : Build a label-free direct config using real molecule files.
+    config = _build_direct_config(
+        tmp_path,
+        skeleton_files=(str(INPUT_DIR / "benzene.xyz"),),
+        skeleton_groups=("[1]",),
+        substituent_files=(str(INPUT_DIR / "methane.xyz"),),
+        substituent_indices=(1,),
+        substituent_groups=("[1]",),
+    )
+    job = _build_job_from_standard_config(config, iterate_jobrunner, tmp_path)
+
+    # [sterp 2] : Generate combinations and inspect the labels emitted by runner.
+    _, combinations, input_errors, _ = (
+        iterate_jobrunner._generate_combinations(job)
+    )
+
+    # [sterp 3] : Confirm default skeleton/substituent labels match YAML behavior.
+    assert input_errors == []
+    assert {combo.label for combo in combinations} == {
+        "skeleton1_1substituent1"
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"skeleton_files": ()}, id="missing-skeleton-file"),
+        pytest.param({"skeleton_groups": ()}, id="missing-skeleton-group"),
+        pytest.param({"substituent_files": ()}, id="missing-sub-file"),
+        pytest.param({"substituent_indices": ()}, id="missing-sub-index"),
+        pytest.param({"substituent_groups": ()}, id="missing-sub-group"),
+        pytest.param(
+            {"skeleton_files": ("a.gjf", "b.gjf")},
+            id="skeleton-group-count",
+        ),
+        pytest.param(
+            {
+                "skeleton_files": ("a.gjf", "b.gjf"),
+                "skeleton_groups": ("[1]", "[2]"),
+                "skeleton_indices": ("[1]",),
+            },
+            id="skeleton-indices-count",
+        ),
+        pytest.param(
+            {
+                "skeleton_files": ("a.gjf", "b.gjf"),
+                "skeleton_groups": ("[1]", "[2]"),
+                "skeleton_labels": ("A",),
+            },
+            id="skeleton-label-count",
+        ),
+        pytest.param(
+            {
+                "substituent_files": ("Me.gjf", "OH.gjf"),
+                "substituent_indices": (1, 1),
+                "substituent_groups": ("[1]", "[1]"),
+                "substituent_labels": ("Me",),
+            },
+            id="sub-label-count",
+        ),
+    ],
+)
+def test_iterate_direct_adapter_rejects_count_mismatches(
+    overrides: dict,
+    tmp_path: Path,
+):
+    """Multiple Click options are strictly paired and never silently zipped."""
+    # [sterp 1] : Apply the count mismatch to the default direct config.
+    with pytest.raises(click.UsageError):
+        # [sterp 2] : Require a UsageError before any truncating zip can occur.
+        _build_direct_config(tmp_path, **overrides)
+
+
+@pytest.mark.parametrize(
+    ("skeleton_groups", "message"),
+    [
+        pytest.param("not-a-list", "Python list literal", id="bad-literal"),
+        pytest.param("1", "list literal", id="non-list"),
+        pytest.param("[]", "empty list", id="empty-list"),
+        pytest.param("[1,[2,3]]", "cannot mix", id="mixed-nesting"),
+        pytest.param("[[1,[2]]]", "more than two levels", id="too-deep"),
+        pytest.param("[True]", "positive integers", id="bool"),
+        pytest.param("[0]", "invalid index <= 0", id="zero"),
+        pytest.param("[-1]", "invalid index <= 0", id="negative"),
+        pytest.param("[1.5]", "positive integers", id="float"),
+        pytest.param("[1,1]", "Duplicate", id="duplicate-flat"),
+        pytest.param("[[1,1]]", "duplicate", id="duplicate-slot"),
+    ],
+)
+def test_iterate_direct_adapter_rejects_invalid_skeleton_groups(
+    skeleton_groups: str,
+    message: str,
+    tmp_path: Path,
+):
+    """Direct list parsing rejects malformed or invalid sites."""
+    # [sterp 1] : Feed the parameterized invalid -skg literal.
+    with pytest.raises(click.BadParameter) as exc_info:
+        _build_direct_config(tmp_path, skeleton_groups=(skeleton_groups,))
+
+    # [sterp 2] : Confirm the parser reports the expected validation class.
+    assert message in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("substituent_groups", "message"),
+    [
+        pytest.param("[[1]]", "flat list", id="nested"),
+        pytest.param("[True]", "positive integers", id="bool"),
+        pytest.param("[0]", "positive integers", id="zero"),
+        pytest.param("[-1]", "positive integers", id="negative"),
+        pytest.param("[1.5]", "positive integers", id="float"),
+        pytest.param("[2]", "does not reference", id="missing-group"),
+    ],
+)
+def test_iterate_direct_adapter_rejects_invalid_substituent_groups(
+    substituent_groups: str,
+    message: str,
+    tmp_path: Path,
+):
+    """Direct ``-subg`` accepts only existing positive-integer flat groups."""
+    # [sterp 1] : Feed the parameterized invalid -subg literal.
+    with pytest.raises(click.BadParameter) as exc_info:
+        _build_direct_config(
+            tmp_path, substituent_groups=(substituent_groups,)
+        )
+
+    # [sterp 2] : Confirm the substituent group rule is reported.
+    assert message in str(exc_info.value)
+
+
+def test_iterate_direct_multiple_options_preserve_order(monkeypatch):
+    """Click multiple tuples are paired by their own preserved order."""
+    # [sterp 1] : Capture the job created from interleaved direct options.
+    captured_jobs = _capture_iterate_jobs(monkeypatch)
+
+    # [sterp 2] : Invoke iterate direct with two skeletons and two substituents.
+    result = CliRunner().invoke(
+        run,
+        [
+            "iterate",
+            "direct",
+            "-skf",
+            "first.gjf",
+            "-skg",
+            "[1]",
+            "-skf",
+            "second.gjf",
+            "-skg",
+            "[2]",
+            "-subf",
+            "Me.gjf",
+            "-subi",
+            "1",
+            "-subg",
+            "[1]",
+            "-subf",
+            "OH.gjf",
+            "-subi",
+            "1",
+            "-subg",
+            "[2]",
+        ],
+        obj={},
+    )
+
+    # [sterp 3] : Confirm standard config order matches the CLI occurrence order.
+    assert result.exit_code == 0, result.output
+    assert len(captured_jobs) == 1
+    settings = captured_jobs[0].settings
+    assert [entry["file_path_raw"] for entry in settings.skeleton_list] == [
+        "first.gjf",
+        "second.gjf",
+    ]
+    assert [entry["file_path_raw"] for entry in settings.substituent_list] == [
+        "Me.gjf",
+        "OH.gjf",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("algorithm_args", "expected_name", "expected_options"),
+    [
+        pytest.param([], "etkdg", {"num_conformers": 10}, id="default-etkdg"),
+        pytest.param(
+            ["etkdg", "--num-conformers", "20", "--global"],
+            "etkdg",
+            {"num_conformers": 20, "use_global_optimization": True},
+            id="explicit-etkdg",
+        ),
+        pytest.param(
+            ["jlgo", "--max-starts", "3", "--slsqp-maxiter", "4"],
+            "jlgo",
+            {"max_starts": 3, "slsqp_maxiter": 4},
+            id="explicit-jlgo",
+        ),
+    ],
+)
+def test_iterate_direct_algorithm_selection_and_options(
+    algorithm_args: list[str],
+    expected_name: str,
+    expected_options: dict,
+    monkeypatch,
+):
+    """Direct input uses the same algorithm resolver as YAML input."""
+    # [sterp 1] : Capture jobs for default, explicit ETKDG, and explicit JLGO.
+    captured_jobs = _capture_iterate_jobs(monkeypatch)
+
+    # [sterp 2] : Invoke iterate direct with the parameterized algorithm args.
+    result = CliRunner().invoke(
+        run,
+        [
+            "iterate",
+            "direct",
+            "-skf",
+            "core.gjf",
+            "-skg",
+            "[1]",
+            "-subf",
+            "Me.gjf",
+            "-subi",
+            "1",
+            "-subg",
+            "[1]",
+            *algorithm_args,
+        ],
+        obj={},
+    )
+
+    # [sterp 3] : Confirm the resolved algorithm name and explicit overrides.
+    assert result.exit_code == 0, result.output
+    algorithm_config = captured_jobs[0].settings.algorithm_config
+    assert algorithm_config.name == expected_name
+    for key, value in expected_options.items():
+        assert algorithm_config.options[key] == value
+
+
+@pytest.mark.parametrize(
+    ("help_args", "snippets"),
+    [
+        pytest.param(
+            ["iterate", "--help"],
+            ["yaml", "direct"],
+            id="iterate",
+        ),
+        pytest.param(
+            ["iterate", "direct", "--help"],
+            ["--skeleton-groups", "--substituent-groups"],
+            id="direct",
+        ),
+        pytest.param(
+            ["iterate", "yaml", "etkdg", "--help"],
+            [
+                "RDKit ETKDGv3",
+                "selects the final algorithm",
+                "same algorithm",
+                "other algorithm are discarded",
+                "highest priority",
+                "chemsmart run iterate yaml -f config.yaml etkdg --num-conformers 50",
+                "chemsmart run iterate direct -skf core.gjf -skg '[1]' -subf Me.gjf -subi 1 -subg '[1]' etkdg --num-conformers 50",
+                "--global",
+            ],
+            id="yaml-etkdg",
+        ),
+        pytest.param(
+            ["iterate", "yaml", "jlgo", "--help"],
+            [
+                "Joint Lagrange",
+                "selects the final algorithm",
+                "same algorithm",
+                "other algorithm are discarded",
+                "highest priority",
+                "chemsmart run iterate yaml -f config.yaml jlgo --max-starts 16",
+                "chemsmart run iterate direct -skf core.gjf -skg '[1]' -subf Me.gjf -subi 1 -subg '[1]' jlgo --max-starts 16",
+                "--max-starts",
+            ],
+            id="yaml-jlgo",
+        ),
+        pytest.param(
+            ["iterate", "direct", "etkdg", "--help"],
+            [
+                "RDKit ETKDGv3",
+                "selects the final algorithm",
+                "same algorithm",
+                "other algorithm are discarded",
+                "highest priority",
+                "chemsmart run iterate yaml -f config.yaml etkdg --num-conformers 50",
+                "chemsmart run iterate direct -skf core.gjf -skg '[1]' -subf Me.gjf -subi 1 -subg '[1]' etkdg --num-conformers 50",
+                "--global",
+            ],
+            id="direct-etkdg",
+        ),
+        pytest.param(
+            ["iterate", "direct", "jlgo", "--help"],
+            [
+                "Joint Lagrange",
+                "selects the final algorithm",
+                "same algorithm",
+                "other algorithm are discarded",
+                "highest priority",
+                "chemsmart run iterate yaml -f config.yaml jlgo --max-starts 16",
+                "chemsmart run iterate direct -skf core.gjf -skg '[1]' -subf Me.gjf -subi 1 -subg '[1]' jlgo --max-starts 16",
+                "--max-starts",
+            ],
+            id="direct-jlgo",
+        ),
+    ],
+)
+def test_iterate_help_paths(help_args: list[str], snippets: list[str]):
+    """The input layer and shared algorithm subcommands expose useful help."""
+    # [sterp 1] : Invoke the parameterized help path without molecule args.
+    result = CliRunner().invoke(run, help_args, obj={})
+
+    # [sterp 2] : Confirm help succeeds and keeps stable semantic snippets.
+    assert result.exit_code == 0, result.output
+    assert "Options:" in result.output
+    for snippet in snippets:
+        assert snippet in result.output
+    assert "cdxml" not in result.output.lower()
+    assert "{override_help}" not in result.output
+    assert "chemsmart run iterate <input> [INPUT_OPTIONS]" not in result.output
+
+
+def test_iterate_legacy_input_command_is_not_registered():
+    """The renamed input layer no longer exposes the old command name."""
+    result = CliRunner().invoke(run, ["iterate", "cli"], obj={})
+
+    assert result.exit_code == 2
+    assert "No such command 'cli'" in result.output
+
+
+def test_iterate_cdxml_command_is_not_registered():
+    """Iterate no longer exposes the removed CDXML input placeholder."""
+    # [sterp 1] : Invoke the removed input command through the real run hierarchy.
+    result = CliRunner().invoke(run, ["iterate", "cdxml"], obj={})
+
+    # [sterp 2] : Confirm Click reports an unknown command, not the old placeholder.
+    assert result.exit_code == 2
+    assert "No such command 'cdxml'" in result.output
+    assert "not implemented" not in result.output
+
+
+def test_iterate_direct_and_equivalent_yaml_generate_same_combinations(
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Equivalent direct and YAML configs produce identical combinations."""
+    # [sterp 1] : Build equivalent direct and YAML configs with real files.
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    water = INPUT_DIR / "water.xyz"
+    direct_config = _build_direct_config(
+        tmp_path,
+        skeleton_files=(str(benzene),),
+        skeleton_groups=("[1,3]",),
+        skeleton_labels=("benzene",),
+        substituent_files=(str(methane), str(water)),
+        substituent_indices=(1, 1),
+        substituent_groups=("[1]", "[1]"),
+        substituent_labels=("Me", "OH"),
+    )
+    yaml_path = _write_iterate_config(
+        tmp_path,
+        "equivalent.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: benzene
+    link_index: [1, 3]
+substituents:
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1]
+  - file_path: "{water}"
+    label: OH
+    link_index: 1
+    groups: [1]
+""",
+    )
+
+    # [sterp 2] : Generate combinations through the same runner path.
+    direct_job = _build_job_from_standard_config(
+        direct_config, iterate_jobrunner, tmp_path, combination_mode="global"
+    )
+    yaml_job = _build_job_from_config_path(
+        yaml_path, iterate_jobrunner, tmp_path, combination_mode="global"
+    )
+    _, direct_combinations, direct_errors, _ = (
+        iterate_jobrunner._generate_combinations(direct_job)
+    )
+    _, yaml_combinations, yaml_errors, _ = (
+        iterate_jobrunner._generate_combinations(yaml_job)
+    )
+
+    # [sterp 3] : Confirm standard data and combination identities are identical.
+    assert direct_errors == []
+    assert yaml_errors == []
+    assert direct_job.settings.skeleton_list == yaml_job.settings.skeleton_list
+    assert (
+        direct_job.settings.substituent_list
+        == yaml_job.settings.substituent_list
+    )
+    assert {_assignment_signature(combo) for combo in direct_combinations} == {
+        _assignment_signature(combo) for combo in yaml_combinations
+    }
+    assert {combo.label for combo in direct_combinations} == {
+        combo.label for combo in yaml_combinations
+    }
+
+
+@pytest.mark.parametrize(
+    ("combination_mode", "expected_labels"),
+    [
+        pytest.param(
+            "global",
+            {
+                "overlap_1Me",
+                "overlap_2Me",
+                "overlap_3Me",
+                "overlap_1Me_2Me",
+                "overlap_1Me_3Me",
+                "overlap_2Me_3Me",
+                "overlap_1Me_2Me_3Me",
+            },
+            id="global",
+        ),
+        pytest.param(
+            "independent",
+            {
+                "overlap_1Me",
+                "overlap_2Me",
+                "overlap_1Me_2Me",
+                "overlap_3Me",
+                "overlap_2Me_3Me",
+            },
+            id="independent",
+        ),
+    ],
+)
+def test_iterate_direct_yaml_overlapping_slots_parity(
+    combination_mode: str,
+    expected_labels: set[str],
+    iterate_jobrunner,
+    tmp_path: Path,
+):
+    """Direct overlapping slots match YAML config and combinations."""
+    # [sterp 1] : Build equivalent overlapping-slot inputs with one shared substituent.
+    benzene = INPUT_DIR / "benzene.xyz"
+    methane = INPUT_DIR / "methane.xyz"
+    direct_config = _build_direct_config(
+        tmp_path,
+        skeleton_files=(str(benzene),),
+        skeleton_groups=("[[1,2],[2,3]]",),
+        skeleton_labels=("overlap",),
+        substituent_files=(str(methane),),
+        substituent_indices=(1,),
+        substituent_groups=("[1,2]",),
+        substituent_labels=("Me",),
+    )
+    yaml_path = _write_iterate_config(
+        tmp_path,
+        "overlap_equivalent.yaml",
+        f"""\
+skeletons:
+  - file_path: "{benzene}"
+    label: overlap
+    slots:
+      - group: 1
+        link_indices: [1, 2]
+      - group: 2
+        link_indices: [2, 3]
+substituents:
+  - file_path: "{methane}"
+    label: Me
+    link_index: 1
+    groups: [1, 2]
+""",
+    )
+    yaml_config = validate_yaml_config(
+        yaml.safe_load(yaml_path.read_text()), str(yaml_path)
+    )
+
+    # [sterp 2] : Confirm direct and YAML normalize to the same standard data.
+    assert direct_config["skeletons"] == yaml_config["skeletons"]
+    assert direct_config["substituents"] == yaml_config["substituents"]
+
+    # [sterp 3] : Generate combinations in the parameterized mode for both inputs.
+    direct_job = _build_job_from_standard_config(
+        direct_config,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode=combination_mode,
+    )
+    yaml_job = _build_job_from_standard_config(
+        yaml_config,
+        iterate_jobrunner,
+        tmp_path,
+        combination_mode=combination_mode,
+    )
+    _, direct_combinations, direct_errors, _ = (
+        iterate_jobrunner._generate_combinations(direct_job)
+    )
+    _, yaml_combinations, yaml_errors, _ = (
+        iterate_jobrunner._generate_combinations(yaml_job)
+    )
+
+    # [sterp 4] : Confirm overlap behavior and same-substituent dedup match YAML.
+    assert direct_errors == []
+    assert yaml_errors == []
+    assert {combo.label for combo in direct_combinations} == expected_labels
+    assert {combo.label for combo in yaml_combinations} == expected_labels
+    assert {_assignment_signature(combo) for combo in direct_combinations} == {
+        _assignment_signature(combo) for combo in yaml_combinations
+    }
+
+
+def test_iterate_validator_normalizes_absent_algorithm(tmp_path: Path):
+    """The shared validator accepts missing algorithm blocks as None."""
+    # [sterp 1] : Validate a minimal standard config without an algorithm block.
+    config = validate_iterate_config(
+        {
+            "skeletons": [{"file_path": "core.xyz", "link_index": [1]}],
+            "substituents": [
+                {"file_path": "Me.xyz", "link_index": [1], "groups": [1]}
+            ],
+        },
+        param_hint="config",
+        path_base_dir=str(tmp_path),
+    )
+
+    # [sterp 2] : Confirm the normalized algorithm entry is explicitly absent.
+    assert config["algorithm"] is None
+
+
+def test_iterate_validator_normalizes_algorithm_block(tmp_path: Path):
+    """The shared validator keeps YAML/CLI algorithm block validation common."""
+    # [sterp 1] : Validate a config with a legal ETKDG algorithm block.
+    config = validate_iterate_config(
+        {
+            "algorithm": {
+                "name": "etkdg",
+                "options": {"num_conformers": 5},
+            },
+            "skeletons": [{"file_path": "core.xyz", "link_index": [1]}],
+            "substituents": [
+                {"file_path": "Me.xyz", "link_index": [1], "groups": [1]}
+            ],
+        },
+        param_hint="config",
+        path_base_dir=str(tmp_path),
+    )
+
+    # [sterp 2] : Confirm algorithm name aliases/options are validated and retained.
+    assert config["algorithm"] == {
+        "name": "etkdg",
+        "options": {"num_conformers": 5},
+    }
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "message"),
+    [
+        pytest.param({"name": "missing"}, "Unknown algorithm", id="name"),
+        pytest.param(
+            {"name": "etkdg", "options": {"num_conformers": True}},
+            "Invalid value",
+            id="option-bool",
+        ),
+    ],
+)
+def test_iterate_validator_rejects_invalid_algorithm_block(
+    algorithm: dict,
+    message: str,
+    tmp_path: Path,
+):
+    """Invalid algorithm blocks are rejected by the shared validator."""
+    # [sterp 1] : Validate a minimal config with the parameterized bad algorithm.
+    with pytest.raises(click.BadParameter) as exc_info:
+        validate_iterate_config(
+            {
+                "algorithm": algorithm,
+                "skeletons": [{"file_path": "core.xyz", "link_index": [1]}],
+                "substituents": [
+                    {
+                        "file_path": "Me.xyz",
+                        "link_index": [1],
+                        "groups": [1],
+                    }
+                ],
+            },
+            param_hint="config",
+            path_base_dir=str(tmp_path),
+        )
+
+    # [sterp 2] : Confirm the shared algorithm validator reports the bad block.
+    assert message in str(exc_info.value)
+
+
+def test_iterate_sub_reconstructs_direct_multiple_options(
+    tmp_path: Path,
+    monkeypatch,
+):
+    """``sub --test`` reconstructs repeated iterate direct options rerunnably."""
+    # [sterp 1] : Generate a scheduler run script from repeated direct options.
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        entry_point,
+        [
+            "sub",
+            "--server",
+            "PBS",
+            "--num-cores",
+            "4",
+            "--test",
+            "iterate",
+            "direct",
+            "-skf",
+            "a.gjf",
+            "-skg",
+            "[1]",
+            "-skf",
+            "b.gjf",
+            "-skg",
+            "[[2]]",
+            "-subf",
+            "Me.gjf",
+            "-subi",
+            "1",
+            "-subg",
+            "[1]",
+            "-subf",
+            "OH.gjf",
+            "-subi",
+            "1",
+            "-subg",
+            "[2]",
+            "etkdg",
+            "--num-conformers",
+            "3",
+        ],
+        obj={},
+    )
+
+    # [sterp 2] : Parse the generated Python run script's reconstructed CLI args.
+    assert result.exit_code == 0, result.output
+    run_script = tmp_path / "chemsmart_run_iterate_iterate.py"
+    assert run_script.exists()
+    run_tree = ast.parse(run_script.read_text())
+    cli_assignment = next(
+        node
+        for node in ast.walk(run_tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "cli_args"
+            for target in node.targets
+        )
+    )
+    reconstructed_args = ast.literal_eval(cli_assignment.value)
+
+    # [sterp 3] : Confirm repeated values and algorithm args survive reconstruction.
+    iterate_index = reconstructed_args.index("iterate")
+    assert reconstructed_args[iterate_index + 1] == "direct"
+    assert "cli" not in reconstructed_args
+    assert [
+        reconstructed_args[idx + 1]
+        for idx, value in enumerate(reconstructed_args)
+        if value == "--skeleton-file"
+    ] == ["a.gjf", "b.gjf"]
+    assert [
+        reconstructed_args[idx + 1]
+        for idx, value in enumerate(reconstructed_args)
+        if value == "--skeleton-groups"
+    ] == ["[1]", "[[2]]"]
+    assert [
+        reconstructed_args[idx + 1]
+        for idx, value in enumerate(reconstructed_args)
+        if value == "--substituent-file"
+    ] == ["Me.gjf", "OH.gjf"]
+    assert [
+        reconstructed_args[idx + 1]
+        for idx, value in enumerate(reconstructed_args)
+        if value == "--substituent-groups"
+    ] == ["[1]", "[2]"]
+    assert (
+        reconstructed_args[reconstructed_args.index("--num-conformers") + 1]
+        == "3"
+    )
+
+    # [sterp 4] : Reparse the reconstructed run args to prove they build the same pairs.
+    captured_jobs = _capture_iterate_jobs(monkeypatch)
+    rerun = CliRunner().invoke(run, reconstructed_args, obj={})
+    assert rerun.exit_code == 0, rerun.output
+    settings = captured_jobs[0].settings
+    assert [entry["file_path_raw"] for entry in settings.skeleton_list] == [
+        "a.gjf",
+        "b.gjf",
+    ]
+    assert settings.skeleton_list[1]["slots"] == [
+        {"group": 2, "link_indices": [2]}
+    ]
 
 
 def test_iterate_timeout_is_reported(iterate_jobrunner, tmp_path: Path):
@@ -763,7 +1615,7 @@ def test_iterate_cli_max_substituted_sites_option(
 ):
     """The YAML input command forwards the reusable Iterate limit option."""
     # [sterp 1] : Capture the job built from the parameterized max-site CLI args.
-    captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
+    captured_jobs = _capture_iterate_jobs(monkeypatch)
 
     # [sterp 2] : Invoke iterate YAML with option_args before job execution.
     result = CliRunner().invoke(
@@ -799,7 +1651,7 @@ def test_iterate_cli_rejects_invalid_max_substituted_sites(
 ):
     """Invalid limits fail as Click usage errors before job execution."""
     # [sterp 1] : Stub job execution while passing parameterized invalid limit args.
-    captured_jobs = _capture_iterate_cli_jobs(monkeypatch)
+    captured_jobs = _capture_iterate_jobs(monkeypatch)
 
     # [sterp 2] : Invoke iterate YAML with the invalid max-substituted-sites form.
     result = CliRunner().invoke(

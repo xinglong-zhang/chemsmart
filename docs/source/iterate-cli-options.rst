@@ -11,17 +11,21 @@ This page documents the CLI options available for the ``iterate`` command.
 The ``iterate`` command is organized into two independent layers:
 
 #. **Input format layer** — how the skeletons/substituents are provided. This is selected with a subcommand of
-   ``iterate`` (currently ``yaml``; ``cdxml`` is reserved but not implemented yet).
+   ``iterate`` (currently ``yaml`` or ``direct``).
 #. **Algorithm layer** — how substituent positions are optimized. This is selected with an *optional* algorithm
    subcommand of the input command (``etkdg``, ``jlgo``).
 
 .. code:: bash
 
-   chemsmart run [--num-cores N] iterate yaml -f <CONFIG_FILE> [YAML_OPTIONS] \
+      chemsmart run [--num-cores N] iterate yaml -f <CONFIG_FILE> [INPUT_OPTIONS] \
+         [ALGORITHM [ALGORITHM_OPTIONS]]
+
+      chemsmart run [--num-cores N] iterate direct [DIRECT_INPUT_OPTIONS] [INPUT_OPTIONS] \
        [ALGORITHM [ALGORITHM_OPTIONS]]
 
-If no algorithm subcommand is given, the algorithm declared in the YAML ``algorithm`` block is used, falling back to the
-built-in default (``etkdg``).
+If no algorithm subcommand is given, YAML input uses the algorithm declared in the YAML ``algorithm`` block, falling
+back to the built-in default (``etkdg``). Direct input has no configuration file algorithm block, so it falls back
+directly to ``etkdg``.
 
 Worker parallelism is controlled by the top-level ``-n/--num-cores`` option. The same value determines the number of
 scheduler cores and Iterate worker processes:
@@ -29,6 +33,7 @@ scheduler cores and Iterate worker processes:
 .. code:: bash
 
    chemsmart run --num-cores 4 iterate yaml -f config.yaml
+   chemsmart run --num-cores 4 iterate direct -skf core.xyz -skg [1] -subf Me.xyz -subi 1 -subg [1]
    chemsmart sub --num-cores 4 iterate yaml -f config.yaml
 
 When omitted, the selected server's configured core count is used.
@@ -95,6 +100,109 @@ These options belong to the ``yaml`` command and are **algorithm-agnostic**.
       -  string
       -  Generate a template configuration file (in YAML format) and exit. Defaults to ``iterate_template.yaml`` if not
          specified.
+
+**********************
+ Direct Input Options
+**********************
+
+Direct input accepts ordered, repeated skeleton and substituent entries through command-line options and converts them
+to the same standard Iterate configuration used by YAML input. It does not accept ``--generate-template`` because
+template generation belongs to the YAML tooling path. It accepts the same execution, output and algorithm options as
+YAML input, including ``-t/--timeout``, ``-cm/--combination-mode``, ``-ms/--max-substituted-sites``,
+``-o/--outputfile``, ``--separate-outputs`` and the ``etkdg``/``jlgo`` algorithm subcommands.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 15 50
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-skf, --skeleton-file``
+      -  repeatable string
+      -  Skeleton molecule file. The number of ``-skf`` and ``-skg`` values must match.
+
+   -  -  ``-skg, --skeleton-groups``
+      -  repeatable Python list literal
+      -  Skeleton attachment sites. ``[1,2,3]`` is a ``link_index`` shorthand; ``[[1,2],[3,4]]`` defines explicit slots.
+
+   -  -  ``-ski, --skeleton-indices``
+      -  repeatable Python list literal or ``none``
+      -  Optional skeleton core indices. If used, provide one value per skeleton; ``none`` keeps the entry unset.
+
+   -  -  ``-skl, --skeleton-label``
+      -  repeatable string or ``none``
+      -  Optional skeleton label. If omitted, or if ``none`` is used for an entry, the existing runner default
+         ``skeleton1``, ``skeleton2`` ... is used.
+
+   -  -  ``-subf, --substituent-file``
+      -  repeatable string
+      -  Substituent molecule file. The number of ``-subf``, ``-subi`` and ``-subg`` values must match.
+
+   -  -  ``-subi, --substituent-index``
+      -  repeatable int
+      -  The single 1-based substituent atom that bonds to the skeleton.
+
+   -  -  ``-subg, --substituent-groups``
+      -  repeatable Python list literal
+      -  Non-empty flat list of global skeleton groups the substituent may fill, for example ``[1,3]``.
+
+   -  -  ``-subl, --substituent-label``
+      -  repeatable string or ``none``
+      -  Optional substituent label. If omitted, or if ``none`` is used for an entry, the existing runner default
+         ``substituent1``, ``substituent2`` ... is used.
+
+Flat and Nested ``-skg``
+========================
+
+``-skg [1,2,3]`` means one shorthand ``link_index`` group. It is equivalent to a YAML skeleton entry with ``link_index:
+[1, 2, 3]`` and occupies one implicit global group.
+
+``-skg [[1,2],[3,4]]`` means explicit slots. It is equivalent to a YAML skeleton entry with two ``slots`` entries. The
+The direct input adapter assigns the slot ``group`` values automatically.
+
+``-skg [[1,2]]`` intentionally remains one explicit slot; it is not flattened to ``link_index``. Use the flat list form
+when you want the shorthand.
+
+Group Numbering and ``-subg``
+=============================
+
+Skeleton groups are assigned globally, contiguously, and in input order. A flat ``-skg [2,4]`` consumes one implicit
+group; each nested slot consumes one group. For example:
+
+.. code:: bash
+
+   chemsmart run iterate direct \
+       -skf a.gjf -skg [[1,3],[5,7]] \
+       -skf b.gjf -skg [2,4] \
+       -skf c.gjf -skg [[6],[8]] \
+       -subf Me.gjf -subi 1 -subg [1,3] \
+       -subf OH.gjf -subi 1 -subg [4,5]
+
+The groups are assigned as ``a`` slot 1 -> group 1, ``a`` slot 2 -> group 2, ``b`` shorthand -> group 3, ``c`` slot 1 ->
+group 4 and ``c`` slot 2 -> group 5. ``-subg`` values must refer to these existing group numbers. A substituent may
+belong to several groups, such as ``-subg [1,3]``.
+
+Shell Quoting
+=============
+
+The list syntax is parsed by Click after the shell has passed the argument through. Bash commonly accepts values like
+``[[1,2],[3,4]]`` directly. zsh treats square brackets as glob patterns, so quote the list arguments or prefix the
+command with ``noglob``:
+
+.. code:: bash
+
+   noglob chemsmart run iterate direct \
+       -skf ./a.gjf -skg [[1,2,3],[4,5,6]] \
+       -skf ./b.gjf -skg [1,2,3,4,5,6] \
+       -subf ./Me.gjf -subi 1 -subg [1,2] \
+       -subf ./OH.gjf -subi 1 -subg [3] \
+       -cm global \
+       etkdg --num-conformers 20
+
+Quoting or ``noglob`` only affects shell expansion; Click still receives the literal list strings such as
+``[[1,2,3],[4,5,6]]``.
 
 Maximum Substituted Sites
 =========================
@@ -329,3 +437,12 @@ YAML ``algorithm`` block (ETKDG example):
 
    # Generate a template YAML configuration file
    chemsmart run iterate yaml -g my_config.yaml
+
+      # Equivalent direct input without a YAML file
+      noglob chemsmart run iterate direct \
+         -skf ./a.gjf -skg [[1,2,3],[4,5,6]] \
+         -skf ./b.gjf -skg [1,2,3,4,5,6] \
+         -subf ./Me.gjf -subi 1 -subg [1,2] \
+         -subf ./OH.gjf -subi 1 -subg [3] \
+         -cm global \
+         etkdg --num-conformers 20

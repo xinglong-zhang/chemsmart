@@ -26,19 +26,20 @@ Generate an annotated YAML template, edit its molecule paths and attachment site
    chemsmart run --num-cores 4 iterate yaml -f iterate_template.yaml \
        --separate-outputs -d ./library
 
-The command has an input-format layer (currently ``yaml``) and an optional algorithm subcommand (``etkdg`` or ``jlgo``):
+The command has an input-format layer (currently ``yaml`` or ``direct``) and an optional algorithm subcommand (``etkdg``
+or ``jlgo``):
 
 .. code:: text
 
    chemsmart run iterate yaml -f CONFIG.yaml [YAML_OPTIONS] \
        [ALGORITHM [ALGORITHM_OPTIONS]]
 
-If the algorithm subcommand is omitted, ``iterate`` uses the algorithm in the YAML ``algorithm`` block. If neither is
-provided, ETKDG is used.
+   chemsmart run iterate direct [DIRECT_INPUT_OPTIONS] [INPUT_OPTIONS] \
+       [ALGORITHM [ALGORITHM_OPTIONS]]
 
-.. note::
-
-   The ``cdxml`` input subcommand is reserved for future support and is not implemented yet.
+If the algorithm subcommand is omitted, YAML input uses the algorithm in the YAML ``algorithm`` block. If neither is
+provided, ETKDG is used. Direct input has no YAML algorithm block, so it uses ETKDG unless an algorithm subcommand is
+provided.
 
 ********************
  Configuration File
@@ -76,6 +77,35 @@ The following example allows ``Me`` and ``OH`` to be placed at either of two sit
 Each of the two sites has three choices: keep the original branch, attach ``Me``, or attach ``OH``. The all-original
 choice is excluded, so this example generates ``3² - 1 = 8`` combinations: four single substitutions and four double
 substitutions.
+
+Direct input
+============
+
+The ``direct`` input layer accepts the skeleton/substituent manifest through command-line options instead of a YAML
+file. It converts the ordered options to the same standard Iterate configuration used by YAML input.
+
+.. code:: bash
+
+   noglob chemsmart run iterate direct \
+      -skf ./a.gjf -skg [[1,2,3],[4,5,6]] \
+      -skf ./b.gjf -skg [1,2,3,4,5,6] \
+      -subf ./Me.gjf -subi 1 -subg [1,2] \
+      -subf ./OH.gjf -subi 1 -subg [3] \
+      -cm global \
+      etkdg --num-conformers 20
+
+``-skg [1,2,3]`` is the flat ``link_index`` shorthand and consumes one implicit group. ``-skg [[1,2],[3,4]]`` defines
+explicit slots; the direct input adapter assigns their group numbers automatically. ``-subg`` lists the global groups a
+substituent can fill, so ``-subg [1,3]`` makes that substituent available to groups 1 and 3.
+
+Group numbers are assigned globally in skeleton input order. Flat ``-skg`` values consume one group; each nested slot
+consumes one group. Optional ``-skl`` and ``-subl`` labels are not inferred from file stems. When omitted, or when the
+placeholder ``none`` is used, Iterate keeps the existing defaults: ``skeleton1``, ``skeleton2`` ... and
+``substituent1``, ``substituent2`` ...
+
+Shell quoting matters only before Click receives the arguments. Bash usually passes square-bracket list values directly.
+zsh expands square brackets as globs, so quote list arguments or prefix the command with ``noglob``. Click still
+receives the literal list string, for example ``[[1,2,3],[4,5,6]]``.
 
 To cap the number of substituted sites in each generated combination, use the CLI-only ``-ms/--max-substituted-sites``
 option:

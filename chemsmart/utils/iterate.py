@@ -37,7 +37,7 @@ ITERATE_YAML_TEMPLATE = """\
 # ================================================
 #
 # The configuration is split into two independent layers:
-#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'cdxml').
+#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'direct').
 #      This file *is* the YAML input; it lists skeletons and substituents.
 #   2. Algorithm layer      -> how substituent positions are optimized.
 #      Configured via the optional top-level 'algorithm' block below, and/or
@@ -157,7 +157,7 @@ def generate_yaml_template(
 
 
 def _parse_index_string(
-    value, context: str, field_name: str
+    value, context: str, field_name: str, param_hint: str
 ) -> list[int] | None:
     """
     Parse index string into a list of integers using utility function.
@@ -194,7 +194,7 @@ def _parse_index_string(
                 f"{context}: "
                 f"'{field_name}' must contain only positive integers "
                 f"(1-based).",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
 
         if len(parsed_indices) == 0:
@@ -202,7 +202,7 @@ def _parse_index_string(
                 f"{context}: "
                 f"Found empty list in '{field_name}'. "
                 f"At least one index must be provided.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
 
         if any(type(index) is not int for index in parsed_indices):
@@ -210,7 +210,7 @@ def _parse_index_string(
                 f"{context}: "
                 f"'{field_name}' must contain only positive integers "
                 f"(1-based).",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
 
         if any(index <= 0 for index in parsed_indices):
@@ -218,7 +218,7 @@ def _parse_index_string(
                 f"{context}: "
                 f"Found invalid index <= 0 in '{field_name}'. "
                 f"All indices must be positive (1-based). Found: {parsed_indices}",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         return parsed_indices
 
@@ -229,38 +229,54 @@ def _parse_index_string(
             f"{context}: "
             f"Invalid format '{value}' in '{field_name}'. "
             f"Expected integer, comma-separated list, or range (e.g. '1-5').",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
 
-def _resolve_file_path(file_path, config_dir: str):
-    """Resolve a molecule file path against the config file's directory.
+def _resolve_file_path(file_path, base_dir: str):
+    """Resolve a molecule file path against an input base directory.
 
-    Relative ``file_path`` values are resolved relative to the directory of
-    the YAML configuration file (not the current working directory), so
-    molecule files can live next to their config and do not depend on where
-    the command is invoked. Absolute paths and empty values are returned
-    unchanged.
+    Relative ``file_path`` values are resolved relative to the base directory
+    supplied by the input adapter. Absolute paths and empty values are returned
+    unchanged. The adapter decides whether that base is a configuration-file
+    directory, the current working directory, or another input source.
     """
     if not file_path:
         return file_path
     if os.path.isabs(file_path):
         return file_path
-    return os.path.normpath(os.path.join(config_dir, file_path))
+    return os.path.normpath(os.path.join(base_dir, file_path))
 
 
 def validate_yaml_config(config: dict, filename: str) -> dict:
+    """Validate a YAML Iterate configuration and normalize values."""
+    config_dir = os.path.dirname(os.path.abspath(filename))
+    return validate_iterate_config(
+        config,
+        param_hint="'-f' / '--filename'",
+        path_base_dir=config_dir,
+    )
+
+
+def validate_iterate_config(
+    config: dict,
+    *,
+    param_hint: str,
+    path_base_dir: str,
+) -> dict:
     """
-    Validate YAML configuration and normalize values.
+    Validate an Iterate input configuration and normalize values.
     Supports link_index (shorthand) and slots (explicit) formats.
     All skeletons participate in global contiguous group numbering.
 
     Parameters
     ----------
     config : dict
-        Raw configuration dictionary from parsed YAML file
-    filename : str
-        Path to configuration file (for error messages)
+        Raw configuration dictionary from an input adapter.
+    param_hint : str
+        Click parameter hint associated with the input adapter.
+    path_base_dir : str
+        Directory against which relative molecule paths are resolved.
 
     Returns
     -------
@@ -279,7 +295,7 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
             f"Unknown top-level key(s) in configuration: "
             f"{unknown_top_keys}. "
             f"Allowed keys: {ALLOWED_TOP_LEVEL_KEYS}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     validated_config = {}
@@ -293,11 +309,11 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
             raise click.BadParameter(
                 f"'skeletons' must be a list, "
                 f"got {type(skeletons).__name__}",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         else:
             validated_config["skeletons"] = [
-                _validate_skeleton_entry(entry, skel_idx)
+                _validate_skeleton_entry(entry, skel_idx, param_hint)
                 for skel_idx, entry in enumerate(skeletons)
             ]
     else:
@@ -312,30 +328,28 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
             raise click.BadParameter(
                 f"'substituents' must be a list, "
                 f"got {type(substituents).__name__}",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         else:
             validated_config["substituents"] = [
-                _validate_substituent_entry(entry, sub_idx)
+                _validate_substituent_entry(entry, sub_idx, param_hint)
                 for sub_idx, entry in enumerate(substituents)
             ]
     else:
         validated_config["substituents"] = []
 
-    # Resolve relative molecule paths against the config file's directory so
-    # that file_path values never depend on the current working directory.
-    # The original (as-written) value is preserved for diagnostics.
-    config_dir = os.path.dirname(os.path.abspath(filename))
+    # Resolve relative molecule paths against the input adapter's base
+    # directory. The original (as-written) value is preserved for diagnostics.
     for entry in (
         validated_config["skeletons"] + validated_config["substituents"]
     ):
         raw_path = entry.get("file_path")
         entry["file_path_raw"] = raw_path
-        entry["file_path"] = _resolve_file_path(raw_path, config_dir)
+        entry["file_path"] = _resolve_file_path(raw_path, path_base_dir)
 
     # Validate and normalize the optional algorithm block
     validated_config["algorithm"] = _validate_algorithm_entry(
-        config.get("algorithm"), filename
+        config.get("algorithm"), param_hint
     )
 
     # Enforce link_index XOR slots for each skeleton
@@ -346,38 +360,38 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
             raise click.BadParameter(
                 f"Skeleton entry {idx + 1} ('{skel.get('label', 'unnamed')}'): "
                 f"Cannot have both 'link_index' and 'slots'.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         if not has_link and not has_slots:
             raise click.BadParameter(
                 f"Skeleton entry {idx + 1} ('{skel.get('label', 'unnamed')}'): "
                 f"Must have either 'link_index' or 'slots'.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
 
     # Common Business Logic Validation
     _validate_business_logic(
         validated_config["skeletons"],
         validated_config["substituents"],
-        filename,
+        param_hint,
     )
 
-    # YAML-specific cross-validation (global group numbering)
-    _validate_yaml_multi_site_logic(validated_config, filename)
+    # Cross-validation (global group numbering)
+    _validate_multi_site_logic(validated_config, param_hint)
 
     return validated_config
 
 
-def _validate_algorithm_entry(entry, filename: str):
+def _validate_algorithm_entry(entry, param_hint: str):
     """
     Validate and normalize the optional top-level ``algorithm`` block.
 
     Parameters
     ----------
     entry : dict or None
-        Raw ``algorithm`` block from the parsed YAML file.
-    filename : str
-        Path to configuration file (for error messages).
+        Raw ``algorithm`` block from the parsed input config.
+    param_hint : str
+        Click parameter hint for this input source.
 
     Returns
     -------
@@ -405,7 +419,7 @@ def _validate_algorithm_entry(entry, filename: str):
     if not isinstance(entry, dict):
         raise click.BadParameter(
             f"'algorithm' must be a mapping, got {type(entry).__name__}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     unknown_keys = set(entry.keys()) - ALLOWED_ALGORITHM_KEYS
@@ -413,7 +427,7 @@ def _validate_algorithm_entry(entry, filename: str):
         raise click.BadParameter(
             f"Unknown key(s) in 'algorithm' block: {unknown_keys}. "
             f"Allowed keys: {ALLOWED_ALGORITHM_KEYS}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     name = entry.get("name")
@@ -421,13 +435,13 @@ def _validate_algorithm_entry(entry, filename: str):
         raise click.BadParameter(
             "'algorithm' block is missing required field 'name'. "
             f"Available algorithms: {available_algorithm_names()}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     try:
         canonical_name = normalize_algorithm_name(name)
     except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="'-f' / '--filename'")
+        raise click.BadParameter(str(exc), param_hint=param_hint)
 
     options = entry.get("options")
     if options is None:
@@ -436,32 +450,32 @@ def _validate_algorithm_entry(entry, filename: str):
         raise click.BadParameter(
             f"'algorithm.options' must be a mapping, "
             f"got {type(options).__name__}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     try:
         validated_options = validate_algorithm_options(canonical_name, options)
     except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="'-f' / '--filename'")
+        raise click.BadParameter(str(exc), param_hint=param_hint)
 
     return {"name": canonical_name, "options": validated_options}
 
 
 def _validate_business_logic(
-    skeletons: list, substituents: list, filename: str
+    skeletons: list, substituents: list, param_hint: str
 ):
     """
     Orchestrate business logic checks for all entities.
     """
-    _validate_skeletons_logic(skeletons, filename)
+    _validate_skeletons_logic(skeletons, param_hint)
 
-    _validate_substituents_logic(substituents, filename)
+    _validate_substituents_logic(substituents, param_hint)
 
-    _validate_unique_labels(skeletons, substituents, filename)
+    _validate_unique_labels(skeletons, substituents, param_hint)
 
 
 def _validate_unique_labels(
-    skeletons: list, substituents: list, filename: str
+    skeletons: list, substituents: list, param_hint: str
 ):
     """Reject duplicate skeleton or substituent labels.
 
@@ -481,7 +495,7 @@ def _validate_unique_labels(
                     f"(already used by {kind.lower()} entry "
                     f"{seen[label] + 1}). Labels must be unique to avoid "
                     f"output collisions.",
-                    param_hint=filename,
+                    param_hint=param_hint,
                 )
             seen[label] = idx
 
@@ -489,32 +503,32 @@ def _validate_unique_labels(
     _check(substituents, "Substituent")
 
 
-def _validate_skeletons_logic(skeletons: list, filename: str):
+def _validate_skeletons_logic(skeletons: list, param_hint: str):
     """
     Validate business rules for all skeleton entries.
     """
     for idx, entry in enumerate(skeletons):
-        _validate_single_skeleton_rules(entry, idx, filename)
+        _validate_single_skeleton_rules(entry, idx, param_hint)
 
 
-def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
+def _validate_single_skeleton_rules(entry: dict, idx: int, param_hint: str):
     """
     Collection of all business rules for a single skeleton.
     """
     # Rule 1: Check if link_index is included in skeleton_indices
-    _rule_skeleton_indices_must_contain_link(entry, idx, filename)
+    _rule_skeleton_indices_must_contain_link(entry, idx, param_hint)
 
     # Rule 2: file_path is required
-    _rule_file_path_required(entry, idx, filename)
+    _rule_file_path_required(entry, idx, param_hint)
 
     # Rule 3: label must be safe for filenames
-    _rule_label_syntax(entry, idx, "Skeleton", filename)
+    _rule_label_syntax(entry, idx, "Skeleton", param_hint)
 
     # Rule 4: link_index values must not repeat within one skeleton
-    _rule_no_duplicate_link_index(entry, idx, filename)
+    _rule_no_duplicate_link_index(entry, idx, param_hint)
 
 
-def _rule_no_duplicate_link_index(entry: dict, idx: int, filename: str):
+def _rule_no_duplicate_link_index(entry: dict, idx: int, param_hint: str):
     """Rule: link_index values must be unique within a skeleton."""
     link_indices = entry.get("link_index")
     if not link_indices:
@@ -527,11 +541,13 @@ def _rule_no_duplicate_link_index(entry: dict, idx: int, filename: str):
             f"(label='{entry.get('label', 'unnamed')}'): "
             f"Duplicate link_index value(s) {duplicates}. "
             f"Each connection site must be listed once.",
-            param_hint=filename,
+            param_hint=param_hint,
         )
 
 
-def _rule_label_syntax(entry: dict, idx: int, entry_type: str, filename: str):
+def _rule_label_syntax(
+    entry: dict, idx: int, entry_type: str, param_hint: str
+):
     """
     Rule: Label must only contain safe characters [a-zA-Z0-9_-.].
     """
@@ -542,11 +558,11 @@ def _rule_label_syntax(entry: dict, idx: int, entry_type: str, filename: str):
                 f"{entry_type} entry {idx + 1} label '{label}': "
                 f"Contains invalid characters. "
                 f"Allowed characters: a-z, A-Z, 0-9, _, -, .",
-                param_hint=filename,
+                param_hint=param_hint,
             )
 
 
-def _rule_file_path_required(entry: dict, idx: int, filename: str):
+def _rule_file_path_required(entry: dict, idx: int, param_hint: str):
     """
     Rule: file_path must be provided and not empty.
     """
@@ -554,12 +570,12 @@ def _rule_file_path_required(entry: dict, idx: int, filename: str):
         raise click.BadParameter(
             f"Skeleton entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
             f"Missing required field 'file_path'.",
-            param_hint=filename,
+            param_hint=param_hint,
         )
 
 
 def _rule_skeleton_indices_must_contain_link(
-    entry: dict, idx: int, filename: str
+    entry: dict, idx: int, param_hint: str
 ):
     """
     Rule: If skeleton_indices is specified, link_index must be included in it.
@@ -576,19 +592,19 @@ def _rule_skeleton_indices_must_contain_link(
                 f"Skeleton entry {idx + 1} (label='{entry.get('label')}'): "
                 f"The link_index {missing} is not included in 'skeleton_indices'. "
                 f"When 'skeleton_indices' is specified, it must contain the link atom.",
-                param_hint=filename,
+                param_hint=param_hint,
             )
 
 
-def _validate_substituents_logic(substituents: list, filename: str):
+def _validate_substituents_logic(substituents: list, param_hint: str):
     """
     Validate business rules for all substituent entries.
     """
     for idx, entry in enumerate(substituents):
-        _validate_single_substituent_rules(entry, idx, filename)
+        _validate_single_substituent_rules(entry, idx, param_hint)
 
 
-def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
+def _validate_single_substituent_rules(entry: dict, idx: int, param_hint: str):
     """
     Collection of all business rules for a single substituent.
     """
@@ -597,7 +613,7 @@ def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
         raise click.BadParameter(
             f"Substituent entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
             f"Missing required field 'file_path'.",
-            param_hint=filename,
+            param_hint=param_hint,
         )
 
     # Rule 2: link_index must be single value
@@ -607,14 +623,16 @@ def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
             f"Substituent entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
             f"Multiple values found in 'link_index': {link_index}. "
             f"Substituents must have exactly one link atom.",
-            param_hint=filename,
+            param_hint=param_hint,
         )
 
     # Rule 3: label must be safe for filenames
-    _rule_label_syntax(entry, idx, "Substituent", filename)
+    _rule_label_syntax(entry, idx, "Substituent", param_hint)
 
 
-def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
+def _validate_skeleton_entry(
+    entry: dict, skel_idx: int, param_hint: str
+) -> dict:
     """
     Validate a single skeleton entry.
 
@@ -633,14 +651,14 @@ def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
     if entry is None:
         raise click.BadParameter(
             f"Skeleton entry {skel_idx + 1} is empty/null",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     if not isinstance(entry, dict):
         raise click.BadParameter(
             f"Skeleton entry {skel_idx + 1} must be a dictionary, "
             f"got {type(entry).__name__}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # Check for unknown keys
@@ -649,7 +667,7 @@ def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
         raise click.BadParameter(
             f"Unknown key(s) in skeleton entry {skel_idx + 1}: {unknown_keys}. "
             f"Allowed keys: {ALLOWED_SKELETON_KEYS}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # Normalize common fields
@@ -664,12 +682,15 @@ def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
     # Parse link_index
     skel_context = f"Skeleton entry {skel_idx + 1}"
     normalized["link_index"] = _parse_index_string(
-        entry.get("link_index"), skel_context, "link_index"
+        entry.get("link_index"), skel_context, "link_index", param_hint
     )
 
     # Parse skeleton_indices
     normalized["skeleton_indices"] = _parse_index_string(
-        entry.get("skeleton_indices"), skel_context, "skeleton_indices"
+        entry.get("skeleton_indices"),
+        skel_context,
+        "skeleton_indices",
+        param_hint,
     )
 
     # Handle slots field
@@ -678,15 +699,15 @@ def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
         if not isinstance(slots_raw, list):
             raise click.BadParameter(
                 f"Skeleton entry {skel_idx + 1}: 'slots' must be a list.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         if len(slots_raw) == 0:
             raise click.BadParameter(
                 f"Skeleton entry {skel_idx + 1}: 'slots' cannot be empty.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         normalized["slots"] = [
-            _validate_embedded_slot_entry(slot, skel_idx, slot_idx)
+            _validate_embedded_slot_entry(slot, skel_idx, slot_idx, param_hint)
             for slot_idx, slot in enumerate(slots_raw)
         ]
     else:
@@ -695,7 +716,9 @@ def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
     return normalized
 
 
-def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
+def _validate_substituent_entry(
+    entry: dict, sub_idx: int, param_hint: str
+) -> dict:
     """
     Validate a single substituent entry.
 
@@ -714,14 +737,14 @@ def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
     if entry is None:
         raise click.BadParameter(
             f"Substituent entry {sub_idx + 1} is empty/null",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     if not isinstance(entry, dict):
         raise click.BadParameter(
             f"Substituent entry {sub_idx + 1} must be a dictionary, "
             f"got {type(entry).__name__}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # Check for unknown keys
@@ -730,7 +753,7 @@ def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
         raise click.BadParameter(
             f"Unknown key(s) in substituent entry {sub_idx + 1}: {unknown_keys}. "
             f"Allowed keys: {ALLOWED_SUBSTITUENT_KEYS}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # Normalize common fields
@@ -747,6 +770,7 @@ def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
         entry.get("link_index"),
         f"Substituent entry {sub_idx + 1}",
         "link_index",
+        param_hint,
     )
 
     # Handle groups field
@@ -755,18 +779,18 @@ def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
         if not isinstance(groups_raw, list):
             raise click.BadParameter(
                 f"Substituent entry {sub_idx + 1}: 'groups' must be a list.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         if len(groups_raw) == 0:
             raise click.BadParameter(
                 f"Substituent entry {sub_idx + 1}: 'groups' cannot be empty.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
-        if not all(isinstance(g, int) and g > 0 for g in groups_raw):
+        if not all(type(g) is int and g > 0 for g in groups_raw):
             raise click.BadParameter(
                 f"Substituent entry {sub_idx + 1}: all 'groups' entries "
                 f"must be positive integers.",
-                param_hint="'-f' / '--filename'",
+                param_hint=param_hint,
             )
         normalized["groups"] = groups_raw
     else:
@@ -775,7 +799,9 @@ def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
     return normalized
 
 
-def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
+def _validate_embedded_slot_entry(
+    entry, skel_idx: int, slot_idx: int, param_hint: str
+) -> dict:
     """
     Validate a single embedded slot entry within a skeleton.
 
@@ -798,13 +824,13 @@ def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
     if entry is None:
         raise click.BadParameter(
             f"{prefix}: is empty/null.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     if not isinstance(entry, dict):
         raise click.BadParameter(
             f"{prefix}: must be a dictionary, " f"got {type(entry).__name__}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     unknown = set(entry.keys()) - ALLOWED_EMBEDDED_SLOT_KEYS
@@ -812,7 +838,7 @@ def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
         raise click.BadParameter(
             f"{prefix}: unknown key(s) {unknown}. "
             f"Allowed: {ALLOWED_EMBEDDED_SLOT_KEYS}",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # group: required, positive integer
@@ -820,24 +846,24 @@ def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
     if group is None:
         raise click.BadParameter(
             f"{prefix}: missing required field 'group'.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
-    if not isinstance(group, int) or group <= 0:
+    if type(group) is not int or group <= 0:
         raise click.BadParameter(
             f"{prefix}: 'group' must be a positive integer, "
             f"got {group!r}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     # link_indices: required, parse to list[int]
     link_indices = _parse_index_string(
-        entry.get("link_indices"), prefix, "link_indices"
+        entry.get("link_indices"), prefix, "link_indices", param_hint
     )
     if not link_indices:
         raise click.BadParameter(
             f"{prefix}: 'link_indices' is required "
             f"and must contain at least one index.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     seen: set = set()
@@ -846,15 +872,15 @@ def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
         raise click.BadParameter(
             f"{prefix}: 'link_indices' contains duplicate value(s) "
             f"{duplicates}.",
-            param_hint="'-f' / '--filename'",
+            param_hint=param_hint,
         )
 
     return {"group": group, "link_indices": link_indices}
 
 
-def _validate_yaml_multi_site_logic(validated: dict, filename: str):
+def _validate_multi_site_logic(validated: dict, param_hint: str):
     """
-    Cross-validate YAML configuration with global group numbering.
+    Cross-validate Iterate input with global group numbering.
 
     ALL skeletons participate in a global contiguous 1-based group
     numbering sequence:
@@ -900,7 +926,7 @@ def _validate_yaml_multi_site_logic(validated: dict, filename: str):
                         f"Group number {group} is already used by "
                         f"skeleton '{all_groups[group]}'. "
                         f"Group numbers must be globally unique.",
-                        param_hint=filename,
+                        param_hint=param_hint,
                     )
 
             skel_groups = sorted(slot["group"] for slot in slots)
@@ -918,7 +944,7 @@ def _validate_yaml_multi_site_logic(validated: dict, filename: str):
                     f"(skeletons without slots each occupy one group number). "
                     f"Previous skeleton ended at group "
                     f"{next_expected_start - 1}.",
-                    param_hint=filename,
+                    param_hint=param_hint,
                 )
 
             for slot in slots:
@@ -932,9 +958,9 @@ def _validate_yaml_multi_site_logic(validated: dict, filename: str):
             raise click.BadParameter(
                 f"Substituent entry {idx + 1} "
                 f"('{sub.get('label', 'unnamed')}'): "
-                f"'groups' field is required in YAML format. "
+                f"'groups' field is required for grouped Iterate input. "
                 f"Available groups: {sorted(all_groups.keys())}",
-                param_hint=filename,
+                param_hint=param_hint,
             )
         for g in groups:
             if g not in all_groups:
@@ -943,7 +969,7 @@ def _validate_yaml_multi_site_logic(validated: dict, filename: str):
                     f"('{sub.get('label', 'unnamed')}'): "
                     f"Group {g} does not reference any skeleton group. "
                     f"Available groups: {sorted(all_groups.keys())}",
-                    param_hint=filename,
+                    param_hint=param_hint,
                 )
 
     # --- Validate skeleton_indices for slots-skeletons ---
@@ -964,5 +990,5 @@ def _validate_yaml_multi_site_logic(validated: dict, filename: str):
                         f"('{skel.get('label', 'unnamed')}'): "
                         f"Slot group {slot['group']} link_indices {missing} "
                         f"are not in 'skeleton_indices'.",
-                        param_hint=filename,
+                        param_hint=param_hint,
                     )

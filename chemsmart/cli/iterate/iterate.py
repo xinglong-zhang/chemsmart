@@ -3,7 +3,7 @@ CLI group for iterate commands.
 
 Provides subcommands for generating molecular structures by attaching
 substituents to skeleton molecules. Input can be provided via YAML
-configuration files or CDXML files (coming soon).
+configuration files or ordered command-line options.
 """
 
 import logging
@@ -12,7 +12,7 @@ import click
 
 from chemsmart.utils.cli import MyGroup
 
-from .cdxml import cdxml
+from .direct_cmd import direct_cmd
 from .yaml_cmd import yaml_cmd
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,10 @@ def iterate(ctx, **kwargs):
 
     \b
     chemsmart run iterate yaml  -f config.yaml   YAML configuration file
-    chemsmart run iterate cdxml -f scheme.cdxml   CDXML file (coming soon)
+    chemsmart run iterate direct -skf core.xyz -skg [1] ...   Direct entries
     """
     ctx.ensure_object(dict)
 
 
 iterate.add_command(yaml_cmd, name="yaml")
-iterate.add_command(cdxml)
+iterate.add_command(direct_cmd, name="direct")

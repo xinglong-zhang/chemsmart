@@ -2,7 +2,7 @@
 # ================================================
 #
 # The configuration is split into two independent layers:
-#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'cdxml').
+#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'direct').
 #      This file *is* the YAML input; it lists skeletons and substituents.
 #   2. Algorithm layer      -> how substituent positions are optimized.
 #      Configured via the optional top-level 'algorithm' block below, and/or
