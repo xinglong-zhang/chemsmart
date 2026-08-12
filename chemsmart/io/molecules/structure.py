@@ -22,6 +22,10 @@ from scipy.spatial.distance import cdist
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.geometry import canonicalize_positions, is_collinear
 from chemsmart.utils.periodictable import PeriodicTable as pt
+from chemsmart.utils.repattern import (
+    gaussian_mm_element_type_charge_neg_pattern,
+    gaussian_mm_element_type_charge_pos_pattern,
+)
 from chemsmart.utils.utils import file_cache, string2index_1based
 
 p = pt()
@@ -3070,6 +3074,9 @@ class CoordinateBlock:
                 high_level_atoms=high_level_atoms,
                 medium_level_atoms=medium_level_atoms,
                 low_level_atoms=low_level_atoms,
+                mm_atom_info=QMMMMolecule.mm_atom_info_from_coordinate_lines(
+                    self.coordinate_block
+                ),
             )
 
     def _get_symbols(self):
@@ -3472,6 +3479,8 @@ class QMMMMolecule(Molecule):
         real_multiplicity=None,
         bonded_atoms=None,
         scale_factors=None,
+        mm_atom_info=None,
+        mm_parameters=None,
         **kwargs,
     ):
         # store reference to the original molecule early to avoid
@@ -3503,6 +3512,8 @@ class QMMMMolecule(Molecule):
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
         self.scale_factors = scale_factors
+        self.mm_atom_info = mm_atom_info
+        self.mm_parameters = mm_parameters
         self.real_charge = real_charge
         self.real_multiplicity = real_multiplicity
         if self.real_charge and self.real_multiplicity:
@@ -3510,6 +3521,76 @@ class QMMMMolecule(Molecule):
             # that of the low_level_charge and low_level_multiplicity
             self.charge = self.real_charge
             self.multiplicity = self.real_multiplicity
+
+    @staticmethod
+    def parse_element_type_charge(atom_label):
+        """Parse ``Element-Type-Charge``; return ``(type, charge)`` or ``None``."""
+        atom_label = str(atom_label).strip()
+        neg = re.match(gaussian_mm_element_type_charge_neg_pattern, atom_label)
+        if neg:
+            return neg.group(2), -float(neg.group(3))
+        pos = re.match(gaussian_mm_element_type_charge_pos_pattern, atom_label)
+        if pos:
+            return pos.group(2), float(pos.group(3))
+        return None
+
+    @classmethod
+    def mm_atom_info_from_coordinate_lines(cls, coordinate_lines):
+        """Parse MM ``(type, charge, link_type, link_charge)`` from ONIOM coords.
+
+        Returns ``None`` if no ``Element-Type-Charge`` labels are present.
+        """
+        records = []
+        typed = False
+        for line in coordinate_lines:
+            if line.startswith("TV"):
+                continue
+            line_elements = line.strip().split()
+            if len(line_elements) < 4 or all(
+                el.isdigit() for el in line_elements
+            ):
+                continue
+
+            parsed = cls.parse_element_type_charge(line_elements[0])
+            link_type = None
+            link_charge = None
+            # Layer column index matches CoordinateBlock._get_partitions.
+            layer_idx = None
+            if len(line_elements) > 5 and all(
+                line_elements[j]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for j in range(2, 5)
+            ):
+                layer_idx = 5
+            elif len(line_elements) > 4 and all(
+                line_elements[j]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for j in range(1, 4)
+            ):
+                layer_idx = 4
+            if layer_idx is not None and len(line_elements) > layer_idx + 1:
+                link_parsed = cls.parse_element_type_charge(
+                    line_elements[layer_idx + 1]
+                )
+                if link_parsed is not None:
+                    link_type, link_charge = link_parsed
+
+            if parsed is None:
+                records.append(None)
+            else:
+                typed = True
+                atom_type, charge = parsed
+                records.append((atom_type, charge, link_type, link_charge))
+
+        if not typed:
+            return None
+        return records
 
     def __getattr__(self, name):
         # Forward any missing attribute to the underlying Molecule.
@@ -3661,12 +3742,31 @@ class QMMMMolecule(Molecule):
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
         for i, (s, (x, y, z)) in enumerate(
             zip(self.chemical_symbols, self.positions)
         ):
-            line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.frozen_atoms is not None:
-                line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            mm_info = None
+            if self.mm_atom_info is not None:
+                mm_info = self.mm_atom_info[i]
+            atom_label = GaussianQMMMJobSettings.format_mm_atom_label(
+                s, mm_info
+            )
+            if mm_info is None:
+                line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+                if self.frozen_atoms is not None:
+                    line = (
+                        f"{s:6} {self.frozen_atoms[i]:5} "
+                        f"{x:15.10f} {y:15.10f} {z:15.10f}"
+                    )
+            else:
+                line = f"{atom_label:16} {x:15.10f} {y:15.10f} {z:15.10f}"
+                if self.frozen_atoms is not None:
+                    line = (
+                        f"{atom_label:16} {self.frozen_atoms[i]:5} "
+                        f"{x:15.10f} {y:15.10f} {z:15.10f}"
+                    )
             if self.partition_level_strings is not None:
                 line += f" {self.partition_level_strings[i]}"
 
@@ -3689,19 +3789,39 @@ class QMMMMolecule(Molecule):
                         atom2_level == "M" or atom2_level == "L"
                     ):
                         if (i + 1) == atom2:
-                            line += f" H {atom1}"
+                            line += (
+                                " "
+                                + GaussianQMMMJobSettings.format_mm_link_atom(
+                                    atom1, mm_info
+                                )
+                            )
                     elif atom1_level == "M" and atom2_level == "L":
                         if (i + 1) == atom2:
-                            line += f" H {atom1}"
+                            line += (
+                                " "
+                                + GaussianQMMMJobSettings.format_mm_link_atom(
+                                    atom1, mm_info
+                                )
+                            )
                     elif (
                         atom1_level == "M" or atom1_level == "L"
                     ) and atom2_level == "H":
                         # lower level line will get the link atom (Hydrogen)
                         if (i + 1) == atom1:
-                            line += f" H {atom2}"
+                            line += (
+                                " "
+                                + GaussianQMMMJobSettings.format_mm_link_atom(
+                                    atom2, mm_info
+                                )
+                            )
                     elif atom1_level == "L" and atom2_level == "M":
                         if (i + 1) == atom1:
-                            line += f" H {atom2}"
+                            line += (
+                                " "
+                                + GaussianQMMMJobSettings.format_mm_link_atom(
+                                    atom2, mm_info
+                                )
+                            )
 
             if self.scale_factors is not None:
                 logger.warning(
@@ -3752,6 +3872,20 @@ class QMMMMolecule(Molecule):
                                 line += f" {float(scale_factor)}"
             f.write(line + "\n")
         return f
+
+    def write_gaussian_connectivity(self, f):
+        """Write a Gaussian Geom=Connectivity section from the bond graph."""
+        graph = self.to_graph()
+        for i in range(self.num_atoms):
+            parts = [str(i + 1)]
+            for j in sorted(graph.neighbors(i)):
+                if j <= i:
+                    continue
+                bond_order = graph.edges[i, j].get("bond_order", 1.0)
+                parts.append(str(j + 1))
+                parts.append(f"{float(bond_order):.1f}")
+            f.write(" ".join(parts) + "\n")
+        f.write("\n")
 
     def _normalize_atom_indices(self, atoms):
         """Normalize layer atom specs to a 1-based integer list."""

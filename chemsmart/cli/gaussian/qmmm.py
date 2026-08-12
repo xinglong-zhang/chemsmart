@@ -169,6 +169,29 @@ def create_qmmm_subcommand(parent_command):
         default=None,
         help="Scale factors for QM/MM calculations as string representation of dict.",
     )
+    @click.option(
+        "-mai",
+        "--mm-atom-info",
+        type=str,
+        default=None,
+        help=(
+            "File with MM atom types and partial charges "
+            "(required for AMBER unless the input .com already has "
+            "Element-Type-Charge labels). Format: [index] type charge "
+            "[link_type link_charge]."
+        ),
+    )
+    @click.option(
+        "-mpf",
+        "--mm-parameters-file",
+        type=str,
+        default=None,
+        help=(
+            "Optional SoftFirst/HardFirst MM parameter lines to append "
+            "after the molecule specification. Not needed if already "
+            "present in the input .com."
+        ),
+    )
     @click_job_options
     @click.pass_context
     def qmmm(
@@ -193,6 +216,8 @@ def create_qmmm_subcommand(parent_command):
         low_level_atoms,
         bonded_atoms,
         scale_factors,
+        mm_atom_info,
+        mm_parameters_file,
         **kwargs,
     ):
         """Run a QM/MM calculation for this job type."""
@@ -313,6 +338,10 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.bonded_atoms = bonded_atoms
         if scale_factors is not None:
             qmmm_settings.scale_factors = scale_factors
+        if mm_atom_info is not None:
+            qmmm_settings.mm_atom_info_file = mm_atom_info
+        if mm_parameters_file is not None:
+            qmmm_settings.mm_parameters_file = mm_parameters_file
 
         # Get molecule
         molecules = ctx.obj["molecules"]

@@ -2,6 +2,8 @@ import os
 from filecmp import cmp
 from shutil import copy
 
+import pytest
+
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian import (
@@ -389,6 +391,139 @@ class TestGaussianInputWriter:
             content = f.read()
         assert "H 3" in content
         assert "0.709" in content
+        assert "geom=connectivity" in content.lower()
+
+    def test_write_qmmm_amber_requires_mm_atom_info(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.low_level_force_field = "AMBER=HardFirst"
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1, 2, 3]
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_amber_missing",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        with pytest.raises(
+            ValueError, match="mm_atom_info_file|Element-Type-Charge"
+        ):
+            GaussianInputWriter(job=job).write(target_directory=tmpdir)
+
+    def test_write_qmmm_amber_from_oniom_com_without_sidecar_files(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        com_path = os.path.join(tmpdir, "prepared_oniom.com")
+        with open(com_path, "w") as handle:
+            handle.write(
+                "%chk=prepared_oniom.chk\n"
+                "%nprocshared=2\n"
+                "%mem=4GB\n"
+                "# opt oniom(b3lyp/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+                "\n"
+                "prepared ONIOM\n"
+                "\n"
+                "0 1 0 1 0 1\n"
+                "C-CT-0.03      0.0000000000    0.0000000000    0.0000000000 H\n"
+                "O-OH--0.65     1.4000000000    0.0000000000    0.0000000000 L H-HC-0.09 1\n"
+                "H-HC-0.09      1.9000000000    0.9000000000    0.0000000000 L\n"
+                "\n"
+                "1 2 1.0\n"
+                "2 3 1.0\n"
+                "3\n"
+                "\n"
+                "HrmBnd1 CT OH HC 50.0 109.5\n"
+                "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n"
+                "\n"
+            )
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.low_level_force_field = "AMBER=HardFirst"
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1]
+        qmmm_settings.bonded_atoms = [(1, 2)]
+        job = GaussianQMMMJob.from_filename(
+            filename=com_path,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_from_com",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert job.molecule.mm_atom_info is not None
+        assert job.molecule.mm_parameters is not None
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        out = os.path.join(tmpdir, "gaussian_qmmm_from_com.com")
+        with open(out) as handle:
+            content = handle.read()
+        assert "C-CT-0.03" in content
+        assert "O-OH--0.65" in content
+        assert "H-HC-0.09 1" in content
+        assert "HrmBnd1 CT OH HC 50.0 109.5" in content
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in content
+
+    def test_write_qmmm_amber_with_mm_atom_info(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        molecule = Molecule.from_filepath(single_molecule_xyz_file)
+        mm_info = os.path.join(tmpdir, "mm_atoms.dat")
+        with open(mm_info, "w") as handle:
+            for i, symbol in enumerate(molecule.chemical_symbols, start=1):
+                if i == 4:
+                    handle.write(f"{i} {symbol} 0.03 HC 0.09\n")
+                else:
+                    handle.write(f"{i} {symbol} 0.0\n")
+        params = os.path.join(tmpdir, "mm_params.dat")
+        with open(params, "w") as handle:
+            handle.write("NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n")
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.low_level_force_field = "AMBER=HardFirst"
+        qmmm_settings.charge = 0
+        qmmm_settings.multiplicity = 1
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1, 2, 3]
+        qmmm_settings.bonded_atoms = [(3, 4)]
+        qmmm_settings.mm_atom_info_file = mm_info
+        qmmm_settings.mm_parameters_file = params
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_amber",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_qmmm_amber.com")
+        with open(g16_file, "r") as handle:
+            content = handle.read()
+        assert "AMBER=HardFirst" in content
+        assert "geom=connectivity" in content.lower()
+        assert "C-C-0.0" in content
+        assert "H-HC-0.09 3" in content
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in content
+        assert "\n1 2 " in content
 
     def test_write_qmmm_input_from_logfile(
         self,

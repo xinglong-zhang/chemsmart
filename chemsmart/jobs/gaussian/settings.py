@@ -2487,6 +2487,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         low_level_atoms=None,
         bonded_atoms=None,
         scale_factors=None,
+        mm_atom_info_file=None,
+        mm_parameters_file=None,
         **kwargs,
     ):
         """
@@ -2552,6 +2554,14 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                     {(atom1, atom2): [scale_low, scale_medium, scale_high]}
                     Values typically range from 0.5-1.0, common value is 0.709
 
+            MM typing (built-in force fields):
+                mm_atom_info_file (str, optional): Text file of AMBER/UFF atom
+                    types and partial charges (required for AMBER unless the
+                    input .com already has Element-Type-Charge labels).
+                mm_parameters_file (str, optional): Optional SoftFirst/HardFirst
+                    MM parameter lines to append after the molecule section.
+                    Not needed if those lines are already in the input .com.
+
             **kwargs: Additional keyword arguments
             passed to parent GaussianJobSettings
 
@@ -2612,6 +2622,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
         self.scale_factors = scale_factors
+        self.mm_atom_info_file = mm_atom_info_file
+        self.mm_parameters_file = mm_parameters_file
 
         self.title = "Gaussian QM/MM job"
 
@@ -2620,6 +2632,149 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             # that of the low_level_charge and low_level_multiplicity
             self.charge = self.charge_total
             self.multiplicity = self.mult_total
+
+    @staticmethod
+    def _is_builtin_mm(force_field):
+        if force_field is None:
+            return False
+        force_field = force_field.lower()
+        return any(
+            name in force_field for name in ("amber", "uff", "dreiding")
+        )
+
+    def uses_builtin_mm(self):
+        """Return True if medium/low uses a Gaussian built-in MM force field."""
+        return self._is_builtin_mm(
+            self.medium_level_force_field
+        ) or self._is_builtin_mm(self.low_level_force_field)
+
+    def requires_mm_atom_info(self):
+        """Return True if AMBER requires MM atom types/charges."""
+        for force_field in (
+            self.medium_level_force_field,
+            self.low_level_force_field,
+        ):
+            if force_field is not None and "amber" in force_field.lower():
+                return True
+        return False
+
+    @staticmethod
+    def load_mm_atom_info(path, num_atoms=None):
+        """Load MM atom types/charges from a simple text file.
+
+        Each non-comment line is either::
+
+            index type charge [link_type link_charge]
+
+        with 1-based ``index``, or::
+
+            type charge [link_type link_charge]
+
+        in molecule order when indices are omitted. Blank lines and ``#``
+        comments are ignored.
+
+        Returns:
+            list[tuple]: ``(atom_type, charge, link_type, link_charge)`` per
+            atom. ``link_type`` / ``link_charge`` may be ``None``.
+        """
+        path = os.path.expanduser(path)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"MM atom info file not found: {path}")
+
+        by_index = {}
+        ordered = []
+
+        with open(path) as handle:
+            for line_number, raw in enumerate(handle, start=1):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                try:
+                    if parts[0].lstrip("+-").isdigit() and len(parts) >= 3:
+                        index = int(parts[0])
+                        atom_type = parts[1]
+                        charge = float(parts[2])
+                        link_type = parts[3] if len(parts) >= 4 else None
+                        link_charge = (
+                            float(parts[4]) if len(parts) >= 5 else None
+                        )
+                        by_index[index] = (
+                            atom_type,
+                            charge,
+                            link_type,
+                            link_charge,
+                        )
+                    elif len(parts) >= 2:
+                        atom_type = parts[0]
+                        charge = float(parts[1])
+                        link_type = parts[2] if len(parts) >= 3 else None
+                        link_charge = (
+                            float(parts[3]) if len(parts) >= 4 else None
+                        )
+                        ordered.append(
+                            (atom_type, charge, link_type, link_charge)
+                        )
+                    else:
+                        raise ValueError(
+                            f"Invalid MM atom info line {line_number}: {raw!r}"
+                        )
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Invalid MM atom info line {line_number} in {path}: "
+                        f"{raw!r}"
+                    ) from exc
+
+        if by_index and ordered:
+            raise ValueError(
+                f"MM atom info file {path} mixes indexed and unindexed lines."
+            )
+
+        if by_index:
+            max_index = max(by_index)
+            expected = num_atoms if num_atoms is not None else max_index
+            missing = [i for i in range(1, expected + 1) if i not in by_index]
+            if missing:
+                raise ValueError(
+                    f"MM atom info file {path} missing atom indices: {missing}"
+                )
+            records = [by_index[i] for i in range(1, expected + 1)]
+        else:
+            records = ordered
+
+        if num_atoms is not None and len(records) != num_atoms:
+            raise ValueError(
+                f"MM atom info file {path} has {len(records)} atoms, "
+                f"expected {num_atoms}."
+            )
+        return records
+
+    @staticmethod
+    def format_mm_atom_label(element, mm_info=None):
+        """Format ``Element`` or ``Element-Type-Charge`` for Gaussian MM input.
+
+        ``mm_info`` is ``(atom_type, charge, link_type, link_charge)`` or
+        ``None``.
+        """
+        if mm_info is None:
+            return element
+        atom_type, charge = mm_info[0], mm_info[1]
+        return f"{element}-{atom_type}-{charge}"
+
+    @staticmethod
+    def format_mm_link_atom(bonded_to, mm_info=None):
+        """Format a link-atom label, optionally with MM type/charge.
+
+        ``mm_info`` is ``(atom_type, charge, link_type, link_charge)`` or
+        ``None``.
+        """
+        if (
+            mm_info is not None
+            and mm_info[2] is not None
+            and mm_info[3] is not None
+        ):
+            return f"H-{mm_info[2]}-{mm_info[3]} {bonded_to}"
+        return f"H {bonded_to}"
 
     @property
     def charge_and_multiplicity_string(self):
@@ -2711,6 +2866,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         # Add ONIOM level of theory string
         oniom_string = self._get_oniom_string()
         route_string += oniom_string
+
+        # Built-in MM ONIOM: prefer explicit connectivity (Gaussian recommendation)
+        if (
+            self.uses_builtin_mm()
+            and "geom=connectivity" not in route_string.lower()
+        ):
+            route_string += " geom=connectivity"
 
         # Add solvation if specified
         if self.solvent_model is not None and self.solvent_id is not None:
