@@ -12,6 +12,10 @@ from chemsmart.agent._contracts import (
     TrustedArtifactRefV1,
     file_sha256,
 )
+from chemsmart.agent.capabilities import (
+    SupportLevel,
+    build_program_component_conformance_receipt,
+)
 from chemsmart.agent.execution import (
     build_producer_edge_rule,
     handoff_optimized_native_geometry,
@@ -21,11 +25,13 @@ from chemsmart.agent.execution_envelope import (
     BoundedExecutionEnvelopeV1,
     load_bounded_execution_envelope,
 )
+from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
     _CommandContext,
     _program_process_environment,
 )
+from chemsmart.agent.tool_specs import build_approved_execution_tool_surface
 from chemsmart.agent.workflows import (
     MaterializedNodeV1,
     ScientificWorkflowEdgeV2,
@@ -337,6 +343,59 @@ def test_deferred_admission_enforces_program_allowlist(tmp_path):
     envelope = load_bounded_execution_envelope(_write_envelope(tmp_path))
     assert isinstance(envelope, BoundedExecutionEnvelopeV1)
     assert envelope.allows("gaussian", "cpu") is False
+
+
+def test_bounded_overlay_keeps_allowed_red_program_reference_only(
+    tmp_path,
+    fake_capability_registry,
+    fake_click_schema,
+):
+    payload = _payload(tmp_path)
+    payload["allowed_program_engines"] = {
+        "demo": ["cpu"],
+        "optional": ["cpu"],
+    }
+    envelope = load_bounded_execution_envelope(
+        _write_envelope(tmp_path, payload)
+    )
+    conformance = build_program_component_conformance_receipt(
+        program="demo",
+        registry_sha256=fake_capability_registry.registry_sha256,
+        live_cli_schema_sha256=fake_click_schema.schema_sha256,
+        fixture_bundle_sha256="1" * 64,
+        covered_jobtypes=("sp",),
+        covered_engines=("cpu",),
+        covered_engine_job_pairs=(("cpu", "sp"),),
+        compiler_receipt_sha256="2" * 64,
+        preview_receipt_sha256="3" * 64,
+        preflight_receipt_sha256="4" * 64,
+        verifier_receipt_sha256="5" * 64,
+        compiler_status="passed",
+        preview_status="passed",
+        preflight_status="passed",
+        verifier_status="passed",
+    )
+
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="bounded-overlay"
+        ),
+        component_conformance_receipts=(conformance,),
+        tool_surface=build_approved_execution_tool_surface(
+            fake_capability_registry
+        ),
+        registry=fake_capability_registry,
+        live_schema=fake_click_schema,
+        approved_workspace=tmp_path,
+        execution_resources=envelope.resources,
+        bounded_execution_envelope=envelope,
+    )
+
+    assert host.overlay.get("demo").support_level is SupportLevel.AVAILABLE
+    assert (
+        host.overlay.get("optional").support_level
+        is SupportLevel.REFERENCE_ONLY
+    )
 
 
 def test_planning_time_reduces_effective_node_timeout(tmp_path, monkeypatch):

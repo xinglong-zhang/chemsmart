@@ -2464,11 +2464,20 @@ def _conformance_project_sections(
                         "stable": "opt",
                     }
                 elif stage == "td":
-                    sections[stage] = {
-                        **common,
-                        "nstates": 3,
-                        "states": "singlets",
-                    }
+                    sections[stage] = (
+                        {
+                            **common,
+                            "nstates": 3,
+                            "states": "singlets",
+                        }
+                        if program == "gaussian"
+                        else {
+                            **common,
+                            "nstates": 3,
+                            "response_method": "tda",
+                            "state_manifold": "singlet",
+                        }
+                    )
         return sections
     return None
 

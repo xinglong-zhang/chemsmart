@@ -40,11 +40,12 @@ from chemsmart.agent.capabilities import (
     CapabilityQueryV1,
     EnvironmentCapabilityReceiptV1,
     EnvironmentTargetV1,
+    ProgramCapabilityRegistryV1,
     ProgramComponentConformanceReceiptV1,
     ProgramSupportOverlayV1,
-    ProgramCapabilityRegistryV1,
     ResolvedEngineBindingV1,
     ResolvedProgramBindingV1,
+    SupportLevel,
     TrustedComputeEnvironmentReceiptV1,
     build_approved_execution_overlay,
     build_command_compiled_preview_overlay,
@@ -1104,7 +1105,9 @@ class CommandCompiledToolHostV1:
                     for item in self.workflow_execution_approval.node_bindings
                 )
                 if self.workflow_execution_approval is not None
-                else self._bounded_overlay_nodes()
+                else self._bounded_overlay_nodes(
+                    preview_overlay=preview_overlay
+                )
             )
             evidence_overlay = build_approved_execution_overlay(
                 registry=self.registry,
@@ -1296,8 +1299,20 @@ class CommandCompiledToolHostV1:
             ] = environment
         self._rehydrate_analysis_event_records()
 
-    def _bounded_overlay_nodes(self):
-        """Return executable registry pairs named by the operating envelope."""
+    def _bounded_overlay_nodes(
+        self,
+        *,
+        preview_overlay: ProgramSupportOverlayV1 | None = None,
+    ):
+        """Return preview-conformant executable pairs allowed by the envelope.
+
+        The envelope is an operating ceiling, not evidence that every allowed
+        program compiled and previewed successfully in this session.  A broad
+        CPU-server envelope may therefore name programs whose bootstrap
+        conformance is currently red.  Keep those programs reference-only and
+        expose execution only for the allowed pairs that already have green
+        preview evidence.
+        """
 
         envelope = self.bounded_execution_envelope
         if envelope is None:  # pragma: no cover - caller narrows this
@@ -1310,14 +1325,33 @@ class CommandCompiledToolHostV1:
                     f"bounded execution allows unknown program {program!r}"
                 )
             allowed_engines = set(engines)
+            preview_pairs = None
+            if preview_overlay is not None:
+                preview_rule = preview_overlay.get(program)
+                if (
+                    preview_rule is None
+                    or preview_rule.support_level
+                    is not SupportLevel.PREVIEW_ONLY
+                ):
+                    continue
+                preview_pairs = set(
+                    preview_rule.allowed_engine_job_pairs
+                    or (
+                        (engine, jobtype)
+                        for engine in preview_rule.allowed_engines
+                        for jobtype in preview_rule.allowed_jobtypes
+                    )
+                )
             nodes.extend(
                 (program, jobtype, engine)
                 for engine, jobtype in capability.execution_engine_job_pairs
                 if engine in allowed_engines
+                and (preview_pairs is None or (engine, jobtype) in preview_pairs)
             )
         if not nodes:
             raise ContractError(
-                "bounded execution allowlist contains no executable engine/job pair"
+                "bounded execution allowlist contains no preview-conformant "
+                "executable engine/job pair"
             )
         return tuple(sorted(set(nodes)))
 

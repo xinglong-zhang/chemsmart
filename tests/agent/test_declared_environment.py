@@ -126,7 +126,7 @@ def test_project_requiring_programs_get_a_fixture(declared_server):
 def test_a_fixture_declares_every_stage_it_claims_to_cover(declared_server):
     """A stage with no section makes the loader return ``None`` and the CLI crash."""
 
-    for program in ("gaussian", "pyscf"):
+    for program in ("gaussian", "orca", "pyscf"):
         sections = live_session._conformance_project_sections(program)
         for stage in live_session._conformance_jobtypes(program, "cpu"):
             if stage in live_session._ROUTE_PROGRAM_STAGE_SECTIONS or (
@@ -140,11 +140,23 @@ def test_a_fixture_carries_only_project_owned_keys(declared_server):
 
     from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
-    allowed = set(PROGRAM_CAPABILITIES["gaussian"].project_owned_parameters)
-    for settings in live_session._conformance_project_sections(
-        "gaussian"
-    ).values():
-        assert set(settings) <= allowed
+    for program in ("gaussian", "orca"):
+        allowed = set(PROGRAM_CAPABILITIES[program].project_owned_parameters)
+        for settings in live_session._conformance_project_sections(
+            program
+        ).values():
+            assert set(settings) <= allowed
+
+    assert live_session._conformance_project_sections("gaussian")["td"][
+        "states"
+    ] == "singlets"
+    assert live_session._conformance_project_sections("orca")["td"] == {
+        "basis": "def2-SVP",
+        "functional": "B3LYP",
+        "nstates": 3,
+        "response_method": "tda",
+        "state_manifold": "singlet",
+    }
 
 
 def test_environment_observation_does_not_depend_on_the_process_path(
