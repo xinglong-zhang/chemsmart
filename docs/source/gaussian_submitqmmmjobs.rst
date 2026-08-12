@@ -557,6 +557,7 @@ For more advanced ONIOM workflows, see:
  See Also
 **********
 
--  :doc:`gaussian_generalcliforallgaussianjobs` - General Gaussian CLI options
--  :doc:`configuration_setuptheprojectsettings` - Project configuration guide
--  :doc:`gaussian_submitstructureoptimizationjobs` - Structure optimization methods
+-  :doc:`gaussian-cli-options` - General Gaussian CLI options
+-  :doc:`configuration-project-settings` - Project configuration guide
+-  :doc:`gaussian-structure-optimization` - Structure optimization methods
+-  :doc:`gaussian-qmmm-jobs` - Gaussian QM/MM jobs overview

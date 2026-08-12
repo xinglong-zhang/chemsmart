@@ -101,6 +101,10 @@ Atom Partitioning
 Charge and Multiplicity
 =======================
 
+High-level (``-ch`` / ``-mh``) charge and multiplicity are **required**. They are written to the ORCA coordinate section
+(``* xyz`` line). Total and intermediate values are written to the ``%qmmm`` block and are not used as a fallback for
+the coordinate section.
+
 .. list-table:: Charge and Multiplicity Options
    :header-rows: 1
    :widths: 30 15 55
@@ -111,27 +115,27 @@ Charge and Multiplicity
 
    -  -  ``-ch, --charge-high``
       -  int
-      -  High-level region charge
+      -  Required. High-level (QM) region charge for the ``* xyz`` line
 
    -  -  ``-mh, --mult-high``
-      -  string
-      -  High-level region multiplicity
-
-   -  -  ``-cm, --charge-medium``
       -  int
-      -  Medium layer charge (for QM/QM2/MM)
+      -  Required. High-level (QM) region multiplicity for the ``* xyz`` line
 
-   -  -  ``-mm, --mult-medium``
-      -  string
-      -  Medium layer multiplicity
+   -  -  ``-ci, --charge-intermediate``
+      -  int
+      -  Intermediate layer charge for the ``%qmmm`` block (QM/QM2/MM)
+
+   -  -  ``-mi, --mult-intermediate``
+      -  int
+      -  Intermediate layer multiplicity for the ``%qmmm`` block
 
    -  -  ``-ct, --charge-total``
       -  int
-      -  Total system charge
+      -  Total system charge for the ``%qmmm`` block
 
    -  -  ``-mt, --mult-total``
-      -  string
-      -  Total system multiplicity
+      -  int
+      -  Total system multiplicity for the ``%qmmm`` block
 
 Advanced QM/MM Options
 ======================
@@ -393,6 +397,10 @@ Settings Atom Partitioning
 Settings Charge and Multiplicity
 --------------------------------
 
+``charge_high`` and ``mult_high`` are required for input generation: they are written to the coordinate section.
+``charge_total`` / ``charge_intermediate`` (and their multiplicities) belong in the ``%qmmm`` block and do not
+substitute for the high-level values.
+
 .. list-table::
    :header-rows: 1
    :widths: 25 20 55
@@ -403,27 +411,27 @@ Settings Charge and Multiplicity
 
    -  -  ``charge_high``
       -  int
-      -  Charge of high-level (QM) region
+      -  Required. Charge of high-level (QM) region (``* xyz`` line)
 
    -  -  ``mult_high``
       -  int
-      -  Multiplicity of high-level (QM) region
+      -  Required. Multiplicity of high-level (QM) region (``* xyz`` line)
 
-   -  -  ``charge_medium``
+   -  -  ``charge_intermediate``
       -  int
-      -  Charge of medium system (QM2 layer)
+      -  Intermediate (QM2) layer charge in the ``%qmmm`` block
 
-   -  -  ``mult_medium``
+   -  -  ``mult_intermediate``
       -  int
-      -  Multiplicity of medium system
+      -  Intermediate (QM2) layer multiplicity in the ``%qmmm`` block
 
    -  -  ``charge_total``
       -  int
-      -  Total system charge
+      -  Total system charge in the ``%qmmm`` block
 
    -  -  ``mult_total``
       -  int
-      -  Total system multiplicity
+      -  Total system multiplicity in the ``%qmmm`` block
 
 Advanced Settings Options
 =========================
@@ -587,7 +595,7 @@ Use the YAML configuration with the project flag:
 
 .. code:: console
 
-   chemsmart sub orca -p qmmm -f system.pdb qmmm -qa 1-20 -cq 0 -mq 1 -ct 0 -mt 1
+   chemsmart sub orca -p qmmm -f system.pdb opt qmmm -ha 1-20 -ch 0 -mh 1 -ct 0 -mt 1
 
 Python Configuration
 ====================
@@ -601,12 +609,12 @@ Programmatic configuration using the settings class:
    # Create basic QM/MM settings
    qmmm_settings = ORCAQMMMJobSettings(
        jobtype="QMMM",
-       qm_functional="B3LYP",
-       qm_basis="def2-SVP",
-       mm_force_field="amber99",
-       qm_atoms="1-20",
-       charge_qm=0,
-       mult_qm=1,
+       high_level_functional="B3LYP",
+       high_level_basis="def2-SVP",
+       low_level_method="amber99",
+       high_level_atoms="1-20",
+       charge_high=0,
+       mult_high=1,
        charge_total=0,
        mult_total=1,
        embedding_type="electronic",
@@ -615,16 +623,16 @@ Programmatic configuration using the settings class:
    # ONIOM configuration
    oniom_settings = ORCAQMMMJobSettings(
        jobtype="QM/QM2/MM",
-       qm_functional="B3LYP",
-       qm_basis="def2-TZVP",
-       qm2_method="HF-3C",
-       mm_force_field="charmm36",
-       qm_atoms=[1, 2, 3, 4, 5],
-       qm2_atoms=list(range(6, 21)),
-       charge_qm=0,
-       mult_qm=1,
-       charge_medium=0,
-       mult_medium=1,
+       high_level_functional="B3LYP",
+       high_level_basis="def2-TZVP",
+       intermediate_level_method="HF-3C",
+       low_level_method="charmm36",
+       high_level_atoms=[1, 2, 3, 4, 5],
+       intermediate_level_atoms=list(range(6, 21)),
+       charge_high=0,
+       mult_high=1,
+       charge_intermediate=0,
+       mult_intermediate=1,
    )
 
 *******************************
@@ -634,9 +642,10 @@ Programmatic configuration using the settings class:
 Required Parameters
 ===================
 
--  **QM region**: Must specify ``qm_functional`` and ``qm_basis`` (unless using built-in methods)
--  **Atom partitioning**: Must define ``qm_atoms`` for all calculations
--  **Charges**: Must specify appropriate charge/multiplicity for each layer
+-  **QM region**: Must specify ``high_level_functional`` and ``high_level_basis`` (unless using built-in methods)
+-  **Atom partitioning**: Must define ``high_level_atoms`` for all calculations
+-  **High-level charge/mult**: Must specify ``charge_high`` and ``mult_high`` (written to ``* xyz``)
+-  **Total/intermediate charges**: Specify ``charge_total`` / ``charge_intermediate`` for the ``%qmmm`` block as needed
 -  **Force fields**: Required for calculations involving MM regions
 
 Validation Rules
@@ -689,5 +698,6 @@ For more advanced QM/MM workflows, see:
  See Also
 **********
 
--  :doc:`orca_generalcliforallorcajobs` - General ORCA CLI options
--  :doc:`configuration_setuptheprojectsettings` - Project configuration guide
+-  :doc:`orca-cli-options` - General ORCA CLI options
+-  :doc:`configuration-project-settings` - Project configuration guide
+-  :doc:`orca-multiscale-calculations` - ORCA multiscale / QM/MM calculations
