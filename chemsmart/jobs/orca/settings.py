@@ -2065,7 +2065,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             level_of_theory = f"! {self.jobtype.upper()}"
         else:
             level_of_theory = "!"
-            parent_jobtype = self.parent_jobtype.lower()
+            parent_jobtype = (
+                self.parent_jobtype.lower() if self.parent_jobtype else None
+            )
             if parent_jobtype in ("opt", "modred", "scan"):
                 level_of_theory += " Opt"
             elif parent_jobtype == "ts":
@@ -2098,9 +2100,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                     level_of_theory += " QM"
                     # only "!QMMM" will be used for additive QMMM
                     level_of_theory += f"/{self.intermediate_level_of_theory}"
-                    print(
-                        f"+++++++++++\n{self.intermediate_level_of_theory}\n+++++++++++"
-                    )
                     if self.low_level_method is not None:
                         level_of_theory += f"/{self.low_level_of_theory}"
             level_of_theory += f" {self.high_level_of_theory}"

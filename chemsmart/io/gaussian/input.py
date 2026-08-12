@@ -111,12 +111,6 @@ class Gaussian16Input(GaussianFileMixin):
         if charge_multiplicity is not None:
             charge, _ = charge_multiplicity
             return charge
-
-        oniom_charge, _ = self._get_oniom_charge_and_multiplicity(
-            use_partition=False
-        )
-        if oniom_charge:
-            return oniom_charge.get("charge_total")
         return None
 
     @property
@@ -128,23 +122,7 @@ class Gaussian16Input(GaussianFileMixin):
         if charge_multiplicity is not None:
             _, multiplicity = charge_multiplicity
             return multiplicity
-
-        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity(
-            use_partition=False
-        )
-        if oniom_multiplicity:
-            return oniom_multiplicity.get("real_multiplicity")
         return None
-
-    @property
-    def oniom_charge(self):
-        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
-        return oniom_charge
-
-    @property
-    def oniom_multiplicity(self):
-        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
-        return oniom_multiplicity
 
     @property
     def route_string(self):
@@ -322,63 +300,24 @@ class Gaussian16Input(GaussianFileMixin):
     def _get_charge_and_multiplicity(self):
         """
         Extract molecular charge and spin multiplicity.
+
+        Accepts a normal ``charge multiplicity`` line, or an ONIOM-style
+        multi-pair line (uses the first charge/multiplicity pair).
         """
         for line in self.contents:
             line_elements = line.split()
             if (
-                (len(line_elements) == 2)
+                len(line_elements) >= 2
                 and line_elements[0].replace("-", "").isdigit()
                 and line_elements[1].isdigit()
+                and all(
+                    element.replace("-", "").isdigit()
+                    for element in line_elements
+                )
             ):
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
-
-    def _get_oniom_charge_and_multiplicity(self, use_partition=True):
-        # line = self.contents[5]
-        line_elements = []
-        for line in self.contents:
-            line_elements = line.split()
-            if (
-                all(element.isdigit() for element in line_elements)
-                and len(line_elements) > 0
-            ):
-                break
-        charge_multiplicity_list = [
-            "charge_total",
-            "real_multiplicity",
-            "int_charge",
-            "int_multiplicity",
-            "model_charge",
-            "model_multiplicity",
-        ]
-        oniom_charge = {}
-        oniom_multiplicity = {}
-        full_line = 12
-        partition_len = None
-        if use_partition:
-            try:
-                partition_len = len(self.partition)
-            except RecursionError:
-                partition_len = None
-        if partition_len == 2:
-            # For two-layer ONIOM, keep only the first and last layer
-            # (drop intermediate/int layer): total and model.
-            charge_multiplicity_list = (
-                charge_multiplicity_list[0:2] + charge_multiplicity_list[4:6]
-            )
-            full_line = 6
-        for j in range(0, int(full_line) - len(line_elements)):
-            line_elements.append("Not specified, will use default value.")
-        for charge in range(0, len(charge_multiplicity_list), 2):
-            oniom_charge[charge_multiplicity_list[charge]] = line_elements[
-                charge
-            ]
-        for multiplicity in range(1, len(charge_multiplicity_list), 2):
-            oniom_multiplicity[charge_multiplicity_list[multiplicity]] = (
-                line_elements[multiplicity]
-            )
-        return oniom_charge, oniom_multiplicity
 
     def _get_gen_genecp_group(self):
         """
@@ -502,13 +441,14 @@ class Gaussian16QMMMInput(Gaussian16Input):
                 partition["low level atoms"] = get_range_from_list(low_atoms)
         return partition
 
-    def _get_oniom_charge_and_multiplicity(self, use_partition=True):
+    def _get_oniom_charge_and_multiplicity(self):
+        """Parse ONIOM charge/multiplicity pairs from the input."""
         line_elements = []
         for line in self.contents:
             line_elements = line.split()
-            if (
-                all(element.isdigit() for element in line_elements)
-                and len(line_elements) > 0
+            # ONIOM charge/mult line: all tokens are integers (allow leading '-').
+            if len(line_elements) > 0 and all(
+                element.replace("-", "").isdigit() for element in line_elements
             ):
                 break
         charge_multiplicity_list = [
@@ -522,9 +462,19 @@ class Gaussian16QMMMInput(Gaussian16Input):
         oniom_charge = {}
         oniom_multiplicity = {}
         full_line = 12
-        if len(self.partition) == 2:
-            print(charge_multiplicity_list)
-            charge_multiplicity_list = charge_multiplicity_list[0:3]
+        try:
+            partition_len = len(self.partition)
+        except RecursionError:
+            partition_len = None
+        if partition_len == 2:
+            # Two-layer line has no intermediate pair:
+            # charge_total mult_total [model_charge model_mult ...]
+            charge_multiplicity_list = [
+                "charge_total",
+                "real_multiplicity",
+                "model_charge",
+                "model_multiplicity",
+            ]
             full_line = 6
         for j in range(0, int(full_line) - len(line_elements)):
             line_elements.append("Not specified, will use default value.")

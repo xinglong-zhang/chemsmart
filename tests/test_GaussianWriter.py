@@ -358,6 +358,38 @@ class TestGaussianInputWriter:
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
 
+    def test_write_qmmm_job_with_scale_factors(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge = 0
+        qmmm_settings.multiplicity = 1
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1, 2, 3]
+        qmmm_settings.bonded_atoms = [(3, 4)]
+        qmmm_settings.scale_factors = {(3, 4): [0.709]}
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_scale",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        g16_writer = GaussianInputWriter(job=job)
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_qmmm_scale.com")
+        with open(g16_file, "r") as f:
+            content = f.read()
+        assert "H 3" in content
+        assert "0.709" in content
+
     def test_write_qmmm_input_from_logfile(
         self,
         tmpdir,
