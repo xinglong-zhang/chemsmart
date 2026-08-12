@@ -178,6 +178,7 @@ These options are only available with ``chemsmart sub``:
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
+-  ``convert``: Convert molecular structure files between formats
 
 ************
  Next Steps
@@ -191,6 +192,8 @@ For specific job types, see the detailed tutorials:
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`
+-  :doc:`convert-cli-options`
+-  :doc:`molecule-input-formats`
 
 .. note::
 
