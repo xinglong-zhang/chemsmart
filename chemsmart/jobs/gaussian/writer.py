@@ -332,16 +332,31 @@ class GaussianInputWriter(InputWriter):
             source = self.job.molecule
             mm_atom_info = None
             mm_parameters = None
+            high_level_atoms = self.settings.high_level_atoms
+            medium_level_atoms = self.settings.medium_level_atoms
+            low_level_atoms = self.settings.low_level_atoms
+            bonded_atoms = self.settings.bonded_atoms
+            scale_factors = self.settings.scale_factors
             if isinstance(source, QMMMMolecule):
                 mm_atom_info = source.mm_atom_info
                 mm_parameters = source.mm_parameters
+                if high_level_atoms is None:
+                    high_level_atoms = source.high_level_atoms
+                if medium_level_atoms is None:
+                    medium_level_atoms = source.medium_level_atoms
+                if low_level_atoms is None:
+                    low_level_atoms = source.low_level_atoms
+                if bonded_atoms is None:
+                    bonded_atoms = source.bonded_atoms
+                if scale_factors is None:
+                    scale_factors = source.scale_factors
             self.job.molecule = QMMMMolecule(
                 molecule=source,
-                high_level_atoms=self.settings.high_level_atoms,
-                medium_level_atoms=self.settings.medium_level_atoms,
-                low_level_atoms=self.settings.low_level_atoms,
-                bonded_atoms=self.settings.bonded_atoms,
-                scale_factors=self.settings.scale_factors,
+                high_level_atoms=high_level_atoms,
+                medium_level_atoms=medium_level_atoms,
+                low_level_atoms=low_level_atoms,
+                bonded_atoms=bonded_atoms,
+                scale_factors=scale_factors,
                 mm_atom_info=mm_atom_info,
                 mm_parameters=mm_parameters,
             )

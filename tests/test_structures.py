@@ -4203,3 +4203,12 @@ H 1.0 0.0 0.0 L
         )
         assert q.charge == 1
         assert q.multiplicity == 2
+
+        q0 = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert q0.charge == 0
+        assert q0.multiplicity == 1

@@ -284,9 +284,21 @@ class TestGaussian16Input:
         )
         assert g16_oniom.molecule.symbols.formula == "CH3CH3"
         assert g16_oniom.partition == {
-            "high level atoms": ["2-5"],
-            "low level atoms": ["6-9"],
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
         }
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
+        from_filepath = Molecule.from_filepath(gaussian_qmmm_inputfile_2layer)
+        assert from_filepath.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            from_filepath.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
 
     def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
         g16_oniom = Gaussian16QMMMInput(
@@ -354,6 +366,88 @@ class TestGaussian16Input:
         assert g16_oniom.model_charge == 0
         assert g16_oniom.real_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.chemical_symbols[0] == "C"
+        assert g16_oniom.partition == {
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
+        }
+
+    def test_oniom_single_pair_charge_defaults_model(self, tmp_path):
+        com = tmp_path / "single_pair_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+
+    def test_oniom_three_layer_full_charge_line_maps_model(self, tmp_path):
+        com = tmp_path / "three_layer_charges.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:am1:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "1 2 3 4 5 6 7 8 9 10 11 12\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " C    0.0  0.0  1.5 M H 1\n"
+            " H    1.0  0.0  1.5 M\n"
+            " C    0.0  0.0  3.0 L H 3\n"
+            " H    1.0  0.0  3.0 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 1
+        assert g16_oniom.int_charge == 3
+        assert g16_oniom.model_charge == 7
+        assert g16_oniom.real_multiplicity == 2
+        assert g16_oniom.int_multiplicity == 4
+        assert g16_oniom.model_multiplicity == 8
+
+    def test_oniom_freeze_flags_are_preserved(self, tmp_path):
+        com = tmp_path / "frozen_oniom.com"
+        com.write_text(
+            "%chk=frozen.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            " C    0    0.0  0.0  0.0 H\n"
+            " H    0    1.0  0.0  0.0 H\n"
+            " C   -1    0.0  0.0  1.5 L H 1\n"
+            " H   -1    1.0  0.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.molecule.num_atoms == 4
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[2], [0.0, 0.0, 1.5]
+        )
+        assert g16_oniom.molecule.frozen_atoms == [0, 0, -1, -1]
+        from_filepath = Molecule.from_filepath(str(com))
+        assert from_filepath.frozen_atoms == [0, 0, -1, -1]
+        assert from_filepath.high_level_atoms == [1, 2]
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)

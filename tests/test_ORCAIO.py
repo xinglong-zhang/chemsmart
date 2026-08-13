@@ -2942,6 +2942,45 @@ class TestORCAQMMMJobSettings:
         assert s1.charge == 5
         assert s1.multiplicity == 1
 
+    def test_qmmm_xyz_line_uses_charge_high_not_total(self):
+        from io import StringIO
+        from unittest.mock import MagicMock
+
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        settings = ORCAQMMMJobSettings(
+            charge_high=1,
+            mult_high=2,
+            charge_total=0,
+            mult_total=1,
+        )
+        job = MagicMock()
+        job.settings = settings
+        job.jobrunner = MagicMock()
+        buf = StringIO()
+        ORCAInputWriter(job=job)._write_charge_and_multiplicity(buf)
+        assert buf.getvalue() == "* xyz 1 2\n"
+
+    def test_qmmm_xyz_line_does_not_fall_back_to_total_charge(self):
+        from io import StringIO
+        from unittest.mock import MagicMock
+
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        settings = ORCAQMMMJobSettings(
+            charge_total=0,
+            mult_total=1,
+        )
+        assert settings.charge == 0
+        assert settings.charge_high is None
+        job = MagicMock()
+        job.settings = settings
+        job.jobrunner = MagicMock()
+        with pytest.raises(
+            AssertionError, match="Charge and multiplicity must be specified"
+        ):
+            ORCAInputWriter(job=job)._write_charge_and_multiplicity(StringIO())
+
     def test_route_string_without_parent_jobtype(self):
         """Unset parent_jobtype should not crash route generation."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
@@ -2972,6 +3011,40 @@ class TestORCAQMMMJobSettings:
 
         s.high_level_atoms = None
         assert s._get_partition_string() == ""
+
+    def test_qmmm_block_uses_orca_keywords(self):
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            high_level_functional="MN15",
+            high_level_basis="def2-SVP",
+            intermediate_level_functional="B3LYP",
+            intermediate_level_basis="def2-SVP",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=2,
+            charge_total=0,
+            mult_total=2,
+            high_level_h_bond_length={("C", "H"): 1.09, "N_H": 1.01},
+            delete_la_double_counting=True,
+            delete_la_bond_double_counting_atoms=True,
+            embedding_type="electronic",
+            parent_jobtype="opt",
+        )
+        block = s.qmmm_block
+        assert 'QM2CUSTOMMETHOD "B3LYP"' in block
+        assert 'QM2CUSTOMMETHOD "B3LYP" end' not in block
+        assert 'QM2CUSTOMBASIS "def2-SVP"' in block
+        assert 'QM2CUSTOMBASIS "def2-SVP" end' not in block
+        assert "Dist_C_HLA 1.09" in block
+        assert "Dist_N_HLA 1.01" in block
+        assert "DeleteLADoubleCounting true" in block
+        assert "Delete_LA_Double_Counting" not in block
+        assert "Embedding" not in block
+        assert "ORCAFFFilename" not in block
+        route = s.qmmm_route_string
+        assert "QM/QM2" in route
 
 
 class TestORCANEB:

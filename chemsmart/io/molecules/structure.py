@@ -3114,7 +3114,7 @@ class CoordinateBlock:
             ):  # cases where PBC system occurs in Gaussian
                 logger.debug(f"Skipping line {line} with TV!")
                 continue
-            if all(el.isdigit() for el in line_elements):
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 # skip the charge and multiplicity
                 # line of QM/MM coordinate block
                 logger.debug(f"Skipping line {line} with all digit elements!")
@@ -3147,7 +3147,7 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
-            if all(el.isdigit() for el in line_elements):
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 # skip the charge and multiplicity
                 # line of QM/MM coordinate block
                 continue
@@ -3196,12 +3196,27 @@ class CoordinateBlock:
                     return False
 
             last_token_numeric = _is_numeric_token(line_elements[-1])
+            oniom_freeze_then_xyz = (
+                is_constraint_flag
+                and len(line_elements) > 5
+                and str(line_elements[5]).strip() in ("H", "M", "L")
+                and _is_numeric_token(line_elements[2])
+                and _is_numeric_token(line_elements[3])
+                and _is_numeric_token(line_elements[4])
+            )
+            oniom_layer_at_xyz = len(line_elements) > 4 and str(
+                line_elements[4]
+            ).strip() in ("H", "M", "L")
 
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
             if len(line_elements) > 4:
-                if is_constraint_flag and last_token_numeric:
+                if oniom_freeze_then_xyz or (
+                    is_constraint_flag
+                    and last_token_numeric
+                    and not oniom_layer_at_xyz
+                ):
                     # Frozen coordinate line: second
                     # token is an explicit -1/0 flag
                     constraints.append(second_val_int)
@@ -3278,6 +3293,8 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
+                continue
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 continue
             if len(line_elements) > 5 and all(
                 line_elements[i]
@@ -3506,7 +3523,7 @@ class QMMMMolecule(Molecule):
         self.mm_parameters = mm_parameters
         self.real_charge = real_charge
         self.real_multiplicity = real_multiplicity
-        if self.real_charge and self.real_multiplicity:
+        if self.real_charge is not None and self.real_multiplicity is not None:
             # the charge and multiplicity of the real system equal to
             # that of the low_level_charge and low_level_multiplicity
             self.charge = self.real_charge
@@ -3524,6 +3541,17 @@ class QMMMMolecule(Molecule):
             return pos.group(2), float(pos.group(3))
         return None
 
+    @staticmethod
+    def _is_charge_multiplicity_line(line_elements):
+        """Return True for a Gaussian ONIOM charge/multiplicity line."""
+        if len(line_elements) < 2:
+            return False
+        return all(
+            element.replace("-", "").isdigit()
+            and element.replace("-", "") != ""
+            for element in line_elements
+        )
+
     @classmethod
     def mm_atom_info_from_coordinate_lines(cls, coordinate_lines):
         """Parse MM ``(type, charge, link_type, link_charge)`` from ONIOM coords.
@@ -3536,8 +3564,8 @@ class QMMMMolecule(Molecule):
             if line.startswith("TV"):
                 continue
             line_elements = line.strip().split()
-            if len(line_elements) < 4 or all(
-                el.isdigit() for el in line_elements
+            if len(line_elements) < 4 or cls._is_charge_multiplicity_line(
+                line_elements
             ):
                 continue
 

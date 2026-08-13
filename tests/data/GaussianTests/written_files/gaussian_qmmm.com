@@ -1,11 +1,11 @@
 %chk=gaussian_qmmm.chk
 %nprocshared=64
 %mem=375GB
-# freq oniom(MN15/def2svp:PBE/6-31g(d,p)/auto:UFF) geom=connectivity
+# freq oniom(MN15/def2svp:UFF) geom=connectivity
 
 Gaussian QM/MM job
 
-0 1 0 1 0 1 0 1 0 1 0 1
+0 1 0 1 0 1
 C       -1.0440166707   -2.3921211654   -1.1765767093 H
 C        0.1047624537   -1.6967413479   -1.6013453653 H
 C       -1.0128798417   -3.2879254912   -0.0053163255 H
