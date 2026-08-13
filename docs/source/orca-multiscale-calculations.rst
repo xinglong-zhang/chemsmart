@@ -185,9 +185,9 @@ Advanced QM/MM Options
       -  string
       -  Embedding type: electronic or mechanical
 
-   -  -  ``-h, --qm-h-bond-length``
-      -  dict
-      -  Custom QM-H bond lengths
+   -  -  ``-h, --high-level-h-bond-length``
+      -  string
+      -  Custom high-level-H bond lengths as a string representation of a dict
 
    -  -  ``-d, --delete-la-double-counting``
       -  bool
