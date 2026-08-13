@@ -393,6 +393,138 @@ class TestGaussianInputWriter:
         assert "0.709" in content
         assert "geom=connectivity" in content.lower()
 
+    def test_write_qmmm_link_atoms_share_high_boundary(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Both MM boundary atoms may link to the same high-layer atom."""
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
+        qmmm_settings = GaussianQMMMJobSettings(
+            parent_jobtype="opt",
+            jobtype="opt",
+            freq=False,
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            charge_high=0,
+            mult_high=1,
+            high_level_atoms=[1, 2, 3],
+            bonded_atoms=[(3, 4), (3, 5)],
+        )
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_shared_link",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        with open(
+            os.path.join(tmpdir, "gaussian_qmmm_shared_link.com")
+        ) as handle:
+            content = handle.read()
+        assert content.count(" L H 3") == 2
+
+    def test_write_qmmm_genecp_follows_conventional_basis_path(
+        self,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """ONIOM gen/genecp uses the same shared basis path as non-QMMM jobs."""
+        import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
+        molecule = Molecule(
+            symbols=["C", "H", "H", "H", "Cu", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [-1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [2.0, 0.0, 0.0],
+                    [3.0, 0.0, 0.0],
+                ],
+                dtype=float,
+            ),
+        )
+        # Organic high layer: choose a light basis (no heavy_elements), same as
+        # a conventional job that does not request GenECP.
+        qmmm_light = GaussianQMMMJobSettings(
+            parent_jobtype="opt",
+            jobtype="opt",
+            freq=False,
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=2,
+            mult_total=2,
+            charge_high=2,
+            mult_high=1,
+            high_level_atoms=[1, 2, 3, 4],
+            bonded_atoms=[(4, 5)],
+        )
+        job = GaussianQMMMJob(
+            molecule=molecule,
+            settings=qmmm_light,
+            label="gaussian_qmmm_light_basis",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        with open(
+            os.path.join(tmpdir, "gaussian_qmmm_light_basis.com")
+        ) as handle:
+            content = handle.read()
+        route = next(
+            line for line in content.splitlines() if line.startswith("#")
+        )
+        assert "oniom(mn15/def2svp:UFF)" in route
+        assert "genecp" not in route.lower()
+        assert "2 2 2 1 2 1" in content
+        assert "L H 4" in content
+        assert "****" not in content
+
+        # Cu in the high layer with genecp: shared path demotes to gen (Z<=36)
+        # and writes the Cu basis block, same as conventional GenECP jobs.
+        qmmm_cu = GaussianQMMMJobSettings(
+            parent_jobtype="opt",
+            jobtype="opt",
+            freq=False,
+            high_level_functional="mn15",
+            high_level_basis="genecp",
+            low_level_force_field="UFF",
+            heavy_elements=["Cu"],
+            heavy_elements_basis="def2-SVPD",
+            light_elements_basis="def2SVP",
+            charge_total=0,
+            mult_total=1,
+            charge_high=0,
+            mult_high=1,
+            high_level_atoms=[1, 2, 3, 4, 5],
+            bonded_atoms=[(5, 6)],
+        )
+        assert qmmm_cu.basis == "genecp"
+        job = GaussianQMMMJob(
+            molecule=molecule,
+            settings=qmmm_cu,
+            label="gaussian_qmmm_cu_high",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        with open(os.path.join(tmpdir, "gaussian_qmmm_cu_high.com")) as handle:
+            content = handle.read()
+        route = next(
+            line for line in content.splitlines() if line.startswith("#")
+        )
+        assert "oniom(mn15/gen:UFF)" in route
+        assert "Cu     0" in content or "Cu 0" in content
+
     def test_write_qmmm_amber_requires_mm_atom_info(
         self,
         tmpdir,

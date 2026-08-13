@@ -300,8 +300,10 @@ def create_qmmm_subcommand(parent_command):
         logger.debug("Applying QMMM-specific CLI options")
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional
+            qmmm_settings.functional = high_level_functional
         if high_level_basis is not None:
             qmmm_settings.high_level_basis = high_level_basis
+            qmmm_settings.basis = high_level_basis
         if high_level_force_field is not None:
             qmmm_settings.high_level_force_field = high_level_force_field
         if medium_level_functional is not None:
@@ -326,8 +328,10 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.mult_intermediate = mult_intermediate
         if charge_high is not None:
             qmmm_settings.charge_high = charge_high
+            qmmm_settings.model_charge = charge_high
         if mult_high is not None:
             qmmm_settings.mult_high = mult_high
+            qmmm_settings.model_multiplicity = mult_high
         if high_level_atoms is not None:
             qmmm_settings.high_level_atoms = high_level_atoms
         if medium_level_atoms is not None:

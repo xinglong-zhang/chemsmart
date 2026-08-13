@@ -2627,6 +2627,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         self.title = "Gaussian QM/MM job"
 
+        # Keep parent basis/functional aligned with the high QM layer so the
+        # shared gen/genecp route and basis-section logic applies unchanged.
+        if self.high_level_basis is not None:
+            self.basis = self.high_level_basis
+        if self.high_level_functional is not None:
+            self.functional = self.high_level_functional
+
         if self.charge_total is not None and self.mult_total is not None:
             # the charge and multiplicity of the real system equal to
             # that of the low_level_charge and low_level_multiplicity
