@@ -380,7 +380,8 @@ Gaussian supports multiple MM force fields:
 YAML Configuration Files
 ========================
 
-Create project-specific ONIOM settings in YAML format.
+Create project-specific ONIOM settings in YAML format. Charge and multiplicity are not set in the project YAML; pass
+them on the command line (``-ct``, ``-mt``, ``-ch``, ``-mh``, and for 3-layer jobs ``-ci``, ``-mi``).
 
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
@@ -390,10 +391,6 @@ Create project-specific ONIOM settings in YAML format.
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
-   charge_total: 0
-   mult_total: 1
-   charge_high: 0
-   mult_high: 1
 
 **3-Layer ONIOM Configuration** (``~/.chemsmart/gaussian/oniom3.yaml``):
 
@@ -405,12 +402,6 @@ Create project-specific ONIOM settings in YAML format.
    medium_level_functional: "B3LYP"
    medium_level_basis: "6-31G*"
    low_level_force_field: "UFF"
-   charge_total: -1
-   mult_total: 2
-   charge_intermediate: 0
-   mult_intermediate: 1
-   charge_high: 0
-   mult_high: 1
 
 **Transition State Configuration** (``~/.chemsmart/gaussian/ts_oniom.yaml``):
 
@@ -420,10 +411,6 @@ Create project-specific ONIOM settings in YAML format.
    high_level_functional: "wB97X-D"
    high_level_basis: "6-311++G(d,p)"
    low_level_force_field: "AMBER=HardFirst"
-   charge_total: 0
-   mult_total: 1
-   charge_high: 0
-   mult_high: 1
 
 **Using Project Configuration**
 
@@ -431,7 +418,7 @@ Use the YAML configuration with the project flag:
 
 .. code:: console
 
-   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ba '[(20,21)]'
+   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(20,21)]'
 
 Python Configuration
 ====================

@@ -283,7 +283,8 @@ QM/MM with custom bond lengths and embedding options:
  Project Configuration
 ***********************
 
-You can also configure QM/MM settings in your project YAML file. Create a ``qmmm.yaml`` file in your project directory:
+You can also configure QM/MM settings in your project YAML file. Create a ``qmmm.yaml`` file in your project directory.
+Charge and multiplicity are not set in the project YAML; pass them on the command line.
 
 .. code:: yaml
 
@@ -549,7 +550,8 @@ For MOL-CRYSTAL-QMMM and IONIC-CRYSTAL-QMMM calculations:
 YAML Configuration Files
 ========================
 
-Create project-specific QM/MM settings in YAML format:
+Create project-specific QM/MM settings in YAML format. Charge and multiplicity are not set in the project YAML; pass
+them on the command line (``-ch``, ``-mh``, ``-ct``, ``-mt``).
 
 **Basic QM/MM Configuration** (``~/.chemsmart/orca/qmmm.yaml``):
 
