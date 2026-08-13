@@ -454,7 +454,10 @@ class Gaussian16QMMMInput(Gaussian16Input):
     @property
     def model_charge(self):
         oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_charge["model_charge"])
+        model_charge = oniom_charge.get("model_charge")
+        if model_charge is None:
+            return self.real_charge
+        return int(model_charge)
 
     @property
     def oniom_multiplicity(self):
@@ -478,7 +481,10 @@ class Gaussian16QMMMInput(Gaussian16Input):
     @property
     def model_multiplicity(self):
         _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_multiplicity["model_multiplicity"])
+        model_multiplicity = oniom_multiplicity.get("model_multiplicity")
+        if model_multiplicity is None:
+            return self.real_multiplicity
+        return int(model_multiplicity)
 
     @property
     def partition(self):
@@ -517,7 +523,6 @@ class Gaussian16QMMMInput(Gaussian16Input):
         ]
         oniom_charge = {}
         oniom_multiplicity = {}
-        full_line = 12
         try:
             partition_len = len(self.partition)
         except RecursionError:
@@ -531,15 +536,40 @@ class Gaussian16QMMMInput(Gaussian16Input):
                 "model_charge",
                 "model_multiplicity",
             ]
-            full_line = 6
-        for j in range(0, int(full_line) - len(line_elements)):
-            line_elements.append("Not specified, will use default value.")
-        for charge in range(0, len(charge_multiplicity_list), 2):
-            oniom_charge[charge_multiplicity_list[charge]] = line_elements[
-                charge
+        elif len(line_elements) >= 8:
+            # Three-layer full line:
+            # cRealL sRealL cIntM sIntM cIntL sIntL cModH sModH ...
+            charge_multiplicity_list = [
+                "charge_total",
+                "real_multiplicity",
+                "int_charge",
+                "int_multiplicity",
+                None,
+                None,
+                "model_charge",
+                "model_multiplicity",
             ]
+        real_charge = line_elements[0] if line_elements else None
+        real_multiplicity = (
+            line_elements[1] if len(line_elements) > 1 else None
+        )
+
+        def _value(index, default):
+            if index >= len(line_elements):
+                return default
+            element = line_elements[index]
+            if element.replace("-", "").isdigit() and element.replace("-", ""):
+                return element
+            return default
+
+        for charge in range(0, len(charge_multiplicity_list), 2):
+            key = charge_multiplicity_list[charge]
+            if key is None:
+                continue
+            oniom_charge[key] = _value(charge, real_charge)
         for multiplicity in range(1, len(charge_multiplicity_list), 2):
-            oniom_multiplicity[charge_multiplicity_list[multiplicity]] = (
-                line_elements[multiplicity]
-            )
+            key = charge_multiplicity_list[multiplicity]
+            if key is None:
+                continue
+            oniom_multiplicity[key] = _value(multiplicity, real_multiplicity)
         return oniom_charge, oniom_multiplicity

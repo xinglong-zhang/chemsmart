@@ -351,6 +351,25 @@ def create_qmmm_subcommand(parent_command):
         if mm_parameters_file is not None:
             qmmm_settings.mm_parameters_file = mm_parameters_file
 
+        if (
+            charge_total is None
+            and qmmm_settings.charge_total is None
+            and parent_settings is not None
+            and parent_settings.charge is not None
+        ):
+            qmmm_settings.charge_total = parent_settings.charge
+            qmmm_settings.real_charge = parent_settings.charge
+            qmmm_settings.charge = parent_settings.charge
+        if (
+            mult_total is None
+            and qmmm_settings.mult_total is None
+            and parent_settings is not None
+            and parent_settings.multiplicity is not None
+        ):
+            qmmm_settings.mult_total = parent_settings.multiplicity
+            qmmm_settings.real_multiplicity = parent_settings.multiplicity
+            qmmm_settings.multiplicity = parent_settings.multiplicity
+
         # Get molecule
         molecules = ctx.obj["molecules"]
         molecule = molecules[-1]
@@ -417,34 +436,3 @@ def create_qmmm_subcommand(parent_command):
         )
 
     return qmmm
-
-
-def _populate_charge_and_multiplicity_on_settings(qs):
-    charge = getattr(qs, "charge", None)
-    mult = getattr(qs, "multiplicity", None)
-
-    if (
-        getattr(qs, "charge_intermediate", None) is not None
-        and getattr(qs, "mult_intermediate", None) is not None
-    ):
-        charge = qs.charge_intermediate
-        mult = qs.mult_intermediate
-    elif (
-        getattr(qs, "charge_high", None) is not None
-        and getattr(qs, "mult_high", None) is not None
-    ):
-        charge = qs.charge_high
-        mult = qs.mult_high
-    elif (
-        getattr(qs, "charge_total", None) is not None
-        and getattr(qs, "mult_total", None) is not None
-    ):
-        charge = qs.charge_total
-        mult = qs.mult_total
-
-    if charge is not None:
-        qs.charge = charge
-        qs.charge_total = charge
-    if mult is not None:
-        qs.multiplicity = mult
-        qs.mult_total = mult

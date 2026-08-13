@@ -2927,11 +2927,10 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             level_name="low",
         )
 
-        # Build ONIOM string with proper parentheses handling
         levels = []
         if high_level_of_theory is not None:
             levels.append(high_level_of_theory)
-        if medium_level_of_theory is not None:
+        if medium_level_of_theory is not None and self.medium_level_atoms:
             levels.append(medium_level_of_theory)
         if low_level_of_theory is not None:
             levels.append(low_level_of_theory)
@@ -3009,6 +3008,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 level_name="medium",
             )
             is None
+            or not self.medium_level_atoms
             or self.validate_and_assign_level(
                 self.low_level_functional,
                 self.low_level_basis,

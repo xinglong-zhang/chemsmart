@@ -694,6 +694,34 @@ class TestGaussianInputWriter:
         assert "HrmBnd1 CT OH HC 50.0 109.5" in content
         assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in content
 
+    def test_write_qmmm_uses_layers_from_oniom_com(
+        self,
+        tmpdir,
+        gaussian_qmmm_inputfile_2layer,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = None
+        job = GaussianQMMMJob.from_filename(
+            filename=gaussian_qmmm_inputfile_2layer,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_from_layers",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        assert job.molecule.high_level_atoms == [1, 2, 3, 4]
+        out = os.path.join(tmpdir, "gaussian_qmmm_from_layers.com")
+        with open(out) as handle:
+            content = handle.read()
+        assert content.count(" H\n") >= 4
+        assert " L" in content
+
     def test_write_qmmm_amber_with_mm_atom_info(
         self,
         tmpdir,

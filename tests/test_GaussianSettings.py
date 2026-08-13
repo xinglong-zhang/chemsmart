@@ -208,6 +208,26 @@ class TestGaussianQMMMJobSettings:
             == "# opt freq oniom(b3lyp/6-31g(d):uff) geom=connectivity"
         )
 
+        settings_medium_theory_no_atoms = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+        )
+        assert (
+            settings_medium_theory_no_atoms.route_string
+            == "# oniom(mn15/def2svp:uff) geom=connectivity"
+        )
+        assert (
+            settings_medium_theory_no_atoms.charge_and_multiplicity_string
+            == "0 1 0 1 0 1"
+        )
+
         settings2 = GaussianQMMMJobSettings(
             high_level_functional="mn15",
             high_level_basis="def2svp",
@@ -217,6 +237,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="sp",
         )
         assert (
@@ -234,6 +255,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="sp",
         )
         # assert settings3.route_string == "#
@@ -253,6 +275,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             solvent_model="smd",
             solvent_id="toluene",
             parent_jobtype="sp",
@@ -272,6 +295,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="opt",
             freq=True,
             solvent_model="smd",
@@ -292,6 +316,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="ts",
             freq=True,
             solvent_model="smd",
@@ -312,6 +337,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="ts",
             freq=False,
             numfreq=True,
@@ -375,6 +401,7 @@ class TestGaussianQMMMJobSettings:
             charge_total=0,
             mult_total=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="opt",
             freq=True,
             solvent_model="smd",
@@ -605,6 +632,7 @@ class TestGaussianQMMMJobSettings:
             low_level_force_field="uff",
             real_charge=0,
             real_multiplicity=1,
+            medium_level_atoms=[4],
         )
         assert (
             settings1.charge_and_multiplicity_string
@@ -622,6 +650,7 @@ class TestGaussianQMMMJobSettings:
             real_multiplicity=1,
             int_charge=1,
             int_multiplicity=3,
+            medium_level_atoms=[4],
         )
         assert (
             settings2.charge_and_multiplicity_string
@@ -641,6 +670,7 @@ class TestGaussianQMMMJobSettings:
             int_multiplicity=2,
             model_charge=0,
             model_multiplicity=1,
+            medium_level_atoms=[4],
         )
         assert (
             settings3.charge_and_multiplicity_string
