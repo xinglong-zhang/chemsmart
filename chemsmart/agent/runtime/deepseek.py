@@ -18,7 +18,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_json,
+    canonical_sha256,
+)
 
 
 DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"
@@ -35,7 +39,62 @@ _UNCLOSED_THINK = re.compile(r"<think\b", flags=re.IGNORECASE)
 
 
 class DeepSeekProtocolError(RuntimeError):
-    """Raised for an unsafe or malformed provider response."""
+    """Raised for an unsafe provider response without retaining its contents.
+
+    A protocol failure can happen after the provider has returned a complete
+    envelope but before any tool call is admissible.  Keep only a digest and
+    byte count of the public (reasoning-scrubbed) envelope plus the structural
+    location of the failure.  The raw response and private continuation never
+    become exception attributes and therefore cannot leak into Runtime V2
+    events or persisted tracebacks.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failing_field: str = "",
+        json_offset: int | None = None,
+        response_envelope_sha256: str = "",
+        response_envelope_bytes: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.error_class = type(self).__name__
+        self.failing_field = str(failing_field)
+        self.json_offset = (
+            None if json_offset is None else max(0, int(json_offset))
+        )
+        self.response_envelope_sha256 = str(response_envelope_sha256)
+        self.response_envelope_bytes = max(0, int(response_envelope_bytes))
+
+    def with_public_response(
+        self, response: Mapping[str, Any]
+    ) -> DeepSeekProtocolError:
+        """Bind nonsecret envelope evidence without retaining the envelope."""
+
+        public = public_provider_response(response)
+        encoded = canonical_json(public).encode("utf-8")
+        return type(self)(
+            str(self),
+            failing_field=self.failing_field,
+            json_offset=self.json_offset,
+            response_envelope_sha256=canonical_sha256(public),
+            response_envelope_bytes=len(encoded),
+        )
+
+    def public_observation(self) -> dict[str, Any]:
+        """Return the closed, nonsecret protocol-failure observation."""
+
+        return {
+            "schema_version": "chemsmart.provider-protocol-failure.v1",
+            "error_class": self.error_class,
+            "failing_field": self.failing_field,
+            "json_offset": self.json_offset,
+            "response_envelope_sha256": self.response_envelope_sha256,
+            "response_envelope_bytes": self.response_envelope_bytes,
+            "retry_decision": "not_retried",
+            "recovery_requirement": "new_independent_attempt",
+        }
 
 
 class DeepSeekTransportError(RuntimeError):
@@ -82,43 +141,37 @@ class DeepSeekHttpsTransport:
         encoded = json.dumps(
             payload, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
-        for attempt in range(2):
-            request = Request(
-                self.endpoint + "/chat/completions",
-                data=encoded,
-                method="POST",
-                headers={
-                    "Authorization": "Bearer " + self._api_key,
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "User-Agent": "chemsmart-agent/1",
-                },
+        request = Request(
+            self.endpoint + "/chat/completions",
+            data=encoded,
+            method="POST",
+            headers={
+                "Authorization": "Bearer " + self._api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "chemsmart-agent/1",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read()
+        except IncompleteRead:
+            # A replay would be a distinct paid provider attempt. Close this
+            # attempt visibly; only a separately authorized new conversation
+            # may retry it.
+            raise DeepSeekTransportError("incomplete_read") from None
+        except HTTPError as exc:
+            raise DeepSeekTransportError(
+                _http_error_class(exc.code), http_status=exc.code
+            ) from None
+        except TimeoutError:
+            raise DeepSeekTransportError("timeout") from None
+        except URLError as exc:
+            reason = getattr(exc, "reason", None)
+            error_class = (
+                "timeout" if isinstance(reason, TimeoutError) else "transport"
             )
-            try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
-                    raw = response.read()
-                break
-            except IncompleteRead as exc:
-                # The official endpoint can occasionally close a chunked
-                # response before sending its first byte.  No provider message
-                # exists to preserve in that case, so one transparent replay
-                # of the identical request is safer than aborting the entire
-                # scientific tool session.  Never replay a partial response.
-                if attempt == 0 and not exc.partial:
-                    continue
-                raise DeepSeekTransportError("incomplete_read") from None
-            except HTTPError as exc:
-                raise DeepSeekTransportError(
-                    _http_error_class(exc.code), http_status=exc.code
-                ) from None
-            except TimeoutError:
-                raise DeepSeekTransportError("timeout") from None
-            except URLError as exc:
-                reason = getattr(exc, "reason", None)
-                error_class = (
-                    "timeout" if isinstance(reason, TimeoutError) else "transport"
-                )
-                raise DeepSeekTransportError(error_class) from None
+            raise DeepSeekTransportError(error_class) from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -173,8 +226,10 @@ class DeepSeekV4FlashConfigV1:
             raise ContractError(
                 "max_output_tokens exceeds DeepSeek V4 Flash capability"
             )
-        if self.sdk_max_retries < 0:
-            raise ContractError("sdk_max_retries must be non-negative")
+        if self.sdk_max_retries != 0:
+            raise ContractError(
+                "provider retries require a separately authorized attempt"
+            )
 
 
 @dataclass(frozen=True)
@@ -296,12 +351,19 @@ class DeepSeekV4ToolSession:
         if not isinstance(response, Mapping):
             raise DeepSeekProtocolError("provider response must be a mapping")
         payload = deepcopy(dict(response))
-        assistant = _assistant_message(payload)
-        tool_call_ids = _validate_tool_calls(assistant)
-        if self._seen_tool_call_ids.intersection(tool_call_ids):
-            raise DeepSeekProtocolError(
-                "provider reused a tool-call ID within one session"
-            )
+        try:
+            assistant = _assistant_message(payload)
+            tool_call_ids = _validate_tool_calls(assistant)
+            if self._seen_tool_call_ids.intersection(tool_call_ids):
+                raise DeepSeekProtocolError(
+                    "provider reused a tool-call ID within one session",
+                    failing_field="choices[0].message.tool_calls[*].id",
+                )
+        except DeepSeekProtocolError as exc:
+            # Validation is intentionally all-or-nothing and precedes every
+            # history mutation, receipt, and tool dispatch.  Do not repair or
+            # replay malformed provider-authored arguments.
+            raise exc.with_public_response(payload) from None
         if tool_call_ids:
             # Short follow-up tool turns may carry an explicitly empty
             # continuation. Replay the exact empty field rather than inventing
@@ -346,7 +408,7 @@ class DeepSeekV4ToolSession:
         """Return the only history shape permitted in events or artifacts."""
 
         return [
-            public_payload(message)
+            _public_message(message)
             for message in self._history
         ]
 
@@ -359,12 +421,73 @@ class DeepSeekV4ToolSession:
 
 
 def public_provider_response(response: Mapping[str, Any]) -> dict[str, Any]:
-    sanitized = public_payload(deepcopy(dict(response)))
+    sanitized = _public_payload_at_path(
+        deepcopy(dict(response)), (), "provider_response"
+    )
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def public_provider_request(request: Mapping[str, Any]) -> dict[str, Any]:
+    """Return one reasoning-free request without changing tool actions."""
+
+    sanitized = _public_payload_at_path(
+        deepcopy(dict(request)), (), "provider_request"
+    )
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _public_message(message: Mapping[str, Any]) -> dict[str, Any]:
+    context = (
+        "assistant_message"
+        if str(message.get("role") or "") == "assistant"
+        else "generic"
+    )
+    sanitized = _public_payload_at_path(deepcopy(dict(message)), (), context)
     return sanitized if isinstance(sanitized, dict) else {}
 
 
 def public_payload(value: Any) -> Any:
     """Recursively remove private reasoning fields from persistable values."""
+
+    return _public_payload_at_path(value, (), "generic")
+
+
+def _is_tool_function_path(
+    path: tuple[Any, ...], context: str
+) -> bool:
+    direct_message = (
+        context == "assistant_message"
+        and len(path) == 3
+        and path[0] == "tool_calls"
+        and isinstance(path[1], int)
+        and path[2] == "function"
+    )
+    provider_response = (
+        context == "provider_response"
+        and len(path) == 6
+        and path[0] == "choices"
+        and path[1] == 0
+        and path[2] == "message"
+        and path[3] == "tool_calls"
+        and isinstance(path[4], int)
+        and path[5] == "function"
+    )
+    provider_request = (
+        context == "provider_request"
+        and len(path) == 5
+        and path[0] == "messages"
+        and isinstance(path[1], int)
+        and path[2] == "tool_calls"
+        and isinstance(path[3], int)
+        and path[4] == "function"
+    )
+    return direct_message or provider_response or provider_request
+
+
+def _public_payload_at_path(
+    value: Any, path: tuple[Any, ...], context: str
+) -> Any:
+    """Sanitize one value while retaining its exact provider-envelope path."""
 
     if isinstance(value, dict):
         if str(value.get("type", "")).lower() in _PRIVATE_REASONING_KEYS:
@@ -373,14 +496,24 @@ def public_payload(value: Any) -> Any:
         for key, item in value.items():
             if key in _PRIVATE_REASONING_KEYS:
                 continue
-            public = public_payload(item)
+            if _is_tool_function_path(path, context) and key == "arguments":
+                # Function arguments are a validated public action, not a
+                # reasoning channel.  Rewriting substrings inside their JSON
+                # text can change the action or make a later call undecodable.
+                result[key] = item
+                continue
+            public = _public_payload_at_path(
+                item, (*path, key), context
+            )
             if public is not None:
                 result[key] = public
         return result
     if isinstance(value, list):
         result = []
-        for item in value:
-            public = public_payload(item)
+        for index, item in enumerate(value):
+            public = _public_payload_at_path(
+                item, (*path, index), context
+            )
             if public is not None:
                 result.append(public)
         return result
@@ -396,11 +529,16 @@ def public_payload(value: Any) -> Any:
 def _assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise DeepSeekProtocolError("provider response has no choices")
+        raise DeepSeekProtocolError(
+            "provider response has no choices", failing_field="choices"
+        )
     choice = choices[0]
     message = choice.get("message") if isinstance(choice, Mapping) else None
     if not isinstance(message, Mapping):
-        raise DeepSeekProtocolError("provider response has no assistant message")
+        raise DeepSeekProtocolError(
+            "provider response has no assistant message",
+            failing_field="choices[0].message",
+        )
     result = deepcopy(dict(message))
     result.setdefault("role", "assistant")
     # Official thinking+tools continuation requires replaying a non-null
@@ -413,29 +551,53 @@ def _assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:
 def _validate_tool_calls(assistant: Mapping[str, Any]) -> tuple[str, ...]:
     raw = assistant.get("tool_calls") or []
     if not isinstance(raw, list):
-        raise DeepSeekProtocolError("assistant tool_calls must be a list")
+        raise DeepSeekProtocolError(
+            "assistant tool_calls must be a list",
+            failing_field="choices[0].message.tool_calls",
+        )
     identifiers = []
-    for item in raw:
+    for index, item in enumerate(raw):
+        field = f"choices[0].message.tool_calls[{index}]"
         if not isinstance(item, Mapping):
-            raise DeepSeekProtocolError("assistant tool call must be an object")
+            raise DeepSeekProtocolError(
+                "assistant tool call must be an object", failing_field=field
+            )
         identifier = str(item.get("id") or "")
         function = item.get("function")
         if not identifier or not isinstance(function, Mapping):
-            raise DeepSeekProtocolError("tool call lacks ID or function")
+            raise DeepSeekProtocolError(
+                "tool call lacks ID or function", failing_field=field
+            )
         if not str(function.get("name") or ""):
-            raise DeepSeekProtocolError("tool call lacks function name")
+            raise DeepSeekProtocolError(
+                "tool call lacks function name",
+                failing_field=field + ".function.name",
+            )
         arguments = function.get("arguments")
         if not isinstance(arguments, str):
-            raise DeepSeekProtocolError("tool call arguments must be JSON text")
+            raise DeepSeekProtocolError(
+                "tool call arguments must be JSON text",
+                failing_field=field + ".function.arguments",
+            )
         try:
             decoded = json.loads(arguments)
         except json.JSONDecodeError as exc:
-            raise DeepSeekProtocolError("tool call arguments are invalid JSON") from exc
+            raise DeepSeekProtocolError(
+                "tool call arguments are invalid JSON",
+                failing_field=field + ".function.arguments",
+                json_offset=exc.pos,
+            ) from None
         if not isinstance(decoded, dict):
-            raise DeepSeekProtocolError("tool call arguments must decode to an object")
+            raise DeepSeekProtocolError(
+                "tool call arguments must decode to an object",
+                failing_field=field + ".function.arguments",
+            )
         identifiers.append(identifier)
     if len(identifiers) != len(set(identifiers)):
-        raise DeepSeekProtocolError("assistant reused a tool-call ID")
+        raise DeepSeekProtocolError(
+            "assistant reused a tool-call ID",
+            failing_field="choices[0].message.tool_calls[*].id",
+        )
     return tuple(identifiers)
 
 
@@ -458,7 +620,7 @@ def _turn_receipt(
         "provider": str(getattr(config, "provider", "deepseek")),
         "requested_model": config.model,
         "observed_model": str(response.get("model") or ""),
-        "request_sha256": canonical_sha256(public_payload(request)),
+        "request_sha256": canonical_sha256(public_provider_request(request)),
         "tool_schema_sha256": canonical_sha256(tools),
         "input_tokens": int(
             usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
@@ -517,5 +679,6 @@ __all__ = [
     "ProviderCapabilitiesV1",
     "ProviderTurnReceiptV1",
     "public_payload",
+    "public_provider_request",
     "public_provider_response",
 ]

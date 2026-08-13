@@ -36,7 +36,11 @@ def test_a_phase_keyed_program_and_a_stage_keyed_one_are_distinguishable():
     """The distinction a model cannot infer from the program name."""
 
     records = _agent_records()
-    assert records["gaussian"].project_section_names == ("gas", "solv")
+    assert records["gaussian"].project_section_names == (
+        "gas",
+        "solv",
+        "td",
+    )
     assert records["orca"].project_section_names == (
         "gas",
         "neb",

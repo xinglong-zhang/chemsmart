@@ -1330,6 +1330,30 @@ def test_orca_error_termination_is_not_engine_completion():
     assert evaluation.observations["orca"]["normal_termination"] is False
 
 
+def test_orca_validator_reports_explicit_dft_d_total_not_scf_component():
+    output_path = Path("tests/data/ORCATests/outputs/KOH.out").resolve()
+    output = _artifact(
+        output_path,
+        artifact_id="result.orca.dftd",
+        kind="orca_output",
+    )
+
+    evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
+        program="orca",
+        jobtype="opt",
+        charge=0,
+        multiplicity=1,
+        expected_settings={"freq": True},
+        output_artifacts=(output,),
+        exit_status=0,
+    )
+
+    assert evaluation.validated is True
+    assert evaluation.observations["orca"]["energy_hartree"] == pytest.approx(
+        -675.522805891018
+    )
+
+
 @pytest.mark.parametrize(
     (
         "neb_converged",

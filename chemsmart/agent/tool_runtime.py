@@ -97,10 +97,12 @@ from chemsmart.agent.execution import (
     build_scientific_decision_record,
     build_validated_data_edge_binding,
     build_workflow_execution_approval,
+    derive_ready_node_ids,
     handoff_optimized_native_geometry,
     handoff_optimized_pyscf_geometry,
     handoff_optimized_xtb_geometry,
     invocation_identity_sha256,
+    is_validated_optimized_geometry_edge,
     promote_project_candidate,
 )
 from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
@@ -1263,6 +1265,11 @@ class CommandCompiledToolHostV1:
         ] = {}
         self.handoffs: dict[str, OptimizedGeometryHandoffV1] = {}
         self._command_contexts: dict[str, _CommandContext] = {}
+        # A node ID is unique only inside one workflow.  Bind every command
+        # prepared through the workflow surface to that exact plan so a later
+        # diagnostic workflow with the same local node name cannot borrow an
+        # older invocation or silently change approval ownership.
+        self._invocation_workflow_plan_sha256s: dict[str, str] = {}
         self._completion_sets: dict[str, tuple[str, ...]] = {}
         self._latest_environment_by_capability: dict[
             str, EnvironmentCapabilityReceiptV1
@@ -2596,9 +2603,19 @@ class CommandCompiledToolHostV1:
                 scientific_v2.plan_sha256 if scientific_v2 else ""
             ),
         )
+        materialized_inputs, _completed = self._observed_workflow_state(
+            draft,
+            scientific_plan_sha256=(
+                scientific_v2.plan_sha256 if scientific_v2 else ""
+            ),
+        )
         finding_nodes = {
             item["node_id"] for item in command_result.get("findings", ())
-        } | {node.node_id for node in draft.nodes if node.unresolved_fields}
+        } | {
+            node.node_id
+            for node in draft.nodes
+            if _remaining_node_unresolved_fields(node, materialized_inputs)
+        }
         actionable = tuple(
             node_id
             for node_id in context.ready_node_ids
@@ -2653,21 +2670,56 @@ class CommandCompiledToolHostV1:
             raise ContractError("workflow has no unique calculation node ID")
         node = nodes[0]
 
-        if node.unresolved_fields:
+        scientific_v2 = command_result.get("scientific_workflow_plan")
+        plan_sha256 = scientific_v2.plan_sha256 if scientific_v2 else ""
+        materialized_inputs, _completed = self._observed_workflow_state(
+            draft,
+            scientific_plan_sha256=plan_sha256,
+        )
+        workflow_context = self._workflow_context(
+            draft,
+            scientific_plan_sha256=plan_sha256,
+        )
+        node_context = workflow_context.node(node_id)
+        if node_context is not None and node_context.state == "completed":
+            return {
+                "status": "completed",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "next_action": "use the validated result already recorded",
+            }
+        if node_context is not None and node_context.state == "blocked":
+            return {
+                "status": "blocked",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "finding": node_context.reason,
+                "next_action": "continue an independent ready branch or close the failed branch",
+            }
+        if node_context is not None and node_context.state == "waiting":
+            return {
+                "status": "waiting_for_artifact",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "producer_inputs": tuple(
+                    canonical_data(item)
+                    for item in node_context.unsatisfied_inputs
+                ),
+                "waiting_on": node_context.waiting_on,
+                "next_action": "execute and validate the named producer first",
+            }
+
+        remaining_unresolved = _remaining_node_unresolved_fields(
+            node, materialized_inputs
+        )
+        if remaining_unresolved:
             return {
                 "status": "needs_clarification",
                 "workflow_id": workflow_id,
                 "node_id": node_id,
-                "unresolved_fields": node.unresolved_fields,
+                "unresolved_fields": remaining_unresolved,
                 "next_action": "resolve the node's scientific settings",
             }
-        scientific_v2 = command_result.get("scientific_workflow_plan")
-        materialized_inputs, _completed = self._observed_workflow_state(
-            draft,
-            scientific_plan_sha256=(
-                scientific_v2.plan_sha256 if scientific_v2 else ""
-            ),
-        )
         resolved_inputs: dict[str, TrustedArtifactRefV1] = {}
         waiting_producers = []
         waiting_artifacts = []
@@ -2949,6 +3001,10 @@ class CommandCompiledToolHostV1:
             job_artifact_options=job_artifact_options,
         )
         compiled = self._record_compiled_command(turn_id, invocation, context)
+        if plan_sha256:
+            self._invocation_workflow_plan_sha256s[
+                invocation.invocation_sha256
+            ] = plan_sha256
         if compiled["inspection"].status != "valid":
             return {
                 "status": "blocked",
@@ -3013,11 +3069,20 @@ class CommandCompiledToolHostV1:
         ):
             return {}, ()
 
+        durable_run = self._durable_workflow_run_state(
+            workflow_id=draft.workflow_id,
+            plan_sha256=scientific_plan_sha256,
+        )
+        durable_states = {
+            node.node_id: node.state
+            for node in (durable_run.nodes if durable_run is not None else ())
+        }
         completed = tuple(
             sorted(
                 node.node_id
                 for node in draft.nodes
-                if (
+                if durable_states.get(node.node_id) == "validated"
+                or (
                     (receipt := self.execution_receipts.get(node.node_id))
                     is not None
                     and receipt.validated
@@ -3078,13 +3143,57 @@ class CommandCompiledToolHostV1:
             draft,
             scientific_plan_sha256=scientific_plan_sha256,
         )
+        durable_run = self._durable_workflow_run_state(
+            workflow_id=draft.workflow_id,
+            plan_sha256=scientific_plan_sha256,
+        )
+        blocked_reasons = {}
+        if durable_run is not None:
+            for node in durable_run.nodes:
+                if node.state in {"failed", "blocked", "ambiguous"}:
+                    blocked_reasons[node.node_id] = (
+                        node.state
+                        + " in the durable workflow run"
+                        + (
+                            ": " + ", ".join(node.failure_rule_ids)
+                            if node.failure_rule_ids
+                            else ""
+                        )
+                    )
+                elif node.state in {"running", "engine_complete"}:
+                    blocked_reasons[node.node_id] = (
+                        "execution already started; reconcile its durable receipt"
+                    )
         return project_workflow_context(
             workflow_id=draft.workflow_id,
             nodes=draft.nodes,
             materialized_artifact_ids=self.artifacts,
             materialized_producer_inputs=materialized_inputs,
             completed_node_ids=completed,
+            blocked_reasons=blocked_reasons,
         )
+
+    def _durable_workflow_run_state(
+        self, *, workflow_id: str, plan_sha256: str
+    ) -> WorkflowRunStateV1 | None:
+        """Return the replayed run only when it owns this exact plan."""
+
+        frozen = self.frozen_workflow_approval
+        if (
+            frozen is None
+            or not plan_sha256
+            or frozen.workflow_id != workflow_id
+            or frozen.plan_sha256 != plan_sha256
+        ):
+            return None
+        frontier = self.event_store.workflow_frontier(
+            workflow_id=workflow_id,
+            run_id="run." + frozen.approval_id,
+        )
+        run = frontier.run_state
+        if run is not None and run.plan_sha256 != plan_sha256:
+            raise ContractError("durable workflow run belongs to another plan")
+        return run
 
     def _scientific_plan_from_draft(
         self,
@@ -3257,8 +3366,15 @@ class CommandCompiledToolHostV1:
                 )
             ),
         )
-        if self.frozen_workflow_approval is not None and (
-            self.frozen_workflow_approval.plan_sha256 != plan.plan_sha256
+        if (
+            self.frozen_workflow_approval is not None
+            and getattr(
+                self.frozen_workflow_approval,
+                "workflow_id",
+                plan.workflow_id,
+            )
+            == plan.workflow_id
+            and self.frozen_workflow_approval.plan_sha256 != plan.plan_sha256
         ):
             raise ContractError(
                 "planned workflow differs from frozen execution approval"
@@ -3338,12 +3454,21 @@ class CommandCompiledToolHostV1:
             )
         return matches[0] if matches else None
 
-    def _node_is_previewed(self, node_id: str) -> bool:
+    def _node_is_previewed(
+        self, node_id: str, *, plan_sha256: str = ""
+    ) -> bool:
         """Whether a node holds the green preview an approval will demand."""
 
         preflight = self._preflight_by_node.get(node_id)
         return (
             preflight is not None
+            and (
+                not plan_sha256
+                or self._invocation_workflow_plan_sha256s.get(
+                    preflight.invocation_sha256
+                )
+                == plan_sha256
+            )
             and preflight.plan_state == "previewed"
             and not preflight.critical_finding_sha256s
         )
@@ -3381,8 +3506,7 @@ class CommandCompiledToolHostV1:
                 producer is None
                 or target is None
                 or incoming_counts[edge.target_node_id] != 1
-                or edge.artifact_class != "geometry_xyz"
-                or producer.stage not in {"opt", "ts"}
+                or not is_validated_optimized_geometry_edge(plan, edge)
                 or producer.program not in {"gaussian", "orca", "pyscf", "xtb"}
                 or target.support_state
                 not in {"resolvable", "unresolved_future"}
@@ -3407,7 +3531,9 @@ class CommandCompiledToolHostV1:
         deferred_ids = self._bounded_deferred_target_ids(plan)
         for node in getattr(plan, "nodes", ()):
             node_id = node.node_id
-            previewed = self._node_is_previewed(node_id)
+            previewed = self._node_is_previewed(
+                node_id, plan_sha256=plan.plan_sha256
+            )
             deferred = not previewed and node_id in deferred_ids
             blocks_approval = not previewed and not deferred
             if blocks_approval:
@@ -3466,7 +3592,9 @@ class CommandCompiledToolHostV1:
             ),
         }
 
-    def _invocation_identity(self, node_id: str) -> str:
+    def _invocation_identity(
+        self, node_id: str, *, plan_sha256: str = ""
+    ) -> str:
         """Path-independent identity of a node's latest compiled command.
 
         Computed from one place so the digest a materialization freezes and
@@ -3474,7 +3602,9 @@ class CommandCompiledToolHostV1:
         """
 
         try:
-            invocation, context = self._latest_invocation_for_node(node_id)
+            invocation, context = self._latest_invocation_for_node(
+                node_id, plan_sha256=plan_sha256
+            )
         except ContractError:
             return ""
         project_artifact = context.project_artifact
@@ -3779,6 +3909,68 @@ class CommandCompiledToolHostV1:
             values["invocation_sha256"],
             "canonical invocation",
         )
+        invocation_plan_sha256 = self._invocation_workflow_plan_sha256s.get(
+            invocation.invocation_sha256, ""
+        )
+        if not invocation_plan_sha256:
+            planned = any(
+                any(node.node_id == values["node_id"] for node in plan.nodes)
+                for plan in self.scientific_workflow_plans.values()
+            ) or any(
+                any(node.node_id == values["node_id"] for node in draft.nodes)
+                for draft in getattr(self, "workflow_drafts", {}).values()
+            )
+            if planned:
+                candidate_plan = self._current_execution_plan_for_node(
+                    values["node_id"]
+                )
+                current_invocation, _context = (
+                    self._plan_invocation_for_node(
+                        plan=candidate_plan,
+                        node_id=values["node_id"],
+                    )
+                )
+                if (
+                    current_invocation.invocation_sha256
+                    != invocation.invocation_sha256
+                ):
+                    raise ContractError(
+                        "preflight invocation is not the current invocation "
+                        "for the selected scientific workflow"
+                    )
+                invocation_plan_sha256 = candidate_plan.plan_sha256
+        if invocation_plan_sha256:
+            plan = self.scientific_workflow_plans.get(
+                invocation_plan_sha256
+            )
+            if plan is None:
+                raise ContractError(
+                    "prepared invocation has no registered scientific plan"
+                )
+            durable_run = self._durable_workflow_run_state(
+                workflow_id=plan.workflow_id,
+                plan_sha256=plan.plan_sha256,
+            )
+            if durable_run is not None:
+                frontier = self.event_store.workflow_frontier(
+                    workflow_id=plan.workflow_id,
+                    run_id=durable_run.run_id,
+                )
+                observed = next(
+                    item
+                    for item in durable_run.nodes
+                    if item.node_id == values["node_id"]
+                )
+                ready = derive_ready_node_ids(
+                    plan,
+                    durable_run,
+                    frontier.data_edge_bindings,
+                )
+                if observed.state != "pending" or values["node_id"] not in ready:
+                    raise ContractError(
+                        "prepared node is not runnable in the current durable "
+                        "workflow frontier"
+                    )
         command_inspection = self._get(
             self.command_inspections,
             values["command_inspection_receipt_sha256"],
@@ -3938,6 +4130,15 @@ class CommandCompiledToolHostV1:
             except ContractError:
                 unresolved_node_ids.append(planned_node.node_id)
                 continue
+            bound_plan_sha256 = self._invocation_workflow_plan_sha256s.get(
+                invocation.invocation_sha256, ""
+            )
+            if bound_plan_sha256 and bound_plan_sha256 != plan.plan_sha256:
+                unresolved_node_ids.append(planned_node.node_id)
+                continue
+            self._invocation_workflow_plan_sha256s[
+                invocation.invocation_sha256
+            ] = plan.plan_sha256
             project = context.project_validation
             project_artifact = context.project_artifact
             environment_sha256 = (
@@ -3952,7 +4153,10 @@ class CommandCompiledToolHostV1:
                 unresolved_node_ids.append(planned_node.node_id)
                 continue
             preflight = self._preflight_by_node.get(planned_node.node_id)
-            previewed = self._node_is_previewed(planned_node.node_id)
+            previewed = self._node_is_previewed(
+                planned_node.node_id,
+                plan_sha256=plan.plan_sha256,
+            )
             materialized_nodes.append(
                 MaterializedNodeV1(
                     node_id=planned_node.node_id,
@@ -3962,7 +4166,10 @@ class CommandCompiledToolHostV1:
                     environment_receipt_sha256=environment_sha256,
                     invocation_sha256=invocation.invocation_sha256,
                     invocation_identity_sha256=(
-                        self._invocation_identity(planned_node.node_id)
+                        self._invocation_identity(
+                            planned_node.node_id,
+                            plan_sha256=plan.plan_sha256,
+                        )
                     ),
                     preflight_receipt_sha256=(
                         preflight.receipt_sha256 if previewed else ""
@@ -4498,13 +4705,34 @@ class CommandCompiledToolHostV1:
         if self.surface.profile != "command_compiled_approved_execution":
             raise ContractError("execution tool is absent from this profile")
         node_id = values["node_id"]
+        frozen_approval = getattr(self, "frozen_workflow_approval", None)
+        if (
+            self.workflow_execution_approval is not None
+            and frozen_approval is None
+        ):
+            raise ContractError(
+                "legacy V1 approval is preview-only; Runtime V2 frozen approval "
+                "is required for execution"
+            )
+        current_plan = self._current_execution_plan_for_node(node_id)
+        invocation, context = self._plan_invocation_for_node(
+            plan=current_plan,
+            node_id=node_id,
+        )
         if self.workflow_execution_approval is None:
-            self._admit_bounded_workflow(node_id=node_id)
+            self._admit_bounded_workflow(
+                node_id=node_id,
+                plan_sha256=current_plan.plan_sha256,
+            )
         approval = self.workflow_execution_approval
         if approval is None:  # pragma: no cover - admission narrows this
             raise ContractError("execution approval was not created")
         scientific_plan = self._execution_scientific_plan()
-        frozen_approval = getattr(self, "frozen_workflow_approval", None)
+        if scientific_plan.plan_sha256 != current_plan.plan_sha256:
+            raise ContractError(
+                "a separate workflow owns the immutable execution approval; "
+                "start a new independent attempt for the current workflow"
+            )
         if frozen_approval is None:
             raise ContractError(
                 "legacy V1 approval is preview-only; Runtime V2 frozen approval "
@@ -4529,7 +4757,6 @@ class CommandCompiledToolHostV1:
                 "process-local execution receipt lacks replay evidence"
             )
         approved_node = approval.node(node_id)
-        invocation, context = self._latest_invocation_for_node(node_id)
         if (
             context.project_artifact is None
             or context.project_validation is None
@@ -4579,7 +4806,10 @@ class CommandCompiledToolHostV1:
             # preview froze the compiled one, and the host rewrite that adds
             # --no-fake, successful-run scratch cleanup, and the resource
             # flags is deterministic from it.
-            invocation_identity_sha256=self._invocation_identity(node_id),
+            invocation_identity_sha256=self._invocation_identity(
+                node_id,
+                plan_sha256=scientific_plan.plan_sha256,
+            ),
             auxiliary_input_artifacts=dict(context.job_artifact_options),
         )
         frozen_preview = frozen_approval.preview_binding(node_id)
@@ -5157,7 +5387,9 @@ class CommandCompiledToolHostV1:
             )
         return effective_timeout
 
-    def _admit_bounded_workflow(self, *, node_id: str) -> None:
+    def _admit_bounded_workflow(
+        self, *, node_id: str, plan_sha256: str = ""
+    ) -> None:
         """Freeze current ChemSmart evidence under the operating envelope.
 
         This is the deferred equivalent of loading an approval file.  It does
@@ -5169,34 +5401,43 @@ class CommandCompiledToolHostV1:
         envelope = self.bounded_execution_envelope
         if envelope is None:
             raise ContractError("workflow has no approval or bounded envelope")
-        if self.execution_receipts:
-            raise ContractError(
-                "bounded workflow admission cannot change mid-run"
-            )
         self._require_bounded_launch_budget()
         plans = tuple(
             plan
             for plan in self.scientific_workflow_plans.values()
             if any(item.node_id == node_id for item in plan.nodes)
+            and (not plan_sha256 or plan.plan_sha256 == plan_sha256)
         )
         if not plans:
             raise ContractError(
                 "bounded execution requires a current scientific workflow "
                 "containing the requested node"
             )
-        plans_by_sha256 = {plan.plan_sha256: plan for plan in plans}
+        # Node IDs are workflow-local.  Choose the current exact plan first,
+        # then require its own materialization.  Falling back to an older plan
+        # with the same node name is what turned a missing identity/preparation
+        # step in an edge-free diagnostic into an unrelated future-edge error.
+        plan = plans[-1]
+        frozen = self.frozen_workflow_approval
+        if frozen is not None:
+            if frozen.plan_sha256 == plan.plan_sha256:
+                raise ContractError("bounded workflow is already admitted")
+            raise ContractError(
+                "a separate workflow already owns the immutable bounded "
+                "approval; preserve that evidence and start a new independent "
+                "attempt for this workflow"
+            )
         current_materializations = tuple(
             workflow
             for workflow in self.materialized_workflows.values()
-            if workflow.plan_sha256 in plans_by_sha256
+            if workflow.plan_sha256 == plan.plan_sha256
         )
         if not current_materializations:
-            raise ContractError("bounded workflow has not been materialized")
-        # A model may repair a workflow while retaining scientifically useful
-        # node names. The most recently materialized plan is the current host
-        # observation; freezing an older same-name draft would suppress that
-        # valid repair.
-        plan = plans_by_sha256[current_materializations[-1].plan_sha256]
+            raise ContractError(
+                "current bounded workflow has not been materialized; prepare "
+                "and preflight this workflow's node after resolving its exact "
+                "molecular identity and project evidence"
+            )
         if plan.task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("bounded workflow belongs to another task")
         if len(plan.nodes) > envelope.max_engine_calls:
@@ -5232,20 +5473,17 @@ class CommandCompiledToolHostV1:
         node_bindings = []
         producer_edges = []
         for edge in data_edges:
-            if edge.artifact_class != "geometry_xyz":
-                raise ContractError(
-                    "bounded execution has no exact selection rule for data "
-                    f"edge {edge.edge_id!r}"
-                )
             producer = next(
                 item
                 for item in plan.nodes
                 if item.node_id == edge.source_node_id
             )
-            if producer.stage not in {"opt", "ts"}:
+            if not is_validated_optimized_geometry_edge(plan, edge):
                 raise ContractError(
-                    "bounded optimized-geometry edge requires an opt or ts "
-                    f"producer, got {producer.node_id!r}/{producer.stage!r}"
+                    "bounded execution has no exact selection rule for data "
+                    f"edge {edge.edge_id!r}; expected an opt or ts producer "
+                    "output named optimized_geometry with artifact class "
+                    "geometry_xyz"
                 )
             if producer.program not in {"gaussian", "orca", "pyscf", "xtb"}:
                 raise ContractError(
@@ -5347,9 +5585,10 @@ class CommandCompiledToolHostV1:
                         edge.edge_sha256 if edge is not None else ""
                     ),
                     auxiliary_input_bindings=(
-                        self._latest_invocation_for_node(planned_node.node_id)[
-                            0
-                        ].auxiliary_input_bindings
+                        self._latest_invocation_for_node(
+                            planned_node.node_id,
+                            plan_sha256=plan.plan_sha256,
+                        )[0].auxiliary_input_bindings
                         if planned_node.node_id not in data_target_ids
                         else ()
                     ),
@@ -5433,8 +5672,8 @@ class CommandCompiledToolHostV1:
         """Resolve current or future context without model-carried receipts."""
 
         if planned_node.node_id not in data_target_ids:
-            _invocation, context = self._latest_invocation_for_node(
-                planned_node.node_id
+            _invocation, context = self._plan_invocation_for_node(
+                plan=plan, node_id=planned_node.node_id
             )
             return context
         draft = next(
@@ -5501,7 +5740,7 @@ class CommandCompiledToolHostV1:
             and edge.target_node_id == planned_node.node_id
         )
         _producer_invocation, producer_context = (
-            self._latest_invocation_for_node(producer)
+            self._plan_invocation_for_node(plan=plan, node_id=producer)
         )
         return _CommandContext(
             proposal=CommandProposalV1(
@@ -5550,16 +5789,85 @@ class CommandCompiledToolHostV1:
         plans.setdefault(plan.plan_sha256, plan)
         return plan
 
-    def _latest_invocation_for_node(
+    def _current_execution_plan_for_node(
         self, node_id: str
+    ) -> ScientificWorkflowPlanV2:
+        """Resolve the current workflow before considering same-name history."""
+
+        plans = tuple(
+            plan
+            for plan in getattr(self, "scientific_workflow_plans", {}).values()
+            if any(node.node_id == node_id for node in plan.nodes)
+        )
+        for draft in reversed(
+            tuple(getattr(self, "workflow_drafts", {}).values())
+        ):
+            if not any(node.node_id == node_id for node in draft.nodes):
+                continue
+            current = tuple(
+                plan for plan in plans if plan.workflow_id == draft.workflow_id
+            )
+            if not current:
+                raise ContractError(
+                    "current workflow node has no task-bound scientific "
+                    "identity; prepare it before requesting execution"
+                )
+            return current[-1]
+        if not plans:
+            raise ContractError(
+                "execution requires a current scientific workflow containing "
+                "the requested node"
+            )
+        return plans[-1]
+
+    def _latest_invocation_for_node(
+        self, node_id: str, *, plan_sha256: str = ""
     ) -> tuple[CanonicalCommandInvocationV1, _CommandContext]:
         invocations = getattr(self, "invocations", {})
         contexts = getattr(self, "_command_contexts", {})
+        plan_bindings = getattr(
+            self, "_invocation_workflow_plan_sha256s", {}
+        )
         for invocation in reversed(tuple(invocations.values())):
             context = contexts[invocation.invocation_sha256]
-            if context.proposal.node_id == node_id:
+            if (
+                context.proposal.node_id == node_id
+                and (
+                    not plan_sha256
+                    or plan_bindings.get(invocation.invocation_sha256)
+                    == plan_sha256
+                )
+            ):
                 return invocation, context
-        raise ContractError("node has no compiled command invocation")
+        message = "node has no compiled command invocation"
+        if plan_sha256:
+            message += " for the selected scientific workflow"
+        raise ContractError(message)
+
+    def _plan_invocation_for_node(
+        self,
+        *,
+        plan: ScientificWorkflowPlanV2,
+        node_id: str,
+    ) -> tuple[CanonicalCommandInvocationV1, _CommandContext]:
+        """Resolve and bind one invocation without cross-plan fallback."""
+
+        try:
+            return self._latest_invocation_for_node(
+                node_id, plan_sha256=plan.plan_sha256
+            )
+        except ContractError:
+            invocation, context = self._latest_invocation_for_node(node_id)
+        bindings = self._invocation_workflow_plan_sha256s
+        observed = bindings.get(invocation.invocation_sha256, "")
+        if observed and observed != plan.plan_sha256:
+            raise ContractError(
+                "node invocation belongs to another scientific workflow"
+            )
+        if not any(node.node_id == node_id for node in plan.nodes):
+            raise ContractError("scientific workflow has no such node")
+        bindings[invocation.invocation_sha256] = plan.plan_sha256
+        return invocation, context
 
     def _invocation_has_green_preflight(self, invocation_sha256: str) -> bool:
         return any(
@@ -7102,6 +7410,62 @@ def _require_current_auxiliary_inputs(
             raise ContractError(
                 f"auxiliary input {parameter_name} differs from approval"
             )
+
+
+def _remaining_node_unresolved_fields(
+    node: Any,
+    materialized_producer_inputs: Mapping[
+        tuple[str, str, str, str], TrustedArtifactRefV1
+    ],
+) -> tuple[str, ...]:
+    """Clear only stale input markers backed by an exact validated handoff.
+
+    Planning legitimately marks a future optimized geometry unresolved.  The
+    draft stays immutable after approval, so that marker must be interpreted
+    against current host evidence rather than copied forever.  Scientific
+    fields such as a method, solvent, state, or IRC direction are never cleared
+    here; only names derived from the exact resolved producer input are.
+    """
+
+    resolved_input_markers: set[str] = set()
+    for item in getattr(node, "inputs", ()) or ():
+        producer_node_id = str(getattr(item, "producer_node_id", "") or "")
+        producer_output_id = str(
+            getattr(item, "producer_output_id", "") or ""
+        )
+        if not producer_node_id or not producer_output_id:
+            continue
+        key = (
+            str(node.node_id),
+            str(item.binding_id),
+            producer_node_id,
+            producer_output_id,
+        )
+        if key not in materialized_producer_inputs:
+            continue
+        binding_id = str(item.binding_id)
+        artifact_class = str(getattr(item, "artifact_class", "") or "")
+        resolved_input_markers.update(
+            {
+                binding_id,
+                producer_output_id,
+                artifact_class,
+                "input." + binding_id,
+                "input." + artifact_class,
+                "input_artifact",
+            }
+        )
+        if artifact_class == "geometry_xyz":
+            resolved_input_markers.add("geometry")
+
+    normalized_markers = {
+        marker.replace("-", "_") for marker in resolved_input_markers
+    }
+    return tuple(
+        field
+        for field in getattr(node, "unresolved_fields", ()) or ()
+        if str(field).replace("-", "_") not in normalized_markers
+    )
 
 
 def _staged_auxiliary_input_findings(

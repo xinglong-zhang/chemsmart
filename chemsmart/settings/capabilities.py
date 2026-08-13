@@ -311,7 +311,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
-            project_section_names=("gas", "solv"),
+            project_section_names=("gas", "solv", "td"),
             project_parameter_domains=(
                 ("states", ("50-50", "singlets", "triplets")),
             ),

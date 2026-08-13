@@ -25,7 +25,7 @@ from chemsmart.agent.runtime.deepseek import (
     DeepSeekProtocolError,
     DeepSeekTransportError,
     ProviderTurnReceiptV1,
-    public_payload,
+    public_provider_request,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
@@ -226,7 +226,9 @@ class ToolLoopRunner:
             )
             # Provider-private reasoning continuation must not influence any
             # persisted evidence, including request digests.
-            request_sha256 = canonical_sha256(public_payload(request))
+            request_sha256 = canonical_sha256(
+                public_provider_request(request)
+            )
             context_limit = min(
                 envelope.budget.max_input_tokens_per_request,
                 network_budget.max_input_tokens_per_request,
@@ -280,7 +282,15 @@ class ToolLoopRunner:
                     provider=session.config.provider,
                 )
                 attempts.append(attempt)
-                self._emit_attempt(envelope.turn_id, attempt)
+                self._emit_attempt(
+                    envelope.turn_id,
+                    attempt,
+                    protocol_observation=(
+                        exc.public_observation()
+                        if isinstance(exc, DeepSeekProtocolError)
+                        else None
+                    ),
+                )
                 terminal_state = "failed"
                 final_text = str(exc)
                 terminal_reason = "provider transport or protocol failed"
@@ -354,9 +364,40 @@ class ToolLoopRunner:
                 terminal_state = "failed"
                 terminal_reason = final_text
                 break
-            assistant = _public_assistant_message(response)
-            tool_calls = assistant.get("tool_calls") or []
-            if not tool_calls:
+            try:
+                assistant = _public_assistant_message(response)
+                raw_tool_calls = assistant.get("tool_calls") or []
+                if not isinstance(raw_tool_calls, list):
+                    raise DeepSeekProtocolError(
+                        "public assistant tool calls must be a list"
+                    )
+                decoded_tool_calls = tuple(
+                    _decode_tool_call(tool_call)
+                    for tool_call in raw_tool_calls
+                )
+            except DeepSeekProtocolError:
+                # Decode the complete public envelope before dispatching any
+                # member.  This is a host-side invariant behind the provider
+                # session's raw-envelope validation, not a partial retry path.
+                self.event_store.append(
+                    turn_id=envelope.turn_id,
+                    kind=EventKind.TURN_BLOCKED.value,
+                    payload={
+                        "reason": "public provider tool envelope failed atomic decoding",
+                        "rule_ids": (
+                            "provider.public_tool_envelope_invalid",
+                        ),
+                    },
+                    idempotency_key=(
+                        "public-tool-envelope-invalid:"
+                        + canonical_sha256(response)
+                    ),
+                )
+                final_text = "provider tool envelope failed validation"
+                terminal_state = "failed"
+                terminal_reason = final_text
+                break
+            if not decoded_tool_calls:
                 final_text = str(assistant.get("content") or "")
                 analysis_policy = self.host.analysis_completion_policy
                 if analysis_policy is not None:
@@ -418,7 +459,7 @@ class ToolLoopRunner:
                                 "model stopped before a workflow or readiness gate"
                             )
                 break
-            if successful_tools + failed_tools + len(tool_calls) > (
+            if successful_tools + failed_tools + len(decoded_tool_calls) > (
                 envelope.budget.max_tool_calls
             ):
                 final_text = "tool-call budget exhausted"
@@ -426,8 +467,7 @@ class ToolLoopRunner:
                 terminal_reason = final_text
                 break
             tool_results = []
-            for tool_call in tool_calls:
-                call_id, tool_name, arguments = _decode_tool_call(tool_call)
+            for call_id, tool_name, arguments in decoded_tool_calls:
                 self.event_store.append(
                     turn_id=envelope.turn_id,
                     kind=EventKind.TOOL_STARTED.value,
@@ -603,23 +643,35 @@ class ToolLoopRunner:
         ):
             raise ContractError("task output budget exceeds network budget")
 
-    def _emit_attempt(self, turn_id: str, attempt: ApiAttemptReceiptV1) -> None:
+    def _emit_attempt(
+        self,
+        turn_id: str,
+        attempt: ApiAttemptReceiptV1,
+        *,
+        protocol_observation: Mapping[str, Any] | None = None,
+    ) -> None:
+        payload = {
+            "receipt_sha256": attempt.receipt_sha256,
+            "provider": attempt.provider,
+            "endpoint_origin": attempt.endpoint_origin,
+            "status": attempt.status,
+            "hypothesis_sha256": attempt.hypothesis_sha256,
+            "budget_sha256": attempt.budget_sha256,
+            "latency_ms": attempt.latency_ms,
+            "input_tokens": attempt.input_tokens,
+            "output_tokens": attempt.output_tokens,
+            "reasoning_tokens": attempt.reasoning_tokens,
+            "nonsecret_error_class": attempt.nonsecret_error_class,
+        }
+        if protocol_observation is not None:
+            payload["response_sha256"] = attempt.response_sha256
+            payload["protocol_failure"] = canonical_data(
+                protocol_observation
+            )
         self.event_store.append(
             turn_id=turn_id,
             kind=EventKind.API_ATTEMPT_OBSERVED.value,
-            payload={
-                "receipt_sha256": attempt.receipt_sha256,
-                "provider": attempt.provider,
-                "endpoint_origin": attempt.endpoint_origin,
-                "status": attempt.status,
-                "hypothesis_sha256": attempt.hypothesis_sha256,
-                "budget_sha256": attempt.budget_sha256,
-                "latency_ms": attempt.latency_ms,
-                "input_tokens": attempt.input_tokens,
-                "output_tokens": attempt.output_tokens,
-                "reasoning_tokens": attempt.reasoning_tokens,
-                "nonsecret_error_class": attempt.nonsecret_error_class,
-            },
+            payload=payload,
             idempotency_key="api-attempt:" + attempt.attempt_id,
         )
 
@@ -647,6 +699,11 @@ class ToolLoopRunner:
             if isinstance(error, DeepSeekProtocolError)
             else "transport_failed",
         )
+        response_sha256 = (
+            error.response_envelope_sha256
+            if isinstance(error, DeepSeekProtocolError)
+            else ""
+        )
         return build_api_attempt_receipt(
             attempt_id=f"{envelope.turn_id}.provider.{ordinal}",
             provider=provider,
@@ -654,7 +711,7 @@ class ToolLoopRunner:
             hypothesis_sha256=hypothesis.hypothesis_sha256,
             budget_sha256=network_budget.budget_sha256,
             request_sha256=request_sha256,
-            response_sha256="",
+            response_sha256=response_sha256,
             status=status,
             latency_ms=max(0, int((self.clock() - started) * 1000)),
             retry_ordinal=0,
@@ -676,6 +733,8 @@ def _public_assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:
 def _decode_tool_call(
     value: Mapping[str, Any],
 ) -> tuple[str, str, dict[str, Any]]:
+    if not isinstance(value, Mapping):
+        raise DeepSeekProtocolError("malformed tool call")
     call_id = str(value.get("id") or "")
     function = value.get("function")
     if not call_id or not isinstance(function, Mapping):
@@ -691,18 +750,63 @@ def _decode_tool_call(
 
 
 def _contains_private_reasoning(value: Any) -> bool:
+    if isinstance(value, (tuple, list)):
+        return any(
+            _contains_private_reasoning_at_path(
+                item,
+                (),
+                (
+                    "assistant_message"
+                    if isinstance(item, Mapping)
+                    and str(item.get("role") or "") == "assistant"
+                    else "generic"
+                ),
+            )
+            for item in value
+        )
+    return _contains_private_reasoning_at_path(value, (), "generic")
+
+
+def _contains_private_reasoning_at_path(
+    value: Any, path: tuple[Any, ...], context: str
+) -> bool:
     forbidden = {"reasoning_content", "thinking", "analysis", "<think>"}
     if isinstance(value, Mapping):
         return any(
             str(key).lower() in forbidden
-            or _contains_private_reasoning(item)
+            or (
+                not (
+                    _is_public_tool_function_path(path, context)
+                    and key == "arguments"
+                )
+                and _contains_private_reasoning_at_path(
+                    item, (*path, key), context
+                )
+            )
             for key, item in value.items()
         )
     if isinstance(value, (tuple, list)):
-        return any(_contains_private_reasoning(item) for item in value)
+        return any(
+            _contains_private_reasoning_at_path(
+                item, (*path, index), context
+            )
+            for index, item in enumerate(value)
+        )
     if isinstance(value, str):
         return "<think" in value.lower()
     return False
+
+
+def _is_public_tool_function_path(
+    path: tuple[Any, ...], context: str
+) -> bool:
+    return (
+        context == "assistant_message"
+        and len(path) == 3
+        and path[0] == "tool_calls"
+        and isinstance(path[1], int)
+        and path[2] == "function"
+    )
 
 
 __all__ = ["ToolLoopResultV1", "ToolLoopRunner"]

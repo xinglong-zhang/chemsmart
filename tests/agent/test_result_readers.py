@@ -202,6 +202,12 @@ def test_orca_post_hf_energy_preserves_total_and_reference_components():
 
     total = _extract(_ORCA_DLPNO_LOG, "orca", "energy", "total").quantities[0]
     scf = _extract(_ORCA_DLPNO_LOG, "orca", "scf_energy", "scf").quantities[0]
+    reference = _extract(
+        _ORCA_DLPNO_LOG,
+        "orca",
+        "reference_energy",
+        "reference",
+    ).quantities[0]
     correlation = _extract(
         _ORCA_DLPNO_LOG,
         "orca",
@@ -211,8 +217,25 @@ def test_orca_post_hf_energy_preserves_total_and_reference_components():
 
     assert total.value == pytest.approx(-76.377481488944)
     assert scf.value == pytest.approx(-76.05666270)
+    assert reference.value == pytest.approx(scf.value)
     assert correlation.value == pytest.approx(total.value - scf.value)
     assert total.value != pytest.approx(scf.value)
+
+
+def test_orca_dft_d_total_scf_and_dispersion_are_distinct_components():
+    path = "tests/data/ORCATests/outputs/KOH.out"
+    total = _extract(path, "orca", "energy", "total").quantities[0]
+    scf = _extract(path, "orca", "scf_energy", "scf").quantities[0]
+    dispersion = _extract(
+        path, "orca", "dispersion_energy", "dispersion"
+    ).quantities[0]
+
+    assert total.value == pytest.approx(-675.522805891018)
+    assert scf.value == pytest.approx(-675.52250804211144)
+    assert dispersion.value == pytest.approx(-0.000297849)
+    assert total.value == pytest.approx(scf.value + dispersion.value)
+    with pytest.raises(Exception, match="post-SCF correlation"):
+        _extract(path, "orca", "correlation_energy", "correlation")
 
 
 def test_error_terminated_orca_output_cannot_supply_scientific_quantities():

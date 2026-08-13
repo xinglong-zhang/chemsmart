@@ -37,6 +37,80 @@ pt = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
+_GAUSSIAN_NATIVE_DEF2_BASIS_TOKENS = {
+    "def2-svp": "def2svp",
+    "def2-svpd": "def2svpd",
+    "def2-tzvp": "def2tzvp",
+    "def2-tzvpd": "def2tzvpd",
+    "def2-tzvpp": "def2tzvpp",
+    "def2-tzvppd": "def2tzvppd",
+    "def2-qzvp": "def2qzvp",
+    "def2-qzvpd": "def2qzvpd",
+    "def2-qzvpp": "def2qzvpp",
+    "def2-qzvppd": "def2qzvppd",
+}
+
+
+def gaussian_native_basis_token(basis):
+    """Return a known generic basis alias in Gaussian-native spelling.
+
+    Gaussian A.03 does not accept the hyphenated Karlsruhe orbital-basis
+    aliases used by programs such as ORCA.  Only aliases whose native
+    spelling is known are translated here.  In particular, this is not a
+    general punctuation stripper: augmented correlation-consistent and Pople
+    names retain the punctuation that is part of their Gaussian keyword.
+    Unknown values also remain explicit instead of being guessed.
+    """
+
+    if not isinstance(basis, str):
+        return basis
+    normalized = basis.strip().casefold()
+    if normalized in _GAUSSIAN_NATIVE_DEF2_BASIS_TOKENS.values():
+        return normalized
+    return _GAUSSIAN_NATIVE_DEF2_BASIS_TOKENS.get(normalized, basis)
+
+
+def _gaussian_route_contains_token(route, token):
+    """Return whether *route* contains one complete Gaussian token."""
+
+    if not isinstance(route, str) or not isinstance(token, str) or not token:
+        return False
+    token_boundary = r"A-Za-z0-9_+*().-"
+    return (
+        re.search(
+            rf"(?<![{token_boundary}]){re.escape(token)}"
+            rf"(?![{token_boundary}])",
+            route,
+            flags=re.IGNORECASE,
+        )
+        is not None
+    )
+
+
+def _replace_gaussian_route_token(route, source, target):
+    """Replace one complete Gaussian token without touching larger names."""
+
+    if not all(isinstance(value, str) and value for value in (route, source)):
+        return route
+    token_boundary = r"A-Za-z0-9_+*().-"
+    return re.sub(
+        rf"(?<![{token_boundary}]){re.escape(source)}"
+        rf"(?![{token_boundary}])",
+        target,
+        route,
+        flags=re.IGNORECASE,
+    )
+
+
+def _canonicalize_gaussian_route_basis_aliases(route):
+    """Canonicalize only the known generic basis tokens in a custom route."""
+
+    result = route
+    for generic, native in _GAUSSIAN_NATIVE_DEF2_BASIS_TOKENS.items():
+        result = _replace_gaussian_route_token(result, generic, native)
+    return result
+
+
 class GaussianJobSettings(MolecularJobSettings):
     """
     Configuration settings for Gaussian computational chemistry jobs.
@@ -721,10 +795,11 @@ class GaussianJobSettings(MolecularJobSettings):
                 raise ValueError(
                     "Error: Basis set is required for ab initio methods."
                 )
-            route_string += f" {self.ab_initio} {self.basis}"
+            native_basis = gaussian_native_basis_token(self.basis)
+            route_string += f" {self.ab_initio} {native_basis}"
             logger.debug(
                 f"Added ab initio method: {self.ab_initio} with basis: "
-                f"{self.basis}"
+                f"{native_basis}"
             )
 
         elif self.functional is not None and self.ab_initio is None:
@@ -735,9 +810,11 @@ class GaussianJobSettings(MolecularJobSettings):
                     "Error: Basis set is required for DFT methods."
                 )
             functional = functional_without_shorthand
-            route_string += f" {functional} {self.basis}"
+            native_basis = gaussian_native_basis_token(self.basis)
+            route_string += f" {functional} {native_basis}"
             logger.debug(
-                f"Added DFT functional: {functional} with basis: {self.basis}"
+                f"Added DFT functional: {functional} with basis: "
+                f"{native_basis}"
             )
 
         elif self.ab_initio is not None and self.functional is not None:
@@ -967,9 +1044,7 @@ class GaussianJobSettings(MolecularJobSettings):
             # Return light elements basis if available,
             # otherwise return original basis
             if self.light_elements_basis is not None:
-                # Remove hyphens for Gaussian compatibility
-                # (def2-SVP -> def2svp)
-                return self.light_elements_basis.replace("-", "").lower()
+                return gaussian_native_basis_token(self.light_elements_basis)
             return self.basis
 
         # Check if any heavy element requires ECP (atomic number > 36)
@@ -2227,14 +2302,52 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for the link calculation step.
         """
         if self.link_route is not None:
-            link_route_string = self.link_route
-            if self.functional not in self.link_route:
-                link_route_string += f" {self.functional}"
-            if self.basis not in self.link_route:
-                link_route_string += f" {self.basis}"
-            if "geom=check" not in self.link_route:
+            if self.semiempirical is not None:
+                method = self.semiempirical
+                native_basis = None
+                link_route_string = self.link_route
+            elif self.ab_initio is not None and self.functional is None:
+                method = self.ab_initio
+                if self.basis is None:
+                    raise ValueError(
+                        "Error: Basis set is required for ab initio methods."
+                    )
+                native_basis = gaussian_native_basis_token(self.basis)
+                link_route_string = (
+                    _canonicalize_gaussian_route_basis_aliases(
+                        self.link_route
+                    )
+                )
+            elif self.functional is not None and self.ab_initio is None:
+                method = self.functional
+                if self.basis is None:
+                    raise ValueError(
+                        "Error: Basis set is required for DFT methods."
+                    )
+                native_basis = gaussian_native_basis_token(self.basis)
+                link_route_string = (
+                    _canonicalize_gaussian_route_basis_aliases(
+                        self.link_route
+                    )
+                )
+            elif self.ab_initio is not None and self.functional is not None:
+                raise ValueError(
+                    "Error: Both ab initio and DFT functional provided.\n"
+                    "Specify only one."
+                )
+            else:
+                raise ValueError("Error: No computational method provided.")
+            if not _gaussian_route_contains_token(
+                link_route_string, method
+            ):
+                link_route_string += f" {method}"
+            if native_basis is not None and not _gaussian_route_contains_token(
+                link_route_string, native_basis
+            ):
+                link_route_string += f" {native_basis}"
+            if "geom=check" not in link_route_string:
                 link_route_string += " geom=check"
-            if "guess=read" not in self.link_route:
+            if "guess=read" not in link_route_string:
                 link_route_string += " guess=read"
             logger.debug(
                 f"Link route for settings {self}: {link_route_string}"
@@ -2705,7 +2818,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             # functional and basis can be given,
             # so that level of theory takes functional and basis set
             if functional and basis:
-                level_of_theory = f"{functional}/{basis}"
+                level_of_theory = (
+                    f"{functional}/{gaussian_native_basis_token(basis)}"
+                )
             else:
                 # but functional and basis set can
                 # also not be given, in which case,

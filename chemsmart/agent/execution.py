@@ -2777,12 +2777,12 @@ def _frozen_producer_edge_rule(
     *,
     environment_receipt_sha256: str,
 ) -> FrozenProducerEdgeRuleV1:
-    source = next(
-        node for node in plan.nodes if node.node_id == edge.source_node_id
-    )
-    if edge.artifact_class != "geometry_xyz" or source.stage != "opt":
+    if not is_validated_optimized_geometry_edge(plan, edge):
         raise ContractError(
-            "future data edge lacks a registered exact artifact selection rule"
+            "future data edge has no registered exact artifact selection rule: "
+            "validated optimized-geometry selection requires an opt or ts "
+            "producer, a geometry_xyz edge, and producer_output_id "
+            "'optimized_geometry'"
         )
     body = {
         "schema_version": "chemsmart.frozen-producer-edge-rule.v1",
@@ -2801,6 +2801,41 @@ def _frozen_producer_edge_rule(
         "preserve_electronic_state": True,
     }
     return FrozenProducerEdgeRuleV1(**body, rule_sha256=canonical_sha256(body))
+
+
+def is_validated_optimized_geometry_edge(
+    plan: ScientificWorkflowPlanV2,
+    edge: ScientificWorkflowEdgeV2,
+) -> bool:
+    """Whether one future edge has ChemSmart's exact geometry selector.
+
+    Both a minimum optimization and a transition-state optimization produce a
+    stationary geometry that the normal parser can select and validate.  The
+    older approval predicate admitted only ``opt``.  A real TS -> IRC/SP DAG
+    was consequently rejected even though the producer output was named
+    exactly and the same native handoff path supports both stages.
+
+    Keep the accepted output name semantic rather than punctuation-sensitive:
+    historical plans use both ``optimized-geometry`` and
+    ``optimized_geometry``.  No other output is guessed to be a geometry.
+    """
+
+    if edge.edge_kind != "data" or edge.artifact_class != "geometry_xyz":
+        return False
+    source = next(
+        (
+            node
+            for node in plan.nodes
+            if node.node_id == edge.source_node_id
+        ),
+        None,
+    )
+    return bool(
+        source is not None
+        and source.stage in {"opt", "ts"}
+        and edge.producer_output_id.replace("-", "_")
+        == "optimized_geometry"
+    )
 
 
 @dataclass(frozen=True)
@@ -3612,10 +3647,16 @@ def derive_ready_node_ids(
         raise ContractError("run state belongs to another workflow")
     if run_state.plan_sha256 != plan.plan_sha256:
         raise ContractError("run state plan digest differs")
-    if not run_state.approval_consumed or run_state.state not in {
-        "approved",
-        "running",
+    if not run_state.approval_consumed or run_state.state in {
+        "waiting_for_approval",
+        "validated",
+        "blocked",
+        "ambiguous",
     }:
+        return ()
+    if run_state.state == "failed" and not any(
+        node.state == "pending" for node in run_state.nodes
+    ):
         return ()
     state_by_node = {node.node_id: node for node in run_state.nodes}
     binding_by_edge: dict[str, ValidatedDataEdgeBindingV1] = {}
@@ -3695,6 +3736,7 @@ def transition_workflow_node(
     *,
     node_id: str,
     new_state: str,
+    plan: ScientificWorkflowPlanV2 | None = None,
     invocation_sha256: str = "",
     execution_receipt_sha256: str = "",
     validator_receipt_sha256s: Sequence[str] = (),
@@ -3721,6 +3763,12 @@ def transition_workflow_node(
     }
     if new_state not in allowed[current.state]:
         raise ContractError("invalid workflow node state transition")
+    if plan is not None:
+        if (
+            plan.workflow_id != run_state.workflow_id
+            or plan.plan_sha256 != run_state.plan_sha256
+        ):
+            raise ContractError("workflow transition plan differs from run state")
     if new_state == "validated":
         if result_validation_receipt is None:
             raise ContractError(
@@ -3780,22 +3828,37 @@ def transition_workflow_node(
         replacement if node.node_id == normalized_id else node
         for node in run_state.nodes
     )
+    if plan is not None:
+        nodes = _block_failed_descendants(plan, nodes)
     node_states = {node.state for node in nodes}
     if "ambiguous" in node_states:
         workflow_state = "ambiguous"
+    elif node_states.intersection({"pending", "running", "engine_complete"}):
+        # A failed branch is not a failed workflow while an independent branch
+        # remains runnable.  The exact DAG below has already converted only
+        # causal descendants into ``blocked``; pending siblings therefore keep
+        # the workflow active until the frontier is exhausted.
+        workflow_state = "running"
+    elif node_states == {"validated"}:
+        workflow_state = "validated"
     elif "failed" in node_states:
         workflow_state = "failed"
     elif "blocked" in node_states:
         workflow_state = "blocked"
-    elif node_states == {"validated"}:
-        workflow_state = "validated"
     else:
         workflow_state = "running"
     started_at = run_state.started_at
-    if not started_at and new_state == "running":
+    if not started_at and (
+        new_state == "running" or workflow_state == "running"
+    ):
         started_at = str(timestamp).strip()
     finished_at = run_state.finished_at
-    if workflow_state in {"validated", "failed"}:
+    if workflow_state == "running":
+        # Old streams could mark the run failed as soon as the first branch
+        # failed.  If replay now exposes an independent pending sibling, clear
+        # that premature timestamp when the sibling advances.
+        finished_at = ""
+    elif workflow_state in {"validated", "failed", "blocked"}:
         finished_at = str(timestamp).strip()
     body = {
         "schema_version": run_state.schema_version,
@@ -3811,6 +3874,61 @@ def transition_workflow_node(
         "finished_at": finished_at,
     }
     return WorkflowRunStateV1(**body, run_state_sha256=canonical_sha256(body))
+
+
+def _block_failed_descendants(
+    plan: ScientificWorkflowPlanV2,
+    nodes: tuple[WorkflowNodeRunStateV1, ...],
+) -> tuple[WorkflowNodeRunStateV1, ...]:
+    """Block only pending nodes made impossible by a failed predecessor.
+
+    Every scientific edge is a required dependency.  Once its source is
+    failed, blocked, or ambiguous, its pending target cannot run; that fact then
+    propagates transitively.  Nodes outside that descendant closure are left
+    untouched, which is the key difference from a workflow-global failure.
+    """
+
+    by_id = {node.node_id: node for node in nodes}
+    changed = True
+    while changed:
+        changed = False
+        for planned in plan.nodes:
+            observed = by_id[planned.node_id]
+            if observed.state != "pending":
+                continue
+            failed_sources = tuple(
+                sorted(
+                    {
+                        edge.source_node_id
+                        for edge in plan.edges
+                        if edge.target_node_id == planned.node_id
+                        and by_id[edge.source_node_id].state
+                        in {"failed", "blocked", "ambiguous"}
+                    }
+                )
+            )
+            if not failed_sources:
+                continue
+            rules = tuple(
+                sorted(
+                    "workflow.dependency."
+                    + by_id[source].state
+                    + "."
+                    + source
+                    for source in failed_sources
+                )
+            )
+            by_id[planned.node_id] = WorkflowNodeRunStateV1(
+                node_id=planned.node_id,
+                state="blocked",
+                invocation_sha256="",
+                execution_receipt_sha256="",
+                validator_receipt_sha256s=(),
+                output_artifact_sha256s=(),
+                failure_rule_ids=rules,
+            )
+            changed = True
+    return tuple(by_id[node.node_id] for node in nodes)
 
 
 __all__ = [
@@ -3852,6 +3970,7 @@ __all__ = [
     "handoff_optimized_native_geometry",
     "handoff_optimized_pyscf_geometry",
     "handoff_optimized_xtb_geometry",
+    "is_validated_optimized_geometry_edge",
     "promote_project_candidate",
     "transition_workflow_node",
     "workflow_execution_approval_json",

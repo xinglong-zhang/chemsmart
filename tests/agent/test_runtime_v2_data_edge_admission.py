@@ -28,7 +28,7 @@ from chemsmart.agent.workflows import (
 )
 
 
-def _plan():
+def _plan(*, producer_stage: str = "opt"):
     return build_scientific_workflow_plan(
         workflow_id="water-opt-hess",
         task_spec_sha256="a" * 64,
@@ -36,7 +36,7 @@ def _plan():
         nodes=(
             ScientificWorkflowNodeV2(
                 node_id="opt-initial",
-                stage="opt",
+                stage=producer_stage,
                 requested_program="pyscf",
                 program="pyscf",
                 engine="cpu",
@@ -67,8 +67,8 @@ def _plan():
     )
 
 
-def _frontier(*, state: str = "previewed"):
-    plan = _plan()
+def _frontier(*, state: str = "previewed", producer_stage: str = "opt"):
+    plan = _plan(producer_stage=producer_stage)
     resources = build_execution_resource_spec(
         execution_target="run",
         cores=4,
@@ -98,8 +98,10 @@ def _frontier(*, state: str = "previewed"):
     return plan, resources, materialized
 
 
-def _approval():
-    plan, resources, materialized = _frontier()
+def _approval(*, producer_stage: str = "opt"):
+    plan, resources, materialized = _frontier(
+        producer_stage=producer_stage
+    )
     approval = build_frozen_workflow_approval(
         approval_id="water-approval",
         plan=plan,
@@ -243,6 +245,16 @@ def test_frozen_approval_records_preview_and_exact_future_selection_rule():
     assert rule.environment_receipt_sha256 == "f" * 64
     assert rule.preserve_atom_order is True
     assert rule.preserve_electronic_state is True
+
+
+def test_ts_producer_is_deferred_under_the_same_exact_geometry_rule():
+    plan, _, approval = _approval(producer_stage="ts")
+
+    assert plan.nodes[0].stage == "ts"
+    rule = approval.producer_edge_rules[0]
+    assert rule.source_node_id == "opt-initial"
+    assert rule.producer_output_id == "optimized-geometry"
+    assert rule.selection_rule == "validated_optimized_geometry"
 
 
 def test_future_node_requires_an_exact_environment_when_multiple_are_approved():

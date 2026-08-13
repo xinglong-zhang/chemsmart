@@ -18,6 +18,7 @@ from chemsmart.io.molecules.structure import QMMMMolecule
 from chemsmart.jobs.gaussian.settings import (
     GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
+    gaussian_native_basis_token,
 )
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.io import replace_word
@@ -195,14 +196,11 @@ class GaussianInputWriter(InputWriter):
                 # returns empty list if no heavy elements found in structure
                 # (heavy elements specified in settings)
             ):
-                # first remove any '-' in light_elements_basis
-                # this is because '-' is needed by bse package to get the right
-                # basis set from
-                # https://www.basissetexchange.org/, eg, def2-SVP
-                # but this is not needed in Gaussian input file
-                # (will cause error when run), eg, def2svp
-                light_elements_basis = (
-                    self.settings.light_elements_basis.replace("-", "").lower()
+                # BSE uses generic names while Gaussian owns its native route
+                # vocabulary. Translate only known aliases; punctuation in
+                # e.g. aug-cc-pVDZ and 6-31G(d) is chemically meaningful.
+                light_elements_basis = gaussian_native_basis_token(
+                    self.settings.light_elements_basis
                 )
 
                 route_string = replace_word(

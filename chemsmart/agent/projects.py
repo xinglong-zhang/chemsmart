@@ -303,9 +303,27 @@ def project_effective_section_settings(
     )
 
 
-def _loader_values_semantically_equal(declared: Any, applied: Any) -> bool:
+def _loader_values_semantically_equal(
+    declared: Any,
+    applied: Any,
+    *,
+    program: str = "",
+    setting_name: str = "",
+) -> bool:
     """Treat presentation-only string normalization as an applied match."""
 
+    if program == "gaussian" and setting_name in {
+        "basis",
+        "high_level_basis",
+        "medium_level_basis",
+        "low_level_basis",
+    }:
+        from chemsmart.jobs.gaussian.settings import (
+            gaussian_native_basis_token,
+        )
+
+        declared = gaussian_native_basis_token(declared)
+        applied = gaussian_native_basis_token(applied)
     if isinstance(declared, str) and isinstance(applied, str):
         return declared.strip().casefold() == applied.strip().casefold()
     return declared == applied
@@ -385,7 +403,10 @@ def project_section_application_observation(
             for name, declared_value in sorted(effective.items())
             if name in applied
             and not _loader_values_semantically_equal(
-                canonical_data(declared_value), applied[name]
+                canonical_data(declared_value),
+                applied[name],
+                program=document.program,
+                setting_name=name,
             )
         )
     if overridden_settings:

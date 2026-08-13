@@ -174,6 +174,28 @@ def test_a_validated_handoff_advances_the_unchanged_producer_edge():
     assert projection.node("sp_5z").state == "waiting"
 
 
+def test_control_dependency_waits_for_completion_without_a_data_edge():
+    nodes = (
+        _Node("first", (), (), (_Output("done", "status"),)),
+        _Node("second", ("first",), (), (_Output("next", "status"),)),
+    )
+
+    waiting = project_workflow_context(
+        workflow_id="wf.control",
+        nodes=nodes,
+    )
+    assert waiting.ready_node_ids == ("first",)
+    assert waiting.node("second").waiting_on == ("first",)
+    assert waiting.node("second").reason == "waiting for first completion"
+
+    advanced = project_workflow_context(
+        workflow_id="wf.control",
+        nodes=nodes,
+        completed_node_ids={"first"},
+    )
+    assert advanced.ready_node_ids == ("second",)
+
+
 def test_an_input_with_no_producer_and_no_artifact_is_blocked_not_waiting():
     """Waiting resolves itself; a dangling input never will, so say so."""
 

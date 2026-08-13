@@ -73,7 +73,9 @@ SELECTOR_UNITS = {
     "charge": "",
     "multiplicity": "",
     "scf_energy": "Eh",
+    "reference_energy": "Eh",
     "correlation_energy": "Eh",
+    "dispersion_energy": "Eh",
     "dipole_moment": "Debye",
     "dipole_moment_magnitude": "Debye",
     "homo": "eV",
@@ -352,10 +354,8 @@ def _orca_output(path: Path) -> Any:
 def _orca_total_energy(output: Any) -> float:
     """Return the final total ORCA energy, including post-SCF correlation.
 
-    ``ORCAOutput.final_energy`` historically prefers ``final_scf_energy``.
-    That is suitable for DFT but silently drops the correlation contribution
-    from MP2 and coupled-cluster results.  The last explicit ORCA final-energy
-    record is the program's total result and remains correct for DFT jobs too.
+    The last explicit ORCA final-energy record is the program's total result
+    and remains correct for DFT, empirical-dispersion, and post-HF jobs.
     """
 
     values: list[float] = []
@@ -397,9 +397,35 @@ def _orca_scf_energy(output: Any) -> float:
 
 
 def _orca_correlation_energy(output: Any) -> float:
-    """Return total post-SCF correlation as ``E(total) - E(SCF)``."""
+    """Return post-SCF correlation without empirical dispersion.
 
-    return _orca_total_energy(output) - _orca_scf_energy(output)
+    DFT-D's separately printed D3/D4 correction is not an electronic
+    correlation energy.  A DFT result therefore cannot satisfy this selector
+    merely because its total differs from its SCF component.
+    """
+
+    method = str(getattr(output, "ab_initio", None) or "").casefold()
+    if not ("mp2" in method or "cc" in method):
+        raise MissingQuantityError(
+            "ORCA result contains no explicit post-SCF correlation method"
+        )
+    dispersion = getattr(output, "final_dispersion_energy", None)
+    return (
+        _orca_total_energy(output)
+        - _orca_scf_energy(output)
+        - float(dispersion or 0.0)
+    )
+
+
+def _orca_dispersion_energy(output: Any) -> float:
+    """Return the final explicit empirical dispersion correction."""
+
+    value = getattr(output, "final_dispersion_energy", None)
+    if value is None:
+        raise MissingQuantityError(
+            "ORCA result contains no empirical dispersion correction"
+        )
+    return float(value)
 
 
 def _orca_positions(output: Any) -> list[list[float]]:
@@ -478,7 +504,9 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
                 output.thermochemistry_multiplicity
             ),
             "scf_energy": _orca_scf_energy,
+            "reference_energy": _orca_scf_energy,
             "correlation_energy": _orca_correlation_energy,
+            "dispersion_energy": _orca_dispersion_energy,
             "dipole_moment": lambda output: [
                 float(item)
                 for item in output.dipole_moment_in_debye.reshape(-1)
@@ -821,7 +849,9 @@ _SELECTOR_DIMENSIONS = {
     "charge": "DIMENSIONLESS",
     "multiplicity": "DIMENSIONLESS",
     "scf_energy": "ENERGY",
+    "reference_energy": "ENERGY",
     "correlation_energy": "ENERGY",
+    "dispersion_energy": "ENERGY",
     "dipole_moment": "DIPOLE_MOMENT",
     "dipole_moment_magnitude": "DIPOLE_MOMENT",
     "homo": "ENERGY",

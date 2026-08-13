@@ -11,7 +11,9 @@ from chemsmart.agent.execution import (
     ProgramResultValidationReceiptV1,
     build_execution_resource_spec,
     build_frozen_workflow_approval,
+    build_workflow_run_state,
     derive_ready_node_ids,
+    transition_workflow_node,
 )
 from chemsmart.agent.tool_runtime import (
     _validate_stationary_point_policy_binding,
@@ -201,8 +203,6 @@ def test_scientific_dag_keeps_sp_and_opt_parallel_but_hess_data_bound():
         status="materialized",
     )
     assert materialized.status == "materialized"
-    from chemsmart.agent.execution import build_workflow_run_state
-
     run = build_workflow_run_state(
         run_id="water-run",
         plan=plan,
@@ -213,6 +213,76 @@ def test_scientific_dag_keeps_sp_and_opt_parallel_but_hess_data_bound():
         "sp-initial",
         "opt-initial",
     )
+
+
+def test_failed_branch_blocks_only_descendants_and_keeps_sibling_runnable():
+    plan = _water_plan()
+    _, _, approval = _approval(plan)
+    run = build_workflow_run_state(
+        run_id="water-run",
+        plan=plan,
+        approval=approval,
+        approval_consumed=True,
+    )
+
+    run = transition_workflow_node(
+        run,
+        node_id="opt-initial",
+        new_state="running",
+        plan=plan,
+        invocation_sha256="3" * 64,
+        timestamp="2026-08-13T00:00:00+00:00",
+    )
+    run = transition_workflow_node(
+        run,
+        node_id="opt-initial",
+        new_state="failed",
+        plan=plan,
+        execution_receipt_sha256="8" * 64,
+        failure_rule_ids=("engine.opt.failed",),
+        timestamp="2026-08-13T00:00:01+00:00",
+    )
+
+    states = {node.node_id: node for node in run.nodes}
+    assert run.state == "running"
+    assert states["opt-initial"].state == "failed"
+    assert states["hess-optimized"].state == "blocked"
+    assert states["hess-optimized"].failure_rule_ids == (
+        "workflow.dependency.failed.opt-initial",
+    )
+    assert states["sp-initial"].state == "pending"
+    assert derive_ready_node_ids(plan, run) == ("sp-initial",)
+
+    run = transition_workflow_node(
+        run,
+        node_id="sp-initial",
+        new_state="running",
+        plan=plan,
+        invocation_sha256="7" * 64,
+        timestamp="2026-08-13T00:00:02+00:00",
+    )
+    run = transition_workflow_node(
+        run,
+        node_id="sp-initial",
+        new_state="engine_complete",
+        plan=plan,
+        execution_receipt_sha256="9" * 64,
+        timestamp="2026-08-13T00:00:03+00:00",
+    )
+    validation = _sp_result_validation()
+    run = transition_workflow_node(
+        run,
+        node_id="sp-initial",
+        new_state="validated",
+        plan=plan,
+        validator_receipt_sha256s=(validation.receipt_sha256,),
+        result_validation_receipt=validation,
+        timestamp="2026-08-13T00:00:04+00:00",
+    )
+
+    assert run.state == "failed"
+    assert run.finished_at == "2026-08-13T00:00:04+00:00"
+    assert derive_ready_node_ids(plan, run) == ()
 
 
 def test_context_manifest_and_specialist_packet_bind_narrow_tools():

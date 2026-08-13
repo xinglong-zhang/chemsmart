@@ -97,8 +97,21 @@ def test_malformed_tool_json_is_rejected_before_dispatch():
         transport=lambda _: _tool_response(arguments="{"),
         messages=[{"role": "user", "content": "Inspect capability."}],
     )
-    with pytest.raises(DeepSeekProtocolError, match="invalid JSON"):
+    with pytest.raises(DeepSeekProtocolError, match="invalid JSON") as observed:
         session.turn(tools=[])
+    error = observed.value
+    assert error.failing_field == (
+        "choices[0].message.tool_calls[0].function.arguments"
+    )
+    assert error.json_offset == 1
+    assert len(error.response_envelope_sha256) == 64
+    assert error.response_envelope_bytes > 0
+    assert error.public_observation()["retry_decision"] == "not_retried"
+    assert error.public_observation()["recovery_requirement"] == (
+        "new_independent_attempt"
+    )
+    assert session.receipts == ()
+    assert session.outstanding_tool_call_ids == ()
 
 
 def test_unknown_tool_is_absent_from_host_dispatch(tmp_path):

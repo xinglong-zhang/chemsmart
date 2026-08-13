@@ -64,8 +64,10 @@ class AlibabaTokenPlanConfigV1:
             raise ContractError(
                 "max_output_tokens exceeds Alibaba Token Plan capability"
             )
-        if self.sdk_max_retries < 0:
-            raise ContractError("provider retries must be non-negative")
+        if self.sdk_max_retries != 0:
+            raise ContractError(
+                "provider retries require a separately authorized attempt"
+            )
 
 
 @dataclass(frozen=True)
@@ -284,7 +286,19 @@ def _merge_tool_call_deltas(
     for raw in raw_calls:
         if not isinstance(raw, Mapping):
             raise DeepSeekProtocolError("Alibaba tool-call fragment must be an object")
-        index = int(raw.get("index", 0))
+        raw_index = raw.get("index", 0)
+        if (
+            isinstance(raw_index, bool)
+            or not isinstance(raw_index, int)
+            or raw_index < 0
+        ):
+            raise DeepSeekProtocolError(
+                "Alibaba tool-call index must be a non-negative integer",
+                failing_field=(
+                    "choices[*].delta.tool_calls[*].index"
+                ),
+            )
+        index = raw_index
         target = assembled.setdefault(
             index,
             {

@@ -225,6 +225,61 @@ ORCA_TD_RESPONSE_METHODS = ("tda", "tddft")
 ORCA_TD_STATE_MANIFOLDS = ("singlet", "singlet_triplet")
 
 
+def _is_orca_dlpno_coupled_cluster(value):
+    """Return whether *value* requests a DLPNO coupled-cluster method."""
+
+    if value is None:
+        return False
+    normalized = str(value).strip().casefold().replace("_", "-")
+    return normalized.startswith(("dlpno-cc", "ro-dlpno-cc"))
+
+
+def _orca_auxiliary_basis_role(value):
+    """Classify an ORCA simple-input auxiliary basis by fitting role.
+
+    ORCA keeps Coulomb (``/J``), Coulomb/exchange (``/JK``), and
+    correlation (AuxC, normally ``/C``) fitting spaces distinct.  Treating
+    every one of them as an interchangeable ``aux_basis`` is unsafe for
+    local coupled-cluster methods: a valid RI-J basis can still make a
+    DLPNO-CC calculation abort before correlation starts.
+    """
+
+    if value is None:
+        return "missing"
+    from chemsmart.io.orca import orca_ref
+
+    normalized = str(value).strip().casefold()
+    if normalized in orca_ref.orca_auxiliary_basis_autoaux:
+        return "autoaux"
+    if normalized in orca_ref.orca_auxiliary_basis_cc:
+        return "correlation"
+    if normalized in orca_ref.orca_auxiliary_basis_coulomb_exchange:
+        return "coulomb_exchange"
+    if normalized in orca_ref.orca_auxiliary_basis_coulomb:
+        return "coulomb"
+    return "unknown"
+
+
+def _orca_correlation_auxiliary_matches_orbital(aux_basis, orbital_basis):
+    """Return whether an explicit AuxC basis matches the orbital basis.
+
+    The built-in ORCA names encode the pairing directly: ``def2-TZVP/C``
+    belongs to ``def2-TZVP`` and ``cc-pVTZ-F12-MP2fit`` belongs to
+    ``cc-pVTZ-F12``.  AutoAux is deliberately handled by its own role and
+    never reaches this comparison.
+    """
+
+    if aux_basis is None or orbital_basis is None:
+        return False
+    auxiliary = str(aux_basis).strip().casefold()
+    orbital = str(orbital_basis).strip().casefold()
+    if auxiliary.endswith("/c"):
+        auxiliary = auxiliary[:-2]
+    elif auxiliary.endswith("-mp2fit"):
+        auxiliary = auxiliary[: -len("-mp2fit")]
+    return auxiliary == orbital
+
+
 def _normalize_orca_functional(value):
     """Return the native ORCA keyword for a recognized functional alias."""
 
@@ -621,6 +676,41 @@ class ORCAJobSettings(MolecularJobSettings):
                 "frozen_core_electrons applies only to "
                 "frozen_core='fc_electrons'."
             )
+
+        if _is_orca_dlpno_coupled_cluster(self.ab_initio):
+            aux_role = _orca_auxiliary_basis_role(self.aux_basis)
+            if aux_role not in {"correlation", "autoaux"}:
+                if aux_role in {"coulomb", "coulomb_exchange"}:
+                    detail = (
+                        f"{self.aux_basis!r} is a /J or /JK fitting basis, "
+                        "not an AuxC correlation-fitting basis"
+                    )
+                elif aux_role == "missing":
+                    detail = "aux_basis is missing"
+                else:
+                    detail = (
+                        f"aux_basis {self.aux_basis!r} cannot be qualified "
+                        "as an AuxC correlation-fitting basis"
+                    )
+                raise ValueError(
+                    f"ORCA {self.ab_initio} requires a correlation-fitting "
+                    f"AuxC basis: {detail}. Set an explicit matching /C "
+                    "basis (for example 'def2-TZVP/C') or explicitly choose "
+                    "aux_basis='AutoAux'. ChemSmart will not silently add "
+                    "AutoAux."
+                )
+            if aux_role == "correlation" and not (
+                _orca_correlation_auxiliary_matches_orbital(
+                    self.aux_basis, self.basis
+                )
+            ):
+                raise ValueError(
+                    f"ORCA {self.ab_initio} orbital basis {self.basis!r} "
+                    f"does not match correlation-fitting aux_basis "
+                    f"{self.aux_basis!r}. Select the /C or -MP2fit basis "
+                    "with the same family and zeta level, or explicitly "
+                    "choose aux_basis='AutoAux'."
+                )
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False

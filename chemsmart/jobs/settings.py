@@ -420,14 +420,11 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         td_config = project_config["td"]
         for job in td_job:  # jobs using td config s
             all_project_configs[job] = stage_defaults(job)
-            if program == "orca":
-                # ChemSmart's ORCA ``td`` stage is a vertical spectrum at the
-                # supplied geometry.  The shared molecular-settings default
-                # predates that stage and requests a frequency calculation;
-                # inheriting it makes project validation expect Freq even
-                # though the TD writer correctly materializes a fixed-geometry
-                # response calculation.  An explicit incompatible request is
-                # rejected by ORCAJobSettings rather than silently ignored.
+            if program in {"gaussian", "orca"}:
+                # A ``td`` stage is a vertical spectrum at the supplied
+                # geometry. The shared molecular-settings default predates
+                # that stage and requests a frequency calculation. Do not
+                # silently add one; an explicit ``td.freq`` below still wins.
                 all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(

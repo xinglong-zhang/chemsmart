@@ -1168,10 +1168,44 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def optimized_structure(self):
-        if self.normal_termination:
+        # A converged ORCA optimization prints one final Cartesian block under
+        # ``FINAL ENERGY EVALUATION AT THE STATIONARY POINT``.  The ordinary
+        # orientation/gradient trajectory can end at the preceding cycle, so
+        # ``all_structures[-1]`` is not necessarily the geometry at which the
+        # final energy and Hessian were evaluated.
+        if self.converged:
+            stationary = self._get_optimized_final_structure()
+            if stationary.num_atoms:
+                # Keep the public Molecule representation consistent with the
+                # trajectory parser, whose symbols are ordinary Python lists.
+                stationary.symbols = list(stationary.symbols)
+                stationary.charge = self.charge
+                stationary.multiplicity = self.multiplicity
+                stationary.energy = self.final_energy
+                stationary.is_optimized_structure = True
+                if self.vibrational_modes is not None:
+                    stationary = self._attach_vib_metadata(stationary)
+                if self.mulliken_atomic_charges is not None:
+                    stationary.mulliken_atomic_charges = (
+                        self.mulliken_atomic_charges
+                    )
+                if self.has_dipole_moment:
+                    stationary.dipole_moment = self.dipole_moment_in_debye
+                    stationary.dipole_moment_magnitude = (
+                        self.dipole_moment_magnitude_in_debye
+                    )
+                if self.point_group is not None:
+                    stationary.point_group = self.point_group
+                    stationary.rotational_symmetry_number = (
+                        self.rotational_symmetry_number
+                    )
+                    stationary.rotational_constants = (
+                        self.rotational_constants_in_Hz
+                    )
+                return stationary
+        if self.all_structures:
             return self.all_structures[-1]
-        else:
-            return self._get_optimized_final_structure()
+        return self._get_optimized_final_structure()
 
     def _get_optimized_final_structure(self):
         """Obtain the final optimized structure
@@ -1218,7 +1252,7 @@ class ORCAOutput(ORCAFileMixin):
         """
         Get the final structure from the ORCA output file.
         """
-        if self.optimized_output_lines is not None:
+        if self.optimized_output_lines:
             return self.optimized_structure
         try:
             return (
@@ -1362,31 +1396,72 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def final_scf_energy(self):
         """
-        Get the final SCF energy in Hartree.
+        Get the final SCF/reference energy in Hartree.
+
+        This intentionally excludes a separately printed empirical
+        dispersion correction and post-SCF coupled-cluster correlation.
         """
-        if self.optimized_output_lines is not None:
-            return self._get_optimized_scf_energy()
-        return self._get_sp_scf_energy()
+        values = []
+        for line in self.contents:
+            if "Total Energy" not in line or ":" not in line:
+                continue
+            fields = line.split()
+            try:
+                colon = fields.index(":")
+                values.append(float(fields[colon + 1]))
+            except (ValueError, IndexError):
+                continue
+        return values[-1] if values else None
+
+    @property
+    def final_reference_energy(self):
+        """Alias that makes the post-HF meaning of SCF energy explicit."""
+
+        return self.final_scf_energy
+
+    @property
+    def dispersion_energies(self):
+        """Empirical dispersion corrections printed by ORCA, in Hartree."""
+
+        values = []
+        pattern = re.compile(
+            r"^\s*Dispersion correction\s+"
+            r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s*$"
+        )
+        for line in self.contents:
+            match = pattern.match(line)
+            if match is not None:
+                values.append(float(match.group(1)))
+        return values
+
+    @property
+    def final_dispersion_energy(self):
+        """Return the last explicit empirical dispersion correction."""
+
+        return (
+            self.dispersion_energies[-1] if self.dispersion_energies else None
+        )
 
     @property
     def final_energy(self):
         """
-        Get the final energy in Hartree.
+        Get ORCA's final total energy in Hartree.
+
+        ``FINAL SINGLE POINT ENERGY`` is the program's explicit total and
+        includes empirical dispersion and post-SCF correlation when those
+        methods are active.  It must not be replaced by the SCF/reference
+        component merely because that component was also printed.
         """
-        if self.final_scf_energy is not None:
-            return self.final_scf_energy
-        return self.single_point_energy
+        if self.energies:
+            return self.energies[-1]
+        return None
 
     @property
     def single_point_energy(self):
         """
         Get the single point energy in Hartree.
         """
-        for line in self.contents:
-            if "FINAL SINGLE POINT ENERGY" in line:
-                sp_energy_in_hartree = float(line.split()[-1])
-                # convert hartree to eV
-                return sp_energy_in_hartree
+        return self.energies[-1] if self.energies else None
 
     @property
     def single_point_energy_eV(self):

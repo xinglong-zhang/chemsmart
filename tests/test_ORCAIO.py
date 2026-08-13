@@ -622,6 +622,17 @@ class TestORCAOutput:
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
         assert molecule.symbols == ["O", "H", "H"]
+        # ORCA prints a final stationary-point evaluation after the last
+        # optimization-cycle orientation.  Handoffs must use that explicit
+        # native block, even when the sub-milliangstrom difference would pass
+        # a loose geometry comparison.
+        assert molecule.is_optimized_structure is True
+        assert molecule.charge == 0
+        assert molecule.multiplicity == 1
+        assert not np.allclose(
+            molecule.positions, orca_out.last_structure.positions, atol=1e-7
+        )
+        assert molecule.positions[0, 2] == pytest.approx(0.087341)
         assert orca_out.molecule.empirical_formula == "H2O"
         assert np.allclose(
             orca_out.optimized_geometry,
@@ -2228,12 +2239,12 @@ class TestORCAOutput:
             np.array(
                 [
                     [
-                        [-0.000000e00, -1.080000e-03, -4.434500e-02],
-                        [0.000000e00, 1.833000e-03, 1.978187e00],
-                        [-0.000000e00, 1.057065e00, -2.682420e-01],
-                        [9.166220e-01, -5.311370e-01, -2.657160e-01],
-                        [-9.166220e-01, -5.311370e-01, -2.657160e-01],
-                        [1.000000e-06, 4.457000e-03, -2.155338e00],
+                        [-0.000000e00, -1.136000e-03, -4.459600e-02],
+                        [0.000000e00, 1.774000e-03, 1.978028e00],
+                        [-0.000000e00, 1.057066e00, -2.681960e-01],
+                        [9.167610e-01, -5.310610e-01, -2.656040e-01],
+                        [-9.167610e-01, -5.310600e-01, -2.656050e-01],
+                        [0.000000e00, 4.417000e-03, -2.155197e00],
                     ]
                 ]
             ),

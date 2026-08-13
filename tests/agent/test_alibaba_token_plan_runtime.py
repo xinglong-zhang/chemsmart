@@ -67,6 +67,8 @@ def test_qwen_config_rejects_preview_and_reduced_reasoning():
         Qwen38MaxConfigV1(model="qwen3.8-max-preview")
     with pytest.raises(ContractError, match="must be xhigh"):
         Qwen38MaxConfigV1(reasoning_effort="high")
+    with pytest.raises(ContractError, match="separately authorized attempt"):
+        Qwen38MaxConfigV1(sdk_max_retries=1)
 
 
 def test_qwen_stream_rejects_an_unexpected_observed_model():
@@ -90,6 +92,47 @@ def test_qwen_stream_rejects_an_unexpected_observed_model():
                 }
             )
         )
+
+
+def test_qwen_stream_rejects_malformed_tool_index_without_echoing_value():
+    from chemsmart.agent.runtime.deepseek import DeepSeekProtocolError
+
+    secret_index = "sk-sp-provider-authored-secret"
+    with pytest.raises(
+        DeepSeekProtocolError, match="non-negative integer"
+    ) as observed:
+        _assemble_sse_response(
+            _sse(
+                {
+                    "id": "chat-malformed-index",
+                    "model": "qwen3.8-max",
+                    "choices": [
+                        {
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": secret_index,
+                                        "id": "call-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "inspect_program_capability",
+                                            "arguments": "{}",
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                }
+            )
+        )
+
+    assert secret_index not in str(observed.value)
+    assert observed.value.failing_field == (
+        "choices[*].delta.tool_calls[*].index"
+    )
 
 
 def test_qwen_sse_assembles_reasoning_and_fragmented_tool_call():

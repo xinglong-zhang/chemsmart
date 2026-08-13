@@ -57,6 +57,12 @@ def test_a_declared_route_parameter_reads_back_as_itself(name, value):
     project = {"basis": "6-31G*", name: value}
     if name != "ab_initio":
         project["functional"] = "B3LYP"
+    elif str(value).casefold().startswith("dlpno-cc"):
+        # The parameter-domain probe still has to construct a scientifically
+        # admissible method.  ORCA local coupled cluster needs a correlation
+        # fitting (AuxC) space; AutoAux is explicit here so this round-trip
+        # test does not depend on any silent writer default.
+        project["aux_basis"] = "AutoAux"
     settings = ORCAJobSettings.from_dict(project)
     route = ORCARoute(settings.route_string)
     recovered = getattr(route, name, None)

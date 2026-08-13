@@ -170,7 +170,7 @@ class RuntimeEventStore:
                 "decision": receipt.decision.value,
                 "reason": receipt.reason,
             }
-            self._append_locked(
+            event = self._append_locked(
                 handle,
                 turn_id=turn_id,
                 kind=PERMISSION_RESOLVED,
@@ -248,6 +248,7 @@ class RuntimeEventStore:
                 initial,
                 node_id=node_id,
                 new_state="running",
+                plan=plan,
                 invocation_sha256=invocation_sha256,
                 timestamp=timestamp,
             )
@@ -418,6 +419,7 @@ class RuntimeEventStore:
                 current,
                 node_id=invocation.node_id,
                 new_state="running",
+                plan=plan,
                 invocation_sha256=invocation.invocation_sha256,
                 timestamp=timestamp,
             )
@@ -432,7 +434,7 @@ class RuntimeEventStore:
                 reserved_at=timestamp,
             )
             reservation_record = canonical_record(reservation)
-            event = self._append_locked(
+            self._append_locked(
                 handle,
                 turn_id=turn_id,
                 kind=WORKFLOW_LAUNCH_RESERVED,
@@ -647,16 +649,19 @@ class RuntimeEventStore:
             if record is None:
                 raise ContractError("workflow run has not started")
             current = _workflow_run_state_from_record(record)
+            frontier = reconstruct_workflow_frontier(
+                state,
+                workflow_id=current.workflow_id,
+                run_id=run_id,
+            )
+            transition_plan = plan or frontier.plan
             if new_state == "running":
-                if plan is None:
+                if transition_plan is None:
                     raise ContractError(
                         "starting another node requires the scientific plan"
                     )
-                frontier = reconstruct_workflow_frontier(
-                    state, workflow_id=plan.workflow_id, run_id=run_id
-                )
                 if node_id not in derive_ready_node_ids(
-                    plan, current, frontier.data_edge_bindings
+                    transition_plan, current, frontier.data_edge_bindings
                 ):
                     raise ContractError("node is not ready in the scientific DAG")
             if new_state == "validated":
@@ -680,6 +685,7 @@ class RuntimeEventStore:
                 current,
                 node_id=node_id,
                 new_state=new_state,
+                plan=transition_plan,
                 invocation_sha256=invocation_sha256,
                 execution_receipt_sha256=execution_receipt_sha256,
                 validator_receipt_sha256s=tuple(validator_receipt_sha256s),

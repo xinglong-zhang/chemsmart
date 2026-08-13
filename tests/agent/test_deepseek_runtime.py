@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import json
+from http.client import IncompleteRead
 
+import pytest
+
+from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.runtime.deepseek import (
     DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
     DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
+    DeepSeekHttpsTransport,
+    DeepSeekTransportError,
+    DeepSeekV4FlashConfigV1,
     DeepSeekV4ToolSession,
 )
 
@@ -95,3 +102,36 @@ def test_deepseek_thinking_tool_continuation_is_full_but_ephemeral():
 
     session.close()
     assert "private reasoning" not in json.dumps(session.public_history())
+
+
+def test_incomplete_response_is_not_silently_retried(monkeypatch):
+    import chemsmart.agent.runtime.deepseek as deepseek
+
+    calls = []
+
+    class _IncompleteResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            raise IncompleteRead(b"", 1)
+
+    def _urlopen(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _IncompleteResponse()
+
+    monkeypatch.setattr(deepseek, "urlopen", _urlopen)
+    transport = DeepSeekHttpsTransport(api_key="not-persisted")
+
+    with pytest.raises(DeepSeekTransportError, match="incomplete_read"):
+        transport({"model": "deepseek-v4-flash", "messages": []})
+
+    assert len(calls) == 1
+
+
+def test_deepseek_config_rejects_implicit_provider_retries():
+    with pytest.raises(ContractError, match="separately authorized attempt"):
+        DeepSeekV4FlashConfigV1(sdk_max_retries=1)

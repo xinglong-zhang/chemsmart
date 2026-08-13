@@ -80,7 +80,9 @@ class ORCARoute:
             str: Ab initio method name or None if not found
         """
         for route_keyword in self.route_keywords:
-            if route_keyword in ORCA_ALL_AB_INITIO:
+            if route_keyword in ORCA_ALL_AB_INITIO or route_keyword.startswith(
+                ("dlpno-cc", "ro-dlpno-cc")
+            ):
                 return route_keyword
         return None
 
@@ -160,6 +162,22 @@ class ORCARoute:
         for route_keyword in self.route_keywords:
             if route_keyword in ORCA_ALL_AUXILIARY_BASIS_SETS:
                 return route_keyword
+        return None
+
+    @property
+    def auxiliary_basis_role(self):
+        """Return the scientific fitting role of the auxiliary basis."""
+
+        from chemsmart.jobs.orca.settings import _orca_auxiliary_basis_role
+
+        return _orca_auxiliary_basis_role(self.auxiliary_basis)
+
+    @property
+    def correlation_auxiliary_basis(self):
+        """Return an AuxC/AutoAux token, never a Coulomb-only fitting set."""
+
+        if self.auxiliary_basis_role in {"correlation", "autoaux"}:
+            return self.auxiliary_basis
         return None
 
     @property

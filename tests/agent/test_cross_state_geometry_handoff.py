@@ -496,7 +496,7 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
     host.engine_bindings = {"engine": engine}
     host.capabilities = {capability.receipt_sha256: capability}
     host.program_bindings = {engine.program_binding_sha256: SimpleNamespace()}
-    host._latest_invocation_for_node = lambda _node_id: (
+    host._latest_invocation_for_node = lambda _node_id, **_kwargs: (
         SimpleNamespace(),
         producer_context,
     )

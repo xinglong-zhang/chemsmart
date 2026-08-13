@@ -159,10 +159,12 @@ def _phase_keyed_programs():
         sections = set(capability.project_section_names)
         if sections.issuperset(PHASE_SECTIONS):
             # PySCF declares the phase pair only as legacy migration input; it
-            # keys its real sections by stage and is covered by its own tests.
+            # keys every real job by stage and is covered by its own tests.
+            # Gaussian and ORCA remain phase-keyed even though a few jobs such
+            # as ``td`` also own an explicit stage section.
             if sections - set(PHASE_SECTIONS) - set(capability.jobtypes):
                 continue
-            if set(capability.jobtypes) & sections:
+            if set(capability.jobtypes).issubset(sections):
                 continue
             yield name, capability
 

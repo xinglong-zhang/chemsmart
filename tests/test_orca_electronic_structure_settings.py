@@ -11,6 +11,8 @@ import pytest
 
 from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
+from chemsmart.io.orca.route import ORCARoute
+from chemsmart.settings.orca import ORCAProjectSettings
 
 
 def _writer(settings):
@@ -153,3 +155,85 @@ def test_unknown_keyword_values_are_refused_not_passed_through(field, value):
             jobtype="sp", functional="bp86", basis="def2-svp", charge=0,
             multiplicity=1, **{field: value},
         )
+
+
+@pytest.mark.parametrize("aux_basis", [None, "def2/J", "def2/JK"])
+def test_dlpno_coupled_cluster_requires_correlation_fitting_basis(aux_basis):
+    with pytest.raises(ValueError, match="correlation-fitting AuxC"):
+        ORCAJobSettings.from_dict(
+            {
+                "jobtype": "sp",
+                "ab_initio": "DLPNO-CCSD(T)",
+                "basis": "def2-TZVP",
+                "aux_basis": aux_basis,
+                "charge": 0,
+                "multiplicity": 1,
+            }
+        )
+
+
+def test_dlpno_auxiliary_basis_error_refuses_silent_autoaux_injection():
+    with pytest.raises(ValueError, match="will not silently add AutoAux"):
+        ORCAJobSettings(
+            jobtype="sp",
+            ab_initio="DLPNO-CCSD(T)",
+            basis="def2-TZVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+
+def test_dlpno_project_yaml_fails_before_native_execution_without_auxc(
+    tmp_path,
+):
+    project = tmp_path / "dlpno-missing-auxc.yaml"
+    project.write_text(
+        "sp:\n"
+        "  ab_initio: DLPNO-CCSD(T)\n"
+        "  basis: def2-TZVP\n"
+        "  charge: 0\n"
+        "  multiplicity: 1\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="aux_basis is missing"):
+        ORCAProjectSettings.from_project(str(project)).sp_settings()
+
+
+def test_dlpno_explicit_auxc_must_match_orbital_basis():
+    with pytest.raises(ValueError, match="same family and zeta level"):
+        ORCAJobSettings(
+            jobtype="sp",
+            ab_initio="DLPNO-CCSD(T)",
+            basis="def2-TZVP",
+            aux_basis="def2-SVP/C",
+            charge=0,
+            multiplicity=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("basis", "aux_basis", "role"),
+    [
+        ("def2-TZVP", "def2-TZVP/C", "correlation"),
+        ("cc-pVTZ-F12", "cc-pVTZ-F12-MP2fit", "correlation"),
+        ("def2-TZVP", "AutoAux", "autoaux"),
+    ],
+)
+def test_dlpno_correlation_auxiliary_basis_round_trips(
+    basis, aux_basis, role
+):
+    settings = ORCAJobSettings(
+        jobtype="sp",
+        ab_initio="DLPNO-CCSD(T1)",
+        basis=basis,
+        aux_basis=aux_basis,
+        charge=0,
+        multiplicity=1,
+    )
+    parsed = ORCARoute(settings.route_string)
+
+    assert parsed.ab_initio == "dlpno-ccsd(t1)"
+    assert parsed.auxiliary_basis == aux_basis.casefold()
+    assert parsed.auxiliary_basis_role == role
+    assert parsed.correlation_auxiliary_basis == aux_basis.casefold()

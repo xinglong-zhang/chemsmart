@@ -403,12 +403,15 @@ class ApprovedWorkflowExecutor:
                 run_state,
                 node_id=outcome.node_id,
                 new_state="blocked",
+                plan=self.plan,
+                failure_rule_ids=("execution.prepare.blocked",),
                 timestamp=stamp,
             )
         run_state = transition_workflow_node(
             run_state,
             node_id=outcome.node_id,
             new_state="running",
+            plan=self.plan,
             invocation_sha256=outcome.invocation_sha256,
             timestamp=stamp,
         )
@@ -417,6 +420,7 @@ class ApprovedWorkflowExecutor:
                 run_state,
                 node_id=outcome.node_id,
                 new_state="failed",
+                plan=self.plan,
                 execution_receipt_sha256=outcome.execution_receipt_sha256,
                 failure_rule_ids=outcome.rule_ids
                 or ("execution.state." + (outcome.state or "unknown"),),
@@ -426,6 +430,7 @@ class ApprovedWorkflowExecutor:
             run_state,
             node_id=outcome.node_id,
             new_state="engine_complete",
+            plan=self.plan,
             execution_receipt_sha256=outcome.execution_receipt_sha256,
             timestamp=stamp,
         )
@@ -441,6 +446,7 @@ class ApprovedWorkflowExecutor:
             run_state,
             node_id=outcome.node_id,
             new_state="validated",
+            plan=self.plan,
             execution_receipt_sha256=outcome.execution_receipt_sha256,
             result_validation_receipt=receipt,
             timestamp=stamp,

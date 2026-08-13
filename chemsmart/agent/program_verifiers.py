@@ -821,6 +821,23 @@ def _settings_match(parsed, expected, *, native_input=None):
                 value
             ) == normalize_gaussian_dispersion(observed):
                 continue
+        if is_gaussian and field in {
+            "basis",
+            "high_level_basis",
+            "medium_level_basis",
+            "low_level_basis",
+        }:
+            from chemsmart.jobs.gaussian.settings import (
+                gaussian_native_basis_token,
+            )
+
+            expected_basis = gaussian_native_basis_token(value)
+            observed_basis = gaussian_native_basis_token(observed)
+            if (
+                str(expected_basis).strip().casefold()
+                == str(observed_basis).strip().casefold()
+            ):
+                continue
         if is_gaussian and field == "additional_route_parameters":
             from chemsmart.io.gaussian.route import (
                 normalize_gaussian_dispersion,

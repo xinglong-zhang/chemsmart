@@ -186,6 +186,9 @@ def project_workflow_context(
         str(node.node_id): set() for node in nodes
     }
     for node in nodes:
+        for dependency in getattr(node, "dependencies", ()) or ():
+            if dependency in dependents:
+                dependents[dependency].add(str(node.node_id))
         for item in _producer_edges(node):
             producer = str(getattr(item, "producer_node_id", "") or "")
             if producer in dependents:
@@ -216,13 +219,31 @@ def project_workflow_context(
                 materialized_producer_inputs=materialized_producer_inputs,
             )
         )
+        satisfied_data_producers = {
+            str(getattr(item, "producer_node_id", "") or "")
+            for item in _producer_edges(node)
+            if str(getattr(item, "producer_node_id", "") or "")
+            and _input_is_satisfied(
+                item,
+                materialized,
+                consumer_node_id=node_id,
+                materialized_producer_inputs=materialized_producer_inputs,
+            )
+        }
         waiting_on = tuple(
             sorted(
                 {
                     item.producer_node_id
                     for item in unsatisfied
                     if item.producer_node_id
-                }
+                }.union(
+                    dependency
+                    for dependency in (
+                        getattr(node, "dependencies", ()) or ()
+                    )
+                    if dependency not in completed_node_ids
+                    and dependency not in satisfied_data_producers
+                )
             )
         )
         if node_id in blocked_reasons:
@@ -233,11 +254,22 @@ def project_workflow_context(
             reason = "validated execution result already exists"
         elif waiting_on:
             state = "waiting"
-            reason = "waiting for " + ", ".join(
+            producer_outputs = tuple(
                 f"{item.producer_node_id}.{item.producer_output_id}"
                 for item in unsatisfied
                 if item.producer_node_id
             )
+            control_dependencies = tuple(
+                dependency
+                for dependency in waiting_on
+                if dependency
+                not in {item.producer_node_id for item in unsatisfied}
+            )
+            waiting_labels = (
+                *producer_outputs,
+                *(dependency + " completion" for dependency in control_dependencies),
+            )
+            reason = "waiting for " + ", ".join(waiting_labels)
         elif unsatisfied:
             # An input with no producer and no artifact is an external artifact
             # the plan never bound -- a different defect from waiting on a

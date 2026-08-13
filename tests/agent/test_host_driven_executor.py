@@ -17,9 +17,17 @@ from types import SimpleNamespace
 import pytest
 
 from chemsmart.agent import executor as executor_module
+from chemsmart.agent._contracts import canonical_sha256
 from chemsmart.agent.execution import (
+    build_workflow_run_state,
+    derive_ready_node_ids,
     argv_shape,
     invocation_identity_sha256,
+)
+from chemsmart.agent.workflows import (
+    ScientificWorkflowEdgeV2,
+    ScientificWorkflowNodeV2,
+    build_scientific_workflow_plan,
 )
 
 
@@ -95,6 +103,91 @@ def test_each_sibling_root_uses_its_own_approved_initial_artifact():
 
     assert executor._input_artifact_id(neutral) == "neutral"
     assert executor._input_artifact_id(anion) == "anion"
+
+
+def test_preparation_block_blocks_descendants_but_not_independent_siblings():
+    plan = build_scientific_workflow_plan(
+        workflow_id="preparation-isolation",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="producer",
+                stage="opt",
+                requested_program="pyscf",
+                program="pyscf",
+                engine="cpu",
+                project_role="producer-opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="descendant",
+                stage="hess",
+                requested_program="pyscf",
+                program="pyscf",
+                engine="cpu",
+                project_role="producer-hess",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="sibling",
+                stage="sp",
+                requested_program="pyscf",
+                program="pyscf",
+                engine="cpu",
+                project_role="independent-sp",
+                unresolved_fields=(),
+            ),
+        ),
+        edges=(
+            ScientificWorkflowEdgeV2(
+                edge_id="producer-to-descendant",
+                source_node_id="producer",
+                target_node_id="descendant",
+                edge_kind="data",
+                artifact_class="geometry_xyz",
+                producer_output_id="optimized-geometry",
+                consumer_input_id="geometry",
+            ),
+        ),
+    )
+    approval = SimpleNamespace(
+        workflow_id=plan.workflow_id,
+        plan_sha256=plan.plan_sha256,
+        approved_node_ids=tuple(sorted(node.node_id for node in plan.nodes)),
+        approval_id="preparation-isolation-approval",
+        approval_sha256="c" * 64,
+    )
+    run = build_workflow_run_state(
+        run_id="preparation-isolation-run",
+        plan=plan,
+        approval=approval,
+        approval_consumed=True,
+    )
+    executor = object.__new__(executor_module.ApprovedWorkflowExecutor)
+    executor.plan = plan
+    outcome = executor_module.ExecutedNodeV1(
+        node_id="producer",
+        program="pyscf",
+        jobtype="opt",
+        state="blocked",
+        invocation_identity_sha256=canonical_sha256("producer"),
+        execution_receipt_sha256="",
+        rule_ids=(),
+        failure="preparation rejected",
+        invocation_sha256="",
+    )
+
+    settled = executor._settle(run, outcome)
+    states = {node.node_id: node.state for node in settled.nodes}
+
+    assert states == {
+        "descendant": "blocked",
+        "producer": "blocked",
+        "sibling": "pending",
+    }
+    assert settled.state == "running"
+    assert derive_ready_node_ids(plan, settled) == ("sibling",)
 
 
 class _Node:

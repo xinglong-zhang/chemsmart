@@ -115,6 +115,37 @@ def test_gas_frequency_is_applied_to_opt_but_not_silently_to_sp(tmp_path):
     assert "explicit 'sp:' section" in sp_observation["next_action"]
 
 
+def test_td_does_not_inherit_the_historical_frequency_default(tmp_path):
+    path = tmp_path / "gaussian-td.yaml"
+    path.write_text(
+        "td:\n"
+        "  functional: CAM-B3LYP\n"
+        "  basis: aug-cc-pVDZ\n"
+        "  states: singlets\n"
+        "  nstates: 5\n",
+        encoding="utf-8",
+    )
+
+    settings = GaussianProjectSettings.from_project(str(path)).td_settings()
+
+    assert settings.freq is False
+    assert _frequency_route_tokens(settings.route_string) == ()
+    assert "td(singlets,nstates=5" in settings.route_string.lower()
+
+
+def test_explicit_td_frequency_is_not_silently_removed(tmp_path):
+    path = tmp_path / "gaussian-td-frequency.yaml"
+    path.write_text(
+        "td:\n  functional: CAM-B3LYP\n  basis: aug-cc-pVDZ\n  freq: true\n",
+        encoding="utf-8",
+    )
+
+    settings = GaussianProjectSettings.from_project(str(path)).td_settings()
+
+    assert settings.freq is True
+    assert _frequency_route_tokens(settings.route_string) == ("freq",)
+
+
 def test_explicit_sp_frequency_remains_applied_and_needs_no_repair(tmp_path):
     path = tmp_path / "gaussian-explicit-sp.yaml"
     path.write_text(

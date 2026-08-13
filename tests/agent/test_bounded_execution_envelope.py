@@ -29,6 +29,7 @@ from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
     _CommandContext,
+    _remaining_node_unresolved_fields,
     _program_process_environment,
 )
 from chemsmart.agent.tool_specs import build_approved_execution_tool_surface
@@ -345,7 +346,7 @@ def test_deferred_admission_builds_existing_approval_contracts(tmp_path):
     host.workflow_drafts = {}
     host.workflow_execution_approval = None
     host.frozen_workflow_approval = None
-    host._latest_invocation_for_node = lambda _node_id: (
+    host._latest_invocation_for_node = lambda _node_id, **_kwargs: (
         SimpleNamespace(auxiliary_input_bindings=()),
         context,
     )
@@ -360,6 +361,20 @@ def test_deferred_admission_builds_existing_approval_contracts(tmp_path):
     ).settings_sha256 == ("5" * 64)
     assert host.frozen_workflow_approval.plan_sha256 == plan.plan_sha256
     assert host.frozen_workflow_approval.execution_admissible is True
+
+    separate = build_scientific_workflow_plan(
+        workflow_id="separate-water-sp",
+        task_spec_sha256=plan.task_spec_sha256,
+        scientific_identity_sha256=plan.scientific_identity_sha256,
+        nodes=plan.nodes,
+        edges=plan.edges,
+    )
+    host.scientific_workflow_plans[separate.plan_sha256] = separate
+    with pytest.raises(ContractError, match="separate workflow already owns"):
+        host._admit_bounded_workflow(
+            node_id="sp-initial",
+            plan_sha256=separate.plan_sha256,
+        )
 
 
 def test_deferred_admission_enforces_program_allowlist(tmp_path):
@@ -691,7 +706,7 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
         binding.program_binding_sha256: SimpleNamespace()
         for binding in (producer_engine, consumer_engine, alternate_engine)
     }
-    host._latest_invocation_for_node = lambda _node_id: (
+    host._latest_invocation_for_node = lambda _node_id, **_kwargs: (
         SimpleNamespace(),
         producer_context,
     )
@@ -756,8 +771,13 @@ def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
     host.bounded_execution_envelope = envelope
     host._preflight_by_node = {
         "opt-initial": SimpleNamespace(
-            plan_state="previewed", critical_finding_sha256s=()
+            invocation_sha256="a" * 64,
+            plan_state="previewed",
+            critical_finding_sha256s=(),
         )
+    }
+    host._invocation_workflow_plan_sha256s = {
+        "a" * 64: plan.plan_sha256
     }
 
     readiness = host._approval_readiness(plan)
@@ -776,6 +796,273 @@ def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
     assert exact_readiness["approvable"] is False
     assert exact_readiness["blocking_node_ids"] == ("hess-optimized",)
     assert exact_readiness["deferred_node_ids"] == ()
+
+
+def test_validated_geometry_handoff_clears_only_stale_input_markers(tmp_path):
+    path = tmp_path / "optimized.xyz"
+    path.write_text("1\noptimized\nH 0 0 0\n", encoding="utf-8")
+    artifact = _artifact(
+        path,
+        artifact_id="geometry.optimized",
+        kind="geometry_xyz",
+    )
+    node = SimpleNamespace(
+        node_id="sp-optimized",
+        unresolved_fields=(
+            "geometry",
+            "input_artifact",
+            "optimized_geometry",
+            "solvent",
+        ),
+        inputs=(
+            SimpleNamespace(
+                binding_id="geometry",
+                artifact_class="geometry_xyz",
+                producer_node_id="ts-initial",
+                producer_output_id="optimized-geometry",
+            ),
+        ),
+    )
+
+    remaining = _remaining_node_unresolved_fields(
+        node,
+        {
+            (
+                "sp-optimized",
+                "geometry",
+                "ts-initial",
+                "optimized-geometry",
+            ): artifact
+        },
+    )
+
+    assert remaining == ("solvent",)
+
+
+def test_unbound_recovery_invocation_is_frozen_to_one_workflow_plan():
+    node = ScientificWorkflowNodeV2(
+        node_id="sp-optimized",
+        stage="sp",
+        requested_program="gaussian",
+        program="gaussian",
+        engine="cpu",
+        project_role="project.sp",
+        unresolved_fields=(),
+    )
+    first = build_scientific_workflow_plan(
+        workflow_id="recovery-first",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(node,),
+        edges=(),
+    )
+    second = build_scientific_workflow_plan(
+        workflow_id="recovery-second",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(node,),
+        edges=(),
+    )
+    invocation = SimpleNamespace(invocation_sha256="c" * 64)
+    context = SimpleNamespace(
+        proposal=SimpleNamespace(node_id="sp-optimized")
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.invocations = {invocation.invocation_sha256: invocation}
+    host._command_contexts = {invocation.invocation_sha256: context}
+    host._invocation_workflow_plan_sha256s = {}
+
+    observed, _ = host._plan_invocation_for_node(
+        plan=first,
+        node_id="sp-optimized",
+    )
+
+    assert observed is invocation
+    assert host._invocation_workflow_plan_sha256s[
+        invocation.invocation_sha256
+    ] == first.plan_sha256
+    with pytest.raises(ContractError, match="another scientific workflow"):
+        host._plan_invocation_for_node(
+            plan=second,
+            node_id="sp-optimized",
+        )
+
+
+def test_current_missing_identity_is_not_misattributed_to_an_older_data_edge():
+    older = build_scientific_workflow_plan(
+        workflow_id="older-edge-workflow",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="producer",
+                stage="opt",
+                requested_program="gaussian",
+                program="gaussian",
+                engine="cpu",
+                project_role="project.opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="shared-node",
+                stage="sp",
+                requested_program="gaussian",
+                program="gaussian",
+                engine="cpu",
+                project_role="project.sp",
+                unresolved_fields=(),
+                support_state="unresolved_future",
+            ),
+        ),
+        edges=(
+            ScientificWorkflowEdgeV2(
+                edge_id="producer-to-shared",
+                source_node_id="producer",
+                target_node_id="shared-node",
+                edge_kind="data",
+                artifact_class="geometry_xyz",
+                producer_output_id="optimized-geometry",
+                consumer_input_id="geometry",
+            ),
+        ),
+    )
+    current_draft = SimpleNamespace(
+        nodes=(SimpleNamespace(node_id="shared-node"),)
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.scientific_workflow_plans = {older.plan_sha256: older}
+    current_draft.workflow_id = "current-missing-identity"
+    host.workflow_drafts = {"current": current_draft}
+
+    with pytest.raises(ContractError, match="no task-bound scientific identity"):
+        host._current_execution_plan_for_node("shared-node")
+
+
+def test_synthesized_future_invocation_binds_at_preflight_for_execution(
+    monkeypatch,
+):
+    import chemsmart.agent.tool_runtime as tool_runtime
+
+    plan = build_scientific_workflow_plan(
+        workflow_id="recovered-handoff",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="opt-initial",
+                stage="opt",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="project.opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="td-optimized",
+                stage="td",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="project.td",
+                unresolved_fields=(),
+                support_state="unresolved_future",
+            ),
+        ),
+        edges=(
+            ScientificWorkflowEdgeV2(
+                edge_id="opt-to-td",
+                source_node_id="opt-initial",
+                target_node_id="td-optimized",
+                edge_kind="data",
+                artifact_class="geometry_xyz",
+                producer_output_id="optimized-geometry",
+                consumer_input_id="geometry",
+            ),
+        ),
+    )
+    invocation = SimpleNamespace(
+        invocation_sha256="c" * 64,
+        project_receipt_sha256="d" * 64,
+    )
+    context = SimpleNamespace(
+        proposal=SimpleNamespace(node_id="td-optimized")
+    )
+    capability = SimpleNamespace(receipt_sha256="e" * 64)
+    program_binding = SimpleNamespace(binding_sha256="f" * 64)
+    engine_binding = SimpleNamespace(
+        binding_sha256="1" * 64,
+        environment_receipt_sha256="2" * 64,
+    )
+    inspection = SimpleNamespace(receipt_sha256="3" * 64)
+    identity = SimpleNamespace(binding_sha256="4" * 64)
+    project = SimpleNamespace(receipt_sha256="d" * 64)
+    preview = SimpleNamespace(
+        receipt_sha256="5" * 64,
+        invocation_sha256=invocation.invocation_sha256,
+    )
+    receipt = SimpleNamespace(
+        receipt_sha256="6" * 64,
+        invocation_sha256=invocation.invocation_sha256,
+        plan_state="previewed",
+        critical_finding_sha256s=(),
+        safe_preview_receipt_sha256=preview.receipt_sha256,
+        execution_ready=True,
+    )
+    monkeypatch.setattr(
+        tool_runtime,
+        "build_program_node_preflight_request",
+        lambda **_kwargs: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        tool_runtime,
+        "evaluate_program_node_preflight",
+        lambda *_args, **_kwargs: receipt,
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.scientific_workflow_plans = {plan.plan_sha256: plan}
+    host._invocation_workflow_plan_sha256s = {}
+    host.invocations = {invocation.invocation_sha256: invocation}
+    host._command_contexts = {invocation.invocation_sha256: context}
+    host.capabilities = {capability.receipt_sha256: capability}
+    host.program_bindings = {program_binding.binding_sha256: program_binding}
+    host.engine_bindings = {engine_binding.binding_sha256: engine_binding}
+    host.command_inspections = {inspection.receipt_sha256: inspection}
+    host.scientific_identities = {identity.binding_sha256: identity}
+    host.project_validations = {project.receipt_sha256: project}
+    host.safe_previews = {preview.receipt_sha256: preview}
+    host.validators = {}
+    host.preflights = {}
+    host._preflight_by_node = {}
+    host._completion_sets = {}
+    host.frozen_workflow_approval = None
+    host._emit = lambda *_args, **_kwargs: None
+    host._materialize_scientific_workflow = lambda **_kwargs: None
+
+    observed = host._preflight_program_node(
+        "turn-1",
+        {
+            "node_id": "td-optimized",
+            "capability_receipt_sha256": capability.receipt_sha256,
+            "program_binding_sha256": program_binding.binding_sha256,
+            "engine_binding_sha256": engine_binding.binding_sha256,
+            "invocation_sha256": invocation.invocation_sha256,
+            "command_inspection_receipt_sha256": inspection.receipt_sha256,
+            "scientific_identity_sha256": identity.binding_sha256,
+            "geometry_artifact_sha256": "7" * 64,
+            "charge": 0,
+            "multiplicity": 1,
+        },
+    )
+
+    assert observed is receipt
+    assert host._invocation_workflow_plan_sha256s[
+        invocation.invocation_sha256
+    ] == plan.plan_sha256
+    selected, _ = host._plan_invocation_for_node(
+        plan=plan,
+        node_id="td-optimized",
+    )
+    assert selected is invocation
 
 
 def test_bounded_server_profile_preserves_program_environment_and_timeout(
