@@ -3460,15 +3460,29 @@ class CommandCompiledToolHostV1:
         """Whether a node holds the green preview an approval will demand."""
 
         preflight = self._preflight_by_node.get(node_id)
-        return (
-            preflight is not None
-            and (
-                not plan_sha256
-                or self._invocation_workflow_plan_sha256s.get(
-                    preflight.invocation_sha256
-                )
-                == plan_sha256
+        safe_preview = (
+            self.safe_previews.get(preflight.safe_preview_receipt_sha256)
+            if preflight is not None
+            else None
+        )
+        if preflight is None or safe_preview is None:
+            return False
+        if (
+            plan_sha256
+            and self._invocation_workflow_plan_sha256s.get(
+                safe_preview.invocation_sha256
             )
+            != plan_sha256
+        ):
+            return False
+        try:
+            invocation, _context = self._latest_invocation_for_node(
+                node_id, plan_sha256=plan_sha256
+            )
+        except ContractError:
+            return False
+        return (
+            safe_preview.invocation_sha256 == invocation.invocation_sha256
             and preflight.plan_state == "previewed"
             and not preflight.critical_finding_sha256s
         )

@@ -10,9 +10,11 @@ import yaml
 from chemsmart.agent._contracts import (
     ContractError,
     TrustedArtifactRefV1,
+    canonical_sha256,
     file_sha256,
 )
 from chemsmart.agent.capabilities import (
+    CapabilityQueryStatus,
     SupportLevel,
     build_program_component_conformance_receipt,
 )
@@ -25,6 +27,11 @@ from chemsmart.agent.execution_envelope import (
     BoundedExecutionEnvelopeV1,
     load_bounded_execution_envelope,
 )
+from chemsmart.agent.preflight import (
+    ProgramNodePreflightReceiptV1,
+    validator_receipt_from_safe_preview,
+)
+from chemsmart.agent.preview import PreviewArtifactV1, SafePreviewReceiptV1
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
@@ -769,15 +776,27 @@ def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
     )
     host = object.__new__(CommandCompiledToolHostV1)
     host.bounded_execution_envelope = envelope
+    preview = SimpleNamespace(
+        receipt_sha256="9" * 64,
+        invocation_sha256="a" * 64,
+    )
     host._preflight_by_node = {
         "opt-initial": SimpleNamespace(
-            invocation_sha256="a" * 64,
+            safe_preview_receipt_sha256=preview.receipt_sha256,
             plan_state="previewed",
             critical_finding_sha256s=(),
         )
     }
+    host.safe_previews = {preview.receipt_sha256: preview}
+    invocation = SimpleNamespace(invocation_sha256=preview.invocation_sha256)
+    host.invocations = {invocation.invocation_sha256: invocation}
+    host._command_contexts = {
+        invocation.invocation_sha256: SimpleNamespace(
+            proposal=SimpleNamespace(node_id="opt-initial")
+        )
+    }
     host._invocation_workflow_plan_sha256s = {
-        "a" * 64: plan.plan_sha256
+        invocation.invocation_sha256: plan.plan_sha256
     }
 
     readiness = host._approval_readiness(plan)
@@ -938,11 +957,7 @@ def test_current_missing_identity_is_not_misattributed_to_an_older_data_edge():
         host._current_execution_plan_for_node("shared-node")
 
 
-def test_synthesized_future_invocation_binds_at_preflight_for_execution(
-    monkeypatch,
-):
-    import chemsmart.agent.tool_runtime as tool_runtime
-
+def test_synthesized_future_invocation_binds_at_preflight_for_execution():
     plan = build_scientific_workflow_plan(
         workflow_id="recovered-handoff",
         task_spec_sha256="a" * 64,
@@ -983,40 +998,95 @@ def test_synthesized_future_invocation_binds_at_preflight_for_execution(
     invocation = SimpleNamespace(
         invocation_sha256="c" * 64,
         project_receipt_sha256="d" * 64,
+        input_sha256="7" * 64,
+        project_sha256="8" * 64,
+        command_path=("run", "orca", "td"),
+        argv=("chemsmart", "run", "orca", "td"),
+        auxiliary_input_bindings=(),
+        program_engine_binding_sha256="1" * 64,
+        joined_capability_sha256="a" * 64,
+        scientific_identity_sha256=plan.scientific_identity_sha256,
+        scoped_options=(
+            SimpleNamespace(parameter_name="charge", values=("0",)),
+            SimpleNamespace(parameter_name="multiplicity", values=("1",)),
+        ),
     )
-    context = SimpleNamespace(
-        proposal=SimpleNamespace(node_id="td-optimized")
+    capability = SimpleNamespace(
+        receipt_sha256="e" * 64,
+        joined_capability_sha256=invocation.joined_capability_sha256,
+        status=CapabilityQueryStatus.SUPPORTED,
+        query=SimpleNamespace(program="orca", jobtype="td", engine="cpu"),
+        capability=SimpleNamespace(requires_project_configuration=True),
     )
-    capability = SimpleNamespace(receipt_sha256="e" * 64)
-    program_binding = SimpleNamespace(binding_sha256="f" * 64)
+    program_binding = SimpleNamespace(
+        binding_sha256="f" * 64,
+        capability_receipt_sha256=capability.receipt_sha256,
+        selected_program="orca",
+        state="resolved",
+    )
     engine_binding = SimpleNamespace(
-        binding_sha256="1" * 64,
+        binding_sha256=invocation.program_engine_binding_sha256,
         environment_receipt_sha256="2" * 64,
-    )
-    inspection = SimpleNamespace(receipt_sha256="3" * 64)
-    identity = SimpleNamespace(binding_sha256="4" * 64)
-    project = SimpleNamespace(receipt_sha256="d" * 64)
-    preview = SimpleNamespace(
-        receipt_sha256="5" * 64,
-        invocation_sha256=invocation.invocation_sha256,
-    )
-    receipt = SimpleNamespace(
-        receipt_sha256="6" * 64,
-        invocation_sha256=invocation.invocation_sha256,
-        plan_state="previewed",
-        critical_finding_sha256s=(),
-        safe_preview_receipt_sha256=preview.receipt_sha256,
+        engine="cpu",
+        capability_receipt_sha256=capability.receipt_sha256,
+        program_binding_sha256=program_binding.binding_sha256,
+        program="orca",
+        selected_engine="cpu",
         execution_ready=True,
+        state="resolved",
     )
-    monkeypatch.setattr(
-        tool_runtime,
-        "build_program_node_preflight_request",
-        lambda **_kwargs: SimpleNamespace(),
+    inspection = SimpleNamespace(receipt_sha256="3" * 64, status="valid")
+    identity = SimpleNamespace(
+        binding_sha256=plan.scientific_identity_sha256,
+        geometry_artifact_sha256=invocation.input_sha256,
+        charge=0,
+        multiplicity=1,
     )
-    monkeypatch.setattr(
-        tool_runtime,
-        "evaluate_program_node_preflight",
-        lambda *_args, **_kwargs: receipt,
+    project = SimpleNamespace(
+        receipt_sha256="d" * 64,
+        status="valid",
+        capability_receipt_sha256=capability.receipt_sha256,
+        settings=(("charge", 0), ("multiplicity", 1)),
+    )
+    project_artifact = SimpleNamespace(sha256=invocation.project_sha256)
+    input_artifact = SimpleNamespace(sha256=invocation.input_sha256)
+    context = SimpleNamespace(
+        proposal=SimpleNamespace(node_id="td-optimized"),
+        project_validation=project,
+        project_artifact=project_artifact,
+        engine_binding=engine_binding,
+        input_artifact=input_artifact,
+        scientific_identity=identity,
+    )
+    artifacts = (PreviewArtifactV1("orca.inp", 1, "0" * 64),)
+    preview_body = {
+        "schema_version": "chemsmart.safe-preview-receipt.v1",
+        "invocation_sha256": invocation.invocation_sha256,
+        "observed_argv_sha256": canonical_sha256(invocation.argv),
+        "input_sha256": invocation.input_sha256,
+        "project_sha256": invocation.project_sha256,
+        "exit_status": 0,
+        "fake_mode": True,
+        "no_scratch_mode": True,
+        "scheduler_test_mode": False,
+        "artifacts": artifacts,
+        "artifact_set_sha256": canonical_sha256(artifacts),
+        "output_sha256": "5" * 64,
+        "exception_class": "",
+        "program_validation_receipt_sha256": inspection.receipt_sha256,
+        "program_validation_status": "valid",
+        "critical_finding_sha256s": (),
+        "status": "previewed",
+        "rule_ids": ("preview.click_exact_argv_observed",),
+    }
+    preview = SafePreviewReceiptV1(
+        **preview_body, receipt_sha256=canonical_sha256(preview_body)
+    )
+    validator = validator_receipt_from_safe_preview(
+        node_id="td-optimized",
+        program="orca",
+        scientific_identity_sha256=identity.binding_sha256,
+        safe_preview=preview,
     )
     host = object.__new__(CommandCompiledToolHostV1)
     host.scientific_workflow_plans = {plan.plan_sha256: plan}
@@ -1030,13 +1100,21 @@ def test_synthesized_future_invocation_binds_at_preflight_for_execution(
     host.scientific_identities = {identity.binding_sha256: identity}
     host.project_validations = {project.receipt_sha256: project}
     host.safe_previews = {preview.receipt_sha256: preview}
-    host.validators = {}
+    host.validators = {validator.receipt_sha256: validator}
     host.preflights = {}
     host._preflight_by_node = {}
     host._completion_sets = {}
     host.frozen_workflow_approval = None
     host._emit = lambda *_args, **_kwargs: None
-    host._materialize_scientific_workflow = lambda **_kwargs: None
+    host.execution_resources = None
+    host.live_schema = SimpleNamespace(schema_sha256="9" * 64)
+    host.materialized_workflows = {}
+    materialized = []
+    host.event_store = SimpleNamespace(
+        record_materialized_workflow=lambda **values: materialized.append(
+            values["workflow"]
+        )
+    )
 
     observed = host._preflight_program_node(
         "turn-1",
@@ -1054,15 +1132,23 @@ def test_synthesized_future_invocation_binds_at_preflight_for_execution(
         },
     )
 
-    assert observed is receipt
-    assert host._invocation_workflow_plan_sha256s[
-        invocation.invocation_sha256
-    ] == plan.plan_sha256
+    assert isinstance(observed, ProgramNodePreflightReceiptV1)
+    assert not hasattr(observed, "invocation_sha256")
+    assert (
+        host._invocation_workflow_plan_sha256s[invocation.invocation_sha256]
+        == plan.plan_sha256
+    )
     selected, _ = host._plan_invocation_for_node(
         plan=plan,
         node_id="td-optimized",
     )
     assert selected is invocation
+    assert materialized[-1].nodes[0].preflight_receipt_sha256 == (
+        observed.receipt_sha256
+    )
+    assert materialized[-1].nodes[0].invocation_sha256 == (
+        invocation.invocation_sha256
+    )
 
 
 def test_bounded_server_profile_preserves_program_environment_and_timeout(
