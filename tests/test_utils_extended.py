@@ -225,6 +225,26 @@ class TestGetListFromStringRange:
         result = get_list_from_string_range("[1-3,5]")
         assert result == [1, 2, 3, 5]
 
+    def test_colon_and_whitespace(self):
+        """Test documented colon-range and space-separated form."""
+        result = get_list_from_string_range("1:15 20")
+        assert result == list(range(1, 16)) + [20]
+
+    def test_unicode_en_dash(self):
+        """Test typographic en-dash ranges copied from documents."""
+        result = get_list_from_string_range("397–469")
+        assert result == list(range(397, 470))
+
+    def test_empty_string_raises(self):
+        """Empty string should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="empty string"):
+            get_list_from_string_range("")
+
+    def test_invalid_token_raises(self):
+        """Non-numeric tokens should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range("1-3,abc")
+
 
 class TestString2Index1Based:
     """Tests for the string2index_1based function."""
