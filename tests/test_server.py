@@ -2,6 +2,7 @@ import os
 from io import StringIO
 
 from chemsmart.settings.executable import (
+    CRESTExecutable,
     GaussianExecutable,
     ORCAExecutable,
     XTBExecutable,
@@ -97,6 +98,20 @@ conda activate ~/anaconda3/envs/chemsmart
         assert xtb_executable.modules is None
         assert xtb_executable.scripts is None
         assert xtb_executable.envars is None
+
+    def test_crest_executable(self, server_yaml_file):
+        crest_executable = CRESTExecutable.from_servername(server_yaml_file)
+        assert crest_executable.executable_folder is None
+        assert crest_executable.get_executable() == "crest"
+        assert crest_executable.local_run is True
+
+        crest_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/chemsmart
+"""
+        assert crest_executable.conda_env == crest_conda_env
+        assert crest_executable.modules is None
+        assert crest_executable.scripts is None
+        assert crest_executable.envars is None
 
     def test_slurm_submitter_writes_extra_scheduler_directives(self):
         server = Server(
