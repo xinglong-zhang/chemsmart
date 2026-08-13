@@ -439,8 +439,6 @@ def create_orca_qmmm_subcommand(parent_command):
             molecule.intermediate_level_atoms = get_list_from_string_range(
                 intermediate_level_atoms
             )
-        if high_level_h_bond_length is not None:
-            molecule.scale_factors = qmmm_settings.high_level_h_bond_length
 
         combined_kwargs = {**parent_kwargs, **kwargs}
 

@@ -347,7 +347,8 @@ QM/MM with custom bond lengths and embedding options:
 ***********************
 
 You can configure QM/MM settings in a YAML file to avoid repetitive CLI options. This is especially useful for running
-multiple jobs with similar settings.
+multiple jobs with similar settings. Charge and multiplicity are not set in the project YAML; pass them on the command
+line (``-ch``, ``-mh``, ``-ct``, ``-mt``, and for QM/QM2 jobs ``-cm``, ``-mm``).
 
 YAML Configuration Location
 ===========================
@@ -364,11 +365,7 @@ Basic 2-Layer QM/MM Configuration
      jobtype: "QMMM"
      high_level_functional: "B3LYP"
      high_level_basis: "def2-SVP"
-     low_level_force_field: "amber"
-     charge_high: 0
-     mult_high: 1
-     charge_total: 0
-     mult_total: 1
+     low_level_force_field: "ff13SB"
      embedding_type: "Electronic"
      freq: false
 
@@ -384,23 +381,15 @@ Basic 2-Layer QM/MM Configuration
      # High-level (QM) region
      high_level_functional: "PBE0"
      high_level_basis: "def2-TZVP"
-     charge_high: 0
-     mult_high: 1
 
      # Intermediate-level (QM2) region
      intermediate_level_functional: "B3LYP"
      intermediate_level_basis: "def2-SVP"
      # Or use a built-in method:
      # intermediate_level_method: "XTB"
-     charge_intermediate: 0
-     mult_intermediate: 1
 
      # Low-level (MM) region
-     low_level_force_field: "amber"
-
-     # Total system
-     charge_total: 0
-     mult_total: 1
+     low_level_force_field: "ff13SB"
 
      # Additional options
      freq: false
@@ -418,8 +407,6 @@ Using Built-in Methods
      high_level_functional: "PBE0"
      high_level_basis: "def2-TZVP"
      intermediate_level_method: "XTB"  # Built-in method
-     charge_total: 0
-     mult_total: 1
 
 **Supported Built-in Methods:**
 
@@ -436,15 +423,17 @@ Once you have a YAML file configured, use it with the ``-p`` flag:
 
 .. code:: console
 
-   # Minimal command - all settings from YAML
+   # Theory from YAML; charge and multiplicity on the CLI
    chemsmart run orca -p qmmm -f system.pdb qmmm \
      -ha 1-20 \
+     -ch 0 -mh 1 -ct 0 -mt 1 \
      -R
 
    # Override YAML settings with CLI options
    chemsmart run orca -p qmmm -f system.pdb qmmm \
      -ha 1-20 \
      -hx M06-2X \
+     -ch 0 -mh 1 -ct 0 -mt 1 \
      -R
 
 **Settings Priority:**
@@ -466,15 +455,7 @@ Complete YAML Example
      high_level_functional: "PBE0"
      high_level_basis: "def2-TZVP"
      intermediate_level_method: "XTB"
-     low_level_force_field: "amber"
-
-     # Charge and multiplicity
-     charge_high: 0
-     mult_high: 1
-     charge_intermediate: 0
-     mult_intermediate: 1
-     charge_total: 0
-     mult_total: 1
+     low_level_force_field: "ff13SB"
 
      # Atom partitioning (optional, can be set via CLI)
      # high_level_atoms: [1, 2, 3, 4, 5]
