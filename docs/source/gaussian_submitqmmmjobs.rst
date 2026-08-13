@@ -166,7 +166,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(25,26)]'
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -175,7 +175,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba '[(10,11),(50,51)]'
 
 Transition State Search
 =======================
@@ -184,7 +184,7 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(30,31)]' -sf '{(30,31): [0.709, 0.709, 0.709]}'
 
 Frequency Analysis
 ==================
@@ -428,7 +428,7 @@ Use the YAML configuration with the project flag:
 
 .. code:: console
 
-   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ba "(20,21)"
+   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ba '[(20,21)]'
 
 Python Configuration
 ====================
