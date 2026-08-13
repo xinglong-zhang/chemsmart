@@ -289,9 +289,7 @@ def test_qwen_private_reasoning_replays_in_ram_but_not_publicly():
     assert "private" not in json.dumps(session.public_history())
 
 
-def test_unified_runner_selects_qwen_and_passes_feedback_projection(
-    tmp_path, monkeypatch
-):
+def test_unified_runner_selects_registered_qwen_adapter(tmp_path, monkeypatch):
     import chemsmart.agent.runtime.alibaba as alibaba
     import chemsmart.agent.services.unified_session as unified
 
@@ -342,17 +340,16 @@ def test_unified_runner_selects_qwen_and_passes_feedback_projection(
         envelope=SimpleNamespace(
             budget=SimpleNamespace(max_output_tokens_per_request=262_144)
         ),
-        hypothesis=object(),
-        network_budget=SimpleNamespace(
+        request_context=object(),
+        provider_budget=SimpleNamespace(
             max_output_tokens_per_request=262_144,
             task_wall_time_seconds=60.0,
         ),
-        feedback_projection="causal-v1",
     )
 
     assert result == "normal-session-result"
     assert observed["session"]["config"].model == "qwen3.8-max"
-    assert observed["loop_init"]["feedback_projection"] == "causal-v1"
+    assert set(observed["loop_init"]) == {"host", "event_store"}
     assert observed["transport_closed"] is True
     assert observed["session_closed"] is True
 

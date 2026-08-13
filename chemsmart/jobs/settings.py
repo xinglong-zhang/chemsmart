@@ -8,6 +8,76 @@ from chemsmart.utils.utils import update_dict_with_existing_keys
 logger = logging.getLogger(__name__)
 
 
+# Public top-level vocabulary owned by the loader below.  These are section
+# names, not the Click job inventory: the two sets intentionally differ.
+MOLECULAR_GAS_PHASE_JOB_SECTIONS = (
+    "crest",
+    "dias",
+    "irc",
+    "modred",
+    "nci",
+    "neb",
+    "opt",
+    "resp",
+    "scan",
+    "set",
+    "traj",
+    "ts",
+    "uvvis",
+    "wbi",
+)
+MOLECULAR_COMMON_DIRECT_SECTIONS = (
+    *MOLECULAR_GAS_PHASE_JOB_SECTIONS,
+    "qmmm",
+    "sp",
+    "td",
+)
+
+
+def molecular_project_section_names(program):
+    """Return the exact top-level section vocabulary this loader accepts."""
+
+    if program not in {"gaussian", "orca"}:
+        raise ValueError(f"Unsupported molecular project program: {program}")
+    names = {"gas", "solv", *MOLECULAR_COMMON_DIRECT_SECTIONS}
+    if program == "gaussian":
+        names.add("link")
+    return tuple(sorted(names))
+
+
+def molecular_project_section_sources(project_config, *, program, jobtype):
+    """Return loader-order YAML sections for a Gaussian/ORCA job.
+
+    This is the section-selection rule used by the molecular project loader:
+    the historical phase section is applied first and an explicit job section
+    overrides it.  Keeping this rule in the loader module lets capability and
+    agent observations project the real semantics instead of maintaining a
+    second phase/jobtype table.
+    """
+
+    available = {
+        name
+        for name, settings in project_config.items()
+        if settings is not None
+    }
+    direct = jobtype if jobtype in available else None
+    if jobtype in {"qmmm", "link"}:
+        return (direct,) if direct is not None else ()
+    if jobtype == "td" and "gas" in available:
+        return (direct,) if direct is not None else ()
+    if jobtype == "sp":
+        phase = "solv" if "solv" in available else "gas"
+    else:
+        phase = "gas" if "gas" in available else "solv"
+    return tuple(
+        dict.fromkeys(
+            name
+            for name in (phase, direct)
+            if name is not None and name in available
+        )
+    )
+
+
 class MolecularJobSettings:
     """Common base job settings for molecular
     systems using Gaussian and ORCA jobs."""
@@ -255,22 +325,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
 
     # job types
-    gas_phase_jobs = [
-        "opt",
-        "modred",
-        "ts",
-        "irc",
-        "scan",
-        "nci",
-        "crest",
-        "dias",
-        "resp",
-        "set",
-        "traj",
-        "uvvis",
-        "wbi",
-        "neb",  # NEB uses gas settings, with NEB-specific options from CLI
-    ]
+    gas_phase_jobs = list(MOLECULAR_GAS_PHASE_JOB_SECTIONS)
     sp_job = ["sp"]
     td_job = ["td"]
     link_job = ["link"] if program == "gaussian" else []
@@ -299,6 +354,20 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         project_config = yaml.safe_load(f)
         logger.debug(
             f"Project settings from yaml {filename}: \n{project_config}"
+        )
+    if not isinstance(project_config, dict):
+        raise TypeError(f"{program} project YAML root must be a mapping")
+    accepted_sections = set(molecular_project_section_names(program))
+    unknown_sections = sorted(
+        set(project_config).difference(accepted_sections)
+    )
+    unknown_stage_sections = sorted(
+        name for name in unknown_sections if name not in default_config
+    )
+    if unknown_stage_sections:
+        raise ValueError(
+            f"Unknown {program} project section(s): "
+            + ", ".join(unknown_stage_sections)
         )
 
     # populate job settings for different jobs
@@ -330,13 +399,28 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             "'gas'/'solv' section nor a supported direct job section; "
             f"found: {found}."
         )
+    if unknown_sections:
+        raise ValueError(
+            f"Unknown {program} project section(s): "
+            + ", ".join(unknown_sections)
+        )
 
     if gas_config is None:
         # no settings for gas phase; using
         # implicit solvation model for all jobs
         # (except td and qmmm, which will use their own configurations)
-        shared_config = solv_config or {}
         for job in all_jobs:
+            sources = molecular_project_section_sources(
+                project_config, program=program, jobtype=job
+            )
+            phase_config = next(
+                (
+                    project_config[name]
+                    for name in sources
+                    if name in {"gas", "solv"}
+                ),
+                {},
+            )
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
@@ -348,22 +432,33 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], shared_config
+                all_project_configs[job], phase_config
             )
     else:
         # settings for gas phase exist - also solv settings exist
         for job in gas_phase_jobs:  # jobs using gas config
+            sources = molecular_project_section_sources(
+                project_config, program=program, jobtype=job
+            )
+            phase_config = next(
+                (
+                    project_config[name]
+                    for name in sources
+                    if name in {"gas", "solv"}
+                ),
+                {},
+            )
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], gas_config
+                all_project_configs[job], phase_config
             )
             try:
                 # Try updating with gas_config first
                 all_project_configs[job] = update_dict_with_existing_keys(
-                    all_project_configs[job], gas_config
+                    all_project_configs[job], phase_config
                 )
             except Exception as e:
                 logger.warning(
@@ -384,8 +479,15 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         # dies with "neither ab initio nor DFT is specified" and a zero-byte
         # input.  No working project can depend on that, because a
         # ``gas:``-only ``sp`` is an unconditional failure today.
-        sp_inherits_gas = solv_config is None
-        sp_config = gas_config if sp_inherits_gas else solv_config
+        sp_sources = molecular_project_section_sources(
+            project_config, program=program, jobtype="sp"
+        )
+        sp_phase = next(
+            (name for name in sp_sources if name in {"gas", "solv"}),
+            None,
+        )
+        sp_inherits_gas = sp_phase == "gas"
+        sp_config = project_config.get(sp_phase, {})
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()

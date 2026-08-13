@@ -1226,11 +1226,13 @@ class TestXTBPreviewAndValidationReceipts:
             )
             finding = next(
                 item
-                for item in warned["findings"]
+                for item in warned["warnings"]
                 if item["rule_id"]
-                == "xtb.environment.openblas_openmp_incompatible"
+                == "xtb.environment.openblas_openmp_warning"
             )
-            assert warned["ready"] is False
+            assert warned["ready"] is True
+            assert warned["validation_state"] == "validated"
+            assert warned["findings"] == []
             assert finding["observed"] == 1
 
         with open(job.outputfile, "a") as handle:

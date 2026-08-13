@@ -1,15 +1,10 @@
 """Deterministic predecessor context for scientific workflow tasks.
 
 The model does not decide which prior records are relevant.  This module
-derives an immutable context packet from the host-owned scientific DAG and an
-experiment-bound policy.  It supports three deliberately different arms:
-
-``P0``
-    The target node and workflow-scoped evidence only.  No predecessor packet.
-``P1``
-    Every public typed record at or before the target in topological order.
-``P2``
-    The exact backward dependency slice, including all fan-in branches.
+derives an immutable context packet from the host-owned scientific DAG and a
+host-selected policy.  ``target_only`` exposes only the target,
+``ordered_predecessors`` exposes preceding nodes in topological order, and
+``dependency_projected`` exposes the exact backward dependency slice.
 
 Only references to public typed records are carried here.  Provider-private
 reasoning, raw transcripts, paths, and native input text have no representation
@@ -35,13 +30,12 @@ from chemsmart.agent.workflows import (
 )
 
 
-CONTEXT_MODES = ("dependency_projected", "full_history", "none")
-CONTEXT_ARM_MODES = {
-    "p0": "none",
-    "p1": "full_history",
-    "p2": "dependency_projected",
-}
-CONTEXT_SELECTOR_VERSION = "chemsmart.task-dependency-context-selector.v1"
+CONTEXT_MODES = (
+    "dependency_projected",
+    "ordered_predecessors",
+    "target_only",
+)
+CONTEXT_SELECTOR_VERSION = "chemsmart.task-dependency-context-selector.v2"
 
 
 def _sorted_unique(values: Sequence[str], field_name: str) -> tuple[str, ...]:
@@ -69,12 +63,11 @@ def _require_optional_identifier(value: str, field_name: str) -> str:
 
 
 @dataclass(frozen=True)
-class TaskDependencyContextPolicyV1:
-    """Experiment-bound rule for selecting predecessor context."""
+class TaskDependencyContextPolicyV2:
+    """Host-neutral rule for selecting predecessor context."""
 
     schema_version: str
     policy_id: str
-    arm_id: str
     mode: str
     selector_version: str
     record_classes: tuple[str, ...]
@@ -82,14 +75,11 @@ class TaskDependencyContextPolicyV1:
     policy_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.task-dependency-context-policy.v1":
+        if self.schema_version != "chemsmart.task-dependency-context-policy.v2":
             raise ContractError("unsupported task dependency context policy")
         require_identifier(self.policy_id, "policy_id")
-        require_identifier(self.arm_id, "arm_id")
-        if self.arm_id not in CONTEXT_ARM_MODES:
-            raise ContractError("context arm must be p0, p1, or p2")
-        if self.mode != CONTEXT_ARM_MODES[self.arm_id]:
-            raise ContractError("context arm and mode disagree")
+        if self.mode not in CONTEXT_MODES:
+            raise ContractError("unsupported task dependency context mode")
         if self.selector_version != CONTEXT_SELECTOR_VERSION:
             raise ContractError("unsupported dependency context selector")
         _sorted_unique(self.record_classes, "record_classes")
@@ -102,7 +92,6 @@ class TaskDependencyContextPolicyV1:
         body = {
             "schema_version": self.schema_version,
             "policy_id": self.policy_id,
-            "arm_id": self.arm_id,
             "mode": self.mode,
             "selector_version": self.selector_version,
             "record_classes": self.record_classes,
@@ -115,25 +104,24 @@ class TaskDependencyContextPolicyV1:
 def build_task_dependency_context_policy(
     *,
     policy_id: str,
-    arm_id: str,
+    mode: str,
     record_classes: Sequence[str],
     max_public_bytes: int,
-) -> TaskDependencyContextPolicyV1:
-    """Build a canonical P0, P1, or P2 context policy."""
+) -> TaskDependencyContextPolicyV2:
+    """Build a canonical host-neutral context policy."""
 
-    normalized_arm = require_identifier(arm_id, "arm_id")
-    if normalized_arm not in CONTEXT_ARM_MODES:
-        raise ContractError("context arm must be p0, p1, or p2")
+    normalized_mode = str(mode).strip().lower()
+    if normalized_mode not in CONTEXT_MODES:
+        raise ContractError("unsupported task dependency context mode")
     body = {
-        "schema_version": "chemsmart.task-dependency-context-policy.v1",
+        "schema_version": "chemsmart.task-dependency-context-policy.v2",
         "policy_id": require_identifier(policy_id, "policy_id"),
-        "arm_id": normalized_arm,
-        "mode": CONTEXT_ARM_MODES[normalized_arm],
+        "mode": normalized_mode,
         "selector_version": CONTEXT_SELECTOR_VERSION,
         "record_classes": tuple(sorted(set(record_classes))),
         "max_public_bytes": int(max_public_bytes),
     }
-    return TaskDependencyContextPolicyV1(
+    return TaskDependencyContextPolicyV2(
         **body, policy_sha256=canonical_sha256(body)
     )
 
@@ -198,12 +186,12 @@ def build_predecessor_evidence_ref(
 
 def bind_selected_public_records(
     *,
-    context: TaskDependencyContextV1,
+    context: TaskDependencyContextV2,
     records: Mapping[str, Mapping[str, Any]],
 ) -> tuple[dict[str, Any], ...]:
     """Bind selected references to their exact canonical public payloads.
 
-    ``TaskDependencyContextV1`` deliberately selects references rather than
+    ``TaskDependencyContextV2`` deliberately selects references rather than
     carrying record bodies.  The live-session composition root calls this
     function before provider work so an omitted, injected, or changed record
     fails closed.  The returned entries follow the context's canonical
@@ -275,7 +263,7 @@ class EvidenceExclusionV1:
 
 
 @dataclass(frozen=True)
-class TaskDependencyContextV1:
+class TaskDependencyContextV2:
     """Canonical public context selected for one workflow target."""
 
     schema_version: str
@@ -294,7 +282,7 @@ class TaskDependencyContextV1:
     context_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.task-dependency-context.v1":
+        if self.schema_version != "chemsmart.task-dependency-context.v2":
             raise ContractError("unsupported task dependency context")
         require_identifier(self.workflow_id, "workflow_id")
         require_sha256(self.plan_sha256, "plan_sha256")
@@ -327,15 +315,17 @@ class TaskDependencyContextV1:
             ancestors.union({self.target_node_id})
         ):
             raise ContractError("dependency and non-dependency nodes overlap")
-        if self.mode == "none" and (
+        if self.mode == "target_only" and (
             self.direct_predecessor_node_ids
             or self.transitive_ancestor_node_ids
             or self.non_dependency_node_ids
             or self.selected_edges
         ):
-            raise ContractError("P0 context cannot expose predecessors")
+            raise ContractError("target-only context cannot expose predecessors")
         if self.mode == "dependency_projected" and self.non_dependency_node_ids:
-            raise ContractError("P2 context cannot include unrelated nodes")
+            raise ContractError(
+                "dependency-projected context cannot include unrelated nodes"
+            )
         edge_ids = tuple(edge.edge_id for edge in self.selected_edges)
         if edge_ids != tuple(sorted(set(edge_ids))):
             raise ContractError("selected context edges must be sorted and unique")
@@ -479,7 +469,7 @@ class ContextSelectionReceiptV1:
 
 def build_dependency_context_public_projection(
     *,
-    context: TaskDependencyContextV1,
+    context: TaskDependencyContextV2,
     selection_receipt: ContextSelectionReceiptV1,
     records: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -515,250 +505,6 @@ def build_dependency_context_public_projection(
             records=records,
         ),
     }
-
-
-@dataclass(frozen=True)
-class ContextManifestV2:
-    """Least-privilege task context with exact selected public records."""
-
-    schema_version: str
-    manifest_id: str
-    workflow_id: str
-    task_spec_sha256: str
-    scientific_identity_sha256: str
-    target_node_id: str
-    dependency_context_sha256: str
-    selection_receipt_sha256: str
-    included_record_sha256s: tuple[str, ...]
-    source_sha256s: tuple[str, ...]
-    artifact_sha256s: tuple[str, ...]
-    tool_schema_sha256: str
-    allowed_tools: tuple[str, ...]
-    token_budget: int
-    tool_call_budget: int
-    wall_time_seconds: int
-    manifest_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.context-manifest.v2":
-            raise ContractError("unsupported context manifest schema")
-        for name, value in (
-            ("manifest_id", self.manifest_id),
-            ("workflow_id", self.workflow_id),
-            ("target_node_id", self.target_node_id),
-        ):
-            require_identifier(value, name)
-        for name, digest in (
-            ("task_spec_sha256", self.task_spec_sha256),
-            ("scientific_identity_sha256", self.scientific_identity_sha256),
-            ("dependency_context_sha256", self.dependency_context_sha256),
-            ("selection_receipt_sha256", self.selection_receipt_sha256),
-            ("tool_schema_sha256", self.tool_schema_sha256),
-        ):
-            require_sha256(digest, name)
-        for name, values in (
-            ("included_record_sha256s", self.included_record_sha256s),
-            ("source_sha256s", self.source_sha256s),
-            ("artifact_sha256s", self.artifact_sha256s),
-        ):
-            _sorted_unique(values, name)
-            for digest in values:
-                require_sha256(digest, name)
-        _sorted_unique(self.allowed_tools, "allowed_tools")
-        for tool in self.allowed_tools:
-            require_identifier(tool, "allowed_tool")
-        if min(self.token_budget, self.tool_call_budget, self.wall_time_seconds) < 1:
-            raise ContractError("context manifest budgets must be positive")
-        body = {
-            "schema_version": self.schema_version,
-            "manifest_id": self.manifest_id,
-            "workflow_id": self.workflow_id,
-            "task_spec_sha256": self.task_spec_sha256,
-            "scientific_identity_sha256": self.scientific_identity_sha256,
-            "target_node_id": self.target_node_id,
-            "dependency_context_sha256": self.dependency_context_sha256,
-            "selection_receipt_sha256": self.selection_receipt_sha256,
-            "included_record_sha256s": self.included_record_sha256s,
-            "source_sha256s": self.source_sha256s,
-            "artifact_sha256s": self.artifact_sha256s,
-            "tool_schema_sha256": self.tool_schema_sha256,
-            "allowed_tools": self.allowed_tools,
-            "token_budget": self.token_budget,
-            "tool_call_budget": self.tool_call_budget,
-            "wall_time_seconds": self.wall_time_seconds,
-        }
-        if self.manifest_sha256 != canonical_sha256(body):
-            raise ContractError("context manifest digest mismatch")
-
-
-@dataclass(frozen=True)
-class SpecialistTaskPacketV2:
-    """Bounded specialist task tied to an exact dependency projection."""
-
-    schema_version: str
-    packet_id: str
-    workflow_id: str
-    role: str
-    target_node_ids: tuple[str, ...]
-    context_manifest_sha256: str
-    context_selection_receipt_sha256: str
-    input_record_sha256s: tuple[str, ...]
-    expected_output_schema: str
-    owner: str
-    merge_key: str
-    packet_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.specialist-task-packet.v2":
-            raise ContractError("unsupported specialist task packet schema")
-        for name, value in (
-            ("packet_id", self.packet_id),
-            ("workflow_id", self.workflow_id),
-            ("role", self.role),
-            ("expected_output_schema", self.expected_output_schema),
-            ("owner", self.owner),
-            ("merge_key", self.merge_key),
-        ):
-            require_identifier(value, name)
-        _unique_identifiers(self.target_node_ids, "target_node_ids")
-        if not self.target_node_ids:
-            raise ContractError("specialist packet requires a target node")
-        for name, digest in (
-            ("context_manifest_sha256", self.context_manifest_sha256),
-            (
-                "context_selection_receipt_sha256",
-                self.context_selection_receipt_sha256,
-            ),
-        ):
-            require_sha256(digest, name)
-        _sorted_unique(self.input_record_sha256s, "input_record_sha256s")
-        for digest in self.input_record_sha256s:
-            require_sha256(digest, "input_record_sha256")
-        body = {
-            "schema_version": self.schema_version,
-            "packet_id": self.packet_id,
-            "workflow_id": self.workflow_id,
-            "role": self.role,
-            "target_node_ids": self.target_node_ids,
-            "context_manifest_sha256": self.context_manifest_sha256,
-            "context_selection_receipt_sha256": (
-                self.context_selection_receipt_sha256
-            ),
-            "input_record_sha256s": self.input_record_sha256s,
-            "expected_output_schema": self.expected_output_schema,
-            "owner": self.owner,
-            "merge_key": self.merge_key,
-        }
-        if self.packet_sha256 != canonical_sha256(body):
-            raise ContractError("specialist task packet digest mismatch")
-
-
-def build_specialist_task_packet_v2(
-    *,
-    packet_id: str,
-    manifest: ContextManifestV2,
-    role: str,
-    target_node_ids: Sequence[str],
-    expected_output_schema: str,
-    owner: str,
-    merge_key: str,
-) -> SpecialistTaskPacketV2:
-    """Create a specialist packet whose inputs exactly match the manifest."""
-
-    normalized_targets = tuple(str(item) for item in target_node_ids)
-    if manifest.target_node_id not in normalized_targets:
-        raise ContractError("specialist targets must include the manifest target")
-    body = {
-        "schema_version": "chemsmart.specialist-task-packet.v2",
-        "packet_id": require_identifier(packet_id, "packet_id"),
-        "workflow_id": manifest.workflow_id,
-        "role": require_identifier(role, "role"),
-        "target_node_ids": normalized_targets,
-        "context_manifest_sha256": manifest.manifest_sha256,
-        "context_selection_receipt_sha256": (
-            manifest.selection_receipt_sha256
-        ),
-        "input_record_sha256s": manifest.included_record_sha256s,
-        "expected_output_schema": require_identifier(
-            expected_output_schema, "expected_output_schema"
-        ),
-        "owner": require_identifier(owner, "owner"),
-        "merge_key": require_identifier(merge_key, "merge_key"),
-    }
-    return SpecialistTaskPacketV2(
-        **body, packet_sha256=canonical_sha256(body)
-    )
-
-
-@dataclass(frozen=True)
-class HarnessContextArmV1:
-    """Binds P0/P1/P2 to one experiment case without ambient state."""
-
-    schema_version: str
-    experiment_id: str
-    case_id: str
-    arm_id: str
-    mode: str
-    policy_sha256: str
-    prompt_sha256: str
-    tool_schema_sha256: str
-    arm_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.harness-context-arm.v1":
-            raise ContractError("unsupported harness context arm")
-        for name, value in (
-            ("experiment_id", self.experiment_id),
-            ("case_id", self.case_id),
-            ("arm_id", self.arm_id),
-        ):
-            require_identifier(value, name)
-        if self.arm_id not in CONTEXT_ARM_MODES:
-            raise ContractError("context arm must be p0, p1, or p2")
-        if self.mode != CONTEXT_ARM_MODES[self.arm_id]:
-            raise ContractError("context arm and mode disagree")
-        for name, digest in (
-            ("policy_sha256", self.policy_sha256),
-            ("prompt_sha256", self.prompt_sha256),
-            ("tool_schema_sha256", self.tool_schema_sha256),
-        ):
-            require_sha256(digest, name)
-        body = {
-            "schema_version": self.schema_version,
-            "experiment_id": self.experiment_id,
-            "case_id": self.case_id,
-            "arm_id": self.arm_id,
-            "mode": self.mode,
-            "policy_sha256": self.policy_sha256,
-            "prompt_sha256": self.prompt_sha256,
-            "tool_schema_sha256": self.tool_schema_sha256,
-        }
-        if self.arm_sha256 != canonical_sha256(body):
-            raise ContractError("harness context arm digest mismatch")
-
-
-def build_harness_context_arm(
-    *,
-    experiment_id: str,
-    case_id: str,
-    policy: TaskDependencyContextPolicyV1,
-    prompt_sha256: str,
-    tool_schema_sha256: str,
-) -> HarnessContextArmV1:
-    body = {
-        "schema_version": "chemsmart.harness-context-arm.v1",
-        "experiment_id": require_identifier(experiment_id, "experiment_id"),
-        "case_id": require_identifier(case_id, "case_id"),
-        "arm_id": policy.arm_id,
-        "mode": policy.mode,
-        "policy_sha256": policy.policy_sha256,
-        "prompt_sha256": require_sha256(prompt_sha256, "prompt_sha256"),
-        "tool_schema_sha256": require_sha256(
-            tool_schema_sha256, "tool_schema_sha256"
-        ),
-    }
-    return HarnessContextArmV1(**body, arm_sha256=canonical_sha256(body))
-
 
 def _plan_graph(
     plan: ScientificWorkflowPlanV2,
@@ -810,10 +556,10 @@ def select_task_dependency_context(
     selection_id: str,
     plan: ScientificWorkflowPlanV2,
     target_node_id: str,
-    policy: TaskDependencyContextPolicyV1,
+    policy: TaskDependencyContextPolicyV2,
     evidence_refs: Sequence[PredecessorEvidenceRefV1] = (),
-) -> tuple[TaskDependencyContextV1 | None, ContextSelectionReceiptV1]:
-    """Select an exact P0/P1/P2 context and issue an observable receipt.
+) -> tuple[TaskDependencyContextV2 | None, ContextSelectionReceiptV1]:
+    """Select an exact host-policy context and issue an observable receipt.
 
     Required records are never truncated.  If the selected packet would exceed
     the public byte budget, no context is returned and the receipt records a
@@ -829,11 +575,11 @@ def select_task_dependency_context(
     direct, transitive = _ancestor_sets(normalized_target, parents)
     ancestors = direct.union(transitive)
 
-    if policy.mode == "none":
+    if policy.mode == "target_only":
         included = {normalized_target}
         exposed_direct: set[str] = set()
         exposed_transitive: set[str] = set()
-    elif policy.mode == "full_history":
+    elif policy.mode == "ordered_predecessors":
         included = set(node_ids[: positions[normalized_target] + 1])
         exposed_direct = direct
         exposed_transitive = transitive
@@ -858,7 +604,7 @@ def select_task_dependency_context(
     )
     selected_edges = (
         ()
-        if policy.mode == "none"
+        if policy.mode == "target_only"
         else tuple(
             sorted(
                 (
@@ -954,7 +700,7 @@ def select_task_dependency_context(
         return None, receipt
 
     context_body = {
-        "schema_version": "chemsmart.task-dependency-context.v1",
+        "schema_version": "chemsmart.task-dependency-context.v2",
         "workflow_id": plan.workflow_id,
         "plan_sha256": plan.plan_sha256,
         "target_node_id": normalized_target,
@@ -972,7 +718,7 @@ def select_task_dependency_context(
         "selected_edges": selected_edges,
         "evidence_refs": selected_refs_tuple,
     }
-    context = TaskDependencyContextV1(
+    context = TaskDependencyContextV2(
         **context_body, context_sha256=canonical_sha256(context_body)
     )
     receipt_body = {
@@ -993,89 +739,19 @@ def select_task_dependency_context(
     return context, receipt
 
 
-def build_context_manifest_v2(
-    *,
-    manifest_id: str,
-    plan: ScientificWorkflowPlanV2,
-    context: TaskDependencyContextV1,
-    selection_receipt: ContextSelectionReceiptV1,
-    source_sha256s: Sequence[str],
-    artifact_sha256s: Sequence[str],
-    tool_schema_sha256: str,
-    allowed_tools: Sequence[str],
-    token_budget: int,
-    tool_call_budget: int,
-    wall_time_seconds: int,
-) -> ContextManifestV2:
-    """Bind the selected records and context receipt to specialist budgets."""
-
-    if (
-        context.workflow_id != plan.workflow_id
-        or context.plan_sha256 != plan.plan_sha256
-    ):
-        raise ContractError("dependency context belongs to another plan")
-    if (
-        selection_receipt.workflow_id != context.workflow_id
-        or selection_receipt.plan_sha256 != context.plan_sha256
-        or selection_receipt.target_node_id != context.target_node_id
-        or selection_receipt.policy_sha256 != context.policy_sha256
-        or selection_receipt.context_sha256 != context.context_sha256
-    ):
-        raise ContractError("selection receipt belongs to another context")
-    if selection_receipt.status != "selected":
-        raise ContractError("blocked context cannot produce a manifest")
-    evidence_ref_sha256s = tuple(
-        item.evidence_ref_sha256 for item in context.evidence_refs
-    )
-    if (
-        selection_receipt.included_evidence_ref_sha256s
-        != evidence_ref_sha256s
-    ):
-        raise ContractError("selection receipt records differ from context")
-    record_sha256s = tuple(
-        sorted(item.record_sha256 for item in context.evidence_refs)
-    )
-    body = {
-        "schema_version": "chemsmart.context-manifest.v2",
-        "manifest_id": require_identifier(manifest_id, "manifest_id"),
-        "workflow_id": plan.workflow_id,
-        "task_spec_sha256": plan.task_spec_sha256,
-        "scientific_identity_sha256": plan.scientific_identity_sha256,
-        "target_node_id": context.target_node_id,
-        "dependency_context_sha256": context.context_sha256,
-        "selection_receipt_sha256": selection_receipt.receipt_sha256,
-        "included_record_sha256s": record_sha256s,
-        "source_sha256s": tuple(sorted(set(source_sha256s))),
-        "artifact_sha256s": tuple(sorted(set(artifact_sha256s))),
-        "tool_schema_sha256": require_sha256(
-            tool_schema_sha256, "tool_schema_sha256"
-        ),
-        "allowed_tools": tuple(sorted(set(allowed_tools))),
-        "token_budget": int(token_budget),
-        "tool_call_budget": int(tool_call_budget),
-        "wall_time_seconds": int(wall_time_seconds),
-    }
-    return ContextManifestV2(**body, manifest_sha256=canonical_sha256(body))
 
 
 __all__ = [
-    "CONTEXT_ARM_MODES",
     "CONTEXT_MODES",
     "CONTEXT_SELECTOR_VERSION",
-    "ContextManifestV2",
     "ContextSelectionReceiptV1",
     "EvidenceExclusionV1",
-    "HarnessContextArmV1",
     "PredecessorEvidenceRefV1",
-    "SpecialistTaskPacketV2",
-    "TaskDependencyContextPolicyV1",
-    "TaskDependencyContextV1",
-    "build_context_manifest_v2",
+    "TaskDependencyContextPolicyV2",
+    "TaskDependencyContextV2",
     "build_dependency_context_public_projection",
-    "build_harness_context_arm",
     "build_predecessor_evidence_ref",
     "bind_selected_public_records",
-    "build_specialist_task_packet_v2",
     "build_task_dependency_context_policy",
     "select_task_dependency_context",
 ]

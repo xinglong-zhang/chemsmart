@@ -583,10 +583,11 @@ def build_command_compiled_tool_surface(
                 },
                 "frequency_scale_factor": {
                     "type": "number",
-                    "enum": [1.0],
+                    "exclusiveMinimum": 0,
                     "description": (
-                        "Frequency scale factor. The current shared engine does "
-                        "not apply scaling, so only 1.0 is accepted."
+                        "Positive multiplicative scale applied to every "
+                        "vibrational frequency before harmonic or "
+                        "quasi-harmonic thermochemistry; omitted means 1.0."
                     ),
                 },
             },
@@ -675,8 +676,7 @@ def build_command_compiled_tool_surface(
         ),
     )
     if not skills_enabled():
-        # Skills off restores the exact pre-skill tool-schema digest, so a
-        # skills-off arm reproduces a recorded baseline byte for byte.
+        # Keep the model-visible surface aligned with the host feature state.
         tools = tuple(
             item
             for item in tools
@@ -724,30 +724,6 @@ def build_approved_execution_tool_surface(
     return AgentToolSurfaceV1(
         schema_version="chemsmart.agent-tool-surface.v1",
         profile="command_compiled_approved_execution",
-        tool_definitions=tools,
-        tool_schema_sha256=canonical_sha256(tools),
-    )
-
-
-def build_single_agent_baseline_tool_surface(
-    registry: ProgramCapabilityRegistryV1 | None = None,
-) -> AgentToolSurfaceV1:
-    """H0 surface with host-prebound capability/program/environment state."""
-
-    full = build_command_compiled_tool_surface(registry)
-    excluded = {
-        "inspect_program_capability",
-        "inspect_program_environment",
-        "assess_program_candidate",
-    }
-    tools = tuple(
-        item
-        for item in full.tool_definitions
-        if item["function"]["name"] not in excluded
-    )
-    return AgentToolSurfaceV1(
-        schema_version="chemsmart.agent-tool-surface.v1",
-        profile="single_agent_typed_baseline",
         tool_definitions=tools,
         tool_schema_sha256=canonical_sha256(tools),
     )
@@ -1409,6 +1385,59 @@ def _analysis_intent_node_schema() -> dict:
             # accepting an omitted key makes an honest stateless analysis fail.
             "temperature_k": _nullable_positive_number(),
             "pressure_atm": _nullable_positive_number(),
+            "concentration_mol_l": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": (
+                    "Thermochemistry-only solution standard state in mol/L. "
+                    "Omit for the pressure-defined ideal-gas standard state."
+                ),
+            },
+            "entropy_method": {
+                "type": "string",
+                "enum": ["rrho", "grimme", "truhlar"],
+                "description": (
+                    "Thermochemistry-only entropy treatment; omitted means "
+                    "harmonic RRHO."
+                ),
+            },
+            "entropy_cutoff_cm1": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": (
+                    "Thermochemistry-only entropy cutoff required for "
+                    "Grimme or Truhlar treatment."
+                ),
+            },
+            "enthalpy_cutoff_cm1": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": (
+                    "Thermochemistry-only Head-Gordon qRRHO enthalpy cutoff."
+                ),
+            },
+            "alpha": {
+                "type": "integer",
+                "minimum": 1,
+                "description": (
+                    "Thermochemistry-only damping exponent; omitted means 4."
+                ),
+            },
+            "use_weighted_mass": {
+                "type": "boolean",
+                "description": (
+                    "Thermochemistry-only isotope-mass convention; omitted "
+                    "uses most-abundant isotopes."
+                ),
+            },
+            "frequency_scale_factor": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": (
+                    "Thermochemistry-only positive multiplicative frequency "
+                    "scale; omitted means 1.0."
+                ),
+            },
             "support_state": {
                 "type": "string",
                 "enum": ["planned", "blocked_unsupported"],
@@ -1553,5 +1582,4 @@ __all__ = [
     "AgentToolSurfaceV1",
     "build_approved_execution_tool_surface",
     "build_command_compiled_tool_surface",
-    "build_single_agent_baseline_tool_surface",
 ]

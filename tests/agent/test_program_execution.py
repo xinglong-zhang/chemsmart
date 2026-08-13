@@ -21,7 +21,7 @@ from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
     _typed_result_validation_findings,
     build_execution_resource_spec,
-    build_locked_pyscf_sp_opt_hess_approval,
+    build_producer_edge_rule,
     build_program_execution_invocation,
     build_program_execution_receipt,
     build_program_result_validation_receipt,
@@ -73,7 +73,7 @@ def _artifact(path, *, artifact_id, kind):
     )
 
 
-def _locked_resources(*, node_timeout_seconds=600):
+def _test_resources(*, node_timeout_seconds=600):
     return build_execution_resource_spec(
         execution_target="run",
         cores=4,
@@ -84,7 +84,7 @@ def _locked_resources(*, node_timeout_seconds=600):
     )
 
 
-def _locked_approval(tmp_path, *, node_timeout_seconds=600):
+def _test_approval(tmp_path, *, node_timeout_seconds=600):
     geometry_path = tmp_path / "water.xyz"
     geometry_path.write_text(
         "3\nwater\nO 0.0 0.0 0.1174\n"
@@ -117,31 +117,77 @@ def _locked_approval(tmp_path, *, node_timeout_seconds=600):
         ),
         encoding="utf-8",
     )
-    resources = _locked_resources(
+    resources = _test_resources(
         node_timeout_seconds=node_timeout_seconds
     )
-    approval = build_locked_pyscf_sp_opt_hess_approval(
-        approval_id="water-approval",
-        workflow_id="water-pyscf-workflow",
-        task_spec_sha256="a" * 64,
-        approved_workspace=tmp_path,
-        resources=resources,
-        initial_artifact=_artifact(
-            geometry_path,
-            artifact_id="geometry.water.initial",
-            kind="geometry_xyz",
-        ),
-        project_artifact=_artifact(
+    edge = build_producer_edge_rule(
+        producer_node_id="opt-initial",
+        consumer_node_id="hess-optimized",
+        artifact_kind="geometry_xyz",
+        selection_rule="validated_optimized_geometry",
+    )
+    initial_common = {
+        "program": "pyscf",
+        "engine": "cpu",
+        "project_artifact_sha256": _artifact(
             project_path,
             artifact_id="project.water.pyscf",
             kind="project_yaml",
+        ).sha256,
+        "charge": 0,
+        "multiplicity": 1,
+        "input_mode": "initial",
+        "initial_artifact_id": "geometry.water.initial",
+        "initial_artifact_sha256": file_sha256(geometry_path),
+        "scientific_identity_sha256": "d" * 64,
+        "producer_edge_sha256": "",
+    }
+    nodes = (
+        ApprovedNodeBindingV1(
+            node_id="sp-initial",
+            jobtype="sp",
+            settings_sha256=canonical_sha256({"stage": "sp"}),
+            **initial_common,
         ),
+        ApprovedNodeBindingV1(
+            node_id="opt-initial",
+            jobtype="opt",
+            settings_sha256=canonical_sha256({"stage": "opt"}),
+            **initial_common,
+        ),
+        ApprovedNodeBindingV1(
+            node_id="hess-optimized",
+            program="pyscf",
+            engine="cpu",
+            jobtype="hess",
+            project_artifact_sha256=initial_common["project_artifact_sha256"],
+            settings_sha256=canonical_sha256({"stage": "hess"}),
+            charge=0,
+            multiplicity=1,
+            input_mode="producer",
+            initial_artifact_id="",
+            initial_artifact_sha256="",
+            scientific_identity_sha256="",
+            producer_edge_sha256=edge.edge_sha256,
+        ),
+    )
+    approval = build_workflow_execution_approval(
+        approval_id="test-approval",
+        workflow_id="test-pyscf-workflow",
+        workflow_sha256=canonical_sha256(
+            {"nodes": nodes, "producer_edges": (edge,)}
+        ),
+        task_spec_sha256="a" * 64,
+        approved_workspace=tmp_path,
+        resources=resources,
+        node_bindings=nodes,
+        producer_edges=(edge,),
     )
     return approval
 
 
-def test_locked_pyscf_approval_binds_order_and_optimized_handoff(tmp_path):
-    approval = _locked_approval(tmp_path)
+def test_generic_approval_binds_order_and_optimized_handoff(tmp_path):
+    approval = _test_approval(tmp_path)
 
     assert tuple(item.node_id for item in approval.node_bindings) == (
         "sp-initial",
@@ -157,9 +203,12 @@ def test_locked_pyscf_approval_binds_order_and_optimized_handoff(tmp_path):
     )
 
 
-def test_locked_pyscf_approval_rejects_non_ten_minute_timeout(tmp_path):
-    with pytest.raises(ContractError, match="locked CPU profile"):
-        _locked_approval(tmp_path, node_timeout_seconds=5400)
+def test_generic_approval_accepts_operator_selected_timeout(tmp_path):
+    approval = _test_approval(tmp_path, node_timeout_seconds=5400)
+
+    assert approval.resource_sha256 == _test_resources(
+        node_timeout_seconds=5400
+    ).resource_sha256
 
 
 def test_execution_host_rejects_legacy_v1_approval_before_invocation_lookup(
@@ -170,7 +219,7 @@ def test_execution_host_rejects_legacy_v1_approval_before_invocation_lookup(
         profile="command_compiled_approved_execution"
     )
     host.execution_receipts = {}
-    host.workflow_execution_approval = _locked_approval(tmp_path)
+    host.workflow_execution_approval = _test_approval(tmp_path)
 
     with pytest.raises(
         ContractError,
@@ -266,7 +315,7 @@ def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
         workflow_sha256="e" * 64,
         task_spec_sha256="a" * 64,
         approved_workspace=tmp_path,
-        resources=_locked_resources(),
+        resources=_test_resources(),
         node_bindings=(node,),
     )
     node = approval.node("water-neb")
@@ -277,7 +326,7 @@ def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
         input_artifact=reactant,
         scientific_identity_sha256=node.scientific_identity_sha256,
         environment_receipt_sha256="b" * 64,
-        resources=_locked_resources(),
+        resources=_test_resources(),
         argv=("chemsmart", "run", "orca", "neb"),
         auxiliary_input_artifacts={"ending_xyzfile": product},
     )
@@ -301,15 +350,15 @@ def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
             input_artifact=reactant,
             scientific_identity_sha256=node.scientific_identity_sha256,
             environment_receipt_sha256="b" * 64,
-            resources=_locked_resources(),
+            resources=_test_resources(),
             argv=("chemsmart", "run", "orca", "neb"),
             auxiliary_input_artifacts={"ending_xyzfile": product},
         )
 
 
 def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
-    approval = _locked_approval(tmp_path)
-    resources = _locked_resources()
+    approval = _test_approval(tmp_path)
+    resources = _test_resources()
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
         artifact_id="project.water.pyscf",
@@ -418,7 +467,7 @@ def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
 
 
 def test_execution_receipt_separates_wrapper_and_child_status(tmp_path):
-    approval = _locked_approval(tmp_path)
+    approval = _test_approval(tmp_path)
     node = approval.node("sp-initial")
     invocation = build_program_execution_invocation(
         node_id=node.node_id,
@@ -435,7 +484,7 @@ def test_execution_receipt_separates_wrapper_and_child_status(tmp_path):
         ),
         scientific_identity_sha256=node.scientific_identity_sha256,
         environment_receipt_sha256="b" * 64,
-        resources=_locked_resources(),
+        resources=_test_resources(),
         argv=("chemsmart", "run", "pyscf", "sp"),
     )
 
@@ -488,7 +537,7 @@ def test_execution_receipt_separates_wrapper_and_child_status(tmp_path):
 
 
 def test_execution_receipt_binds_resolvable_result_validation(tmp_path):
-    approval = _locked_approval(tmp_path)
+    approval = _test_approval(tmp_path)
     node = approval.node("sp-initial")
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
@@ -507,7 +556,7 @@ def test_execution_receipt_binds_resolvable_result_validation(tmp_path):
         input_artifact=initial,
         scientific_identity_sha256=node.scientific_identity_sha256,
         environment_receipt_sha256="b" * 64,
-        resources=_locked_resources(),
+        resources=_test_resources(),
         argv=("chemsmart", "run", "pyscf", "sp"),
     )
     output_path = tmp_path / "observable.json"
@@ -1035,7 +1084,7 @@ def test_run_environment_libxc_substitution_is_rejected_semantically(tmp_path):
 def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
     tmp_path, bind_source_artifact
 ):
-    _locked_approval(tmp_path)
+    _test_approval(tmp_path)
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
         artifact_id="project.water.pyscf",

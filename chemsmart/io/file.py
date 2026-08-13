@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
@@ -742,15 +743,409 @@ class PKaCDXFile(CDXFile):
         """Return the 0-based RDKit index for a CDXML node id."""
         if rdkit_mol is None:
             return None
-        target_id = int(cdxml_id)
+        try:
+            target_id = int(cdxml_id)
+        except (TypeError, ValueError):
+            return None
         for atom in rdkit_mol.GetAtoms():
             if atom.HasProp("_CDX_ATOM_ID"):
                 if atom.GetIntProp("_CDX_ATOM_ID") == target_id:
                     return atom.GetIdx()
         return None
 
+    def _rdkit_atom_idx_by_cdxml_topology(self, rdkit_mol, cdxml_id):
+        """Map one XML atom through exact identity or rooted graph topology.
+
+        RDKit versions differ in whether condensed-label atoms retain
+        ``_CDX_ATOM_ID``.  When the exact target ID is absent, flatten the
+        target's complete CDXML fragment (including nested Fragment nodes and
+        their ExternalConnectionPoint), then compare its heavy-atom graph to
+        the RDKit graph.  Atomic number, formal charge, declared hydrogen
+        count, heavy degree, bond order, neighbour topology, and any surviving
+        CDXML-ID anchors all participate in the isomorphism.
+
+        Only a root atom shared by every valid mapping is accepted.  Missing
+        connection metadata, a graph mismatch, or symmetry that maps the XML
+        root onto multiple RDKit atoms therefore fails closed with ``None``.
+        """
+
+        exact = self._rdkit_atom_idx_by_cdxml_id(rdkit_mol, cdxml_id)
+        if exact is not None:
+            return exact
+
+        root = self._parse_cdxml_root()
+        target = next(
+            (
+                node
+                for node in root.iter("n")
+                if node.get("id") == str(cdxml_id)
+            ),
+            None,
+        )
+        if target is None:
+            return None
+
+        xml_topology = self._cdxml_heavy_graph(root, target)
+        rdkit_topology = self._rdkit_heavy_graph(rdkit_mol)
+        if xml_topology is None or rdkit_topology is None:
+            return None
+        xml_graph, target_id = xml_topology
+        if target_id not in xml_graph:
+            return None
+
+        anchors = {
+            xml_id: rdkit_idx
+            for xml_id in xml_graph
+            if (
+                rdkit_idx := self._rdkit_atom_idx_by_cdxml_id(
+                    rdkit_mol, xml_id
+                )
+            )
+            is not None
+        }
+        for xml_id in xml_graph:
+            xml_graph.nodes[xml_id]["anchor"] = (
+                xml_id if xml_id in anchors else None
+            )
+        for rdkit_idx in rdkit_topology:
+            rdkit_topology.nodes[rdkit_idx]["anchor"] = None
+        for xml_id, rdkit_idx in anchors.items():
+            if rdkit_idx not in rdkit_topology:
+                return None
+            if rdkit_topology.nodes[rdkit_idx]["anchor"] is not None:
+                return None
+            rdkit_topology.nodes[rdkit_idx]["anchor"] = xml_id
+
+        def node_match(xml_node, rdkit_node):
+            return (
+                xml_node["atomic_number"] == rdkit_node["atomic_number"]
+                and xml_node["formal_charge"] == rdkit_node["formal_charge"]
+                and xml_node["heavy_degree"] == rdkit_node["heavy_degree"]
+                and (
+                    xml_node["hydrogen_count"] is None
+                    or xml_node["hydrogen_count"]
+                    == rdkit_node["hydrogen_count"]
+                )
+                and xml_node["anchor"] == rdkit_node["anchor"]
+            )
+
+        def edge_match(xml_edge, rdkit_edge):
+            return xml_edge["bond_order"] == rdkit_edge["bond_order"]
+
+        root_candidates = set()
+        for component in nx.connected_components(rdkit_topology):
+            rdkit_component = rdkit_topology.subgraph(component).copy()
+            if (
+                len(rdkit_component) != len(xml_graph)
+                or rdkit_component.number_of_edges()
+                != xml_graph.number_of_edges()
+            ):
+                continue
+            matcher = nx.algorithms.isomorphism.GraphMatcher(
+                xml_graph,
+                rdkit_component,
+                node_match=node_match,
+                edge_match=edge_match,
+            )
+            for mapping in matcher.isomorphisms_iter():
+                root_candidates.add(mapping[target_id])
+                if len(root_candidates) > 1:
+                    return None
+        return next(iter(root_candidates)) if root_candidates else None
+
+    @staticmethod
+    def _cdxml_bond_order(order):
+        """Normalize a CDXML bond order to the topology vocabulary."""
+
+        token = str(order or "1").strip().casefold()
+        named = {
+            "single": "single",
+            "double": "double",
+            "triple": "triple",
+            "aromatic": "aromatic",
+        }
+        if token in named:
+            return named[token]
+        try:
+            numeric = float(token)
+        except (TypeError, ValueError):
+            return None
+        for expected, label in (
+            (1.0, "single"),
+            (1.5, "aromatic"),
+            (2.0, "double"),
+            (3.0, "triple"),
+        ):
+            if abs(numeric - expected) < 1e-8:
+                return label
+        return None
+
+    @staticmethod
+    def _rdkit_bond_order(bond):
+        """Normalize one RDKit bond to the topology vocabulary."""
+
+        if bond.GetIsAromatic():
+            return "aromatic"
+        numeric = float(bond.GetBondTypeAsDouble())
+        for expected, label in (
+            (1.0, "single"),
+            (2.0, "double"),
+            (3.0, "triple"),
+        ):
+            if abs(numeric - expected) < 1e-8:
+                return label
+        return None
+
+    def _cdxml_heavy_graph(self, root, target):
+        """Return the target component as a flattened heavy-atom XML graph."""
+
+        parent_by_element = {
+            child: parent for parent in root.iter() for child in parent
+        }
+        top_fragment = None
+        current = target
+        while current in parent_by_element:
+            current = parent_by_element[current]
+            if current.tag == "fragment":
+                top_fragment = current
+        if top_fragment is None:
+            return None
+
+        raw = nx.Graph()
+        nodes_by_id = {}
+        for node in top_fragment.iter("n"):
+            node_id = node.get("id")
+            if node_id is None or node_id in nodes_by_id:
+                return None
+            nodes_by_id[node_id] = node
+            node_type = node.get("NodeType")
+            kind = (
+                "fragment"
+                if node_type == "Fragment"
+                else (
+                    "port"
+                    if node_type == "ExternalConnectionPoint"
+                    else "atom"
+                )
+            )
+            raw.add_node(node_id, kind=kind, element=node)
+
+        for bond in top_fragment.iter("b"):
+            begin, end = bond.get("B"), bond.get("E")
+            order = self._cdxml_bond_order(bond.get("Order"))
+            if (
+                begin not in raw
+                or end not in raw
+                or begin == end
+                or order is None
+                or raw.has_edge(begin, end)
+            ):
+                return None
+            raw.add_edge(
+                begin,
+                end,
+                bond_order=order,
+                bond_id=bond.get("id"),
+            )
+
+        def element_depth(element):
+            depth = 0
+            while element in parent_by_element:
+                element = parent_by_element[element]
+                depth += 1
+            return depth
+
+        fragment_nodes = sorted(
+            (
+                node
+                for node in top_fragment.iter("n")
+                if node.get("NodeType") == "Fragment"
+            ),
+            key=element_depth,
+            reverse=True,
+        )
+        for outer in fragment_nodes:
+            outer_id = outer.get("id")
+            inner = outer.find("fragment")
+            if outer_id not in raw or inner is None:
+                return None
+            ports = [
+                node
+                for node in inner.findall("n")
+                if node.get("NodeType") == "ExternalConnectionPoint"
+            ]
+            port_ids = [port.get("id") for port in ports]
+            if not ports or any(port_id not in raw for port_id in port_ids):
+                return None
+            parent_edges = [
+                (neighbor, dict(raw.edges[outer_id, neighbor]))
+                for neighbor in raw.neighbors(outer_id)
+            ]
+            port_anchors = {}
+            for port_id in port_ids:
+                neighbors = list(raw.neighbors(port_id))
+                if len(neighbors) != 1:
+                    return None
+                port_anchors[port_id] = neighbors[0]
+
+            # Every ExternalConnectionPoint represents one bond from the
+            # condensed fragment to its parent graph.  Without an exact
+            # one-to-one parent connection, deleting the wrapper and port
+            # would fabricate a flattened topology from incomplete XML.
+            if len(parent_edges) != len(ports):
+                return None
+            if len(ports) == 1:
+                paired = [(parent_edges[0], port_ids[0])]
+            else:
+                bond_ordering = [
+                    token
+                    for token in str(outer.get("BondOrdering") or "").split()
+                    if token != "0"
+                ]
+                parent_by_bond = {
+                    edge[1].get("bond_id"): edge
+                    for edge in parent_edges
+                    if edge[1].get("bond_id") is not None
+                }
+                if (
+                    len(bond_ordering) != len(ports)
+                    or len(parent_by_bond) != len(parent_edges)
+                    or set(bond_ordering) != set(parent_by_bond)
+                ):
+                    return None
+                paired = []
+                used_bonds = set()
+                used_ordinals = set()
+                for port in ports:
+                    try:
+                        ordinal = int(port.get("ExternalConnectionNum"))
+                        if ordinal < 1 or ordinal > len(bond_ordering):
+                            return None
+                        bond_id = bond_ordering[ordinal - 1]
+                        parent_edge = parent_by_bond[bond_id]
+                    except (TypeError, ValueError, IndexError, KeyError):
+                        return None
+                    if bond_id in used_bonds or ordinal in used_ordinals:
+                        return None
+                    used_bonds.add(bond_id)
+                    used_ordinals.add(ordinal)
+                    paired.append((parent_edge, port.get("id")))
+            for (parent_neighbor, edge), port_id in paired:
+                anchor = port_anchors[port_id]
+                if parent_neighbor == anchor or raw.has_edge(
+                    parent_neighbor, anchor
+                ):
+                    return None
+                raw.add_edge(
+                    parent_neighbor,
+                    anchor,
+                    bond_order=edge["bond_order"],
+                    bond_id=edge.get("bond_id"),
+                )
+            raw.remove_node(outer_id)
+            for port_id in port_ids:
+                raw.remove_node(port_id)
+
+        target_id = target.get("id")
+        if target_id not in raw or raw.nodes[target_id]["kind"] != "atom":
+            return None
+        component = set(nx.node_connected_component(raw, target_id))
+        if any(raw.nodes[node_id]["kind"] != "atom" for node_id in component):
+            return None
+
+        heavy = nx.Graph()
+        for node_id in component:
+            node = raw.nodes[node_id]["element"]
+            atomic_number = int(node.get("Element", "6"))
+            if atomic_number == 1:
+                continue
+            explicit_hydrogens = sum(
+                int(raw.nodes[neighbor]["element"].get("Element", "6")) == 1
+                for neighbor in raw.neighbors(node_id)
+            )
+            declared_hydrogens = node.get("NumHydrogens")
+            hydrogen_count = (
+                int(declared_hydrogens) + explicit_hydrogens
+                if declared_hydrogens is not None
+                else explicit_hydrogens or None
+            )
+            heavy.add_node(
+                node_id,
+                atomic_number=atomic_number,
+                formal_charge=int(node.get("Charge", "0")),
+                hydrogen_count=hydrogen_count,
+            )
+        for begin, end, edge in raw.subgraph(component).edges(data=True):
+            if begin in heavy and end in heavy:
+                heavy.add_edge(begin, end, bond_order=edge["bond_order"])
+
+        aromatic_edges = set()
+        for cycle in nx.cycle_basis(heavy):
+            if len(cycle) not in {5, 6}:
+                continue
+            edges = [
+                (cycle[index], cycle[(index + 1) % len(cycle)])
+                for index in range(len(cycle))
+            ]
+            orders = [heavy.edges[edge]["bond_order"] for edge in edges]
+            if (
+                set(orders).issubset({"single", "double"})
+                and orders.count("double") == len(cycle) // 2
+                and all(
+                    heavy.nodes[node_id]["atomic_number"] in {6, 7, 8, 15, 16}
+                    for node_id in cycle
+                )
+            ):
+                aromatic_edges.update(frozenset(edge) for edge in edges)
+        for begin, end in heavy.edges:
+            if frozenset((begin, end)) in aromatic_edges:
+                heavy.edges[begin, end]["bond_order"] = "aromatic"
+        for node_id in heavy:
+            heavy.nodes[node_id]["heavy_degree"] = heavy.degree[node_id]
+        if target_id not in heavy:
+            return None
+        return heavy, target_id
+
+    def _rdkit_heavy_graph(self, rdkit_mol):
+        """Return a heavy-atom RDKit graph using the XML topology vocabulary."""
+
+        if rdkit_mol is None:
+            return None
+        graph = nx.Graph()
+        for atom in rdkit_mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
+            graph.add_node(
+                atom.GetIdx(),
+                atomic_number=atom.GetAtomicNum(),
+                formal_charge=atom.GetFormalCharge(),
+                hydrogen_count=sum(
+                    neighbor.GetAtomicNum() == 1
+                    for neighbor in atom.GetNeighbors()
+                ),
+            )
+        for bond in rdkit_mol.GetBonds():
+            begin, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            if begin not in graph or end not in graph:
+                continue
+            order = self._rdkit_bond_order(bond)
+            if order is None or graph.has_edge(begin, end):
+                return None
+            graph.add_edge(begin, end, bond_order=order)
+        for atom_idx in graph:
+            graph.nodes[atom_idx]["heavy_degree"] = graph.degree[atom_idx]
+        return graph
+
     def _nested_deprotonatable_cdxml_ids(self, node_cdxml_id):
-        """Return nested atom ids with explicit/implicit H inside a fragment node."""
+        """Resolve one deprotonatable nested atom by CDXML identity/topology.
+
+        A condensed ChemDraw label is represented by an outer ``Fragment``
+        node whose RDKit atom identity belongs to an inner node.  Bind the
+        acidic heavy atom only when exactly one H-bearing N/O/S/H node is in
+        the component attached to the outer fragment's external connection
+        point.  Document order is not chemical identity: multiple candidates
+        are ambiguous and must fail rather than selecting the first one.
+        """
         root = self._parse_cdxml_root()
         node = None
         for candidate in root.iter("n"):
@@ -764,40 +1159,67 @@ class PKaCDXFile(CDXFile):
         if inner_fragment is None:
             return []
 
+        nodes = {
+            child.get("id"): child
+            for child in inner_fragment.findall("n")
+            if child.get("id") is not None
+        }
+        adjacency = {node_id: set() for node_id in nodes}
+        for bond in inner_fragment.findall("b"):
+            begin, end = bond.get("B"), bond.get("E")
+            if begin in adjacency and end in adjacency:
+                adjacency[begin].add(end)
+                adjacency[end].add(begin)
+        external_ids = {
+            node_id
+            for node_id, child in nodes.items()
+            if child.get("NodeType") == "ExternalConnectionPoint"
+        }
+        reachable = set(external_ids)
+        frontier = list(external_ids)
+        while frontier:
+            current = frontier.pop()
+            for neighbor in adjacency[current] - reachable:
+                reachable.add(neighbor)
+                frontier.append(neighbor)
+
         ids = []
         for child in inner_fragment.findall("n"):
             if child.get("NodeType") == "ExternalConnectionPoint":
+                continue
+            child_id = child.get("id")
+            if external_ids and child_id not in reachable:
                 continue
             num_h_attr = child.get("NumHydrogens")
             if num_h_attr is None or int(num_h_attr) < 1:
                 continue
             element = int(child.get("Element", "0"))
             if element in (1, 7, 8, 16):
-                child_id = child.get("id")
                 if child_id is not None:
                     ids.append(child_id)
+        if len(ids) > 1:
+            raise ValueError(
+                "Condensed CDXML fragment has multiple topology-connected "
+                "H-bearing acidic-atom candidates: " + ", ".join(ids)
+            )
         return ids
 
     def _rdkit_heavy_idx_for_implicit_h(
         self, rdkit_mol_h, atom, local_idx=None
     ):
         """Map a coloured implicit-H heavy atom to a post-AddHs RDKit index."""
-        heavy_idx = self._rdkit_atom_idx_by_cdxml_id(
+        nested_ids = self._nested_deprotonatable_cdxml_ids(atom["cdxml_id"])
+        if nested_ids:
+            # A nested fragment's outer node is not an RDKit atom.  Preserve
+            # the exact inner XML identity and never fall back to a positional
+            # index that may refer to another heavy atom.
+            return self._rdkit_atom_idx_by_cdxml_topology(
+                rdkit_mol_h, nested_ids[0]
+            )
+
+        heavy_idx = self._rdkit_atom_idx_by_cdxml_topology(
             rdkit_mol_h, atom["cdxml_id"]
         )
-        if heavy_idx is None:
-            for nested_id in self._nested_deprotonatable_cdxml_ids(
-                atom["cdxml_id"]
-            ):
-                heavy_idx = self._rdkit_atom_idx_by_cdxml_id(
-                    rdkit_mol_h, nested_id
-                )
-                if heavy_idx is not None:
-                    break
-
-        if heavy_idx is None and local_idx is not None:
-            if 0 <= local_idx < rdkit_mol_h.GetNumAtoms():
-                heavy_idx = local_idx
         return heavy_idx
 
     def _proton_index_from_rdkit_heavy(self, rdkit_mol_h, heavy_idx, atom):

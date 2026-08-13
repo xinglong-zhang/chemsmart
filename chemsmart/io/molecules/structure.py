@@ -27,6 +27,10 @@ p = pt()
 logger = logging.getLogger(__name__)
 
 
+class RDKitVolumeUnavailableError(ValueError):
+    """RDKit did not establish a physically meaningful molecular volume."""
+
+
 class Molecule:
     """Class to represent a molcular structure.
 
@@ -636,11 +640,30 @@ class Molecule:
 
     @property
     def vdw_volume_from_rdkit(self):
-        """Calculate the van der Waals volume of the molecule using RDKit."""
+        """Calculate the van der Waals volume using RDKit, or fail closed.
+
+        A non-empty finite 3-D molecule has a strictly positive occupied
+        volume.  RDKit returning zero or a non-finite sentinel therefore does
+        not establish a scientific quantity and must not be confused with a
+        valid zero-volume result or silently replaced by another algorithm.
+        """
         from rdkit.Chem.rdMolDescriptors import DoubleCubicLatticeVolume
 
+        coordinates = np.asarray(self.positions, dtype=float)
+        if coordinates.shape != (self.num_atoms, 3) or not np.all(
+            np.isfinite(coordinates)
+        ):
+            raise RDKitVolumeUnavailableError(
+                "RDKit VDW volume requires finite Cartesian coordinates "
+                "with shape (number_of_atoms, 3)."
+            )
         dclv = DoubleCubicLatticeVolume(self.to_rdkit())
-        volume = dclv.GetVDWVolume()
+        volume = float(dclv.GetVDWVolume())
+        if not np.isfinite(volume) or volume <= 0.0:
+            raise RDKitVolumeUnavailableError(
+                "RDKit did not establish a positive finite VDW volume; "
+                f"observed {volume!r} angstrom^3."
+            )
         return volume
 
     @property

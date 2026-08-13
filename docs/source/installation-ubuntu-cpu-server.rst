@@ -1,192 +1,42 @@
-Ubuntu x86 CPU Server and Private Container
-############################################
+Ubuntu CPU Target-Host Example
+##############################
 
-This page defines the first portable ChemSmart execution environment for an
-x86-64 Ubuntu CPU server. The preferred deployment is the private, pinned CPU
-research image. A source installation remains available for development, but
-it is not the reference benchmark environment.
+This page is one target-host example for running CHEMSMART on an Ubuntu CPU
+server. It separates the CHEMSMART controller from external chemistry programs
+and introduces real execution in stages. It is not a universal reference:
+verify architecture, scheduler, resources and program compatibility on the
+actual machine.
 
-Image scope
-===========
+CHEMSMART does not distribute Gaussian, ORCA, xTB, NCIPLOT, PySCF, MPI, or
+provider credentials. Install and license each required backend separately.
 
-The ``linux/amd64`` image contains ChemSmart 3.1.4, Python 3.10,
-PySCF 2.14.0, xTB 6.7.1, NumPy 1.26.4, h5py 3.16.0,
-geomeTRIC 1.1.1, pyscf-dispersion 1.5.0, PyMOL open source 3.1.0,
-Open Babel, FFmpeg, ASE, and the remaining locked ChemSmart dependencies.
+Example host prerequisites
+==========================
 
-GPU4PySCF, CUDA, Gaussian, and ORCA are not installed. A PySCF GPU request is
-rejected rather than silently executed on the CPU. Gaussian and ORCA require a
-future separately qualified deployment.
+- an actively maintained Ubuntu release on a supported architecture;
+- resources sized for the selected molecule and method;
+- local SSD scratch space sized for the selected methods;
+- outbound HTTPS for package installation and authorised model providers; and
+- a non-root account for all calculations.
 
-The candidate workflow builds the exact selected ``main`` commit and records
-that revision in the immutable image metadata. The private package is:
+Large post-HF, numerical Hessian, IRC, NEB, or conformer workflows may require
+substantially more memory, time, and scratch space. Resource requirements are
+part of the scientific plan, not universal defaults.
 
-.. code-block:: text
-
-   ghcr.io/hongjiseung-rok/chemsmart
-
-``cpu-<12-character-main-commit>`` is an immutable candidate. After human
-scientific review, the same digest may be promoted without rebuilding to
-``3.1.4-cpu`` and ``cpu-main``.
-
-Host requirements
-=================
-
-- Ubuntu 22.04 x86-64 with a current Docker Engine;
-- a non-root server account permitted to run Docker;
-- local writable workspace and scratch storage;
-- sufficient CPU and RAM for the selected method; and
-- authenticated read access to the private GHCR package.
-
-The image favors portability over AVX2, AVX-512, or ``-march=native`` tuning.
-VM provisioning and scheduler integration are later deployment stages.
-
-Authenticate and pull
-=====================
-
-Use a GitHub token with ``read:packages``. Pass it through stdin and clear the
-shell variable after login:
+System packages
+===============
 
 .. code-block:: bash
 
-   export GHCR_READ_TOKEN='REDACTED'
-   printf '%s' "$GHCR_READ_TOKEN" | \
-     docker login ghcr.io --username Hongjiseung-ROK --password-stdin
-   unset GHCR_READ_TOKEN
+   sudo apt-get update
+   sudo apt-get install -y build-essential ca-certificates curl git \
+     libegl1 libgl1 libsm6 libxext6 libxrender1
 
-   docker pull ghcr.io/hongjiseung-rok/chemsmart:3.1.4-cpu
+Install Miniforge, Mambaforge, Miniconda, or Anaconda for Linux x86-64 if the
+host does not already provide Conda.
 
-The package owner must verify that the GHCR package is private, remove
-inherited public-repository access if GitHub exposes it, and grant only the
-intended package access.
-
-Runtime contract
-================
-
-The process runs as UID/GID 1000, uses ``/workspace`` for calculations and
-``/scratch`` for temporary engine data, and writes caches under ``/tmp``.
-Make those locations writable and keep the remaining filesystem read-only:
-
-.. code-block:: bash
-
-   mkdir -p "$PWD/workspace" "$PWD/scratch"
-   chmod u+rwx "$PWD/workspace" "$PWD/scratch"
-
-   docker run --rm -it \
-     --read-only \
-     --ulimit stack=-1:-1 \
-     --cpus 8 \
-     --memory 32g \
-     --tmpfs /tmp:rw,nosuid,nodev,size=4g \
-     --mount "type=bind,src=$PWD/workspace,dst=/workspace" \
-     --mount "type=bind,src=$PWD/scratch,dst=/scratch" \
-     ghcr.io/hongjiseung-rok/chemsmart:3.1.4-cpu \
-     chemsmart --help
-
-xTB requires the unlimited stack setting. The container entrypoint raises the
-soft limit when allowed, but Docker's ``--ulimit stack=-1:-1`` establishes the
-host-side hard limit.
-
-Mounted directories must permit UID 1000 to write. On a shared server, use
-ACLs or administrator-managed ownership rather than world-writable modes.
-
-Configuration
-=============
-
-The image's ``~/.chemsmart/server/local.yaml`` declares local execution, two
-CPU cores, 8 GB RAM, zero GPUs, PySCF and xTB from ``/opt/conda/bin``, and
-``/scratch``. Resource flags on ``chemsmart run`` override these conservative
-defaults.
-
-Mount a site-specific server file if required:
-
-.. code-block:: bash
-
-   --mount type=bind,src=/secure/config/local.yaml,\
-   dst=/home/chemsmart/.chemsmart/server/local.yaml,readonly
-
-Do not store provider credentials, private registry tokens, or host secrets in
-an image layer, YAML committed to Git, OCI label, or Docker build argument.
-
-PySCF and xTB execution
-=======================
-
-Put project YAML and coordinates in the mounted workspace. The following
-commands use the same canonical path available to the agent.
-
-PySCF CPU single point:
-
-.. code-block:: bash
-
-   chemsmart run --server local --num-cores 4 --num-gpus 0 \
-     --mem-gb 16 --no-scratch pyscf \
-     --project /workspace/pyscf.yaml \
-     --filename /workspace/water.xyz sp
-
-xTB optimization:
-
-.. code-block:: bash
-
-   chemsmart run --server local --num-cores 4 --num-gpus 0 \
-     --mem-gb 16 xtb \
-     --project /workspace/xtb.yaml \
-     --filename /workspace/water.xyz opt
-
-For Hessian or frequency work, feed the validated optimized PySCF HDF5 or xTB
-``xtbopt.xyz`` to the downstream command. Do not silently reuse the initial
-geometry.
-
-Live agent observation
-======================
-
-The image contains an Alibaba Token Plan profile selecting
-``deepseek-v4-flash-0731`` with maximum reasoning effort, thinking
-continuation, and no fallback. Supply the key only as a permission-restricted,
-read-only runtime file:
-
-.. code-block:: bash
-
-   chmod 600 /secure/provider.env
-   chemsmart agent plan \
-     --provider alibaba-token-plan \
-     --task-file /workspace/task.md \
-     --secret-file /run/secrets/provider.env \
-     --workspace /workspace
-
-The Docker invocation must bind ``/secure/provider.env`` to
-``/run/secrets/provider.env`` read-only. ``agent plan`` may create project YAML
-and safe previews, but it cannot execute PySCF or xTB.
-
-Qualification and scientific claims
-===================================
-
-The manual candidate workflow builds natively on GitHub's Ubuntu 22.04
-x86-64 runner. It checks the read-only/non-root runtime and project previews,
-then performs real neutral-singlet water calculations:
-
-- PySCF B3LYP/def2-SVP SP, a separate D3BJ SP, geomeTRIC OPT, and HESS on the
-  optimized HDF5 geometry; and
-- GFN2-xTB SP, OPT, and HESS on the optimized ``xtbopt.xyz`` geometry.
-
-Acceptance requires exact engine versions, normal termination, charge 0,
-multiplicity 1, finite energy, optimization convergence, structured HDF5,
-Hessian symmetry, parsed water frequencies, and explicit optimized-geometry
-handoff. These checks qualify the installed engines; they do not grade agent
-intelligence or reproduce a large scientific benchmark.
-
-The workflow also records one preview-only model answer and visible tool
-trajectory. A computational chemist reads it directly and accepts any
-scientifically valid ChemSmart YAML/CLI decomposition. No answer-key, exact
-DAG comparator, token threshold, or tool-count score decides acceptance.
-
-Only the public calculation summary and visible agent observation are uploaded.
-Raw workspaces, HDF5 artifacts, verbose logs, event stores, provider-private
-reasoning, and credentials remain private.
-
-Source installation for development
-===================================
-
-For source-level development rather than reference benchmark execution:
+Install the CHEMSMART controller
+================================
 
 .. code-block:: bash
 
@@ -197,30 +47,187 @@ For source-level development rather than reference benchmark execution:
    make install-dev
    make configure
 
-A separate PySCF compute environment should use the same direct pins:
+The repository requires Python 3.10. ``make env`` uses ``environment.yml``;
+``make configure`` creates local configuration under ``~/.chemsmart``. Never
+commit that directory because it contains host paths and scheduler settings.
+
+Verify the controller before configuring engines:
 
 .. code-block:: bash
 
+   chemsmart --version
+   chemsmart --help
+   chemsmart run --help
+   chemsmart agent --help
+
+Configure a local CPU server file
+=================================
+
+Start from the generated ``~/.chemsmart/server/local.yaml`` and replace every
+example path with a path observed on the server. A minimal shape is:
+
+.. code-block:: yaml
+
+   SERVER:
+     SCHEDULER: null
+     QUEUE_NAME: null
+     NUM_HOURS: 1
+     MEM_GB: 32
+     NUM_CORES: 4
+     NUM_GPUS: 0
+     NUM_THREADS: 4
+     SUBMIT_COMMAND: null
+     SCRATCH_DIR: /scratch/USER/chemsmart
+     USE_HOSTS: false
+
+   ORCA:
+     EXEFOLDER: /opt/orca
+     LOCAL_RUN: true
+     SCRATCH: true
+     ENVARS: |
+       export PATH=/opt/openmpi/bin:$PATH
+       export LD_LIBRARY_PATH=/opt/openmpi/lib:$LD_LIBRARY_PATH
+
+   XTB:
+     EXEFOLDER: /opt/xtb/bin
+     LOCAL_RUN: true
+     SCRATCH: true
+
+   PYSCF:
+     EXEFOLDER: /opt/conda/envs/chemsmart-pyscf/bin
+     LOCAL_RUN: true
+     SCRATCH: false
+
+Use the actual username or a user-owned path in ``SCRATCH_DIR``. Do not paste
+``USER`` literally. Create the directory and verify write permission before
+execution.
+
+ORCA and MPI compatibility
+==========================
+
+Install ORCA from its authorised distribution. Parallel ORCA builds require a
+compatible MPI implementation; a binary linked to Open MPI must not be launched
+with MPICH tools. Check the binary and launcher on the target server:
+
+.. code-block:: bash
+
+   /opt/orca/orca --version
+   /opt/openmpi/bin/mpirun --version
+   ldd /opt/orca/orca | grep -i mpi
+
+First qualify ORCA with one core. Increase the core count only after serial
+normal termination, parsing, and a small parallel calculation are all green.
+A zero process exit status is not enough; CHEMSMART also checks ORCA's normal
+termination and job-specific convergence.
+
+xTB CPU backend
+===============
+
+Install the maintained xTB release in a dedicated program environment or a
+server-managed location. Confirm the exact executable that server YAML selects:
+
+.. code-block:: bash
+
+   /opt/xtb/bin/xtb --version
+
+The maintained CHEMSMART xTB surface is CPU ``sp``, ``opt``, and ``hess``.
+Unknown native features are not silently added to generated commands.
+
+PySCF CPU compute environment
+=============================
+
+PySCF is a Python library backend. Keep its compute interpreter separate from
+the controller when binary or scientific dependencies differ:
+
+.. code-block:: bash
+
+   conda create -n chemsmart-pyscf python=3.10 pip -y
+   conda activate chemsmart-pyscf
    python -m pip install \
-     "pyscf==2.14.0" "numpy==1.26.4" "h5py==3.16.0" \
+     "pyscf==2.14.0" "h5py>=3.10,<4" "numpy<2" \
      "geometric==1.1.1" "pyscf-dispersion==1.5.0"
+   python -c "import h5py, pyscf; print(pyscf.__version__, h5py.__version__)"
 
-Point ``PYSCF.EXEFOLDER`` at that environment's ``bin`` directory. This
-source path is not byte-equivalent to the pinned container unless all
-transitive dependencies and server configuration are also reproduced.
+Point ``PYSCF.EXEFOLDER`` at this environment's ``bin`` directory. CHEMSMART
+generates a standalone Python calculation and reads its structured HDF5 result;
+the compute environment does not need to import the CHEMSMART source tree.
 
-Future server stage
-===================
+GPU4PySCF requires a separately qualified NVIDIA/CUDA stack. It is outside the
+CPU benchmark path and must never be selected as an automatic fallback.
 
-After the image digest is promoted and pulled successfully:
+Staged server qualification
+===========================
 
-1. provision the Ubuntu VM and durable workspace/scratch volumes;
-2. configure private GHCR read credentials outside the image;
-3. qualify the image on the actual VM with its CPU, memory, filesystem, and
-   network limits;
-4. run a small real benchmark through ChemSmart YAML/CLI; and
-5. add Gaussian, ORCA, MPI, or a scheduler only as separately qualified
-   execution layers.
+Run stages in order and stop on the first scientific or environment failure.
 
-See :doc:`agent-workflows`, :doc:`pyscf-cli-options`,
-:doc:`xtb-cli-options`, and :doc:`configuration-server-settings`.
+1. **Controller and schema**
+
+   .. code-block:: bash
+
+      chemsmart --version
+      chemsmart run orca --help
+      chemsmart run pyscf --help
+      chemsmart run xtb --help
+
+2. **Program-free previews**
+
+   .. code-block:: bash
+
+      chemsmart run --fake --no-scratch xtb \
+        -p test -f examples/xtb/water.xyz sp
+      chemsmart run --fake --no-scratch orca \
+        -p test -f examples/xtb/water.xyz sp
+      chemsmart run --fake --no-scratch pyscf \
+        -p test -f examples/xtb/water.xyz sp
+
+3. **Small real single points**
+
+   Execute one backend at a time with one core and a small closed-shell
+   molecule. Inspect generated input, selected program version, normal
+   termination, parsed energy, charge, multiplicity, atom order and units.
+
+4. **Geometry and frequencies**
+
+   Qualify OPT and HESS/FREQ separately, then verify the downstream frequency
+   calculation consumes the validated optimized geometry.
+
+5. **Advanced workflows**
+
+   Introduce TS, IRC, NEB, numerical derivatives, post-HF composites and
+   thermochemistry only after the underlying methods and resources are known to
+   work on this host.
+
+6. **Agent benchmark**
+
+   Run ``chemsmart agent plan`` first. Permit real engine execution only through
+   the normal approval and runner path after reviewing the generated YAML and
+   preview.
+
+Provider configuration
+======================
+
+Keep provider profiles in ``~/.chemsmart/agent/agent.yaml`` and credentials in
+a permission-restricted file outside the repository. The secret assignment
+file is parsed as data and must never be sourced or committed.
+
+.. code-block:: bash
+
+   chmod 600 /secure/path/api.env
+   chemsmart agent plan \
+     --provider PROFILE \
+     --task-file task.md \
+     --secret-file /secure/path/api.env \
+     --workspace ./agent-workspace
+
+See :doc:`agent-workflows` for the scientific and execution boundary.
+
+Scheduler hosts
+===============
+
+For SLURM, PBS/Torque, or LSF, create a separate server YAML and use
+``chemsmart sub``. Generate a script with ``--test`` before any submission.
+Scheduler modules, accounts, queues, wall time and scratch policy are host
+facts and must be confirmed with the administrator.
+
+See :doc:`installation-hpc-cluster` and
+:doc:`configuration-server-settings` for the submission model.

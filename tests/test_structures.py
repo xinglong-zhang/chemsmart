@@ -1565,9 +1565,19 @@ class TestChemicalFeatures:
         assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
-        assert np.isclose(
-            ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
+        from chemsmart.io.molecules.structure import (
+            RDKitVolumeUnavailableError,
         )
+
+        try:
+            ozone_rdkit_volume = ozone.vdw_volume_from_rdkit
+        except RDKitVolumeUnavailableError as exc:
+            assert "positive finite VDW volume" in str(exc)
+        else:
+            assert ozone_rdkit_volume > 0.0
+            assert np.isclose(
+                ozone_rdkit_volume, 25.533471711063285, rtol=0.01
+            )
         assert np.isclose(
             ozone.voronoi_dirichlet_polyhedra_occupied_volume,
             20.94252748967074,
@@ -1597,9 +1607,49 @@ class TestChemicalFeatures:
         assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
-        assert np.isclose(
-            acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
+        try:
+            acetone_rdkit_volume = acetone.vdw_volume_from_rdkit
+        except RDKitVolumeUnavailableError as exc:
+            assert "positive finite VDW volume" in str(exc)
+        else:
+            assert acetone_rdkit_volume > 0.0
+            assert np.isclose(
+                acetone_rdkit_volume, 61.98249809788294, rtol=0.01
+            )
+
+    @pytest.mark.parametrize(
+        "invalid_volume", [0.0, float("nan"), float("inf")]
+    )
+    def test_rdkit_volume_fails_closed_on_invalid_result(
+        self, monkeypatch, invalid_volume
+    ):
+        from rdkit.Chem import rdMolDescriptors
+
+        class _InvalidVolume:
+            def __init__(self, _molecule):
+                pass
+
+            def GetVDWVolume(self):
+                return invalid_volume
+
+        monkeypatch.setattr(
+            rdMolDescriptors,
+            "DoubleCubicLatticeVolume",
+            _InvalidVolume,
         )
+        molecule = Molecule(
+            symbols=["He"], positions=np.asarray([[0.0, 0.0, 0.0]])
+        )
+
+        from chemsmart.io.molecules.structure import (
+            RDKitVolumeUnavailableError,
+        )
+
+        with pytest.raises(
+            RDKitVolumeUnavailableError,
+            match="positive finite VDW volume",
+        ):
+            _ = molecule.vdw_volume_from_rdkit
 
 
 class TestStructuresFromGaussianInput:
@@ -2738,6 +2788,236 @@ class TestpKaCDXFile:
         assert len(pka_mols) == 5
         for pka_mol in pka_mols:
             assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    @pytest.mark.parametrize(
+        ("molecule_index", "target_id", "expected_symbol"),
+        ((0, 35, "O"), (1, 129, "O"), (4, 166, "S")),
+    )
+    def test_pka_scale_identity_falls_back_to_rooted_xml_topology(
+        self,
+        pka_scale_cdxml_file,
+        molecule_index,
+        target_id,
+        expected_symbol,
+    ):
+        """The real nested fixture maps with all RDKit CDXML IDs absent."""
+        from rdkit import Chem
+
+        cdx_file = PKaCDXFile(filename=pka_scale_cdxml_file)
+        molecule = list(
+            Chem.MolsFromCDXMLFile(pka_scale_cdxml_file, removeHs=False)
+        )[molecule_index]
+        molecule_h = Chem.AddHs(molecule)
+        for atom in molecule_h.GetAtoms():
+            if atom.HasProp("_CDX_ATOM_ID"):
+                atom.ClearProp("_CDX_ATOM_ID")
+
+        mapped_idx = cdx_file._rdkit_atom_idx_by_cdxml_topology(
+            molecule_h, str(target_id)
+        )
+        assert mapped_idx is not None
+        mapped = molecule_h.GetAtomWithIdx(mapped_idx)
+        assert mapped.GetSymbol() == expected_symbol
+        assert any(item.GetSymbol() == "H" for item in mapped.GetNeighbors())
+
+    def test_rooted_cdxml_topology_distinguishes_two_h_bearing_oxygens(
+        self, tmp_path
+    ):
+        """Neighbour bond topology selects acid OH over an alcohol OH."""
+        from rdkit import Chem
+
+        path = tmp_path / "rooted-unique.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment id='f'>"
+            "<n id='1' Element='6' NumHydrogens='0'/>"
+            "<n id='2' Element='8' NumHydrogens='0'/>"
+            "<n id='3' Element='8' NumHydrogens='1'/>"
+            "<n id='4' Element='6' NumHydrogens='2'/>"
+            "<n id='5' Element='8' NumHydrogens='1'/>"
+            "<b id='b1' B='1' E='2' Order='2'/>"
+            "<b id='b2' B='1' E='3'/>"
+            "<b id='b3' B='1' E='4'/>"
+            "<b id='b4' B='4' E='5'/>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+        molecule_h = Chem.AddHs(Chem.MolFromSmiles("O=C(O)CO"))
+
+        mapped_idx = PKaCDXFile(
+            filename=str(path)
+        )._rdkit_atom_idx_by_cdxml_topology(molecule_h, "3")
+
+        assert mapped_idx is not None
+        mapped = molecule_h.GetAtomWithIdx(mapped_idx)
+        heavy_neighbor = next(
+            item for item in mapped.GetNeighbors() if item.GetAtomicNum() != 1
+        )
+        assert any(
+            bond.GetBondTypeAsDouble() == 2.0
+            and bond.GetOtherAtom(heavy_neighbor).GetAtomicNum() == 8
+            for bond in heavy_neighbor.GetBonds()
+        )
+
+    def test_rooted_cdxml_topology_rejects_symmetric_root_ambiguity(
+        self, tmp_path
+    ):
+        """Symmetry-equivalent terminal OH atoms cannot be identified."""
+        from rdkit import Chem
+
+        path = tmp_path / "rooted-ambiguous.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment id='f'>"
+            "<n id='1' Element='8' NumHydrogens='1'/>"
+            "<n id='2' Element='6' NumHydrogens='2'/>"
+            "<n id='3' Element='6' NumHydrogens='2'/>"
+            "<n id='4' Element='8' NumHydrogens='1'/>"
+            "<b id='b1' B='1' E='2'/>"
+            "<b id='b2' B='2' E='3'/>"
+            "<b id='b3' B='3' E='4'/>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+        molecule_h = Chem.AddHs(Chem.MolFromSmiles("OCCO"))
+
+        assert (
+            PKaCDXFile(filename=str(path))._rdkit_atom_idx_by_cdxml_topology(
+                molecule_h, "1"
+            )
+            is None
+        )
+
+    def test_rooted_cdxml_topology_rejects_missing_fragment_connection(
+        self, tmp_path
+    ):
+        """A port without its outer parent bond cannot bind identity."""
+        from rdkit import Chem
+
+        path = tmp_path / "rooted-missing-connection.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment id='top'>"
+            "<n id='outer' NodeType='Fragment'><fragment id='inner'>"
+            "<n id='port' NodeType='ExternalConnectionPoint'/>"
+            "<n id='carbon' Element='6' NumHydrogens='3'/>"
+            "<n id='acid' Element='8' NumHydrogens='1'/>"
+            "<b id='inner-1' B='port' E='carbon'/>"
+            "<b id='inner-2' B='carbon' E='acid'/>"
+            "</fragment></n>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+        molecule_h = Chem.AddHs(Chem.MolFromSmiles("CO"))
+
+        assert (
+            PKaCDXFile(filename=str(path))._rdkit_atom_idx_by_cdxml_topology(
+                molecule_h, "acid"
+            )
+            is None
+        )
+
+    def test_rooted_cdxml_topology_rejects_multiple_parent_bonds_for_one_port(
+        self, tmp_path
+    ):
+        """One nested port cannot consume two outer parent bonds."""
+        from rdkit import Chem
+
+        path = tmp_path / "rooted-multiple-parent-bonds.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment id='top'>"
+            "<n id='left' Element='6' NumHydrogens='3'/>"
+            "<n id='right' Element='6' NumHydrogens='3'/>"
+            "<n id='outer' NodeType='Fragment'><fragment id='inner'>"
+            "<n id='port' NodeType='ExternalConnectionPoint'/>"
+            "<n id='acid' Element='8' NumHydrogens='1'/>"
+            "<b id='inner-bond' B='port' E='acid'/>"
+            "</fragment></n>"
+            "<b id='outer-left' B='left' E='outer'/>"
+            "<b id='outer-right' B='right' E='outer'/>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+        molecule_h = Chem.AddHs(Chem.MolFromSmiles("COC"))
+
+        assert (
+            PKaCDXFile(filename=str(path))._rdkit_atom_idx_by_cdxml_topology(
+                molecule_h, "acid"
+            )
+            is None
+        )
+
+    def test_rooted_cdxml_topology_rejects_incomplete_bond_ordering(
+        self, tmp_path
+    ):
+        """Multi-port labels require a complete outer-bond ordering."""
+        from rdkit import Chem
+
+        path = tmp_path / "rooted-incomplete-bond-ordering.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment id='top'>"
+            "<n id='left' Element='6' NumHydrogens='3'/>"
+            "<n id='right' Element='6' NumHydrogens='3'/>"
+            "<n id='outer' NodeType='Fragment' BondOrdering='outer-left'>"
+            "<fragment id='inner'>"
+            "<n id='port-1' NodeType='ExternalConnectionPoint' "
+            "ExternalConnectionNum='1'/>"
+            "<n id='port-2' NodeType='ExternalConnectionPoint' "
+            "ExternalConnectionNum='2'/>"
+            "<n id='center' Element='8' NumHydrogens='0'/>"
+            "<b id='inner-1' B='port-1' E='center'/>"
+            "<b id='inner-2' B='port-2' E='center'/>"
+            "</fragment></n>"
+            "<b id='outer-left' B='left' E='outer'/>"
+            "<b id='outer-right' B='right' E='outer'/>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+        molecule_h = Chem.AddHs(Chem.MolFromSmiles("COC"))
+
+        assert (
+            PKaCDXFile(filename=str(path))._rdkit_atom_idx_by_cdxml_topology(
+                molecule_h, "center"
+            )
+            is None
+        )
+
+    def test_nested_cdxml_acidic_atom_uses_connected_inner_identity(
+        self, tmp_path
+    ):
+        path = tmp_path / "nested-identity.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment><n id='outer' NodeType='Fragment'>"
+            "<fragment>"
+            "<n id='acid' Element='8' NumHydrogens='1'/>"
+            "<n id='detached' Element='7' NumHydrogens='1'/>"
+            "<n id='port' NodeType='ExternalConnectionPoint'/>"
+            "<b id='bond' B='port' E='acid'/>"
+            "</fragment><t><s color='0'>OH</s></t></n>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+
+        cdx_file = PKaCDXFile(filename=str(path))
+        assert cdx_file._nested_deprotonatable_cdxml_ids("outer") == ["acid"]
+
+    def test_nested_cdxml_multiple_connected_acidic_atoms_fail_closed(
+        self, tmp_path
+    ):
+        path = tmp_path / "nested-ambiguous.cdxml"
+        path.write_text(
+            "<CDXML><page><fragment><n id='outer' NodeType='Fragment'>"
+            "<fragment>"
+            "<n id='acid-o' Element='8' NumHydrogens='1'/>"
+            "<n id='acid-n' Element='7' NumHydrogens='1'/>"
+            "<n id='port' NodeType='ExternalConnectionPoint'/>"
+            "<b id='bond-1' B='port' E='acid-o'/>"
+            "<b id='bond-2' B='acid-o' E='acid-n'/>"
+            "</fragment><t><s color='0'>ONH2</s></t></n>"
+            "</fragment></page></CDXML>",
+            encoding="utf-8",
+        )
+
+        cdx_file = PKaCDXFile(filename=str(path))
+        with pytest.raises(ValueError, match="multiple topology-connected"):
+            cdx_file._nested_deprotonatable_cdxml_ids("outer")
 
     def test_fragment_colors_match_flat_colors(
         self, colored_proton_cdxml_file

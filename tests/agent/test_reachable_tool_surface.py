@@ -25,13 +25,11 @@ from chemsmart.agent.tool_specs import (
     LATE_BOUND_ARGUMENTS,
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
-    build_single_agent_baseline_tool_surface,
 )
 
 _SURFACES = (
     build_command_compiled_tool_surface,
     build_approved_execution_tool_surface,
-    build_single_agent_baseline_tool_surface,
 )
 
 #: Registry attribute on the host for each late-bound argument, so "can this

@@ -216,8 +216,11 @@ def test_orca_post_hf_energy_preserves_total_and_reference_components():
     ).quantities[0]
 
     assert total.value == pytest.approx(-76.377481488944)
-    assert scf.value == pytest.approx(-76.05666270)
+    assert scf.value == pytest.approx(-76.066479259)
     assert reference.value == pytest.approx(scf.value)
+    # The tracked ORCA CBS fixture prints this native value explicitly.  The
+    # selector must not reconstruct it from the finite-basis SCF record.
+    assert correlation.value == pytest.approx(-0.311002230)
     assert correlation.value == pytest.approx(total.value - scf.value)
     assert total.value != pytest.approx(scf.value)
 
@@ -236,6 +239,111 @@ def test_orca_dft_d_total_scf_and_dispersion_are_distinct_components():
     assert total.value == pytest.approx(scf.value + dispersion.value)
     with pytest.raises(Exception, match="post-SCF correlation"):
         _extract(path, "orca", "correlation_energy", "correlation")
+
+
+def test_orca_correlation_requires_a_native_printed_result_not_method_name():
+    reader = reader_for("orca")
+
+    class _MethodOnly:
+        ab_initio = "DLPNO-CCSD(T)"
+        contents = (
+            "Total Energy       : -10.000000 Eh -272.1 eV",
+            "FINAL SINGLE POINT ENERGY -10.200000",
+        )
+        final_dispersion_energy = None
+
+    with pytest.raises(MissingQuantityError, match="explicit final"):
+        reader.read(_MethodOnly(), "correlation_energy")
+
+
+def test_orca_native_correlation_record_is_evidence_without_method_heuristic():
+    reader = reader_for("orca")
+
+    class _PrintedResult:
+        ab_initio = None
+        contents = (
+            "Total Energy       : -10.000000 Eh -272.1 eV",
+            "Final correlation energy ... -0.200000",
+            "FINAL SINGLE POINT ENERGY -10.200000",
+        )
+        final_dispersion_energy = None
+
+    value, unit = reader.read(_PrintedResult(), "correlation_energy")
+    assert value == pytest.approx(-0.2)
+    assert unit == "Eh"
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    (
+        (("RI-MP2 CORRELATION ENERGY: -0.123456 Eh",), -0.123456),
+        (("E(CORR)(corrected) ... -0.211643112",), -0.211643112),
+        (
+            (
+                "E(CORR)(corrected) ... -0.211643112",
+                "Triples Correction (T) ... -0.002954307",
+                "Final correlation energy ... -0.214597419",
+            ),
+            -0.214597419,
+        ),
+        (
+            (
+                "Final correlation energy ... -0.275446122",
+                "Extrapolated CBS correlation energy (2/3) : "
+                "-0.311002230 (-0.035556108)",
+            ),
+            -0.311002230,
+        ),
+    ),
+)
+def test_orca_native_correlation_record_precedence(lines, expected):
+    class _PrintedResult:
+        contents = lines
+
+    value, unit = reader_for("orca").read(
+        _PrintedResult(), "correlation_energy"
+    )
+    assert value == pytest.approx(expected)
+    assert unit == "Eh"
+
+
+def test_orca_compound_output_uses_last_chronological_correlation_record():
+    """A prior job's CBS record cannot outrank a later native RI-MP2 result."""
+
+    class _CompoundResult:
+        contents = (
+            "Final correlation energy ... -0.275446122",
+            "Extrapolated CBS correlation energy (2/3) : "
+            "-0.311002230 (-0.035556108)",
+            "FINAL SINGLE POINT ENERGY -10.311002230",
+            "---------------- later calculation ----------------",
+            "RI-MP2 CORRELATION ENERGY: -0.123456 Eh",
+            "FINAL SINGLE POINT ENERGY -20.123456000",
+        )
+
+    value, unit = reader_for("orca").read(
+        _CompoundResult(), "correlation_energy"
+    )
+
+    assert value == pytest.approx(-0.123456)
+    assert unit == "Eh"
+
+
+def test_gaussian_missing_post_annihilation_spin_is_a_typed_absence():
+    reader = reader_for("gaussian")
+
+    class _NoPostAnnihilationSpin:
+        spin_square_history = [
+            {"before_annihilation": 2.1, "after_annihilation": None}
+        ]
+
+    with pytest.raises(
+        MissingQuantityError,
+        match=r"does not print <S\^2> after annihilation",
+    ):
+        reader.read(
+            _NoPostAnnihilationSpin(), "spin_square_after_annihilation"
+        )
 
 
 def test_error_terminated_orca_output_cannot_supply_scientific_quantities():

@@ -1,6 +1,6 @@
 """The executor supplies the caller, never the science.
 
-Measured across the campaign's live sessions: seventeen ``agent plan`` sessions
+Measured across repeated live sessions: seventeen ``agent plan`` sessions
 rejected 42 of 868 tool calls (4.8%); the one ``agent run`` session rejected 20
 of 69 (29%) -- twelve execution attempts and eight re-plans *inside* an
 execution session -- and completed no nodes. ``agent run`` is

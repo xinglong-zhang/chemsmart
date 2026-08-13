@@ -594,11 +594,10 @@ def _validate_thermochemistry_controls(
         raise QuantityContractError("use_weighted_mass must be boolean")
     if (
         not math.isfinite(float(frequency_scale_factor))
-        or float(frequency_scale_factor) != 1.0
+        or float(frequency_scale_factor) <= 0.0
     ):
         raise QuantityContractError(
-            "the shared thermochemistry engine does not yet apply frequency "
-            "scaling; frequency_scale_factor must be exactly 1.0"
+            "frequency_scale_factor must be finite and positive"
         )
 
 
@@ -1246,8 +1245,10 @@ def _thermochemistry_assumptions(
         ),
         "rotational symmetry derived by the shared ChemSmart engine",
         (
-            "frequency scale factor 1.0; the shared engine applies no "
-            "frequency scaling"
+            "frequency scale factor 1.0; no frequency scaling"
+            if request.frequency_scale_factor == 1.0
+            else "vibrational frequencies multiplied by "
+            f"{request.frequency_scale_factor:g} before thermochemistry"
         ),
     ]
     if request.concentration_mol_l is None:
@@ -1333,6 +1334,7 @@ def derive_result_thermochemistry(
             else request.entropy_method
         ),
         h_freq_cutoff=request.enthalpy_cutoff_cm1,
+        frequency_scale_factor=request.frequency_scale_factor,
         check_imaginary_frequencies=True,
     )
     if engine.program != request.program:

@@ -46,7 +46,7 @@ not a method or answer DAG:
 .. code-block:: yaml
 
    schema_version: chemsmart.bounded-execution-envelope.v1
-   mode: continuous-local
+   mode: bounded-local
    allowed_program_engines:
      gaussian: [cpu]
      orca: [cpu]
@@ -62,7 +62,7 @@ not a method or answer DAG:
    episode_wall_time_seconds: 5400
    postprocess_reserve_seconds: 600
    max_engine_calls: 8
-   scratch_root: /workspace/chemsmart-bench/scratch
+   scratch_root: /absolute/path/chosen-by-the-user
 
 Use it instead of ``--approval-file``:
 
@@ -93,18 +93,18 @@ Provider turn deadlines
 Runtime V2 does not treat a socket timeout as an end-to-end provider bound.
 Each selected profile may bind four monotonic deadlines in the existing
 ``agent.yaml`` profile. The absolute turn deadline cannot be extended by SSE
-comments, partial bytes, streamed reasoning, or other provider progress:
+comments, partial bytes, streamed reasoning, or other provider progress. The
+following is a schematic fragment for a provider adapter already registered in
+the local runtime; it is not a complete runnable profile:
 
 .. code-block:: yaml
 
    providers:
-     deepseek-v4-token-plan:
-       type: openai
-       api_key_env: ALIBABA_TOKEN_PLAN_KEY
-       model: deepseek-v4-flash-0731
-       base_url: https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
-       reasoning_effort: max
-       preserve_thinking: true
+     registered-provider-profile:
+       type: <registered-adapter-type>
+       api_key_env: <provider-key-label>
+       model: <provider-model-id>
+       base_url: <official-provider-endpoint>
        transport_deadlines:
          connect_seconds: 15
          first_event_seconds: 90
@@ -120,12 +120,12 @@ and observed provider/model identity, requested reasoning effort, the fact that
 applied effort is not reported by the endpoint, and the effective deadlines.
 A failed attempt records only its sanitized timeout phase and the same public
 configuration; it never records private reasoning, response text, or a secret.
-The built-in transports connect directly to their fixed official HTTPS hosts;
+Registered transports connect directly to their configured official HTTPS hosts;
 they do not inherit process proxy settings. TCP, TLS, response status, headers,
 and response-body reads are covered by the monotonic policy. CPython's
 synchronous platform DNS lookup is the explicit exception: it cannot be
-cancelled without leaving a resolver worker, so host-level DNS health remains
-part of benchmark-host qualification.
+cancelled without leaving a resolver worker, so DNS health must be verified on
+the actual target host.
 
 Waiting for chemistry
 =====================
@@ -164,7 +164,7 @@ answer DAG or native program input.
        multiplicity: 1
        source_locator: https://example.org/coordinate-record
        source_record_sha256: <sha256-of-source-record>
-       state_source_locator: benchmark-case:water#initial-state
+       state_source_locator: source-record:water#initial-state
 
 Challenge-driven scientist persona
 ===================================

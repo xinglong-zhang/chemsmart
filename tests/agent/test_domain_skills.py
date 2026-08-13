@@ -151,7 +151,7 @@ def test_skills_enabled_toggle(monkeypatch, value, expected):
     assert skills_enabled() is expected
 
 
-def test_skills_off_restores_baseline_prompt_and_tool_surface(monkeypatch):
+def test_skills_off_restores_historical_prompt_and_tool_surface(monkeypatch):
     from chemsmart.agent.live_session import (
         _system_prompt,
         activated_skill_documents,
@@ -173,7 +173,7 @@ def test_skills_off_restores_baseline_prompt_and_tool_surface(monkeypatch):
     assert "consult_domain_skill" not in {
         item["function"]["name"] for item in disabled_surface.tool_definitions
     }
-    # A skills-off session is byte-identical to the pre-skill baseline.
+    # A skills-off session is byte-identical to the pre-skill surface.
     assert _system_prompt({}, skill_index=()) == _system_prompt({})
     assert (
         disabled_surface.tool_schema_sha256

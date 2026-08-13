@@ -4,10 +4,9 @@ These are declared in Python, never in a user overlay, so editing a
 ``SKILL.md`` cannot introduce or alter one.
 
 Scope note for this round: consumers **record** the applicable conventions
-alongside a reported quantity so the convention in force is auditable.  None of
-them changes a verdict, so a session with skills disabled reproduces the
-recorded baseline exactly.  Rules that would change a verdict need an execution
-round to be evidence-gated and are deliberately absent.
+alongside a reported quantity so the convention in force is auditable. None of
+them changes a scientific verdict. Rules that would change a verdict require
+execution evidence and are deliberately absent.
 """
 
 from __future__ import annotations

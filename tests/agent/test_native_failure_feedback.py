@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
-from chemsmart.agent.feedback import project_tool_feedback
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.io.native_failure import (
     summarize_gaussian_native_failure,
@@ -236,16 +235,10 @@ def test_nonzero_gaussian_failure_survives_causal_execution_feedback():
         },
     }
 
-    projected = project_tool_feedback(
-        tool="execute_approved_program_node",
-        result=tool_result,
-        mode="causal-v1",
-    )
-    failure = projected.content["result"]["result_validation"]["observations"][
+    failure = tool_result["result"]["result_validation"]["observations"][
         "gaussian"
     ]["outputs"][0]["native_failure"]
 
-    assert projected.content["status"] == "failed"
     assert failure["termination_state"] == "error_termination"
     assert failure["error_class"] == "input_syntax"
     assert failure["diagnostic_lines"] == [

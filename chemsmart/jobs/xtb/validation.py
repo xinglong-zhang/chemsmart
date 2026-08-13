@@ -678,6 +678,7 @@ def validate_xtb_result(
     from chemsmart.io.xtb.route import XTBRoute
 
     findings = verify_xtb_provenance_binding(provenance_binding)
+    warnings = []
     requested = _settings_payload(job.settings)
     command_route = XTBRoute(" ".join(command))
     command_settings = _route_settings(command_route)
@@ -743,9 +744,9 @@ def validate_xtb_result(
     stderr_path = Path(job.folder) / f"{job.label}.err"
     openblas_warning_count = _openblas_openmp_warning_count(stderr_path)
     if openblas_warning_count:
-        findings.append(
+        warnings.append(
             _finding(
-                "xtb.environment.openblas_openmp_incompatible",
+                "xtb.environment.openblas_openmp_warning",
                 "stderr.openblas_openmp_warning_count",
                 0,
                 openblas_warning_count,
@@ -1146,6 +1147,7 @@ def validate_xtb_result(
             else environment_receipt.get("receipt_sha256")
         ),
         "artifacts": artifacts,
+        "warnings": warnings,
         "findings": findings,
     }
     return finalize_receipt(receipt_path, payload)

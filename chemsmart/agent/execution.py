@@ -865,156 +865,6 @@ def build_workflow_execution_approval(
     )
 
 
-def build_locked_pyscf_sp_opt_hess_approval(
-    *,
-    approval_id: str,
-    workflow_id: str,
-    task_spec_sha256: str,
-    approved_workspace: str | Path,
-    resources: ExecutionResourceSpecV1,
-    initial_artifact: TrustedArtifactRefV1,
-    project_artifact: TrustedArtifactRefV1,
-) -> WorkflowExecutionApprovalV1:
-    """Build the fixed CPU water integration-workflow approval.
-
-    The project is read through the production PySCF YAML loader.  Stage
-    settings digests are derived with the same registry projection used by
-    :func:`chemsmart.agent.projects.validate_project_yaml`, avoiding a
-    hand-maintained digest or an approval that depends on model-selected
-    artifact IDs.  The exact initial geometry is approved for SP and OPT;
-    HESS is approved only through the validated OPT producer-edge rule.
-
-    This helper does not execute, preview, or claim readiness.  It merely
-    constructs the private approval consumed by the existing host gates.
-    """
-
-    workspace = _absolute_workspace(approved_workspace)
-    initial_path = _require_current_artifact(
-        initial_artifact, "initial geometry artifact"
-    )
-    project_path = _require_current_artifact(
-        project_artifact, "PySCF project artifact"
-    )
-    for label, path in (
-        ("initial geometry", initial_path),
-        ("PySCF project", project_path),
-    ):
-        try:
-            path.relative_to(workspace)
-        except ValueError as exc:
-            raise ContractError(
-                f"{label} must be inside the approved workspace"
-            ) from exc
-    if initial_artifact.kind != "geometry_xyz":
-        raise ContractError("locked workflow requires an exact XYZ artifact")
-    if project_artifact.kind != "project_yaml":
-        raise ContractError("locked workflow requires a project YAML artifact")
-    if resources.execution_target != "run":
-        raise ContractError("locked workflow requires local run execution")
-    if (
-        resources.cores != 4
-        or resources.memory_gb != 4.0
-        or resources.gpu_count != 0
-        or resources.scratch_policy != "none"
-        or resources.node_timeout_seconds != 600
-    ):
-        raise ContractError("resources differ from the locked CPU profile")
-
-    from chemsmart.agent.capabilities import load_program_capabilities
-    from chemsmart.agent.commands import build_scientific_identity_binding
-    from chemsmart.settings.pyscf import YamlPySCFProjectSettings
-
-    identity = build_scientific_identity_binding(
-        task_spec_sha256=task_spec_sha256,
-        geometry_artifact=initial_artifact,
-        charge=0,
-        multiplicity=1,
-    )
-    project = YamlPySCFProjectSettings.from_yaml(project_path)
-    capability = load_program_capabilities().get("pyscf")
-    if capability is None:
-        raise ContractError("PySCF is absent from the program registry")
-    allowed = set(capability.project_owned_parameters)
-    allowed.update({"jobtype", "engine", "freq"})
-    settings_digests: dict[str, str] = {}
-    for jobtype in ("sp", "opt", "hess"):
-        settings = getattr(project, f"{jobtype}_settings")()
-        settings.validate()
-        _require_locked_pyscf_settings(settings, jobtype=jobtype)
-        effective = {
-            key: canonical_data(getattr(settings, key))
-            for key in sorted(allowed)
-            if hasattr(settings, key)
-        }
-        settings_digests[jobtype] = canonical_sha256(effective)
-
-    edge = build_producer_edge_rule(
-        producer_node_id="opt-initial",
-        consumer_node_id="hess-optimized",
-        artifact_kind="geometry_xyz",
-        selection_rule="validated_optimized_geometry",
-    )
-    initial_common = {
-        "program": "pyscf",
-        "engine": "cpu",
-        "project_artifact_sha256": project_artifact.sha256,
-        "charge": 0,
-        "multiplicity": 1,
-        "input_mode": "initial",
-        "initial_artifact_id": initial_artifact.artifact_id,
-        "initial_artifact_sha256": initial_artifact.sha256,
-        "scientific_identity_sha256": identity.binding_sha256,
-        "producer_edge_sha256": "",
-    }
-    nodes = (
-        ApprovedNodeBindingV1(
-            node_id="sp-initial",
-            jobtype="sp",
-            settings_sha256=settings_digests["sp"],
-            **initial_common,
-        ),
-        ApprovedNodeBindingV1(
-            node_id="opt-initial",
-            jobtype="opt",
-            settings_sha256=settings_digests["opt"],
-            **initial_common,
-        ),
-        ApprovedNodeBindingV1(
-            node_id="hess-optimized",
-            program="pyscf",
-            engine="cpu",
-            jobtype="hess",
-            project_artifact_sha256=project_artifact.sha256,
-            settings_sha256=settings_digests["hess"],
-            charge=0,
-            multiplicity=1,
-            input_mode="producer",
-            initial_artifact_id="",
-            initial_artifact_sha256="",
-            scientific_identity_sha256="",
-            producer_edge_sha256=edge.edge_sha256,
-        ),
-    )
-    workflow_sha256 = canonical_sha256(
-        {
-            "schema_version": "chemsmart.pyscf-sp-opt-hess-workflow.v1",
-            "task_spec_sha256": task_spec_sha256,
-            "nodes": nodes,
-            "producer_edges": (edge,),
-        }
-    )
-    return build_workflow_execution_approval(
-        approval_id=approval_id,
-        workflow_id=workflow_id,
-        workflow_sha256=workflow_sha256,
-        task_spec_sha256=task_spec_sha256,
-        approved_workspace=workspace,
-        resources=resources,
-        node_bindings=nodes,
-        producer_edges=(edge,),
-    )
-
-
 def workflow_execution_approval_json(
     approval: WorkflowExecutionApprovalV1,
 ) -> str:
@@ -1163,44 +1013,6 @@ def workflow_approval_request_json(
     """Return the reviewable envelope, deliberately not the run envelope."""
 
     return canonical_json({"workflow_approval_request": request}) + "\n"
-
-
-def _require_locked_pyscf_settings(settings: object, *, jobtype: str) -> None:
-    expected = {
-        "functional": "b3lyp",
-        "basis": "def2-svp",
-        "defgrid": "defgrid2",
-        "density_fit": False,
-        "dispersion": None,
-        "solvent_model": None,
-        "solvent_id": None,
-        "scf_tol": 1e-9,
-        "scf_maxiter": 100,
-        "engine": "cpu",
-        "jobtype": jobtype,
-    }
-    if jobtype == "opt":
-        expected.update({"opt_solver": "geometric", "opt_maxsteps": 100})
-    if jobtype == "hess":
-        expected["freq"] = True
-    for name, required in expected.items():
-        observed = getattr(settings, name, None)
-        if isinstance(required, str) and isinstance(observed, str):
-            matches = observed.strip().lower() == required
-        else:
-            matches = observed == required
-        if not matches:
-            raise ContractError(
-                f"locked PySCF {jobtype} setting {name} differs: "
-                f"expected {required!r}, observed {observed!r}"
-            )
-    if (
-        getattr(settings, "charge", None) is not None
-        or getattr(settings, "multiplicity", None) is not None
-    ):
-        raise ContractError(
-            "locked project must inherit charge and multiplicity from XYZ"
-        )
 
 
 def argv_shape(argv: Sequence[str]) -> tuple[str, ...]:
@@ -3952,7 +3764,6 @@ __all__ = [
     "bind_project_promotion_validation",
     "build_execution_resource_spec",
     "build_frozen_workflow_approval",
-    "build_locked_pyscf_sp_opt_hess_approval",
     "WorkflowApprovalRequestV1",
     "approve_workflow_request",
     "build_producer_edge_rule",

@@ -1,6 +1,6 @@
 """``agent run --approval-file`` must be able to reach execution.
 
-The campaign has never graded a number. The reason was recorded as "no approval
+The observed sessions never reached a calculated number. The reason was recorded as "no approval
 file is ever emitted from a plan session", and `WorkflowApprovalRequestV1` was
 added to close that. Reading the execution path end to end shows the reason was
 wrong, and the real one is worse.
@@ -66,12 +66,19 @@ def test_the_v1_composition_surface_is_otherwise_complete():
 
 
 def test_an_approval_file_can_actually_drive_execution():
-    """The property the campaign needs in order to grade any number."""
+    """The property a calculation needs in order to report a number."""
     source = inspect.getsource(live_session._execution_composition_inputs)
     assert _EXECUTION_STATE in source, (
         "the only place an approval file becomes host state does not supply "
         "the frozen approval, so no approval file can execute a node"
     )
+
+
+def test_approval_file_requires_operator_selected_resources():
+    source = inspect.getsource(live_session._execution_composition_inputs)
+
+    assert "approval file requires explicit execution_resources" in source
+    assert "_locked_execution_resources" not in source
 
 
 def test_a_frozen_body_for_another_task_is_refused():

@@ -1,7 +1,7 @@
 """The model must be told which YAML sections a program's loader reads.
 
 This is the single thing the loader is strictest about and the thing sessions
-guessed most often across the campaign: a `td:` section written for a
+guessed most often across observed sessions: a `td:` section written for a
 phase-keyed program, a `gas:` section where the loader wanted `solv:`, a
 jobtype-keyed section for a program that keys by phase.  Each was corrected
 only by a rejection.
@@ -9,7 +9,7 @@ only by a rejection.
 `project_section_names` has been declared in settings/capabilities.py since the
 section-shape gate was added.  It was never projected into the record the model
 receives, so the information existed and did not reach the caller -- the same
-shape as every other defect this campaign found.
+shape as other observed loader defects.
 """
 
 import pytest
@@ -36,17 +36,12 @@ def test_a_phase_keyed_program_and_a_stage_keyed_one_are_distinguishable():
     """The distinction a model cannot infer from the program name."""
 
     records = _agent_records()
-    assert records["gaussian"].project_section_names == (
-        "gas",
-        "solv",
-        "td",
-    )
-    assert records["orca"].project_section_names == (
-        "gas",
-        "neb",
-        "solv",
-        "td",
-    )
+    assert "gas" in records["gaussian"].project_section_names
+    assert "link" in records["gaussian"].project_section_names
+    assert "sp" in records["gaussian"].project_section_names
+    assert "gas" in records["orca"].project_section_names
+    assert "neb" in records["orca"].project_section_names
+    assert "sp" in records["orca"].project_section_names
     assert "sp" in records["pyscf"].project_section_names
     assert "opt" in records["xtb"].project_section_names
 

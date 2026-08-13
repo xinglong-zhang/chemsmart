@@ -291,7 +291,7 @@ class DeepSeekV4FlashConfigV1:
         if not _is_official_endpoint(self.endpoint):
             raise ContractError("thinking continuation requires official DeepSeek")
         if self.thinking_mode != "enabled":
-            raise ContractError("DeepSeek V4 tool experiments require thinking")
+            raise ContractError("DeepSeek V4 tool sessions require thinking")
         if self.reasoning_effort not in {"high", "max"}:
             raise ContractError("reasoning_effort must be high or max")
         if not 1 <= self.max_output_tokens <= (

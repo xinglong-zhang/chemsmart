@@ -10,8 +10,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError, canonical_data
-from chemsmart.agent.feedback import CAUSAL_FEEDBACK_V1, project_tool_feedback
+from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.workflow_context import (
     WorkflowNodeContextV1,
     project_workflow_context,
@@ -254,35 +253,6 @@ def test_a_waiting_node_must_say_what_it_waits_for():
             dependents=(),
             reason="",
         )
-
-
-def test_the_projection_survives_causal_feedback_with_its_reasons_intact():
-    """A causal arm that silently dropped this would measure nothing."""
-
-    envelope = {
-        "tool": "plan_command_workflow",
-        "status": "ok",
-        "result": canonical_data(
-            {
-                "workflow_context": _project(),
-                # The model's own submitted DAG is echoed back and dropped.
-                "nodes": [{"node_id": "echo"}],
-            }
-        ),
-    }
-    projected = project_tool_feedback(
-        tool="plan_command_workflow",
-        result=envelope,
-        mode=CAUSAL_FEEDBACK_V1,
-    ).content["result"]
-
-    assert "nodes" not in projected, "the echo must still be dropped"
-    context = projected["workflow_context"]
-    assert len(context["nodes"]) == 4
-    waiting = next(
-        item for item in context["nodes"] if item["node_id"] == "sp_qz"
-    )
-    assert "opt.opt_geom" in waiting["reason"]
 
 
 def test_a_rejected_node_names_the_node_and_the_offending_value():

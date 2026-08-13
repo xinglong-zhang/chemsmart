@@ -60,7 +60,7 @@ def test_the_prompt_preserves_bounded_causal_future_nodes():
     from chemsmart.agent import live_session
 
     prompt = live_session._system_prompt(
-        {"authorization_mode": "bounded_continuous"}
+        {"authorization_mode": "bounded_local"}
     )
     for phrase in (
         "When the task names a program, plan that program",

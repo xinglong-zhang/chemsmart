@@ -21,9 +21,6 @@ from chemsmart.agent.execution import (
     build_workflow_execution_approval,
     handoff_optimized_xtb_geometry,
 )
-from chemsmart.agent.experiments.program_management_fixtures import (
-    ProgramManagementHostFixtureFactoryV1,
-)
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.tool_runtime import _CommandContext
@@ -35,6 +32,9 @@ from chemsmart.agent.workflows import (
     ScientificWorkflowNodeV2,
     build_command_workflow_draft,
     build_scientific_workflow_plan,
+)
+from tests.agent.neutral_workflow_fixture import (
+    build_neutral_workflow_fixture,
 )
 
 
@@ -344,11 +344,7 @@ def test_absent_state_preserves_legacy_command_and_scientific_plan_digests():
 
 
 def test_model_workflow_state_reaches_command_and_scientific_dags(tmp_path):
-    factory = ProgramManagementHostFixtureFactoryV1(
-        source_tree_root=".",
-        materialization_root=tmp_path / "fixture",
-    )
-    fixture = factory(SimpleNamespace(case_id="DS-PM-003"))
+    fixture = build_neutral_workflow_fixture(tmp_path / "fixture")
     store = RuntimeEventStore(
         tmp_path / "events" / "runtime.jsonl", session_id="session"
     )

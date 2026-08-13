@@ -29,10 +29,8 @@ from chemsmart.agent._contracts import ContractError, require_identifier
 def workflow_context_enabled() -> bool:
     """Return whether the dependency projection is surfaced to the agent.
 
-    Defaults to enabled.  ``CHEMSMART_AGENT_WORKFLOW_CONTEXT=0`` withholds it,
-    restoring the exact pre-projection tool result so a context-off arm
-    reproduces the recorded baseline and the paired comparison measures the
-    projection rather than incidental drift.
+    Defaults to enabled. ``CHEMSMART_AGENT_WORKFLOW_CONTEXT=0`` withholds the
+    projection for callers that need the smaller historical result shape.
     """
 
     return os.environ.get(

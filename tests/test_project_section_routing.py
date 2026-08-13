@@ -37,7 +37,10 @@ import tempfile
 
 import pytest
 
-from chemsmart.jobs.settings import read_molecular_job_yaml
+from chemsmart.jobs.settings import (
+    molecular_project_section_names,
+    read_molecular_job_yaml,
+)
 from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
 PHASE_KEYED_PROGRAMS = ("orca", "gaussian")
@@ -155,18 +158,13 @@ NON_MOLECULAR_JOBTYPES = frozenset({"inp", "userjob"})
 
 def _phase_keyed_programs():
     """Yield the programs whose project YAML groups settings by phase."""
-    for name, capability in sorted(PROGRAM_CAPABILITIES.items()):
-        sections = set(capability.project_section_names)
-        if sections.issuperset(PHASE_SECTIONS):
-            # PySCF declares the phase pair only as legacy migration input; it
-            # keys every real job by stage and is covered by its own tests.
-            # Gaussian and ORCA remain phase-keyed even though a few jobs such
-            # as ``td`` also own an explicit stage section.
-            if sections - set(PHASE_SECTIONS) - set(capability.jobtypes):
-                continue
-            if set(capability.jobtypes).issubset(sections):
-                continue
-            yield name, capability
+    for name in PHASE_KEYED_PROGRAMS:
+        capability = PROGRAM_CAPABILITIES[name]
+        assert (
+            capability.project_section_names
+            == molecular_project_section_names(name)
+        )
+        yield name, capability
 
 
 def _configs_from_single_section(section, program):

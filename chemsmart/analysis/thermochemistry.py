@@ -48,6 +48,8 @@ class Thermochemistry:
             used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function
             used in calculating enthalpy.
+        frequency_scale_factor: float. Positive factor multiplied into all
+            parsed vibrational frequencies before thermochemical corrections.
         energy_units: str. The energy units to use for output. Default is
             "hartree".
         outputfile: str. The output file to save the thermochemistry
@@ -72,6 +74,7 @@ class Thermochemistry:
         s_freq_cutoff=None,
         entropy_method=None,
         h_freq_cutoff=None,
+        frequency_scale_factor=1.0,
         energy_units="hartree",
         check_imaginary_frequencies=True,
         rotational_mode="physical",
@@ -109,6 +112,14 @@ class Thermochemistry:
         )  # convert the unit of cutoff frequency
         # from cm^-1 to Hz
         self.entropy_method = entropy_method
+        self.frequency_scale_factor = float(frequency_scale_factor)
+        if (
+            not math.isfinite(self.frequency_scale_factor)
+            or self.frequency_scale_factor <= 0.0
+        ):
+            raise ValueError(
+                "frequency_scale_factor must be finite and positive"
+            )
         self.h_freq_cutoff = (
             h_freq_cutoff * units._c * 1e2 if h_freq_cutoff else None
         )  # convert the unit of cutoff frequency
@@ -389,7 +400,11 @@ class Thermochemistry:
         if self.vibrational_frequencies is None:
             return None
 
-        frequencies = list(self.vibrational_frequencies)
+        frequencies = [
+            float(frequency)
+            * float(getattr(self, "frequency_scale_factor", 1.0))
+            for frequency in self.vibrational_frequencies
+        ]
 
         # Quasi-linear correction: Gaussian gives 3N-6 frequencies for
         # non-linear molecules; pad to 3N-5 for linear treatment.

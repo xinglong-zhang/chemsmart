@@ -158,7 +158,6 @@ from chemsmart.agent.tool_specs import (
     AgentToolSurfaceV1,
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
-    build_single_agent_baseline_tool_surface,
 )
 from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionNodeV1,
@@ -180,7 +179,7 @@ from chemsmart.agent.workflow_context import (
 )
 from chemsmart.agent.dependency_context import (
     ContextSelectionReceiptV1,
-    TaskDependencyContextV1,
+    TaskDependencyContextV2,
 )
 from chemsmart.agent.workflows import (
     AGGREGATE_NODE_PROGRAM,
@@ -217,6 +216,22 @@ class _CommandContext:
     input_artifact: TrustedArtifactRefV1
     scientific_identity: ScientificIdentityBindingV1
     job_artifact_options: tuple[tuple[str, TrustedArtifactRefV1], ...] = ()
+
+
+@dataclass(frozen=True)
+class _ResolvedProgramWorkflow:
+    """Exact host-owned view used by workflow program tools.
+
+    A calculation-only command plan and a calculation-plus-analysis toolchain
+    use different public schemas.  Program tools need their shared command
+    draft and task-bound V2 plan, so retain that binding without requiring an
+    unrelated analysis plan to exist.
+    """
+
+    draft: CommandWorkflowDraftV1
+    scientific_plan: ScientificWorkflowPlanV2 | None
+    command_result: Mapping[str, Any]
+    scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -937,7 +952,7 @@ class CommandCompiledToolHostV1:
         execution_server: str = "",
         execution_environment: Mapping[str, str] = {},
         execution_environment_remove: tuple[str, ...] = (),
-        dependency_context: TaskDependencyContextV1 | None = None,
+        dependency_context: TaskDependencyContextV2 | None = None,
         dependency_context_selection_receipt: (
             ContextSelectionReceiptV1 | None
         ) = None,
@@ -950,8 +965,7 @@ class CommandCompiledToolHostV1:
             conformance_receipts=component_conformance_receipts,
             live_schema=self.live_schema,
         )
-        h1_surface = build_command_compiled_tool_surface(self.registry)
-        h0_surface = build_single_agent_baseline_tool_surface(self.registry)
+        command_surface = build_command_compiled_tool_surface(self.registry)
         execution_surface = build_approved_execution_tool_surface(
             self.registry
         )
@@ -959,15 +973,14 @@ class CommandCompiledToolHostV1:
             tool_surface is not None
             and tool_surface.tool_schema_sha256
             not in {
-                h0_surface.tool_schema_sha256,
-                h1_surface.tool_schema_sha256,
+                command_surface.tool_schema_sha256,
                 execution_surface.tool_schema_sha256,
             }
         ):
             raise ContractError(
                 "injected tool surface is not a canonical profile"
             )
-        self.surface = tool_surface or h1_surface
+        self.surface = tool_surface or command_surface
         self.artifacts = dict(artifacts)
         self.task_spec_sha256s = frozenset(task_spec_sha256s)
         self.approved_environment_identities = tuple(
@@ -1243,6 +1256,9 @@ class CommandCompiledToolHostV1:
         self._scientific_toolchain_command_results: dict[
             str, dict[str, Any]
         ] = {}
+        self._latest_program_workflows: dict[
+            str, _ResolvedProgramWorkflow
+        ] = {}
         #: Last accepted scientific plan per workflow, so a later repair can be
         #: checked against the question and not only against its own findings.
         self.scientific_plans: dict[str, Any] = {}
@@ -1316,7 +1332,7 @@ class CommandCompiledToolHostV1:
 
         The envelope is an operating ceiling, not evidence that every allowed
         program compiled and previewed successfully in this session.  A broad
-        CPU-server envelope may therefore name programs whose bootstrap
+        target-host envelope may therefore name programs whose bootstrap
         conformance is currently red.  Keep those programs reference-only and
         expose execution only for the allowed pairs that already have green
         preview evidence.
@@ -1441,7 +1457,7 @@ class CommandCompiledToolHostV1:
                 self.scientific_decisions[receipt_sha256] = decision
 
     def record_seeded_evidence(self, turn_id: str) -> None:
-        """Persist host-prebound H0 evidence before any model action."""
+        """Persist host-prebound evidence before any model action."""
 
         for receipt in self.capabilities.values():
             self._emit(
@@ -2251,6 +2267,13 @@ class CommandCompiledToolHostV1:
             result["approval_readiness"] = self._approval_readiness(
                 scientific_plan
             )
+        self._latest_program_workflows[draft.workflow_id] = (
+            _ResolvedProgramWorkflow(
+                draft=draft,
+                scientific_plan=scientific_plan,
+                command_result=result,
+            )
+        )
         return result
 
     def _plan_scientific_workflow(self, turn_id: str, values: dict) -> Any:
@@ -2356,6 +2379,17 @@ class CommandCompiledToolHostV1:
                     pressure_atm=raw_node.get("pressure_atm"),
                     support_state=raw_node["support_state"],
                     blocked_reason=raw_node["blocked_reason"],
+                    concentration_mol_l=raw_node.get("concentration_mol_l"),
+                    entropy_method=raw_node.get("entropy_method", "rrho"),
+                    entropy_cutoff_cm1=raw_node.get("entropy_cutoff_cm1"),
+                    enthalpy_cutoff_cm1=raw_node.get("enthalpy_cutoff_cm1"),
+                    alpha=raw_node.get("alpha", 4),
+                    use_weighted_mass=raw_node.get(
+                        "use_weighted_mass", False
+                    ),
+                    frequency_scale_factor=raw_node.get(
+                        "frequency_scale_factor", 1.0
+                    ),
                     validation_rules=tuple(
                         sorted(
                             (
@@ -2395,6 +2429,7 @@ class CommandCompiledToolHostV1:
         self._scientific_toolchain_command_results[plan.plan_sha256] = (
             command_result
         )
+        self._bind_program_toolchain(plan, command_result)
         frontier = project_scientific_toolchain_frontier(
             plan,
             actionable_calculation_node_ids=command_result[
@@ -2412,6 +2447,41 @@ class CommandCompiledToolHostV1:
             "calculation_plan": command_result,
             "workflow_frontier": frontier,
         }
+
+    def _bind_program_toolchain(
+        self,
+        plan: ScientificToolchainPlanV1,
+        command_result: Mapping[str, Any],
+    ) -> None:
+        """Bind analysis only to the exact command workflow it extends."""
+
+        resolved = self._latest_program_workflows.get(plan.workflow_id)
+        if resolved is None or resolved.command_result is not command_result:
+            raise ContractError(
+                "scientific toolchain has no exact command workflow binding"
+            )
+        if plan.command_workflow_draft_sha256 != resolved.draft.draft_sha256:
+            raise ContractError(
+                "scientific toolchain belongs to another command workflow"
+            )
+        scientific_plan = command_result.get("scientific_workflow_plan")
+        if resolved.draft.nodes:
+            if (
+                not isinstance(scientific_plan, ScientificWorkflowPlanV2)
+                or scientific_plan is not resolved.scientific_plan
+            ):
+                raise ContractError(
+                    "scientific toolchain lacks its task-bound scientific plan"
+                )
+        elif (
+            scientific_plan is not None or resolved.scientific_plan is not None
+        ):
+            raise ContractError(
+                "analysis-only toolchain must not invent a scientific plan"
+            )
+        self._latest_program_workflows[plan.workflow_id] = replace(
+            resolved, scientific_toolchain_plan=plan
+        )
 
     @staticmethod
     def _analysis_result_program_for_kind(artifact_kind: str) -> str:
@@ -2564,6 +2634,7 @@ class CommandCompiledToolHostV1:
         self._scientific_toolchain_command_results[
             revised_plan.plan_sha256
         ] = command_result
+        self._bind_program_toolchain(revised_plan, command_result)
         return {
             "scientific_toolchain_plan": revised_plan,
             "calculation_plan": command_result,
@@ -2588,23 +2659,56 @@ class CommandCompiledToolHostV1:
             ),
         }
 
+    def _resolve_program_workflow(
+        self, workflow_id: str
+    ) -> _ResolvedProgramWorkflow:
+        """Resolve the latest workflow surface with exact host bindings."""
+
+        resolved = self._latest_program_workflows.get(workflow_id)
+        if resolved is None:
+            raise ContractError("unknown scientific workflow ID")
+        if (
+            self.workflow_drafts.get(resolved.draft.draft_sha256)
+            is not resolved.draft
+            or resolved.draft.workflow_id != workflow_id
+        ):
+            raise ContractError(
+                "workflow resolver lost its exact command draft binding"
+            )
+        scientific_plan = resolved.scientific_plan
+        if scientific_plan is not None and (
+            scientific_plan.workflow_id != workflow_id
+            or self.scientific_workflow_plans.get(scientific_plan.plan_sha256)
+            is not scientific_plan
+        ):
+            raise ContractError(
+                "workflow resolver lost its exact scientific plan binding"
+            )
+        toolchain = resolved.scientific_toolchain_plan
+        if toolchain is not None and (
+            toolchain.workflow_id != workflow_id
+            or toolchain.command_workflow_draft_sha256
+            != resolved.draft.draft_sha256
+            or self.scientific_toolchain_plans.get(toolchain.plan_sha256)
+            is not toolchain
+            or self._scientific_toolchain_command_results.get(
+                toolchain.plan_sha256
+            )
+            is not resolved.command_result
+        ):
+            raise ContractError(
+                "workflow resolver lost its exact scientific toolchain binding"
+            )
+        return resolved
+
     def _inspect_workflow_frontier(self, turn_id: str, values: dict) -> Any:
         """Return the latest connected frontier for a named workflow."""
 
         del turn_id
-        candidates = tuple(
-            plan
-            for plan in self.scientific_toolchain_plans.values()
-            if plan.workflow_id == values["workflow_id"]
-        )
-        if not candidates:
-            raise ContractError("unknown scientific workflow ID")
-        plan = candidates[-1]
-        command_result = self._scientific_toolchain_command_results[
-            plan.plan_sha256
-        ]
-        draft = command_result["workflow_draft"]
-        scientific_v2 = command_result.get("scientific_workflow_plan")
+        resolved = self._resolve_program_workflow(values["workflow_id"])
+        command_result = resolved.command_result
+        draft = resolved.draft
+        scientific_v2 = resolved.scientific_plan
         context = self._workflow_context(
             draft,
             scientific_plan_sha256=(
@@ -2639,6 +2743,12 @@ class CommandCompiledToolHostV1:
                 | finding_nodes
             )
         )
+        plan = resolved.scientific_toolchain_plan
+        if plan is None:
+            return {
+                "scientific_workflow_plan": scientific_v2,
+                "workflow_context": context,
+            }
         return {
             "scientific_toolchain_plan": plan,
             "workflow_context": context,
@@ -2661,25 +2771,25 @@ class CommandCompiledToolHostV1:
 
         workflow_id = values["workflow_id"]
         node_id = values["node_id"]
-        plans = tuple(
-            plan
-            for plan in self.scientific_toolchain_plans.values()
-            if plan.workflow_id == workflow_id
-        )
-        if not plans:
-            raise ContractError("unknown scientific workflow ID")
-        plan = plans[-1]
-        command_result = self._scientific_toolchain_command_results[
-            plan.plan_sha256
-        ]
-        draft = command_result["workflow_draft"]
+        resolved = self._resolve_program_workflow(workflow_id)
+        draft = resolved.draft
         nodes = tuple(node for node in draft.nodes if node.node_id == node_id)
         if len(nodes) != 1:
             raise ContractError("workflow has no unique calculation node ID")
         node = nodes[0]
+        if not node.inputs:
+            return {
+                "status": "needs_clarification",
+                "workflow_id": workflow_id,
+                "node_id": node_id,
+                "finding": "program node declares no molecular input",
+                "next_action": "repair the workflow input binding",
+            }
 
-        scientific_v2 = command_result.get("scientific_workflow_plan")
-        plan_sha256 = scientific_v2.plan_sha256 if scientific_v2 else ""
+        scientific_v2 = resolved.scientific_plan
+        if scientific_v2 is None:
+            raise ContractError("workflow has no task-bound scientific plan")
+        plan_sha256 = scientific_v2.plan_sha256
         materialized_inputs, _completed = self._observed_workflow_state(
             draft,
             scientific_plan_sha256=plan_sha256,
@@ -3499,7 +3609,7 @@ class CommandCompiledToolHostV1:
         """Return causal future nodes that bounded execution can defer.
 
         A consumer of an optimized geometry cannot be compiled or previewed
-        before its producer runs.  The continuous execution contract admits
+        before its producer runs.  The bounded execution contract admits
         that exact dependency without weakening the preview requirement for
         any initially runnable node.  Keep the predicate here aligned with
         the producer-edge subset accepted by ``_admit_bounded_workflow`` so
@@ -3542,7 +3652,7 @@ class CommandCompiledToolHostV1:
         """Say which nodes still stand between this plan and execution.
 
         Exact approvals require every materialized node to hold a green
-        preview.  Bounded continuous execution additionally permits an exact
+        preview.  Bounded local execution additionally permits an exact
         producer-data target to remain deferred until its optimized geometry
         exists.  That causal future node is not a preview blocker and must not
         be presented as a stage the model should delete.
@@ -3581,7 +3691,7 @@ class CommandCompiledToolHostV1:
         return {
             "approvable": not blocking,
             "authorization_mode": (
-                "bounded_continuous"
+                "bounded_local"
                 if getattr(self, "bounded_execution_envelope", None)
                 is not None
                 else "exact_preview"
@@ -3596,7 +3706,7 @@ class CommandCompiledToolHostV1:
             "rule": (
                 (
                     "every initially runnable node needs a green preview "
-                    "before execution. Under bounded continuous execution, "
+                    "before execution. Under bounded local execution, "
                     "an exact producer-data target is deferred_admissible "
                     "until its producer materializes the optimized geometry. "
                     "Repair a preview_required node using the findings "

@@ -8,9 +8,6 @@ import yaml
 
 from chemsmart.agent.execution import derive_ready_node_ids
 from chemsmart.agent._contracts import ContractError, canonical_sha256
-from chemsmart.agent.experiments.program_management_fixtures import (
-    ProgramManagementHostFixtureFactoryV1,
-)
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.projects import ProjectValidationReceiptV1
 from chemsmart.agent.tool_runtime import (
@@ -18,14 +15,13 @@ from chemsmart.agent.tool_runtime import (
     _project_v1_execution_run_state,
     _scientific_plan_from_v1_approval,
 )
+from tests.agent.neutral_workflow_fixture import (
+    build_neutral_workflow_fixture,
+)
 
 
 def test_plan_tool_projects_explicit_data_edge_into_scientific_dag(tmp_path):
-    factory = ProgramManagementHostFixtureFactoryV1(
-        source_tree_root=".",
-        materialization_root=tmp_path / "fixture",
-    )
-    fixture = factory(SimpleNamespace(case_id="DS-PM-003"))
+    fixture = build_neutral_workflow_fixture(tmp_path / "fixture")
     store = RuntimeEventStore(
         tmp_path / "events" / "runtime.jsonl", session_id="session"
     )
@@ -71,11 +67,7 @@ def test_rejected_replan_cannot_displace_the_latest_observed_workflow(
     workflow receipt, or Runtime V2 cannot terminate honestly as ``planned``.
     """
 
-    factory = ProgramManagementHostFixtureFactoryV1(
-        source_tree_root=".",
-        materialization_root=tmp_path / "fixture",
-    )
-    fixture = factory(SimpleNamespace(case_id="DS-PM-003"))
+    fixture = build_neutral_workflow_fixture(tmp_path / "fixture")
     store = RuntimeEventStore(
         tmp_path / "events" / "runtime.jsonl", session_id="session"
     )
@@ -187,11 +179,7 @@ def test_v1_approval_projection_does_not_invent_tuple_order_dependencies():
 def test_validated_project_repair_can_rebind_without_rewriting_analysis_dag(
     tmp_path,
 ):
-    factory = ProgramManagementHostFixtureFactoryV1(
-        source_tree_root=".",
-        materialization_root=tmp_path / "fixture",
-    )
-    fixture = factory(SimpleNamespace(case_id="DS-PM-003"))
+    fixture = build_neutral_workflow_fixture(tmp_path / "fixture")
     store = RuntimeEventStore(
         tmp_path / "events" / "runtime.jsonl", session_id="session"
     )

@@ -6,12 +6,11 @@ from dataclasses import replace
 from typing import Any
 
 from chemsmart.agent._contracts import ContractError
-from chemsmart.agent.adaptive_api_campaign import (
-    AdaptiveHypothesisV1,
-    AdaptiveNetworkBudgetV1,
+from chemsmart.agent.request_context import (
+    ProviderNetworkBudgetV1,
+    RequestContextProvenanceV1,
 )
 from chemsmart.agent.api_access import SecretLease
-from chemsmart.agent.feedback import FULL_FEEDBACK_V1
 from chemsmart.agent.loop import ToolLoopResultV1, ToolLoopRunner
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
@@ -46,9 +45,8 @@ class UnifiedSessionRunner:
         *,
         messages: list[dict[str, Any]],
         envelope: TaskEnvelopeV1,
-        hypothesis: AdaptiveHypothesisV1,
-        network_budget: AdaptiveNetworkBudgetV1,
-        feedback_projection: str = FULL_FEEDBACK_V1,
+        request_context: RequestContextProvenanceV1,
+        provider_budget: ProviderNetworkBudgetV1,
     ) -> ToolLoopResultV1:
         if not messages or not all(
             isinstance(item, dict) and item.get("role") in {
@@ -63,7 +61,7 @@ class UnifiedSessionRunner:
         def _leased_run(secret: str) -> ToolLoopResultV1:
             approved_output_limit = min(
                 envelope.budget.max_output_tokens_per_request,
-                network_budget.max_output_tokens_per_request,
+                provider_budget.max_output_tokens_per_request,
                 self.provider_config.max_output_tokens,
             )
             bound_config = replace(
@@ -104,12 +102,11 @@ class UnifiedSessionRunner:
                 return ToolLoopRunner(
                     host=self.host,
                     event_store=self.event_store,
-                    feedback_projection=feedback_projection,
                 ).run(
                     session=session,
                     envelope=envelope,
-                    hypothesis=hypothesis,
-                    network_budget=network_budget,
+                    request_context=request_context,
+                    provider_budget=provider_budget,
                 )
             finally:
                 session.close()

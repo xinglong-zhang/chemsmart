@@ -82,7 +82,7 @@ class ProgramCapabilityV1:
     #: Which YAML sections this program's loader reads.  Declared in
     #: settings/capabilities.py since the section-shape gate was added, but
     #: never projected here, so a model authoring a project had to guess the
-    #: one thing the loader is strictest about.  Across this campaign sessions
+    #: one thing the loader is strictest about. Across repeated sessions
     #: guessed a td: section for a phase-keyed program, guessed gas: where the
     #: loader wanted solv:, and learned the rule only from a rejection.
     project_section_names: tuple[str, ...] = ()

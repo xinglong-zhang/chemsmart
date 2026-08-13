@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
-
 import pytest
 
 from chemsmart.agent._contracts import (
@@ -10,13 +8,9 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
 )
 from chemsmart.agent.dependency_context import (
-    HarnessContextArmV1,
     bind_selected_public_records,
-    build_context_manifest_v2,
     build_dependency_context_public_projection,
-    build_harness_context_arm,
     build_predecessor_evidence_ref,
-    build_specialist_task_packet_v2,
     build_task_dependency_context_policy,
     select_task_dependency_context,
 )
@@ -133,27 +127,27 @@ def _evidence():
     )
 
 
-def _policy(arm_id: str, *, max_public_bytes: int = 100_000):
+def _policy(mode: str, *, max_public_bytes: int = 100_000):
     return build_task_dependency_context_policy(
-        policy_id=f"paper-{arm_id}",
-        arm_id=arm_id,
+        policy_id=f"workflow-{mode}",
+        mode=mode,
         record_classes=("artifact", "decision", "validation"),
         max_public_bytes=max_public_bytes,
     )
 
 
-def _select(arm_id: str, *, evidence=None, max_public_bytes=100_000):
+def _select(mode: str, *, evidence=None, max_public_bytes=100_000):
     return select_task_dependency_context(
-        selection_id=f"select-{arm_id}",
+        selection_id=f"select-{mode}",
         plan=_fan_out_fan_in_plan(),
         target_node_id="derived-value",
-        policy=_policy(arm_id, max_public_bytes=max_public_bytes),
+        policy=_policy(mode, max_public_bytes=max_public_bytes),
         evidence_refs=_evidence() if evidence is None else evidence,
     )
 
 
-def test_p2_selects_all_fan_in_and_transitive_ancestors_only():
-    context, receipt = _select("p2")
+def test_dependency_projection_selects_all_fan_in_and_ancestors_only():
+    context, receipt = _select("dependency_projected")
 
     assert context is not None
     assert context.direct_predecessor_node_ids == ("sp-low", "sp-high")
@@ -197,8 +191,8 @@ def test_p2_selects_all_fan_in_and_transitive_ancestors_only():
     )
 
 
-def test_p1_includes_preceding_unrelated_sibling_but_not_descendant():
-    context, _ = _select("p1")
+def test_ordered_predecessors_include_prior_sibling_not_descendant():
+    context, _ = _select("ordered_predecessors")
 
     assert context is not None
     assert context.included_node_ids == (
@@ -221,8 +215,8 @@ def test_p1_includes_preceding_unrelated_sibling_but_not_descendant():
     }
 
 
-def test_p0_is_a_real_no_predecessor_baseline():
-    context, _ = _select("p0")
+def test_target_only_context_exposes_no_predecessor():
+    context, _ = _select("target_only")
 
     assert context is not None
     assert context.included_node_ids == ("derived-value",)
@@ -236,15 +230,17 @@ def test_p0_is_a_real_no_predecessor_baseline():
 
 
 def test_selection_is_canonical_across_evidence_input_order():
-    forward, forward_receipt = _select("p2")
-    reverse, reverse_receipt = _select("p2", evidence=tuple(reversed(_evidence())))
+    forward, forward_receipt = _select("dependency_projected")
+    reverse, reverse_receipt = _select(
+        "dependency_projected", evidence=tuple(reversed(_evidence()))
+    )
 
     assert reverse == forward
     assert reverse_receipt == forward_receipt
 
 
 def test_context_budget_blocks_instead_of_truncating_required_evidence():
-    context, receipt = _select("p2", max_public_bytes=1)
+    context, receipt = _select("dependency_projected", max_public_bytes=1)
 
     assert context is None
     assert receipt.status == "blocked_context_budget"
@@ -265,101 +261,9 @@ def test_unknown_node_evidence_fails_closed():
         size_bytes=10,
     )
     with pytest.raises(ContractError, match="unknown node"):
-        _select("p2", evidence=(*_evidence(), unknown))
+        _select("dependency_projected", evidence=(*_evidence(), unknown))
 
 
-def test_context_manifest_v2_binds_exact_selected_records_and_receipt():
-    plan = _fan_out_fan_in_plan()
-    policy = _policy("p2")
-    context, receipt = select_task_dependency_context(
-        selection_id="manifest-selection",
-        plan=plan,
-        target_node_id="derived-value",
-        policy=policy,
-        evidence_refs=_evidence(),
-    )
-    assert context is not None
-
-    manifest = build_context_manifest_v2(
-        manifest_id="derived-context",
-        plan=plan,
-        context=context,
-        selection_receipt=receipt,
-        source_sha256s=("a" * 64,),
-        artifact_sha256s=("b" * 64,),
-        tool_schema_sha256="c" * 64,
-        allowed_tools=("inspect_calculation",),
-        token_budget=16_000,
-        tool_call_budget=8,
-        wall_time_seconds=600,
-    )
-
-    assert manifest.dependency_context_sha256 == context.context_sha256
-    assert manifest.selection_receipt_sha256 == receipt.receipt_sha256
-    assert manifest.included_record_sha256s == tuple(
-        sorted(item.record_sha256 for item in context.evidence_refs)
-    )
-
-
-def test_harness_arm_is_bound_to_policy_without_environment_toggle():
-    policy = _policy("p2")
-    arm = build_harness_context_arm(
-        experiment_id="paper-context-study",
-        case_id="qm9-ammonia",
-        policy=policy,
-        prompt_sha256="d" * 64,
-        tool_schema_sha256="e" * 64,
-    )
-
-    assert arm.arm_id == "p2"
-    assert arm.mode == "dependency_projected"
-    assert arm.policy_sha256 == policy.policy_sha256
-    with pytest.raises(ContractError, match="arm and mode disagree"):
-        HarnessContextArmV1(
-            **{
-                **dataclasses.asdict(arm),
-                "mode": "full_history",
-                "arm_sha256": canonical_sha256({"mismatched": True}),
-            }
-        )
-
-
-def test_specialist_packet_v2_binds_target_and_selected_records():
-    plan = _fan_out_fan_in_plan()
-    context, receipt = select_task_dependency_context(
-        selection_id="specialist-selection",
-        plan=plan,
-        target_node_id="derived-value",
-        policy=_policy("p2"),
-        evidence_refs=_evidence(),
-    )
-    assert context is not None
-    manifest = build_context_manifest_v2(
-        manifest_id="specialist-context",
-        plan=plan,
-        context=context,
-        selection_receipt=receipt,
-        source_sha256s=("a" * 64,),
-        artifact_sha256s=("b" * 64,),
-        tool_schema_sha256="c" * 64,
-        allowed_tools=("inspect_calculation",),
-        token_budget=16_000,
-        tool_call_budget=8,
-        wall_time_seconds=600,
-    )
-    packet = build_specialist_task_packet_v2(
-        packet_id="derived-specialist",
-        manifest=manifest,
-        role="scientific-specialist",
-        target_node_ids=("derived-value",),
-        expected_output_schema="scientific-advice-v1",
-        owner="coordinator",
-        merge_key="derived-value-advice",
-    )
-
-    assert packet.target_node_ids == ("derived-value",)
-    assert packet.context_manifest_sha256 == manifest.manifest_sha256
-    assert packet.input_record_sha256s == manifest.included_record_sha256s
 
 
 def _payload_context():
@@ -413,7 +317,7 @@ def _payload_context():
         selection_id="payload-selection",
         plan=_fan_out_fan_in_plan(),
         target_node_id="derived-value",
-        policy=_policy("p2"),
+        policy=_policy("dependency_projected"),
         evidence_refs=refs,
     )
     assert context is not None
@@ -446,7 +350,7 @@ def test_public_projection_exposes_only_selected_hash_bound_payloads():
         selection_id="payload-selection",
         plan=_fan_out_fan_in_plan(),
         target_node_id="derived-value",
-        policy=_policy("p2"),
+        policy=_policy("dependency_projected"),
         evidence_refs=tuple(
             build_predecessor_evidence_ref(
                 record_id=item.record_id,
@@ -477,9 +381,9 @@ def test_public_projection_exposes_only_selected_hash_bound_payloads():
     assert "unselected-sibling" not in canonical_json(projection)
 
 
-def test_public_projection_rejects_a_receipt_from_another_context_arm():
+def test_public_projection_rejects_a_receipt_from_another_context_mode():
     context, payloads = _payload_context()
-    _, wrong_receipt = _select("p1")
+    _, wrong_receipt = _select("ordered_predecessors")
 
     with pytest.raises(ContractError, match="selection receipt .* mismatch"):
         build_dependency_context_public_projection(

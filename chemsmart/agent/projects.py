@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
 import hashlib
+import importlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -273,28 +273,12 @@ def project_effective_section_settings(
         section.name: dict(section.settings) for section in document.sections
     }
     effective: dict[str, Any] = {}
-    if document.program in {"gaussian", "orca"}:
-        if normalized_jobtype == "sp":
-            effective.update(
-                (
-                    sections.get("solv")
-                    if "solv" in sections
-                    else sections.get("gas")
-                )
-                or {}
-            )
-        elif normalized_jobtype not in {"td", "qmmm"}:
-            effective.update(
-                (
-                    sections.get("gas")
-                    if "gas" in sections
-                    else sections.get("solv")
-                )
-                or {}
-            )
-        effective.update(sections.get(normalized_jobtype) or {})
-    else:
-        effective.update(sections.get(normalized_jobtype) or {})
+    for section_name in _loader_project_section_sources(
+        document.program,
+        normalized_jobtype,
+        sections,
+    ):
+        effective.update(sections[section_name])
     return tuple(
         sorted(
             (str(name), canonical_data(value))
@@ -352,23 +336,10 @@ def project_section_application_observation(
         section.name: dict(section.settings) for section in document.sections
     }
     available = tuple(sorted(sections))
-    if document.program in {"gaussian", "orca"}:
-        if normalized_jobtype == "sp":
-            candidates = (
-                "solv" if "solv" in sections else "gas",
-                "sp",
-            )
-        elif normalized_jobtype in {"td", "qmmm"}:
-            candidates = (normalized_jobtype,)
-        else:
-            candidates = (
-                "gas" if "gas" in sections else "solv",
-                normalized_jobtype,
-            )
-    else:
-        candidates = (normalized_jobtype,)
-    used = tuple(
-        dict.fromkeys(name for name in candidates if name in sections)
+    used = _loader_project_section_sources(
+        document.program,
+        normalized_jobtype,
+        sections,
     )
     ignored = tuple(sorted(set(available).difference(used)))
     effective = dict(
@@ -446,6 +417,39 @@ def project_section_application_observation(
     return observation
 
 
+def _loader_project_section_sources(
+    program: str,
+    jobtype: str,
+    sections: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """Project section precedence from each checked-out loader owner."""
+
+    if program in {"gaussian", "orca"}:
+        from chemsmart.jobs.settings import molecular_project_section_sources
+
+        return molecular_project_section_sources(
+            sections,
+            program=program,
+            jobtype=jobtype,
+        )
+    if program == "pyscf":
+        from chemsmart.settings.pyscf import PYSCF_STAGE_SOURCES
+
+        # Migration input is checked first and the canonical stage, when
+        # present, is the loader-selected representation that takes priority.
+        return tuple(
+            source
+            for source in reversed(PYSCF_STAGE_SOURCES[jobtype])
+            if source in sections
+        )
+    if program == "xtb":
+        from chemsmart.settings.xtb import YamlXTBProjectSettingsBuilder
+
+        if jobtype not in YamlXTBProjectSettingsBuilder.SECTIONS:
+            return ()
+    return (jobtype,) if jobtype in sections else ()
+
+
 def _require_declared_section_shape(
     program: str, payload: Mapping[str, Any]
 ) -> None:
@@ -460,17 +464,11 @@ def _require_declared_section_shape(
     still act on it.
     """
 
-    from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
+    from chemsmart.settings.capabilities import loader_project_section_names
 
-    capability = PROGRAM_CAPABILITIES.get(program)
-    declared = set(capability.project_section_names if capability else ())
+    declared = set(loader_project_section_names(program))
     if not declared:
         return
-    # A phase-keyed program also reads a per-jobtype section for the job types
-    # that carry their own settings (td, irc, qmmm). Admitting the declared job
-    # types keeps this gate aligned with the loader instead of maintaining a
-    # second list that drifts from it.
-    declared |= set(capability.jobtypes)
     unknown = sorted(set(payload) - declared)
     if unknown:
         raise ContractError(

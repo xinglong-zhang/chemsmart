@@ -1191,6 +1191,30 @@ class ORCARefs:
         return [basis.lower() for basis in orca_auxiliary_basis_cc]
 
     @property
+    def orca_auxiliary_basis_cc_pairings(self):
+        """Exact registered AuxC-to-orbital basis relationships.
+
+        Consumers must not infer a correlation-fitting role or compatibility
+        from an arbitrary user string ending in ``/C`` or ``-MP2fit``.  Build
+        the relationship only for names expanded from ORCA's maintained AuxC
+        registry, then expose an exact lookup to settings validation.
+        """
+
+        pairings = {}
+        for auxiliary in self.orca_auxiliary_basis_cc:
+            if auxiliary.endswith("/c"):
+                orbital = auxiliary[:-2]
+            elif auxiliary.endswith("-mp2fit"):
+                orbital = auxiliary[: -len("-mp2fit")]
+            else:  # pragma: no cover - registry additions must declare a pair
+                raise ValueError(
+                    "ORCA AuxC registry entry has no orbital-basis pairing: "
+                    f"{auxiliary!r}"
+                )
+            pairings[auxiliary] = orbital
+        return pairings
+
+    @property
     def orca_auxiliary_basis_autoaux(self):
         return [basis.lower() for basis in self.ORCA_AUXILIARY_AUTOAUX]
 

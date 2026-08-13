@@ -7,11 +7,11 @@ import pytest
 
 from chemsmart.agent._contracts import canonical_json, canonical_sha256
 from chemsmart.agent._contracts import ContractError
-from chemsmart.agent.adaptive_api_campaign import (
-    AdaptiveHypothesisV1,
-    AdaptiveNetworkBudgetV1,
-)
 from chemsmart.agent.loop import ToolLoopRunner, _execution_wake_reason
+from chemsmart.agent.request_context import (
+    ProviderNetworkBudgetV1,
+    build_request_context_provenance,
+)
 from chemsmart.agent.runtime.alibaba import (
     AlibabaTokenPlanHttpsTransport,
     Qwen38MaxConfigV1,
@@ -50,6 +50,9 @@ class _DispatchSpyHost:
             profile="command_compiled_preview",
         )
         self.analysis_completion_policy = None
+        self.task_spec_sha256s = frozenset(
+            {canonical_sha256("synthetic task")}
+        )
         self.dispatched: list[tuple[str, dict]] = []
 
     def record_seeded_evidence(self, _turn_id: str) -> None:
@@ -94,40 +97,25 @@ def _run_contracts(
         **envelope_body, envelope_sha256=canonical_sha256(envelope_body)
     )
     network_body = {
-        "schema_version": "chemsmart.adaptive-network-budget.v1",
+        "schema_version": "chemsmart.provider-network-budget.v1",
         "allowed_provider": config.provider,
         "endpoint_origin": config.endpoint,
-        "purpose": "synthetic-provider-protocol-regression",
         "max_concurrency": 1,
         "max_input_tokens_per_request": config.context_tokens,
         "max_output_tokens_per_request": config.max_output_tokens,
         "task_wall_time_seconds": 30.0,
-        "quota_scope": "no-network-synthetic-test",
-        "top_up_allowed": False,
-        "engine_calls": 0,
-        "hpc_calls": 0,
     }
-    network = AdaptiveNetworkBudgetV1(
+    network = ProviderNetworkBudgetV1(
         **network_body, budget_sha256=canonical_sha256(network_body)
     )
-    hypothesis_body = {
-        "schema_version": "chemsmart.adaptive-hypothesis.v1",
-        "hypothesis_id": "malformed-envelope-is-closed",
-        "changed_factor": "second_tool_call_has_invalid_json",
-        "comparator_id": "valid-two-tool-call-envelope",
-        "expected_outcome": "no tool call is dispatched",
-        "deterministic_oracle_id": "protocol-failure-event-v1",
-        "source_sha256s": (canonical_sha256("synthetic envelope"),),
-        "prompt_sha256": envelope.request_sha256,
-        "tool_schema_sha256": host.surface.tool_schema_sha256,
-        "configuration_sha256": network.budget_sha256,
-        "distinct_from_prior": "Synthetic all-or-nothing dispatch regression.",
-    }
-    hypothesis = AdaptiveHypothesisV1(
-        **hypothesis_body,
-        hypothesis_sha256=canonical_sha256(hypothesis_body),
+    request_context = build_request_context_provenance(
+        task_spec_sha256=canonical_sha256("synthetic task"),
+        prompt_sha256=envelope.request_sha256,
+        tool_schema_sha256=host.surface.tool_schema_sha256,
+        configuration_sha256=canonical_sha256("synthetic configuration"),
+        provider_budget_sha256=network.budget_sha256,
     )
-    return envelope, hypothesis, network
+    return envelope, request_context, network
 
 
 class _ExecutionWaitHost(_DispatchSpyHost):
@@ -170,6 +158,34 @@ class _ExecutionWaitHost(_DispatchSpyHost):
                 "termination_requested": False,
             },
         }
+
+
+def test_request_context_must_bind_the_active_host_task(tmp_path):
+    config = Qwen38MaxConfigV1()
+    host = _DispatchSpyHost()
+    envelope, _request_context, network = _run_contracts(host, config)
+    mismatched = build_request_context_provenance(
+        task_spec_sha256=canonical_sha256("another task"),
+        prompt_sha256=envelope.request_sha256,
+        tool_schema_sha256=host.surface.tool_schema_sha256,
+        configuration_sha256=canonical_sha256("synthetic configuration"),
+        provider_budget_sha256=network.budget_sha256,
+    )
+    runner = ToolLoopRunner(
+        host=host,
+        event_store=RuntimeEventStore(
+            tmp_path / "events" / "runtime.jsonl",
+            session_id="protocol-session",
+        ),
+    )
+
+    with pytest.raises(ContractError, match="another task"):
+        runner._validate_run_contract(
+            envelope=envelope,
+            request_context=mismatched,
+            provider_budget=network,
+            provider=config.provider,
+        )
 
 
 def test_alibaba_malformed_envelope_is_auditable_without_partial_dispatch(
@@ -220,13 +236,13 @@ def test_alibaba_malformed_envelope_is_auditable_without_partial_dispatch(
         session_id="protocol-session",
     )
     host = _DispatchSpyHost()
-    envelope, hypothesis, network = _run_contracts(host, config)
+    envelope, request_context, network = _run_contracts(host, config)
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.terminal_state == "failed"
@@ -361,13 +377,13 @@ def test_valid_tool_argument_text_is_preserved_and_dispatched_atomically(
         session_id="protocol-session",
     )
     host = _DispatchSpyHost()
-    envelope, hypothesis, network = _run_contracts(host, config)
+    envelope, request_context, network = _run_contracts(host, config)
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.terminal_state == "blocked"
@@ -444,13 +460,13 @@ def test_public_decode_failure_cannot_dispatch_an_earlier_call(
         session_id="protocol-session",
     )
     host = _DispatchSpyHost()
-    envelope, hypothesis, network = _run_contracts(host, config)
+    envelope, request_context, network = _run_contracts(host, config)
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.terminal_state == "failed"
@@ -529,15 +545,15 @@ def test_approved_engine_execution_parks_provider_and_wakes_with_durable_evidenc
         session_id="protocol-session",
     )
     host = _ExecutionWaitHost(timeline)
-    envelope, hypothesis, network = _run_contracts(
+    envelope, request_context, network = _run_contracts(
         host, config, chemistry_engine_calls=1
     )
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert timeline == [
@@ -667,15 +683,15 @@ def test_approved_program_dispatch_rejection_still_closes_wait_event(tmp_path):
         session_id="protocol-session",
     )
     host = RejectingHost(timeline)
-    envelope, hypothesis, network = _run_contracts(
+    envelope, request_context, network = _run_contracts(
         host, config, chemistry_engine_calls=1
     )
 
     ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     events = store.read_events()
@@ -747,15 +763,15 @@ def test_execution_wait_admission_failure_is_canonical_and_terminal(tmp_path):
         session_id="protocol-session",
     )
     host = ExhaustedHost(timeline)
-    envelope, hypothesis, network = _run_contracts(
+    envelope, request_context, network = _run_contracts(
         host, config, chemistry_engine_calls=1
     )
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.failed_tool_calls == 1
@@ -809,13 +825,13 @@ def test_provider_deadline_failure_terminalizes_inside_episode_reserve(tmp_path)
         session_id="protocol-session",
     )
     host = _DispatchSpyHost()
-    envelope, hypothesis, network = _run_contracts(host, config)
+    envelope, request_context, network = _run_contracts(host, config)
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.terminal_state == "failed"
@@ -859,13 +875,13 @@ def test_raw_reset_is_sanitized_and_terminalizes_runtime(
         session_id="protocol-session",
     )
     host = _DispatchSpyHost()
-    envelope, hypothesis, network = _run_contracts(host, config)
+    envelope, request_context, network = _run_contracts(host, config)
 
     result = ToolLoopRunner(host=host, event_store=store).run(
         session=session,
         envelope=envelope,
-        hypothesis=hypothesis,
-        network_budget=network,
+        request_context=request_context,
+        provider_budget=network,
     )
 
     assert result.terminal_state == "failed"

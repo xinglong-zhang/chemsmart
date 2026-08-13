@@ -16,9 +16,9 @@ make install-dev
 make pre-commit
 ```
 
-For a headless x86 Ubuntu benchmark host, follow
-`docs/source/installation-ubuntu-cpu-server.rst` before configuring external
-programs.
+For a headless target host, follow
+`docs/source/installation-ubuntu-cpu-server.rst` as one Linux example and
+verify every external program and resource setting on the actual machine.
 
 ## Before editing
 
@@ -94,7 +94,7 @@ Use focused conventional commits, for example:
 
 ```bash
 git commit -m "fix(orca): validate semantic normal termination"
-git commit -m "docs: add Ubuntu CPU benchmark setup"
+git commit -m "docs: document target-host CPU setup"
 ```
 
 Before pushing, inspect the complete diff and verify that relevant checks ran.

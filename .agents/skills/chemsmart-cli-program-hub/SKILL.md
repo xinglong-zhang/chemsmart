@@ -53,9 +53,10 @@ this skill when the lesson is general.
 Do not hard-code a failing molecule or paper. A new setting or selector should
 name a program or scientific concept, not a benchmark case.
 
-## CPU server qualification
+## Target-host qualification
 
-On x86 Ubuntu, qualify controller import and CLI help, program-free previews,
-one-core real single points, optimization/frequency handoff, then advanced
-workflows. Confirm ORCA/MPI compatibility and the exact PySCF interpreter.
-Keep host configuration and credentials outside Git.
+On each intended host, qualify controller import and CLI help, program-free
+previews, a minimal real calculation, optimization/frequency handoff, then
+advanced workflows. Confirm program and MPI compatibility and the exact PySCF
+interpreter where applicable. Keep host configuration and credentials outside
+Git.

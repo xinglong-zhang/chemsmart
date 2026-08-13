@@ -8,6 +8,7 @@ calculation producer or a model-authored path.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
@@ -199,6 +200,13 @@ class AnalysisNodeIntentV1:
     support_state: str
     blocked_reason: str
     validation_rules: tuple[AnalysisValidationRuleIntentV1, ...] = ()
+    concentration_mol_l: float | None = None
+    entropy_method: str = "rrho"
+    entropy_cutoff_cm1: float | None = None
+    enthalpy_cutoff_cm1: float | None = None
+    alpha: int = 4
+    use_weighted_mass: bool = False
+    frequency_scale_factor: float = 1.0
 
     def __post_init__(self) -> None:
         _identifier(self.node_id, "analysis node_id")
@@ -284,17 +292,88 @@ class AnalysisNodeIntentV1:
                     f"{sorted(unknown)}"
                 )
         if self.analysis_kind == "thermochemistry":
-            if self.temperature_k is None or self.temperature_k <= 0:
+            if (
+                self.temperature_k is None
+                or not math.isfinite(float(self.temperature_k))
+                or self.temperature_k <= 0
+            ):
                 raise ScientificToolchainContractError(
                     "thermochemistry requires a positive temperature"
                 )
-            if self.pressure_atm is None or self.pressure_atm <= 0:
+            if (
+                self.pressure_atm is None
+                or not math.isfinite(float(self.pressure_atm))
+                or self.pressure_atm <= 0
+            ):
                 raise ScientificToolchainContractError(
                     "thermochemistry requires a positive pressure"
+                )
+            method = str(self.entropy_method).strip().lower()
+            object.__setattr__(self, "entropy_method", method)
+            if method not in {"rrho", "grimme", "truhlar"}:
+                raise ScientificToolchainContractError(
+                    "thermochemistry entropy_method must be rrho, grimme, "
+                    "or truhlar"
+                )
+            for field in (
+                "concentration_mol_l",
+                "entropy_cutoff_cm1",
+                "enthalpy_cutoff_cm1",
+            ):
+                value = getattr(self, field)
+                if value is not None and (
+                    not math.isfinite(float(value)) or float(value) <= 0.0
+                ):
+                    raise ScientificToolchainContractError(
+                        f"thermochemistry {field} must be finite and positive"
+                    )
+            if method == "rrho" and self.entropy_cutoff_cm1 is not None:
+                raise ScientificToolchainContractError(
+                    "thermochemistry entropy_cutoff_cm1 requires grimme or "
+                    "truhlar entropy"
+                )
+            if method in {"grimme", "truhlar"} and (
+                self.entropy_cutoff_cm1 is None
+            ):
+                raise ScientificToolchainContractError(
+                    f"thermochemistry {method} entropy requires "
+                    "entropy_cutoff_cm1"
+                )
+            if (
+                isinstance(self.alpha, bool)
+                or not isinstance(self.alpha, int)
+                or self.alpha <= 0
+            ):
+                raise ScientificToolchainContractError(
+                    "thermochemistry alpha must be a positive integer"
+                )
+            if not isinstance(self.use_weighted_mass, bool):
+                raise ScientificToolchainContractError(
+                    "thermochemistry use_weighted_mass must be boolean"
+                )
+            if (
+                not math.isfinite(float(self.frequency_scale_factor))
+                or float(self.frequency_scale_factor) <= 0.0
+            ):
+                raise ScientificToolchainContractError(
+                    "thermochemistry frequency_scale_factor must be finite "
+                    "and positive"
                 )
         elif self.temperature_k is not None or self.pressure_atm is not None:
             raise ScientificToolchainContractError(
                 "temperature and pressure apply only to thermochemistry"
+            )
+        elif (
+            self.concentration_mol_l is not None
+            or self.entropy_method != "rrho"
+            or self.entropy_cutoff_cm1 is not None
+            or self.enthalpy_cutoff_cm1 is not None
+            or self.alpha != 4
+            or self.use_weighted_mass is not False
+            or self.frequency_scale_factor != 1.0
+        ):
+            raise ScientificToolchainContractError(
+                "thermochemistry controls apply only to thermochemistry"
             )
         if self.analysis_kind == "quantity_expression":
             if (
@@ -460,6 +539,13 @@ def build_scientific_toolchain_plan(
             support_state=node.support_state,
             blocked_reason=node.blocked_reason,
             validation_rules=node.validation_rules,
+            concentration_mol_l=node.concentration_mol_l,
+            entropy_method=node.entropy_method,
+            entropy_cutoff_cm1=node.entropy_cutoff_cm1,
+            enthalpy_cutoff_cm1=node.enthalpy_cutoff_cm1,
+            alpha=node.alpha,
+            use_weighted_mass=node.use_weighted_mass,
+            frequency_scale_factor=node.frequency_scale_factor,
         )
         normalized_analyses.append(normalized)
         dependencies[node.node_id].update(effective_dependencies)

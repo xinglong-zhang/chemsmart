@@ -28,8 +28,8 @@ gradient, Hessian, solvent and density-fitting path rather than inferring
 support from package import. Compare CPU and GPU energies under identical
 settings before using a new pathway for production research.
 
-The x86 CPU server workflow may preview GPU intent but must keep GPU execution
-unavailable when no qualified device exists.
+A CPU-only host may preview GPU intent but must keep GPU execution unavailable
+when no qualified device exists.
 
 ## Self-improvement cycle
 

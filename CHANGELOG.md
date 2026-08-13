@@ -6,8 +6,8 @@ Changelog
 ------------
 - Consolidated CHEMSMART 3.1.4 as the canonical project-YAML and CLI hub for
   Gaussian, ORCA, xTB, PySCF, GPU4PySCF, and provider-neutral agent workflows.
-- Added x86 Ubuntu CPU-server deployment guidance, staged real-engine
-  qualification, and project-local computational-research skills.
+- Added target-host CPU installation guidance, staged real-engine
+  validation, and project-local computational-research skills.
 - Extended ORCA workflow support and result analysis for TS/IRC/NEB, TD/TDA,
   VPT2, final stationary structures, semantic normal termination, basis and
   reference parsing, and unit-aware quantities.
@@ -916,4 +916,3 @@ Changelog
 - Initial commit. [Xinglong Zhang]
 - ✅ Ready to clone and code. [xinglong-zhang]
 - Initial commit. [Xinglong Zhang]
-

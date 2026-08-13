@@ -263,21 +263,19 @@ def _orca_auxiliary_basis_role(value):
 def _orca_correlation_auxiliary_matches_orbital(aux_basis, orbital_basis):
     """Return whether an explicit AuxC basis matches the orbital basis.
 
-    The built-in ORCA names encode the pairing directly: ``def2-TZVP/C``
-    belongs to ``def2-TZVP`` and ``cc-pVTZ-F12-MP2fit`` belongs to
-    ``cc-pVTZ-F12``.  AutoAux is deliberately handled by its own role and
-    never reaches this comparison.
+    Compatibility comes from ORCA's exact maintained AuxC registry rather
+    than suffix manipulation on a caller-provided name.  AutoAux is
+    deliberately handled by its own role and never reaches this comparison.
     """
 
     if aux_basis is None or orbital_basis is None:
         return False
+    from chemsmart.io.orca import orca_ref
+
     auxiliary = str(aux_basis).strip().casefold()
     orbital = str(orbital_basis).strip().casefold()
-    if auxiliary.endswith("/c"):
-        auxiliary = auxiliary[:-2]
-    elif auxiliary.endswith("-mp2fit"):
-        auxiliary = auxiliary[: -len("-mp2fit")]
-    return auxiliary == orbital
+    paired_orbital = orca_ref.orca_auxiliary_basis_cc_pairings.get(auxiliary)
+    return paired_orbital == orbital
 
 
 def _normalize_orca_functional(value):

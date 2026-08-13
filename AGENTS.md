@@ -169,10 +169,11 @@ Use only ChemSmart execution and permission mechanisms for calculations,
 schedulers and paid resources. Never expose secrets, silently change a
 molecular model or electronic state, or claim an engine ran when it did not.
 
-## CPU server and repository hygiene
+## Target-host and repository hygiene
 
-- Treat x86-64 Ubuntu as the reference CPU benchmark platform unless a task
-  specifies another host.
+- Validate each target host from its observed operating system, architecture,
+  scheduler, program installations and resource limits; do not treat one
+  deployment as a universal reference.
 - Keep controller and program-specific compute environments explicit. PySCF
   and GPU4PySCF may use a dedicated interpreter selected in server YAML.
 - Do not commit credentials, user configuration, engine binaries, generated

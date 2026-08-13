@@ -5,7 +5,7 @@ Why this exists
 
 ``agent run --approval-file`` is ``run_live_agent_session`` with one extra
 tool, so a model holding a digest-frozen plan is asked to re-derive it turn by
-turn.  Measured over the campaign's live sessions, that is where the harness
+turn. Repeated live sessions showed that this is where the harness
 stops working: seventeen ``agent plan`` sessions rejected 42 of 868 tool calls
 (4.8%), while the one ``agent run`` session rejected 20 of 69 (29%) -- twelve
 of them attempts to execute, eight of them the model re-planning inside an

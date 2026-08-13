@@ -212,6 +212,20 @@ def test_dlpno_explicit_auxc_must_match_orbital_basis():
         )
 
 
+def test_dlpno_auxc_compatibility_comes_from_exact_registered_pairing():
+    """A plausible suffix must not turn an unknown name into an AuxC role."""
+
+    with pytest.raises(ValueError, match="cannot be qualified"):
+        ORCAJobSettings(
+            jobtype="sp",
+            ab_initio="DLPNO-CCSD(T)",
+            basis="invented-TZVP",
+            aux_basis="invented-TZVP/C",
+            charge=0,
+            multiplicity=1,
+        )
+
+
 @pytest.mark.parametrize(
     ("basis", "aux_basis", "role"),
     [

@@ -4,9 +4,9 @@
 
 This guide covers installing CHEMSMART on Linux and macOS systems.
 
-For a headless x86-64 Ubuntu benchmark server, use the staged instructions in
+For one headless Ubuntu target-host example, use the staged instructions in
 :doc:`installation-ubuntu-cpu-server`. The steps below cover general developer
-and workstation installation.
+and workstation installation on Linux or macOS.
 
 ********************
  Create Environment

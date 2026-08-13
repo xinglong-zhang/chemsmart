@@ -13,11 +13,11 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     canonical_json,
 )
-from chemsmart.agent.adaptive_api_campaign import (
-    AdaptiveHypothesisV1,
-    AdaptiveNetworkBudgetV1,
-    ApiAttemptReceiptV1,
-    build_api_attempt_receipt,
+from chemsmart.agent.request_context import (
+    ProviderAttemptReceiptV1,
+    ProviderNetworkBudgetV1,
+    RequestContextProvenanceV1,
+    build_provider_attempt_receipt,
 )
 from chemsmart.agent.analysis_completion import AnalysisIncompleteError
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
@@ -30,11 +30,6 @@ from chemsmart.agent.runtime.deepseek import (
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
-from chemsmart.agent.feedback import (
-    FEEDBACK_MODES,
-    FULL_FEEDBACK_V1,
-    project_tool_feedback,
-)
 
 
 @dataclass(frozen=True)
@@ -139,32 +134,28 @@ class ToolLoopRunner:
         host: CommandCompiledToolHostV1,
         event_store: RuntimeEventStore,
         clock: Callable[[], float] = time.monotonic,
-        feedback_projection: str = FULL_FEEDBACK_V1,
     ) -> None:
         self.host = host
         self.event_store = event_store
         self.clock = clock
-        self.feedback_projection = str(feedback_projection).strip().lower()
-        if self.feedback_projection not in FEEDBACK_MODES:
-            raise ContractError("unsupported tool-feedback projection")
 
     def run(
         self,
         *,
         session: Any,
         envelope: TaskEnvelopeV1,
-        hypothesis: AdaptiveHypothesisV1,
-        network_budget: AdaptiveNetworkBudgetV1,
+        request_context: RequestContextProvenanceV1,
+        provider_budget: ProviderNetworkBudgetV1,
     ) -> ToolLoopResultV1:
         self._validate_run_contract(
             envelope=envelope,
-            hypothesis=hypothesis,
-            network_budget=network_budget,
+            request_context=request_context,
+            provider_budget=provider_budget,
             provider=str(session.config.provider),
         )
         approved_output_limit = min(
             envelope.budget.max_output_tokens_per_request,
-            network_budget.max_output_tokens_per_request,
+            provider_budget.max_output_tokens_per_request,
         )
         if session.config.max_output_tokens > approved_output_limit:
             raise ContractError("provider max_tokens exceeds approved budget")
@@ -201,7 +192,7 @@ class ToolLoopRunner:
         )
         self.host.record_seeded_evidence(envelope.turn_id)
         start = self.clock()
-        attempts: list[ApiAttemptReceiptV1] = []
+        attempts: list[ProviderAttemptReceiptV1] = []
         provider_receipts: list[ProviderTurnReceiptV1] = []
         successful_tools = 0
         failed_tools = 0
@@ -213,7 +204,7 @@ class ToolLoopRunner:
         while True:
             elapsed = self.clock() - start
             remaining_wall_time = (
-                network_budget.task_wall_time_seconds - elapsed
+                provider_budget.task_wall_time_seconds - elapsed
             )
             if remaining_wall_time <= 0:
                 terminal_state = "failed"
@@ -222,7 +213,7 @@ class ToolLoopRunner:
                 break
             post_turn_reserve = min(
                 _PROVIDER_POST_TURN_RESERVE_SECONDS,
-                max(0.1, network_budget.task_wall_time_seconds * 0.1),
+                max(0.1, provider_budget.task_wall_time_seconds * 0.1),
             )
             provider_turn_allowance = remaining_wall_time - post_turn_reserve
             if provider_turn_allowance <= 0:
@@ -246,7 +237,7 @@ class ToolLoopRunner:
             )
             context_limit = min(
                 envelope.budget.max_input_tokens_per_request,
-                network_budget.max_input_tokens_per_request,
+                provider_budget.max_input_tokens_per_request,
             )
             projected = estimate_request_input_tokens(request)
             if projected > context_limit:
@@ -288,8 +279,8 @@ class ToolLoopRunner:
             except (DeepSeekTransportError, DeepSeekProtocolError) as exc:
                 attempt = self._failed_attempt(
                     envelope=envelope,
-                    hypothesis=hypothesis,
-                    network_budget=network_budget,
+                    request_context=request_context,
+                    provider_budget=provider_budget,
                     ordinal=transport_ordinal,
                     request_sha256=request_sha256,
                     started=attempt_start,
@@ -316,12 +307,12 @@ class ToolLoopRunner:
                 terminal_reason = "provider transport or protocol failed"
                 break
             provider_receipts.append(provider_receipt)
-            attempt = build_api_attempt_receipt(
+            attempt = build_provider_attempt_receipt(
                 attempt_id=f"{envelope.turn_id}.provider.{transport_ordinal}",
                 provider=session.config.provider,
-                endpoint_origin=network_budget.endpoint_origin,
-                hypothesis_sha256=hypothesis.hypothesis_sha256,
-                budget_sha256=network_budget.budget_sha256,
+                endpoint_origin=provider_budget.endpoint_origin,
+                request_context_sha256=request_context.provenance_sha256,
+                provider_budget_sha256=provider_budget.budget_sha256,
                 request_sha256=request_sha256,
                 response_sha256=canonical_sha256(response),
                 status="succeeded",
@@ -371,7 +362,7 @@ class ToolLoopRunner:
             budget_findings = []
             if provider_receipt.input_tokens > min(
                 envelope.budget.max_input_tokens_per_request,
-                network_budget.max_input_tokens_per_request,
+                provider_budget.max_input_tokens_per_request,
             ):
                 budget_findings.append("budget.provider_input_tokens_exceeded")
             if provider_receipt.output_tokens > approved_output_limit:
@@ -600,22 +591,7 @@ class ToolLoopRunner:
                         },
                         idempotency_key="tool-woke:" + call_id,
                     )
-                projected = project_tool_feedback(
-                    tool=tool_name,
-                    result=result,
-                    mode=self.feedback_projection,
-                )
-                # The complete public result remains evidence even when the
-                # provider receives only the compact causal projection.
-                tool_event_payload.update(
-                    {
-                        "canonical_result": canonical_data(result),
-                        "feedback_projection": self.feedback_projection,
-                        "feedback_equivalence_receipt": canonical_data(
-                            projected.receipt
-                        ),
-                    }
-                )
+                tool_event_payload["canonical_result"] = canonical_data(result)
                 self.event_store.append(
                     turn_id=envelope.turn_id,
                     kind=tool_event_kind,
@@ -626,7 +602,7 @@ class ToolLoopRunner:
                     {
                         "role": "tool",
                         "tool_call_id": call_id,
-                        "content": canonical_json(projected.content),
+                        "content": canonical_json(result),
                     }
                 )
             session.append_tool_results(tool_results)
@@ -687,22 +663,35 @@ class ToolLoopRunner:
         self,
         *,
         envelope: TaskEnvelopeV1,
-        hypothesis: AdaptiveHypothesisV1,
-        network_budget: AdaptiveNetworkBudgetV1,
+        request_context: RequestContextProvenanceV1,
+        provider_budget: ProviderNetworkBudgetV1,
         provider: str,
     ) -> None:
         if envelope.session_id != self.event_store.session_id:
             raise ContractError("task envelope belongs to another event stream")
         if envelope.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
             raise ContractError("task envelope uses another tool schema")
-        if hypothesis.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
-            raise ContractError("hypothesis uses another tool schema")
+        if (
+            request_context.tool_schema_sha256
+            != self.host.surface.tool_schema_sha256
+        ):
+            raise ContractError("request context uses another tool schema")
+        if request_context.prompt_sha256 != envelope.request_sha256:
+            raise ContractError("request context uses another prompt")
+        if (
+            request_context.task_spec_sha256
+            not in self.host.task_spec_sha256s
+        ):
+            raise ContractError("request context uses another task")
+        if (
+            request_context.provider_budget_sha256
+            != provider_budget.budget_sha256
+        ):
+            raise ContractError("request context uses another provider budget")
         if provider not in {"deepseek", "alibaba-token-plan"}:
             raise ContractError("active tool loop provider is not registered")
-        if network_budget.allowed_provider != provider:
-            raise ContractError("network budget belongs to another provider")
-        if network_budget.engine_calls or network_budget.hpc_calls:
-            raise ContractError("active planning loop cannot run chemistry")
+        if provider_budget.allowed_provider != provider:
+            raise ContractError("provider budget belongs to another provider")
         execution_profile = (
             self.host.surface.profile == "command_compiled_approved_execution"
         )
@@ -714,14 +703,14 @@ class ToolLoopRunner:
             )
         if (
             envelope.budget.max_output_tokens_per_request
-            > network_budget.max_output_tokens_per_request
+            > provider_budget.max_output_tokens_per_request
         ):
-            raise ContractError("task output budget exceeds network budget")
+            raise ContractError("task output budget exceeds provider budget")
 
     def _emit_attempt(
         self,
         turn_id: str,
-        attempt: ApiAttemptReceiptV1,
+        attempt: ProviderAttemptReceiptV1,
         *,
         protocol_observation: Mapping[str, Any] | None = None,
         transport_observation: Mapping[str, Any] | None = None,
@@ -731,8 +720,8 @@ class ToolLoopRunner:
             "provider": attempt.provider,
             "endpoint_origin": attempt.endpoint_origin,
             "status": attempt.status,
-            "hypothesis_sha256": attempt.hypothesis_sha256,
-            "budget_sha256": attempt.budget_sha256,
+            "request_context_sha256": attempt.request_context_sha256,
+            "provider_budget_sha256": attempt.provider_budget_sha256,
             "latency_ms": attempt.latency_ms,
             "input_tokens": attempt.input_tokens,
             "output_tokens": attempt.output_tokens,
@@ -759,14 +748,14 @@ class ToolLoopRunner:
         self,
         *,
         envelope: TaskEnvelopeV1,
-        hypothesis: AdaptiveHypothesisV1,
-        network_budget: AdaptiveNetworkBudgetV1,
+        request_context: RequestContextProvenanceV1,
+        provider_budget: ProviderNetworkBudgetV1,
         ordinal: int,
         request_sha256: str,
         started: float,
         error: Exception,
         provider: str,
-    ) -> ApiAttemptReceiptV1:
+    ) -> ProviderAttemptReceiptV1:
         error_class = getattr(error, "error_class", type(error).__name__)
         status = {
             "quota_exhausted": "quota_exhausted",
@@ -788,12 +777,12 @@ class ToolLoopRunner:
             if isinstance(error, DeepSeekProtocolError)
             else ""
         )
-        return build_api_attempt_receipt(
+        return build_provider_attempt_receipt(
             attempt_id=f"{envelope.turn_id}.provider.{ordinal}",
             provider=provider,
-            endpoint_origin=network_budget.endpoint_origin,
-            hypothesis_sha256=hypothesis.hypothesis_sha256,
-            budget_sha256=network_budget.budget_sha256,
+            endpoint_origin=provider_budget.endpoint_origin,
+            request_context_sha256=request_context.provenance_sha256,
+            provider_budget_sha256=provider_budget.budget_sha256,
             request_sha256=request_sha256,
             response_sha256=response_sha256,
             status=status,

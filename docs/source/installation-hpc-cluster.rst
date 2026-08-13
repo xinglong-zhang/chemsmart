@@ -5,9 +5,10 @@ CHEMSMART uses the same project YAML and program commands for local execution
 and scheduler submission. Install the controller on a login or workflow node,
 then describe each compute environment in a server YAML file.
 
-For a standalone x86 Ubuntu CPU machine, start with
-:doc:`installation-ubuntu-cpu-server`. This page covers scheduler-specific
-configuration after the controller and chemistry programs are available.
+For a standalone Ubuntu CPU machine, the example in
+:doc:`installation-ubuntu-cpu-server` can be adapted to the target host. This
+page covers scheduler-specific configuration after the controller and
+chemistry programs are available.
 
 Prerequisites
 =============

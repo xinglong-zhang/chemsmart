@@ -1,4 +1,4 @@
-"""User-owned bounds for one continuous local agent execution session.
+"""User-owned bounds for one bounded local agent execution session.
 
 The envelope authorizes *where and how much* ChemSmart may execute.  It does
 not contain a molecule, method, workflow node, project, or DAG.  Those remain
@@ -100,10 +100,10 @@ class BoundedExecutionEnvelopeV1:
             raise ContractError(
                 "unsupported bounded execution envelope schema"
             )
-        if self.mode != "continuous-local":
-            raise ContractError(
-                "bounded execution mode must be continuous-local"
-            )
+        if self.mode == "continuous-local":
+            object.__setattr__(self, "mode", "bounded-local")
+        if self.mode != "bounded-local":
+            raise ContractError("bounded execution mode must be bounded-local")
         if not self.allowed_program_engines:
             raise ContractError(
                 "bounded execution requires an engine allowlist"
@@ -136,7 +136,7 @@ class BoundedExecutionEnvelopeV1:
             raise ContractError("allowed programs must be unique")
         if self.resources.execution_target != "run":
             raise ContractError(
-                "continuous local execution requires target run"
+                "bounded local execution requires target run"
             )
         if self.resources.scratch_policy != "server":
             raise ContractError(

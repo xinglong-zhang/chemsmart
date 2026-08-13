@@ -377,8 +377,22 @@ def _orca_scf_energy(output: Any) -> float:
     # perfectly valid correlated single point.  Read the last explicit TOTAL
     # SCF ENERGY value first; for post-HF output that is the reference energy
     # paired with the final correlated total below it.
+    lines = tuple(str(line) for line in getattr(output, "contents", ()))
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?"
+    cbs_pattern = re.compile(
+        rf"^\s*Extrapolated CBS SCF energy\b.*?:\s*(?P<value>{number})\b",
+        re.IGNORECASE,
+    )
+    cbs_values = [
+        float(match.group("value"))
+        for line in lines
+        if (match := cbs_pattern.match(line)) is not None
+    ]
+    if cbs_values:
+        return cbs_values[-1]
+
     values: list[float] = []
-    for line in getattr(output, "contents", ()):
+    for line in lines:
         text = str(line)
         if "Total Energy" not in text or ":" not in text:
             continue
@@ -397,24 +411,60 @@ def _orca_scf_energy(output: Any) -> float:
 
 
 def _orca_correlation_energy(output: Any) -> float:
-    """Return post-SCF correlation without empirical dispersion.
+    """Return ORCA's final native post-SCF correlation energy.
 
     DFT-D's separately printed D3/D4 correction is not an electronic
     correlation energy.  A DFT result therefore cannot satisfy this selector
-    merely because its total differs from its SCF component.
+    merely because its total differs from its SCF component.  Parse the native
+    MP2/CC result record itself rather than inferring correlation from a method
+    token or subtracting independently rounded total-energy components.
+
+    ORCA prints progressively more final records for correlated workflows.  A
+    later CBS extrapolation supersedes the preceding finite-basis result; a
+    later final CC correlation energy (including a printed triples correction)
+    supersedes corrected CCSD; and corrected CCSD supersedes its preceding MP2
+    record.  Compound outputs may then start another job, so chronology across
+    all supported native records—not record-class priority—identifies the last
+    completed correlation result.
     """
 
-    method = str(getattr(output, "ab_initio", None) or "").casefold()
-    if not ("mp2" in method or "cc" in method):
-        raise MissingQuantityError(
-            "ORCA result contains no explicit post-SCF correlation method"
-        )
-    dispersion = getattr(output, "final_dispersion_energy", None)
-    return (
-        _orca_total_energy(output)
-        - _orca_scf_energy(output)
-        - float(dispersion or 0.0)
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?"
+    record_patterns = (
+        re.compile(
+            rf"^\s*Extrapolated CBS correlation energy\b.*?:\s*"
+            rf"(?P<value>{number})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*Final correlation energy\s+(?:\.\.\.\s+)?"
+            rf"(?P<value>{number})(?:\s+Eh)?\s*$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*E\(CORR\)\(corrected\)\s+(?:\.\.\.\s+)?"
+            rf"(?P<value>{number})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*(?:RI-)?(?:DLPNO-)?MP2 correlation energy\s*"
+            rf"(?:\.\.\.|:)\s*(?P<value>{number})(?:\s+Eh)?\s*$",
+            re.IGNORECASE,
+        ),
     )
+    lines = tuple(str(line) for line in getattr(output, "contents", ()))
+    records: list[tuple[int, float]] = []
+    for line_index, line in enumerate(lines):
+        for pattern in record_patterns:
+            match = pattern.match(line)
+            if match is not None:
+                records.append((line_index, float(match.group("value"))))
+                break
+    if not records:
+        raise MissingQuantityError(
+            "ORCA result contains no explicit final post-SCF correlation "
+            "energy record"
+        )
+    return records[-1][1]
 
 
 def _orca_dispersion_energy(output: Any) -> float:
@@ -565,6 +615,23 @@ def _gaussian_output(path: Path) -> Any:
     return Gaussian16Output(filename=str(path))
 
 
+def _gaussian_spin_square_after_annihilation(output: Any) -> float:
+    """Return Gaussian's printed post-annihilation spin diagnostic.
+
+    Restricted calculations and some incomplete unrestricted blocks record
+    ``None`` for the post-annihilation value.  That is an absent scientific
+    quantity, not a value that should reach ``float(None)`` and be reported as
+    a parser-type failure.
+    """
+
+    value = output.spin_square_history[-1]["after_annihilation"]
+    if value is None:
+        raise MissingQuantityError(
+            "Gaussian result does not print <S^2> after annihilation"
+        )
+    return float(value)
+
+
 def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
     accessors = _text_output_accessors()
     accessors.update(
@@ -642,8 +709,8 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
             "spin_square": lambda output: float(
                 output.spin_square_history[-1]["before_annihilation"]
             ),
-            "spin_square_after_annihilation": lambda output: float(
-                output.spin_square_history[-1]["after_annihilation"]
+            "spin_square_after_annihilation": (
+                _gaussian_spin_square_after_annihilation
             ),
             "spin_square_target": _spin_square_target,
             "spin_square_deviation": lambda output: float(

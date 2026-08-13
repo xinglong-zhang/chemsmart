@@ -24,15 +24,12 @@ from chemsmart.agent.runtime.reducer import RuntimeState
 from chemsmart.agent.workflows import (
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
-    ContextManifestV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
-    SpecialistTaskPacketV1,
     StationaryPointValidationPolicyV1,
     MaterializedNodeV1,
     build_materialized_workflow,
     build_scientific_workflow_plan,
-    eligible_specialist_roles,
 )
 
 
@@ -179,7 +176,6 @@ def test_scientific_dag_keeps_sp_and_opt_parallel_but_hess_data_bound():
         "multiple_stages",
         "producer_artifact_edge",
     )
-    assert eligible_specialist_roles(plan) == ("dag_specialist",)
     resources, partial, approval = _approval(plan)
     assert resources.cores == 4
     materialized = build_materialized_workflow(
@@ -284,42 +280,6 @@ def test_failed_branch_blocks_only_descendants_and_keeps_sibling_runnable():
     assert run.finished_at == "2026-08-13T00:00:04+00:00"
     assert derive_ready_node_ids(plan, run) == ()
 
-
-def test_context_manifest_and_specialist_packet_bind_narrow_tools():
-    body = {
-        "schema_version": "chemsmart.context-manifest.v1",
-        "manifest_id": "context-water",
-        "workflow_id": "water-workflow",
-        "task_spec_sha256": "a" * 64,
-        "scientific_identity_sha256": "b" * 64,
-        "source_sha256s": ("c" * 64,),
-        "artifact_sha256s": ("d" * 64,),
-        "tool_schema_sha256": "e" * 64,
-        "allowed_tools": ("inspect_program_capability",),
-        "token_budget": 4096,
-        "tool_call_budget": 4,
-        "wall_time_seconds": 120,
-    }
-    manifest = ContextManifestV1(
-        **body, manifest_sha256=canonical_sha256(body)
-    )
-    packet_body = {
-        "schema_version": "chemsmart.specialist-task-packet.v1",
-        "packet_id": "packet-water",
-        "workflow_id": "water-workflow",
-        "role": "pyscf-specialist",
-        "context_manifest_sha256": manifest.manifest_sha256,
-        "input_record_sha256s": ("f" * 64,),
-        "expected_output_schema": "typed-settings-v1",
-        "owner": "coordinator",
-        "merge_key": "water-settings",
-    }
-    packet = SpecialistTaskPacketV1(
-        **packet_body, packet_sha256=canonical_sha256(packet_body)
-    )
-
-    assert packet.owner == "coordinator"
-    assert manifest.allowed_tools == ("inspect_program_capability",)
 
 
 def test_stationary_point_policy_freezes_expected_mode_count():

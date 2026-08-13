@@ -126,10 +126,9 @@ def _load_document(path: Path, origin: str) -> SkillDocumentV1:
 def skills_enabled() -> bool:
     """Return whether domain-knowledge skills are surfaced to the agent.
 
-    Defaults to enabled.  ``CHEMSMART_AGENT_SKILLS=0`` removes both the prompt
-    index and the ``consult_domain_skill`` tool, restoring the exact pre-skill
-    prompt and tool-schema digests so a skills-off arm reproduces a recorded
-    baseline byte for byte.
+    Defaults to enabled. ``CHEMSMART_AGENT_SKILLS=0`` removes both the prompt
+    index and the ``consult_domain_skill`` tool for historical clients that
+    expect the smaller surface.
     """
 
     return os.environ.get("CHEMSMART_AGENT_SKILLS", "1").strip() not in (

@@ -26,6 +26,29 @@ from chemsmart.utils.constants import (
 
 
 class TestThermochemistry:
+    def test_frequency_scale_factor_is_applied_before_thermochemistry(
+        self, gaussian_singlet_opt_outfile
+    ):
+        unscaled = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+        )
+        scaled = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            frequency_scale_factor=0.95,
+        )
+
+        assert np.allclose(
+            scaled.cleaned_frequencies,
+            np.asarray(unscaled.cleaned_frequencies) * 0.95,
+        )
+        assert scaled.zero_point_energy == pytest.approx(
+            unscaled.zero_point_energy * 0.95
+        )
+
     def test_thermochemistry_from_gaussian_output(
         self, gaussian_singlet_opt_outfile
     ):

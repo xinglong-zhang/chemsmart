@@ -4,7 +4,7 @@
 digest.  Nothing produced one.  The documented flow is "plan, then run with an
 approval file", and the only route to that file was to re-plan and hope a
 fresh session emitted a byte-identical workflow -- which is why no numerical
-case in this campaign has ever been executed.
+case in the observed sessions had ever been executed.
 
 These tests pin the missing half and, more importantly, pin that it stays
 inert: a request is not an approval, and cannot become one by accident.

@@ -13,7 +13,7 @@ These tests pin the pre-request guard, which spends nothing and says why.
 The underlying fix -- selecting which preceding work to carry forward instead
 of carrying all of it -- is not here.  chemsmart.agent.dependency_context
 already implements that policy with a budget, and the live loop does not call
-it; see the campaign report.
+it; see the archived observation record.
 """
 
 from chemsmart.agent.loop import estimate_request_input_tokens

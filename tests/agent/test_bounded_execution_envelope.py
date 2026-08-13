@@ -53,7 +53,7 @@ from chemsmart.cli.agent import agent
 def _payload(tmp_path: Path) -> dict:
     return {
         "schema_version": "chemsmart.bounded-execution-envelope.v1",
-        "mode": "continuous-local",
+        "mode": "bounded-local",
         "allowed_program_engines": {"pyscf": ["cpu"], "xtb": ["cpu"]},
         "resources": {
             "execution_target": "run",
@@ -100,6 +100,18 @@ def test_loader_accepts_science_free_resource_and_program_bounds(tmp_path):
     assert observed.resources.cores == 8
     assert observed.resources.memory_gb == 28
     assert observed.max_engine_calls == 4
+    assert observed.mode == "bounded-local"
+
+
+def test_loader_accepts_legacy_continuous_local_as_alias(tmp_path):
+    payload = _payload(tmp_path)
+    payload["mode"] = "continuous-local"
+
+    observed = load_bounded_execution_envelope(
+        _write_envelope(tmp_path, payload)
+    )
+
+    assert observed.mode == "bounded-local"
 
 
 def test_bounded_execution_cleans_only_runner_validated_successful_scratch(
@@ -1160,6 +1172,14 @@ def test_bounded_server_profile_preserves_program_environment_and_timeout(
         live_session,
         "_active_server_program_blocks",
         lambda: {
+            "PYSCF": {
+                "EXEFOLDER": "/opt/chem/pyscf/bin",
+                "LOCAL_RUN": True,
+            },
+            "XTB": {
+                "EXEFOLDER": "/opt/chem/xtb/bin",
+                "LOCAL_RUN": True,
+            },
             "ORCA": {
                 "EXEFOLDER": "/opt/orca",
                 "LOCAL_RUN": False,
@@ -1192,6 +1212,8 @@ def test_bounded_server_profile_preserves_program_environment_and_timeout(
     observed = yaml.safe_load(profile.read_text(encoding="utf-8"))
 
     assert observed["SERVER"]["NUM_HOURS"] == 3
+    assert observed["PYSCF"]["EXEFOLDER"] == "/opt/chem/pyscf/bin"
+    assert observed["XTB"]["EXEFOLDER"] == "/opt/chem/xtb/bin"
     assert "openmpi/bin" in observed["ORCA"]["ENVARS"]
     assert "LD_LIBRARY_PATH" in observed["ORCA"]["ENVARS"]
     assert "export g16root=/opt/g16" in observed["GAUSSIAN"]["ENVARS"]

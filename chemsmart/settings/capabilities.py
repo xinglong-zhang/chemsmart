@@ -275,6 +275,24 @@ _XTB_PROJECT_PARAMETERS = (
 )
 
 
+def loader_project_section_names(program: str) -> tuple[str, ...]:
+    """Project-section vocabulary projected from each concrete loader."""
+
+    if program in {"gaussian", "orca"}:
+        from chemsmart.jobs.settings import molecular_project_section_names
+
+        return molecular_project_section_names(program)
+    if program == "pyscf":
+        from chemsmart.settings.pyscf import PYSCF_ALLOWED_SECTIONS
+
+        return tuple(sorted(PYSCF_ALLOWED_SECTIONS))
+    if program == "xtb":
+        from chemsmart.settings.xtb import YamlXTBProjectSettingsBuilder
+
+        return tuple(sorted(YamlXTBProjectSettingsBuilder.SECTIONS))
+    return ()
+
+
 PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
     {
         "gaussian": ProgramCapability(
@@ -311,7 +329,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
-            project_section_names=("gas", "solv", "td"),
+            project_section_names=loader_project_section_names("gaussian"),
             project_parameter_domains=(
                 ("states", ("50-50", "singlets", "triplets")),
             ),
@@ -351,7 +369,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
-            project_section_names=("gas", "neb", "solv", "td"),
+            project_section_names=loader_project_section_names("orca"),
             project_parameter_domains=(
                 (
                     "ab_initio",
@@ -403,14 +421,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             engines=("cpu", "gpu"),
             # PySCF keys sections by job type, and its loader also
             # accepts the legacy gas/solv pair and canonicalises it.
-            project_section_names=(
-                "gas",
-                "hess",
-                "opt",
-                "solv",
-                "sp",
-                "td",
-            ),
+            project_section_names=loader_project_section_names("pyscf"),
             project_parameter_domains=(
                 ("ab_initio", ("hf",)),
                 ("defgrid", ("defgrid1", "defgrid2", "defgrid3")),
@@ -443,7 +454,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             jobtypes=("hess", "opt", "sp"),
             project_owned_parameters=_XTB_PROJECT_PARAMETERS,
             engines=("cpu",),
-            project_section_names=("hess", "opt", "sp"),
+            project_section_names=loader_project_section_names("xtb"),
             project_parameter_domains=(
                 ("gfn_version", ("gfn0", "gfn1", "gfn2", "gfnff")),
                 (
@@ -586,6 +597,7 @@ __all__ = [
     "engine_capability",
     "program_capability",
     "project_owns_parameter",
+    "loader_project_section_names",
     "requires_project_configuration",
     "supports_project_configuration",
 ]
