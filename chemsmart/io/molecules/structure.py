@@ -3933,14 +3933,17 @@ class QMMMMolecule(Molecule):
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of
         an atom based on its integer index."""
-        high_level_atoms = self._normalize_atom_indices(self.high_level_atoms)
+        if isinstance(self.high_level_atoms, str):
+            self.high_level_atoms = self._normalize_atom_indices(self.high_level_atoms)
+        high_level_atoms = self.high_level_atoms
         if high_level_atoms is None:
             return None
         if atom_index in high_level_atoms:
             return "H"
-        medium_level_atoms = (
-            self._normalize_atom_indices(self.medium_level_atoms) or []
-        )
+
+        if isinstance(self.medium_level_atoms, str):
+            self.medium_level_atoms = self._normalize_atom_indices(self.medium_level_atoms)
+        medium_level_atoms = self.medium_level_atoms or []
         if atom_index in medium_level_atoms:
             return "M"
         return "L"
