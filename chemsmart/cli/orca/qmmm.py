@@ -152,8 +152,8 @@ def create_orca_qmmm_subcommand(parent_command):
     @click.option(
         "-h",
         "--high-level-h-bond-length",
-        type=dict,
-        help="Custom high-level-H bond lengths",
+        type=str,
+        help="Custom high-level-H bond lengths as a string representation of a dict.",
     )
     @click.option(
         "-d",
@@ -318,7 +318,15 @@ def create_orca_qmmm_subcommand(parent_command):
             qmmm_settings.parent_jobtype = parent_jobtype
 
         if jobtype is not None:
+            previous_jobtype = (qmmm_settings.jobtype or "").upper()
             qmmm_settings.jobtype = jobtype
+            if (
+                jobtype.upper() == "QM/QM2"
+                and previous_jobtype == "QM/QM2/MM"
+                and intermediate_level_atoms is None
+            ):
+                qmmm_settings.intermediate_level_atoms = None
+                qmmm_settings.low_level_method = None
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional
         if high_level_basis is not None:
@@ -361,7 +369,9 @@ def create_orca_qmmm_subcommand(parent_command):
         if optregion_fixed_atoms is not None:
             qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
         if high_level_h_bond_length is not None:
-            qmmm_settings.high_level_h_bond_length = high_level_h_bond_length
+            qmmm_settings.high_level_h_bond_length = ast.literal_eval(
+                high_level_h_bond_length
+            )
         if delete_la_double_counting is not None:
             qmmm_settings.delete_la_double_counting = delete_la_double_counting
         if delete_la_bond_double_counting_atoms is not None:
@@ -430,10 +440,7 @@ def create_orca_qmmm_subcommand(parent_command):
                 intermediate_level_atoms
             )
         if high_level_h_bond_length is not None:
-            high_level_h_bond_length_dict = ast.literal_eval(
-                high_level_h_bond_length
-            )
-            molecule.scale_factors = high_level_h_bond_length_dict
+            molecule.scale_factors = qmmm_settings.high_level_h_bond_length
 
         combined_kwargs = {**parent_kwargs, **kwargs}
 
