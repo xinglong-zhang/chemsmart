@@ -216,6 +216,16 @@ jobs:
             exit 1
           fi
 
+          docker run --rm \
+            --read-only \
+            --cpus 1 \
+            --memory 2g \
+            --mount "type=bind,src=$agent_dir,dst=/workspace,readonly" \
+            "$IMAGE_NAME:$CANDIDATE_TAG" \
+            python /opt/chemsmart/qualification/validate_live_plan.py \
+              --workspace /workspace \
+              >"$public_dir/live-plan-qualification.json"
+
           python - "$stdout_file" "$public_json" <<'PY'
           import json
           import sys
@@ -271,6 +281,7 @@ jobs:
           path: |
             ${{ runner.temp }}/chemsmart-public/qualification-summary.json
             ${{ runner.temp }}/chemsmart-public/agent-public-observation.json
+            ${{ runner.temp }}/chemsmart-public/live-plan-qualification.json
           if-no-files-found: error
           retention-days: 30
 
