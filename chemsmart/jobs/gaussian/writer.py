@@ -494,6 +494,10 @@ class GaussianInputWriter(InputWriter):
         """
         logger.debug("Writing gen/genecp basis set information.")
         if self.settings.genecp:
+            genecp_section = self.settings.get_genecp_section(
+                molecule=self.job.molecule
+            )
+
             # Write genecp section only if heavy elements are in the molecule
             heavy_elements_in_structure = self.settings.prune_heavy_elements(
                 self.job.molecule
@@ -515,9 +519,6 @@ class GaussianInputWriter(InputWriter):
                 pass
 
             else:
-                genecp_section = self.settings.get_genecp_section(
-                    molecule=self.job.molecule
-                )
                 logger.debug("Writing GenECP section for heavy elements")
                 f.write(genecp_section.string)
                 # Check that the last line of genecp_section.string is empty,
