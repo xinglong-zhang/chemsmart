@@ -273,8 +273,8 @@ ORCA input files.
 
    # Subset of atoms (1-based indices)
    subset = mol[[1, 2]]             # atoms 1 and 2
-   subset.chemical_formula          # 'OH'
-
+   subset.chemical_formula          # 'HO' (Hill notation: alphabetical when no C)
+   
    # Deep copy
    mol_copy = mol.copy()
 
@@ -371,6 +371,8 @@ CHEMSMART provides bidirectional conversion with popular chemistry libraries:
 
    # To PDB string
    pdb_string = mol.to_pdb()
+   # NOTE: Small-molecule records may start with HETATM (not ATOM); check both.
+   assert "HETATM" in pdb_string or "ATOM" in pdb_string
 
    # To NetworkX graph (nodes = atoms, edges = bonds with bond_order)
    graph = mol.to_graph()
