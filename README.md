@@ -38,6 +38,8 @@ First, users can select the appropriate installation method for their operating 
 - [Installation (Windows Anaconda PowerShell)](https://chemsmart.readthedocs.io/en/latest/installation-windows-powershell.html)
 - [Installation (HPC Cluster)](https://chemsmart.readthedocs.io/en/latest/installation-hpc-cluster.html)
 
+For Windows users, it is recommended to install using Windows WSL for full functionality support. 
+
 The corresponding tutorial video for installation is available on [YouTube](https://www.youtube.com/watch?v=VtY7fhvfptQ) and [Bilibili](https://www.bilibili.com/video/BV1abQtBZEKf/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380).
 
 **Configuration**
