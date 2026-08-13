@@ -2802,17 +2802,6 @@ class Gaussian16Output(GaussianFileMixin):
         return charge_multiplicity
 
 
-class Gaussian16QMMMOutput(Gaussian16Output):
-    """Parser for Gaussian QM/MM (ONIOM) output files.
-
-    Inherits ONIOM helpers from Gaussian16Output. Prefer this class when
-    reading ONIOM / QM/MM logs.
-    """
-
-    def __init__(self, filename):
-        super().__init__(filename)
-
-
 class Gaussian16WBIOutput(Gaussian16Output):
     def __init__(self, filename):
         super().__init__(filename)

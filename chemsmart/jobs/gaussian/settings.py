@@ -2942,21 +2942,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         return oniom_string
 
-    def get_qmmm_level_of_theory_string(self):
-        """Get ONIOM level of theory for route string.
-
-        Deprecated: Use _get_route_string_from_jobtype instead.
-
-        Note: jobtype is now inferred from the parent command when using CLI,
-        so it should always be set. If not set, defaults to basic ONIOM route.
-        """
-        if self.jobtype is None:
-            logger.warning(
-                "Job type not specified for ONIOM job. "
-                "Using basic route string without job-specific keywords."
-            )
-        return self._get_route_string_from_jobtype()
-
     def _get_charge_and_multiplicity(self):
         """Obtain charge and multiplicity string.
         For two-layer ONIOM jobs, the format for this input line is:

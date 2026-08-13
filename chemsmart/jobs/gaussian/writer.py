@@ -417,7 +417,9 @@ class GaussianInputWriter(InputWriter):
             with open(params_path) as handle:
                 content = handle.read()
         else:
-            content = self.job.molecule.__dict__.get("mm_parameters")
+            molecule = self.job.molecule
+            if isinstance(molecule, QMMMMolecule):
+                content = molecule.mm_parameters
 
         if not content:
             return

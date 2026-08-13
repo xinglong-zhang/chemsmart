@@ -351,25 +351,6 @@ def create_qmmm_subcommand(parent_command):
         if mm_parameters_file is not None:
             qmmm_settings.mm_parameters_file = mm_parameters_file
 
-        if (
-            charge_total is None
-            and qmmm_settings.charge_total is None
-            and parent_settings is not None
-            and parent_settings.charge is not None
-        ):
-            qmmm_settings.charge_total = parent_settings.charge
-            qmmm_settings.real_charge = parent_settings.charge
-            qmmm_settings.charge = parent_settings.charge
-        if (
-            mult_total is None
-            and qmmm_settings.mult_total is None
-            and parent_settings is not None
-            and parent_settings.multiplicity is not None
-        ):
-            qmmm_settings.mult_total = parent_settings.multiplicity
-            qmmm_settings.real_multiplicity = parent_settings.multiplicity
-            qmmm_settings.multiplicity = parent_settings.multiplicity
-
         # Get molecule
         molecules = ctx.obj["molecules"]
         molecule = molecules[-1]
@@ -399,23 +380,6 @@ def create_qmmm_subcommand(parent_command):
             molecule.bonded_atoms = ast.literal_eval(bonded_atoms)
         if scale_factors is not None:
             molecule.scale_factors = ast.literal_eval(scale_factors)
-
-        if parent_settings is not None:
-            inherited_keywords = [
-                "modred",
-                "custom_solvent",
-                "append_additional_info",
-                "additional_route_parameters",
-                "additional_opt_options_in_route",
-            ]
-            try:
-                qmmm_settings = qmmm_settings.merge(
-                    parent_settings, keywords=inherited_keywords
-                )
-            except Exception as exc:
-                logger.debug(
-                    f"Failed to merge parent settings into QMMM: {exc}"
-                )
 
         if parent_jobtype is not None:
             qmmm_settings.parent_jobtype = parent_jobtype
