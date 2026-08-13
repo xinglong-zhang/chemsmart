@@ -25,22 +25,25 @@ bohr_to_meter = (
     1 * units.Bohr / units.m
 )  # 1 Bohr = 0.52917721067 Å = 0.52917721067e-10 m
 amu_to_kg = 1 * units._amu  # 1 amu = 1.66053906660e-27 kg
-hartree_to_joules = 4.35974434e-18  # 1 Hartree = 4.35974434 × 10^-18 Joules
+hartree_to_joules = units.Hartree * units._e
 cal_to_joules = 4.184  # 1 Calorie = 4.184 Joules
-kcal_per_mol_to_hartree = 1 / 627.509474  # 1 Hartree = 627.509474 kcal/mol
 
-# Energy conversion factors derived from ase.units for consistency
+# Energy conversion factors derived from one ASE/CODATA authority.  PySCF's
+# orbital-energy reader also uses ``units.Hartree`` to expose native Eh as eV,
+# so the inverse conversion here must use that exact same value.
 hartree_to_kcal_mol = units.Hartree / (units.kcal / units.mol)
 HARTREE_TO_KCAL_MOL = hartree_to_kcal_mol
+kcal_per_mol_to_hartree = 1 / hartree_to_kcal_mol
 
 # Conversion factors for energy units
-joule_per_mol_to_eV = 1.0364269574711572e-05  # J/mol to eV
-joule_per_mol_to_kcal_per_mol = 1 / 4184  # J/mol to kcal/mol
-joule_per_mol_to_kJ_per_mol = 0.001  # J/mol to kJ/mol
-joule_per_mol_to_hartree = 1 / (
-    hartree_to_joules * units._Nav
-)  # J/mol to Hartree
-# joule_per_mol_to_hartree = 3.8087991196914175e-07
+joule_per_mol_to_eV = units.J / units.mol
+joule_per_mol_to_kcal_per_mol = (units.J / units.mol) / (
+    units.kcal / units.mol
+)
+joule_per_mol_to_kJ_per_mol = (units.J / units.mol) / (
+    units.kJ / units.mol
+)
+joule_per_mol_to_hartree = (units.J / units.mol) / units.Hartree
 
 au_to_debye = 2.54174623
 
@@ -79,13 +82,14 @@ def energy_conversion(from_unit, to_unit, value=1.0):
             f"Unsupported to_unit: {to_unit}. Choose from {valid_units}"
         )
 
-    # Conversion factors to J/mol (SI units used internally in Thermochemistry)
+    # Conversion factors to J/mol (SI units used internally in Thermochemistry),
+    # all obtained from the same ASE/CODATA unit table.
     to_j_per_mol = {
-        "hartree": hartree_to_joules * units._Nav,  # Hartree to J/mol
-        "ev": 1 / joule_per_mol_to_eV,  # eV to J/mol
-        "kcal/mol": 4184.0,  # kcal/mol to J/mol (1 kcal = 4184 J)
-        "kj/mol": 1000.0,  # kJ/mol to J/mol
-        "j/mol": 1.0,  # J/mol to J/mol
+        "hartree": units.Hartree / (units.J / units.mol),
+        "ev": 1.0 / (units.J / units.mol),
+        "kcal/mol": (units.kcal / units.mol) / (units.J / units.mol),
+        "kj/mol": (units.kJ / units.mol) / (units.J / units.mol),
+        "j/mol": 1.0,
     }
 
     # Convert input value to J/mol

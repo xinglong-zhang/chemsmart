@@ -9,19 +9,29 @@ while every public/persistable projection removes private reasoning fields.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
-from http.client import IncompleteRead
+from dataclasses import dataclass, field
+from http.client import HTTPException, IncompleteRead
 import json
 import re
+import ssl
+import time
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from chemsmart.agent._contracts import (
     ContractError,
     canonical_json,
     canonical_sha256,
+)
+from chemsmart.agent.runtime.transport import (
+    ProviderDeadlineExceeded,
+    ProviderTurnDeadline,
+    ProviderTurnDeadlinesV1,
+    is_socket_timeout,
+    open_bounded_https_response,
+    read_bounded_response_body,
 )
 
 
@@ -100,10 +110,32 @@ class DeepSeekProtocolError(RuntimeError):
 class DeepSeekTransportError(RuntimeError):
     """Non-secret transport failure with a stable error class."""
 
-    def __init__(self, error_class: str, *, http_status: int = 0) -> None:
+    def __init__(
+        self,
+        error_class: str,
+        *,
+        http_status: int = 0,
+        timeout_phase: str = "",
+        timeout_seconds: float = 0.0,
+    ) -> None:
         super().__init__(error_class)
         self.error_class = error_class
         self.http_status = int(http_status)
+        self.timeout_phase = str(timeout_phase)
+        self.timeout_seconds = max(0.0, float(timeout_seconds))
+
+    def public_observation(self) -> dict[str, Any]:
+        """Return only stable, non-secret transport and deadline facts."""
+
+        return {
+            "schema_version": "chemsmart.provider-transport-failure.v1",
+            "error_class": self.error_class,
+            "http_status": self.http_status,
+            "timeout_phase": self.timeout_phase,
+            "timeout_seconds": self.timeout_seconds,
+            "retry_decision": "not_retried",
+            "recovery_requirement": "new_independent_attempt",
+        }
 
 
 class DeepSeekHttpsTransport:
@@ -114,16 +146,30 @@ class DeepSeekHttpsTransport:
         *,
         api_key: str,
         endpoint: str = DEEPSEEK_OFFICIAL_ENDPOINT,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float | None = None,
+        turn_deadlines: ProviderTurnDeadlinesV1 | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not _is_official_endpoint(endpoint):
             raise ContractError("DeepSeek transport requires the official endpoint")
         if not api_key:
             raise ContractError("DeepSeek transport requires a leased credential")
-        if timeout_seconds <= 0:
-            raise ContractError("DeepSeek timeout must be positive")
+        policy = turn_deadlines or ProviderTurnDeadlinesV1()
+        if timeout_seconds is not None:
+            value = float(timeout_seconds)
+            if value <= 0:
+                raise ContractError("DeepSeek timeout must be positive")
+            policy = ProviderTurnDeadlinesV1(
+                connect_seconds=min(policy.connect_seconds, value),
+                first_event_seconds=min(policy.first_event_seconds, value),
+                inter_event_seconds=min(policy.inter_event_seconds, value),
+                absolute_seconds=min(policy.absolute_seconds, value),
+            )
         self.endpoint = endpoint.rstrip("/")
-        self.timeout_seconds = float(timeout_seconds)
+        self.turn_deadlines = policy
+        self._clock = clock
+        self._next_turn_timeout_seconds: float | None = None
+        self._last_deadline_record = policy.public_record()
         self._api_key = api_key
         self._closed = False
 
@@ -133,7 +179,12 @@ class DeepSeekHttpsTransport:
         value = float(timeout_seconds)
         if value <= 0:
             raise ContractError("DeepSeek timeout must be positive")
-        self.timeout_seconds = value
+        self._next_turn_timeout_seconds = min(
+            value, self.turn_deadlines.absolute_seconds
+        )
+
+    def public_deadline_record(self) -> dict[str, float]:
+        return dict(self._last_deadline_record)
 
     def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
         if self._closed or not self._api_key:
@@ -152,9 +203,26 @@ class DeepSeekHttpsTransport:
                 "User-Agent": "chemsmart-agent/1",
             },
         )
+        deadline = ProviderTurnDeadline(
+            self.turn_deadlines,
+            turn_limit_seconds=self._next_turn_timeout_seconds,
+            clock=self._clock,
+        )
+        self._next_turn_timeout_seconds = None
+        self._last_deadline_record = deadline.public_record()
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = response.read()
+            with open_bounded_https_response(
+                request, deadline=deadline
+            ) as response:
+                if deadline.connected_at is None:
+                    # Focused in-memory transports may inject an already-open
+                    # response; the production opener marks this itself.
+                    deadline.response_acquired()
+                raw = read_bounded_response_body(
+                    response, deadline=deadline
+                )
+        except ProviderDeadlineExceeded as exc:
+            raise _deadline_transport_error(exc) from None
         except IncompleteRead:
             # A replay would be a distinct paid provider attempt. Close this
             # attempt visibly; only a separately authorized new conversation
@@ -165,13 +233,16 @@ class DeepSeekHttpsTransport:
                 _http_error_class(exc.code), http_status=exc.code
             ) from None
         except TimeoutError:
-            raise DeepSeekTransportError("timeout") from None
+            raise _deadline_transport_error(deadline.timeout_error()) from None
         except URLError as exc:
             reason = getattr(exc, "reason", None)
-            error_class = (
-                "timeout" if isinstance(reason, TimeoutError) else "transport"
-            )
-            raise DeepSeekTransportError(error_class) from None
+            if isinstance(reason, BaseException) and is_socket_timeout(reason):
+                raise _deadline_transport_error(
+                    deadline.timeout_error()
+                ) from None
+            raise DeepSeekTransportError("transport") from None
+        except (HTTPException, ssl.SSLError, ConnectionError, OSError):
+            raise DeepSeekTransportError("transport") from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -208,6 +279,9 @@ class DeepSeekV4FlashConfigV1:
     max_output_tokens: int = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
     context_tokens: int = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
     sdk_max_retries: int = 0
+    turn_deadlines: ProviderTurnDeadlinesV1 = field(
+        default_factory=ProviderTurnDeadlinesV1
+    )
 
     def __post_init__(self) -> None:
         if self.provider != "deepseek":
@@ -336,6 +410,12 @@ class DeepSeekV4ToolSession:
         if setter is None:
             return
         setter(float(timeout_seconds))
+
+    def public_transport_deadline_record(self) -> dict[str, float]:
+        """Expose only the transport's effective public deadline policy."""
+
+        getter = getattr(self._transport, "public_deadline_record", None)
+        return dict(getter()) if getter is not None else {}
 
     def turn(
         self, *, tools: list[dict[str, Any]] | None = None
@@ -649,6 +729,10 @@ def _is_official_endpoint(endpoint: str) -> bool:
             and parsed.hostname == "api.deepseek.com"
             and parsed.port in {None, 443}
             and parsed.path.rstrip("/") in {"", "/v1"}
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
         )
     except ValueError:
         return False
@@ -666,6 +750,22 @@ def _http_error_class(status: int) -> str:
     return "http_error"
 
 
+def _deadline_transport_error(
+    error: ProviderDeadlineExceeded,
+) -> DeepSeekTransportError:
+    error_class = {
+        "connect": "connect_timeout",
+        "first_event": "first_event_timeout",
+        "inter_event": "inter_event_timeout",
+        "absolute": "turn_deadline_exceeded",
+    }.get(error.phase, "timeout")
+    return DeepSeekTransportError(
+        error_class,
+        timeout_phase=error.phase,
+        timeout_seconds=error.timeout_seconds,
+    )
+
+
 __all__ = [
     "DEEPSEEK_OFFICIAL_ENDPOINT",
     "DEEPSEEK_V4_FLASH_CONTEXT_TOKENS",
@@ -678,6 +778,7 @@ __all__ = [
     "DeepSeekV4ToolSession",
     "ProviderCapabilitiesV1",
     "ProviderTurnReceiptV1",
+    "ProviderTurnDeadlinesV1",
     "public_payload",
     "public_provider_request",
     "public_provider_response",

@@ -1,0 +1,5 @@
+ORTE_ERROR_LOG: Data unpack had inadequate space
+[private-host:12345] [[123,0],0] *** An error occurred in MPI_Type_match_size "bare private token with spaces" https://private.invalid/trace /secret/path
+[private-host:12345] [[123,0],0] *** MPI_ERR_ARG: invalid argument of some other kind
+PMIX ERROR: UNREACHABLE in file server/pmix_server.c at line 2198
+TOKEN=fixture-secret-that-must-not-be-selected

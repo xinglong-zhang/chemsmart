@@ -55,7 +55,8 @@ LABEL org.opencontainers.image.title="ChemSmart CPU Research Runtime" \
       org.opencontainers.image.source="https://github.com/Hongjiseung-ROK/chemsmart" \
       org.opencontainers.image.version="3.1.4-cpu" \
       org.opencontainers.image.revision="${CONTAINER_RECIPE_REVISION}" \
-      io.chemsmart.source-revision="${CHEMSMART_SOURCE_REVISION}"
+      io.chemsmart.source-revision="${CHEMSMART_SOURCE_REVISION}" \
+      io.chemsmart.runtime-transaction-regression="safe-preview-preflight-materialization-v1"
 
 ENV PATH=/opt/conda/bin:${PATH} \
     HOME=/home/chemsmart \

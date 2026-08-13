@@ -1,0 +1,6 @@
+Synthetic parser fixture; this is not a complete Gaussian output.
+QPErr --- A syntax error was detected in the input line. authorization=Bearer fixture secret with spaces https://private.invalid/file /secret/path
+# opt freq B3LYP def2-TZVP
+                    '
+Error termination via Lnk1e in /opt/gaussian/g16/l1.exe at Thu Aug 13 12:00:00 2026.
+API_KEY=fixture-secret-that-must-not-be-selected

@@ -22,6 +22,7 @@ from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.xtb.validation import (
+    _openblas_openmp_warning_count,
     audit_xtb_result_receipt,
     bind_xtb_execution_input,
     canonical_sha256,
@@ -35,6 +36,16 @@ from chemsmart.settings.executable import XTBExecutable
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import RunScript, SLURMSubmitter
 from chemsmart.settings.xtb import XTBProjectSettings
+
+
+def test_openblas_openmp_warning_amplification_is_counted_from_stderr(tmp_path):
+    stderr = tmp_path / "xtb.err"
+    warning = (
+        "OpenBLAS Warning: Detect OpenMP Loop and this application may hang."
+    )
+    stderr.write_text(f"{warning}\nordinary diagnostic\n{warning}\n")
+
+    assert _openblas_openmp_warning_count(stderr) == 2
 
 
 def test_run_and_sub_expose_the_same_xtb_command_tree():
@@ -1199,6 +1210,28 @@ class TestXTBPreviewAndValidationReceipts:
             "receipt",
         }
         assert job.is_complete() is True
+
+        if jobtype == "sp":
+            Path(job.errfile).write_text(
+                "OpenBLAS Warning: Detect OpenMP Loop and this application "
+                "may hang.\n"
+            )
+            warned = validate_xtb_result(
+                job=job,
+                command=command,
+                environment_receipt=environment,
+                provenance_binding=provenance,
+                returncode=0,
+                receipt_path=job.result_receiptfile,
+            )
+            finding = next(
+                item
+                for item in warned["findings"]
+                if item["rule_id"]
+                == "xtb.environment.openblas_openmp_incompatible"
+            )
+            assert warned["ready"] is False
+            assert finding["observed"] == 1
 
         with open(job.outputfile, "a") as handle:
             handle.write("mutated\n")

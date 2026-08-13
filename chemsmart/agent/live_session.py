@@ -118,6 +118,7 @@ from chemsmart.agent.runtime.contracts import (
     TaskPhase,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 from chemsmart.agent.skills import (
     SkillDocumentV1,
@@ -1451,7 +1452,7 @@ def _provider_public_record(
     fallback_profiles: Iterable[AgentProviderProfileV1],
     experiment: bool,
 ) -> dict[str, Any]:
-    return {
+    record = {
         "profile_name": profile.profile_name,
         "provider": profile.provider,
         "model": profile.model,
@@ -1473,6 +1474,18 @@ def _provider_public_record(
             else "explicit_attributed_provider_unavailability_only"
         ),
     }
+    deadlines = getattr(profile, "transport_deadlines", None)
+    record["transport_deadlines"] = (
+        deadlines.configuration_record()
+        if deadlines is not None
+        else ProviderTurnDeadlinesV1().configuration_record()
+    )
+    record["transport_deadline_source"] = (
+        "agent_provider_profile_v2"
+        if deadlines is not None
+        else "runtime_immutable_defaults"
+    )
+    return record
 
 
 def _experiment_public_record(

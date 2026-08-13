@@ -10,11 +10,14 @@ from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.api_access import load_secret_lease
 from chemsmart.agent.runtime.alibaba import (
     AlibabaTokenPlanConfigV1,
+    AlibabaTokenPlanHttpsTransport,
     AlibabaTokenPlanToolSession,
     Qwen38MaxConfigV1,
     Qwen38MaxToolSession,
     _assemble_sse_response,
 )
+from chemsmart.agent.runtime.deepseek import DeepSeekTransportError
+from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 
@@ -385,3 +388,164 @@ def test_qwen_session_propagates_remaining_turn_timeout():
     session.turn()
 
     assert observed == [17.5]
+
+
+class _Clock:
+    def __init__(self):
+        self.value = 0.0
+
+    def __call__(self):
+        return self.value
+
+
+class _DripResponse:
+    def __init__(self, clock, chunks, step):
+        self.clock = clock
+        self.chunks = iter(chunks)
+        self.step = step
+        self.closed = False
+        self.timeouts = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.closed = True
+        return False
+
+    def settimeout(self, value):
+        self.timeouts.append(value)
+
+    def read1(self, _size):
+        self.clock.value += self.step
+        return next(self.chunks, b"")
+
+
+def test_sse_heartbeats_cannot_extend_the_absolute_turn_deadline(monkeypatch):
+    import chemsmart.agent.runtime.alibaba as alibaba
+
+    clock = _Clock()
+    response = _DripResponse(
+        clock,
+        [b": heartbeat\n"] * 10,
+        step=0.04,
+    )
+    monkeypatch.setattr(
+        alibaba,
+        "open_bounded_https_response",
+        lambda *_args, **_kwargs: response,
+    )
+    transport = AlibabaTokenPlanHttpsTransport(
+        api_key="sk-sp-test",
+        clock=clock,
+        turn_deadlines=ProviderTurnDeadlinesV1(
+            connect_seconds=0.05,
+            first_event_seconds=0.11,
+            inter_event_seconds=0.11,
+            absolute_seconds=0.12,
+        ),
+    )
+
+    with pytest.raises(
+        DeepSeekTransportError, match="turn_deadline_exceeded"
+    ) as observed:
+        transport({"model": "deepseek-v4-flash-0731", "messages": []})
+
+    assert observed.value.timeout_phase == "absolute"
+    assert observed.value.public_observation()["timeout_seconds"] == 0.12
+    assert response.closed is True
+    assert response.timeouts
+
+
+def test_sse_comments_do_not_satisfy_the_first_event_deadline(monkeypatch):
+    import chemsmart.agent.runtime.alibaba as alibaba
+
+    clock = _Clock()
+    response = _DripResponse(
+        clock,
+        [b": heartbeat\n"] * 10,
+        step=0.04,
+    )
+    monkeypatch.setattr(
+        alibaba,
+        "open_bounded_https_response",
+        lambda *_args, **_kwargs: response,
+    )
+    transport = AlibabaTokenPlanHttpsTransport(
+        api_key="sk-sp-test",
+        clock=clock,
+        turn_deadlines=ProviderTurnDeadlinesV1(
+            connect_seconds=0.05,
+            first_event_seconds=0.1,
+            inter_event_seconds=0.1,
+            absolute_seconds=0.5,
+        ),
+    )
+
+    with pytest.raises(
+        DeepSeekTransportError, match="first_event_timeout"
+    ) as observed:
+        transport({"model": "deepseek-v4-flash-0731", "messages": []})
+
+    assert observed.value.timeout_phase == "first_event"
+    assert response.closed is True
+
+
+def test_connect_timeout_is_classified_without_starting_a_worker(monkeypatch):
+    import chemsmart.agent.runtime.alibaba as alibaba
+
+    observed_timeout = []
+
+    def _timeout(_request, *, deadline):
+        observed_timeout.append(deadline.connect_timeout_seconds)
+        raise TimeoutError
+
+    monkeypatch.setattr(alibaba, "open_bounded_https_response", _timeout)
+    transport = AlibabaTokenPlanHttpsTransport(api_key="sk-sp-test")
+
+    with pytest.raises(DeepSeekTransportError, match="connect_timeout") as error:
+        transport({"model": "deepseek-v4-flash-0731", "messages": []})
+
+    assert error.value.timeout_phase == "connect"
+    assert observed_timeout[0] == pytest.approx(15.0, abs=0.01)
+
+
+def test_sse_inter_event_deadline_ignores_comments_after_data(monkeypatch):
+    import chemsmart.agent.runtime.alibaba as alibaba
+
+    clock = _Clock()
+    first = b"data: " + json.dumps(
+        {
+            "id": "partial",
+            "model": "deepseek-v4-flash-0731",
+            "choices": [],
+        }
+    ).encode("utf-8") + b"\n"
+    response = _DripResponse(
+        clock,
+        [first, b": heartbeat\n", b": heartbeat\n", b": heartbeat\n"],
+        step=0.04,
+    )
+    monkeypatch.setattr(
+        alibaba,
+        "open_bounded_https_response",
+        lambda *_args, **_kwargs: response,
+    )
+    transport = AlibabaTokenPlanHttpsTransport(
+        api_key="sk-sp-test",
+        clock=clock,
+        turn_deadlines=ProviderTurnDeadlinesV1(
+            connect_seconds=0.05,
+            first_event_seconds=0.1,
+            inter_event_seconds=0.1,
+            absolute_seconds=0.5,
+        ),
+    )
+
+    with pytest.raises(
+        DeepSeekTransportError, match="inter_event_timeout"
+    ) as observed:
+        transport({"model": "deepseek-v4-flash-0731", "messages": []})
+
+    assert observed.value.timeout_phase == "inter_event"
+    assert response.closed is True

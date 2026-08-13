@@ -21,6 +21,9 @@ XTB_ENVIRONMENT_SCHEMA_VERSION = "chemsmart.xtb-environment.v1"
 XTB_PREVIEW_SCHEMA_VERSION = "chemsmart.xtb-preview.v1"
 XTB_RESULT_SCHEMA_VERSION = "chemsmart.xtb-result-validation.v1"
 _MISSING = object()
+_OPENBLAS_OPENMP_WARNING = (
+    "OpenBLAS Warning: Detect OpenMP Loop and this application may hang."
+)
 
 
 class XTBEnvironmentError(RuntimeError):
@@ -139,6 +142,16 @@ def _artifact_record(path):
         "size": path.stat().st_size,
         "sha256": sha256_file(path),
     }
+
+
+def _openblas_openmp_warning_count(path):
+    """Count the xTB/OpenBLAS incompatibility warning without loading stderr."""
+
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            return sum(line.count(_OPENBLAS_OPENMP_WARNING) for line in handle)
+    except OSError:
+        return 0
 
 
 def _bound_artifact_record(path, *, role):
@@ -727,6 +740,19 @@ def validate_xtb_result(
                 "artifact:input_geometry",
             )
         )
+    stderr_path = Path(job.folder) / f"{job.label}.err"
+    openblas_warning_count = _openblas_openmp_warning_count(stderr_path)
+    if openblas_warning_count:
+        findings.append(
+            _finding(
+                "xtb.environment.openblas_openmp_incompatible",
+                "stderr.openblas_openmp_warning_count",
+                0,
+                openblas_warning_count,
+                f"artifact:{stderr_path.name}",
+            )
+        )
+
     output = None
     main = None
     observed_settings = None

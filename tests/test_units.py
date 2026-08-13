@@ -151,3 +151,15 @@ class TestEnergyConversion:
                 assert (
                     abs(result - expected) < TOLERANCE
                 ), f"Conversion from {from_unit} to {to_unit}: expected {expected}, got {result}"
+
+    def test_hartree_ev_round_trip_uses_one_ase_authority(self):
+        """Native PySCF Eh -> public eV -> typed Eh is lossless."""
+        native_hartree = -0.4000000000000000
+        public_ev = native_hartree * units.Hartree
+
+        assert energy_conversion(
+            "eV", "hartree", public_ev
+        ) == pytest.approx(native_hartree, abs=1e-15)
+        assert energy_conversion(
+            "hartree", "eV", native_hartree
+        ) == pytest.approx(public_ev, abs=5e-15)

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from http.client import HTTPException
 import json
-from typing import Any, Mapping
+import ssl
+import time
+from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from chemsmart.agent._contracts import ContractError, require_identifier
 from chemsmart.agent.provider_config import (
@@ -23,6 +26,15 @@ from chemsmart.agent.runtime.deepseek import (
     DeepSeekTransportError,
     DeepSeekV4ToolSession,
     ProviderCapabilitiesV1,
+    _deadline_transport_error,
+)
+from chemsmart.agent.runtime.transport import (
+    ProviderDeadlineExceeded,
+    ProviderTurnDeadline,
+    ProviderTurnDeadlinesV1,
+    is_socket_timeout,
+    iter_bounded_response_lines,
+    open_bounded_https_response,
 )
 
 
@@ -38,6 +50,9 @@ class AlibabaTokenPlanConfigV1:
     max_output_tokens: int = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
     context_tokens: int = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
     sdk_max_retries: int = 0
+    turn_deadlines: ProviderTurnDeadlinesV1 = field(
+        default_factory=ProviderTurnDeadlinesV1
+    )
 
     def __post_init__(self) -> None:
         if self.provider != ALIBABA_TOKEN_PLAN_PROVIDER:
@@ -90,16 +105,30 @@ class AlibabaTokenPlanHttpsTransport:
         *,
         api_key: str,
         endpoint: str = ALIBABA_TOKEN_PLAN_ENDPOINT,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float | None = None,
+        turn_deadlines: ProviderTurnDeadlinesV1 | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not _is_token_plan_endpoint(endpoint):
             raise ContractError("Alibaba transport requires the Token Plan endpoint")
         if not api_key.startswith("sk-sp-"):
             raise ContractError("Alibaba transport requires a Token Plan lease")
-        if timeout_seconds <= 0:
-            raise ContractError("Alibaba timeout must be positive")
+        policy = turn_deadlines or ProviderTurnDeadlinesV1()
+        if timeout_seconds is not None:
+            value = float(timeout_seconds)
+            if value <= 0:
+                raise ContractError("Alibaba timeout must be positive")
+            policy = ProviderTurnDeadlinesV1(
+                connect_seconds=min(policy.connect_seconds, value),
+                first_event_seconds=min(policy.first_event_seconds, value),
+                inter_event_seconds=min(policy.inter_event_seconds, value),
+                absolute_seconds=min(policy.absolute_seconds, value),
+            )
         self.endpoint = endpoint.rstrip("/")
-        self.timeout_seconds = float(timeout_seconds)
+        self.turn_deadlines = policy
+        self._clock = clock
+        self._next_turn_timeout_seconds: float | None = None
+        self._last_deadline_record = policy.public_record()
         self._api_key = api_key
         self._closed = False
 
@@ -109,7 +138,12 @@ class AlibabaTokenPlanHttpsTransport:
         value = float(timeout_seconds)
         if value <= 0:
             raise ContractError("Alibaba timeout must be positive")
-        self.timeout_seconds = value
+        self._next_turn_timeout_seconds = min(
+            value, self.turn_deadlines.absolute_seconds
+        )
+
+    def public_deadline_record(self) -> dict[str, float]:
+        return dict(self._last_deadline_record)
 
     def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
         if self._closed or not self._api_key:
@@ -128,21 +162,43 @@ class AlibabaTokenPlanHttpsTransport:
                 "User-Agent": "chemsmart-agent/1",
             },
         )
+        deadline = ProviderTurnDeadline(
+            self.turn_deadlines,
+            turn_limit_seconds=self._next_turn_timeout_seconds,
+            clock=self._clock,
+        )
+        self._next_turn_timeout_seconds = None
+        self._last_deadline_record = deadline.public_record()
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with open_bounded_https_response(
+                request, deadline=deadline
+            ) as response:
+                if deadline.connected_at is None:
+                    # Focused in-memory transports may inject an already-open
+                    # response; the production opener marks this itself.
+                    deadline.response_acquired()
                 return _assemble_sse_response(
-                    response, expected_model=str(payload.get("model") or "")
+                    response,
+                    expected_model=str(payload.get("model") or ""),
+                    deadline=deadline,
                 )
+        except ProviderDeadlineExceeded as exc:
+            raise _deadline_transport_error(exc) from None
         except HTTPError as exc:
             raise DeepSeekTransportError(
                 _http_error_class(exc), http_status=exc.code
             ) from None
         except TimeoutError:
-            raise DeepSeekTransportError("timeout") from None
+            raise _deadline_transport_error(deadline.timeout_error()) from None
         except URLError as exc:
             reason = getattr(exc, "reason", None)
-            error_class = "timeout" if isinstance(reason, TimeoutError) else "transport"
-            raise DeepSeekTransportError(error_class) from None
+            if isinstance(reason, BaseException) and is_socket_timeout(reason):
+                raise _deadline_transport_error(
+                    deadline.timeout_error()
+                ) from None
+            raise DeepSeekTransportError("transport") from None
+        except (HTTPException, ssl.SSLError, ConnectionError, OSError):
+            raise DeepSeekTransportError("transport") from None
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DeepSeekTransportError("invalid_json") from exc
 
@@ -210,7 +266,10 @@ class Qwen38MaxToolSession(AlibabaTokenPlanToolSession):
 
 
 def _assemble_sse_response(
-    response, *, expected_model: str = ALIBABA_TOKEN_PLAN_MODEL
+    response,
+    *,
+    expected_model: str = ALIBABA_TOKEN_PLAN_MODEL,
+    deadline: ProviderTurnDeadline | None = None,
 ) -> dict[str, Any]:
     response_id = ""
     observed_model = ""
@@ -222,7 +281,14 @@ def _assemble_sse_response(
     tool_calls: dict[int, dict[str, Any]] = {}
     saw_event = False
 
-    for raw_line in response:
+    lines = (
+        iter_bounded_response_lines(response, deadline=deadline)
+        if deadline is not None
+        else response
+    )
+    for raw_line in lines:
+        if deadline is not None:
+            deadline.check()
         line = raw_line.decode("utf-8").strip()
         if not line or line.startswith(":"):
             continue
@@ -230,10 +296,14 @@ def _assemble_sse_response(
             raise DeepSeekProtocolError("Alibaba stream contains a non-SSE event")
         data = line[5:].strip()
         if data == "[DONE]":
+            if deadline is not None:
+                deadline.event_observed()
             break
         chunk = json.loads(data)
         if not isinstance(chunk, Mapping):
             raise DeepSeekProtocolError("Alibaba stream chunk must be an object")
+        if deadline is not None:
+            deadline.event_observed()
         saw_event = True
         response_id = response_id or str(chunk.get("id") or "")
         observed_model = observed_model or str(chunk.get("model") or "")
@@ -343,15 +413,9 @@ def _http_error_class(exc: HTTPError) -> str:
     if exc.code == 404:
         return "model_unavailable"
     if exc.code == 429:
-        try:
-            payload = json.loads(exc.read().decode("utf-8"))
-            error = payload.get("error", payload)
-            detail = " ".join(
-                str(error.get(key) or "") for key in ("code", "message", "type")
-            ).lower()
-        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
-            detail = ""
-        return "quota_exhausted" if "quota" in detail else "rate_limited"
+        # Never read an untrusted error body here: a peer could drip it past
+        # the turn cap, and provider text must not enter Runtime evidence.
+        return "rate_limited"
     if 500 <= exc.code < 600:
         return "provider_5xx"
     return "http_error"

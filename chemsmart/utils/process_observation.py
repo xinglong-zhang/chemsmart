@@ -20,6 +20,7 @@ import os
 import shutil
 import signal
 import subprocess
+import threading
 import time
 from typing import Any
 
@@ -195,6 +196,41 @@ def _active_process_ids(
     }
 
 
+def _refresh_known_process_tree(
+    *,
+    table: dict[int, _ProcessRow] | None,
+    root_pid: int,
+    known_process_ids: set[int],
+    known_process_group_ids: set[int],
+) -> None:
+    """Extend a previously observed tree across reparenting and new sessions."""
+
+    if table is None:
+        return
+    known_process_ids.add(root_pid)
+    discovered = set(known_process_ids)
+    for known_pid in tuple(known_process_ids):
+        discovered.update(_descendant_ids(table, known_pid))
+    known_process_ids.update(discovered)
+    known_process_group_ids.update(
+        table[pid].process_group_id
+        for pid in known_process_ids
+        if pid in table
+    )
+
+    controller_group = os.getpgrp() if hasattr(os, "getpgrp") else None
+    owned_groups = {
+        process_group_id
+        for process_group_id in known_process_group_ids
+        if process_group_id > 0 and process_group_id != controller_group
+    }
+    known_process_ids.update(
+        row.pid
+        for row in table.values()
+        if row.process_group_id in owned_groups
+    )
+
+
 def _send_signal_to_tree(
     *,
     process: subprocess.Popen,
@@ -205,14 +241,14 @@ def _send_signal_to_tree(
     """Signal owned groups first, then remaining known process IDs."""
 
     controller_group = os.getpgrp() if hasattr(os, "getpgrp") else None
-    signalled_group = False
+    signalled_groups: set[int] = set()
     if hasattr(os, "killpg"):
         for process_group_id in sorted(known_process_group_ids, reverse=True):
             if process_group_id <= 0 or process_group_id == controller_group:
                 continue
             try:
                 os.killpg(process_group_id, signum)
-                signalled_group = True
+                signalled_groups.add(process_group_id)
             except ProcessLookupError:
                 continue
             except PermissionError:
@@ -221,18 +257,15 @@ def _send_signal_to_tree(
         if pid <= 0 or pid == os.getpid():
             continue
         try:
+            if os.getpgid(pid) in signalled_groups:
+                continue
+        except (AttributeError, OSError, ProcessLookupError):
+            pass
+        try:
             os.kill(pid, signum)
         except (ProcessLookupError, PermissionError):
             continue
-    if process.poll() is None:
-        try:
-            if signum == signal.SIGTERM:
-                process.terminate()
-            else:
-                process.kill()
-        except (OSError, ProcessLookupError):
-            pass
-    return "process_group_tree" if signalled_group else "pid_tree"
+    return "process_group_tree" if signalled_groups else "pid_tree"
 
 
 def _terminate_process_tree(
@@ -241,41 +274,75 @@ def _terminate_process_tree(
     known_process_ids: set[int],
     known_process_group_ids: set[int],
     grace_seconds: float,
+    initial_signal: signal.Signals = signal.SIGTERM,
 ) -> tuple[bool, str, tuple[int, ...], str]:
+    _refresh_known_process_tree(
+        table=_process_table(),
+        root_pid=process.pid,
+        known_process_ids=known_process_ids,
+        known_process_group_ids=known_process_group_ids,
+    )
     scope = _send_signal_to_tree(
         process=process,
         known_process_ids=known_process_ids,
         known_process_group_ids=known_process_group_ids,
-        signum=signal.SIGTERM,
+        signum=initial_signal,
     )
     deadline = time.monotonic() + max(0.0, grace_seconds)
     remaining: set[int] | None = set(known_process_ids)
     while time.monotonic() < deadline:
         table = _process_table()
+        before_ids = set(known_process_ids)
+        before_groups = set(known_process_group_ids)
+        _refresh_known_process_tree(
+            table=table,
+            root_pid=process.pid,
+            known_process_ids=known_process_ids,
+            known_process_group_ids=known_process_group_ids,
+        )
+        if (
+            known_process_ids != before_ids
+            or known_process_group_ids != before_groups
+        ):
+            refreshed_scope = _send_signal_to_tree(
+                process=process,
+                known_process_ids=known_process_ids,
+                known_process_group_ids=known_process_group_ids,
+                signum=initial_signal,
+            )
+            if refreshed_scope == "process_group_tree":
+                scope = refreshed_scope
         active = _active_process_ids(table, known_process_ids)
         if process.poll() is not None and active == set():
-            return True, scope, (), "SIGTERM"
+            return True, scope, (), initial_signal.name
         if active is not None:
             remaining = active
         time.sleep(0.02)
 
     table = _process_table()
-    if table is not None:
-        known_process_ids.update(_descendant_ids(table, process.pid))
-        known_process_group_ids.update(
-            table[pid].process_group_id
-            for pid in known_process_ids
-            if pid in table
-        )
-    scope = _send_signal_to_tree(
+    _refresh_known_process_tree(
+        table=table,
+        root_pid=process.pid,
+        known_process_ids=known_process_ids,
+        known_process_group_ids=known_process_group_ids,
+    )
+    kill_scope = _send_signal_to_tree(
         process=process,
         known_process_ids=known_process_ids,
         known_process_group_ids=known_process_group_ids,
         signum=signal.SIGKILL,
     )
+    if kill_scope == "process_group_tree":
+        scope = kill_scope
     kill_deadline = time.monotonic() + max(0.2, grace_seconds)
     while time.monotonic() < kill_deadline:
         table = _process_table()
+        _refresh_known_process_tree(
+            table=table,
+            root_pid=process.pid,
+            known_process_ids=known_process_ids,
+            known_process_group_ids=known_process_group_ids,
+        )
         active = _active_process_ids(table, known_process_ids)
         if process.poll() is not None and active == set():
             return True, scope, (), "SIGKILL"
@@ -343,6 +410,50 @@ def launch_failure_observation(
     )
 
 
+class ProcessSignalGuard:
+    """Park one external signal while a child launch is being observed.
+
+    The handler records only the first signal.  Tree discovery, termination,
+    stream collection, and signal propagation remain in normal Python flow.
+    Signal handlers are installed only on the main thread, and an ignored
+    signal retains its original ignored semantics.
+    """
+
+    def __init__(self) -> None:
+        self.external_signal: int | None = None
+        self._prior_handlers: dict[int, Any] = {}
+        self._entered = False
+
+    def __enter__(self) -> ProcessSignalGuard:
+        if self._entered:
+            raise RuntimeError("process signal guard cannot be re-entered")
+        self._entered = True
+        if threading.current_thread() is not threading.main_thread():
+            return self
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            prior = signal.getsignal(signum)
+            if prior == signal.SIG_IGN:
+                continue
+            self._prior_handlers[signum] = prior
+            signal.signal(signum, self._capture)
+        return self
+
+    def _capture(self, signum: int, _frame: Any) -> None:
+        if self.external_signal is None:
+            self.external_signal = signum
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        for signum, prior in self._prior_handlers.items():
+            signal.signal(signum, prior)
+        self._prior_handlers.clear()
+        self._entered = False
+        if self.external_signal is not None:
+            os.kill(os.getpid(), self.external_signal)
+            raise InterruptedError(
+                "process observation interrupted by external signal"
+            )
+
+
 def observe_process(
     process: subprocess.Popen,
     *,
@@ -350,6 +461,7 @@ def observe_process(
     memory_limit_mb: float | None = None,
     sample_interval_seconds: float = 0.1,
     termination_grace_seconds: float = 1.0,
+    signal_guard: ProcessSignalGuard | None = None,
 ) -> ObservedProcessResult:
     """Wait for one process while enforcing time and observed-RSS bounds.
 
@@ -359,6 +471,17 @@ def observe_process(
     If RSS cannot be observed, the receipt says so rather than fabricating a
     value.
     """
+
+    if signal_guard is None:
+        with ProcessSignalGuard() as active_guard:
+            return observe_process(
+                process,
+                timeout_seconds=timeout_seconds,
+                memory_limit_mb=memory_limit_mb,
+                sample_interval_seconds=sample_interval_seconds,
+                termination_grace_seconds=termination_grace_seconds,
+                signal_guard=active_guard,
+            )
 
     timeout_seconds = float(timeout_seconds)
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
@@ -399,12 +522,11 @@ def observe_process(
     while True:
         table = _process_table()
         if table is not None:
-            descendants = _descendant_ids(table, process.pid)
-            known_process_ids.update(descendants)
-            known_process_group_ids.update(
-                table[pid].process_group_id
-                for pid in descendants
-                if pid in table
+            _refresh_known_process_tree(
+                table=table,
+                root_pid=process.pid,
+                known_process_ids=known_process_ids,
+                known_process_group_ids=known_process_group_ids,
             )
             active = _active_process_ids(table, known_process_ids) or set()
             rss_kib = sum(table[pid].rss_kib for pid in active if pid in table)
@@ -419,6 +541,8 @@ def observe_process(
                     limit_reason = "memory_limit_exceeded"
                     break
 
+        if signal_guard.external_signal is not None:
+            break
         now = time.monotonic()
         remaining = deadline - now
         if remaining <= 0:
@@ -432,12 +556,19 @@ def observe_process(
         except subprocess.TimeoutExpired:
             continue
 
-    termination_requested = bool(limit_reason)
+    termination_requested = bool(
+        limit_reason or signal_guard.external_signal is not None
+    )
     termination_confirmed: bool | None = None
     termination_scope = "not_required"
     termination_signal = ""
     remaining_process_ids: tuple[int, ...] = ()
     if termination_requested:
+        initial_signal = (
+            signal.Signals(signal_guard.external_signal)
+            if signal_guard.external_signal is not None
+            else signal.SIGTERM
+        )
         (
             termination_confirmed,
             termination_scope,
@@ -448,6 +579,7 @@ def observe_process(
             known_process_ids=known_process_ids,
             known_process_group_ids=known_process_group_ids,
             grace_seconds=termination_grace_seconds,
+            initial_signal=initial_signal,
         )
         try:
             stdout, stderr = process.communicate(timeout=1)
@@ -503,6 +635,7 @@ def observe_process(
 __all__ = [
     "ObservedProcessResult",
     "PROCESS_OBSERVATION_SCHEMA_VERSION",
+    "ProcessSignalGuard",
     "ProcessObservationV1",
     "launch_failure_observation",
     "observe_process",

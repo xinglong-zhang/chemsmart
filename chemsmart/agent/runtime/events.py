@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -65,6 +66,8 @@ class EventKind(str, Enum):
     WORKFLOW_LAUNCH_RESERVED = "workflow_node_launch_reserved"
     WORKFLOW_DATA_EDGE_BOUND = "workflow_data_edge_bound"
     WORKFLOW_NODE_STATE_CHANGED = "workflow_node_state_changed"
+    TOOL_WAITING = "tool_waiting"
+    TOOL_WOKE = "tool_woke"
     RUNTIME_TERMINATED = "runtime_terminated"
 
 
@@ -104,6 +107,8 @@ WORKFLOW_EXECUTION_STARTED = EventKind.WORKFLOW_EXECUTION_STARTED.value
 WORKFLOW_LAUNCH_RESERVED = EventKind.WORKFLOW_LAUNCH_RESERVED.value
 WORKFLOW_DATA_EDGE_BOUND = EventKind.WORKFLOW_DATA_EDGE_BOUND.value
 WORKFLOW_NODE_STATE_CHANGED = EventKind.WORKFLOW_NODE_STATE_CHANGED.value
+TOOL_WAITING = EventKind.TOOL_WAITING.value
+TOOL_WOKE = EventKind.TOOL_WOKE.value
 RUNTIME_TERMINATED = EventKind.RUNTIME_TERMINATED.value
 
 _RECEIPT_EVENTS = frozenset(
@@ -276,6 +281,60 @@ def _validate_payload(
             str(payload.get("plan_receipt_sha256") or ""),
             "plan_receipt_sha256",
         )
+    if kind == TOOL_WAITING:
+        _validate_wait_event_identity(kind, payload)
+        if payload.get("wait_kind") != "approved_program_tool_dispatch":
+            raise ContractError(
+                "tool waiting event requires a typed wait kind"
+            )
+        timeout_seconds = payload.get("timeout_seconds")
+        if (
+            not _is_finite_runtime_number(timeout_seconds)
+            or timeout_seconds <= 0
+        ):
+            raise ContractError(
+                "tool waiting event requires a positive timeout"
+            )
+    if kind == TOOL_WOKE:
+        _validate_wait_event_identity(kind, payload)
+        if payload.get("wake_reason") not in {
+            "result",
+            "timeout",
+            "signal",
+            "failure",
+            "replay",
+        }:
+            raise ContractError("tool wake event requires a typed wake reason")
+        waited_seconds = payload.get("waited_seconds")
+        if not _is_finite_runtime_number(waited_seconds) or waited_seconds < 0:
+            raise ContractError(
+                "tool wake event requires non-negative wait time"
+            )
+
+
+def _validate_wait_event_identity(
+    kind: str, payload: Mapping[str, Any]
+) -> None:
+    label = "tool waiting" if kind == TOOL_WAITING else "tool wake"
+    for field_name in ("request_id", "tool"):
+        value = payload.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError(
+                f"{label} event requires a non-empty {field_name}"
+            )
+    provider_calls = payload.get("provider_calls_while_waiting")
+    if not _is_finite_runtime_number(provider_calls) or provider_calls != 0:
+        raise ContractError(
+            f"{label} event requires zero provider calls while waiting"
+        )
+
+
+def _is_finite_runtime_number(value: Any) -> bool:
+    """Accept only native JSON numeric values, never booleans or NaN/Inf."""
+
+    if type(value) is int:
+        return True
+    return type(value) is float and math.isfinite(value)
 
 
 def _validate_typed_receipt_payload(
@@ -703,6 +762,8 @@ __all__ = [
     "WORKFLOW_LAUNCH_RESERVED",
     "WORKFLOW_DATA_EDGE_BOUND",
     "WORKFLOW_NODE_STATE_CHANGED",
+    "TOOL_WAITING",
+    "TOOL_WOKE",
     "RuntimeEvent",
     "SUBSTITUTION_ASSESSED",
     "EventKind",

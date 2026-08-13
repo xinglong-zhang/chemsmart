@@ -104,6 +104,11 @@ class ToolLoopResultV1:
 #: rejected -- never to decide anything scientific.
 _CHARS_PER_TOKEN = 3.5
 
+# Keep enough of the task envelope after any provider turn to close the stream,
+# persist failure/success evidence, and render the Runtime result.  The outer
+# episode timeout remains a last resort rather than the normal transport stop.
+_PROVIDER_POST_TURN_RESERVE_SECONDS = 30.0
+
 
 def estimate_request_input_tokens(request: Mapping[str, Any]) -> int:
     """Estimate the input size of a provider request before sending it.
@@ -215,11 +220,21 @@ class ToolLoopRunner:
                 final_text = "provider wall-time budget exhausted"
                 terminal_reason = final_text
                 break
+            post_turn_reserve = min(
+                _PROVIDER_POST_TURN_RESERVE_SECONDS,
+                max(0.1, network_budget.task_wall_time_seconds * 0.1),
+            )
+            provider_turn_allowance = remaining_wall_time - post_turn_reserve
+            if provider_turn_allowance <= 0:
+                terminal_state = "failed"
+                final_text = "provider wall-time reserve reached"
+                terminal_reason = final_text
+                break
             timeout_setter = getattr(
                 session, "set_turn_timeout_seconds", None
             )
             if timeout_setter is not None:
-                timeout_setter(remaining_wall_time)
+                timeout_setter(provider_turn_allowance)
             transport_ordinal += 1
             request = session.request_payload(
                 tools=list(self.host.surface.tool_definitions)
@@ -290,6 +305,11 @@ class ToolLoopRunner:
                         if isinstance(exc, DeepSeekProtocolError)
                         else None
                     ),
+                    transport_observation=(
+                        _public_transport_failure(session, exc)
+                        if isinstance(exc, DeepSeekTransportError)
+                        else None
+                    ),
                 )
                 terminal_state = "failed"
                 final_text = str(exc)
@@ -323,8 +343,19 @@ class ToolLoopRunner:
                 payload={
                     "receipt_sha256": provider_receipt.receipt_sha256,
                     "provider": provider_receipt.provider,
+                    "requested_provider": session.config.provider,
+                    "observed_provider": provider_receipt.provider,
                     "requested_model": provider_receipt.requested_model,
                     "observed_model": provider_receipt.observed_model,
+                    "requested_reasoning_effort": (
+                        str(session.config.reasoning_effort)
+                    ),
+                    # The supported endpoints echo model identity but do not
+                    # report the applied reasoning effort independently.
+                    "observed_reasoning_effort": "not_reported",
+                    "transport_deadlines": (
+                        session.public_transport_deadline_record()
+                    ),
                     "finish_reason": provider_receipt.finish_reason,
                     "tool_calls_present": (
                         provider_receipt.tool_calls_present
@@ -478,7 +509,28 @@ class ToolLoopRunner:
                     },
                     idempotency_key="tool-started:" + call_id,
                 )
+                wait_started = None
+                wait_emitted = False
                 try:
+                    if tool_name == "execute_approved_program_node":
+                        wait_timeout = (
+                            self.host.execution_wait_timeout_seconds()
+                        )
+                        wait_started = self.clock()
+                        self.event_store.append(
+                            turn_id=envelope.turn_id,
+                            kind=EventKind.TOOL_WAITING.value,
+                            payload={
+                                "request_id": call_id,
+                                "tool": tool_name,
+                                "wait_kind": "approved_program_tool_dispatch",
+                                "timeout_seconds": wait_timeout,
+                                "provider_calls_while_waiting": 0,
+                                "continuation_state": "private_in_memory",
+                            },
+                            idempotency_key="tool-waiting:" + call_id,
+                        )
+                        wait_emitted = True
                     result = self.host.dispatch(
                         turn_id=envelope.turn_id,
                         tool_name=tool_name,
@@ -525,6 +577,29 @@ class ToolLoopRunner:
                         "error_class": type(exc).__name__,
                     }
                     tool_event_key = "tool-failed:" + call_id
+                if wait_emitted and wait_started is not None:
+                    process_observation = _execution_process_observation(result)
+                    wake_reason = _execution_wake_reason(
+                        result=result,
+                        process_observation=process_observation,
+                    )
+                    self.event_store.append(
+                        turn_id=envelope.turn_id,
+                        kind=EventKind.TOOL_WOKE.value,
+                        payload={
+                            "request_id": call_id,
+                            "tool": tool_name,
+                            "wake_reason": wake_reason,
+                            "waited_seconds": max(
+                                0.0, self.clock() - wait_started
+                            ),
+                            "provider_calls_while_waiting": 0,
+                            "process_observation_sha256": str(
+                                process_observation.get("receipt_sha256") or ""
+                            ),
+                        },
+                        idempotency_key="tool-woke:" + call_id,
+                    )
                 projected = project_tool_feedback(
                     tool=tool_name,
                     result=result,
@@ -649,6 +724,7 @@ class ToolLoopRunner:
         attempt: ApiAttemptReceiptV1,
         *,
         protocol_observation: Mapping[str, Any] | None = None,
+        transport_observation: Mapping[str, Any] | None = None,
     ) -> None:
         payload = {
             "receipt_sha256": attempt.receipt_sha256,
@@ -667,6 +743,10 @@ class ToolLoopRunner:
             payload["response_sha256"] = attempt.response_sha256
             payload["protocol_failure"] = canonical_data(
                 protocol_observation
+            )
+        if transport_observation is not None:
+            payload["transport_failure"] = canonical_data(
+                transport_observation
             )
         self.event_store.append(
             turn_id=turn_id,
@@ -693,6 +773,10 @@ class ToolLoopRunner:
             "credential_invalid": "credential_invalid",
             "rate_limited": "rate_limited",
             "timeout": "timeout",
+            "connect_timeout": "timeout",
+            "first_event_timeout": "timeout",
+            "inter_event_timeout": "timeout",
+            "turn_deadline_exceeded": "timeout",
         }.get(
             str(error_class),
             "protocol_failed"
@@ -717,6 +801,72 @@ class ToolLoopRunner:
             retry_ordinal=0,
             nonsecret_error_class=str(error_class),
         )
+
+
+def _execution_process_observation(result: Any) -> dict[str, Any]:
+    """Locate the host-owned public process receipt in a tool result."""
+
+    if not isinstance(result, Mapping):
+        return {}
+    outer = result.get("result")
+    outer = outer if isinstance(outer, Mapping) else result
+    process = outer.get("process_observation")
+    if isinstance(process, Mapping):
+        return dict(process)
+    execution = outer.get("execution")
+    if isinstance(execution, Mapping):
+        observations = execution.get("observations")
+        if isinstance(observations, Mapping):
+            process = observations.get("process_observation")
+            return dict(process) if isinstance(process, Mapping) else {}
+    return {}
+
+
+def _public_transport_failure(
+    session: Any, error: DeepSeekTransportError
+) -> dict[str, Any]:
+    """Bind a sanitized failure to requested identity and deadline policy."""
+
+    return {
+        **error.public_observation(),
+        "requested_provider": str(session.config.provider),
+        "observed_provider": "not_observed",
+        "requested_model": str(session.config.model),
+        "observed_model": "not_observed",
+        "requested_reasoning_effort": str(session.config.reasoning_effort),
+        "observed_reasoning_effort": "not_reported",
+        "transport_deadlines": session.public_transport_deadline_record(),
+    }
+
+
+def _execution_wake_reason(
+    *, result: Any, process_observation: Mapping[str, Any]
+) -> str:
+    """Classify why the synchronous approved-engine wait returned."""
+
+    outer = result.get("result") if isinstance(result, Mapping) else None
+    outer = outer if isinstance(outer, Mapping) else result
+    if isinstance(outer, Mapping) and outer.get("idempotent_replay") is True:
+        return "replay"
+    if process_observation.get("timed_out") is True:
+        return "timeout"
+    if isinstance(result, Mapping) and result.get("status") == "rejected":
+        return "failure"
+    state = str(process_observation.get("state") or "")
+    returncode = process_observation.get("returncode")
+    if process_observation.get("memory_limit_exceeded") is True:
+        return "failure"
+    if (
+        isinstance(returncode, int)
+        and not isinstance(returncode, bool)
+        and returncode < 0
+    ):
+        return "signal"
+    if process_observation and (
+        state != "exited" or returncode not in {0, None}
+    ):
+        return "failure"
+    return "result"
 
 
 def _public_assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:

@@ -245,7 +245,7 @@ _PROJECTION_CONTRACTS = {
         ),
         _ToolProjectionContractV1(
             "execute_approved_program_node",
-            whole_branches=frozenset({"findings"}),
+            whole_branches=frozenset({"findings", "native_failure"}),
         ),
     )
 }

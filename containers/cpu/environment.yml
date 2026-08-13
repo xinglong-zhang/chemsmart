@@ -6,6 +6,9 @@ dependencies:
   - pip
   - numpy=1.26.4
   - h5py=3.16.0
+  # xTB is OpenMP-parallel.  The pthreads OpenBLAS variant emits one warning
+  # per inner loop and may hang when entered from xTB's OpenMP regions.
+  - libopenblas=0.3.34=openmp_*
   - xtb=6.7.1
   - pymol-open-source=3.1.0
   - ffmpeg=7.1.1

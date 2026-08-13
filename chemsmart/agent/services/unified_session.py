@@ -70,11 +70,12 @@ class UnifiedSessionRunner:
                 self.provider_config,
                 max_output_tokens=approved_output_limit,
             )
+            turn_deadlines = bound_config.turn_deadlines
             if bound_config.provider == "deepseek":
                 transport = DeepSeekHttpsTransport(
                     api_key=secret,
                     endpoint=bound_config.endpoint,
-                    timeout_seconds=network_budget.task_wall_time_seconds,
+                    turn_deadlines=turn_deadlines,
                 )
                 session = DeepSeekV4ToolSession(
                     transport=transport,
@@ -90,7 +91,7 @@ class UnifiedSessionRunner:
                 transport = AlibabaTokenPlanHttpsTransport(
                     api_key=secret,
                     endpoint=bound_config.endpoint,
-                    timeout_seconds=network_budget.task_wall_time_seconds,
+                    turn_deadlines=turn_deadlines,
                 )
                 session = AlibabaTokenPlanToolSession(
                     transport=transport,

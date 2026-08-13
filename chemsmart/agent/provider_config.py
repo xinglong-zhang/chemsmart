@@ -16,6 +16,7 @@ from chemsmart.agent.runtime.deepseek import (
     DEEPSEEK_V4_FLASH_MODEL,
     DeepSeekV4FlashConfigV1,
 )
+from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
 from chemsmart.io.yaml import YAMLFile
 
 ALIBABA_TOKEN_PLAN_PROVIDER = "alibaba-token-plan"
@@ -29,7 +30,12 @@ ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS = 262_144
 
 @dataclass(frozen=True)
 class AgentProviderProfileV1:
-    """One public provider profile; credentials remain in the secret file."""
+    """One public provider profile; credentials remain in the secret file.
+
+    V1 records remain byte-identical and receive the immutable default
+    deadline policy at runtime.  Explicit deadline profiles use the V2
+    subclass below so historical dataclass projections also remain identical.
+    """
 
     schema_version: str
     profile_name: str
@@ -58,6 +64,10 @@ class AgentProviderProfileV1:
     def runtime_config(self):
         """Build the provider-native ephemeral continuation configuration."""
 
+        turn_deadlines = getattr(
+            self, "transport_deadlines", ProviderTurnDeadlinesV1()
+        )
+
         if self.provider == ALIBABA_TOKEN_PLAN_PROVIDER:
             from chemsmart.agent.runtime.alibaba import (
                 AlibabaTokenPlanConfigV1,
@@ -69,6 +79,7 @@ class AgentProviderProfileV1:
                 reasoning_effort=self.reasoning_effort,
                 preserve_thinking=self.preserve_thinking,
                 max_output_tokens=self.max_output_tokens,
+                turn_deadlines=turn_deadlines,
             )
         if self.provider == "deepseek":
             return DeepSeekV4FlashConfigV1(
@@ -76,8 +87,30 @@ class AgentProviderProfileV1:
                 endpoint=self.endpoint,
                 reasoning_effort=self.reasoning_effort,
                 max_output_tokens=self.max_output_tokens,
+                turn_deadlines=turn_deadlines,
             )
         raise ContractError("provider profile has no runtime adapter")
+
+
+@dataclass(frozen=True)
+class AgentProviderProfileV2(AgentProviderProfileV1):
+    """Provider profile whose explicit transport policy is digest-bound."""
+
+    transport_deadlines: ProviderTurnDeadlinesV1
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.agent-provider-profile.v2":
+            raise ContractError("unsupported agent provider profile schema")
+        body = {
+            key: value
+            for key, value in self.__dict__.items()
+            if key not in {"profile_sha256", "transport_deadlines"}
+        }
+        body["transport_deadlines"] = (
+            self.transport_deadlines.configuration_record()
+        )
+        if self.profile_sha256 != canonical_sha256(body):
+            raise ContractError("agent provider profile digest mismatch")
 
 
 @dataclass(frozen=True)
@@ -264,6 +297,41 @@ def _build_profile(
     preserve_thinking = entry.get("preserve_thinking", True)
     if not isinstance(preserve_thinking, bool):
         raise ContractError("preserve_thinking must be boolean")
+    raw_deadlines = entry.get("transport_deadlines")
+    if raw_deadlines is None:
+        transport_deadlines = None
+    elif not isinstance(raw_deadlines, Mapping):
+        raise ContractError("transport_deadlines must be a mapping")
+    else:
+        required_deadlines = {
+            "connect_seconds",
+            "first_event_seconds",
+            "inter_event_seconds",
+            "absolute_turn_seconds",
+        }
+        if set(raw_deadlines) != required_deadlines:
+            raise ContractError(
+                "transport_deadlines requires exactly connect_seconds, "
+                "first_event_seconds, inter_event_seconds, and "
+                "absolute_turn_seconds"
+            )
+        try:
+            transport_deadlines = ProviderTurnDeadlinesV1(
+                connect_seconds=float(raw_deadlines["connect_seconds"]),
+                first_event_seconds=float(
+                    raw_deadlines["first_event_seconds"]
+                ),
+                inter_event_seconds=float(
+                    raw_deadlines["inter_event_seconds"]
+                ),
+                absolute_seconds=float(
+                    raw_deadlines["absolute_turn_seconds"]
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ContractError(
+                "transport deadline values must be numbers"
+            ) from exc
 
     if endpoint == ALIBABA_TOKEN_PLAN_ENDPOINT:
         provider = ALIBABA_TOKEN_PLAN_PROVIDER
@@ -308,7 +376,11 @@ def _build_profile(
         raise ContractError("agent provider endpoint is not registered")
 
     body = {
-        "schema_version": "chemsmart.agent-provider-profile.v1",
+        "schema_version": (
+            "chemsmart.agent-provider-profile.v2"
+            if transport_deadlines is not None
+            else "chemsmart.agent-provider-profile.v1"
+        ),
         "profile_name": profile_name,
         "provider": provider,
         "wire_protocol": "openai-chat-completions",
@@ -320,9 +392,24 @@ def _build_profile(
         "context_tokens": context_tokens,
         "max_output_tokens": max_output_tokens,
     }
-    return AgentProviderProfileV1(
-        **body, profile_sha256=canonical_sha256(body)
+    if transport_deadlines is not None:
+        body["transport_deadlines"] = (
+            transport_deadlines.configuration_record()
+        )
+    constructor = dict(body)
+    constructor.pop("transport_deadlines", None)
+    profile_type = (
+        AgentProviderProfileV2
+        if transport_deadlines is not None
+        else AgentProviderProfileV1
     )
+    values = {
+        **constructor,
+        "profile_sha256": canonical_sha256(body),
+    }
+    if transport_deadlines is not None:
+        values["transport_deadlines"] = transport_deadlines
+    return profile_type(**values)
 
 
 __all__ = [
@@ -332,6 +419,7 @@ __all__ = [
     "ALIBABA_TOKEN_PLAN_MODEL",
     "ALIBABA_TOKEN_PLAN_PROVIDER",
     "AgentProviderProfileV1",
+    "AgentProviderProfileV2",
     "AgentProviderSelectionV1",
     "default_agent_config_path",
     "load_agent_provider_selection",

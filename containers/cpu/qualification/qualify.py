@@ -25,6 +25,8 @@ import sys
 import numpy as np
 from ase.io import read as ase_read
 
+from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
+from chemsmart.agent.postprocessing import derive_trusted_thermochemistry
 from chemsmart.agent.skills import resolve_skill
 from chemsmart.io.pyscf.output import read_pyscf_h5
 from chemsmart.io.xtb.output import XTBOutput
@@ -41,9 +43,15 @@ PYTHON_PACKAGE_VERSIONS = {
 
 CONDA_PACKAGE_VERSIONS = {
     "xtb": "6.7.1",
+    "libopenblas": "0.3.34",
     "pymol-open-source": "3.1.0",
     "ffmpeg": "7.1.1",
 }
+
+QUALIFICATION_NUM_CORES = 2
+OPENBLAS_OPENMP_WARNING = (
+    "OpenBLAS Warning: Detect OpenMP Loop and this application may hang."
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -131,6 +139,89 @@ def package_versions() -> dict[str, str]:
         f"xTB executable did not report 6.7.1: {version_probe}",
     )
     return observed
+
+
+def assert_linear_algebra_runtime() -> dict[str, str]:
+    """Prove xTB and OpenBLAS resolve one ABI-compatible OpenMP runtime."""
+
+    conda_meta = Path(sys.prefix) / "conda-meta"
+
+    def record(name: str) -> dict:
+        matches = sorted(conda_meta.glob(f"{name}-*.json"))
+        require(len(matches) == 1, f"Expected one {name} record: {matches}")
+        return load_receipt(matches[0])
+
+    openblas = record("libopenblas")
+    mutex = record("_openmp_mutex")
+    require(
+        openblas.get("build") == "openmp_hd680484_0",
+        "The CPU image must use the locked OpenMP OpenBLAS build, observed "
+        f"{openblas.get('build')!r}.",
+    )
+    require(
+        mutex.get("build") == "7_kmp_llvm",
+        "The locked OpenMP mutex must select one LLVM runtime, observed "
+        f"{mutex.get('build')!r}.",
+    )
+
+    libdir = Path(sys.prefix) / "lib"
+    implementations = sorted(libdir.glob("libopenblasp-r*.so"))
+    require(
+        len(implementations) == 1,
+        f"Expected one OpenBLAS implementation: {implementations}",
+    )
+    implementation = implementations[0].resolve(strict=True)
+    blas = (libdir / "libblas.so.3").resolve(strict=True)
+    lapack = (libdir / "liblapack.so.3").resolve(strict=True)
+    require(
+        blas == implementation and lapack == implementation,
+        "BLAS and LAPACK do not resolve to the locked OpenBLAS implementation: "
+        f"blas={blas}, lapack={lapack}, openblas={implementation}",
+    )
+
+    xtb = Path(shutil.which("xtb") or "")
+    require(xtb.is_file(), "xTB executable is unavailable for ABI inspection")
+
+    def linked_openmp(path: Path) -> Path:
+        completed = subprocess.run(
+            ["ldd", str(path)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        require(
+            completed.returncode == 0 and "not found" not in completed.stdout,
+            f"Unresolved shared library for {path}: {completed.stdout}",
+        )
+        match = re.search(
+            r"^\s*libgomp\.so\.1\s+=>\s+(\S+)",
+            completed.stdout,
+            flags=re.MULTILINE,
+        )
+        require(match is not None, f"No OpenMP runtime resolved for {path}")
+        return Path(match.group(1)).resolve(strict=True)
+
+    xtb_openmp = linked_openmp(xtb)
+    openblas_openmp = linked_openmp(implementation)
+    selected_openmp = (libdir / "libgomp.so.1").resolve(strict=True)
+    require(
+        xtb_openmp == openblas_openmp == selected_openmp,
+        "xTB and OpenBLAS loaded different OpenMP runtimes: "
+        f"xtb={xtb_openmp}, openblas={openblas_openmp}, "
+        f"selected={selected_openmp}",
+    )
+    require(
+        selected_openmp.name == "libomp.so",
+        f"OpenMP mutex did not resolve libgomp ABI to libomp: {selected_openmp}",
+    )
+    return {
+        "openblas_build": str(openblas["build"]),
+        "openmp_mutex_build": str(mutex["build"]),
+        "blas_lapack_implementation": str(implementation),
+        "shared_openmp_runtime": str(selected_openmp),
+        "xtb_dynamic_linkage": "resolved",
+    }
 
 
 def import_runtime_dependencies() -> dict[str, str]:
@@ -242,7 +333,7 @@ def pyscf_command(
         "--server",
         "local",
         "--num-cores",
-        "2",
+        str(QUALIFICATION_NUM_CORES),
         "--num-gpus",
         "0",
         "--mem-gb",
@@ -272,7 +363,7 @@ def xtb_command(
         "--server",
         "local",
         "--num-cores",
-        "2",
+        str(QUALIFICATION_NUM_CORES),
         "--num-gpus",
         "0",
         "--mem-gb",
@@ -379,7 +470,7 @@ def qualify_pyscf(workspace: Path, fixtures: Path) -> dict[str, object]:
         cwd=cases["hess"],
     )
 
-    sp_spec, _, _, sp_results = inspect_pyscf_result(
+    sp_spec, _, sp_status, sp_results = inspect_pyscf_result(
         one_file(cases["sp"], "*.h5")
     )
     d3_spec, _, _, d3_results = inspect_pyscf_result(
@@ -392,6 +483,11 @@ def qualify_pyscf(workspace: Path, fixtures: Path) -> dict[str, object]:
     require(
         d3_spec.get("dispersion") == "d3bj",
         "The PySCF dispersion qualification did not apply D3BJ.",
+    )
+    require(
+        "forces" not in sp_results
+        and "forces" not in sp_status.get("properties", {}),
+        "Force-free PySCF SP unexpectedly evaluated a nuclear gradient.",
     )
 
     require(
@@ -435,6 +531,41 @@ def qualify_pyscf(workspace: Path, fixtures: Path) -> dict[str, object]:
         f"Consequential imaginary PySCF water mode: {frequencies.tolist()}",
     )
 
+    hess_artifact = TrustedArtifactRefV1(
+        artifact_id="qualification.pyscf.water-hessian",
+        kind="pyscf_hdf5",
+        sha256=file_sha256(hess_h5),
+        size_bytes=hess_h5.stat().st_size,
+        path=str(hess_h5),
+        cli_value=str(hess_h5),
+    )
+    qh_gibbs = {}
+    for cutoff in (50, 100, 200):
+        thermo = derive_trusted_thermochemistry(
+            artifact=hess_artifact,
+            program="pyscf",
+            temperature_k=298.15,
+            pressure_atm=1.0,
+            entropy_method="grimme",
+            entropy_cutoff_cm1=cutoff,
+            enthalpy_cutoff_cm1=cutoff,
+        )
+        require(
+            thermo.entropy_cutoff_cm1 == cutoff
+            and thermo.enthalpy_cutoff_cm1 == cutoff,
+            "Typed quasi-harmonic receipt lost its requested cutoff",
+        )
+        quantity = next(
+            item
+            for item in thermo.quantities
+            if item.quantity_id == "quasi_harmonic_gibbs_free_energy"
+        )
+        require(
+            math.isfinite(float(quantity.value)),
+            "Non-finite typed quasi-harmonic Gibbs energy",
+        )
+        qh_gibbs[str(cutoff)] = float(quantity.value)
+
     receipts = {}
     for name, folder in cases.items():
         receipt = load_receipt(one_file(folder, "*.receipt.json"))
@@ -464,7 +595,10 @@ def qualify_pyscf(workspace: Path, fixtures: Path) -> dict[str, object]:
         "hessian_shape": list(hessian.shape),
         "hessian_max_antisymmetry": symmetry_error,
         "optimized_hdf5_handoff": True,
+        "typed_grimme_qh_gibbs_hartree": qh_gibbs,
+        "typed_qh_cutoffs_cm-1": [50, 100, 200],
         "gpu_request_with_zero_devices_refused": True,
+        "force_free_sp": True,
         "receipt_states": receipts,
     }
 
@@ -483,6 +617,9 @@ def inspect_xtb_result(
         f"Wrong xTB {jobtype} multiplicity: {result.multiplicity}",
     )
     receipt = load_receipt(one_file(folder, "*.xtb-result-receipt.json"))
+    environment = load_receipt(
+        one_file(folder, "*.xtb-environment-receipt.json")
+    )
     require(receipt.get("ready") is True, f"xTB {jobtype} receipt is red")
     require(
         not receipt.get("findings"),
@@ -496,6 +633,30 @@ def inspect_xtb_result(
     require(
         energy is not None and math.isfinite(float(energy)),
         f"Missing xTB {jobtype} energy",
+    )
+    resources = environment.get("resources", {})
+    for field in (
+        "omp_num_threads",
+        "mkl_num_threads",
+        "openblas_num_threads",
+    ):
+        require(
+            str(resources.get(field)) == str(QUALIFICATION_NUM_CORES),
+            f"xTB {jobtype} {field} did not match requested cores: "
+            f"{resources}",
+        )
+    stderr_paths = sorted(folder.glob("*.err"))
+    require(
+        len(stderr_paths) == 1,
+        f"Expected one xTB stderr artifact in {folder}: {stderr_paths}",
+    )
+    with stderr_paths[0].open(encoding="utf-8", errors="replace") as handle:
+        warning_count = sum(
+            line.count(OPENBLAS_OPENMP_WARNING) for line in handle
+        )
+    require(
+        warning_count == 0,
+        f"xTB {jobtype} emitted {warning_count} OpenBLAS/OpenMP warnings",
     )
     return result, receipt
 
@@ -604,6 +765,8 @@ def qualify_xtb(workspace: Path, fixtures: Path) -> dict[str, object]:
         ),
         "frequencies_cm-1": [float(value) for value in frequencies],
         "optimized_geometry_handoff": True,
+        "requested_threads": QUALIFICATION_NUM_CORES,
+        "openblas_openmp_warning_count": 0,
         "receipt_states": {
             "sp": sp_receipt["validation_state"],
             "opt": opt_receipt["validation_state"],
@@ -637,6 +800,7 @@ def main() -> int:
         "status": "qualified",
         "platform": "linux/amd64",
         "packages": package_versions(),
+        "linear_algebra_runtime": assert_linear_algebra_runtime(),
         "imports": import_runtime_dependencies(),
         "runtime_boundary": assert_runtime_boundary(),
         "pyscf": qualify_pyscf(workspace, fixtures),

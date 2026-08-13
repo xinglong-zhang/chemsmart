@@ -561,6 +561,15 @@ def test_environment_probe_and_driver_sources_are_syntax_bounded():
     assert '"status": "unavailable"' in source
 
 
+def test_force_free_sp_driver_does_not_launch_an_undeclared_gradient():
+    source = PySCFScriptWriter.render(
+        {"schema_version": "2.0", "label": "force-free-sp"}
+    )
+
+    assert "nuc_grad_method" not in source
+    assert 'status["properties"]["forces"]' not in source
+
+
 def test_generated_host_transfer_calls_gpu_array_get_before_numpy_conversion():
     class FakeGpuArray:
         def __init__(self):

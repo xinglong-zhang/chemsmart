@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from ase import units
 
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
@@ -48,6 +49,9 @@ from chemsmart.agent.tool_runtime import (
 )
 from chemsmart.agent.workflows import StationaryPointValidationPolicyV1
 from chemsmart.analysis.result_quantities import (
+    QuantitySelectorV1,
+    ResultQuantityExtractionRequestV1,
+    extract_pyscf_quantities,
     validate_pyscf_analysis_artifact,
 )
 from chemsmart.jobs.pyscf.writer import (
@@ -1031,7 +1035,7 @@ def test_run_environment_libxc_substitution_is_rejected_semantically(tmp_path):
 def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
     tmp_path, bind_source_artifact
 ):
-    approval = _locked_approval(tmp_path)
+    _locked_approval(tmp_path)
     project = _artifact(
         tmp_path / "water-pyscf.yaml",
         artifact_id="project.water.pyscf",
@@ -1238,6 +1242,22 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
     )
     assert analysis_output.energies[-1] == pytest.approx(-76.3)
     assert analysis_receipt["result_sha256"] == result.sha256
+    extraction = extract_pyscf_quantities(
+        request=ResultQuantityExtractionRequestV1(
+            schema_version="chemsmart.quantity-extraction-request.v1",
+            artifact_id=result.artifact_id,
+            artifact_sha256=result.sha256,
+            program="pyscf",
+            selectors=(
+                QuantitySelectorV1(quantity_id="homo", selector="homo"),
+            ),
+        ),
+        artifact_path=h5_path,
+    )
+    assert extraction.quantities[0].source_value == pytest.approx(
+        -0.4 * units.Hartree
+    )
+    assert extraction.quantities[0].value == pytest.approx(-0.4, abs=1e-15)
 
 
 def test_substituted_pyscf_run_receipt_cannot_prove_engine_completion(

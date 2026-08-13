@@ -87,6 +87,59 @@ without pretending that the producer optimized the second state.
 Use a disposable workspace containing only approved molecular, project and
 result artifacts. Store credentials outside the workspace and repository.
 
+Provider turn deadlines
+=======================
+
+Runtime V2 does not treat a socket timeout as an end-to-end provider bound.
+Each selected profile may bind four monotonic deadlines in the existing
+``agent.yaml`` profile. The absolute turn deadline cannot be extended by SSE
+comments, partial bytes, streamed reasoning, or other provider progress:
+
+.. code-block:: yaml
+
+   providers:
+     deepseek-v4-token-plan:
+       type: openai
+       api_key_env: ALIBABA_TOKEN_PLAN_KEY
+       model: deepseek-v4-flash-0731
+       base_url: https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
+       reasoning_effort: max
+       preserve_thinking: true
+       transport_deadlines:
+         connect_seconds: 15
+         first_event_seconds: 90
+         inter_event_seconds: 90
+         absolute_turn_seconds: 300
+
+All four fields are required when the mapping is present. Explicit values are
+part of the provider-profile digest. Profiles created before this mapping use
+the same immutable defaults. For every turn, the effective absolute bound is
+the smaller of ``absolute_turn_seconds`` and the episode time remaining after
+Runtime terminalization reserve. ``provider_turn_observed`` records requested
+and observed provider/model identity, requested reasoning effort, the fact that
+applied effort is not reported by the endpoint, and the effective deadlines.
+A failed attempt records only its sanitized timeout phase and the same public
+configuration; it never records private reasoning, response text, or a secret.
+The built-in transports connect directly to their fixed official HTTPS hosts;
+they do not inherit process proxy settings. TCP, TLS, response status, headers,
+and response-body reads are covered by the monotonic policy. CPython's
+synchronous platform DNS lookup is the explicit exception: it cannot be
+cancelled without leaving a resolver worker, so host-level DNS health remains
+part of benchmark-host qualification.
+
+Waiting for chemistry
+=====================
+
+An approved program tool is dispatched synchronously through the normal
+ChemSmart runner. While the runner waits for its bounded child process, no new
+provider request is made and no frontier-model reasoning is active. The same
+in-memory provider session retains its private continuation and resumes only
+after the tool returns with a result, timeout, signal, failure, or idempotent
+replay. Hash-chained ``tool_waiting`` and ``tool_woke`` events make this parked
+interval public without persisting the continuation. This is a process wait,
+not a scheduler or parallel agent control plane; process-tree timeout and
+termination remain owned by the existing ChemSmart runner.
+
 When a task uses one or more named geometries, pass an approved molecular
 input manifest with ``--identity-manifest``. Each entry names a
 workspace-relative XYZ file and its exact SHA-256, approved molecular names,

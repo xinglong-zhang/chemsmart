@@ -67,6 +67,39 @@ jobs:
             --file Containerfile \
             .
 
+      - name: Verify image identity and safe transaction materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_revision="$(docker image inspect \
+            --format '{{ index .Config.Labels "io.chemsmart.source-revision" }}' \
+            "$IMAGE_NAME:$CANDIDATE_TAG")"
+          transaction_regression="$(docker image inspect \
+            --format '{{ index .Config.Labels "io.chemsmart.runtime-transaction-regression" }}' \
+            "$IMAGE_NAME:$CANDIDATE_TAG")"
+          test "$source_revision" = "$GITHUB_SHA"
+          [[ "$source_revision" =~ ^[0-9a-f]{40}$ ]]
+          test "$transaction_regression" = \
+            'safe-preview-preflight-materialization-v1'
+
+          docker run --rm \
+            --read-only \
+            --ulimit stack=-1:-1 \
+            --cpus 2 \
+            --memory 8g \
+            --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            "$IMAGE_NAME:$CANDIDATE_TAG" \
+            python /opt/chemsmart/qualification/transaction_regression.py
+
+          docker run --rm \
+            --read-only \
+            --ulimit stack=-1:-1 \
+            --cpus 2 \
+            --memory 8g \
+            --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            "$IMAGE_NAME:$CANDIDATE_TAG" \
+            python /opt/chemsmart/qualification/program_surface_matrix.py
+
       - name: Smoke-test the read-only runtime and YAML previews
         shell: bash
         run: |

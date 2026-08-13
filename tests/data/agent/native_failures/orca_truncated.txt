@@ -1,0 +1,2 @@
+Synthetic parser fixture with no terminal marker.
+The process ended before a native completion record was written.

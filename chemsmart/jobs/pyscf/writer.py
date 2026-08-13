@@ -1226,10 +1226,11 @@ def main():
         results["mo_energy"] = _to_host_array(mf.mo_energy).astype(float)
         results["mo_occ"] = _to_host_array(mf.mo_occ).astype(float)
 
-        # PySCF gradients are dE/dR in Hartree/Bohr. Molecule and database
-        # contracts expose forces, so negate the exact final-geometry gradient.
         # Optional properties are explicit status records. Missing values must
         # never be indistinguishable from a property that was not attempted.
+        # ``forces`` is deliberately absent: the public PySCF settings reject
+        # force requests, so an ordinary SP must not pay for an undeclared
+        # nuclear-gradient calculation after its requested SCF has completed.
         try:
             spin_square, effective_multiplicity = _spin_diagnostic(mf)
             results["spin_square"] = spin_square
@@ -1239,19 +1240,6 @@ def main():
             status["properties"]["spin_square"] = {"status": "ok"}
         except Exception as exc:
             status["properties"]["spin_square"] = {
-                "status": "unavailable",
-                "failure": {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                },
-            }
-        try:
-            results["forces"] = -_to_host_array(
-                mf.nuc_grad_method().kernel()
-            ).astype(float)
-            status["properties"]["forces"] = {"status": "ok"}
-        except Exception as exc:
-            status["properties"]["forces"] = {
                 "status": "unavailable",
                 "failure": {
                     "type": type(exc).__name__,

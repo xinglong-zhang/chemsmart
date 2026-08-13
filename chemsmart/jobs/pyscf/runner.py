@@ -58,6 +58,7 @@ from chemsmart.jobs.pyscf.writer import (
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import PySCFExecutable
 from chemsmart.utils.process_observation import (
+    ProcessSignalGuard,
     launch_failure_observation,
     observe_process,
 )
@@ -721,20 +722,23 @@ class PySCFJobRunner(JobRunner):
         self._write_input(job)
         command = self._get_command(job)
         env = self._update_os_environ(job)
-        try:
-            process = self._create_process(job, command=command, env=env)
-            self._child_returncode = self._run(process, **kwargs)
-        except Exception as exc:
-            self._child_returncode = None
-            self._process_observation = launch_failure_observation(
-                timeout_seconds=self.NODE_TIMEOUT_SECONDS,
-                memory_limit_mb=self._process_memory_limit_mb(),
-                error_type=type(exc).__name__,
-            ).as_dict()
-            self._launch_failure = {
-                "type": type(exc).__name__,
-                "message": str(exc)[:500],
-            }
+        with ProcessSignalGuard() as signal_guard:
+            try:
+                process = self._create_process(job, command=command, env=env)
+                self._child_returncode = self._run(
+                    process, signal_guard=signal_guard, **kwargs
+                )
+            except Exception as exc:
+                self._child_returncode = None
+                self._process_observation = launch_failure_observation(
+                    timeout_seconds=self.NODE_TIMEOUT_SECONDS,
+                    memory_limit_mb=self._process_memory_limit_mb(),
+                    error_type=type(exc).__name__,
+                ).as_dict()
+                self._launch_failure = {
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:500],
+                }
         self._postrun(job)
         try:
             self._postrun_cleanup(job)
@@ -774,7 +778,7 @@ class PySCFJobRunner(JobRunner):
 
         return None if self.mem_gb is None else float(self.mem_gb) * 1024.0
 
-    def _run(self, process, **kwargs):
+    def _run(self, process, *, signal_guard=None, **kwargs):
         """Observe the child tree under fixed time and memory boundaries."""
 
         del kwargs
@@ -783,6 +787,7 @@ class PySCFJobRunner(JobRunner):
             timeout_seconds=self.NODE_TIMEOUT_SECONDS,
             memory_limit_mb=self._process_memory_limit_mb(),
             sample_interval_seconds=self.PROCESS_SAMPLE_INTERVAL_SECONDS,
+            signal_guard=signal_guard,
         )
         self._process_observation = result.observation.as_dict()
         return result.observation.returncode
@@ -1333,7 +1338,6 @@ class FakePySCFJobRunner(PySCFJobRunner):
                     },
                 }
                 for name in (
-                    "forces",
                     "mulliken_charges",
                     "dipole_moment",
                     "point_group",

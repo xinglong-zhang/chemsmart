@@ -1,0 +1,4 @@
+Synthetic parser fixture; this is not a complete ORCA output.
+WARNING: A /J-Basis is not an appropriate auxiliary basis set for correlated methods authorization=Bearer fixture secret with spaces https://private.invalid/file /secret/path
+ORCA finished by error termination in MDCI
+Error (ORCA_MAIN): aborting the run

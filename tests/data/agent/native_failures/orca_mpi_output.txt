@@ -1,0 +1,3 @@
+Synthetic parser fixture; this is not a complete ORCA output.
+ORCA finished by error termination in LEANSCF
+Error (ORCA_MAIN): aborting the run

@@ -53,6 +53,8 @@ from chemsmart.agent.runtime.events import (
     WORKFLOW_LAUNCH_RESERVED,
     WORKFLOW_DATA_EDGE_BOUND,
     WORKFLOW_NODE_STATE_CHANGED,
+    TOOL_WAITING,
+    TOOL_WOKE,
     RuntimeEvent,
 )
 
@@ -135,6 +137,8 @@ class RuntimeState:
     pending_approval: str = ""
     last_failure_rule_ids: list[str] = field(default_factory=list)
     shadow_violations: list[str] = field(default_factory=list)
+    active_waits: dict[str, dict] = field(default_factory=dict)
+    completed_waits: list[dict] = field(default_factory=list)
 
 
 def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
@@ -331,6 +335,13 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         state.active_tool_calls[request_id] = str(
             event.payload.get("tool") or ""
         )
+    elif event.kind == TOOL_WAITING:
+        request_id = str(event.payload.get("request_id") or "")
+        state.active_waits[request_id] = dict(event.payload)
+    elif event.kind == TOOL_WOKE:
+        request_id = str(event.payload.get("request_id") or "")
+        state.active_waits.pop(request_id, None)
+        state.completed_waits.append(dict(event.payload))
     elif event.kind in {"tool_succeeded", "tool_failed", "tool_request_rejected"}:
         request_id = str(event.payload.get("request_id") or "")
         state.active_tool_calls.pop(request_id, None)

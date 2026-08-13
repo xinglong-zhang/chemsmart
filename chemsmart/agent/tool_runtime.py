@@ -200,6 +200,7 @@ from chemsmart.agent.workflows import (
 )
 from chemsmart.utils.process_observation import (
     ProcessObservationV1,
+    ProcessSignalGuard,
     launch_failure_observation,
     observe_process,
 )
@@ -1538,6 +1539,13 @@ class CommandCompiledToolHostV1:
             "status": "ok",
             "result": _model_visible_data(canonical_data(result)),
         }
+
+    def execution_wait_timeout_seconds(self) -> float:
+        """Return the bounded wait advertised before an engine launch."""
+
+        if self.execution_resources is None:
+            raise ContractError("execution wait requires host-owned resources")
+        return self._require_bounded_launch_budget()
 
     def _resolve_task_spec_reference(
         self, values: Mapping[str, Any], field_name: str
@@ -4760,10 +4768,14 @@ class CommandCompiledToolHostV1:
         )
         if replayed is not None:
             self.execution_receipts[node_id] = replayed
+            result_validation = self.result_validation_receipts.get(
+                replayed.result_validation_receipt_sha256
+            )
             return {
                 "execution": replayed,
                 "idempotent_replay": True,
                 "handoff": self.handoffs.get(node_id),
+                "result_validation": result_validation,
             }
         existing = self.execution_receipts.get(node_id)
         if existing is not None:
@@ -4916,33 +4928,39 @@ class CommandCompiledToolHostV1:
         )
         _require_current_auxiliary_inputs(context.job_artifact_options)
         launch_ambiguous = False
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=node_workspace,
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                start_new_session=True,
-            )
-        except OSError as exc:
-            process_observation = launch_failure_observation(
-                timeout_seconds=effective_timeout_seconds,
-                memory_limit_mb=self.execution_resources.memory_gb * 1024.0,
-                error_type=type(exc).__name__,
-            )
-            stdout_text = ""
-            stderr_text = type(exc).__name__
-        else:
-            process_result = observe_process(
-                process,
-                timeout_seconds=effective_timeout_seconds,
-                memory_limit_mb=self.execution_resources.memory_gb * 1024.0,
-            )
-            process_observation = process_result.observation
-            stdout_text = _public_process_stream(process_result.stdout)
-            stderr_text = _public_process_stream(process_result.stderr)
+        with ProcessSignalGuard() as signal_guard:
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=node_workspace,
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                process_observation = launch_failure_observation(
+                    timeout_seconds=effective_timeout_seconds,
+                    memory_limit_mb=(
+                        self.execution_resources.memory_gb * 1024.0
+                    ),
+                    error_type=type(exc).__name__,
+                )
+                stdout_text = ""
+                stderr_text = type(exc).__name__
+            else:
+                process_result = observe_process(
+                    process,
+                    timeout_seconds=effective_timeout_seconds,
+                    memory_limit_mb=(
+                        self.execution_resources.memory_gb * 1024.0
+                    ),
+                    signal_guard=signal_guard,
+                )
+                process_observation = process_result.observation
+                stdout_text = _public_process_stream(process_result.stdout)
+                stderr_text = _public_process_stream(process_result.stderr)
         _write_host_execution_artifact(
             node_workspace / "controller.stdout", stdout_text
         )
@@ -5368,6 +5386,8 @@ class CommandCompiledToolHostV1:
             "execution": receipt,
             "idempotent_replay": False,
             "produced_handoffs": tuple(produced_handoffs),
+            "process_observation": process_observation.as_dict(),
+            "result_validation": result_validation_receipt,
         }
 
     def _require_bounded_launch_budget(self) -> float:
@@ -6227,9 +6247,11 @@ class CommandCompiledToolHostV1:
                 == "approved_stationary_point_policy"
             ):
                 findings.append("pyscf.result.policy_validation_unavailable")
-        elif exit_status != 0:
+        elif exit_status != 0 and program not in {"orca", "gaussian"}:
             findings.append("execution.process.nonzero_or_unknown")
         elif program == "orca":
+            if exit_status != 0:
+                findings.append("execution.process.nonzero_or_unknown")
             candidates = tuple(
                 artifact
                 for artifact in output_artifacts
@@ -6266,6 +6288,34 @@ class CommandCompiledToolHostV1:
                             )
                         )
                     )
+                    if not output.normal_termination:
+                        from chemsmart.io.native_failure import (
+                            summarize_orca_native_failure,
+                        )
+
+                        diagnostic_artifacts = _native_diagnostic_artifacts(
+                            output_artifacts
+                        )
+                        failure_summary = summarize_orca_native_failure(
+                            output.contents,
+                            diagnostic_lines=_iter_native_diagnostic_lines(
+                                diagnostic_artifacts
+                            ),
+                        )
+                        if failure_summary is not None:
+                            orca_observation["native_failure"] = (
+                                _bound_native_failure_summary(
+                                    failure_summary,
+                                    artifacts=(
+                                        candidates[0],
+                                        *diagnostic_artifacts,
+                                    ),
+                                )
+                            )
+                            findings.append(
+                                "orca.native_failure."
+                                + failure_summary.error_class
+                            )
                     frequencies = tuple(output.vibrational_frequencies or ())
                     orca_observation.update(
                         {
@@ -6382,6 +6432,8 @@ class CommandCompiledToolHostV1:
                 observation["xtb"] = xtb_observation
                 findings.extend(xtb_findings)
         elif program == "gaussian":
+            if exit_status != 0:
+                findings.append("execution.process.nonzero_or_unknown")
             candidates = tuple(
                 artifact
                 for artifact in output_artifacts
@@ -6461,6 +6513,27 @@ class CommandCompiledToolHostV1:
                             artifact, field_name="Gaussian result output"
                         )
                         output = Gaussian16Output(str(path))
+                        if not output.normal_termination:
+                            from chemsmart.io.native_failure import (
+                                summarize_gaussian_native_failure,
+                            )
+
+                            failure_summary = (
+                                summarize_gaussian_native_failure(
+                                    output.contents
+                                )
+                            )
+                            if failure_summary is not None:
+                                row["native_failure"] = (
+                                    _bound_native_failure_summary(
+                                        failure_summary,
+                                        artifacts=(artifact,),
+                                    )
+                                )
+                                findings.append(
+                                    "gaussian.native_failure."
+                                    + failure_summary.error_class
+                                )
                         energies = tuple(
                             float(value) for value in output.energies
                         )
@@ -7674,6 +7747,55 @@ def _project_v1_execution_run_state(
         ),
     }
     return WorkflowRunStateV1(**body, run_state_sha256=canonical_sha256(body))
+
+
+def _native_diagnostic_artifacts(
+    artifacts: tuple[TrustedArtifactRefV1, ...],
+) -> tuple[TrustedArtifactRefV1, ...]:
+    """Return at most two bound native stderr sidecars for parser diagnosis."""
+
+    return tuple(
+        artifact
+        for artifact in artifacts
+        if artifact.kind == "program_output"
+        and Path(artifact.path).suffix.lower() == ".err"
+    )[:2]
+
+
+def _iter_native_diagnostic_lines(
+    artifacts: tuple[TrustedArtifactRefV1, ...],
+):
+    """Stream bound sidecar lines without retaining or exposing the log."""
+
+    for artifact in artifacts:
+        try:
+            path = _current_artifact_path(
+                artifact, field_name="native diagnostic sidecar"
+            )
+            with path.open(encoding="utf-8", errors="replace") as handle:
+                yield from handle
+        except (ContractError, OSError):
+            continue
+
+
+def _bound_native_failure_summary(
+    summary: Any,
+    *,
+    artifacts: tuple[TrustedArtifactRefV1, ...],
+) -> dict[str, Any]:
+    """Attach path-free trusted artifact pointers to a parser summary."""
+
+    record = dict(summary.as_dict())
+    record["artifact_refs"] = tuple(
+        {
+            "artifact_id": artifact.artifact_id,
+            "kind": artifact.kind,
+            "sha256": artifact.sha256,
+            "size_bytes": artifact.size_bytes,
+        }
+        for artifact in artifacts
+    )
+    return record
 
 
 def _model_visible_data(value: Any) -> Any:

@@ -18,12 +18,14 @@ from dataclasses import dataclass
 
 from ase import units as ase_units
 
+from chemsmart.utils.constants import energy_conversion as _energy_conversion
+
 #: Hartree to kcal/mol (CODATA-consistent with the rest of the package).
-HARTREE_TO_KCAL_PER_MOL = 627.5094740631
+HARTREE_TO_KCAL_PER_MOL = _energy_conversion("hartree", "kcal/mol")
 #: Hartree to kJ/mol.
-HARTREE_TO_KJ_PER_MOL = 2625.4996394799
+HARTREE_TO_KJ_PER_MOL = _energy_conversion("hartree", "kJ/mol")
 #: Hartree to eV.
-HARTREE_TO_EV = 27.211386245988
+HARTREE_TO_EV = _energy_conversion("hartree", "eV")
 #: Gas constant in kcal/(mol K), for Boltzmann populations.
 GAS_CONSTANT_KCAL = 1.987204258640832e-3
 #: One wavenumber, as a molar energy: h * c * N_A, in kJ/mol per cm^-1.

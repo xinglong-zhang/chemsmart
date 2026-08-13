@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 from chemsmart.agent._contracts import ContractError
-from chemsmart.agent.provider_config import load_agent_provider_selection
+from chemsmart.agent._contracts import canonical_sha256
+from chemsmart.agent.provider_config import (
+    AgentProviderProfileV1,
+    load_agent_provider_selection,
+)
 
 
 def _write_config(
@@ -65,6 +69,34 @@ def test_agent_yaml_selects_qwen_production_and_explicit_fallback(tmp_path):
     assert selection.fallback_profiles[0].provider == "deepseek"
 
 
+def test_historical_provider_profile_v1_digest_is_byte_compatible():
+    body = {
+        "schema_version": "chemsmart.agent-provider-profile.v1",
+        "profile_name": "alibaba-token-plan",
+        "provider": "alibaba-token-plan",
+        "wire_protocol": "openai-chat-completions",
+        "api_key_env": "ALIBABA_TOKEN_PLAN_KEY",
+        "model": "qwen3.8-max",
+        "endpoint": (
+            "https://token-plan.ap-southeast-1.maas.aliyuncs.com/"
+            "compatible-mode/v1"
+        ),
+        "reasoning_effort": "xhigh",
+        "preserve_thinking": True,
+        "context_tokens": 1_000_000,
+        "max_output_tokens": 262_144,
+    }
+
+    profile = AgentProviderProfileV1(
+        **body, profile_sha256=canonical_sha256(body)
+    )
+
+    assert profile.__dict__ == {
+        **body,
+        "profile_sha256": canonical_sha256(body),
+    }
+
+
 def test_agent_yaml_profile_override_keeps_fallback_attributed(tmp_path):
     selection = load_agent_provider_selection(
         _write_config(tmp_path / "agent.yaml"), requested_profile="deepseek"
@@ -97,6 +129,51 @@ def test_agent_yaml_accepts_catalog_model_on_token_plan(tmp_path):
     runtime = profile.runtime_config()
     assert runtime.model == profile.model
     assert runtime.reasoning_effort == profile.reasoning_effort
+
+
+def test_agent_yaml_binds_explicit_provider_turn_deadlines(tmp_path):
+    path = _write_config(
+        tmp_path / "agent.yaml",
+        model="deepseek-v4-flash-0731",
+        reasoning_effort="max",
+    )
+    content = path.read_text(encoding="utf-8").replace(
+        "    preserve_thinking: true\n",
+        "    preserve_thinking: true\n"
+        "    transport_deadlines:\n"
+        "      connect_seconds: 15\n"
+        "      first_event_seconds: 90\n"
+        "      inter_event_seconds: 90\n"
+        "      absolute_turn_seconds: 300\n",
+        1,
+    )
+    path.write_text(content, encoding="utf-8")
+
+    profile = load_agent_provider_selection(path).active_profile
+
+    assert profile.schema_version == "chemsmart.agent-provider-profile.v2"
+    assert profile.transport_deadlines.configuration_record() == {
+        "connect_seconds": 15.0,
+        "first_event_seconds": 90.0,
+        "inter_event_seconds": 90.0,
+        "absolute_turn_seconds": 300.0,
+    }
+    assert profile.runtime_config().turn_deadlines == profile.transport_deadlines
+
+
+def test_agent_yaml_rejects_partial_provider_turn_deadlines(tmp_path):
+    path = _write_config(tmp_path / "agent.yaml")
+    content = path.read_text(encoding="utf-8").replace(
+        "    preserve_thinking: true\n",
+        "    preserve_thinking: true\n"
+        "    transport_deadlines:\n"
+        "      connect_seconds: 15\n",
+        1,
+    )
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ContractError, match="requires exactly"):
+        load_agent_provider_selection(path)
 
 
 def test_selected_agent_profile_rejects_literal_secret(tmp_path):
