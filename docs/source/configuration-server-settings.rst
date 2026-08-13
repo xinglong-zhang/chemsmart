@@ -325,7 +325,7 @@ SCRATCH
 **Description:** Default scratch mode for Gaussian when the user omits both ``--scratch`` and ``--no-scratch`` on the
 CLI (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
 When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
-absent or ``null``, CHEMSMART uses the Gaussian job-runner class default (``True``)—that is **not** the same as omitting
+absent or ``null``, CHEMSMART uses the Gaussian default (``True``)—that is **not** the same as omitting
 the CLI flags; CLI omission triggers the lookup of this key in the first place.
 
 **Example:**
@@ -334,7 +334,7 @@ the CLI flags; CLI omission triggers the lookup of this key in the first place.
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
-   SCRATCH: null   # Same as omitting the key (use class default)
+   SCRATCH: null   # Same as omitting the key (use the program default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -440,7 +440,7 @@ SCRATCH
 **Description:** Default scratch mode for ORCA when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
 (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
 When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
-absent or ``null``, CHEMSMART uses the ORCA job-runner class default (``True``).
+absent or ``null``, CHEMSMART uses the ORCA default (``True``).
 
 **Example:**
 
@@ -448,7 +448,7 @@ absent or ``null``, CHEMSMART uses the ORCA job-runner class default (``True``).
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
-   SCRATCH: null   # Same as omitting the key (use class default)
+   SCRATCH: null   # Same as omitting the key (use the program default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -537,7 +537,7 @@ SCRATCH
 **Description:** Default scratch mode for NCIPLOT when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
 (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
 When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
-absent or ``null``, CHEMSMART uses the NCIPLOT job-runner class default (``True``).
+absent or ``null``, CHEMSMART uses the NCIPLOT default (``True``).
 
 **Example:**
 
@@ -545,7 +545,7 @@ absent or ``null``, CHEMSMART uses the NCIPLOT job-runner class default (``True`
 
    SCRATCH: True
    SCRATCH: False
-   SCRATCH: null   # Same as omitting the key (use class default)
+   SCRATCH: null   # Same as omitting the key (use the program default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -786,8 +786,9 @@ Complete example for a local workstation without a job scheduler:
 Scratch Behavior
 ================
 
-CHEMSMART resolves whether to run in scratch from the CLI, the program ``SCRATCH`` key in server YAML, and the
-job-runner class default. When scratch mode is enabled, the scratch **directory path** is resolved separately.
+CHEMSMART resolves whether to run in scratch from the CLI, the program
+``SCRATCH`` key in server YAML, and the program default. When scratch mode is
+enabled, the scratch **directory path** is resolved separately.
 
 Scratch mode (on/off)
 ---------------------
@@ -795,19 +796,12 @@ Scratch mode (on/off)
 CLI (``chemsmart run`` / ``chemsmart sub``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job`` resolves scratch **before** the typed
-runner is constructed:
+When both ``--scratch`` and ``--no-scratch`` are omitted, CHEMSMART resolves
+scratch mode before execution:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
 #. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
-#. Else the job-runner class default.
-
-Programmatic API (direct constructor)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-If you call a typed runner constructor with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
-default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI flag yields scratch off, but
-``NCIPLOTJobRunner(..., scratch=None)`` still uses the class default (on).
+#. Else the program default.
 
 .. note::
 
@@ -849,12 +843,12 @@ Resolution table (CLI path)
       -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
-      -  absent *(class ``False``, e.g. PyMOL, thermochemistry)*
+      -  absent *(program default ``False``, e.g. PyMOL, thermochemistry)*
       -  ``False``
       -  job folder
 
    -  -  omit
-      -  absent *(class ``True``, e.g. Gaussian, ORCA, NCIPLOT)*
+      -  absent *(program default ``True``, e.g. Gaussian, ORCA, NCIPLOT)*
       -  ``True``
       -  scratch directory if path exists; else job folder (warning)
 

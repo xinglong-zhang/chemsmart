@@ -204,13 +204,11 @@ High-accuracy single point calculation on QM/MM geometry:
 
    chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
-***********************************
- GaussianQMMMJobSettings Reference
-***********************************
+******************************
+ Gaussian QM/MM YAML Reference
+******************************
 
-The ``GaussianQMMMJobSettings`` class provides comprehensive configuration options for Gaussian ONIOM calculations with
-enhanced equality comparison support. This class now includes proper ``__eq__`` method implementation for accurate
-settings comparison during job validation and configuration management.
+The following project settings configure Gaussian ONIOM calculations.
 
 Core Configuration Parameters
 =============================
@@ -265,19 +263,6 @@ Job Type and Theory Levels
    -  -  ``low_level_force_field``
       -  str
       -  Force field for low layer (AMBER=HardFirst, UFF, DREIDING, etc.)
-
-Settings Comparison and Validation
-----------------------------------
-
-The ``GaussianQMMMJobSettings`` class now supports robust equality comparison including:
-
--  **Complete attribute comparison**: All QMMM-specific parameters are included in equality checks
--  **Configuration validation**: Enables accurate detection of setting changes during job execution
--  **Debugging support**: Detailed difference logging when settings don't match
--  **Type safety**: Proper type checking prevents invalid comparisons
-
-This enhancement improves reliability when: - Comparing job configurations across multiple runs - Validating project
-settings consistency - Detecting configuration changes in automated workflows - Debugging job setup issues
 
 Settings Atom Partitioning
 --------------------------
@@ -439,17 +424,16 @@ Usage with project settings:
 Common Issues and Solutions
 ===========================
 
-**Settings Comparison Errors**
-   With the enhanced equality comparison, you can now reliably detect when settings have changed between job runs. Check
-   the logging output for detailed differences when settings don't match expectations.
+**Settings validation errors**
+   Compare the project YAML and the effective command options. Regenerate the
+   input after correcting a mismatched layer or setting.
 
 **Link Atom Optimization**
-   If QM/MM interface is problematic, adjust scale factors or reconsider layer boundaries. The improved settings
-   validation helps ensure consistent scale factor application.
+   If the QM/MM interface is problematic, adjust scale factors or reconsider
+   layer boundaries.
 
 **Force Field Compatibility**
-   Ensure your system has the required force field files. The enhanced error checking provides clearer messages about
-   missing dependencies.
+   Ensure your system has the required force field files.
 
 **Performance Optimization**
    -  Use smaller basis sets for medium layers in 3-layer calculations

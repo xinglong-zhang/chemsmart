@@ -52,7 +52,7 @@ class ProviderNetworkBudgetV1:
 
 @dataclass(frozen=True)
 class RequestContextProvenanceV1:
-    """Digests that identify the exact request without encoding a benchmark."""
+    """Digests that identify the exact request without encoding its answer."""
 
     schema_version: str
     task_spec_sha256: str

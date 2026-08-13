@@ -55,7 +55,7 @@ Example with the ``run`` command:
 
 **Key Options:**
 
--  ``--no-scratch``: Disable scratch for this run (overrides YAML / class defaults; see :ref:`scratch-behavior`)
+-  ``--no-scratch``: Disable scratch for this run (overrides YAML and program defaults; see :ref:`scratch-behavior`)
 -  ``--fake``: Dry run mode (don't actually submit)
 -  ``-p qmmm``: Load settings from ``~/.chemsmart/orca/qmmm.yaml``
 -  ``-f``: Input structure file
@@ -567,23 +567,12 @@ Updated CLI options after refactoring from "medium" to "intermediate" naming:
       -  ``--low-level-force-field``
       -  Low-level (MM) force field
 
-Naming Update Summary
-=====================
+********************************
+ ORCA Multiscale YAML Reference
+********************************
 
-**Old → New:** The "medium" terminology has been updated to "intermediate" throughout:
-
--  CLI options now use ``-ix/-ib/-im/-ia/-ci/-mi`` for intermediate functionals, bases, methods, atoms, charge, and
-   multiplicity.
--  YAML parameters: ``medium_level_*`` → ``intermediate_level_*``
--  Settings attributes: ``charge_medium`` → ``charge_intermediate``
-
-*******************************
- ORCAQMMMJobSettings Reference
-*******************************
-
-The ``ORCAQMMMJobSettings`` class provides comprehensive configuration options for ORCA multiscale calculations with
-enhanced equality comparison support. This class now includes proper ``__eq__`` method implementation for accurate
-settings comparison during job validation and configuration management.
+The following project settings configure ORCA multiscale calculations. Use
+``intermediate`` consistently for the QM2 layer.
 
 Core Configuration Parameters
 =============================
@@ -626,20 +615,6 @@ Job Type and Methods
    -  -  ``low_level_force_field``
       -  str
       -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
-
-Settings Comparison and Validation
-----------------------------------
-
-The ``ORCAQMMMJobSettings`` class now supports robust equality comparison including:
-
--  **Complete attribute comparison**: All QMMM-specific parameters are included in equality checks
--  **Configuration validation**: Enables accurate detection of setting changes during job execution
--  **Type safety**: Proper type checking prevents invalid comparisons
--  **Inheritance support**: Maintains compatibility with parent ORCA settings class
-
-This enhancement improves reliability when: - Comparing job configurations across multiple runs - Validating project
-settings consistency - Detecting configuration changes in automated workflows - Debugging multiscale calculation setup
-issues
 
 Settings Atom Partitioning
 --------------------------
@@ -827,21 +802,21 @@ Optimization Controls
 Common Issues and Solutions
 ===========================
 
-**Settings Comparison Errors**
-   With the enhanced equality comparison, you can now reliably detect when settings have changed between job runs. The
-   simplified comparison (without detailed difference logging) ensures faster execution.
+**Settings validation errors**
+   Compare the project YAML and effective command options. Regenerate the
+   input after correcting a mismatched layer or setting.
 
 **QM/MM Interface Optimization**
-   If the QM/MM interface is problematic, adjust custom bond lengths or reconsider atom partitioning. The improved
-   settings validation helps ensure consistent interface parameter application.
+   If the QM/MM interface is problematic, adjust custom bond lengths or
+   reconsider atom partitioning.
 
 **Force Field and Method Compatibility**
-   Ensure your system has required force field files and that QM methods are compatible. The enhanced error checking
-   provides clearer messages about missing dependencies.
+   Ensure your system has required force field files and that QM methods are
+   compatible.
 
 **Crystal QM/MM Setup**
-   For crystal calculations, ensure proper unit cell definition and charge convergence settings. The validation methods
-   help detect incompatible parameter combinations.
+   For crystal calculations, ensure proper unit cell definition and charge
+   convergence settings.
 
 **Performance Optimization**
    -  Use appropriate basis sets for each layer (larger for QM, smaller for QM2)

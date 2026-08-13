@@ -241,14 +241,8 @@ class ToolLoopRunner:
             )
             projected = estimate_request_input_tokens(request)
             if projected > context_limit:
-                # The existing budget check runs on the provider receipt, which
-                # means the request has already been sent and charged before
-                # anyone notices it was too large.  The session history grows
-                # on every turn and is never pruned, so a long workflow reaches
-                # this point by construction rather than by accident: measured
-                # across fourteen live sessions, input tokens rose monotonically
-                # on every single turn and total cost scaled with the square of
-                # the turn count.  Refusing here spends nothing and says why.
+                # Reject before transport so an accumulated conversation cannot
+                # exceed the configured provider context and incur a paid call.
                 self.event_store.append(
                     turn_id=envelope.turn_id,
                     kind=EventKind.TURN_BLOCKED.value,

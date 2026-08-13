@@ -79,12 +79,8 @@ class ProgramCapabilityV1:
     project_owned_parameters: tuple[str, ...]
     engines: tuple[str, ...]
     project_parameter_domains: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    #: Which YAML sections this program's loader reads.  Declared in
-    #: settings/capabilities.py since the section-shape gate was added, but
-    #: never projected here, so a model authoring a project had to guess the
-    #: one thing the loader is strictest about. Across repeated sessions
-    #: guessed a td: section for a phase-keyed program, guessed gas: where the
-    #: loader wanted solv:, and learned the rule only from a rejection.
+    #: Which YAML sections this program's loader reads.  This projection keeps
+    #: model-visible capability data aligned with the loader's public contract.
     project_section_names: tuple[str, ...] = ()
     engine_job_capabilities: tuple[EngineJobCapabilityV1, ...] = ()
 
@@ -245,14 +241,17 @@ class ProgramSupportRuleV1:
         for ordinal, digest in enumerate(evidence):
             if digest:
                 require_sha256(digest, f"support evidence {ordinal}")
-        preview_evidence = evidence[:4]
+        # Bootstrap may prove compilation, fake preview and preflight.  The
+        # generated-artifact verifier is a per-node action and its evidence is
+        # optional here; treating importability as execution was an overclaim.
+        preview_evidence = evidence[:3]
         if self.support_level in {
             SupportLevel.AVAILABLE,
             SupportLevel.PREVIEW_ONLY,
         } and not all(preview_evidence):
             raise ContractError(
-                "compiler, preview, preflight, and verifier evidence are "
-                "required for an operable support rule"
+                "compiler, preview, and preflight evidence are required for "
+                "an operable support rule"
             )
         if (
             self.support_level is SupportLevel.AVAILABLE
@@ -804,14 +803,20 @@ def load_program_capabilities(
     for raw_name, raw in sorted(
         raw_registry.items(), key=lambda item: str(item[0])
     ):
+        if not bool(getattr(raw, "agent_enabled", True)):
+            continue
         program = require_identifier(str(raw_name), "program")
         declared = require_identifier(
             str(getattr(raw, "program", program)), "declared program"
         )
         if declared != program:
             raise ContractError("capability mapping key differs from program")
-        jobtypes = _normalized_tuple(getattr(raw, "jobtypes", ()), "jobtypes")
-        engines = _normalized_tuple(getattr(raw, "engines", ()), "engines")
+        declared_jobtypes = _normalized_tuple(
+            getattr(raw, "jobtypes", ()), "jobtypes"
+        )
+        declared_engines = _normalized_tuple(
+            getattr(raw, "engines", ()), "engines"
+        )
         raw_matrix = tuple(getattr(raw, "engine_job_capabilities", ()) or ())
         if raw_matrix:
             engine_job_capabilities = tuple(
@@ -833,15 +838,26 @@ def load_program_capabilities(
                     for item in raw_matrix
                 )
             )
+            # The canonical settings declaration also serves the broader
+            # human CLI.  Runtime V2 receives only exact pairs that the
+            # program owner deliberately admitted to the v1 agent.
+            jobtypes = tuple(
+                sorted({item.jobtype for item in engine_job_capabilities})
+            )
+            engines = tuple(
+                sorted({item.engine for item in engine_job_capabilities})
+            )
         else:
             # Legacy settings registries declared independent lists. Project
             # them once into an explicit matrix so every downstream decision
             # is pair-aware without changing old registry authorship APIs.
             engine_job_capabilities = tuple(
                 EngineJobCapabilityV1(engine=engine, jobtype=jobtype)
-                for engine in engines
-                for jobtype in jobtypes
+                for engine in declared_engines
+                for jobtype in declared_jobtypes
             )
+            jobtypes = declared_jobtypes
+            engines = declared_engines
         programs.append(
             ProgramCapabilityV1(
                 program=program,
@@ -1003,8 +1019,10 @@ def build_command_compiled_preview_overlay(
     """Build an observation-bound, fail-closed preview support declaration.
 
     Source presence is deliberately irrelevant. A program becomes previewable
-    only after compiler, preview, preflight, and verifier conformance receipts
-    passed against the exact registry, Click schema, and fixture bundle.
+    only after compiler, preview, and preflight conformance receipts passed
+    against the exact registry, Click schema, and fixture bundle. Generated
+    artifacts are verified later for the concrete program node; bootstrap does
+    not claim that verifier execution occurred.
     """
 
     registry = registry or load_program_capabilities()
@@ -1040,7 +1058,7 @@ def build_command_compiled_preview_overlay(
             and evidence.compiler_status == "passed"
             and evidence.preview_status == "passed"
             and evidence.preflight_status == "passed"
-            and evidence.verifier_status == "passed"
+            and evidence.verifier_status != "failed"
             and bool(evidence.effective_engine_job_pairs)
         )
         rules.append(
@@ -1068,7 +1086,9 @@ def build_command_compiled_preview_overlay(
                     evidence.preflight_receipt_sha256 if operable else ""
                 ),
                 verifier_evidence_sha256=(
-                    evidence.verifier_receipt_sha256 if operable else ""
+                    evidence.verifier_receipt_sha256
+                    if operable and evidence.verifier_status == "passed"
+                    else ""
                 ),
                 rule_ids=(
                     ("agent.support.conformance_receipts_passed",)

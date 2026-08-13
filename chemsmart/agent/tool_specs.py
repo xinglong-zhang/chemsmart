@@ -32,18 +32,8 @@ class AgentToolSurfaceV1:
             raise ContractError("agent tool schema digest mismatch")
 
 
-#: repair_command is built but not reachable, so it is not advertised.
-#:
-#: CommandCounterexampleV1 is never constructed anywhere in the package and
-#: register_counterexample has no callers, so the counterexamples registry is
-#: empty for the whole lifetime of every session and this tool cannot succeed.
-#: Four live sessions called it anyway, across three cases, and three separate
-#: attempts to discourage that by wording all failed -- because the problem was
-#: never the wording.
-#:
-#: The handler, the contract, and the invocation fields that carry a repair are
-#: all kept.  Re-expose this by adding _REPAIR_COMMAND_TOOL back to the tuple in
-#: the same change that wires a producer for counterexamples.
+#: ``repair_command`` is implemented internally but is not advertised because
+#: the public Runtime does not create its prerequisite counterexample record.
 _REPAIR_COMMAND_TOOL_SOURCE = """_tool(
             "repair_command",
             (
@@ -730,16 +720,8 @@ def build_approved_execution_tool_surface(
 
 
 #: What each recurring argument name means, applied wherever that name appears.
-#:
-#: Measured before this existed: 7 of 93 required arguments across the whole
-#: model-visible surface carried a description, so a model had to infer 86
-#: mandatory fields from their spelling.  Two live sessions failed on
-#: ``record_scientific_decision`` for exactly that reason -- one omitted
-#: ``alternatives``, another wrote a sentence into ``stage_order``.
-#:
-#: Keying by argument name rather than by tool is deliberate: the same field
-#: means the same thing everywhere it appears, and one entry then describes it
-#: in every tool that takes it.
+#: Keying by argument name keeps the same field definition consistent across
+#: every tool that accepts it.
 ARGUMENT_DESCRIPTIONS: dict[str, str] = {
     "basis_mode": (
         "How the basis is specified: a single set, or split by element class."
@@ -922,14 +904,8 @@ def _describe(name: str, schema: dict) -> dict:
     return {**schema, "description": f"{meaning} {existing}"}
 
 
-#: Arguments the runtime passes through its public-identifier validator.
-#:
-#: Measured: 36 of 37 identifier-guarded arguments were exposed as
-#: unconstrained strings, so the rule existed only after submission.  Two live
-#: sessions wrote whole sentences into identifier fields -- a dependency phrase
-#: into ``stage_order``, a method description into ``project_role`` -- and only
-#: learned the rule from the rejection.  Declaring the pattern states it before
-#: the call instead of after it.
+#: Arguments the runtime passes through its public-identifier validator.  The
+#: schema publishes the constraint so callers can construct valid requests.
 IDENTIFIER_ARGUMENTS = frozenset(
     {
         "artifact_class",

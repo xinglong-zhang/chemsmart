@@ -14,10 +14,12 @@ rerun them.
 
 from __future__ import annotations
 
+import json
 import math
 import os
+import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
@@ -875,20 +877,7 @@ def workflow_execution_approval_json(
 
 @dataclass(frozen=True)
 class WorkflowApprovalRequestV1:
-    """A finished plan presented for approval, carrying no approval itself.
-
-    ``agent run`` consumes an approval that binds exact nodes and an exact
-    workflow digest.  Nothing produced one: the documented flow is "plan, then
-    run with an approval file", and the only route to that file was to re-plan
-    and hope a fresh session emitted a byte-identical workflow.  This is the
-    missing half -- the same body a reviewer must sign, assembled from what a
-    session actually planned, and explicitly not signed.
-
-    The distinction is the safety property, not bookkeeping.  A request is
-    inert: it cannot be passed to ``agent run``, because that reads
-    ``workflow_approval`` and requires ``status == "approved"``.  Turning one
-    into an approval is a separate, explicit act.
-    """
+    """Exact, inert workflow request presented for human review."""
 
     schema_version: str
     request_id: str
@@ -2859,19 +2848,9 @@ def build_frozen_workflow_approval(
         PREVIEW_RESOURCE_SHA256,
     ):
         raise ContractError("materialized workflow resource binding differs")
-    # A plan session has no execution resources, so it materializes under the
-    # preview sentinel.  Demanding equality with a run profile therefore made
-    # the documented flow circular: only a workflow materialized by a session
-    # that *already* held execution resources could be frozen, and holding them
-    # requires an approval, which requires a freeze.  Nothing could produce the
-    # first one, which is why no call site ever passed a frozen approval.
-    #
-    # Binding resources is the reviewer's act, so the freeze is where it
-    # belongs.  The safety chain is unchanged: the frozen approval records
-    # ``resources``, the V1 approval records the same profile, and the session
-    # refuses at load time unless both equal the locked run profile.  A
-    # workflow that *was* materialized under a real profile must still match
-    # it, so an approval cannot be moved between resource profiles.
+    # Preview materialization may carry the preview sentinel.  Human review
+    # binds the concrete resources, while a real-profile materialization must
+    # already match them exactly.
     unresolved = set(materialized_workflow.unresolved_node_ids)
     data_edges = tuple(edge for edge in plan.edges if edge.edge_kind == "data")
     data_targets = {edge.target_node_id for edge in data_edges}
@@ -3009,6 +2988,888 @@ def build_frozen_workflow_approval(
     return FrozenWorkflowApprovalV1(
         **body, approval_sha256=canonical_sha256(digest_body)
     )
+
+
+@dataclass(frozen=True)
+class WorkflowEnvironmentBindingV1:
+    """The exact observed execution environment assigned to one DAG node."""
+
+    node_id: str
+    program: str
+    engine: str
+    environment_receipt_sha256: str
+    environment_identity_sha256: str
+
+    def __post_init__(self) -> None:
+        require_identifier(self.node_id, "node_id")
+        require_identifier(self.program, "program")
+        require_identifier(self.engine, "engine")
+        require_sha256(
+            self.environment_receipt_sha256,
+            "environment_receipt_sha256",
+        )
+        require_sha256(
+            self.environment_identity_sha256,
+            "environment_identity_sha256",
+        )
+
+
+_REVIEW_SECRET_FIELD_PARTS = frozenset(
+    {
+        "api_key",
+        "credential",
+        "password",
+        "private_key",
+        "secret",
+        "token",
+    }
+)
+
+
+def execution_path_placeholder(role: str, sha256: str) -> str:
+    """Return a human-readable, digest-bound stand-in for one approved path."""
+
+    normalized_role = require_identifier(role, "execution path role")
+    digest = require_sha256(sha256, f"{normalized_role} sha256")
+    return f"<{normalized_role}:sha256={digest}>"
+
+
+def execution_server_profile_sha256(
+    *, resources: ExecutionResourceSpecV1, scratch_root: str
+) -> str:
+    """Bind the generated server profile to reviewed resources and scratch."""
+
+    scratch = str(scratch_root).strip()
+    if not scratch:
+        raise ContractError("execution server profile requires a scratch root")
+    return canonical_sha256(
+        {
+            "schema_version": "chemsmart.execution-server-profile.v1",
+            "resource_sha256": resources.resource_sha256,
+            "scratch_root_sha256": canonical_sha256(
+                {"scratch_root": scratch}
+            ),
+        }
+    )
+
+
+def _looks_absolute_path(value: str) -> bool:
+    return Path(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+
+def _path_free_review_value(value: Any, *, field_name: str = "") -> Any:
+    """Preserve reviewed science while withholding secrets and host paths."""
+
+    normalized_field = str(field_name).strip().lower().replace("-", "_")
+    if any(part in normalized_field for part in _REVIEW_SECRET_FIELD_PARTS):
+        return execution_path_placeholder(
+            "redacted-value",
+            canonical_sha256({"field": normalized_field, "redacted": True}),
+        )
+    if isinstance(value, Mapping):
+        return {
+            str(key): _path_free_review_value(item, field_name=str(key))
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            _path_free_review_value(item, field_name=field_name)
+            for item in value
+        )
+    if isinstance(value, str) and _looks_absolute_path(value):
+        return execution_path_placeholder(
+            "private-path",
+            canonical_sha256({"field": normalized_field, "value": value}),
+        )
+    return canonical_data(value)
+
+
+def path_free_review_record(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Create the canonical path-free public projection of a reviewed record."""
+
+    projected = _path_free_review_value(value)
+    if not isinstance(projected, dict):  # pragma: no cover - Mapping narrows this
+        raise ContractError("review record must project to an object")
+    return projected
+
+
+def normalized_project_settings_review(
+    settings: Mapping[str, Any] | Sequence[tuple[str, Any]],
+) -> tuple[str, str]:
+    """Render effective loader settings without secrets or private paths."""
+
+    projected = path_free_review_record(dict(settings))
+    text = canonical_json(projected)
+    return text, canonical_sha256(
+        {"normalized_project_settings_text": text}
+    )
+
+
+def environment_review_summary(receipt: Any) -> dict[str, Any]:
+    """Project execution-relevant environment facts without host paths."""
+
+    status = getattr(receipt, "status", "")
+    summary = {
+        "program": getattr(receipt, "program", ""),
+        "engine": getattr(receipt, "engine", ""),
+        "status": getattr(status, "value", str(status)),
+        "target_kind": getattr(receipt, "target_kind", ""),
+        "locator": getattr(receipt, "locator", ""),
+        "observed_version": getattr(receipt, "observed_version", ""),
+        "observed_location_sha256": getattr(
+            receipt, "observed_location_sha256", ""
+        ),
+        "compute_interpreter_sha256": getattr(
+            receipt, "compute_interpreter_sha256", ""
+        ),
+        "compute_evidence_sha256": getattr(
+            receipt, "compute_evidence_sha256", ""
+        ),
+        "dependency_versions": tuple(
+            tuple(item)
+            for item in getattr(receipt, "dependency_versions", ())
+        ),
+        "solver_evidence": tuple(
+            tuple(item) for item in getattr(receipt, "solver_evidence", ())
+        ),
+        "gpu_evidence": tuple(
+            tuple(item) for item in getattr(receipt, "gpu_evidence", ())
+        ),
+        "observation_method": getattr(receipt, "observation_method", ""),
+    }
+    return path_free_review_record(summary)
+
+
+def build_real_execution_argv(
+    *,
+    compiled_argv: Sequence[str],
+    command_path: Sequence[str],
+    resources: ExecutionResourceSpecV1,
+    server: str = "",
+) -> tuple[str, ...]:
+    """Materialize the exact OS process argv from reviewed input."""
+
+    path = tuple(str(item) for item in command_path)
+    argv = tuple(str(item) for item in compiled_argv)
+    if len(path) < 2 or path[0] != "run":
+        raise ContractError("local execution requires a run command")
+    program = path[1]
+    try:
+        program_index = argv.index(program, 2)
+    except ValueError as exc:
+        raise ContractError("compiled argv does not contain its program") from exc
+    root = [
+        sys.executable,
+        "-m",
+        "chemsmart",
+        "run",
+        "--no-fake",
+        "--delete-scratch",
+    ]
+    root.append(
+        "--no-scratch"
+        if resources.scratch_policy == "none"
+        else "--scratch"
+    )
+    root.extend(("--num-cores", str(resources.cores)))
+    root.extend(("--num-gpus", str(resources.gpu_count)))
+    memory = (
+        str(int(resources.memory_gb))
+        if resources.memory_gb.is_integer()
+        else str(resources.memory_gb)
+    )
+    root.extend(("--mem-gb", memory))
+    if server:
+        root.extend(("--server", str(server)))
+    return tuple(root + list(argv[program_index:]))
+
+
+def project_real_execution_argv(
+    argv: Sequence[str],
+    *,
+    path_bindings: Mapping[str, tuple[str, str]],
+) -> tuple[str, ...]:
+    """Replace every approved path token and reject any unreviewed path."""
+
+    replacements: dict[str, str] = {}
+    for raw_path, (role, digest) in path_bindings.items():
+        token = str(raw_path)
+        replacement = execution_path_placeholder(role, digest)
+        previous = replacements.setdefault(token, replacement)
+        if previous != replacement:
+            raise ContractError("one execution path has conflicting approvals")
+    projected = tuple(replacements.get(str(item), str(item)) for item in argv)
+    unbound = tuple(item for item in projected if _looks_absolute_path(item))
+    if unbound:
+        raise ContractError(
+            "real execution argv contains an unreviewed absolute path"
+        )
+    return projected
+
+
+def real_execution_argv_sha256(argv: Sequence[str]) -> str:
+    """Digest the exact path-neutral execution argv shown to the reviewer."""
+
+    return canonical_sha256({"real_execution_argv": tuple(argv)})
+
+
+def _require_path_free_review_value(value: Any, field_name: str) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _require_path_free_review_value(item, f"{field_name}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _require_path_free_review_value(item, field_name)
+    elif isinstance(value, str) and _looks_absolute_path(value):
+        raise ContractError(f"{field_name} cannot expose an absolute host path")
+
+
+@dataclass(frozen=True)
+class WorkflowExecutionNodeReviewV1:
+    """Self-contained human projection of one proposed real engine launch."""
+
+    schema_version: str
+    node_id: str
+    stage: str
+    program: str
+    engine: str
+    molecular_identity: dict[str, Any]
+    molecular_identity_sha256: str
+    project_artifact_sha256: str
+    project_settings_sha256: str
+    project_settings_text: str
+    project_settings_text_sha256: str
+    real_execution_argv: tuple[str, ...]
+    real_execution_argv_sha256: str
+    execution_resources: dict[str, Any]
+    resource_sha256: str
+    environment_summary: dict[str, Any]
+    server_profile_sha256: str
+    environment_receipt_sha256: str
+    environment_identity_sha256: str
+    projection_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-execution-node-review.v1":
+            raise ContractError("unsupported workflow node review schema")
+        for name, value in (
+            ("node_id", self.node_id),
+            ("stage", self.stage),
+            ("program", self.program),
+            ("engine", self.engine),
+        ):
+            require_identifier(value, name)
+        object.__setattr__(
+            self, "molecular_identity", canonical_data(self.molecular_identity)
+        )
+        object.__setattr__(
+            self, "execution_resources", canonical_data(self.execution_resources)
+        )
+        object.__setattr__(
+            self, "environment_summary", canonical_data(self.environment_summary)
+        )
+        object.__setattr__(
+            self, "real_execution_argv", tuple(self.real_execution_argv)
+        )
+        for name, digest in (
+            ("molecular_identity_sha256", self.molecular_identity_sha256),
+            ("project_artifact_sha256", self.project_artifact_sha256),
+            ("project_settings_sha256", self.project_settings_sha256),
+            ("project_settings_text_sha256", self.project_settings_text_sha256),
+            ("real_execution_argv_sha256", self.real_execution_argv_sha256),
+            ("resource_sha256", self.resource_sha256),
+            ("server_profile_sha256", self.server_profile_sha256),
+            ("environment_receipt_sha256", self.environment_receipt_sha256),
+            ("environment_identity_sha256", self.environment_identity_sha256),
+        ):
+            require_sha256(digest, name)
+        _require_path_free_review_value(
+            self.molecular_identity, "molecular_identity"
+        )
+        _require_path_free_review_value(
+            self.execution_resources, "execution_resources"
+        )
+        _require_path_free_review_value(
+            self.environment_summary, "environment_summary"
+        )
+        _require_path_free_review_value(
+            self.real_execution_argv, "real_execution_argv"
+        )
+        if self.molecular_identity_sha256 != canonical_sha256(
+            self.molecular_identity
+        ):
+            raise ContractError("molecular identity review digest mismatch")
+        expected_settings_text_sha256 = canonical_sha256(
+            {"normalized_project_settings_text": self.project_settings_text}
+        )
+        try:
+            parsed_settings = json.loads(self.project_settings_text)
+        except json.JSONDecodeError as exc:
+            raise ContractError(
+                "project settings review must be canonical JSON"
+            ) from exc
+        if not isinstance(parsed_settings, Mapping) or canonical_json(
+            parsed_settings
+        ) != self.project_settings_text:
+            raise ContractError("project settings review must be a canonical object")
+        _require_path_free_review_value(
+            parsed_settings, "project_settings_text"
+        )
+        if self.project_settings_text_sha256 != expected_settings_text_sha256:
+            raise ContractError("project settings review digest mismatch")
+        if self.real_execution_argv_sha256 != real_execution_argv_sha256(
+            self.real_execution_argv
+        ):
+            raise ContractError("real execution argv review digest mismatch")
+        if self.projection_sha256 != canonical_sha256(self._body()):
+            raise ContractError("workflow node review digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "projection_sha256"
+        }
+
+
+def build_workflow_execution_node_review(
+    *,
+    node_id: str,
+    stage: str,
+    program: str,
+    engine: str,
+    molecular_identity: Mapping[str, Any],
+    project_artifact_sha256: str,
+    project_settings_sha256: str,
+    project_settings: Mapping[str, Any] | Sequence[tuple[str, Any]],
+    real_execution_argv: Sequence[str],
+    execution_resources: ExecutionResourceSpecV1,
+    environment_summary: Mapping[str, Any],
+    server_profile_sha256: str,
+    environment_receipt_sha256: str,
+    environment_identity_sha256: str,
+) -> WorkflowExecutionNodeReviewV1:
+    """Build and digest one path-free node projection for human review."""
+
+    identity = path_free_review_record(dict(molecular_identity))
+    settings_text, settings_text_sha256 = normalized_project_settings_review(
+        project_settings
+    )
+    argv = tuple(str(item) for item in real_execution_argv)
+    body = {
+        "schema_version": "chemsmart.workflow-execution-node-review.v1",
+        "node_id": node_id,
+        "stage": stage,
+        "program": program,
+        "engine": engine,
+        "molecular_identity": identity,
+        "molecular_identity_sha256": canonical_sha256(identity),
+        "project_artifact_sha256": project_artifact_sha256,
+        "project_settings_sha256": project_settings_sha256,
+        "project_settings_text": settings_text,
+        "project_settings_text_sha256": settings_text_sha256,
+        "real_execution_argv": argv,
+        "real_execution_argv_sha256": real_execution_argv_sha256(argv),
+        "execution_resources": canonical_data(execution_resources),
+        "resource_sha256": execution_resources.resource_sha256,
+        "environment_summary": path_free_review_record(environment_summary),
+        "server_profile_sha256": server_profile_sha256,
+        "environment_receipt_sha256": environment_receipt_sha256,
+        "environment_identity_sha256": environment_identity_sha256,
+    }
+    return WorkflowExecutionNodeReviewV1(
+        **body, projection_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class WorkflowExecutionReviewV1:
+    """Inert, exact review packet emitted after planning and safe preview.
+
+    This object intentionally contains no approval.  It binds the scientific
+    plan, its command materialization, resources, operating bounds, and the
+    environment identities observed during preview so that a human can review
+    one digest and later approve exactly those bytes.
+    """
+
+    schema_version: str
+    request: WorkflowApprovalRequestV1
+    scientific_plan: ScientificWorkflowPlanV2
+    materialized_workflow: MaterializedWorkflowV1
+    execution_resources: ExecutionResourceSpecV1
+    execution_envelope: dict[str, Any]
+    environment_bindings: tuple[WorkflowEnvironmentBindingV1, ...]
+    node_reviews: tuple[WorkflowExecutionNodeReviewV1, ...]
+    stationary_point_policy: StationaryPointValidationPolicyV1 | None
+    status: str
+    review_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-execution-review.v1":
+            raise ContractError("unsupported workflow execution review schema")
+        if self.status != "unapproved":
+            raise ContractError("an execution review is inert and unapproved")
+        object.__setattr__(
+            self, "execution_envelope", canonical_data(self.execution_envelope)
+        )
+        object.__setattr__(
+            self, "environment_bindings", tuple(self.environment_bindings)
+        )
+        object.__setattr__(self, "node_reviews", tuple(self.node_reviews))
+        if self.request.workflow_id != self.scientific_plan.workflow_id:
+            raise ContractError("review request belongs to another workflow")
+        if self.request.workflow_sha256 != self.scientific_plan.plan_sha256:
+            raise ContractError("review request differs from scientific plan")
+        if self.request.task_spec_sha256 != self.scientific_plan.task_spec_sha256:
+            raise ContractError("review request differs from task specification")
+        if self.materialized_workflow.workflow_id != self.scientific_plan.workflow_id:
+            raise ContractError("review materialization belongs to another workflow")
+        if self.materialized_workflow.plan_sha256 != self.scientific_plan.plan_sha256:
+            raise ContractError("review materialization differs from scientific plan")
+        if self.materialized_workflow.task_spec_sha256 != (
+            self.scientific_plan.task_spec_sha256
+        ):
+            raise ContractError("review materialization differs from task specification")
+        if self.request.resource_sha256 != self.execution_resources.resource_sha256:
+            raise ContractError("review request differs from execution resources")
+        if self.materialized_workflow.resource_sha256 not in {
+            PREVIEW_RESOURCE_SHA256,
+            self.execution_resources.resource_sha256,
+        }:
+            raise ContractError("review materialization differs from resources")
+        node_ids = tuple(item.node_id for item in self.environment_bindings)
+        if node_ids != tuple(sorted(set(node_ids))):
+            raise ContractError(
+                "review environment bindings must be sorted and node-unique"
+            )
+        if set(node_ids) != {node.node_id for node in self.scientific_plan.nodes}:
+            raise ContractError("review environments must cover every workflow node")
+        review_node_ids = tuple(item.node_id for item in self.node_reviews)
+        if review_node_ids != tuple(sorted(set(review_node_ids))):
+            raise ContractError("node reviews must be sorted and node-unique")
+        if set(review_node_ids) != {
+            node.node_id for node in self.scientific_plan.nodes
+        }:
+            raise ContractError("node reviews must cover every workflow node")
+        planned_by_id = {
+            node.node_id: node for node in self.scientific_plan.nodes
+        }
+        binding_by_id = {
+            item.node_id: item for item in self.request.node_bindings
+        }
+        environment_by_id = {
+            item.node_id: item for item in self.environment_bindings
+        }
+        if set(binding_by_id) != set(planned_by_id):
+            raise ContractError("review node bindings are incomplete")
+        for item in self.node_reviews:
+            planned = planned_by_id[item.node_id]
+            binding = binding_by_id[item.node_id]
+            environment = environment_by_id[item.node_id]
+            if (item.stage, item.program, item.engine) != (
+                planned.stage,
+                planned.program,
+                planned.engine,
+            ):
+                raise ContractError("node review differs from scientific plan")
+            if (
+                item.project_artifact_sha256
+                != binding.project_artifact_sha256
+                or item.project_settings_sha256 != binding.settings_sha256
+                or item.resource_sha256
+                != self.execution_resources.resource_sha256
+            ):
+                raise ContractError("node review differs from approved inputs")
+            if (
+                item.environment_receipt_sha256
+                != environment.environment_receipt_sha256
+                or item.environment_identity_sha256
+                != environment.environment_identity_sha256
+            ):
+                raise ContractError("node review differs from environment binding")
+            if (
+                item.environment_summary.get("program") != item.program
+                or item.environment_summary.get("engine") != item.engine
+            ):
+                raise ContractError("node review environment summary differs")
+            molecular = item.molecular_identity
+            if (
+                molecular.get("charge") != binding.charge
+                or molecular.get("multiplicity") != binding.multiplicity
+            ):
+                raise ContractError("node review molecular state differs")
+            coordinate = molecular.get("coordinate_identity")
+            if not isinstance(coordinate, Mapping):
+                raise ContractError("node review lacks coordinate identity")
+            if binding.input_mode == "initial" and (
+                coordinate.get("kind") != "exact-input-artifact"
+                or coordinate.get("geometry_artifact_sha256")
+                != binding.initial_artifact_sha256
+            ):
+                raise ContractError("node review initial geometry differs")
+            if binding.input_mode == "producer" and (
+                coordinate.get("kind") != "validated-producer-output"
+                or coordinate.get("producer_edge_sha256")
+                != binding.producer_edge_sha256
+            ):
+                raise ContractError("node review producer geometry differs")
+        scratch_root = str(self.execution_envelope.get("scratch_root", ""))
+        expected_server_profile = execution_server_profile_sha256(
+            resources=self.execution_resources,
+            scratch_root=scratch_root,
+        )
+        if any(
+            item.server_profile_sha256 != expected_server_profile
+            for item in self.node_reviews
+        ):
+            raise ContractError("node review server profile differs")
+        if self.stationary_point_policy is not None:
+            if self.stationary_point_policy.task_spec_sha256 != (
+                self.scientific_plan.task_spec_sha256
+            ):
+                raise ContractError("stationary-point policy belongs to another task")
+        if self.review_sha256 != canonical_sha256(self._body()):
+            raise ContractError("workflow execution review digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "review_sha256"
+        }
+
+
+def build_workflow_execution_review(
+    *,
+    request: WorkflowApprovalRequestV1,
+    scientific_plan: ScientificWorkflowPlanV2,
+    materialized_workflow: MaterializedWorkflowV1,
+    execution_resources: ExecutionResourceSpecV1,
+    execution_envelope: Mapping[str, Any],
+    environment_bindings: Sequence[WorkflowEnvironmentBindingV1],
+    node_reviews: Sequence[WorkflowExecutionNodeReviewV1],
+    stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
+) -> WorkflowExecutionReviewV1:
+    """Assemble one self-verifying review packet without granting authority."""
+
+    body = {
+        "schema_version": "chemsmart.workflow-execution-review.v1",
+        "request": request,
+        "scientific_plan": scientific_plan,
+        "materialized_workflow": materialized_workflow,
+        "execution_resources": execution_resources,
+        "execution_envelope": canonical_data(dict(execution_envelope)),
+        "environment_bindings": tuple(environment_bindings),
+        "node_reviews": tuple(node_reviews),
+        "stationary_point_policy": stationary_point_policy,
+        "status": "unapproved",
+    }
+    return WorkflowExecutionReviewV1(
+        **body, review_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class WorkflowReviewResolutionV1:
+    """Durable human resolution of one exact execution review digest."""
+
+    schema_version: str
+    resolution_id: str
+    review_sha256: str
+    decision: str
+    actor: str
+    approval_id: str
+    one_shot: bool
+    resolution_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-review-resolution.v1":
+            raise ContractError("unsupported workflow review resolution schema")
+        require_identifier(self.resolution_id, "resolution_id")
+        require_sha256(self.review_sha256, "review_sha256")
+        if self.decision not in {"approve", "deny", "revise", "quit"}:
+            raise ContractError("unknown workflow review decision")
+        if not str(self.actor).strip():
+            raise ContractError("workflow review resolution requires an actor")
+        if self.decision == "approve":
+            require_identifier(self.approval_id, "approval_id")
+            if not self.one_shot:
+                raise ContractError("workflow execution approval must be one-shot")
+        elif self.approval_id or self.one_shot:
+            raise ContractError("a non-approval decision cannot grant authority")
+        if self.resolution_sha256 != canonical_sha256(self._body()):
+            raise ContractError("workflow review resolution digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "resolution_sha256"
+        }
+
+
+def build_workflow_review_resolution(
+    *,
+    resolution_id: str,
+    review_sha256: str,
+    decision: str,
+    actor: str,
+    approval_id: str = "",
+) -> WorkflowReviewResolutionV1:
+    normalized_decision = str(decision).strip().lower()
+    body = {
+        "schema_version": "chemsmart.workflow-review-resolution.v1",
+        "resolution_id": require_identifier(resolution_id, "resolution_id"),
+        "review_sha256": require_sha256(review_sha256, "review_sha256"),
+        "decision": normalized_decision,
+        "actor": str(actor).strip(),
+        "approval_id": str(approval_id).strip(),
+        "one_shot": normalized_decision == "approve",
+    }
+    return WorkflowReviewResolutionV1(
+        **body, resolution_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class WorkflowExecutionApprovalBundleV1:
+    """Compound, one-shot input consumed only by ``agent execute``."""
+
+    schema_version: str
+    review_sha256: str
+    resolution: WorkflowReviewResolutionV1
+    workflow_approval: WorkflowExecutionApprovalV1
+    frozen_workflow_approval: FrozenWorkflowApprovalV1
+    approved_scientific_plan: ScientificWorkflowPlanV2
+    approved_materialized_workflow: MaterializedWorkflowV1
+    execution_resources: ExecutionResourceSpecV1
+    execution_envelope: dict[str, Any]
+    approved_environment_identities: tuple[str, ...]
+    node_reviews: tuple[WorkflowExecutionNodeReviewV1, ...]
+    stationary_point_policy: StationaryPointValidationPolicyV1 | None
+    one_shot: bool
+    status: str
+    bundle_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.workflow-execution-approval-bundle.v1":
+            raise ContractError("unsupported execution approval bundle schema")
+        require_sha256(self.review_sha256, "review_sha256")
+        object.__setattr__(
+            self, "execution_envelope", canonical_data(self.execution_envelope)
+        )
+        object.__setattr__(
+            self,
+            "approved_environment_identities",
+            tuple(self.approved_environment_identities),
+        )
+        object.__setattr__(self, "node_reviews", tuple(self.node_reviews))
+        if self.resolution.decision != "approve":
+            raise ContractError("execution bundle requires an approve resolution")
+        if self.resolution.review_sha256 != self.review_sha256:
+            raise ContractError("execution bundle resolution targets another review")
+        if self.resolution.approval_id != self.workflow_approval.approval_id:
+            raise ContractError("execution bundle approval IDs differ")
+        frozen = self.frozen_workflow_approval
+        approval = self.workflow_approval
+        if frozen.approval_id != approval.approval_id:
+            raise ContractError("frozen and workflow approval IDs differ")
+        if frozen.workflow_id != approval.workflow_id:
+            raise ContractError("frozen and workflow approvals differ")
+        if frozen.plan_sha256 != self.approved_scientific_plan.plan_sha256:
+            raise ContractError("execution bundle plan differs from frozen approval")
+        if frozen.materialized_workflow_sha256 != (
+            self.approved_materialized_workflow.materialized_sha256
+        ):
+            raise ContractError(
+                "execution bundle materialization differs from frozen approval"
+            )
+        if approval.resource_sha256 != self.execution_resources.resource_sha256:
+            raise ContractError("execution bundle resources differ from approval")
+        identities = tuple(sorted(set(self.approved_environment_identities)))
+        if identities != self.approved_environment_identities or not identities:
+            raise ContractError(
+                "approved environment identities must be sorted, unique, and nonempty"
+            )
+        if identities != frozen.environment_identity_sha256s:
+            raise ContractError("execution bundle environments differ from approval")
+        node_ids = tuple(item.node_id for item in self.node_reviews)
+        if node_ids != tuple(sorted(set(node_ids))):
+            raise ContractError("execution bundle node reviews must be unique")
+        if set(node_ids) != {
+            node.node_id for node in self.approved_scientific_plan.nodes
+        }:
+            raise ContractError("execution bundle node reviews are incomplete")
+        binding_by_id = {
+            item.node_id: item for item in approval.node_bindings
+        }
+        planned_by_id = {
+            item.node_id: item for item in self.approved_scientific_plan.nodes
+        }
+        if set(binding_by_id) != set(planned_by_id):
+            raise ContractError("execution bundle node bindings are incomplete")
+        for item in self.node_reviews:
+            binding = binding_by_id[item.node_id]
+            planned = planned_by_id[item.node_id]
+            if (
+                item.project_artifact_sha256
+                != binding.project_artifact_sha256
+                or item.project_settings_sha256 != binding.settings_sha256
+                or item.resource_sha256
+                != self.execution_resources.resource_sha256
+                or item.environment_identity_sha256 not in identities
+            ):
+                raise ContractError("execution bundle node review differs")
+            if (item.stage, item.program, item.engine) != (
+                planned.stage,
+                planned.program,
+                planned.engine,
+            ):
+                raise ContractError("execution bundle command stage differs")
+            molecular = item.molecular_identity
+            if (
+                molecular.get("charge") != binding.charge
+                or molecular.get("multiplicity") != binding.multiplicity
+            ):
+                raise ContractError("execution bundle molecular state differs")
+            if (
+                item.environment_summary.get("program") != item.program
+                or item.environment_summary.get("engine") != item.engine
+            ):
+                raise ContractError("execution bundle environment summary differs")
+            coordinate = molecular.get("coordinate_identity")
+            if not isinstance(coordinate, Mapping):
+                raise ContractError("execution bundle lacks coordinate identity")
+            if binding.input_mode == "initial" and (
+                coordinate.get("kind") != "exact-input-artifact"
+                or coordinate.get("geometry_artifact_sha256")
+                != binding.initial_artifact_sha256
+            ):
+                raise ContractError("execution bundle initial geometry differs")
+            if binding.input_mode == "producer" and (
+                coordinate.get("kind") != "validated-producer-output"
+                or coordinate.get("producer_edge_sha256")
+                != binding.producer_edge_sha256
+            ):
+                raise ContractError("execution bundle producer geometry differs")
+        expected_server_profile = execution_server_profile_sha256(
+            resources=self.execution_resources,
+            scratch_root=str(self.execution_envelope.get("scratch_root", "")),
+        )
+        if any(
+            item.server_profile_sha256 != expected_server_profile
+            for item in self.node_reviews
+        ):
+            raise ContractError("execution bundle server profile differs")
+        if not self.one_shot or self.status != "approved":
+            raise ContractError("execution bundle must be approved and one-shot")
+        if self.bundle_sha256 != canonical_sha256(self._body()):
+            raise ContractError("workflow execution approval bundle digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "bundle_sha256"
+        }
+
+    def node_review(self, node_id: str) -> WorkflowExecutionNodeReviewV1:
+        """Return the exact human-reviewed projection for one workflow node."""
+
+        matches = tuple(item for item in self.node_reviews if item.node_id == node_id)
+        if len(matches) != 1:
+            raise ContractError("execution bundle has no unique node review")
+        return matches[0]
+
+
+def approve_workflow_execution_review(
+    review: WorkflowExecutionReviewV1,
+    *,
+    approval_id: str,
+    approved_review_sha256: str,
+    actor: str,
+    resolution_id: str,
+) -> WorkflowExecutionApprovalBundleV1:
+    """Convert the one reviewed digest into one exact executable bundle."""
+
+    if approved_review_sha256 != review.review_sha256:
+        raise ContractError(
+            "the reviewed digest does not match this execution review"
+        )
+    approval = approve_workflow_request(
+        review.request,
+        approval_id=approval_id,
+        approved_request_sha256=review.request.request_sha256,
+        resources=review.execution_resources,
+    )
+    identity_by_receipt = {
+        item.environment_receipt_sha256: item.environment_identity_sha256
+        for item in review.environment_bindings
+    }
+    data_targets = {
+        edge.target_node_id
+        for edge in review.scientific_plan.edges
+        if edge.edge_kind == "data"
+    }
+    future_environments = {
+        item.node_id: item.environment_receipt_sha256
+        for item in review.environment_bindings
+        if item.node_id in data_targets
+    }
+    identities = tuple(
+        sorted(
+            {
+                item.environment_identity_sha256
+                for item in review.environment_bindings
+            }
+        )
+    )
+    frozen = build_frozen_workflow_approval(
+        approval_id=approval_id,
+        plan=review.scientific_plan,
+        materialized_workflow=review.materialized_workflow,
+        resources=review.execution_resources,
+        environment_identity_sha256s=identities,
+        future_node_environment_identity_sha256s=future_environments,
+        environment_identity_by_receipt=identity_by_receipt,
+        stationary_point_policy=review.stationary_point_policy,
+    )
+    resolution = build_workflow_review_resolution(
+        resolution_id=resolution_id,
+        review_sha256=review.review_sha256,
+        decision="approve",
+        actor=actor,
+        approval_id=approval_id,
+    )
+    body = {
+        "schema_version": "chemsmart.workflow-execution-approval-bundle.v1",
+        "review_sha256": review.review_sha256,
+        "resolution": resolution,
+        "workflow_approval": approval,
+        "frozen_workflow_approval": frozen,
+        "approved_scientific_plan": review.scientific_plan,
+        "approved_materialized_workflow": review.materialized_workflow,
+        "execution_resources": review.execution_resources,
+        "execution_envelope": review.execution_envelope,
+        "approved_environment_identities": identities,
+        "node_reviews": review.node_reviews,
+        "stationary_point_policy": review.stationary_point_policy,
+        "one_shot": True,
+        "status": "approved",
+    }
+    return WorkflowExecutionApprovalBundleV1(
+        **body, bundle_sha256=canonical_sha256(body)
+    )
+
+
+def workflow_execution_review_json(review: WorkflowExecutionReviewV1) -> str:
+    return canonical_json({"workflow_execution_review": review}) + "\n"
+
+
+def workflow_execution_approval_bundle_json(
+    bundle: WorkflowExecutionApprovalBundleV1,
+) -> str:
+    return canonical_json({"workflow_execution_approval_bundle": bundle}) + "\n"
 
 
 @dataclass(frozen=True)
@@ -3758,16 +4619,26 @@ __all__ = [
     "ProjectArtifactPromotionV1",
     "ScientificDecisionRecordV1",
     "WorkflowExecutionApprovalV1",
+    "WorkflowExecutionApprovalBundleV1",
+    "WorkflowExecutionNodeReviewV1",
+    "WorkflowExecutionReviewV1",
+    "WorkflowEnvironmentBindingV1",
+    "WorkflowReviewResolutionV1",
     "WorkflowNodeRunStateV1",
     "WorkflowRunStateV1",
     "ValidatedDataEdgeBindingV1",
     "bind_project_promotion_validation",
     "build_execution_resource_spec",
+    "build_real_execution_argv",
     "build_frozen_workflow_approval",
     "WorkflowApprovalRequestV1",
     "approve_workflow_request",
+    "approve_workflow_execution_review",
     "build_producer_edge_rule",
     "build_workflow_approval_request",
+    "build_workflow_execution_review",
+    "build_workflow_execution_node_review",
+    "build_workflow_review_resolution",
     "workflow_approval_request_json",
     "build_program_conformance_probe",
     "build_program_execution_invocation",
@@ -3778,11 +4649,20 @@ __all__ = [
     "build_workflow_execution_approval",
     "build_workflow_run_state",
     "derive_ready_node_ids",
+    "environment_review_summary",
     "handoff_optimized_native_geometry",
     "handoff_optimized_pyscf_geometry",
     "handoff_optimized_xtb_geometry",
     "is_validated_optimized_geometry_edge",
+    "execution_path_placeholder",
+    "execution_server_profile_sha256",
+    "normalized_project_settings_review",
+    "path_free_review_record",
+    "project_real_execution_argv",
+    "real_execution_argv_sha256",
     "promote_project_candidate",
     "transition_workflow_node",
     "workflow_execution_approval_json",
+    "workflow_execution_approval_bundle_json",
+    "workflow_execution_review_json",
 ]

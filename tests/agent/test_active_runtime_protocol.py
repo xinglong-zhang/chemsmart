@@ -3,6 +3,7 @@ import pytest
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekProtocolError,
+    DeepSeekV4FlashConfigV1,
     DeepSeekV4ToolSession,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
@@ -37,6 +38,10 @@ def _tool_response(*, call_id="call-1", arguments="{}", content=None):
     }
 
 
+def _config():
+    return DeepSeekV4FlashConfigV1(model="deepseek-v4-flash")
+
+
 def test_null_content_is_normalized_only_for_private_tool_continuation():
     observed_requests = []
 
@@ -47,6 +52,7 @@ def test_null_content_is_normalized_only_for_private_tool_continuation():
     session = DeepSeekV4ToolSession(
         transport=transport,
         messages=[{"role": "user", "content": "Inspect capability."}],
+        config=_config(),
     )
     session.turn(tools=[])
     assert session.public_history()[-1]["content"] == ""
@@ -58,6 +64,7 @@ def test_mismatched_tool_result_id_is_rejected():
     session = DeepSeekV4ToolSession(
         transport=lambda _: _tool_response(),
         messages=[{"role": "user", "content": "Inspect capability."}],
+        config=_config(),
     )
     session.turn(tools=[])
     with pytest.raises(ContractError, match="exactly match"):
@@ -73,6 +80,7 @@ def test_duplicate_tool_call_id_in_one_turn_is_rejected():
     session = DeepSeekV4ToolSession(
         transport=lambda _: response,
         messages=[{"role": "user", "content": "Inspect capability."}],
+        config=_config(),
     )
     with pytest.raises(DeepSeekProtocolError, match="reused"):
         session.turn(tools=[])
@@ -83,6 +91,7 @@ def test_conflicting_tool_call_id_reuse_across_turns_is_rejected():
     session = DeepSeekV4ToolSession(
         transport=lambda _: next(responses),
         messages=[{"role": "user", "content": "Inspect capability."}],
+        config=_config(),
     )
     session.turn(tools=[])
     session.append_tool_results(
@@ -96,6 +105,7 @@ def test_malformed_tool_json_is_rejected_before_dispatch():
     session = DeepSeekV4ToolSession(
         transport=lambda _: _tool_response(arguments="{"),
         messages=[{"role": "user", "content": "Inspect capability."}],
+        config=_config(),
     )
     with pytest.raises(DeepSeekProtocolError, match="invalid JSON") as observed:
         session.turn(tools=[])

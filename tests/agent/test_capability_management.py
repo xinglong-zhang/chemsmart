@@ -89,9 +89,6 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
         ("cpu", "opt"),
         ("cpu", "sp"),
         ("cpu", "td"),
-        ("gpu", "hess"),
-        ("gpu", "opt"),
-        ("gpu", "sp"),
     )
     receipt = build_program_component_conformance_receipt(
         program="pyscf",
@@ -99,7 +96,7 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
         live_cli_schema_sha256=live_schema.schema_sha256,
         fixture_bundle_sha256="1" * 64,
         covered_jobtypes=("hess", "opt", "sp", "td"),
-        covered_engines=("cpu", "gpu"),
+        covered_engines=("cpu",),
         covered_engine_job_pairs=pairs,
         compiler_receipt_sha256="2" * 64,
         preview_receipt_sha256="3" * 64,
@@ -130,9 +127,7 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
     )
 
     assert cpu_td.status is CapabilityQueryStatus.PREVIEW_ONLY
-    assert gpu_td.status is (
-        CapabilityQueryStatus.UNSUPPORTED_ENGINE_JOB_COMBINATION
-    )
+    assert gpu_td.status is CapabilityQueryStatus.UNSUPPORTED_ENGINE
     assert cpu_td.effective_engine_job_pairs == pairs
 
     with pytest.raises(ContractError, match="preview-only engine-job pair"):
@@ -148,7 +143,7 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
         preview_overlay=overlay,
         approved_nodes=(
             ("pyscf", "sp", "cpu"),
-            ("pyscf", "opt", "gpu"),
+            ("pyscf", "opt", "cpu"),
         ),
         execution_evidence_sha256="6" * 64,
     )
@@ -158,16 +153,14 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
         live_schema=live_schema,
         overlay=execution_overlay,
     )
-    cross_product_only = query_capability(
-        ProgramCapabilityQueryV1("pyscf", "opt", "cpu"),
+    unapproved_pair = query_capability(
+        ProgramCapabilityQueryV1("pyscf", "hess", "cpu"),
         registry=registry,
         live_schema=live_schema,
         overlay=execution_overlay,
     )
     assert approved.status is CapabilityQueryStatus.SUPPORTED
-    assert cross_product_only.status is (
-        CapabilityQueryStatus.UNSUPPORTED_ENGINE_JOB_COMBINATION
-    )
+    assert unapproved_pair.status is CapabilityQueryStatus.UNSUPPORTED_JOBTYPE
 
 def test_live_registry_projects_loader_bounded_parameter_domains():
     from chemsmart.agent.capabilities import load_program_capabilities

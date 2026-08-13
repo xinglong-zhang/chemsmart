@@ -86,6 +86,21 @@ def agent():
 
 @agent.command("plan")
 @_task_options
+@click.option(
+    "--execution-envelope",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Resource/program bounds used only to prepare an exact review; "
+        "this command never executes an engine."
+    ),
+)
+@click.option(
+    "--review-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the inert exact execution review packet to this JSON file.",
+)
 def plan(
     task,
     task_file,
@@ -95,6 +110,8 @@ def plan(
     workspace,
     analysis_completion_file,
     identity_manifest,
+    execution_envelope,
+    review_file,
 ):
     """Create and safely preview a command-compiled research workflow."""
 
@@ -117,8 +134,10 @@ def plan(
         workspace=workspace,
         execution_enabled=False,
         approval_file=None,
+        execution_envelope_file=execution_envelope,
         analysis_completion_file=analysis_completion_file,
         approved_molecular_inputs=approved_inputs,
+        review_file=review_file.resolve() if review_file is not None else None,
     )
     click.echo(result.public_summary_json())
 
@@ -129,16 +148,25 @@ def plan(
     "--approval-file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
-    help="Host workflow approval. Omission keeps the session preview-only.",
+    help=(
+        "Legacy option retained only to fail closed; approvals are consumed "
+        "by 'chemsmart agent execute'."
+    ),
 )
 @click.option(
     "--execution-envelope",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help=(
-        "Science-free local resource/program bounds for one continuous "
-        "plan, preview, execute, and analysis session."
+        "Science-free resource/program bounds for planning, safe preview, "
+        "and an inert exact review packet. It grants no execution authority."
     ),
+)
+@click.option(
+    "--review-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the inert exact execution review packet to this JSON file.",
 )
 def run(
     task,
@@ -151,15 +179,17 @@ def run(
     identity_manifest,
     approval_file,
     execution_envelope,
+    review_file,
 ):
-    """Plan and, when approved, execute host-compiled workflow nodes."""
+    """Plan and safely preview; real execution is a separate approved step."""
 
     from chemsmart.agent.live_session import run_live_agent_session
     from chemsmart.agent.identity import load_approved_molecular_input_manifest
 
-    if approval_file is not None and execution_envelope is not None:
+    if approval_file is not None:
         raise click.UsageError(
-            "--approval-file and --execution-envelope are mutually exclusive"
+            "--approval-file cannot grant authority to a provider session; "
+            "use 'chemsmart agent execute --approval-file ...'"
         )
 
     approved_inputs = (
@@ -176,15 +206,190 @@ def run(
         provider_config_file=provider_config,
         secret_file=secret_file,
         workspace=workspace,
-        execution_enabled=(
-            approval_file is not None or execution_envelope is not None
-        ),
-        approval_file=approval_file,
+        execution_enabled=False,
+        approval_file=None,
         execution_envelope_file=execution_envelope,
         analysis_completion_file=analysis_completion_file,
         approved_molecular_inputs=approved_inputs,
+        review_file=review_file.resolve() if review_file is not None else None,
     )
     click.echo(result.public_summary_json())
+
+
+@agent.command("approve")
+@click.option(
+    "--review-file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Inert workflow execution review produced by agent plan or run.",
+)
+@click.option(
+    "--reviewed-sha256",
+    required=True,
+    help="The full review digest the human inspected and is resolving.",
+)
+@click.option(
+    "--decision",
+    required=True,
+    type=click.Choice(
+        ("approve", "deny", "revise", "quit"), case_sensitive=False
+    ),
+    help="One exact human resolution; there are no session or prefix grants.",
+)
+@click.option(
+    "--actor", required=True, help="Human actor recorded with the decision."
+)
+@click.option(
+    "--approval-id",
+    default=None,
+    help="Optional public approval ID; otherwise it is derived from the digest.",
+)
+@click.option(
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Required for approve: exact one-shot approval bundle JSON.",
+)
+@click.option(
+    "--decision-log",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Append-only decision event stream; defaults beside the review file.",
+)
+def approve(
+    review_file,
+    reviewed_sha256,
+    decision,
+    actor,
+    approval_id,
+    output,
+    decision_log,
+):
+    """Resolve one reviewed digest without contacting a model or engine."""
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.live_session import resolve_workflow_execution_review
+
+    normalized = decision.lower()
+    if normalized == "approve" and output is None:
+        raise click.UsageError("--output is required when --decision=approve")
+    if normalized != "approve" and output is not None:
+        raise click.UsageError(
+            "--output is valid only when --decision=approve"
+        )
+    try:
+        resolution, bundle = resolve_workflow_execution_review(
+            review_file=review_file,
+            reviewed_sha256=reviewed_sha256,
+            decision=normalized,
+            actor=actor,
+            output_file=output.resolve() if output is not None else None,
+            decision_log=(
+                decision_log.resolve() if decision_log is not None else None
+            ),
+            approval_id=str(approval_id or ""),
+        )
+    except ContractError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        json.dumps(
+            {
+                "decision": resolution.decision,
+                "review_sha256": resolution.review_sha256,
+                "resolution_sha256": resolution.resolution_sha256,
+                "approval_id": resolution.approval_id,
+                "bundle_sha256": bundle.bundle_sha256 if bundle else "",
+                "one_shot": bool(bundle),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@agent.command("tui")
+@click.option(
+    "--provider",
+    type=str,
+    default=None,
+    help="Named agent.yaml profile; defaults to its active profile.",
+)
+@click.option(
+    "--provider-config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
+)
+@click.option(
+    "--secret-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Secret assignment file parsed as data; it is never sourced.",
+)
+@click.option(
+    "--execution-envelope",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Optional local resource/program bounds for an execution review.",
+)
+@click.option(
+    "--review-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Absolute inert-review output; use with --execution-envelope.",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="Task workspace containing user-approved artifacts.",
+)
+@click.option(
+    "--analysis-completion-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Host-owned JSON policy for receipt-based numerical analysis.",
+)
+@click.option(
+    "--identity-manifest",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="User-approved molecular identity and geometry bindings.",
+)
+@click.option(
+    "--plain",
+    is_flag=True,
+    help="Use an inline, no-mouse terminal mode for SSH and simple terminals.",
+)
+def tui(
+    provider,
+    provider_config,
+    secret_file,
+    execution_envelope,
+    review_file,
+    workspace,
+    analysis_completion_file,
+    identity_manifest,
+    plain,
+):
+    """Open interactive planning, analysis, review, and approved execution."""
+
+    from chemsmart.agent.tui import launch_tui
+
+    try:
+        launch_tui(
+            workspace=workspace,
+            secret_file=secret_file,
+            execution_envelope_file=execution_envelope,
+            review_file=review_file,
+            provider=provider.lower() if provider else None,
+            provider_config_file=provider_config,
+            identity_manifest=identity_manifest,
+            analysis_completion_file=analysis_completion_file,
+            plain=plain,
+        )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @agent.command("execute")

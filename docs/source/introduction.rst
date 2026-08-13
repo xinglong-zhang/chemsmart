@@ -34,23 +34,19 @@ CHEMSMART commands. A model proposes typed scientific intent rather than
 authoring backend-native input or shell commands.
 
 ``chemsmart agent plan`` creates a project-backed workflow and safe previews
-without invoking a chemistry engine. ``chemsmart agent run`` follows the same
-path and may execute host-compiled nodes only when an explicit approval file is
-provided. Both commands require a provider, a disposable workspace, a provider
-credential file, and exactly one of ``--task`` or ``--task-file``.
+without invoking a chemistry engine. Real execution begins only after a human
+reviews and approves the exact workflow packet. The provider-free executor then
+runs the approved DAG without asking a model to reinterpret it.
 
 .. code-block:: bash
 
-   chemsmart agent plan --provider deepseek --task-file research-task.txt \
+   chemsmart agent plan --provider PROFILE --task-file research-task.txt \
      --secret-file provider.env --workspace ./agent-workspace
 
-   chemsmart agent run --provider deepseek --task-file research-task.txt \
-     --secret-file provider.env --workspace ./agent-workspace \
-     --approval-file workflow-approval.json
-
-Omitting ``--approval-file`` from ``agent run`` keeps the session preview-only.
-CHEMSMART, not the model, resolves project artifacts, canonical commands,
-environment availability, approvals, terminal state, and validation.
+Use :doc:`agent-workflows` for review, approval, deterministic execution, and
+provider configuration. CHEMSMART, not the model, resolves project artifacts,
+canonical commands, environment availability, approvals, terminal state, and
+validation.
 
 **********
  Citation

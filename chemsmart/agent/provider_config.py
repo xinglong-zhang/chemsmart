@@ -11,9 +11,6 @@ from chemsmart.agent._contracts import ContractError, canonical_sha256
 from chemsmart.agent.api_access import require_provider_key_label
 from chemsmart.agent.runtime.deepseek import (
     DEEPSEEK_OFFICIAL_ENDPOINT,
-    DEEPSEEK_V4_FLASH_CONTEXT_TOKENS,
-    DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS,
-    DEEPSEEK_V4_FLASH_MODEL,
     DeepSeekV4FlashConfigV1,
 )
 from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
@@ -26,6 +23,46 @@ ALIBABA_TOKEN_PLAN_ENDPOINT = (
 ALIBABA_TOKEN_PLAN_MODEL = "qwen3.8-max"
 ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS = 1_000_000
 ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS = 262_144
+
+
+def _explicit_model(value: Any, *, provider: str) -> str:
+    """Return one explicit provider model ID without imposing a catalog."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ContractError(f"{provider} profile requires an explicit model")
+    model = value.strip()
+    if model != value or any(ord(character) < 32 for character in model):
+        raise ContractError(f"{provider} model ID must be normalized text")
+    return model
+
+
+def _explicit_token_limits(entry: Mapping[str, Any]) -> tuple[int, int]:
+    """Read the profile-owned context and generation bounds."""
+
+    values = []
+    for field_name in ("context_tokens", "max_output_tokens"):
+        value = entry.get(field_name)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ContractError(
+                f"provider profile requires explicit positive {field_name}"
+            )
+        values.append(value)
+    context_tokens, max_output_tokens = values
+    if max_output_tokens > context_tokens:
+        raise ContractError(
+            "provider max_output_tokens cannot exceed context_tokens"
+        )
+    return context_tokens, max_output_tokens
+
+
+def _validate_profile_limits(profile: Any) -> None:
+    _explicit_model(profile.model, provider=str(profile.provider))
+    _explicit_token_limits(
+        {
+            "context_tokens": profile.context_tokens,
+            "max_output_tokens": profile.max_output_tokens,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -53,6 +90,7 @@ class AgentProviderProfileV1:
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.agent-provider-profile.v1":
             raise ContractError("unsupported agent provider profile schema")
+        _validate_profile_limits(self)
         body = {
             key: value
             for key, value in self.__dict__.items()
@@ -78,6 +116,7 @@ class AgentProviderProfileV1:
                 endpoint=self.endpoint,
                 reasoning_effort=self.reasoning_effort,
                 preserve_thinking=self.preserve_thinking,
+                context_tokens=self.context_tokens,
                 max_output_tokens=self.max_output_tokens,
                 turn_deadlines=turn_deadlines,
             )
@@ -86,6 +125,7 @@ class AgentProviderProfileV1:
                 model=self.model,
                 endpoint=self.endpoint,
                 reasoning_effort=self.reasoning_effort,
+                context_tokens=self.context_tokens,
                 max_output_tokens=self.max_output_tokens,
                 turn_deadlines=turn_deadlines,
             )
@@ -101,6 +141,7 @@ class AgentProviderProfileV2(AgentProviderProfileV1):
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.agent-provider-profile.v2":
             raise ContractError("unsupported agent provider profile schema")
+        _validate_profile_limits(self)
         body = {
             key: value
             for key, value in self.__dict__.items()
@@ -115,7 +156,7 @@ class AgentProviderProfileV2(AgentProviderProfileV1):
 
 @dataclass(frozen=True)
 class AgentProviderSelectionV1:
-    """Active profile plus ordered, explicitly attributed fallbacks."""
+    """One explicit active profile; Runtime performs no implicit fallback."""
 
     schema_version: str
     active_profile: AgentProviderProfileV1
@@ -125,6 +166,11 @@ class AgentProviderSelectionV1:
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.agent-provider-selection.v1":
             raise ContractError("unsupported agent provider selection schema")
+        if self.fallback_profiles:
+            raise ContractError(
+                "Runtime does not execute fallback profiles; start a new "
+                "explicit provider attempt"
+            )
         names = (
             self.active_profile.profile_name,
             *(item.profile_name for item in self.fallback_profiles),
@@ -199,32 +245,17 @@ def load_agent_provider_selection(
         fallback_names = tuple(item.strip() for item in raw_fallbacks)
     else:
         raise ContractError("agent provider fallbacks must be profile names")
-    missing = tuple(
-        name
-        for name in fallback_names
-        if name not in providers or not isinstance(providers[name], Mapping)
-    )
-    if missing:
+    if fallback_names:
         raise ContractError(
-            "agent provider fallback profile is not configured"
+            "Runtime does not execute fallback profiles; start a new explicit "
+            "--provider attempt"
         )
-    # Only profiles that can enter this selection are part of the Runtime V2
-    # trust boundary.  Idle profiles may belong to another client or legacy
-    # workflow; inspecting them made a valid explicitly selected profile fail
-    # for unrelated configuration.  Selected and fallback profiles still fail
-    # closed on literal credentials.
-    selected_entries = {
-        name: providers[name]
-        for name in (selected_name, *fallback_names)
-        if name in providers
-    }
+    # Only the explicitly selected profile enters the Runtime V2 trust
+    # boundary. Idle profiles may belong to another client or legacy workflow.
+    selected_entries = {selected_name: providers[selected_name]}
     _reject_literal_secrets(selected_entries)
     selected_profile = _build_profile(selected_name, providers[selected_name])
-    fallback_profiles = tuple(
-        _build_profile(name, providers[name])
-        for name in fallback_names
-        if name != selected_name
-    )
+    fallback_profiles: tuple[AgentProviderProfileV1, ...] = ()
     body = {
         "schema_version": "chemsmart.agent-provider-selection.v1",
         "active_profile_sha256": selected_profile.profile_sha256,
@@ -241,7 +272,7 @@ def load_agent_provider_selection(
 
 
 def _reject_literal_secrets(providers: Mapping[str, Any]) -> None:
-    """Reject credentials in profiles selected for the active fallback chain.
+    """Reject credentials in the explicitly selected active profile.
 
     The check intentionally inspects field names and presence only; a secret
     value is never copied into an exception or receipt.  Unselected profiles
@@ -289,7 +320,7 @@ def _build_profile(
     if str(entry.get("api_key") or "").strip():
         raise ContractError("agent.yaml must not contain literal API keys")
     api_key_env = str(entry.get("api_key_env") or "").strip()
-    model = str(entry.get("model") or "").strip()
+    raw_model = entry.get("model")
     endpoint = str(
         entry.get("base_url") or entry.get("endpoint") or ""
     ).rstrip("/")
@@ -297,6 +328,7 @@ def _build_profile(
     preserve_thinking = entry.get("preserve_thinking", True)
     if not isinstance(preserve_thinking, bool):
         raise ContractError("preserve_thinking must be boolean")
+    context_tokens, max_output_tokens = _explicit_token_limits(entry)
     raw_deadlines = entry.get("transport_deadlines")
     if raw_deadlines is None:
         transport_deadlines = None
@@ -335,20 +367,9 @@ def _build_profile(
 
     if endpoint == ALIBABA_TOKEN_PLAN_ENDPOINT:
         provider = ALIBABA_TOKEN_PLAN_PROVIDER
-        if not model:
-            raise ContractError("Alibaba Token Plan profile requires a model")
-        if model == "qwen3.8-max-preview":
-            raise ContractError(
-                "Alibaba Token Plan profile requires production qwen3.8-max"
-            )
+        model = _explicit_model(raw_model, provider="Alibaba Token Plan")
         require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or (
-            "xhigh" if model == ALIBABA_TOKEN_PLAN_MODEL else "max"
-        )
-        if model == ALIBABA_TOKEN_PLAN_MODEL and reasoning_effort != "xhigh":
-            raise ContractError(
-                "qwen3.8-max maximum reasoning requires xhigh"
-            )
+        reasoning_effort = reasoning_effort or "max"
         if reasoning_effort not in {"high", "max", "xhigh"}:
             raise ContractError(
                 "Alibaba Token Plan reasoning effort must be high, max or "
@@ -358,20 +379,15 @@ def _build_profile(
             raise ContractError(
                 "Alibaba Token Plan tool continuation must be preserved"
             )
-        context_tokens = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
-        max_output_tokens = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
     elif endpoint == DEEPSEEK_OFFICIAL_ENDPOINT:
         provider = "deepseek"
-        if model != DEEPSEEK_V4_FLASH_MODEL:
-            raise ContractError("DeepSeek fallback requires deepseek-v4-flash")
+        model = _explicit_model(raw_model, provider="DeepSeek")
         require_provider_key_label(api_key_env, provider=provider)
         reasoning_effort = reasoning_effort or "max"
         if reasoning_effort not in {"high", "max"}:
             raise ContractError(
                 "DeepSeek reasoning effort must be high or max"
             )
-        context_tokens = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
-        max_output_tokens = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
     else:
         raise ContractError("agent provider endpoint is not registered")
 

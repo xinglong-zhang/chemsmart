@@ -1,9 +1,9 @@
 """Task-owned completion policy for structured scientific analysis.
 
-The policy is supplied by the user or benchmark harness, bound to the exact
+The policy is supplied by the user or calling application, bound to the exact
 task digest by the host, and evaluated only against deterministic receipts.
-It deliberately describes generic analysis stages and requested quantity
-classes; it contains no benchmark answer or paper-specific formula.
+It describes generic analysis stages and requested quantity classes without
+embedding a task answer or paper-specific formula.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ class AnalysisExpressionSourceRequirementV1:
     Empty ``artifact_sha256s`` means every target artifact named by the
     enclosing policy.  A non-empty tuple permits an expression to depend on a
     scientifically meaningful subset, such as the reactant side of a larger
-    reaction bundle, without encoding a benchmark answer.
+    reaction bundle, without encoding a predetermined answer.
     """
 
     stage: str

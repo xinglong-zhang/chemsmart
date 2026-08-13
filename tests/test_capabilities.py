@@ -10,6 +10,9 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.cli.xtb import xtb
 from chemsmart.settings.capabilities import (
+    AGENT_PROGRAM_EXECUTION_ENGINES,
+    AGENT_PROGRAM_JOBTYPES,
+    AGENT_PROGRAMS,
     COMPUTATIONAL_PROGRAMS,
     ENGINE_CAPABILITIES,
     EXECUTABLE_PROGRAMS,
@@ -115,6 +118,11 @@ def test_derived_views_are_exact_registry_projections():
     assert PROGRAM_JOBTYPES is PROGRAM_CLI_JOBTYPES
     assert PROGRAM_ENGINES is PROGRAM_EXECUTION_ENGINES
     assert PROJECT_OWNED_PARAMETERS is PROGRAM_PROJECT_OWNED_CLI_PARAMETERS
+    assert AGENT_PROGRAMS == frozenset(
+        {"gaussian", "orca", "pyscf", "xtb"}
+    )
+    assert AGENT_PROGRAM_EXECUTION_ENGINES["pyscf"] == ("cpu",)
+    assert AGENT_PROGRAM_JOBTYPES["pyscf"] == ("hess", "opt", "sp", "td")
     assert dict(PROGRAM_JOBTYPES) == {
         name: capability.jobtypes
         for name, capability in PROGRAM_CAPABILITIES.items()
@@ -203,7 +211,7 @@ def test_registry_internal_invariants(name, capability):
     )
 
 
-def test_pyscf_engine_job_matrix_separates_cpu_td_from_gpu_and_execution():
+def test_pyscf_agent_matrix_is_cpu_only_and_keeps_td_preview_only():
     capability = PROGRAM_CAPABILITIES["pyscf"]
 
     preview_pairs = {
@@ -219,14 +227,11 @@ def test_pyscf_engine_job_matrix_separates_cpu_td_from_gpu_and_execution():
 
     assert ("cpu", "td") in preview_pairs
     assert ("cpu", "td") not in execution_pairs
-    assert ("gpu", "td") not in preview_pairs
+    assert not any(engine == "gpu" for engine, _jobtype in preview_pairs)
     assert {
         ("cpu", "sp"),
         ("cpu", "opt"),
         ("cpu", "hess"),
-        ("gpu", "sp"),
-        ("gpu", "opt"),
-        ("gpu", "hess"),
     }.issubset(execution_pairs)
 
 

@@ -45,6 +45,7 @@ execution state, and deterministic validation.
 
    cli-overview
    agent-workflows
+   agent-tui
    molecule-input-formats
    chemdraw-organometallic
 
@@ -140,16 +141,8 @@ execution state, and deterministic validation.
    scripts-data-management
    scripts-electronic-analysis
 
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference
-
-   modules
-
 ********************
  Indices and Tables
 ********************
 
--  :ref:`genindex`
--  :ref:`modindex`
 -  :ref:`search`

@@ -86,6 +86,9 @@ from chemsmart.agent.execution import (
     ProjectArtifactPromotionV1,
     ScientificDecisionRecordV1,
     WorkflowExecutionApprovalV1,
+    WorkflowExecutionReviewV1,
+    WorkflowExecutionNodeReviewV1,
+    WorkflowEnvironmentBindingV1,
     WorkflowNodeRunStateV1,
     WorkflowRunStateV1,
     bind_project_promotion_validation,
@@ -97,13 +100,23 @@ from chemsmart.agent.execution import (
     build_scientific_decision_record,
     build_validated_data_edge_binding,
     build_workflow_execution_approval,
+    build_workflow_approval_request,
+    build_workflow_execution_review,
+    build_workflow_execution_node_review,
+    build_real_execution_argv,
     derive_ready_node_ids,
+    environment_review_summary,
+    execution_server_profile_sha256,
     handoff_optimized_native_geometry,
     handoff_optimized_pyscf_geometry,
     handoff_optimized_xtb_geometry,
     invocation_identity_sha256,
     is_validated_optimized_geometry_edge,
+    normalized_project_settings_review,
     promote_project_candidate,
+    execution_path_placeholder,
+    project_real_execution_argv,
+    real_execution_argv_sha256,
 )
 from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
 from chemsmart.agent.knowledge import (
@@ -950,6 +963,7 @@ class CommandCompiledToolHostV1:
         scientific_workflow_plan: ScientificWorkflowPlanV2 | None = None,
         preview_server: str = "",
         execution_server: str = "",
+        execution_server_file_sha256: str = "",
         execution_environment: Mapping[str, str] = {},
         execution_environment_remove: tuple[str, ...] = (),
         dependency_context: TaskDependencyContextV2 | None = None,
@@ -1004,6 +1018,14 @@ class CommandCompiledToolHostV1:
         )
         self.preview_server = str(preview_server)
         self.execution_server = str(execution_server)
+        self.execution_server_file_sha256 = str(
+            execution_server_file_sha256
+        )
+        if self.execution_server_file_sha256:
+            require_sha256(
+                self.execution_server_file_sha256,
+                "execution_server_file_sha256",
+            )
         self.execution_environment = {
             str(key): str(value)
             for key, value in execution_environment.items()
@@ -1918,7 +1940,7 @@ class CommandCompiledToolHostV1:
         a new artifact ID.  Without this small relational observation a model
         can validate the replacement yet finish with an older project still
         named by the workflow.  The observation contains only public host state
-        and never consults a benchmark answer.
+        and contains no predetermined scientific answer.
         """
 
         latest_by_workflow: dict[str, ScientificToolchainPlanV1] = {}
@@ -4852,9 +4874,9 @@ class CommandCompiledToolHostV1:
             node_id=node_id,
         )
         if self.workflow_execution_approval is None:
-            self._admit_bounded_workflow(
-                node_id=node_id,
-                plan_sha256=current_plan.plan_sha256,
+            raise ContractError(
+                "execution requires a human-approved one-shot workflow bundle; "
+                "a resource envelope alone never grants authority"
             )
         approval = self.workflow_execution_approval
         if approval is None:  # pragma: no cover - admission narrows this
@@ -5024,7 +5046,7 @@ class CommandCompiledToolHostV1:
                 "idempotent_replay": True,
                 "handoff": self.handoffs.get(node_id),
             }
-        command = [sys.executable, "-m", "chemsmart", *real_argv[1:]]
+        command = list(real_argv)
         environment = _program_process_environment(
             overrides=self.execution_environment,
             remove=self.execution_environment_remove,
@@ -5531,6 +5553,388 @@ class CommandCompiledToolHostV1:
             )
         return effective_timeout
 
+    def build_execution_review(
+        self,
+        *,
+        workspace: str | Path,
+        request_id: str = "",
+    ) -> WorkflowExecutionReviewV1:
+        """Freeze review evidence without creating execution authority.
+
+        The resource envelope is advisory input during planning.  This method
+        is the only product path from that preview session: it emits an inert
+        packet which a separate human-only command may approve later.  It
+        deliberately does not populate either approval field on this host.
+        """
+
+        envelope = self.bounded_execution_envelope
+        resources = self.execution_resources
+        if envelope is None or resources is None:
+            raise ContractError(
+                "execution review requires an explicit resource envelope"
+            )
+        if resources.resource_sha256 != envelope.resources.resource_sha256:
+            raise ContractError("review resources differ from execution envelope")
+        plans = tuple(self.scientific_workflow_plans.values())
+        if not plans:
+            raise ContractError("execution review requires a scientific workflow")
+        plan = plans[-1]
+        if plan.task_spec_sha256 not in self.task_spec_sha256s:
+            raise ContractError("review workflow belongs to another task")
+        if len(plan.nodes) > envelope.max_engine_calls:
+            raise ContractError(
+                "scientific workflow exceeds bounded engine-call budget: "
+                f"{len(plan.nodes)} nodes for {envelope.max_engine_calls} calls"
+            )
+        data_edges = tuple(
+            edge for edge in plan.edges if edge.edge_kind == "data"
+        )
+        data_target_ids = {edge.target_node_id for edge in data_edges}
+        unsupported = tuple(
+            item.node_id
+            for item in plan.nodes
+            if item.support_state == "blocked_unsupported"
+            or (
+                item.support_state == "unresolved_future"
+                and item.node_id not in data_target_ids
+            )
+            or item.support_state not in {"resolvable", "unresolved_future"}
+        )
+        if unsupported:
+            raise ContractError(
+                "execution review refuses unsupported or non-causal unresolved "
+                "nodes: " + ", ".join(unsupported)
+            )
+        if len(data_target_ids) != len(data_edges):
+            raise ContractError(
+                "execution review supports one molecular data input per node"
+            )
+        materialized = self._latest_bounded_materialization(plan)
+        producer_edges = []
+        for edge in data_edges:
+            producer = next(
+                item
+                for item in plan.nodes
+                if item.node_id == edge.source_node_id
+            )
+            if not is_validated_optimized_geometry_edge(plan, edge):
+                raise ContractError(
+                    "execution review has no exact selection rule for data "
+                    f"edge {edge.edge_id!r}; expected an opt or ts producer "
+                    "output named optimized_geometry with artifact class "
+                    "geometry_xyz"
+                )
+            if producer.program not in {"gaussian", "orca", "pyscf", "xtb"}:
+                raise ContractError(
+                    "execution review has no optimized-geometry handoff for "
+                    f"producer program {producer.program!r}"
+                )
+            producer_edges.append(
+                build_producer_edge_rule(
+                    producer_node_id=edge.source_node_id,
+                    consumer_node_id=edge.target_node_id,
+                    artifact_kind=edge.artifact_class,
+                    selection_rule="validated_optimized_geometry",
+                )
+            )
+        edge_by_target = {
+            edge.consumer_node_id: edge for edge in producer_edges
+        }
+        node_bindings = []
+        environment_bindings = []
+        node_reviews: list[WorkflowExecutionNodeReviewV1] = []
+        for planned_node in plan.nodes:
+            if not envelope.allows(planned_node.program, planned_node.engine):
+                raise ContractError(
+                    "workflow uses program/engine outside review allowlist: "
+                    f"{planned_node.program}/{planned_node.engine}"
+                )
+            context = self._bounded_node_context(
+                plan=plan,
+                planned_node=planned_node,
+                data_target_ids=data_target_ids,
+            )
+            environment_receipt_sha256 = (
+                context.engine_binding.environment_receipt_sha256
+            )
+            environment_identity = self._environment_identity_for(
+                environment_receipt_sha256
+            )
+            if not environment_identity:
+                raise ContractError(
+                    f"node {planned_node.node_id!r} lacks environment identity"
+                )
+            environment_receipt = self.environments.get(
+                environment_receipt_sha256
+            )
+            if environment_receipt is None:
+                raise ContractError(
+                    f"node {planned_node.node_id!r} lacks environment evidence"
+                )
+            environment_bindings.append(
+                WorkflowEnvironmentBindingV1(
+                    node_id=planned_node.node_id,
+                    program=planned_node.program,
+                    engine=planned_node.engine,
+                    environment_receipt_sha256=environment_receipt_sha256,
+                    environment_identity_sha256=environment_identity,
+                )
+            )
+            edge = edge_by_target.get(planned_node.node_id)
+            project = context.project_artifact
+            validation = context.project_validation
+            if (
+                project is None
+                or validation is None
+                or validation.status != "valid"
+            ):
+                raise ContractError(
+                    f"node {planned_node.node_id!r} lacks valid project evidence"
+                )
+            target_charge = (
+                planned_node.charge
+                if planned_node.charge is not None
+                else context.scientific_identity.charge
+            )
+            target_multiplicity = (
+                planned_node.multiplicity
+                if planned_node.multiplicity is not None
+                else context.scientific_identity.multiplicity
+            )
+            if edge is None and (target_charge, target_multiplicity) != (
+                context.scientific_identity.charge,
+                context.scientific_identity.multiplicity,
+            ):
+                raise ContractError(
+                    f"initial node {planned_node.node_id!r} explicit state "
+                    "differs from its task-bound molecular input"
+                )
+            if edge is None:
+                invocation, invocation_context = self._plan_invocation_for_node(
+                    plan=plan, node_id=planned_node.node_id
+                )
+                review_input_sha256 = context.input_artifact.sha256
+                input_binding = (
+                    context.input_artifact.cli_value,
+                    ("molecular-input", review_input_sha256),
+                )
+                coordinate_identity = {
+                    "kind": "exact-input-artifact",
+                    "geometry_artifact_sha256": review_input_sha256,
+                }
+            else:
+                invocation_context = context
+                scientific_identity = replace(
+                    context.scientific_identity,
+                    charge=target_charge,
+                    multiplicity=target_multiplicity,
+                    binding_sha256=canonical_sha256(
+                        {
+                            "schema_version": (
+                                "chemsmart.scientific-identity-binding.v1"
+                            ),
+                            "task_spec_sha256": (
+                                context.scientific_identity.task_spec_sha256
+                            ),
+                            "geometry_artifact_id": (
+                                context.scientific_identity.geometry_artifact_id
+                            ),
+                            "geometry_artifact_sha256": (
+                                context.scientific_identity.geometry_artifact_sha256
+                            ),
+                            "charge": target_charge,
+                            "multiplicity": target_multiplicity,
+                        }
+                    ),
+                )
+                proposal = replace(
+                    context.proposal,
+                    scientific_identity_sha256=(
+                        scientific_identity.binding_sha256
+                    ),
+                    charge=target_charge,
+                    multiplicity=target_multiplicity,
+                )
+                invocation = compile_command(
+                    proposal,
+                    capability=context.capability,
+                    binding=context.engine_binding,
+                    project=context.project_artifact,
+                    project_validation=context.project_validation,
+                    input_artifact=context.input_artifact,
+                    scientific_identity=scientific_identity,
+                    job_artifact_options=dict(context.job_artifact_options),
+                    live_schema=self.live_schema,
+                    server=self.preview_server,
+                )
+                review_input_sha256 = edge.edge_sha256
+                input_binding = (
+                    context.input_artifact.cli_value,
+                    ("producer-geometry", review_input_sha256),
+                )
+                coordinate_identity = {
+                    "kind": "validated-producer-output",
+                    "producer_edge_sha256": edge.edge_sha256,
+                    "selection_rule": edge.selection_rule,
+                    "reference_geometry_sha256": context.input_artifact.sha256,
+                }
+            approved_identity = next(
+                (
+                    identity
+                    for identity in self.approved_molecular_identities.values()
+                    if identity.geometry_sha256
+                    == context.input_artifact.sha256
+                ),
+                None,
+            )
+            if approved_identity is None:
+                molecular_identity = {
+                    "identity_evidence_status": "task-bound-geometry-only",
+                    "coordinate_identity": coordinate_identity,
+                    "input_binding_sha256": review_input_sha256,
+                    "charge": target_charge,
+                    "multiplicity": target_multiplicity,
+                    "electronic_state": "charge-and-multiplicity-specified",
+                    "scientific_identity_sha256": (
+                        context.scientific_identity.binding_sha256
+                        if edge is None
+                        else "deferred-until-producer-output"
+                    ),
+                }
+            else:
+                molecular_identity = {
+                    "identity_evidence_status": "approved-molecular-identity",
+                    **approved_identity.public_record(),
+                    "coordinate_identity": coordinate_identity,
+                    "input_binding_sha256": review_input_sha256,
+                    "charge": target_charge,
+                    "multiplicity": target_multiplicity,
+                    "electronic_state": "charge-and-multiplicity-specified",
+                    "scientific_identity_sha256": (
+                        context.scientific_identity.binding_sha256
+                        if edge is None
+                        else "deferred-until-producer-output"
+                    ),
+                }
+            server_profile_sha256 = execution_server_profile_sha256(
+                resources=resources,
+                scratch_root=envelope.scratch_root,
+            )
+            server_token = execution_path_placeholder(
+                "server-profile", server_profile_sha256
+            )
+            real_argv = build_real_execution_argv(
+                compiled_argv=invocation.argv,
+                command_path=invocation.command_path,
+                resources=resources,
+                server=server_token,
+            )
+            path_bindings = {
+                sys.executable: (
+                    "controller-python",
+                    file_sha256(Path(sys.executable).resolve()),
+                ),
+                project.cli_value: ("project-yaml", project.sha256),
+                input_binding[0]: input_binding[1],
+            }
+            for auxiliary in invocation.auxiliary_input_bindings:
+                artifact = dict(invocation_context.job_artifact_options).get(
+                    auxiliary.parameter_name
+                )
+                if artifact is None:
+                    raise ContractError(
+                        "review invocation lacks an auxiliary artifact"
+                    )
+                path_bindings[artifact.cli_value] = (
+                    "auxiliary-" + auxiliary.parameter_name,
+                    auxiliary.artifact_sha256,
+                )
+            node_reviews.append(
+                build_workflow_execution_node_review(
+                    node_id=planned_node.node_id,
+                    stage=planned_node.stage,
+                    program=planned_node.program,
+                    engine=planned_node.engine,
+                    molecular_identity=molecular_identity,
+                    project_artifact_sha256=project.sha256,
+                    project_settings_sha256=validation.settings_sha256,
+                    project_settings=validation.settings,
+                    real_execution_argv=project_real_execution_argv(
+                        real_argv, path_bindings=path_bindings
+                    ),
+                    execution_resources=resources,
+                    environment_summary=environment_review_summary(
+                        environment_receipt
+                    ),
+                    server_profile_sha256=server_profile_sha256,
+                    environment_receipt_sha256=environment_receipt_sha256,
+                    environment_identity_sha256=environment_identity,
+                )
+            )
+            node_bindings.append(
+                ApprovedNodeBindingV1(
+                    node_id=planned_node.node_id,
+                    program=planned_node.program,
+                    engine=planned_node.engine,
+                    jobtype=planned_node.stage,
+                    project_artifact_sha256=project.sha256,
+                    settings_sha256=validation.settings_sha256,
+                    charge=target_charge,
+                    multiplicity=target_multiplicity,
+                    input_mode="producer" if edge is not None else "initial",
+                    initial_artifact_id=(
+                        "" if edge is not None else context.input_artifact.artifact_id
+                    ),
+                    initial_artifact_sha256=(
+                        "" if edge is not None else context.input_artifact.sha256
+                    ),
+                    scientific_identity_sha256=(
+                        ""
+                        if edge is not None
+                        else context.scientific_identity.binding_sha256
+                    ),
+                    producer_edge_sha256=(
+                        edge.edge_sha256 if edge is not None else ""
+                    ),
+                    auxiliary_input_bindings=(
+                        self._latest_invocation_for_node(
+                            planned_node.node_id,
+                            plan_sha256=plan.plan_sha256,
+                        )[0].auxiliary_input_bindings
+                        if planned_node.node_id not in data_target_ids
+                        else ()
+                    ),
+                )
+            )
+        review_request_id = (
+            str(request_id).strip()
+            or "review-" + plan.plan_sha256[:16]
+        )
+        request = build_workflow_approval_request(
+            request_id=review_request_id,
+            workflow_id=plan.workflow_id,
+            workflow_sha256=plan.plan_sha256,
+            task_spec_sha256=plan.task_spec_sha256,
+            workspace=workspace,
+            resources=resources,
+            node_bindings=tuple(node_bindings),
+            producer_edges=tuple(producer_edges),
+        )
+        return build_workflow_execution_review(
+            request=request,
+            scientific_plan=plan,
+            materialized_workflow=materialized,
+            execution_resources=resources,
+            execution_envelope=canonical_data(envelope),
+            environment_bindings=tuple(
+                sorted(environment_bindings, key=lambda item: item.node_id)
+            ),
+            node_reviews=tuple(
+                sorted(node_reviews, key=lambda item: item.node_id)
+            ),
+            stationary_point_policy=self.stationary_point_policy,
+        )
+
     def _admit_bounded_workflow(
         self, *, node_id: str, plan_sha256: str = ""
     ) -> None:
@@ -6026,33 +6430,152 @@ class CommandCompiledToolHostV1:
     def _real_execution_argv(
         self, invocation: CanonicalCommandInvocationV1
     ) -> tuple[str, ...]:
-        if invocation.command_path[0] != "run":
-            raise ContractError("local execution requires a run command")
-        program = invocation.command_path[1]
-        try:
-            program_index = invocation.argv.index(program, 2)
-        except ValueError as exc:
-            raise ContractError(
-                "compiled argv does not contain its program"
-            ) from exc
-        resources = self.execution_resources
-        root = ["chemsmart", "run", "--no-fake", "--delete-scratch"]
-        root.append(
-            "--no-scratch"
-            if resources.scratch_policy == "none"
-            else "--scratch"
+        return build_real_execution_argv(
+            compiled_argv=invocation.argv,
+            command_path=invocation.command_path,
+            resources=self.execution_resources,
+            server=self.execution_server,
         )
-        root.extend(("--num-cores", str(resources.cores)))
-        root.extend(("--num-gpus", str(resources.gpu_count)))
-        memory = (
-            str(int(resources.memory_gb))
-            if resources.memory_gb.is_integer()
-            else str(resources.memory_gb)
+
+    def verify_reviewed_real_execution_argv(
+        self,
+        *,
+        node_id: str,
+        invocation_sha256: str,
+        review: WorkflowExecutionNodeReviewV1,
+    ) -> tuple[str, ...]:
+        """Prove the next real launch is exactly the path-neutral review."""
+
+        if review.node_id != node_id:
+            raise ContractError("execution node differs from reviewed command")
+        invocation = self._get(
+            self.invocations, invocation_sha256, "canonical invocation"
         )
-        root.extend(("--mem-gb", memory))
+        context = self._get(
+            self._command_contexts,
+            invocation.invocation_sha256,
+            "command context",
+        )
+        if (review.program, review.engine, review.stage) != (
+            context.proposal.program,
+            context.engine_binding.engine,
+            context.proposal.jobtype,
+        ):
+            raise ContractError("program command differs from human review")
+        if self.execution_resources is None or (
+            review.resource_sha256
+            != self.execution_resources.resource_sha256
+        ):
+            raise ContractError("execution resources differ from human review")
+        if context.project_artifact is None or context.project_validation is None:
+            raise ContractError("reviewed execution requires a validated project")
+        if (
+            context.project_artifact.sha256 != review.project_artifact_sha256
+            or context.project_validation.settings_sha256
+            != review.project_settings_sha256
+        ):
+            raise ContractError("project materialization differs from human review")
+        _settings_text, settings_text_sha256 = normalized_project_settings_review(
+            context.project_validation.settings
+        )
+        if settings_text_sha256 != review.project_settings_text_sha256:
+            raise ContractError("effective project settings differ from human review")
+        current_environment_identity = self._environment_identity_for(
+            context.engine_binding.environment_receipt_sha256
+        )
+        if current_environment_identity != review.environment_identity_sha256:
+            raise ContractError("execution environment differs from human review")
+        current_environment = self.environments.get(
+            context.engine_binding.environment_receipt_sha256
+        )
+        if (
+            current_environment is None
+            or environment_review_summary(current_environment)
+            != review.environment_summary
+        ):
+            raise ContractError("execution environment facts differ from human review")
+        molecular = review.molecular_identity
+        if (
+            context.scientific_identity.charge != molecular.get("charge")
+            or context.scientific_identity.multiplicity
+            != molecular.get("multiplicity")
+        ):
+            raise ContractError("molecular electronic state differs from human review")
+        coordinate = molecular.get("coordinate_identity")
+        if not isinstance(coordinate, Mapping):
+            raise ContractError("human review lacks coordinate identity")
+        path_bindings = {
+            sys.executable: (
+                "controller-python",
+                file_sha256(Path(sys.executable).resolve()),
+            ),
+            context.project_artifact.cli_value: (
+                "project-yaml",
+                context.project_artifact.sha256,
+            )
+        }
+        if coordinate.get("kind") == "exact-input-artifact":
+            expected_input = str(coordinate.get("geometry_artifact_sha256", ""))
+            if context.input_artifact.sha256 != expected_input:
+                raise ContractError("molecular input bytes differ from human review")
+            if (
+                molecular.get("scientific_identity_sha256")
+                != context.scientific_identity.binding_sha256
+            ):
+                raise ContractError("molecular identity differs from human review")
+            input_role = "molecular-input"
+            input_digest = expected_input
+        elif coordinate.get("kind") == "validated-producer-output":
+            binding = self.workflow_execution_approval.node(node_id)
+            input_digest = str(coordinate.get("producer_edge_sha256", ""))
+            if (
+                binding.input_mode != "producer"
+                or binding.producer_edge_sha256 != input_digest
+            ):
+                raise ContractError("producer geometry edge differs from human review")
+            if self.handoffs.get(node_id) is None:
+                raise ContractError("producer geometry lacks validated handoff")
+            input_role = "producer-geometry"
+        else:
+            raise ContractError("unknown reviewed coordinate identity")
+        path_bindings[context.input_artifact.cli_value] = (
+            input_role,
+            input_digest,
+        )
         if self.execution_server:
-            root.extend(("--server", self.execution_server))
-        return tuple(root + list(invocation.argv[program_index:]))
+            server_path = Path(self.execution_server)
+            if (
+                not self.execution_server_file_sha256
+                or not server_path.is_file()
+                or server_path.is_symlink()
+                or file_sha256(server_path)
+                != self.execution_server_file_sha256
+            ):
+                raise ContractError("execution server profile changed after setup")
+            path_bindings[self.execution_server] = (
+                "server-profile",
+                review.server_profile_sha256,
+            )
+        auxiliary_by_name = dict(context.job_artifact_options)
+        for binding in invocation.auxiliary_input_bindings:
+            artifact = auxiliary_by_name.get(binding.parameter_name)
+            if artifact is None or artifact.sha256 != binding.artifact_sha256:
+                raise ContractError("auxiliary input differs from human review")
+            path_bindings[artifact.cli_value] = (
+                "auxiliary-" + binding.parameter_name,
+                binding.artifact_sha256,
+            )
+        projected = project_real_execution_argv(
+            self._real_execution_argv(invocation),
+            path_bindings=path_bindings,
+        )
+        if (
+            projected != review.real_execution_argv
+            or real_execution_argv_sha256(projected)
+            != review.real_execution_argv_sha256
+        ):
+            raise ContractError("real execution command differs from human review")
+        return projected
 
     def _execution_output_artifacts(
         self, node_id: str, workspace: Path, *, program: str = ""

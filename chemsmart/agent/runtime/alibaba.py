@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request
 
-from chemsmart.agent._contracts import ContractError, require_identifier
+from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.provider_config import (
     ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS,
     ALIBABA_TOKEN_PLAN_ENDPOINT,
@@ -27,6 +27,8 @@ from chemsmart.agent.runtime.deepseek import (
     DeepSeekV4ToolSession,
     ProviderCapabilitiesV1,
     _deadline_transport_error,
+    _require_explicit_model_id,
+    _validate_token_limits,
 )
 from chemsmart.agent.runtime.transport import (
     ProviderDeadlineExceeded,
@@ -42,13 +44,13 @@ from chemsmart.agent.runtime.transport import (
 class AlibabaTokenPlanConfigV1:
     """One model selected from the Alibaba Token Plan catalog."""
 
+    model: str
+    context_tokens: int
+    max_output_tokens: int
     provider: str = ALIBABA_TOKEN_PLAN_PROVIDER
-    model: str = ALIBABA_TOKEN_PLAN_MODEL
     endpoint: str = ALIBABA_TOKEN_PLAN_ENDPOINT
     reasoning_effort: str = "xhigh"
     preserve_thinking: bool = True
-    max_output_tokens: int = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
-    context_tokens: int = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
     sdk_max_retries: int = 0
     turn_deadlines: ProviderTurnDeadlinesV1 = field(
         default_factory=ProviderTurnDeadlinesV1
@@ -59,7 +61,11 @@ class AlibabaTokenPlanConfigV1:
             raise ContractError(
                 "Alibaba Token Plan provider identity is immutable"
             )
-        require_identifier(self.model, "Alibaba Token Plan model")
+        _require_explicit_model_id(self.model, provider="Alibaba Token Plan")
+        _validate_token_limits(
+            context_tokens=self.context_tokens,
+            max_output_tokens=self.max_output_tokens,
+        )
         if not _is_token_plan_endpoint(self.endpoint):
             raise ContractError(
                 "Alibaba adapter requires the Token Plan endpoint"
@@ -73,12 +79,6 @@ class AlibabaTokenPlanConfigV1:
             raise ContractError(
                 "Alibaba tool continuation must preserve thinking"
             )
-        if not 1 <= self.max_output_tokens <= (
-            ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
-        ):
-            raise ContractError(
-                "max_output_tokens exceeds Alibaba Token Plan capability"
-            )
         if self.sdk_max_retries != 0:
             raise ContractError(
                 "provider retries require a separately authorized attempt"
@@ -88,6 +88,10 @@ class AlibabaTokenPlanConfigV1:
 @dataclass(frozen=True)
 class Qwen38MaxConfigV1(AlibabaTokenPlanConfigV1):
     """Backward-compatible production Qwen 3.8 Max configuration."""
+
+    model: str = ALIBABA_TOKEN_PLAN_MODEL
+    context_tokens: int = ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS
+    max_output_tokens: int = ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -215,12 +219,12 @@ class AlibabaTokenPlanToolSession(DeepSeekV4ToolSession):
         *,
         transport,
         messages: list[dict[str, Any]],
-        config: AlibabaTokenPlanConfigV1 | None = None,
+        config: AlibabaTokenPlanConfigV1,
     ) -> None:
         super().__init__(
             transport=transport,
             messages=messages,
-            config=config or AlibabaTokenPlanConfigV1(),
+            config=config,
         )
 
     @property
@@ -240,6 +244,7 @@ class AlibabaTokenPlanToolSession(DeepSeekV4ToolSession):
             "messages": deepcopy(self._history),
             "stream": True,
             "stream_options": {"include_usage": True},
+            "max_tokens": self.config.max_output_tokens,
             "reasoning_effort": self.config.reasoning_effort,
             "preserve_thinking": self.config.preserve_thinking,
         }
@@ -268,7 +273,7 @@ class Qwen38MaxToolSession(AlibabaTokenPlanToolSession):
 def _assemble_sse_response(
     response,
     *,
-    expected_model: str = ALIBABA_TOKEN_PLAN_MODEL,
+    expected_model: str,
     deadline: ProviderTurnDeadline | None = None,
 ) -> dict[str, Any]:
     response_id = ""

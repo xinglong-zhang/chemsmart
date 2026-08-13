@@ -64,12 +64,6 @@ This guide covers installing CHEMSMART on Windows using Git Bash.
 
       make install
 
-#. For developers, install additional packages:
-
-   .. code:: bash
-
-      make install-dev
-
 *********************
  Configure CHEMSMART
 *********************

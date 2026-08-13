@@ -32,6 +32,8 @@ from chemsmart.agent.permissions import (
     _evaluate_permission,
 )
 from chemsmart.agent.execution import (
+    WorkflowExecutionApprovalBundleV1,
+    WorkflowReviewResolutionV1,
     FrozenWorkflowApprovalV1,
     ProgramExecutionInvocationV1,
     ProgramExecutionReceiptV1,
@@ -65,6 +67,8 @@ from chemsmart.agent.runtime.events import (
     RESULT_QUANTITIES_EXTRACTED,
     SCIENTIFIC_DECISION_RECORDED,
     SCIENTIFIC_WORKFLOW_MATERIALIZED,
+    WORKFLOW_REVIEW_RESOLVED,
+    EXECUTION_BUNDLE_CONSUMED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
     SUBSTITUTION_ASSESSED,
@@ -206,6 +210,75 @@ class RuntimeEventStore:
                 "materialized-workflow:" + workflow.materialized_sha256
             ),
         )
+
+    def record_workflow_review_resolution(
+        self,
+        *,
+        turn_id: str,
+        resolution: WorkflowReviewResolutionV1,
+    ) -> RuntimeEvent:
+        """Persist approve/deny/revise/quit against the exact reviewed digest."""
+
+        record = canonical_data(resolution)
+        receipt_sha256 = canonical_sha256(record)
+        return self.append(
+            turn_id=turn_id,
+            kind=WORKFLOW_REVIEW_RESOLVED,
+            payload={
+                "receipt_sha256": receipt_sha256,
+                "review_sha256": resolution.review_sha256,
+                "resolution_id": resolution.resolution_id,
+                "approval_id": resolution.approval_id,
+                "decision": resolution.decision,
+                "record": record,
+            },
+            idempotency_key=(
+                "workflow-review-resolution:" + resolution.resolution_id
+            ),
+        )
+
+    def claim_execution_bundle(
+        self,
+        *,
+        turn_id: str,
+        bundle: WorkflowExecutionApprovalBundleV1,
+    ) -> RuntimeEvent:
+        """Atomically consume one compound approval before execution starts."""
+
+        with self._locked_handle(exclusive=True) as handle:
+            events = self._read_locked(handle)
+            state = replay_events(events)
+            if (
+                bundle.bundle_sha256 in state.consumed_execution_bundle_sha256s
+                or bundle.workflow_approval.approval_id
+                in state.consumed_execution_approval_ids
+            ):
+                raise ContractError("execution approval bundle has already been consumed")
+            record = {
+                "schema_version": "chemsmart.execution-bundle-consumption.v1",
+                "bundle_sha256": bundle.bundle_sha256,
+                "review_sha256": bundle.review_sha256,
+                "approval_id": bundle.workflow_approval.approval_id,
+                "one_shot": True,
+                "status": "consumed",
+            }
+            return self._append_locked(
+                handle,
+                turn_id=turn_id,
+                kind=EXECUTION_BUNDLE_CONSUMED,
+                payload={
+                    "receipt_sha256": canonical_sha256(record),
+                    "bundle_sha256": bundle.bundle_sha256,
+                    "review_sha256": bundle.review_sha256,
+                    "approval_id": bundle.workflow_approval.approval_id,
+                    "status": "consumed",
+                    "record": record,
+                },
+                idempotency_key=(
+                    "execution-bundle-consumed:" + bundle.bundle_sha256
+                ),
+                existing_events=events,
+            )
 
     def consume_and_start_workflow(
         self,

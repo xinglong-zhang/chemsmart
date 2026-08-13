@@ -247,9 +247,8 @@ ambiguous child directories are logged as errors and skipped while valid sibling
  Linear and Quasi-Linear Molecule Handling
 *******************************************
 
-CHEMSMART correctly handles linear and quasi-linear molecules when computing rotational thermochemistry. The
-``Thermochemistry`` Python class exposes a ``rotational_mode`` parameter that controls how rotational constants are
-treated.
+CHEMSMART handles linear and quasi-linear molecules when computing rotational thermochemistry. The CLI uses the physical
+rotor treatment described below.
 
 Why This Matters
 ================
@@ -271,64 +270,11 @@ bending mode.
 Rotational Modes
 ================
 
-Two modes are available via the ``rotational_mode`` argument of ``Thermochemistry``:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 80
-
-   -  -  Mode
-      -  Description
-
-   -  -  ``"physical"`` *(default)*
-
-      -  Derives rotational constants from the molecular geometry. Collapses effectively linear or quasi-linear ``[A, B,
-         C]`` triples to the single perpendicular constant ``[B_perp]``, treating the molecule as a linear rotor.
-         Nonlinear molecules are kept unchanged. For quasi-linear species, also pads vibrational frequencies from 3N-6
-         to 3N-5 when needed.
-
-   -  -  ``"gaussian"``
-      -  Preserves the rotational constants exactly as printed in the Gaussian output. If Gaussian overflowed one or
-         more values (``*************``), CHEMSMART falls back to geometry-derived constants automatically.
-
-Python API Examples
-===================
-
-**Physical mode (default) — linear rotor treatment:**
-
-.. code:: python
-
-   from chemsmart.analysis.thermochemistry import Thermochemistry
-
-   thermo = Thermochemistry(
-       filename="koh_opt.log",
-       temperature=298.15,
-       rotational_mode="physical",   # default
-   )
-   print(thermo.rotational_partition_function)
-
-The molecule is analysed geometrically; any near-linear or truly linear structure is automatically collapsed to a
-linear-rotor model.
-
-**Gaussian mode — reproduce Gaussian output file values:**
-
-.. code:: python
-
-   thermo = Thermochemistry(
-       filename="koh_opt.log",
-       temperature=298.15,
-       rotational_mode="gaussian",
-   )
-   print(thermo.rotational_partition_function)
-
-This mode matches the partition function and thermochemical corrections that Gaussian itself would report. When Gaussian
-printed overflow tokens for the axial constant, CHEMSMART silently falls back to geometry-derived constants to avoid a
-division-by-zero error while keeping the nonlinear-rotor model.
-
-.. note::
-
-   ``rotational_mode`` is a Python-API parameter of ``Thermochemistry`` and is not yet exposed as a CLI option. The
-   ``chemsmart run thermochemistry`` command always uses the ``"physical"`` mode.
+The physical treatment derives rotational constants from molecular geometry,
+collapses an effectively linear ``[A, B, C]`` triple to its perpendicular
+constant, and restores the missing degenerate bend when an output contains
+only 3N-6 modes for a quasi-linear species. If a native output contains an
+overflowed rotational constant, geometry-derived constants are used.
 
 ***********************************
  Boltzmann Weighted Averaging Jobs

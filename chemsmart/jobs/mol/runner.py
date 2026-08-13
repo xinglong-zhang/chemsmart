@@ -21,8 +21,12 @@ import sys
 from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
+from chemsmart.jobs.mol.style_registry import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+    PYMOL_STYLE_TEMPLATES,
+    PYMOL_VISUALIZE_STYLE_CLI_CHOICES as PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
+    is_pymol_derived_style as is_pymol_derived_style,
+    normalize_pymol_style,
 )
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
@@ -41,39 +45,6 @@ from chemsmart.utils.utils import (
 pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
-
-
-_SCIENTIFIC_STYLE_TEMPLATE = "zhang_group_scientific_styles.py"
-
-# Hyphenated CLI names derived from the registry (insertion order preserved).
-PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
-    style.replace("_", "-") for style in PYMOL_SCIENTIFIC_STYLE_COMMANDS
-]
-
-PYMOL_STYLE_TEMPLATES = {
-    "pymol": "zhang_group_pymol_style.py",
-    "cylview": "zhang_group_pymol_style.py",
-    "cylview_flat": "zhang_group_pymol_style.py",
-    **dict.fromkeys(
-        PYMOL_SCIENTIFIC_STYLE_COMMANDS,
-        _SCIENTIFIC_STYLE_TEMPLATE,
-    ),
-}
-
-
-def normalize_pymol_style(style):
-    """Return a supported PyMOL style keyword."""
-    normalized = (style or "pymol").lower().replace("-", "_")
-    if normalized not in PYMOL_STYLE_TEMPLATES:
-        raise ValueError(f"The style {style} is not available!")
-    return normalized
-
-
-def is_pymol_derived_style(style):
-    """Return True when ``style`` maps to ``zhang_group_scientific_styles.py``."""
-    if style is None:
-        return False
-    return normalize_pymol_style(style) in PYMOL_SCIENTIFIC_STYLE_COMMANDS
 
 
 class PyMOLJobRunner(JobRunner):

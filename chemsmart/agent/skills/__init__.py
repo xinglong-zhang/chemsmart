@@ -1,9 +1,8 @@
-"""Domain-knowledge skills for the ChemSmart agent.
+"""Advisory domain knowledge for the ChemSmart Agent.
 
-A skill is a markdown document with YAML frontmatter, mirroring the convention
-used by the repository's Claude-facing skills.  It carries **knowledge**:
-conventions, definitions, and established facts.  It carries no accuracy target,
-no error budget, and no readiness authority.
+A domain document carries conventions, definitions, and established facts. It
+carries no accuracy target, error budget, execution authority, or readiness
+authority.
 
 Two authority tiers are deliberately separated:
 

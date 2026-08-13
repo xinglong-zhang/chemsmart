@@ -53,7 +53,14 @@ class EngineJobCapability:
 
 @dataclass(frozen=True)
 class ProgramCapability:
-    """Agent-operability facts for one executable chemistry program."""
+    """CLI facts and the bounded agent surface for one chemistry program.
+
+    ``jobtypes`` and ``engines`` describe the human CLI.  The exact
+    ``engine_job_capabilities`` matrix is the narrower surface that Runtime V2
+    may expose to a model.  ``agent_enabled`` keeps a human-only CLI program in
+    this single canonical registry without silently advertising it to the
+    agent.
+    """
 
     program: str
     requires_project_configuration: bool
@@ -63,6 +70,7 @@ class ProgramCapability:
     engines: tuple[str, ...]
     project_parameter_domains: tuple[tuple[str, tuple[str, ...]], ...] = ()
     engine_job_capabilities: tuple[EngineJobCapability, ...] = ()
+    agent_enabled: bool = True
     #: Top-level section names this program's project YAML accepts. The
     #: route-building programs group settings by phase (``gas`` for most job
     #: types, ``solv`` for ``sp``); PySCF keys sections by job type instead.
@@ -132,6 +140,8 @@ class ProgramCapability:
                     raise ValueError(
                         "engine-job capability uses an undeclared jobtype"
                     )
+        if not isinstance(self.agent_enabled, bool):
+            raise ValueError("agent_enabled must be boolean")
 
     @property
     def resolved_engine_job_capabilities(
@@ -341,6 +351,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             jobtypes=(),
             project_owned_parameters=(),
             engines=("cpu",),
+            agent_enabled=False,
         ),
         "orca": ProgramCapability(
             program="orca",
@@ -489,6 +500,12 @@ ENGINE_CAPABILITIES = PROGRAM_CAPABILITIES
 # the advanced NCIPLOT leaf.
 KNOWN_PROGRAMS = frozenset(PROGRAM_CAPABILITIES)
 EXECUTABLE_PROGRAMS = KNOWN_PROGRAMS
+AGENT_PROGRAMS = frozenset(
+    name
+    for name, capability in PROGRAM_CAPABILITIES.items()
+    if capability.agent_enabled
+    and capability.resolved_engine_job_capabilities
+)
 PROJECT_PROGRAMS = frozenset(
     name
     for name, capability in PROGRAM_CAPABILITIES.items()
@@ -515,6 +532,38 @@ PROGRAM_EXECUTION_ENGINES: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         name: capability.engines
         for name, capability in PROGRAM_CAPABILITIES.items()
+    }
+)
+AGENT_PROGRAM_EXECUTION_ENGINES: Mapping[str, tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            name: tuple(
+                sorted(
+                    {
+                        item.engine
+                        for item in capability.resolved_engine_job_capabilities
+                        if item.preview_supported
+                    }
+                )
+            )
+            for name, capability in PROGRAM_CAPABILITIES.items()
+            if name in AGENT_PROGRAMS
+        }
+    )
+)
+AGENT_PROGRAM_JOBTYPES: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        name: tuple(
+            sorted(
+                {
+                    item.jobtype
+                    for item in capability.resolved_engine_job_capabilities
+                    if item.preview_supported
+                }
+            )
+        )
+        for name, capability in PROGRAM_CAPABILITIES.items()
+        if name in AGENT_PROGRAMS
     }
 )
 PROGRAM_PROJECT_OWNED_CLI_PARAMETERS: Mapping[str, tuple[str, ...]] = (
@@ -576,6 +625,9 @@ def project_owns_parameter(program: str | None, parameter: str) -> bool:
 
 
 __all__ = [
+    "AGENT_PROGRAM_EXECUTION_ENGINES",
+    "AGENT_PROGRAM_JOBTYPES",
+    "AGENT_PROGRAMS",
     "COMPUTATIONAL_PROGRAMS",
     "ENGINE_CAPABILITIES",
     "EXECUTABLE_PROGRAMS",

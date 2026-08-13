@@ -242,30 +242,20 @@ def test_agent_run_rejects_approval_and_envelope_together(tmp_path):
     result = CliRunner().invoke(agent, args)
 
     assert result.exit_code == 2
-    assert "mutually exclusive" in result.output
+    assert "cannot grant authority" in result.output
 
 
-def test_existing_approval_path_is_forwarded_unchanged(tmp_path, monkeypatch):
-    captured = {}
+def test_existing_approval_path_is_not_forwarded_to_provider(tmp_path, monkeypatch):
     approval = tmp_path / "approval.json"
     approval.write_text("{}", encoding="utf-8")
 
-    def fake_run(**kwargs):
-        captured.update(kwargs)
-        return _Result()
-
-    import chemsmart.agent.live_session as live_session
-
-    monkeypatch.setattr(live_session, "run_live_agent_session", fake_run)
     result = CliRunner().invoke(
         agent,
         _cli_args(tmp_path) + ["--approval-file", str(approval)],
     )
 
-    assert result.exit_code == 0, result.output
-    assert captured["execution_enabled"] is True
-    assert captured["approval_file"] == approval
-    assert captured["execution_envelope_file"] is None
+    assert result.exit_code == 2, result.output
+    assert "cannot grant authority" in result.output
 
 
 def test_envelope_path_is_forwarded_as_bounded_execution(
@@ -287,7 +277,7 @@ def test_envelope_path_is_forwarded_as_bounded_execution(
     )
 
     assert result.exit_code == 0, result.output
-    assert captured["execution_enabled"] is True
+    assert captured["execution_enabled"] is False
     assert captured["approval_file"] is None
     assert captured["execution_envelope_file"] == envelope
 

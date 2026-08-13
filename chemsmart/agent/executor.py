@@ -1,36 +1,14 @@
-"""Execute an approved scientific workflow without consulting a model.
+"""Execute one exact human-approved scientific workflow without a provider.
 
-Why this exists
----------------
-
-``agent run --approval-file`` is ``run_live_agent_session`` with one extra
-tool, so a model holding a digest-frozen plan is asked to re-derive it turn by
-turn. Repeated live sessions showed that this is where the harness
-stops working: seventeen ``agent plan`` sessions rejected 42 of 868 tool calls
-(4.8%), while the one ``agent run`` session rejected 20 of 69 (29%) -- twelve
-of them attempts to execute, eight of them the model re-planning inside an
-execution session -- and completed no nodes at all.
-
-Nothing in that work needs judgement.  Which project, which program, which
-node graph, which charge and multiplicity: all of it was decided by the model
-at plan time and frozen under ``plan_sha256``.  What remains is bookkeeping
-with exactly one right answer -- which node is ready, which digest satisfies
-which contract, which receipt the host itself just produced -- and the harness
-already owns a deterministic answer to each.
-
-So this module supplies the caller, not the science.  It composes the same
-host ``agent run`` composes, and calls the same ``host.dispatch`` a model
-calls, with host-computed arguments.  The event log, the receipt chain and the
-YAML->CLI DAG are the same records either way; only the author of the
-bookkeeping changes.  That strengthens the provenance claim rather than
-weakening it, because unlike a model this executor *cannot* silently re-plan:
-``derive_ready_node_ids`` and the frozen approval both forbid deviation.
+The executor follows the frozen DAG and normal ChemSmart host tools.  It does
+not choose science, re-plan, or widen approval.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -40,6 +18,11 @@ from chemsmart.agent._contracts import (
     file_sha256,
 )
 from chemsmart.agent.capabilities import load_program_capabilities
+from chemsmart.agent.api_access import (
+    DEFAULT_KEY_LABELS,
+    PROVIDER_KEY_LABEL_TOKENS,
+    normalize_key_label,
+)
 from chemsmart.agent.cli_schema import build_live_click_schema
 from chemsmart.agent.execution import (
     build_workflow_run_state,
@@ -50,10 +33,7 @@ from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.tool_specs import build_approved_execution_tool_surface
 
-#: The exact host calls one program node needs, in order.  This sequence is
-#: not a heuristic: it is the order the tool contracts already require, and it
-#: is what the model in the ``agent run`` session attempted and was refused
-#: twelve times.
+#: The present-tense host contract for one approved program node.
 PROGRAM_NODE_SEQUENCE = (
     "inspect_program_capability",
     "inspect_program_environment",
@@ -64,6 +44,34 @@ PROGRAM_NODE_SEQUENCE = (
     "preflight_program_node",
     "execute_approved_program_node",
 )
+
+
+def _provider_secret_environment_labels() -> tuple[str, ...]:
+    """Return known and provider-shaped credential labels in this process.
+
+    Profiles may use lab- or project-specific ``api_key_env`` names.  The
+    provider token is deliberately required in those labels, so engine
+    isolation can discover and remove them without retaining provider config
+    in the approved executor.
+    """
+
+    return tuple(
+        sorted(
+            {
+                label
+                for labels in DEFAULT_KEY_LABELS.values()
+                for label in labels
+            }
+            | {
+                label
+                for label in os.environ
+                if any(
+                    token in normalize_key_label(label)
+                    for token in PROVIDER_KEY_LABEL_TOKENS.values()
+                )
+            }
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -97,9 +105,7 @@ class WorkflowExecutionResultV1:
 
     @property
     def executed_node_ids(self) -> tuple[str, ...]:
-        return tuple(
-            node.node_id for node in self.nodes if node.state == "executed"
-        )
+        return tuple(node.node_id for node in self.nodes if node.validated)
 
 
 def _result_of(payload: Any) -> Any:
@@ -201,6 +207,8 @@ class ApprovedWorkflowExecutor:
         project_artifacts: Mapping[str, Any],
         task_spec_sha256: str,
         run_directory: Path,
+        execution_bundle: Any,
+        approval_workspace: Path,
     ) -> None:
         self.host = host
         self.plan = plan
@@ -212,6 +220,9 @@ class ApprovedWorkflowExecutor:
         }
         self.task_spec_sha256 = task_spec_sha256
         self.run_directory = run_directory
+        self.execution_bundle = execution_bundle
+        self.approval_workspace = approval_workspace
+        self._bundle_claimed = False
         self._turn = 0
         self._handoff_inputs: dict[str, str] = {}
 
@@ -233,6 +244,29 @@ class ApprovedWorkflowExecutor:
             f"node {node_id!r} is in the approved plan but has no approved "
             "binding; the approval and the plan disagree"
         )
+
+    def _verify_launch_and_claim_once(
+        self, *, node_id: str, invocation_sha256: str
+    ) -> None:
+        """Compare the real launch first, then claim the one-shot bundle."""
+
+        review = self.execution_bundle.node_review(node_id)
+        self.host.verify_reviewed_real_execution_argv(
+            node_id=node_id,
+            invocation_sha256=invocation_sha256,
+            review=review,
+        )
+        if self._bundle_claimed:
+            return
+        from chemsmart.agent.live_session import (
+            claim_workflow_execution_approval_bundle,
+        )
+
+        claim_workflow_execution_approval_bundle(
+            self.execution_bundle,
+            workspace=self.approval_workspace,
+        )
+        self._bundle_claimed = True
 
     def _input_artifact_id(self, binding: Any) -> str:
         if binding.input_mode == "initial":
@@ -346,6 +380,10 @@ class ApprovedWorkflowExecutor:
                 command_inspection_receipt_sha256=inspection_sha256,
             )
 
+            self._verify_launch_and_claim_once(
+                node_id=node_id,
+                invocation_sha256=invocation_sha256,
+            )
             executed = self._call(
                 "execute_approved_program_node", node_id=node_id
             )
@@ -519,6 +557,7 @@ def execute_approved_workflow(
     workspace: Path,
     run_directory: Path,
     task_spec_sha256: str = "",
+    expected_approval_file_sha256: str = "",
 ) -> WorkflowExecutionResultV1:
     """Execute an approved workflow end to end, contacting no provider.
 
@@ -531,18 +570,32 @@ def execute_approved_workflow(
         _bootstrap_conformance,
         _execution_composition_inputs,
         _observe_environments,
+        load_workflow_execution_approval_bundle,
     )
 
     workspace = Path(workspace).resolve()
     run_directory = Path(run_directory).resolve()
     run_directory.mkdir(parents=True, exist_ok=True)
 
+    approval_file = Path(approval_file).resolve()
+    bundle = load_workflow_execution_approval_bundle(
+        approval_file,
+        expected_file_sha256=expected_approval_file_sha256,
+    )
+    effective_task_spec_sha256 = (
+        str(task_spec_sha256).strip()
+        or bundle.approved_scientific_plan.task_spec_sha256
+    )
+    if effective_task_spec_sha256 != (
+        bundle.approved_scientific_plan.task_spec_sha256
+    ):
+        raise ContractError("task specification differs from approval bundle")
     inputs = _execution_composition_inputs(
         host_type=CommandCompiledToolHostV1,
         workspace=workspace,
         run_directory=run_directory,
         approval_file=Path(approval_file).resolve(),
-        task_spec_sha256=task_spec_sha256,
+        task_spec_sha256=effective_task_spec_sha256,
     )
     plan = inputs.pop("approved_scientific_plan")
     if plan is None:
@@ -584,13 +637,15 @@ def execute_approved_workflow(
         tool_surface=build_approved_execution_tool_surface(registry),
         registry=registry,
         live_schema=live_schema,
-        task_spec_sha256s=(task_spec_sha256,) if task_spec_sha256 else (),
+        task_spec_sha256s=(effective_task_spec_sha256,),
         # ``_execution_composition_inputs`` already writes and supplies the
         # execution server profile; naming it again here would be a second
         # source of truth for where real jobs are launched.
         scientific_workflow_plan=plan,
         materialized_workflow=materialized,
         approved_environment_identities=environment_identities,
+        execution_server_file_sha256=file_sha256(inputs["execution_server"]),
+        execution_environment_remove=_provider_secret_environment_labels(),
         **inputs,
     )
     return ApprovedWorkflowExecutor(
@@ -600,8 +655,10 @@ def execute_approved_workflow(
         frozen_approval=frozen_approval,
         initial_artifacts=initial_artifacts,
         project_artifacts=project_artifacts,
-        task_spec_sha256=task_spec_sha256,
+        task_spec_sha256=effective_task_spec_sha256,
         run_directory=run_directory,
+        execution_bundle=bundle,
+        approval_workspace=workspace,
     ).run()
 
 

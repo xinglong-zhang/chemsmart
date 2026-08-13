@@ -18,8 +18,22 @@ In PyMOL directly::
 """
 
 import numpy as np
-from pymol import cmd  # type: ignore
 
+try:
+    from pymol import cmd  # type: ignore
+except ModuleNotFoundError:  # Importable metadata; execution still fails closed.
+    class _UnavailablePyMOLCommand:
+        def extend(self, *_args, **_kwargs):
+            return None
+
+        def __getattr__(self, _name):
+            raise ModuleNotFoundError(
+                "PyMOL is required to execute scientific visualization styles"
+            )
+
+    cmd = _UnavailablePyMOLCommand()
+
+from chemsmart.jobs.mol.style_registry import SCIENTIFIC_STYLE_COMMAND_NAMES
 from chemsmart.utils.geometry import get_coordinating_atoms
 from chemsmart.utils.periodictable import is_metal, metal_element_symbols
 
@@ -1536,9 +1550,13 @@ SCIENTIFIC_STYLE_CLASSES = (
 )
 
 
+_template_command_names = tuple(
+    style_cls.command for style_cls in SCIENTIFIC_STYLE_CLASSES
+)
+if _template_command_names != SCIENTIFIC_STYLE_COMMAND_NAMES:
+    raise RuntimeError("PyMOL scientific style registry is out of sync")
 PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
-    style_cls.command: style_cls.command
-    for style_cls in SCIENTIFIC_STYLE_CLASSES
+    name: name for name in _template_command_names
 }
 
 

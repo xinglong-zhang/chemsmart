@@ -32,8 +32,8 @@ System packages
    sudo apt-get install -y build-essential ca-certificates curl git \
      libegl1 libgl1 libsm6 libxext6 libxrender1
 
-Install Miniforge, Mambaforge, Miniconda, or Anaconda for Linux x86-64 if the
-host does not already provide Conda.
+Install the Conda distribution appropriate for the host architecture if the
+server does not already provide one.
 
 Install the CHEMSMART controller
 ================================
@@ -42,14 +42,14 @@ Install the CHEMSMART controller
 
    git clone https://github.com/Hongjiseung-ROK/chemsmart.git
    cd chemsmart
-   make env
+   conda env create -f environment.yml
    conda activate chemsmart
-   make install-dev
-   make configure
+   python -m pip install .
+   chemsmart config
 
-The repository requires Python 3.10. ``make env`` uses ``environment.yml``;
-``make configure`` creates local configuration under ``~/.chemsmart``. Never
-commit that directory because it contains host paths and scheduler settings.
+The package requires Python 3.10. ``chemsmart config`` creates local
+configuration under ``~/.chemsmart``. Never commit that directory because it
+contains host paths and scheduler settings.
 
 Verify the controller before configuring engines:
 
@@ -77,7 +77,7 @@ example path with a path observed on the server. A minimal shape is:
      NUM_GPUS: 0
      NUM_THREADS: 4
      SUBMIT_COMMAND: null
-     SCRATCH_DIR: /scratch/USER/chemsmart
+     SCRATCH_DIR: /absolute/user-owned/scratch/chemsmart
      USE_HOSTS: false
 
    ORCA:
@@ -98,9 +98,8 @@ example path with a path observed on the server. A minimal shape is:
      LOCAL_RUN: true
      SCRATCH: false
 
-Use the actual username or a user-owned path in ``SCRATCH_DIR``. Do not paste
-``USER`` literally. Create the directory and verify write permission before
-execution.
+Use an absolute user-owned path in ``SCRATCH_DIR``. Create the directory and
+verify write permission before execution.
 
 ORCA and MPI compatibility
 ==========================
@@ -152,8 +151,8 @@ Point ``PYSCF.EXEFOLDER`` at this environment's ``bin`` directory. CHEMSMART
 generates a standalone Python calculation and reads its structured HDF5 result;
 the compute environment does not need to import the CHEMSMART source tree.
 
-GPU4PySCF requires a separately qualified NVIDIA/CUDA stack. It is outside the
-CPU benchmark path and must never be selected as an automatic fallback.
+GPU4PySCF requires a separately qualified NVIDIA/CUDA stack. Do not select it
+as an automatic fallback on a CPU-only host.
 
 Staged server qualification
 ===========================
@@ -197,11 +196,11 @@ Run stages in order and stop on the first scientific or environment failure.
    thermochemistry only after the underlying methods and resources are known to
    work on this host.
 
-6. **Agent benchmark**
+6. **Agent workflow**
 
-   Run ``chemsmart agent plan`` first. Permit real engine execution only through
-   the normal approval and runner path after reviewing the generated YAML and
-   preview.
+   Run ``chemsmart agent plan`` first. Permit real engine execution only after
+   reviewing and approving the exact generated YAML, DAG, compiled command,
+   molecular state, environment, and resources.
 
 Provider configuration
 ======================

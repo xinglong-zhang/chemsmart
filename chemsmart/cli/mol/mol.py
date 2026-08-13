@@ -15,7 +15,9 @@ from chemsmart.cli.job import (
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
-from chemsmart.jobs.mol.runner import PYMOL_VISUALIZE_STYLE_CLI_CHOICES
+from chemsmart.jobs.mol.style_registry import (
+    PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
+)
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label, select_items_by_index
 

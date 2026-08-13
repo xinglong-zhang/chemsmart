@@ -6,113 +6,136 @@
   <img src="docs/source/_static/chemsmart_logo.png" alt="CHEMSMART logo" width="600">
 </p>
 
-CHEMSMART is a CLI-first, project-YAML hub for computational chemistry. It
-gives users and research agents one maintained interface for preparing,
-running, submitting, and analysing calculations across supported quantum
-chemistry programs.
+CHEMSMART is a CLI-first, project-YAML hub for computational chemistry. Human
+researchers and AI agents use the same validated project settings and commands
+to prepare, preview, run, submit, and analyse calculations across supported
+programs.
 
-The same command hub also provides molecular-database assembly, inspection,
-query, and export operations, together with ITERATE workflows for systematic
-structure generation and calculation campaigns.
-
-Scientific choices live in readable project YAML. CHEMSMART translates those
-choices into program-native inputs, controls execution through the same
-`chemsmart run` and `chemsmart sub` commands used by human researchers, and
-returns structured quantities for reproducible post-processing. A model never
-needs to invent Gaussian, ORCA, xTB, or PySCF input syntax.
+Scientific choices remain visible in project YAML. CHEMSMART translates those
+choices into program-native inputs, compiles the public CLI, controls execution,
+and exposes typed, unit-aware results. Generated native files are downstream
+artifacts; they are not a second user or model API.
 
 Current package version: **3.1.4**. Python **3.10** is required.
 
-## Architecture
+## Product model
 
 ```text
-scientific question
-       │
-       ▼
-project YAML + molecular artifact
-       │
-       ▼
-CHEMSMART CLI and scientific DAG
-       │
-       ├── Gaussian / ORCA / xTB native input
-       ├── PySCF standalone compute script
-       └── local runner or scheduler submission
-       │
-       ▼
-program output + structured result reader
-       │
-       ▼
-unit-aware analysis, thermochemistry, and claims
+scientific question and molecular artifacts
+                  |
+                  v
+        project YAML + typed DAG
+                  |
+                  v
+       CHEMSMART compile and preview
+                  |
+       human approval for exact DAG
+                  |
+                  v
+        deterministic CLI execution
+                  |
+                  v
+ native output + typed scientific analysis
 ```
 
-The CLI is the operational authority for both users and agents. Generated
-native files are downstream execution artifacts, not an alternative user or
-model API.
+Planning, YAML generation, CLI compilation, safe preview, and result analysis
+do not start a chemistry engine. Real Agent execution requires a one-shot human
+approval bound to the exact workflow, molecular state, inputs, project files,
+commands, environment, and resources. The approved executor uses no model or
+provider credential.
 
-## Program support
+## Human CLI support
 
-| Program | Maintained CHEMSMART surface | Execution requirement |
-| --- | --- | --- |
-| Gaussian | input generation, local/scheduled jobs, result parsing and analysis | licensed Gaussian installation |
-| ORCA | SP, OPT, TS, IRC, scan, NEB, TD/TDA, QRC, pKa and analysis workflows | compatible ORCA installation and MPI runtime when parallel |
-| xTB | CPU `sp`, `opt`, and `hess` with optional strict project YAML | xTB executable |
-| PySCF | CPU `sp`, `opt`, `hess`, structured HDF5 results; bounded TD preview | dedicated PySCF 2.14 compute interpreter |
-| GPU4PySCF | PySCF execution engine, not a separate program | compatible NVIDIA driver, CUDA, CuPy, cuTENSOR and GPU4PySCF stack |
-| NCIPLOT | input generation and execution integration | NCIPLOT installation |
+The human CLI includes Gaussian, ORCA, xTB, PySCF, GPU4PySCF as a PySCF engine,
+NCIPLOT, molecular databases, pKa and thermochemistry analysis, ITERATE, and
+PyMOL-based molecular operations. Each external program requires a compatible,
+separately licensed installation where applicable.
 
-Program licenses and binaries are not distributed with CHEMSMART.
-
-## Linux, macOS, and HPC quick start
-
-Start from a clean clone and use the package environment appropriate for the
-target workstation or cluster. The system packages below are an Ubuntu
-example; equivalent packages may be used on another supported host:
+Use the live command help as the option authority:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y build-essential ca-certificates curl git \
-  libegl1 libgl1 libsm6 libxext6 libxrender1
-
-git clone https://github.com/Hongjiseung-ROK/chemsmart.git
-cd chemsmart
-make env
-conda activate chemsmart
-make install-dev
-make configure
+chemsmart --help
+chemsmart run --help
+chemsmart sub --help
+chemsmart run PROGRAM --help
 ```
 
-`make env` creates or updates the `chemsmart` environment from
-`environment.yml`. `make configure` creates local templates under
-`~/.chemsmart`; inspect those files before running any engine. Program paths,
-scheduler directives, scratch paths, memory, and core counts are machine-local
-configuration and must not be committed.
+## Agent support in version 3.1.4
 
-Verify the controller before installing external engines:
+| Program | Planning and safe preview | Explicitly approved execution | Result analysis |
+| --- | --- | --- | --- |
+| PySCF CPU | `sp`, `opt`, `hess`; `td` preview | `sp`, `opt`, `hess` | structured HDF5 quantities actually produced |
+| GPU4PySCF | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | the same structured PySCF result path |
+| xTB CPU | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | receipt-bound native quantities, orbitals, frequencies and geometry handoffs; XYZ trajectory analysis uses the shared geometry reader |
+| ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb` | the same six job families | native energies, structures, frequencies, excited states, spin and trajectory evidence actually produced |
+| Gaussian CPU | `sp`, `opt`, `ts`, `irc`, `td`, `link` | the same six job families | normal native outputs supplied by the user, including thermochemistry, excited states, spin and trajectory evidence |
+
+The table describes implemented product paths, not the software installed on a
+particular workstation. Before execution, ChemSmart still requires the exact
+program/engine environment to be available and included in the human review.
+Gaussian is separately licensed, GPU4PySCF requires a compatible CUDA stack,
+and neither is implied by installing ChemSmart. NCIPLOT and remaining CLI job
+families without an Agent engine/job declaration stay available to humans but
+are not Agent execution paths in version 3.1.4.
+
+The Runtime is provider-neutral. Version 3.1.4 ships registered adapters for
+Alibaba Token Plan and DeepSeek. The user profile supplies the provider,
+endpoint, model, reasoning setting, and credential label; CHEMSMART does not
+choose a default model.
+
+Across those programs, the public Agent surface includes:
+
+- live capability and target-environment inspection;
+- molecular identity/state binding and loader-validated project YAML;
+- causal calculation DAGs, workflow-frontier inspection, independent branches,
+  and validated optimized-geometry handoff;
+- live CLI compilation, generated-artifact inspection, safe preview, and
+  program preflight;
+- semantic extraction from Gaussian and ORCA native output, receipt-bound xTB
+  output, structured PySCF HDF5, and XYZ geometries or trajectories;
+- RRHO and explicitly parameterised quasi-harmonic thermochemistry;
+- unit-aware expressions for energy differences, CBS extrapolation,
+  Boltzmann populations/averages, harmonic ZPE, imaginary-mode counts,
+  distances, angles, dihedrals, centres of mass, inertia, rotor constants, and
+  connectivity changes; and
+- evidence-bound numerical claims and a human-readable scientific decision.
+
+These layers are general ChemSmart operations. They do not encode a benchmark
+answer, molecule-specific route, preferred DAG shape, or forced tool order.
+
+## Installation
+
+Create an isolated environment on the workstation or cluster that will host
+the controller:
+
+```bash
+git clone https://github.com/Hongjiseung-ROK/chemsmart.git
+cd chemsmart
+conda env create -f environment.yml
+conda activate chemsmart
+python -m pip install .
+chemsmart config
+```
+
+Program executables, compute interpreters, scheduler settings, scratch paths,
+memory, and core counts belong in the user's ChemSmart configuration. Inspect
+the generated files under `~/.chemsmart` before running an engine. Do not place
+credentials in a project or calculation workspace.
+
+Confirm the controller and preview path before enabling external programs:
 
 ```bash
 chemsmart --version
-chemsmart --help
-chemsmart run --help
-chemsmart agent --help
-```
-
-Run a program-free xTB preview through the real CLI schema:
-
-```bash
 chemsmart run --fake --no-scratch xtb \
-  -p test -f examples/xtb/water.xyz sp
+  -p preview -f examples/xtb/water.xyz sp
 ```
 
-For full server installation, external program setup, PySCF compute
-environment separation, and staged benchmark execution, see
-[Ubuntu CPU server installation](docs/source/installation-ubuntu-cpu-server.rst).
+## Project YAML and CLI
 
-## Project YAML
-
-Project YAML is the canonical location for method, basis, dispersion, solvent,
-convergence, and stage settings. CLI options may override supported fields for
-one invocation, but CHEMSMART remains responsible for validating and
-materialising the final program settings.
+Project YAML is the canonical location for methods, basis sets, dispersion,
+solvent, convergence, and stage settings. Supported CLI flags may override a
+field for one invocation; CHEMSMART still validates and materialises the final
+settings.
 
 Example ORCA project:
 
@@ -134,118 +157,66 @@ solv:
   freq: false
 ```
 
-Example stage-specific PySCF CPU project:
-
-```yaml
-sp:
-  ab_initio: hf
-  functional: null
-  basis: def2-svp
-  density_fit: false
-  freq: false
-opt:
-  ab_initio: hf
-  functional: null
-  basis: def2-svp
-  opt_solver: geometric
-  opt_maxsteps: 100
-  freq: false
-hess:
-  ab_initio: hf
-  functional: null
-  basis: def2-svp
-  freq: true
-```
-
-Never edit a generated native input to make a project appear valid. Correct
-the YAML or CLI intent and regenerate the artifact.
-
-## CLI usage
-
-Local execution and scheduler submission share program subcommands:
+Local execution and scheduler submission use the same program subcommands:
 
 ```bash
 chemsmart run [RUN_OPTIONS] PROGRAM [PROGRAM_OPTIONS] JOBTYPE
 chemsmart sub [SUB_OPTIONS] PROGRAM [PROGRAM_OPTIONS] JOBTYPE
 ```
 
-Examples:
+Safe examples:
 
 ```bash
-# Local ORCA preview; does not invoke ORCA
+# Generate and inspect ORCA artifacts without invoking ORCA.
 chemsmart run --fake --no-scratch orca \
-  -p test -f examples/xtb/water.xyz sp
+  -p preview -f examples/xtb/water.xyz sp
 
-# Real local xTB calculation after xTB is configured
-chemsmart run --no-scratch xtb \
-  -p test -f examples/xtb/water.xyz opt
-
-# PySCF fixed-geometry Hessian in a configured CPU compute environment
-chemsmart run --no-scratch pyscf \
-  -p test -f examples/xtb/water.xyz hess
-
-# Generate and inspect a scheduler script without submitting it
+# Generate a scheduler script without submitting it.
 chemsmart sub --test --fake -s my_server orca \
-  -p test -f examples/xtb/water.xyz opt
+  -p preview -f examples/xtb/water.xyz opt
 ```
 
-Use `--help` at the exact command level to inspect the live option surface.
+Correct project YAML or CLI intent and regenerate when an artifact is wrong.
+Do not hand-edit a generated native input and then treat it as ChemSmart state.
 
-## Agent workflows
+## Agent workflow
 
-The provider-neutral agent uses the same YAML loaders, CLI compiler, program
-adapters, result readers, and scientific analysis operations as a user.
+A plan session may create project YAML, compile commands, and safe previews but
+cannot launch an engine:
 
 ```bash
 chemsmart agent plan \
   --provider PROFILE \
   --task-file task.md \
-  --secret-file /secure/path/api.env \
-  --workspace ./agent-workspace
+  --secret-file /secure/path/provider.env \
+  --workspace /absolute/path/agent-workspace
 ```
 
-`agent plan` may create project YAML and safe previews but does not run a
-chemistry engine. `agent run` stays preview-only unless an approval file is
-provided. `agent execute` performs an already approved workflow without a
-model or provider credential.
+The terminal UI presents the planned DAG, molecular and electronic state,
+project YAML, compiled commands, environment, resources, and exact digests.
+The user may approve the complete workflow once, deny it, request revision, or
+quit. An approved packet is executed separately and deterministically with no
+provider call. See [Agent workflows](docs/source/agent-workflows.rst) for the
+interactive and non-interactive commands.
 
-See [Agent workflows](docs/source/agent-workflows.rst) for the operational
-boundary and the behavior-first research loop.
+## Scientific discipline
 
-## Scientific execution discipline
-
-- Preserve molecular identity, atom order, coordinate units, charge,
-  multiplicity, electronic state, and constraints.
-- Distinguish planned, previewed, executed, parsed, and scientifically
+- Preserve identity, atom order, coordinate units, charge, multiplicity,
+  electronic state, constraints, and physical conditions.
+- Distinguish planned, previewed, approved, executed, parsed, validated, and
   interpreted work.
-- Treat normal process exit as necessary but not sufficient; check
-  convergence and the requested properties.
-- Use validated optimized geometries for downstream Hessian, SP, IRC, or path
-  calculations.
-- Keep signs, units, thermochemical conventions, temperature, pressure or
-  concentration explicit.
-- Prefer a new scientific experiment over a benchmark-specific rule. Improve
-  the smallest reusable CLI, YAML, parser, or analysis capability exposed by a
-  real failure.
-
-## Development
-
-```bash
-conda activate chemsmart
-make install-dev
-make pre-commit
-make test
-make docs
-```
-
-Focused tests should be run while developing. Full tests and documentation
-builds should pass before a release branch is published. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+- Treat normal process exit as necessary but not sufficient evidence.
+- Use validated optimized geometries for downstream calculations.
+- Keep signs, units, standard states, temperature, pressure or concentration,
+  and thermochemical conventions explicit.
+- Cite CHEMSMART and every external program, method, basis set, and dataset used
+  in a publication.
 
 ## Documentation
 
 - [Documentation index](docs/source/index.rst)
-- [Ubuntu CPU server installation](docs/source/installation-ubuntu-cpu-server.rst)
+- [Installation on Linux and macOS](docs/source/installation-linux-macos.rst)
+- [HPC installation](docs/source/installation-hpc-cluster.rst)
 - [CLI overview](docs/source/cli-overview.rst)
 - [Project configuration](docs/source/configuration-project-settings.rst)
 - [Server configuration](docs/source/configuration-server-settings.rst)
@@ -253,17 +224,3 @@ builds should pass before a release branch is published. See
 - [PySCF](docs/source/pyscf-cli-options.rst)
 - [xTB](docs/source/xtb-cli-options.rst)
 - [ORCA](docs/source/orca-cli-options.rst)
-
-## Citation
-
-If CHEMSMART contributes to a publication, cite the toolkit and the external
-programs, methods, basis sets, and datasets used by the workflow.
-
-Zhang, X.; Tan, H.; Liu, J.; Li, Z.; Wang, L.; Chen, B. W. J.
-*CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit for
-High-Efficiency Computational Chemistry Workflows*. arXiv 2025,
-arXiv:2508.20042. <https://doi.org/10.48550/arXiv.2508.20042>.
-
-## License
-
-CHEMSMART is distributed under the terms in [LICENSE](LICENSE).

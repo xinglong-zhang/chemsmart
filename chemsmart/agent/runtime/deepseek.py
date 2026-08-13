@@ -48,6 +48,28 @@ _THINK_BLOCK = re.compile(
 _UNCLOSED_THINK = re.compile(r"<think\b", flags=re.IGNORECASE)
 
 
+def _require_explicit_model_id(model: Any, *, provider: str) -> str:
+    if not isinstance(model, str) or not model.strip():
+        raise ContractError(f"{provider} configuration requires a model")
+    normalized = model.strip()
+    if normalized != model or any(ord(character) < 32 for character in model):
+        raise ContractError(f"{provider} model ID must be normalized text")
+    return model
+
+
+def _validate_token_limits(
+    *, context_tokens: Any, max_output_tokens: Any
+) -> None:
+    for field_name, value in (
+        ("context_tokens", context_tokens),
+        ("max_output_tokens", max_output_tokens),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ContractError(f"{field_name} must be a positive integer")
+    if max_output_tokens > context_tokens:
+        raise ContractError("max_output_tokens cannot exceed context_tokens")
+
+
 class DeepSeekProtocolError(RuntimeError):
     """Raised for an unsafe provider response without retaining its contents.
 
@@ -258,26 +280,41 @@ class DeepSeekHttpsTransport:
 
 @dataclass(frozen=True)
 class ProviderCapabilitiesV1:
+    model: str
+    context_tokens: int
+    max_output_tokens: int
     schema_version: str = "chemsmart.provider-capabilities.v1"
     provider: str = "deepseek"
     wire_protocol: str = "openai-chat-completions"
-    model: str = DEEPSEEK_V4_FLASH_MODEL
-    context_tokens: int = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
-    max_output_tokens: int = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
     thinking_with_tools: bool = True
     continuation_mode: str = "assistant_reasoning_and_tool_results"
     private_reasoning_persisted: bool = False
 
+    def __post_init__(self) -> None:
+        _require_explicit_model_id(self.model, provider=self.provider)
+        _validate_token_limits(
+            context_tokens=self.context_tokens,
+            max_output_tokens=self.max_output_tokens,
+        )
+        if self.private_reasoning_persisted:
+            raise ContractError("private provider reasoning cannot be persisted")
+
 
 @dataclass(frozen=True)
 class DeepSeekV4FlashConfigV1:
+    """DeepSeek adapter configuration bound to an explicit model profile.
+
+    The historical class name is retained for replay/API compatibility, but
+    Runtime V2 no longer chooses a DeepSeek model on the caller's behalf.
+    """
+
+    model: str
+    context_tokens: int
+    max_output_tokens: int
     provider: str = "deepseek"
-    model: str = DEEPSEEK_V4_FLASH_MODEL
     endpoint: str = DEEPSEEK_OFFICIAL_ENDPOINT
     thinking_mode: str = "enabled"
     reasoning_effort: str = "max"
-    max_output_tokens: int = DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
-    context_tokens: int = DEEPSEEK_V4_FLASH_CONTEXT_TOKENS
     sdk_max_retries: int = 0
     turn_deadlines: ProviderTurnDeadlinesV1 = field(
         default_factory=ProviderTurnDeadlinesV1
@@ -286,20 +323,17 @@ class DeepSeekV4FlashConfigV1:
     def __post_init__(self) -> None:
         if self.provider != "deepseek":
             raise ContractError("DeepSeek provider identity is immutable")
-        if self.model != DEEPSEEK_V4_FLASH_MODEL:
-            raise ContractError("this adapter is pinned to deepseek-v4-flash")
+        _require_explicit_model_id(self.model, provider="DeepSeek")
+        _validate_token_limits(
+            context_tokens=self.context_tokens,
+            max_output_tokens=self.max_output_tokens,
+        )
         if not _is_official_endpoint(self.endpoint):
             raise ContractError("thinking continuation requires official DeepSeek")
         if self.thinking_mode != "enabled":
             raise ContractError("DeepSeek V4 tool sessions require thinking")
         if self.reasoning_effort not in {"high", "max"}:
             raise ContractError("reasoning_effort must be high or max")
-        if not 1 <= self.max_output_tokens <= (
-            DEEPSEEK_V4_FLASH_MAX_OUTPUT_TOKENS
-        ):
-            raise ContractError(
-                "max_output_tokens exceeds DeepSeek V4 Flash capability"
-            )
         if self.sdk_max_retries != 0:
             raise ContractError(
                 "provider retries require a separately authorized attempt"
@@ -359,9 +393,9 @@ class DeepSeekV4ToolSession:
         *,
         transport: Callable[[dict[str, Any]], Mapping[str, Any]],
         messages: list[dict[str, Any]],
-        config: DeepSeekV4FlashConfigV1 | None = None,
+        config: DeepSeekV4FlashConfigV1,
     ) -> None:
-        self.config = config or DeepSeekV4FlashConfigV1()
+        self.config = config
         self._transport = transport
         self._history = deepcopy(messages)
         self._receipts: list[ProviderTurnReceiptV1] = []
@@ -432,6 +466,7 @@ class DeepSeekV4ToolSession:
             raise DeepSeekProtocolError("provider response must be a mapping")
         payload = deepcopy(dict(response))
         try:
+            _validate_response_model(payload, expected_model=self.config.model)
             assistant = _assistant_message(payload)
             tool_call_ids = _validate_tool_calls(assistant)
             if self._seen_tool_call_ids.intersection(tool_call_ids):
@@ -626,6 +661,24 @@ def _assistant_message(response: Mapping[str, Any]) -> dict[str, Any]:
     if result.get("tool_calls") and result.get("content") is None:
         result["content"] = ""
     return result
+
+
+def _validate_response_model(
+    response: Mapping[str, Any], *, expected_model: str
+) -> None:
+    """Refuse an unbound response before continuation state can change."""
+
+    observed_model = response.get("model")
+    if not isinstance(observed_model, str) or not observed_model:
+        raise DeepSeekProtocolError(
+            "provider response does not identify its model",
+            failing_field="model",
+        )
+    if observed_model != expected_model:
+        raise DeepSeekProtocolError(
+            "provider response model differs from the requested model",
+            failing_field="model",
+        )
 
 
 def _validate_tool_calls(assistant: Mapping[str, Any]) -> tuple[str, ...]:

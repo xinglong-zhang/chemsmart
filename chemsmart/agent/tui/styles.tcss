@@ -1,0 +1,39 @@
+Screen {
+    background: $background;
+}
+
+#agent-shell {
+    height: 100%;
+}
+
+#wordmark {
+    height: 3;
+    padding: 1 2 0 2;
+    background: $surface;
+}
+
+#phase-bar {
+    height: 2;
+    padding: 0 2;
+    background: $surface;
+}
+
+#transcript {
+    height: 1fr;
+    margin: 1 2 0 2;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+#composer {
+    height: 3;
+    margin: 1 2 0 2;
+    border: round $primary;
+}
+
+#footer {
+    height: 2;
+    padding: 0 2;
+    color: $text-muted;
+    background: $surface;
+}

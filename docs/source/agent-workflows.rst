@@ -1,153 +1,211 @@
 Computational Agent Workflows
 #############################
 
-CHEMSMART's agent is a provider-neutral computational-chemistry researcher that
-operates through the same project YAML, Click commands, program adapters,
-runners and result readers as a human user.
+ChemSmart Agent turns a scientific request into project YAML, compiled
+ChemSmart CLI operations, a safe preview, and typed result analysis.  The
+model proposes the chemistry; ChemSmart owns native-input generation,
+execution, validation, and result parsing.
 
-The model proposes scientific intent. CHEMSMART owns native input generation,
-command construction, program execution and structured analysis. A model must
-not repair a workflow by writing native Gaussian, ORCA, xTB or PySCF execution
-text.
+Supported scope
+===============
 
-Agent commands
-==============
+Version 3.1.4 exposes the following product-capable engine/job pairs through
+project YAML, command compilation, safe preview, exact human approval, and the
+normal ChemSmart runners:
 
-Plan and safely preview a workflow:
+* Gaussian CPU: ``irc``, ``link``, ``opt``, ``sp``, ``td``, and ``ts``.
+* ORCA CPU: ``irc``, ``neb``, ``opt``, ``sp``, ``td``, and ``ts``.
+* PySCF CPU: ``hess``, ``opt``, and ``sp``; CPU ``td`` is preview-only.
+* GPU4PySCF: PySCF ``hess``, ``opt``, and ``sp`` with the ``gpu`` engine.
+* xTB CPU: ``hess``, ``opt``, and ``sp``.
+
+These are product capabilities, not claims that an executable is available on
+the current machine.  Each approved run still requires the environment probe
+for its exact program and engine to report available.  Gaussian requires a
+separately licensed installation and GPU4PySCF requires a compatible CUDA
+stack. Typed analysis is available only for quantities actually parsed and
+registered from a completed result. NCIPLOT and other CLI leaves without an
+Agent engine/job declaration remain outside this surface.
+
+Configure a provider
+====================
+
+The Runtime is provider-neutral.  Version 3.1.4 registers Alibaba Token Plan
+and DeepSeek adapters.  It has no default model: every selected profile must
+name its model explicitly.  Credentials belong in a separate assignment file,
+not in ``agent.yaml``.
+
+The following example defines both registered adapters.  Select either profile
+with ``active`` or ``--provider`` and replace the model placeholders with model
+IDs available to your accounts.
+
+.. code-block:: yaml
+
+   active: alibaba
+   fallback: []
+   providers:
+     alibaba:
+       type: openai
+       api_key_env: ALIBABA_TOKEN_PLAN_KEY
+       model: REPLACE_WITH_YOUR_ALIBABA_MODEL_ID
+       context_tokens: REPLACE_WITH_MODEL_CONTEXT_LIMIT
+       max_output_tokens: REPLACE_WITH_MODEL_OUTPUT_LIMIT
+       base_url: https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
+       reasoning_effort: max
+       preserve_thinking: true
+       transport_deadlines:
+         connect_seconds: 15
+         first_event_seconds: 90
+         inter_event_seconds: 90
+         absolute_turn_seconds: 300
+     deepseek:
+       type: openai
+       api_key_env: DEEPSEEK_API_KEY
+       model: REPLACE_WITH_YOUR_DEEPSEEK_MODEL_ID
+       context_tokens: REPLACE_WITH_MODEL_CONTEXT_LIMIT
+       max_output_tokens: REPLACE_WITH_MODEL_OUTPUT_LIMIT
+       base_url: https://api.deepseek.com
+       reasoning_effort: max
+       preserve_thinking: true
+
+Replace every model and limit placeholder with values supported by the
+selected account and model. Both token-limit fields are required positive
+integers, and
+``max_output_tokens`` cannot exceed ``context_tokens``.  They are explicit
+profile facts: ChemSmart binds them into the profile digest, Runtime
+capabilities, and the provider request.  For ``qwen3.8-max``, use
+``reasoning_effort: xhigh``.
+
+``fallback`` must be empty.  Runtime does not switch providers inside a
+session, so a non-empty fallback list is rejected.  After a classified
+provider failure, start a new, explicitly attributed attempt with
+``--provider OTHER_PROFILE``.  Private reasoning, response text, and
+credentials are not written to the public session record.
+
+The assignment file contains only the label selected by the active profile:
+
+.. code-block:: text
+
+   ALIBABA_TOKEN_PLAN_KEY=your-secret-value
+
+Plan and safe preview
+=====================
+
+Use a workspace containing only user-approved molecular, project, and result
+artifacts.  The command below contacts the selected provider but never starts
+a chemistry engine:
 
 .. code-block:: bash
 
    chemsmart agent plan \
      --provider PROFILE \
+     --provider-config /secure/path/agent.yaml \
      --task-file task.md \
-     --secret-file /secure/path/api.env \
-     --workspace ./agent-workspace
+     --secret-file /secure/path/provider.env \
+     --workspace /absolute/path/task-workspace
 
-Plan and optionally execute reviewed nodes:
+``chemsmart agent run`` has the same preview-only authority.  It is retained
+for workflows that also request an execution review; passing
+``--approval-file`` to a provider session fails closed.
 
-.. code-block:: bash
+Exact execution approval
+========================
 
-   chemsmart agent run \
-     --provider PROFILE \
-     --task-file task.md \
-     --secret-file /secure/path/api.env \
-     --workspace ./agent-workspace \
-     --approval-file workflow-approval.json
-
-Without ``--approval-file``, ``agent run`` remains preview-only. Deterministic
-execution of an already approved workflow uses ``chemsmart agent execute`` and
-requires no provider credential.
-
-For a user-authorized local research episode, ``--execution-envelope`` keeps
-planning, ChemSmart preview, engine execution, result registration and typed
-analysis in one model conversation. The envelope contains operating authority,
-not a method or answer DAG:
+Real execution is a separate, three-command chain.  First provide explicit
+program and resource bounds.  These bounds are review input, not permission.
 
 .. code-block:: yaml
 
    schema_version: chemsmart.bounded-execution-envelope.v1
    mode: bounded-local
    allowed_program_engines:
-     gaussian: [cpu]
      orca: [cpu]
      pyscf: [cpu]
      xtb: [cpu]
    resources:
      execution_target: run
-     cores: 8
-     memory_gb: 28
+     cores: 4
+     memory_gb: 8
      gpu_count: 0
      scratch_policy: server
-     node_timeout_seconds: 3600
-   episode_wall_time_seconds: 5400
-   postprocess_reserve_seconds: 600
-   max_engine_calls: 8
+     node_timeout_seconds: 1800
+   episode_wall_time_seconds: 3600
+   postprocess_reserve_seconds: 300
+   max_engine_calls: 4
    scratch_root: /absolute/path/chosen-by-the-user
 
-Use it instead of ``--approval-file``:
+Create an inert review packet after project compilation and safe preview:
 
 .. code-block:: bash
 
-   chemsmart agent run \
+   chemsmart agent plan \
      --provider PROFILE \
+     --provider-config /secure/path/agent.yaml \
      --task-file task.md \
-     --secret-file /secure/path/api.env \
-     --workspace ./agent-workspace \
-     --identity-manifest identities.yaml \
-     --execution-envelope envelope.yaml
+     --secret-file /secure/path/provider.env \
+     --workspace /absolute/path/task-workspace \
+     --execution-envelope /absolute/path/resources.yaml \
+     --review-file /absolute/path/execution-review.json
 
-Every calculation still passes through the project loader, live Click schema,
-native-input writer, preview verifier, program runner and result validator. A
-future-geometry edge may consume a validated optimized structure. When the DAG
-explicitly declares a different charge and multiplicity for its consumer,
-CHEMSMART preserves the coordinates and atom order while rebinding the target
-electronic state; this supports four-point reorganization-energy workflows
-without pretending that the producer optimized the second state.
+Read the complete review.  It binds the molecular and electronic state,
+project and input bytes, scientific DAG, compiled operations, data handoffs,
+resources, and observed program environments.  Then record exactly one human
+decision using the displayed ``review_sha256``:
 
-Use a disposable workspace containing only approved molecular, project and
-result artifacts. Store credentials outside the workspace and repository.
+.. code-block:: bash
 
-Provider turn deadlines
-=======================
+   chemsmart agent approve \
+     --review-file /absolute/path/execution-review.json \
+     --reviewed-sha256 FULL_REVIEW_SHA256 \
+     --decision approve \
+     --actor HUMAN_ID \
+     --output /absolute/path/execution-approval.json
 
-Runtime V2 does not treat a socket timeout as an end-to-end provider bound.
-Each selected profile may bind four monotonic deadlines in the existing
-``agent.yaml`` profile. The absolute turn deadline cannot be extended by SSE
-comments, partial bytes, streamed reasoning, or other provider progress. The
-following is a schematic fragment for a provider adapter already registered in
-the local runtime; it is not a complete runnable profile:
+``--decision`` also accepts ``deny``, ``revise``, or ``quit``; those decisions
+create no execution grant.  There is no permanent, session-wide, or
+command-prefix approval.  A change to any reviewed input requires a new review
+and approval.
 
-.. code-block:: yaml
+Finally execute the one-shot bundle without a model or provider credential:
 
-   providers:
-     registered-provider-profile:
-       type: <registered-adapter-type>
-       api_key_env: <provider-key-label>
-       model: <provider-model-id>
-       base_url: <official-provider-endpoint>
-       transport_deadlines:
-         connect_seconds: 15
-         first_event_seconds: 90
-         inter_event_seconds: 90
-         absolute_turn_seconds: 300
+.. code-block:: bash
 
-All four fields are required when the mapping is present. Explicit values are
-part of the provider-profile digest. Profiles created before this mapping use
-the same immutable defaults. For every turn, the effective absolute bound is
-the smaller of ``absolute_turn_seconds`` and the episode time remaining after
-Runtime terminalization reserve. ``provider_turn_observed`` records requested
-and observed provider/model identity, requested reasoning effort, the fact that
-applied effort is not reported by the endpoint, and the effective deadlines.
-A failed attempt records only its sanitized timeout phase and the same public
-configuration; it never records private reasoning, response text, or a secret.
-Registered transports connect directly to their configured official HTTPS hosts;
-they do not inherit process proxy settings. TCP, TLS, response status, headers,
-and response-body reads are covered by the monotonic policy. CPython's
-synchronous platform DNS lookup is the explicit exception: it cannot be
-cancelled without leaving a resolver worker, so DNS health must be verified on
-the actual target host.
+   chemsmart agent execute \
+     --approval-file /absolute/path/execution-approval.json \
+     --workspace /absolute/path/task-workspace \
+     --run-directory /absolute/path/run
 
-Waiting for chemistry
-=====================
+The workspace keeps a durable consumption ledger, so the same bundle cannot
+be executed twice.  If pre-launch validation or execution stops, review and
+approve the corrected workflow again.
 
-An approved program tool is dispatched synchronously through the normal
-ChemSmart runner. While the runner waits for its bounded child process, no new
-provider request is made and no frontier-model reasoning is active. The same
-in-memory provider session retains its private continuation and resumes only
-after the tool returns with a result, timeout, signal, failure, or idempotent
-replay. Hash-chained ``tool_waiting`` and ``tool_woke`` events make this parked
-interval public without persisting the continuation. This is a process wait,
-not a scheduler or parallel agent control plane; process-tree timeout and
-termination remain owned by the existing ChemSmart runner.
+Terminal interface
+==================
 
-When a task uses one or more named geometries, pass an approved molecular
-input manifest with ``--identity-manifest``. Each entry names a
-workspace-relative XYZ file and its exact SHA-256, approved molecular names,
-geometry role, coordinate units, charge, multiplicity and source locator.
-CHEMSMART validates the exact bytes and atom order before publishing the
-path-free identity and state records to the model. Filenames and XYZ comments
-remain non-authoritative, and the manifest must not contain an expected value,
-answer DAG or native program input.
+Install the optional interface and open the same approval chain in a terminal:
+
+.. code-block:: bash
+
+   python -m pip install 'chemsmart[agent-tui]'
+   chemsmart agent tui \
+     --provider PROFILE \
+     --provider-config /secure/path/agent.yaml \
+     --secret-file /secure/path/provider.env \
+     --workspace /absolute/path/task-workspace \
+     --execution-envelope /absolute/path/resources.yaml \
+     --review-file /absolute/path/execution-review.json
+
+The TUI displays the exact review and offers explicit approve, deny, revise,
+and quit-review actions.  Execution still requires re-entering the full
+approval-file SHA-256.  See :doc:`agent-tui` for the command reference.
+
+Molecular identity
+==================
+
+When a task uses named geometries, pass ``--identity-manifest``.  Every entry
+binds a workspace-relative XYZ file to its exact SHA-256, approved name,
+geometry role, coordinate units, charge, multiplicity, and source.  Filenames
+and XYZ comments are not identity evidence.
 
 .. code-block:: yaml
 
@@ -157,78 +215,67 @@ answer DAG or native program input.
        identity_id: water-initial
        approved_names: [water, H2O]
        geometry_file: inputs/water.xyz
-       geometry_sha256: <sha256-of-exact-xyz-bytes>
+       geometry_sha256: SHA256_OF_EXACT_XYZ_BYTES
        coordinate_units: angstrom
-       geometry_role: neutral optimization start
+       geometry_role: neutral optimisation start
        charge: 0
        multiplicity: 1
-       source_locator: https://example.org/coordinate-record
-       source_record_sha256: <sha256-of-source-record>
-       state_source_locator: source-record:water#initial-state
+       source_locator: SOURCE_RECORD
+       source_record_sha256: SHA256_OF_SOURCE_RECORD
+       state_source_locator: SOURCE_RECORD_STATE
 
-Challenge-driven scientist persona
-===================================
+Provider waits and deadlines
+============================
 
-The agent should behave as a senior computational scientist:
+Provider profiles may bind connect, first-event, inter-event, and absolute-turn
+deadlines as shown above.  The absolute deadline cannot be extended by stream
+heartbeats or partial bytes.  Synchronous platform DNS resolution is the
+documented exception and must be checked on the target host.
 
-- ask for scientifically consequential missing facts;
-- choose defensible programs and methods rather than mimic a hidden answer;
-- preserve molecular identity, geometry, state, conditions and units;
-- design causal calculation and post-processing DAGs;
-- react to real engine and parser failures by revising the scientific plan;
-- distinguish planned, previewed, executed, analysed and inferred work; and
-- explain limitations in proportion to their effect on the requested claim.
+During an approved program run, the Runtime makes no provider call while the
+normal ChemSmart runner waits synchronously.  Public wait and wake events
+record that interval; they are not a scheduler, sleep service, or parallel
+agent.  Process timeout and termination remain the runner's responsibility.
 
-Creative routes are welcome. A different algebraic decomposition, a
-program-native alternative, or a composite method may be superior to the path
-anticipated by the task designer.
+Interpreting evidence
+=====================
 
-Self-improving research cycle
-=============================
+Keep the following states distinct in reports: proposed, planned,
+materialised, previewed, approved, executing, engine-complete, parsed,
+scientifically validated, and interpreted.  A provider answer, fake preview,
+fixture parser, or engine return code alone is not a scientific result.
 
-Self-improvement is driven by observation:
+Check molecular identity and atom order, charge and multiplicity, method and
+program semantics, convergence, stationary-point evidence, geometry handoff,
+physical conditions, signs, dimensions, and units before using a value in a
+scientific claim.
 
-1. give the agent a concise, difficult and scientifically complete task;
-2. run the real model through the normal CHEMSMART surface;
-3. read its answer and tool trajectory as a computational scientist;
-4. classify the consequential obstacle as chemistry, model reasoning, program
-   capability, environment, parser or tool affordance;
-5. improve the smallest general CHEMSMART layer or project skill;
-6. rerun a relevant task and compare the scientific behavior; and
-7. retain the lesson only when it generalises beyond one paper or molecule.
-
-Self-improvement does not mean autonomous privilege escalation, hidden prompt
-mutation or learning benchmark answers. Repository edits, paid provider calls,
-engine execution and scheduler use remain within user authority.
-
-Human scientific evaluation
-===========================
-
-Read the visible answer directly. Judge molecular and electronic-state
-preservation, method suitability, numerical transformations, signs, units,
-physical conventions and necessary causal dependencies. Accept any route that
-is chemically and mathematically sound.
-
-Use these outcomes:
-
-- **Improvement:** correct requested result or equivalent coherent plan.
-- **Partial improvement:** central chemistry improved, but an important
-  quantity, condition, dependency or limitation remains unresolved.
-- **No improvement:** invented data, altered scientific problem, invalid
-  chemistry or mathematics, or an unperformed action presented as executed.
-
-Tool-call count, token use, exact DAG shape and runtime labels are operating
-observations, not scientific oracles.
-
-Current analysis boundary
+Analyse completed results
 =========================
 
-Cross-program quasi-harmonic thermochemistry remains available through the
-typed analysis operation and the existing ``chemsmart run thermochemistry``
-CLI. The CLI command does not yet load project YAML or materialize as a
-result-artifact analysis node in a scientific workflow. Therefore the agent
-surface has not been removed in this release: doing so would delete the only
-model-callable route used by thermochemistry-dependent workflows. The general
-follow-up is a canonical YAML-backed analysis command node whose structured
-receipt can re-enter dimensional expressions; it is not a benchmark-specific
-repair.
+Analysis is a normal Agent mode and does not require execution approval. Put
+one or more supported completed results in an otherwise clean workspace and
+ask for the quantities or comparison you need. ChemSmart discovers normally
+terminated Gaussian and ORCA outputs, receipt-bound xTB outputs, structured
+PySCF HDF5 results, and XYZ geometry/trajectory artifacts. For example::
+
+   chemsmart agent plan \
+     --provider PROFILE \
+     --provider-config /secure/path/agent.yaml \
+     --secret-file /secure/path/provider.env \
+     --workspace /absolute/path/completed-results \
+     --task "Extract the final energy and frequencies, diagnose the stationary point, and report the result with explicit units."
+
+The Agent may inspect registered artifacts, extract semantic quantities,
+derive RRHO or explicitly parameterised quasi-harmonic thermochemistry,
+evaluate unit-aware expression DAGs (including energy differences, CBS
+extrapolation, Boltzmann populations, distances, angles and dihedrals), and
+bind numerical claims to the resulting typed evidence. Supply
+``--analysis-completion-file`` only when an application needs a stricter,
+host-authored list of mandatory quantities or claims; ordinary existing-result
+analysis does not require one.
+
+After ``agent execute`` completes, start this analysis mode over the completed
+result workspace. The deterministic executor itself stops at validated engine
+receipts and never contacts a provider; scientific interpretation is a new,
+explicit Agent request rather than an implicit post-run model call.

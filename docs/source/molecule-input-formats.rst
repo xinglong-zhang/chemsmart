@@ -436,4 +436,5 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`
 
-For more technical details on the implementation, see the CHEMSMART preprint: https://arxiv.org/abs/2508.20042
+For the scientific design and citation, see the CHEMSMART preprint:
+https://arxiv.org/abs/2508.20042

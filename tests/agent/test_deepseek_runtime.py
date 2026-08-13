@@ -73,6 +73,7 @@ def test_deepseek_thinking_tool_continuation_is_full_but_ephemeral():
     session = DeepSeekV4ToolSession(
         transport=transport,
         messages=[{"role": "user", "content": "Plan a PySCF node."}],
+        config=DeepSeekV4FlashConfigV1(model="deepseek-v4-flash"),
     )
     public_first, first_receipt = session.turn(tools=[{"type": "function"}])
     session.append_tool_results(
@@ -137,7 +138,9 @@ def test_incomplete_response_is_not_silently_retried(monkeypatch):
 
 def test_deepseek_config_rejects_implicit_provider_retries():
     with pytest.raises(ContractError, match="separately authorized attempt"):
-        DeepSeekV4FlashConfigV1(sdk_max_retries=1)
+        DeepSeekV4FlashConfigV1(
+            model="deepseek-v4-flash", sdk_max_retries=1
+        )
 
 
 @pytest.mark.parametrize(
@@ -152,7 +155,9 @@ def test_deepseek_endpoint_rejects_non_authority_data_without_reflection(
     endpoint,
 ):
     with pytest.raises(ContractError) as config_error:
-        DeepSeekV4FlashConfigV1(endpoint=endpoint)
+        DeepSeekV4FlashConfigV1(
+            model="deepseek-v4-flash", endpoint=endpoint
+        )
     with pytest.raises(ContractError) as transport_error:
         DeepSeekHttpsTransport(api_key="not-persisted", endpoint=endpoint)
 

@@ -1,0 +1,3 @@
+interface:
+  display_name: "ChemSmart Agent"
+  short_description: "Plan, approve, execute, and analyse ChemSmart workflows"

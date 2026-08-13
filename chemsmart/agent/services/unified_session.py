@@ -15,7 +15,6 @@ from chemsmart.agent.loop import ToolLoopResultV1, ToolLoopRunner
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekHttpsTransport,
-    DeepSeekV4FlashConfigV1,
     DeepSeekV4ToolSession,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
@@ -31,12 +30,12 @@ class UnifiedSessionRunner:
         host: CommandCompiledToolHostV1,
         event_store: RuntimeEventStore,
         credential_lease: SecretLease,
-        provider_config: Any | None = None,
+        provider_config: Any,
     ) -> None:
         self.host = host
         self.event_store = event_store
         self.credential_lease = credential_lease
-        self.provider_config = provider_config or DeepSeekV4FlashConfigV1()
+        self.provider_config = provider_config
         if credential_lease.provider != self.provider_config.provider:
             raise ContractError("credential lease belongs to another provider")
 

@@ -43,6 +43,8 @@ from chemsmart.agent.runtime.events import (
     QUANTITY_EXPRESSION_EVALUATED,
     SCIENTIFIC_DECISION_RECORDED,
     SCIENTIFIC_WORKFLOW_MATERIALIZED,
+    WORKFLOW_REVIEW_RESOLVED,
+    EXECUTION_BUNDLE_CONSUMED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
     SUBSTITUTION_ASSESSED,
@@ -98,6 +100,10 @@ class RuntimeState:
     provider_turn_receipts: list[str] = field(default_factory=list)
     api_attempt_receipts: list[str] = field(default_factory=list)
     materialized_workflow_receipts: list[str] = field(default_factory=list)
+    workflow_review_resolution_receipts: list[str] = field(default_factory=list)
+    execution_bundle_consumption_receipts: list[str] = field(default_factory=list)
+    consumed_execution_bundle_sha256s: list[str] = field(default_factory=list)
+    consumed_execution_approval_ids: list[str] = field(default_factory=list)
     workflow_approval_receipts: list[str] = field(default_factory=list)
     workflow_execution_start_receipts: list[str] = field(default_factory=list)
     workflow_launch_reservation_receipts: list[str] = field(default_factory=list)
@@ -205,6 +211,8 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         SCIENTIFIC_WORKFLOW_MATERIALIZED: (
             state.materialized_workflow_receipts
         ),
+        WORKFLOW_REVIEW_RESOLVED: state.workflow_review_resolution_receipts,
+        EXECUTION_BUNDLE_CONSUMED: state.execution_bundle_consumption_receipts,
         WORKFLOW_APPROVAL_CONSUMED: state.workflow_approval_receipts,
         WORKFLOW_EXECUTION_STARTED: state.workflow_execution_start_receipts,
         WORKFLOW_LAUNCH_RESERVED: state.workflow_launch_reservation_receipts,
@@ -227,6 +235,13 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             state.materialized_workflow_records[
                 workflow.materialized_sha256
             ] = canonical_data(workflow)
+        elif event.kind == EXECUTION_BUNDLE_CONSUMED:
+            bundle_sha256 = str(event.payload.get("bundle_sha256") or "")
+            approval_id = str(event.payload.get("approval_id") or "")
+            if bundle_sha256 not in state.consumed_execution_bundle_sha256s:
+                state.consumed_execution_bundle_sha256s.append(bundle_sha256)
+            if approval_id not in state.consumed_execution_approval_ids:
+                state.consumed_execution_approval_ids.append(approval_id)
         elif event.kind == WORKFLOW_APPROVAL_CONSUMED:
             approval = frozen_workflow_approval_from_record(
                 event.payload["record"]

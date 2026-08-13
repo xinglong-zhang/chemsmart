@@ -51,8 +51,11 @@ calculation, not only the number.
 A vertical quantity therefore contains **no optimization of the final state**.
 Computing two independently relaxed geometries and calling the result vertical,
 or using one geometry and calling the result adiabatic, reports something other
-than what was asked. For the same pair of states the vertical value is the
-larger one, because the final state is evaluated away from its own minimum.
+than what was asked. For the signed difference
+``E_final - E_initial``, the vertical value is normally no smaller because the
+final state is evaluated away from its own minimum. A positive electron
+affinity is commonly defined with the opposite sign, so its numerical
+inequality reverses; always state the direction before comparing values.
 
 ## 3. Say which energy terms are included
 
@@ -98,18 +101,14 @@ Apply the principles to the system at hand rather than recalling a list.
 
 ## 5. Reference-method limitation for low-spin and stretched states
 
-A single-determinant reference describes a high-spin state better than a
-low-spin state of the same system, because the low-spin state can carry
-multiconfigurational character that one determinant cannot represent. The same
-limitation appears wherever near-degenerate configurations mix: open-shell
-singlets and diradicals, transition-metal spin-state energetics, homolytic bond
-dissociation near and beyond the Coulson–Fischer point, and bond-breaking
-regions of a reaction path.
-
-Where it applies, the low-spin state is placed too high, and the effect grows
-with the fraction of exact (Hartree–Fock) exchange in the functional. Report the
-direction of this bias alongside the number. Do not quote a magnitude unless it
-comes from a cited benchmark for the same property and method class.
+A single-determinant reference can be less balanced for low-spin,
+near-degenerate, or stretched-bond states than for a corresponding high-spin
+state. Open-shell singlets, diradicals, transition-metal spin states and
+bond-breaking regions therefore require diagnostics rather than a universal
+error direction. Depending on the system, reference, functional and amount of
+exact exchange, a low-spin state may be biased upward or downward. Establish
+the direction from spin diagnostics, reference stability, multireference
+evidence or an applicable cited benchmark; do not infer it from spin alone.
 
 ## 6. Differences are more convergence-sensitive than absolutes
 
@@ -134,8 +133,8 @@ cancellation the difference relies on.
   |---|---|---|---|---|
   | `C1`, `Cs`, `Ci`, `C∞v` | 1 | | `D2h` | 4 |
   | `C2`, `C2v`, `C2h`, `D∞h` | 2 | | `D3h` | 6 |
-  | `C3v`, `D3` | 3 | | `Td` | 12 |
-  | | | | `Oh` | 24 |
+  | `C3v` | 3 | | `D3`, `D3h` | 6 |
+  | `Td` | 12 | | `Oh` | 24 |
 
 - The modern standard state is **1 bar**. Older tables and some program defaults
   use 1 atm; the two differ by `R ln(1.01325)` in the standard entropy. When a

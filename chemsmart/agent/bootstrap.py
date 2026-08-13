@@ -222,14 +222,12 @@ def bootstrap_program_conformance(
         {"schema": live_schema.schema_sha256, "paths": tuple(observations)}
     )
     preview_sha = canonical_sha256(fixture)
-    # The preflight and verifier code paths are imported by the same source
-    # tree that generated the fake artifacts. Their detailed scientific verdict
-    # remains per-node evidence, not a property of this bootstrap receipt.
+    # The fake CLI callback performs settings/materialisation preflight.  It
+    # does not invoke the separate generated-artifact verifier: that verifier
+    # runs later for the concrete node and must never be reported as observed
+    # merely because its module is importable.
     preflight_sha = canonical_sha256(
         {"component": "program_node_preflight", "program": program}
-    )
-    verifier_sha = canonical_sha256(
-        {"component": "generated_artifact_verifier", "program": program}
     )
     return build_program_component_conformance_receipt(
         program=program,
@@ -241,11 +239,11 @@ def bootstrap_program_conformance(
         compiler_receipt_sha256=compiler_sha,
         preview_receipt_sha256=preview_sha,
         preflight_receipt_sha256=preflight_sha,
-        verifier_receipt_sha256=verifier_sha,
+        verifier_receipt_sha256="",
         compiler_status=status,
         preview_status=status,
         preflight_status=status,
-        verifier_status=status,
+        verifier_status="not_observed",
     )
 
 

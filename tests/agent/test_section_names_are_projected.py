@@ -16,13 +16,14 @@ import pytest
 
 from chemsmart.agent.capabilities import load_program_capabilities
 from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
+from chemsmart.settings.capabilities import AGENT_PROGRAMS
 
 
 def _agent_records():
     return {item.program: item for item in load_program_capabilities().programs}
 
 
-@pytest.mark.parametrize("program", sorted(PROGRAM_CAPABILITIES))
+@pytest.mark.parametrize("program", sorted(AGENT_PROGRAMS))
 def test_the_declared_sections_reach_the_model_unchanged(program):
     declared = PROGRAM_CAPABILITIES[program].project_section_names
     projected = _agent_records()[program].project_section_names
@@ -46,18 +47,19 @@ def test_a_phase_keyed_program_and_a_stage_keyed_one_are_distinguishable():
     assert "opt" in records["xtb"].project_section_names
 
 
-def test_a_program_with_no_project_configuration_declares_no_sections():
-    """An empty tuple is a statement, not a gap."""
+def test_human_only_nciplot_is_not_projected_to_the_agent():
+    """NCIPLOT stays on the human CLI without becoming a v1 agent promise."""
 
     records = _agent_records()
-    assert records["nciplot"].project_section_names == ()
+    assert "nciplot" not in records
     assert not PROGRAM_CAPABILITIES["nciplot"].supports_project_configuration
 
 
 def test_the_projection_is_derived_not_restated():
     """A hand-maintained copy would drift from the loader it describes."""
 
-    for program, core in PROGRAM_CAPABILITIES.items():
+    for program in AGENT_PROGRAMS:
+        core = PROGRAM_CAPABILITIES[program]
         projected = _agent_records()[program].project_section_names
         assert projected is not core.project_section_names or True
         assert tuple(projected) == tuple(core.project_section_names)

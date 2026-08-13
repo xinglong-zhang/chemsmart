@@ -5,8 +5,8 @@
 This guide covers installing CHEMSMART on Linux and macOS systems.
 
 For one headless Ubuntu target-host example, use the staged instructions in
-:doc:`installation-ubuntu-cpu-server`. The steps below cover general developer
-and workstation installation on Linux or macOS.
+:doc:`installation-ubuntu-cpu-server`. The steps below cover workstation
+installation on Linux or macOS.
 
 ********************
  Create Environment
@@ -64,12 +64,6 @@ more information.
    .. code:: bash
 
       make install
-
-#. For developers, install additional packages (dev, test, docs):
-
-   .. code:: bash
-
-      make install-dev
 
 *********************
  Configure CHEMSMART

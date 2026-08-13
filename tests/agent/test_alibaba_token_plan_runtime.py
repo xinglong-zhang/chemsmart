@@ -65,6 +65,16 @@ def test_token_plan_payload_uses_profile_selected_deepseek_model():
     assert payload["preserve_thinking"] is True
 
 
+def test_generic_token_plan_adapter_requires_an_explicit_model():
+    with pytest.raises(TypeError):
+        AlibabaTokenPlanConfigV1()
+    with pytest.raises(TypeError):
+        AlibabaTokenPlanToolSession(
+            transport=lambda payload: payload,
+            messages=[{"role": "user", "content": "Plan."}],
+        )
+
+
 def test_qwen_config_rejects_preview_and_reduced_reasoning():
     with pytest.raises(ContractError, match="production qwen3.8-max"):
         Qwen38MaxConfigV1(model="qwen3.8-max-preview")
@@ -93,7 +103,8 @@ def test_qwen_stream_rejects_an_unexpected_observed_model():
                         }
                     ],
                 }
-            )
+            ),
+            expected_model="qwen3.8-max",
         )
 
 
@@ -129,7 +140,8 @@ def test_qwen_stream_rejects_malformed_tool_index_without_echoing_value():
                         }
                     ],
                 }
-            )
+            ),
+            expected_model="qwen3.8-max",
         )
 
     assert secret_index not in str(observed.value)
@@ -196,7 +208,8 @@ def test_qwen_sse_assembles_reasoning_and_fragmented_tool_call():
                     "completion_tokens_details": {"reasoning_tokens": 5},
                 },
             },
-        )
+        ),
+        expected_model="qwen3.8-max",
     )
 
     message = response["choices"][0]["message"]

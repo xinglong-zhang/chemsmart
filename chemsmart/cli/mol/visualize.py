@@ -9,7 +9,7 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
-from chemsmart.jobs.mol.runner import (
+from chemsmart.jobs.mol.style_registry import (
     is_pymol_derived_style,
     normalize_pymol_style,
 )

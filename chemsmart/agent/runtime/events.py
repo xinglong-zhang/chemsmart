@@ -61,6 +61,8 @@ class EventKind(str, Enum):
     PROVIDER_TURN_OBSERVED = "provider_turn_observed"
     API_ATTEMPT_OBSERVED = "api_attempt_observed"
     SCIENTIFIC_WORKFLOW_MATERIALIZED = "scientific_workflow_materialized"
+    WORKFLOW_REVIEW_RESOLVED = "workflow_review_resolved"
+    EXECUTION_BUNDLE_CONSUMED = "execution_bundle_consumed"
     WORKFLOW_APPROVAL_CONSUMED = "workflow_approval_consumed"
     WORKFLOW_EXECUTION_STARTED = "workflow_execution_started"
     WORKFLOW_LAUNCH_RESERVED = "workflow_node_launch_reserved"
@@ -102,6 +104,8 @@ API_ATTEMPT_OBSERVED = EventKind.API_ATTEMPT_OBSERVED.value
 SCIENTIFIC_WORKFLOW_MATERIALIZED = (
     EventKind.SCIENTIFIC_WORKFLOW_MATERIALIZED.value
 )
+WORKFLOW_REVIEW_RESOLVED = EventKind.WORKFLOW_REVIEW_RESOLVED.value
+EXECUTION_BUNDLE_CONSUMED = EventKind.EXECUTION_BUNDLE_CONSUMED.value
 WORKFLOW_APPROVAL_CONSUMED = EventKind.WORKFLOW_APPROVAL_CONSUMED.value
 WORKFLOW_EXECUTION_STARTED = EventKind.WORKFLOW_EXECUTION_STARTED.value
 WORKFLOW_LAUNCH_RESERVED = EventKind.WORKFLOW_LAUNCH_RESERVED.value
@@ -140,6 +144,8 @@ _RECEIPT_EVENTS = frozenset(
         PROVIDER_TURN_OBSERVED,
         API_ATTEMPT_OBSERVED,
         SCIENTIFIC_WORKFLOW_MATERIALIZED,
+        WORKFLOW_REVIEW_RESOLVED,
+        EXECUTION_BUNDLE_CONSUMED,
         WORKFLOW_APPROVAL_CONSUMED,
         WORKFLOW_EXECUTION_STARTED,
         WORKFLOW_LAUNCH_RESERVED,
@@ -419,6 +425,11 @@ def _validate_typed_receipt_payload(
                 "ready_for_approval",
             },
         ),
+        WORKFLOW_REVIEW_RESOLVED: (
+            "decision",
+            {"approve", "deny", "revise", "quit"},
+        ),
+        EXECUTION_BUNDLE_CONSUMED: ("status", {"consumed"}),
         WORKFLOW_APPROVAL_CONSUMED: ("status", {"consumed"}),
         WORKFLOW_EXECUTION_STARTED: ("state", {"running"}),
         WORKFLOW_LAUNCH_RESERVED: ("state", {"running"}),
@@ -485,6 +496,8 @@ def _validate_typed_receipt_payload(
         ANALYSIS_COMPLETION_EVALUATED,
         ANALYSIS_CLAIMS_RECORDED,
         SCIENTIFIC_WORKFLOW_MATERIALIZED,
+        WORKFLOW_REVIEW_RESOLVED,
+        EXECUTION_BUNDLE_CONSUMED,
         WORKFLOW_APPROVAL_CONSUMED,
         WORKFLOW_EXECUTION_STARTED,
         WORKFLOW_NODE_STATE_CHANGED,
