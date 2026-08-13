@@ -22,7 +22,7 @@ verify every external program and resource setting on the actual machine.
 
 ## Before editing
 
-1. Read `AGENTS.md` and the smallest relevant `.agents/skills` entry.
+1. Read `AGENTS.md`.
 2. Inspect the active branch and dirty worktree.
 3. Reproduce the observed behavior with the live CLI or a focused source
    probe.

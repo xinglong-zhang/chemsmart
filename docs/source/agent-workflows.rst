@@ -232,20 +232,3 @@ model-callable route used by thermochemistry-dependent workflows. The general
 follow-up is a canonical YAML-backed analysis command node whose structured
 receipt can re-enter dimensional expressions; it is not a benchmark-specific
 repair.
-
-Project skills
-==============
-
-The maintained project-local skills are under ``.agents/skills``:
-
-- ``chemsmart-agent-harness``;
-- ``chemsmart-agent-harness-refine-loop``;
-- ``chemsmart-cli-program-hub``;
-- ``chemsmart-scientific-workflow``;
-- ``chemsmart-evidence-audit``;
-- ``pyscf-v2-14-0``; and
-- ``gpu4pyscf-v1-8-0``.
-
-They are operational guidance, not a substitute for the checked-out source or
-the live CLI. Update them when a real general lesson makes their guidance
-wrong, incomplete or suppressive.

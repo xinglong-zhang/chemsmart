@@ -209,11 +209,6 @@ chemistry engine. `agent run` stays preview-only unless an approval file is
 provided. `agent execute` performs an already approved workflow without a
 model or provider credential.
 
-The repository includes a focused set of computational-research skills under
-`.agents/skills`. They teach future research agents to work as challenging,
-self-improving computational scientists while keeping program control inside
-CHEMSMART. They do not encode benchmark answers or replace the live CLI.
-
 See [Agent workflows](docs/source/agent-workflows.rst) for the operational
 boundary and the behavior-first research loop.
 

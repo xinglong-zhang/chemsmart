@@ -179,8 +179,7 @@ molecular model or electronic state, or claim an engine ran when it did not.
 - Do not commit credentials, user configuration, engine binaries, generated
   inputs, outputs, scratch directories, benchmark transcripts or one-off
   diagnostic reports.
-- Maintain user-facing documentation under `docs/source` and reusable research
-  skills under `.agents/skills`.
+- Maintain user-facing documentation under `docs/source`.
 - Keep READMEs and CLI examples aligned with the live Click schema.
 
 ## Collaboration
@@ -189,22 +188,6 @@ The main scientist owns interpretation and the improvement decision. Default
 to no subagents. Use one only for a genuinely independent specialty or when
 parallel work materially accelerates a real experiment. Do not spawn workers
 for routine hashing, grading, confirmation or duplicated inspection.
-
-## Project skills
-
-Use the smallest relevant project-local skill set:
-
-- `chemsmart-agent-harness` for Runtime V2, provider adapters and typed tools;
-- `chemsmart-agent-harness-refine-loop` for behavior-first self-improvement;
-- `chemsmart-cli-program-hub` for CLI, YAML and program integration;
-- `chemsmart-scientific-workflow` for computational-chemistry design and
-  physical validation;
-- `chemsmart-evidence-audit` for a user-requested provenance or claims audit;
-- `pyscf-v2-14-0` and `gpu4pyscf-v1-8-0` for backend-specific execution.
-
-Repository source and live CLI behavior remain authoritative when guidance is
-outdated. Update the skill after a real general lesson rather than preserving
-stale instructions.
 
 ## Reporting
 

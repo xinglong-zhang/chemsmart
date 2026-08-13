@@ -4,7 +4,6 @@ Read `AGENTS.md` first. It defines the scientific mission, execution boundary,
 behavior-first research method, and repository hygiene rules for every coding
 agent.
 
-Use the project-local skills under `.agents/skills` when a task matches them.
 The checked-out source, project loaders, and live Click schema remain the
 operational authority.
 

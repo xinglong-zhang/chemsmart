@@ -1,4 +1,0 @@
-interface:
-  display_name: "PySCF 2.14 for ChemSmart"
-  short_description: "Run and improve the ChemSmart PySCF CPU backend"
-  default_prompt: "Use $pyscf-v2-14-0 to design or diagnose this ChemSmart PySCF workflow."

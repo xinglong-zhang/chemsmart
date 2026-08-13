@@ -1,4 +1,0 @@
-interface:
-  display_name: "ChemSmart Scientific Workflow"
-  short_description: "Design and interpret rigorous chemistry workflows"
-  default_prompt: "Use $chemsmart-scientific-workflow to design or assess this calculation through ChemSmart."
