@@ -1034,6 +1034,12 @@ class TestPyMOLJobRunnerBaseHelpers:
     def test_is_pymol_derived_style_none_is_false(self):
         assert is_pymol_derived_style(None) is False
 
+    def test_is_pymol_derived_style_true_for_scientific_style(self):
+        assert is_pymol_derived_style("glossy") is True
+
+    def test_is_pymol_derived_style_false_for_base_pymol_style(self):
+        assert is_pymol_derived_style("pymol") is False
+
     def test_scratch_defaults_to_class_scratch_when_none(self, pbs_server):
         runner = PyMOLJobRunner(server=pbs_server)
         assert runner.scratch is PyMOLJobRunner.SCRATCH
@@ -1162,6 +1168,17 @@ class TestPyMOLJobRunnerBaseHelpers:
 
         mock_run.assert_not_called()
 
+    def test_write_input_skips_when_inputfile_already_exists(self, tmp_path):
+        inputfile = tmp_path / "mol.xyz"
+        inputfile.write_text("existing content\n")
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(
+            inputfile=str(inputfile), molecule="unused-since-skipped"
+        )
+        runner._write_input(job)
+        # Untouched -- existing content preserved, no write attempted.
+        assert inputfile.read_text() == "existing content\n"
+
     def test_write_input_list_with_non_molecule_raises(self, tmp_path):
         runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
         job = SimpleNamespace(
@@ -1258,6 +1275,7 @@ class TestPyMOLJobRunnerBaseHelpers:
     @pytest.mark.parametrize(
         "style,expected",
         [
+            ("pymol", 'cmd -d "pymol_style mol'),
             ("cylview", 'cmd -d "cylview_style mol'),
             ("cylview-flat", 'cmd -d "cylview_flat_style mol'),
         ],
@@ -1285,10 +1303,13 @@ class TestPyMOLJobRunnerBaseHelpers:
 
     def test_add_coordinates_labels_handles_angles_and_dihedrals(self):
         runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
-        job = SimpleNamespace(coordinates=[[1, 2, 3], [1, 2, 3, 4]])
+        # A bond after the dihedral forces the parsing loop to continue
+        # past a matched "D" (dihedral) entry rather than ending on it.
+        job = SimpleNamespace(coordinates=[[1, 2, 3], [1, 2, 3, 4], [5, 6]])
         command = runner._add_coordinates_labels(job, "cmd")
         assert "angle a1, id 1, id 2, id 3" in command
         assert "dihedral di1, id 1, id 2, id 3, id 4" in command
+        assert "distance d1, id 5, id 6" in command
 
     def test_offset_labels_sets_position_when_given(self):
         runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
@@ -1590,8 +1611,56 @@ class TestPyMOLNCIJobRunnerHelpers:
         command = runner._run_nci_command(job, "cmd")
         assert command == f"cmd; {expected_fragment}"
 
+    def test_add_nci_specific_commands_chains_all_steps(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLNCIJobRunner
+
+        runner = PyMOLNCIJobRunner.__new__(PyMOLNCIJobRunner)
+        job = SimpleNamespace()
+        calls = []
+        for name in (
+            "_hide_labels",
+            "_load_cube_files",
+            "_add_refresh_command",
+            "_run_nci_command",
+            "_add_ray_command",
+        ):
+            mocker.patch.object(
+                PyMOLNCIJobRunner,
+                name,
+                side_effect=lambda j, c, n=name: c + f";{n}",
+            )
+            calls.append(name)
+
+        result = runner._add_nci_specific_commands(job, "cmd")
+        assert result == "cmd" + "".join(f";{n}" for n in calls)
+
 
 class TestPyMOLMOJobRunnerHelpers:
+    def test_prerun_chains_all_setup_steps(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        job = SimpleNamespace()
+        mock_assign = mocker.patch.object(
+            PyMOLMOJobRunner, "_assign_variables"
+        )
+        mock_fchk = mocker.patch.object(
+            PyMOLMOJobRunner, "_generate_fchk_file"
+        )
+        mock_cube = mocker.patch.object(
+            PyMOLMOJobRunner, "_generate_mo_cube_file"
+        )
+        mock_pml = mocker.patch.object(
+            PyMOLMOJobRunner, "_write_molecular_orbital_pml"
+        )
+
+        runner._prerun(job)
+
+        mock_assign.assert_called_once_with(job)
+        mock_fchk.assert_called_once_with(job)
+        mock_cube.assert_called_once_with(job)
+        mock_pml.assert_called_once_with(job)
+
     def test_generate_mo_cube_file_no_selection_raises(self, mocker):
         from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
 
@@ -1685,6 +1754,34 @@ class TestPyMOLMOJobRunnerHelpers:
         assert mock_run.call_args.args[0] == (
             f"/opt/g16/cubegen 0 MO={expected_mo} mol.fchk mol.cube 0 h"
         )
+
+    def test_generate_mo_cube_file_number_zero_spuriously_raises(
+        self, tmp_path, monkeypatch, mocker
+    ):
+        """See BUGS_FOUND.md: number=0 passes the "exactly one of"
+        selection check (job.number is not None) but then fails the
+        truthy `if job.number:` check used to resolve mo_type, so MO
+        index 0 can never actually be visualized -- it spuriously hits
+        the "No MO specified" error instead."""
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        monkeypatch.chdir(tmp_path)
+        mocker.patch.object(
+            PyMOLMOJobRunner,
+            "_get_gaussian_executable",
+            return_value="/opt/g16",
+        )
+        mocker.patch("chemsmart.jobs.mol.runner.run_command")
+        job = SimpleNamespace(
+            number=0,
+            homo=False,
+            lumo=False,
+            job_basename="mol",
+            source_basename="mol",
+        )
+        with pytest.raises(ValueError, match="No MO specified"):
+            runner._generate_mo_cube_file(job)
 
     def test_write_molecular_orbital_pml_overwrites_existing(self, tmp_path):
         from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
