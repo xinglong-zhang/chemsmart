@@ -429,6 +429,92 @@ class TestGaussianInputWriter:
             content = handle.read()
         assert content.count(" L H 3") == 2
 
+    def test_write_qmmm_auto_assigns_link_atoms_for_cut_bonds(
+        self,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Cut covalent bonds are assigned as link atoms when bonded_atoms is omitted."""
+        import numpy as np
+
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
+        molecule = Molecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [-0.48611108, -0.34722222, 0.00000000],
+                    [-0.12945666, -1.35603222, 0.00000000],
+                    [-0.12943824, 0.15717597, -0.87365150],
+                    [-1.55611108, -0.34720903, 0.00000000],
+                    [0.02723114, 0.37873406, 1.25740497],
+                    [-0.32782521, 1.38810715, 1.25642745],
+                    [-0.33103797, -0.12453438, 2.13105486],
+                    [1.09722933, 0.37702737, 1.25838372],
+                ],
+                dtype=float,
+            ),
+        )
+        qmmm_settings = GaussianQMMMJobSettings(
+            parent_jobtype="opt",
+            jobtype="opt",
+            freq=False,
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            charge_high=0,
+            mult_high=1,
+            high_level_atoms=[1, 2, 3, 4],
+        )
+        job = GaussianQMMMJob(
+            molecule=molecule,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_auto_link",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        with open(
+            os.path.join(tmpdir, "gaussian_qmmm_auto_link.com")
+        ) as handle:
+            content = handle.read()
+        assert "L H 1" in content
+        assert job.molecule.bonded_atoms == [(1, 5)]
+
+    def test_write_qmmm_rejects_multiple_link_atoms_on_same_atom(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Gaussian permits only one link-atom specification per atom."""
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
+        qmmm_settings = GaussianQMMMJobSettings(
+            parent_jobtype="opt",
+            jobtype="opt",
+            freq=False,
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            charge_high=0,
+            mult_high=1,
+            high_level_atoms=[1, 2, 3],
+            bonded_atoms=[(2, 4), (3, 4)],
+        )
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_double_link",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        with pytest.raises(ValueError, match="only one link-atom"):
+            GaussianInputWriter(job=job).write(target_directory=tmpdir)
+
     def test_write_qmmm_genecp_follows_conventional_basis_path(
         self,
         tmpdir,

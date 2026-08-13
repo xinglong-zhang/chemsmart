@@ -2841,6 +2841,41 @@ class TestQMMMMolecule:
             lines = [line.strip() for line in f.readlines()]
         assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
 
+    def test_auto_assigns_link_atoms_for_cut_covalent_bonds(self):
+        """Cut covalent bonds become link-atom pairs when bonded_atoms is omitted."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [-0.48611108, -0.34722222, 0.00000000],
+                    [-0.12945666, -1.35603222, 0.00000000],
+                    [-0.12943824, 0.15717597, -0.87365150],
+                    [-1.55611108, -0.34720903, 0.00000000],
+                    [0.02723114, 0.37873406, 1.25740497],
+                    [-0.32782521, 1.38810715, 1.25642745],
+                    [-0.33103797, -0.12453438, 2.13105486],
+                    [1.09722933, 0.37702737, 1.25838372],
+                ]
+            ),
+            high_level_atoms=[1, 2, 3, 4],
+        )
+        buf = StringIO()
+        mol._write_gaussian_coordinates(buf)
+        text = buf.getvalue()
+        assert mol.bonded_atoms == [(1, 5)]
+        assert "L H 1" in text
+        # Explicit empty list disables auto-assignment.
+        mol_no_links = QMMMMolecule(
+            symbols=mol.symbols,
+            positions=mol.positions,
+            high_level_atoms=[1, 2, 3, 4],
+            bonded_atoms=[],
+        )
+        buf_no_links = StringIO()
+        mol_no_links._write_gaussian_coordinates(buf_no_links)
+        assert mol_no_links.bonded_atoms == []
+        assert "H 1" not in buf_no_links.getvalue()
+
 
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""
@@ -4024,6 +4059,16 @@ H 1.0 0.0 0.0 L
             bonded_atoms="[(1, 2)]",
         )
         q4._write_gaussian_coordinates(StringIO())
+        # Gaussian permits only one link-atom specification per atom
+        bad3 = QMMMMolecule(
+            symbols=["C", "C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0], [3.0, 0, 0]]),
+            high_level_atoms=[1, 2],
+            low_level_atoms=[3],
+            bonded_atoms=[(1, 3), (2, 3)],
+        )
+        with pytest.raises(ValueError, match="only one link-atom"):
+            bad3._write_gaussian_coordinates(StringIO())
 
     def test_qmmm_partition_validation(self):
         q = QMMMMolecule(

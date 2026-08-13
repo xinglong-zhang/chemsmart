@@ -160,7 +160,11 @@ def create_qmmm_subcommand(parent_command):
         "--bonded-atoms",
         type=str,
         default=None,
-        help="Bonded atom pairs at QM/MM boundary as string representation of dict.",
+        help=(
+            "Bonded atom pairs at QM/MM boundary, e.g. '[(3, 4), (5, 6)]'. "
+            "If omitted, cut covalent bonds are assigned from molecular "
+            "connectivity."
+        ),
     )
     @click.option(
         "-sf",

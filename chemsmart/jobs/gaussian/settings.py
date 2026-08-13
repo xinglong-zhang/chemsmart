@@ -2407,7 +2407,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             high_level_atoms (list/str): Atoms in high layer (1-indexed)
             medium_level_atoms (list/str): Atoms in medium layer (1-indexed)
             low_level_atoms (list/str): Atoms in low layer (1-indexed)
-            bonded_atoms (list): Covalent bonds crossing layer boundaries
+            bonded_atoms (list): Covalent bonds crossing layer boundaries.
+            If omitted, cut covalent bonds are assigned from connectivity.
             scale_factors (dict): Custom scale factors for link atom placement
 
     Examples:

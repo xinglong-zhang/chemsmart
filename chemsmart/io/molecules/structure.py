@@ -83,7 +83,8 @@ class Molecule:
     qm high/medium/low_level_atoms：list of integers to define QM/MM layers
         The atoms that are treated at the high/medium/low level of theory.
     bonded_atoms: list of tuples of integers
-        The atom pairs that are treated as bonded in QM/MM calculations.
+        Covalent atom pairs that cross QM/MM layer boundaries (1-based).
+        If omitted, pairs are assigned from ``to_graph`` connectivity.
     scale factors: a dictionary of scale factors for QM/MM calculations,
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
@@ -3744,6 +3745,11 @@ class QMMMMolecule(Molecule):
         ), "Positions to write should not be None!"
         from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
+        if self.bonded_atoms is None:
+            self.bonded_atoms = self._detect_cut_bonds()
+        elif not isinstance(self.bonded_atoms, list):
+            self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+
         for i, (s, (x, y, z)) in enumerate(
             zip(self.chemical_symbols, self.positions)
         ):
@@ -3770,10 +3776,9 @@ class QMMMMolecule(Molecule):
             if self.partition_level_strings is not None:
                 line += f" {self.partition_level_strings[i]}"
 
-            if self.bonded_atoms is not None:
+            if self.bonded_atoms:
                 # Handle QM link atoms and bonded-to atoms
-                if not isinstance(self.bonded_atoms, list):
-                    self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+                link_atom_bonded_to = None
                 for atom1, atom2 in self.bonded_atoms:
                     atom1_level = self._determine_level_from_atom_index(atom1)
                     atom2_level = self._determine_level_from_atom_index(atom2)
@@ -3785,43 +3790,23 @@ class QMMMMolecule(Molecule):
                         raise ValueError(
                             f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
                         )
-                    elif atom1_level == "H" and (
-                        atom2_level == "M" or atom2_level == "L"
-                    ):
-                        if (i + 1) == atom2:
-                            line += (
-                                " "
-                                + GaussianQMMMJobSettings.format_mm_link_atom(
-                                    atom1, mm_info
-                                )
-                            )
-                    elif atom1_level == "M" and atom2_level == "L":
-                        if (i + 1) == atom2:
-                            line += (
-                                " "
-                                + GaussianQMMMJobSettings.format_mm_link_atom(
-                                    atom1, mm_info
-                                )
-                            )
-                    elif (
-                        atom1_level == "M" or atom1_level == "L"
-                    ) and atom2_level == "H":
-                        # lower level line will get the link atom (Hydrogen)
-                        if (i + 1) == atom1:
-                            line += (
-                                " "
-                                + GaussianQMMMJobSettings.format_mm_link_atom(
-                                    atom2, mm_info
-                                )
-                            )
-                    elif atom1_level == "L" and atom2_level == "M":
-                        if (i + 1) == atom1:
-                            line += (
-                                " "
-                                + GaussianQMMMJobSettings.format_mm_link_atom(
-                                    atom2, mm_info
-                                )
-                            )
+                    higher, lower = self._gaussian_link_atom_pair(
+                        atom1, atom2, atom1_level, atom2_level
+                    )
+                    if lower is None or (i + 1) != lower:
+                        continue
+                    if link_atom_bonded_to is not None:
+                        raise ValueError(
+                            "Gaussian permits only one link-atom "
+                            "specification per atom; "
+                            f"atom {i + 1} is already linked to atom "
+                            f"{link_atom_bonded_to} and cannot also be "
+                            f"linked to atom {higher}."
+                        )
+                    line += " " + GaussianQMMMJobSettings.format_mm_link_atom(
+                        higher, mm_info
+                    )
+                    link_atom_bonded_to = higher
 
             if self.scale_factors is not None:
                 logger.warning(
@@ -3896,6 +3881,37 @@ class QMMMMolecule(Molecule):
         from chemsmart.utils.utils import get_list_from_string_range
 
         return get_list_from_string_range(atoms)
+
+    def _detect_cut_bonds(self):
+        """Return 1-based pairs for covalent bonds that cross layer boundaries."""
+        cut_bonds = []
+        for i, j in sorted(self.to_graph().edges()):
+            atom1 = i + 1
+            atom2 = j + 1
+            level1 = self._determine_level_from_atom_index(atom1)
+            level2 = self._determine_level_from_atom_index(atom2)
+            if level1 is None or level2 is None:
+                continue
+            if level1 != level2:
+                cut_bonds.append((atom1, atom2))
+        if cut_bonds:
+            logger.debug(
+                "Auto-assigned ONIOM link-atom boundary bonds from cut "
+                f"covalent bonds: {cut_bonds}"
+            )
+        return cut_bonds
+
+    @staticmethod
+    def _gaussian_link_atom_pair(atom1, atom2, atom1_level, atom2_level):
+        """Return (higher-layer atom, lower-layer host) for a boundary bond."""
+        rank = {"H": 2, "M": 1, "L": 0}
+        r1 = rank.get(atom1_level)
+        r2 = rank.get(atom2_level)
+        if r1 is None or r2 is None:
+            return None, None
+        if r1 > r2:
+            return atom1, atom2
+        return atom2, atom1
 
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of

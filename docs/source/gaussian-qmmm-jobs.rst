@@ -304,7 +304,8 @@ Settings Atom Partitioning
 
    -  -  ``bonded_atoms``
       -  list
-      -  Bonds crossing boundaries: [(atom1, atom2), (atom3, atom4)]
+      -  Bonds crossing boundaries: [(atom1, atom2), ...]. Optional; cut covalent bonds are assigned from connectivity
+         if omitted.
 
    -  -  ``scale_factors``
       -  dict
@@ -354,6 +355,8 @@ Link Atom Handling
 ONIOM automatically handles covalent bonds crossing layer boundaries by:
 
 -  **Link atom placement**: Hydrogen atoms placed along cut bonds
+-  **Automatic assignment**: Cut covalent bonds are detected from molecular connectivity unless ``bonded_atoms`` is
+   given
 -  **Scale factor control**: Distance scaling for optimal QM/MM interface
 -  **Charge redistribution**: Prevents charge buildup at boundaries
 -  **Geometric constraints**: Maintains chemical sensibility
