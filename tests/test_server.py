@@ -162,7 +162,9 @@ class TestMissingProgramSectionFallback:
         assert exe.scripts is None
         assert exe.envars is None
 
-    def test_xtb_missing_section_logs_warning(self, legacy_server_yaml, caplog):
+    def test_xtb_missing_section_logs_warning(
+        self, legacy_server_yaml, caplog
+    ):
         """A warning is logged when the XTB section is absent."""
         import logging
 
