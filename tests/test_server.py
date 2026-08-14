@@ -1,6 +1,8 @@
 import os
 from io import StringIO
 
+import pytest
+
 from chemsmart.settings.executable import (
     CRESTExecutable,
     GaussianExecutable,
@@ -144,3 +146,71 @@ conda activate ~/anaconda3/envs/chemsmart
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+
+
+# Minimal server YAML content that pre-dates xTB support (no XTB or CREST section)
+_LEGACY_SERVER_YAML = """\
+SERVER:
+    SCHEDULER: PBS
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 375
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: qsub
+    SCRATCH_DIR: null
+    USE_HOSTS: false
+GAUSSIAN:
+    EXEFOLDER: ~/programs/g16
+    LOCAL_RUN: True
+ORCA:
+    EXEFOLDER: ~/programs/orca_6_0_0
+    LOCAL_RUN: False
+"""
+
+
+class TestMissingProgramSectionFallback:
+    """Tests that Executable.from_servername falls back gracefully when the
+    program block (e.g. XTB, CREST) is absent from the server YAML.  This
+    covers users who installed CHEMSMART before xTB support was added."""
+
+    @pytest.fixture()
+    def legacy_server_yaml(self, tmp_path):
+        """Write a server YAML that has no XTB or CREST block."""
+        yaml_path = tmp_path / "legacy_server.yaml"
+        yaml_path.write_text(_LEGACY_SERVER_YAML)
+        return str(yaml_path)
+
+    def test_xtb_missing_section_returns_default(self, legacy_server_yaml):
+        """XTBExecutable.from_servername does not raise when XTB block absent."""
+        exe = XTBExecutable.from_servername(legacy_server_yaml)
+        assert exe.executable_folder is None
+        assert exe.get_executable() == "xtb"
+        assert exe.local_run is False
+        assert exe.conda_env is None
+        assert exe.modules is None
+        assert exe.scripts is None
+        assert exe.envars is None
+
+    def test_xtb_missing_section_logs_warning(self, legacy_server_yaml, caplog):
+        """A warning is logged when the XTB section is absent."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            XTBExecutable.from_servername(legacy_server_yaml)
+        assert any("XTB" in msg for msg in caplog.messages)
+
+    def test_crest_missing_section_returns_default(self, legacy_server_yaml):
+        """CRESTExecutable.from_servername does not raise when CREST block absent."""
+        exe = CRESTExecutable.from_servername(legacy_server_yaml)
+        assert exe.executable_folder is None
+        assert exe.get_executable() == "crest"
+        assert exe.local_run is False
+        assert exe.conda_env is None
+
+    def test_present_section_still_parsed_correctly(self, legacy_server_yaml):
+        """Programs that *are* present in the legacy YAML are still parsed."""
+        exe = GaussianExecutable.from_servername(legacy_server_yaml)
+        assert exe.executable_folder == os.path.expanduser("~/programs/g16")
+        assert exe.local_run is True
