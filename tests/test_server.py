@@ -144,3 +144,38 @@ conda activate ~/anaconda3/envs/chemsmart
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+
+
+class TestMissingProgramSectionFallback:
+    """Tests that Executable.from_servername raises ValueError when the
+    program block (e.g. XTB, CREST) is absent from the server YAML, and
+    that programs which ARE present still parse correctly.
+
+    Covers users who installed CHEMSMART before xTB support was added."""
+
+    def test_xtb_missing_section_raises(self, legacy_server_yaml):
+        """XTBExecutable.from_servername raises ValueError when XTB block absent."""
+        import pytest
+
+        with pytest.raises(ValueError, match="XTB"):
+            XTBExecutable.from_servername(legacy_server_yaml)
+
+    def test_xtb_missing_section_error_message(self, legacy_server_yaml):
+        """The ValueError message mentions updating the server YAML."""
+        import pytest
+
+        with pytest.raises(ValueError, match="server YAML"):
+            XTBExecutable.from_servername(legacy_server_yaml)
+
+    def test_crest_missing_section_raises(self, legacy_server_yaml):
+        """CRESTExecutable.from_servername raises ValueError when CREST block absent."""
+        import pytest
+
+        with pytest.raises(ValueError, match="CREST"):
+            CRESTExecutable.from_servername(legacy_server_yaml)
+
+    def test_present_section_still_parsed_correctly(self, legacy_server_yaml):
+        """Programs that *are* present in the legacy YAML are still parsed."""
+        exe = GaussianExecutable.from_servername(legacy_server_yaml)
+        assert exe.executable_folder == os.path.expanduser("~/programs/g16")
+        assert exe.local_run is True
