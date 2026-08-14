@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 
 from chemsmart.analysis.fukui import (
+    analyze_fukui,
     discover_fukui_companion_outputs,
     radical_ion_charge_and_multiplicity,
 )
@@ -34,6 +35,66 @@ class TestFukuiHelpers:
         found = discover_fukui_companion_outputs(str(neutral))
         assert found["radical_cation"] == str(cation)
         assert found["radical_anion"] == str(anion)
+
+
+class DummyFukuiOutput:
+    def __init__(self, energy, charges):
+        self.energies = [energy]
+        self.mulliken_atomic_charges = charges
+
+
+class TestAnalyzeFukuiOutput:
+    def test_writes_results_table(self, tmp_path, monkeypatch, caplog):
+        import logging
+
+        caplog.set_level(logging.INFO, logger="chemsmart.analysis.fukui")
+        outputs = {
+            "n.log": DummyFukuiOutput(-100.0, {"C1": 0.10, "H2": 0.00}),
+            "c.log": DummyFukuiOutput(-99.5, {"C1": 0.40, "H2": 0.10}),
+            "a.log": DummyFukuiOutput(-100.4, {"C1": -0.20, "H2": -0.10}),
+        }
+
+        def fake_load(filename):
+            return outputs[filename], "gaussian"
+
+        monkeypatch.setattr("chemsmart.analysis.fukui._load_output", fake_load)
+        output_path = tmp_path / "subdir" / "fukui.dat"
+        analyze_fukui(
+            neutral_filename="n.log",
+            radical_cation_filename="c.log",
+            radical_anion_filename="a.log",
+            mode="mulliken",
+            output=str(output_path),
+        )
+        text = output_path.read_text()
+        assert "Ionization energy = 0.5" in text
+        assert "Fukui Minus (f-)" in text
+        assert "C1" in text
+        assert "Ionization energy" not in caplog.text
+
+    def test_cli_passes_output(self, tmp_path, mocker, caplog):
+        import logging
+
+        caplog.set_level(logging.INFO, logger="chemsmart.cli.fukui")
+        mock = mocker.patch("chemsmart.cli.fukui.analyze_fukui")
+        neutral = tmp_path / "mol_n.log"
+        cation = tmp_path / "mol_rc.log"
+        anion = tmp_path / "mol_ra.log"
+        neutral.write_text("n")
+        cation.write_text("c")
+        anion.write_text("a")
+        output_path = tmp_path / "fukui.dat"
+        runner = CliRunner()
+        result = runner.invoke(
+            fukui_analyze,
+            ["-n", str(neutral), "-o", str(output_path)],
+        )
+        assert result.exit_code == 0, result.output
+        mock.assert_called_once()
+        assert mock.call_args.kwargs["output"] == str(output_path)
+        assert mock.call_args.kwargs["radical_cation_filename"] == str(cation)
+        assert mock.call_args.kwargs["radical_anion_filename"] == str(anion)
+        assert "Auto-discovered" not in caplog.text
 
 
 class TestGaussianFukuiJob:
@@ -186,6 +247,7 @@ class TestFukuiCLI:
         assert "-c, --radical-cation-filename" in result.output
         assert "-a, --radical-anion-filename" in result.output
         assert "-m, --mode" in result.output
+        assert "-o, --output" in result.output
         assert "Charges to be used for Fukui Indices" in result.output
 
     def test_analyze_requires_ion_file(self, tmp_path):

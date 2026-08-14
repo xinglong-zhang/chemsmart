@@ -355,10 +355,38 @@ Analysis (``chemsmart run fukui``)
 Post-processing is program-agnostic (Gaussian ``.log`` or ORCA ``.out``) and matches the historical ``fukui.py`` script
 options:
 
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-n, --neutral-filename``
+      -  string
+      -  Neutral output file (required)
+
+   -  -  ``-c, --radical-cation-filename``
+      -  string
+      -  Radical-cation output; auto-discovered as ``<base>_rc`` beside ``-n`` if omitted
+
+   -  -  ``-a, --radical-anion-filename``
+      -  string
+      -  Radical-anion output; auto-discovered as ``<base>_ra`` beside ``-n`` if omitted
+
+   -  -  ``-m, --mode``
+      -  string
+      -  Charge partitioning: ``mulliken`` (default), ``nbo``, ``hirshfeld``, or ``cm5``
+
+   -  -  ``-o, --output``
+      -  string
+      -  Write results to this file instead of logging them
+
 .. code:: bash
 
    chemsmart run fukui -n <label>_n.log -c <label>_rc.log -a <label>_ra.log
 
    chemsmart run fukui -n <label>_n.log -m nbo
 
-When ``-c`` / ``-a`` are omitted, companion ``_rc`` / ``_ra`` files beside ``-n`` are auto-discovered.
+   chemsmart run fukui -n <label>_n.log -o fukui.dat

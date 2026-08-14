@@ -50,11 +50,19 @@ logger = logging.getLogger(__name__)
     type=click.Choice(list(FUKUI_MODES), case_sensitive=False),
     help="Charges to be used for Fukui Indices calculations.",
 )
+@click.option(
+    "-o",
+    "--output",
+    default=None,
+    type=str,
+    help="Write Fukui results to this file instead of logging them.",
+)
 def fukui(
     neutral_filename,
     radical_cation_filename=None,
     radical_anion_filename=None,
     mode="mulliken",
+    output=None,
 ):
     """Compute Fukui reactivity indices from existing output files.
 
@@ -66,19 +74,23 @@ def fukui(
       chemsmart run fukui -n mol_n.log -c mol_rc.log -a mol_ra.log
 
       chemsmart run fukui -n mol_n.log -m nbo
+
+      chemsmart run fukui -n mol_n.log -o fukui.dat
     """
     if radical_cation_filename is None or radical_anion_filename is None:
         discovered = discover_fukui_companion_outputs(neutral_filename)
         if radical_cation_filename is None and discovered["radical_cation"]:
             radical_cation_filename = discovered["radical_cation"]
-            logger.info(
-                f"Auto-discovered radical cation: {radical_cation_filename}"
-            )
+            if output is None:
+                logger.info(
+                    f"Auto-discovered radical cation: {radical_cation_filename}"
+                )
         if radical_anion_filename is None and discovered["radical_anion"]:
             radical_anion_filename = discovered["radical_anion"]
-            logger.info(
-                f"Auto-discovered radical anion: {radical_anion_filename}"
-            )
+            if output is None:
+                logger.info(
+                    f"Auto-discovered radical anion: {radical_anion_filename}"
+                )
 
     if radical_cation_filename is None and radical_anion_filename is None:
         raise click.UsageError(
@@ -92,5 +104,6 @@ def fukui(
         radical_cation_filename=radical_cation_filename,
         radical_anion_filename=radical_anion_filename,
         mode=mode,
+        output=output,
     )
     return None

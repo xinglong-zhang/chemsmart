@@ -91,11 +91,24 @@ def _charges_for_mode(output, mode, program):
     )
 
 
-def _log_charges(title, charges):
-    logger.info(f"\n{title}")
+def _emit(message, lines):
+    if lines is None:
+        logger.info(message)
+    else:
+        lines.append(message)
+
+
+def _log_charges(title, charges, lines):
+    _emit(f"\n{title}", lines)
     for key, value in charges.items():
-        logger.info(f"{key:<6}  :  {value:>8.3f}")
-    logger.info("\n")
+        _emit(f"{key:<6}  :  {value:>8.3f}", lines)
+    _emit("\n", lines)
+
+
+def _write_fukui_output(output, lines):
+    path = Path(output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
 
 
 def analyze_fukui(
@@ -103,6 +116,7 @@ def analyze_fukui(
     radical_cation_filename=None,
     radical_anion_filename=None,
     mode="mulliken",
+    output=None,
 ):
     """Compute and log condensed Fukui indices from existing outputs.
 
@@ -114,6 +128,9 @@ def analyze_fukui(
         Optional ion outputs. At least one must be provided.
     mode
         Charge partitioning: ``mulliken``, ``nbo``, ``hirshfeld``, or ``cm5``.
+    output
+        Optional path to write results. When set, results are written to this
+        file and not logged.
     """
     mode = mode.lower()
     if mode not in FUKUI_MODES:
@@ -127,6 +144,7 @@ def analyze_fukui(
             "be provided."
         )
 
+    lines = [] if output is not None else None
     neutral_output, program = _load_output(neutral_filename)
 
     radical_cation_output = None
@@ -151,22 +169,27 @@ def analyze_fukui(
         chemical_potential = -0.5 * (ionization_energy + affinity_energy)
         chemical_hardness = ionization_energy - affinity_energy
         if abs(chemical_hardness) < 1e-12:
-            logger.warning(
+            warning = (
                 "Chemical hardness is effectively zero; global "
                 "electrophilicity index cannot be computed to avoid "
                 "division by zero."
             )
+            if lines is None:
+                logger.warning(warning)
+            else:
+                lines.append(warning)
             global_electrophilicity_index = None
         else:
             global_electrophilicity_index = chemical_potential**2 / (
                 2 * chemical_hardness
             )
-        logger.info(f"Ionization energy = {ionization_energy}")
-        logger.info(f"Electron affinity energy = {affinity_energy}")
-        logger.info(f"Chemical potential = {chemical_potential}")
-        logger.info(f"Chemical hardness = {chemical_hardness}")
-        logger.info(
-            f"Global electrophilicity index = {global_electrophilicity_index}"
+        _emit(f"Ionization energy = {ionization_energy}", lines)
+        _emit(f"Electron affinity energy = {affinity_energy}", lines)
+        _emit(f"Chemical potential = {chemical_potential}", lines)
+        _emit(f"Chemical hardness = {chemical_hardness}", lines)
+        _emit(
+            f"Global electrophilicity index = {global_electrophilicity_index}",
+            lines,
         )
 
     mode_labels = {
@@ -175,9 +198,10 @@ def analyze_fukui(
         "hirshfeld": "Hirshfeld",
         "cm5": "CM5",
     }
-    logger.info(
+    _emit(
         f"\nUsing {mode_labels[mode]} Charges for computing Fukui "
-        "Reactivity Indices."
+        "Reactivity Indices.",
+        lines,
     )
 
     charge_for_neutral = _charges_for_mode(neutral_output, mode, program)
@@ -192,19 +216,24 @@ def analyze_fukui(
             radical_anion_output, mode, program
         )
 
-    _log_charges("Neutral System Charges:", charge_for_neutral)
+    _log_charges("Neutral System Charges:", charge_for_neutral, lines)
     if charge_for_radical_cation is not None:
         _log_charges(
-            "Radical Cationic System Charges:", charge_for_radical_cation
+            "Radical Cationic System Charges:",
+            charge_for_radical_cation,
+            lines,
         )
     if charge_for_radical_anion is not None:
         _log_charges(
-            "Radical Anionic System Charges:", charge_for_radical_anion
+            "Radical Anionic System Charges:",
+            charge_for_radical_anion,
+            lines,
         )
 
-    logger.info(
+    _emit(
         "\nAtom        Fukui Minus (f-)   Fukui Plus(f+)    "
-        "Fukui Zero(f0)    Fukui Dual Descriptor(f(2))"
+        "Fukui Zero(f0)    Fukui Dual Descriptor(f(2))",
+        lines,
     )
     for key, value in charge_for_neutral.items():
         if charge_for_radical_cation is not None:
@@ -226,7 +255,11 @@ def analyze_fukui(
         else:
             fukui_zero = 0.0
             fukui_dual = 0.0
-        logger.info(
+        _emit(
             f"{key:<4}        {fukui_minus:>12.3f}     {fukui_plus:>12.3f}     "
-            f"{fukui_zero:>12.3f}     {fukui_dual:>12.3f}"
+            f"{fukui_zero:>12.3f}     {fukui_dual:>12.3f}",
+            lines,
         )
+
+    if output is not None:
+        _write_fukui_output(output, lines)
