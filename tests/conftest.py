@@ -18,6 +18,7 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
@@ -1756,6 +1757,64 @@ def xtb_he_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "he_hess")
 
 
+# master CREST test directory
+@pytest.fixture()
+def crest_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "CRESTTests")
+
+
+# crest yaml files
+@pytest.fixture()
+def crest_yaml_settings_directory(crest_test_directory):
+    return os.path.join(crest_test_directory, "project_yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv")
+
+
+@pytest.fixture()
+def crest_outputs_directory(crest_test_directory):
+    crest_outputs_directory = os.path.join(crest_test_directory, "outputs")
+    return os.path.abspath(crest_outputs_directory)
+
+
+@pytest.fixture()
+def crest_styrene_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "styrene_conformers")
+
+
+@pytest.fixture()
+def crest_octane_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "octane_conformers")
+
+
+@pytest.fixture()
+def crest_ts1a_constrained_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "TS1A_constrained_conformers")
+
+
+@pytest.fixture()
+def crest_hexane_failed_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "hexane_failed_conformers")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -1989,6 +2048,18 @@ def xtb_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def xtb_jobrunner_scratch(tmpdir, pbs_server):
     return FakeXTBJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def crest_jobrunner_no_scratch(pbs_server):
+    return FakeCRESTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def crest_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeCRESTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 
@@ -2903,3 +2974,41 @@ def database_ase_file(database_test_directory):
 @pytest.fixture()
 def database_empty_file(database_test_directory):
     return os.path.join(database_test_directory, "empty.db")
+
+
+# ---------------------------------------------------------------------------
+# Reusable fixture: minimal server YAML without XTB/CREST sections
+# (simulates a pre-xTB CHEMSMART install)
+# ---------------------------------------------------------------------------
+
+_LEGACY_SERVER_YAML = """\
+SERVER:
+    SCHEDULER: PBS
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 375
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: qsub
+    SCRATCH_DIR: null
+    USE_HOSTS: false
+GAUSSIAN:
+    EXEFOLDER: ~/programs/g16
+    LOCAL_RUN: True
+ORCA:
+    EXEFOLDER: ~/programs/orca_6_0_0
+    LOCAL_RUN: False
+"""
+
+
+@pytest.fixture()
+def legacy_server_yaml(tmp_path):
+    """Path to a temporary server YAML that has no XTB or CREST block.
+
+    Simulates a server configuration written before xTB support was added to
+    CHEMSMART, so that tests can verify the graceful fallback behaviour.
+    """
+    yaml_path = tmp_path / "legacy_server.yaml"
+    yaml_path.write_text(_LEGACY_SERVER_YAML)
+    return str(yaml_path)

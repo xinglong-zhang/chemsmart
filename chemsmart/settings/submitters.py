@@ -4,6 +4,7 @@ from abc import abstractmethod
 from typing import Optional
 
 from chemsmart.settings.executable import (
+    CRESTExecutable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
@@ -262,6 +263,8 @@ class Submitter(RegistryMixin):
             executable = ORCAExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "xtb":
             executable = XTBExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "crest":
+            executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
 

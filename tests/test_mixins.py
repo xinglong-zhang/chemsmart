@@ -1,6 +1,7 @@
 import os
 
 from chemsmart.utils.mixins import (
+    CRESTFileMixin,
     FileMixin,
     FolderMixin,
     GaussianFileMixin,
@@ -205,6 +206,28 @@ class TestXTBFileMixin:
         assert dummy.uhf == 0
         assert dummy.freq is False
         assert dummy.grad is True
+
+
+class DummyCRESTFile(CRESTFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def route_string(self):
+        return "crest 1a.xyz --cinp constraints.inp --gfn2 --chrg 0 --uhf 0 --optlev tight"
+
+
+class TestCRESTFileMixin:
+    def test_crest_file_properties(self):
+        dummy = DummyCRESTFile("test.out")
+        assert dummy.jobtype == "conformers"
+        assert dummy.optimization_level == "tight"
+        assert dummy.gfn_version == "gfn2"
+        assert dummy.solvent_model is None
+        assert dummy.solvent_id is None
+        assert dummy.charge == 0
+        assert dummy.uhf == 0
+        assert dummy.constrained is True
 
 
 class TestYAMLFileMixin:
