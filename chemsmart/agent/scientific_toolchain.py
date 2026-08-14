@@ -265,6 +265,12 @@ class AnalysisNodeIntentV1:
                         f"({output.quantity_kind}) declares no unit; "
                         + DIMENSIONLESS_UNIT_HINT
                     )
+                if str(output.unit).strip().lower() == "count":
+                    raise ScientificToolchainContractError(
+                        f"analysis output {output.output_id!r} "
+                        f"({output.quantity_kind}) declares unsupported unit "
+                        f"{output.unit!r}; counts use physical unit '1'"
+                    )
         if self.support_state == "blocked_unsupported":
             if not str(self.blocked_reason).strip():
                 raise ScientificToolchainContractError(

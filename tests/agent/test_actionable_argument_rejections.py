@@ -309,6 +309,41 @@ def test_the_precondition_and_the_rejection_come_from_one_table():
     assert producer in str(failure.value)
 
 
+def _count_expression_intent(unit):
+    from chemsmart.agent.scientific_toolchain import (
+        AnalysisNodeIntentV1,
+        AnalysisOutputIntentV1,
+    )
+
+    return AnalysisNodeIntentV1(
+        node_id="derive-count",
+        analysis_kind="quantity_expression",
+        dependencies=(),
+        inputs=(),
+        selectors=(),
+        outputs=(
+            AnalysisOutputIntentV1(
+                output_id="n_imaginary",
+                quantity_kind="count",
+                unit=unit,
+            ),
+        ),
+        expression_nodes=(
+            {
+                "node_id": "n_imaginary",
+                "operation": "literal",
+                "literal_value": 0,
+                "literal_unit": "1",
+            },
+        ),
+        expression_output_node_ids=("n_imaginary",),
+        temperature_k=None,
+        pressure_atm=None,
+        support_state="planned",
+        blocked_reason="",
+    )
+
+
 def test_a_blank_unit_names_the_output_and_the_value_to_use():
     """Seen in three separate live cases, always on a count.
 
@@ -320,25 +355,17 @@ def test_a_blank_unit_names_the_output_and_the_value_to_use():
 
     from chemsmart.agent.analysis_nodes import AnalysisContractError
     from chemsmart.agent.scientific_toolchain import (
-        AnalysisOutputIntentV1,
         ScientificToolchainContractError,
     )
 
     with pytest.raises(ScientificToolchainContractError) as failure:
-        AnalysisOutputIntentV1(
-            output_id="n_imaginary", quantity_kind="count", unit=""
-        )
+        _count_expression_intent("")
     message = str(failure.value)
     assert "'n_imaginary'" in message
     assert "count" in message
     assert "'1'" in message
 
-    assert (
-        AnalysisOutputIntentV1(
-            output_id="n_imaginary", quantity_kind="count", unit="1"
-        ).unit
-        == "1"
-    )
+    assert _count_expression_intent("1").outputs[0].unit == "1"
 
     # The other plane must answer the same mistake the same way. Both now read
     # one contract-level constant, so this asserts a shared object rather than
@@ -359,3 +386,17 @@ def test_a_blank_unit_names_the_output_and_the_value_to_use():
         )
     assert DIMENSIONLESS_UNIT_HINT in str(other_plane.value)
     assert AnalysisContractError is not None
+
+
+def test_an_unsupported_count_unit_is_rejected_before_plan_sealing():
+    from chemsmart.agent.scientific_toolchain import (
+        ScientificToolchainContractError,
+    )
+
+    with pytest.raises(ScientificToolchainContractError) as failure:
+        _count_expression_intent("count")
+
+    message = str(failure.value)
+    assert "analysis output 'n_imaginary' (count)" in message
+    assert "unsupported unit 'count'" in message
+    assert "counts use physical unit '1'" in message
