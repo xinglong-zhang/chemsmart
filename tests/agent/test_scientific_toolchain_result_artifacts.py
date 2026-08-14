@@ -1,11 +1,14 @@
 """Typed analysis must consume a registered result, not a native handoff."""
 
+from dataclasses import replace
+
 import pytest
 
 from chemsmart.agent.scientific_toolchain import (
     AnalysisInputIntentV1,
     AnalysisNodeIntentV1,
     AnalysisOutputIntentV1,
+    RegisteredResultInputIntentV1,
     ScientificToolchainContractError,
     build_scientific_toolchain_plan,
 )
@@ -95,3 +98,77 @@ def test_thermochemistry_requires_the_registered_program_result_artifact():
     assert plan.analysis_nodes[0].inputs[0].producer_output_id == (
         "analysis-result"
     )
+
+
+def test_registered_result_can_be_the_thermochemistry_root():
+    thermochemistry = replace(
+        _thermochemistry(),
+        dependencies=(),
+        inputs=(
+            RegisteredResultInputIntentV1(
+                input_id="result",
+                artifact_id="registered-frequency-result",
+            ),
+        ),
+    )
+
+    plan = build_scientific_toolchain_plan(
+        plan_id="registered-thermochemistry",
+        workflow_id="registered-thermochemistry",
+        command_workflow_draft_sha256="b" * 64,
+        calculation_nodes=(),
+        calculation_observables={},
+        analysis_nodes=(thermochemistry,),
+        required_output_ids=("gibbs",),
+    )
+
+    assert plan.analysis_nodes[0].inputs == thermochemistry.inputs
+
+
+def test_analysis_quantity_cannot_replace_thermochemistry_result_artifact():
+    quantity_source = AnalysisNodeIntentV1(
+        node_id="derived-quantity",
+        analysis_kind="claim_rendering",
+        dependencies=(),
+        inputs=(),
+        selectors=(),
+        outputs=(
+            AnalysisOutputIntentV1(
+                output_id="derived-energy",
+                quantity_kind="energy",
+                unit="hartree",
+            ),
+        ),
+        expression_nodes=(),
+        expression_output_node_ids=(),
+        temperature_k=None,
+        pressure_atm=None,
+        support_state="planned",
+        blocked_reason="",
+    )
+    thermochemistry = replace(
+        _thermochemistry(),
+        dependencies=("derived-quantity",),
+        inputs=(
+            AnalysisInputIntentV1(
+                input_id="result",
+                source_kind="analysis_output",
+                producer_node_id="derived-quantity",
+                producer_output_id="derived-energy",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        ScientificToolchainContractError,
+        match=r"analysis_output.*cannot replace",
+    ):
+        build_scientific_toolchain_plan(
+            plan_id="derived-thermochemistry",
+            workflow_id="derived-thermochemistry",
+            command_workflow_draft_sha256="c" * 64,
+            calculation_nodes=(),
+            calculation_observables={},
+            analysis_nodes=(quantity_source, thermochemistry),
+            required_output_ids=("gibbs",),
+        )

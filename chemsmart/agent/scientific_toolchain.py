@@ -279,12 +279,22 @@ class AnalysisNodeIntentV1:
                 raise ScientificToolchainContractError(
                     "result extraction needs one result input and selectors"
                 )
+        elif self.analysis_kind == "thermochemistry":
+            if self.support_state == "planned" and len(self.inputs) != 1:
+                raise ScientificToolchainContractError(
+                    "planned thermochemistry needs exactly one result input"
+                )
+            if self.selectors:
+                raise ScientificToolchainContractError(
+                    "selectors apply only to result extraction"
+                )
         elif any(
             isinstance(item, RegisteredResultInputIntentV1)
             for item in self.inputs
         ):
             raise ScientificToolchainContractError(
-                "registered result inputs apply only to result extraction"
+                "registered result inputs apply only to result extraction "
+                "or thermochemistry"
             )
         elif self.selectors:
             raise ScientificToolchainContractError(
@@ -559,8 +569,15 @@ def build_scientific_toolchain_plan(
                 else "analysis_output"
             )
             if item.source_kind != expected_kind:
+                producer_class = (
+                    "calculation"
+                    if producer in calculation_by_id
+                    else "analysis"
+                )
                 raise ScientificToolchainContractError(
-                    "analysis input source_kind differs from its producer"
+                    f"analysis input {item.input_id!r} declares source_kind "
+                    f"{item.source_kind!r}, but producer {producer!r} is a "
+                    f"{producer_class} node and requires {expected_kind!r}"
                 )
             if item.producer_output_id not in produced[producer]:
                 raise ScientificToolchainContractError(
@@ -594,10 +611,10 @@ def build_scientific_toolchain_plan(
         if requires_result_artifact and not binds_result_artifact:
             raise ScientificToolchainContractError(
                 f"analysis node {node.node_id!r} ({node.analysis_kind}) "
-                "binds no calculation result; the registered operation "
-                "reads a typed program result artifact, not a quantity "
-                "derived by another analysis node. Consume the producing "
-                "calculation's result output directly."
+                "binds no complete typed program result. Use a registered "
+                "result root or consume the immediate calculation's "
+                "program_output; an analysis_output quantity cannot replace "
+                "the result artifact."
             )
         unknown = effective_dependencies.difference(all_ids)
         if unknown:

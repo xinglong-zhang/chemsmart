@@ -265,8 +265,8 @@ def build_command_compiled_tool_surface(
                 "or blocked calculation placeholder. "
                 "Future analysis inputs name producer node/output pairs; they "
                 "do not require artifact or receipt hashes before execution. "
-                "A result extraction may instead consume one existing "
-                "host-registered result by artifact_id. "
+                "A result-extraction or thermochemistry root may instead "
+                "consume one existing host-registered result by artifact_id. "
                 "Keep unsupported requested analyses as blocked_unsupported nodes."
             ),
             {
@@ -1333,9 +1333,10 @@ def _analysis_intent_node_schema() -> dict:
             "artifact_id": {
                 "type": "string",
                 "description": (
-                    "For result_extraction only, name one existing registered "
-                    "result instead of a future program output. Leave inputs "
-                    "empty. Do not supply a path, hash, or program-native text."
+                    "For a result_extraction or thermochemistry root, name "
+                    "one existing registered result instead of a future "
+                    "program output. Leave inputs empty. Do not supply a "
+                    "path, hash, or program-native text."
                 ),
             },
             "inputs": {
@@ -1353,6 +1354,14 @@ def _analysis_intent_node_schema() -> dict:
                         "source_kind": {
                             "type": "string",
                             "enum": ["analysis_output", "program_output"],
+                            "description": (
+                                "Describe the immediate producer: use "
+                                "program_output when producer_node_id names a "
+                                "calculation node, and analysis_output when it "
+                                "names an analysis node. A planned extraction "
+                                "or thermochemistry input must be the "
+                                "calculation's typed result-reader output."
+                            ),
                         },
                         "producer_node_id": _public_identifier(),
                         "producer_output_id": _public_identifier(),

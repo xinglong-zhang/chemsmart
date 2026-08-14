@@ -7,6 +7,7 @@ from chemsmart.agent.scientific_toolchain import (
     AnalysisInputIntentV1,
     AnalysisNodeIntentV1,
     AnalysisOutputIntentV1,
+    RegisteredResultInputIntentV1,
     ScientificToolchainContractError,
 )
 from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
@@ -75,6 +76,48 @@ def test_quasi_harmonic_entropy_requires_its_typed_cutoff():
         _thermochemistry_node(entropy_cutoff_cm1=None)
 
 
+def test_planned_thermochemistry_requires_exactly_one_result_input():
+    with pytest.raises(
+        ScientificToolchainContractError,
+        match="exactly one result input",
+    ):
+        _thermochemistry_node(inputs=(), dependencies=())
+
+    registered = RegisteredResultInputIntentV1(
+        input_id="registered-result",
+        artifact_id="frequency-result",
+    )
+    node = _thermochemistry_node(inputs=(registered,), dependencies=())
+    assert node.inputs == (registered,)
+
+    with pytest.raises(
+        ScientificToolchainContractError,
+        match="exactly one result input",
+    ):
+        _thermochemistry_node(
+            inputs=(
+                registered,
+                RegisteredResultInputIntentV1(
+                    input_id="second-result",
+                    artifact_id="second-frequency-result",
+                ),
+            ),
+            dependencies=(),
+        )
+
+
+def test_blocked_thermochemistry_can_preserve_intent_without_a_result():
+    node = _thermochemistry_node(
+        dependencies=(),
+        inputs=(),
+        support_state="blocked_unsupported",
+        blocked_reason="required result reader is unavailable",
+    )
+
+    assert node.inputs == ()
+    assert node.support_state == "blocked_unsupported"
+
+
 def test_plan_tool_schema_exposes_thermochemistry_controls():
     tool = next(
         item
@@ -94,6 +137,10 @@ def test_plan_tool_schema_exposes_thermochemistry_controls():
         "frequency_scale_factor",
     ):
         assert name in analysis
+
+    assert "thermochemistry root" in analysis["artifact_id"]["description"]
+    source_kind = analysis["inputs"]["items"]["properties"]["source_kind"]
+    assert "immediate producer" in source_kind["description"]
 
 
 def test_extended_thermochemistry_receipt_replays_with_all_controls():

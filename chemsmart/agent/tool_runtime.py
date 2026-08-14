@@ -2430,16 +2430,27 @@ class CommandCompiledToolHostV1:
         draft = command_result["workflow_draft"]
         analysis_nodes = []
         for raw_node in values["analysis_nodes"]:
+            analysis_kind = str(raw_node["analysis_kind"])
             artifact_id = str(raw_node.get("artifact_id", "")).strip()
             raw_inputs = tuple(raw_node["inputs"])
             if artifact_id and raw_inputs:
                 raise ContractError(
-                    "result extraction must choose a registered result or a "
-                    "future program output, not both"
+                    "an analysis node must choose a registered result or a "
+                    "future producer output, not both"
                 )
             if artifact_id:
                 artifact = self._artifact(artifact_id)
-                self._analysis_result_program_for_kind(artifact.kind)
+                result_program = self._analysis_result_program_for_kind(
+                    artifact.kind
+                )
+                if (
+                    analysis_kind == "thermochemistry"
+                    and result_program == "xyz"
+                ):
+                    raise ContractError(
+                        "thermochemistry requires a complete typed program "
+                        "result, not a geometry-only registered artifact"
+                    )
                 analysis_inputs = (
                     RegisteredResultInputIntentV1(
                         input_id="registered-result",
@@ -2464,7 +2475,7 @@ class CommandCompiledToolHostV1:
             analysis_nodes.append(
                 AnalysisNodeIntentV1(
                     node_id=raw_node["node_id"],
-                    analysis_kind=raw_node["analysis_kind"],
+                    analysis_kind=analysis_kind,
                     dependencies=tuple(sorted(set(raw_node["dependencies"]))),
                     inputs=analysis_inputs,
                     selectors=tuple(
@@ -3025,15 +3036,23 @@ class CommandCompiledToolHostV1:
                 continue
 
             if node.analysis_kind == "thermochemistry":
-                source_artifact_ids = {
-                    receipt.artifact_id
-                    for dependency_receipts in dependencies.values()
-                    for digest in dependency_receipts
-                    if (
-                        receipt := self.quantity_extractions.get(digest)
-                    )
-                    is not None
-                }
+                registered = tuple(
+                    item
+                    for item in node.inputs
+                    if isinstance(item, RegisteredResultInputIntentV1)
+                )
+                if len(registered) == 1:
+                    source_artifact_ids = {registered[0].artifact_id}
+                else:
+                    source_artifact_ids = {
+                        receipt.artifact_id
+                        for dependency_receipts in dependencies.values()
+                        for digest in dependency_receipts
+                        if (
+                            receipt := self.quantity_extractions.get(digest)
+                        )
+                        is not None
+                    }
                 thermochemistry_kind_aliases = {
                     # Gibbs free-energy correction and thermal free-energy
                     # correction are the same G(T)-E_electronic quantity; the
