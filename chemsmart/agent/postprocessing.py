@@ -25,6 +25,26 @@ from chemsmart.analysis.result_quantities import (
 )
 
 
+def typed_result_artifact_kind(program: str) -> str:
+    """Return the trusted artifact kind consumed by one program's reader."""
+
+    from chemsmart.analysis.result_readers import (
+        reader_for,
+        registered_reader_programs,
+    )
+
+    normalized = str(program).strip().lower()
+    if normalized == "pyscf":
+        return "pyscf_hdf5"
+    reader = reader_for(normalized)
+    if reader is None:
+        raise ContractError(
+            "no typed result reader is registered for program; registered: "
+            f"{('pyscf',) + registered_reader_programs()}"
+        )
+    return reader.artifact_kind
+
+
 def extract_trusted_result_quantities(
     *,
     artifact: TrustedArtifactRefV1,
@@ -33,32 +53,23 @@ def extract_trusted_result_quantities(
 ) -> QuantityExtractionReceiptV1:
     """Extract quantities after resolving the artifact through host state."""
 
-    from chemsmart.analysis.result_readers import (
-        extract_logged_quantities,
-        reader_for,
-        registered_reader_programs,
-    )
+    from chemsmart.analysis.result_readers import extract_logged_quantities
 
-    reader = reader_for(program)
-    if program != "pyscf" and reader is None:
-        raise ContractError(
-            "no quantity reader is registered for program; registered: "
-            f"{('pyscf',) + registered_reader_programs()}"
-        )
-    expected_kind = "pyscf_hdf5" if program == "pyscf" else reader.artifact_kind
+    normalized_program = str(program).strip().lower()
+    expected_kind = typed_result_artifact_kind(normalized_program)
     if artifact.kind != expected_kind:
         raise ContractError(
-            f"{program} quantity extraction requires a bound "
+            f"{normalized_program} quantity extraction requires a bound "
             f"{expected_kind} artifact, not {artifact.kind!r}"
         )
     request = ResultQuantityExtractionRequestV1(
         schema_version="chemsmart.quantity-extraction-request.v1",
         artifact_id=artifact.artifact_id,
         artifact_sha256=artifact.sha256,
-        program=program,
+        program=normalized_program,
         selectors=selectors,
     )
-    if program == "pyscf":
+    if normalized_program == "pyscf":
         return extract_pyscf_quantities(
             request=request, artifact_path=artifact.path
         )
@@ -83,22 +94,8 @@ def derive_trusted_thermochemistry(
 ) -> ThermochemistryReceiptV1:
     """Evaluate shared RRHO or quasi-harmonic thermochemistry."""
 
-    from chemsmart.analysis.result_readers import (
-        reader_for,
-        registered_reader_programs,
-    )
-
     normalized_program = str(program).strip().lower()
-    reader = reader_for(normalized_program)
-    if normalized_program == "pyscf":
-        expected_kind = "pyscf_hdf5"
-    elif reader is not None:
-        expected_kind = reader.artifact_kind
-    else:
-        raise ContractError(
-            "no structured thermochemistry bridge is registered for program; "
-            f"registered: {('pyscf',) + registered_reader_programs()}"
-        )
+    expected_kind = typed_result_artifact_kind(normalized_program)
     if artifact.kind != expected_kind:
         raise ContractError(
             f"{normalized_program} thermochemistry requires a bound "
@@ -142,4 +139,5 @@ __all__ = [
     "derive_trusted_thermochemistry",
     "evaluate_typed_quantity_expression",
     "extract_trusted_result_quantities",
+    "typed_result_artifact_kind",
 ]

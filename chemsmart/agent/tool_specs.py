@@ -1243,10 +1243,15 @@ def _workflow_node_schema() -> dict:
                 },
                 "description": (
                     "Typed program artifacts made available to downstream "
-                    "nodes. An ORCA TS with frequencies may declare "
-                    "final_hessian/orca_hessian in addition to its final "
-                    "geometry; ChemSmart selects the unique Hessian bound to "
-                    "the validated final TS rather than guessing a filename."
+                    "nodes. Future typed result extraction or thermochemistry "
+                    "must consume a reader artifact: orca_output, "
+                    "gaussian_output, xtb_output, or pyscf_hdf5 for the "
+                    "matching program. Declare it as a separate expected "
+                    "output. Native handoff artifacts have different roles: "
+                    "for example, an ORCA TS with frequencies may also "
+                    "declare final_hessian/orca_hessian for a downstream IRC, "
+                    "and ChemSmart selects the Hessian bound to the validated "
+                    "final TS rather than guessing a filename."
                 ),
             },
             "unresolved_fields": {
@@ -1335,6 +1340,12 @@ def _analysis_intent_node_schema() -> dict:
             },
             "inputs": {
                 "type": "array",
+                "description": (
+                    "Typed producer edges. A planned result_extraction or "
+                    "thermochemistry node must name the producer's registered "
+                    "result-reader output, not a native geometry or Hessian "
+                    "handoff output."
+                ),
                 "items": {
                     "type": "object",
                     "properties": {

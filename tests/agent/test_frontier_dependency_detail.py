@@ -109,7 +109,7 @@ def _calculation(node_id, output_id):
         ),
         expected_outputs=(
             ArtifactOutputIntentV1(
-                output_id=output_id, artifact_class="energy"
+                output_id=output_id, artifact_class="pyscf_hdf5"
             ),
         ),
         unresolved_fields=(),

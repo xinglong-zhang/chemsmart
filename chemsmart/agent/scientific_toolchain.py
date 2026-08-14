@@ -19,6 +19,7 @@ from chemsmart.agent._contracts import (
     require_identifier,
 )
 from chemsmart.agent.workflows import CommandNodeIntentV1
+from chemsmart.agent.postprocessing import typed_result_artifact_kind
 from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionError,
     normalize_numeric_value,
@@ -34,6 +35,9 @@ ANALYSIS_INTENT_KINDS = (
     "unsupported_external",
 )
 ANALYSIS_INTENT_SUPPORT_STATES = ("blocked_unsupported", "planned")
+# Registered analysis operations for these kinds read a typed program result
+# artifact; a derived quantity from another analysis node cannot stand in.
+RESULT_ARTIFACT_ANALYSIS_KINDS = ("result_extraction", "thermochemistry")
 ANALYSIS_VALIDATION_PREDICATES = (
     "all_equal",
     "all_finite",
@@ -507,9 +511,16 @@ def build_scientific_toolchain_plan(
             "calculation and analysis node IDs must be distinct"
         )
     all_ids = set(calculation_by_id) | set(analysis_by_id)
-    produced: dict[str, set[str]] = {
-        node.node_id: {item.output_id for item in node.expected_outputs}
+    calculation_output_classes: dict[str, dict[str, str]] = {
+        node.node_id: {
+            item.output_id: item.artifact_class
+            for item in node.expected_outputs
+        }
         for node in calculations
+    }
+    produced: dict[str, set[str]] = {
+        node_id: set(outputs)
+        for node_id, outputs in calculation_output_classes.items()
     }
     produced.update(
         {
@@ -528,8 +539,14 @@ def build_scientific_toolchain_plan(
     normalized_analyses: list[AnalysisNodeIntentV1] = []
     for node in analyses:
         effective_dependencies = set(node.dependencies)
+        requires_result_artifact = (
+            node.support_state == "planned"
+            and node.analysis_kind in RESULT_ARTIFACT_ANALYSIS_KINDS
+        )
+        binds_result_artifact = False
         for item in node.inputs:
             if isinstance(item, RegisteredResultInputIntentV1):
+                binds_result_artifact = True
                 continue
             producer = item.producer_node_id
             if producer not in all_ids:
@@ -549,7 +566,39 @@ def build_scientific_toolchain_plan(
                 raise ScientificToolchainContractError(
                     "analysis input references an unknown producer output"
                 )
+            if producer in calculation_by_id and requires_result_artifact:
+                calculation = calculation_by_id[producer]
+                try:
+                    required_artifact_class = typed_result_artifact_kind(
+                        calculation.program
+                    )
+                except ContractError as exc:
+                    raise ScientificToolchainContractError(str(exc)) from exc
+                declared_artifact_class = calculation_output_classes[
+                    producer
+                ][item.producer_output_id]
+                if declared_artifact_class != required_artifact_class:
+                    raise ScientificToolchainContractError(
+                        f"analysis node {node.node_id!r} "
+                        f"({node.analysis_kind}) consumes "
+                        f"{producer}.{item.producer_output_id}, declared as "
+                        f"{declared_artifact_class!r}; typed "
+                        f"{calculation.program} analysis requires a "
+                        f"{required_artifact_class!r} calculation output. "
+                        "Declare that result output separately; native "
+                        "geometry or Hessian outputs remain available for "
+                        "program-to-program handoffs."
+                    )
+                binds_result_artifact = True
             effective_dependencies.add(producer)
+        if requires_result_artifact and not binds_result_artifact:
+            raise ScientificToolchainContractError(
+                f"analysis node {node.node_id!r} ({node.analysis_kind}) "
+                "binds no calculation result; the registered operation "
+                "reads a typed program result artifact, not a quantity "
+                "derived by another analysis node. Consume the producing "
+                "calculation's result output directly."
+            )
         unknown = effective_dependencies.difference(all_ids)
         if unknown:
             raise ScientificToolchainContractError(
