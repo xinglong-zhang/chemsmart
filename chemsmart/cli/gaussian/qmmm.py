@@ -161,7 +161,7 @@ def create_qmmm_subcommand(parent_command):
         type=str,
         default=None,
         help=(
-            "Bonded atom pairs at QM/MM boundary, e.g. '[(3, 4), (5, 6)]'. "
+            "Bonded atom pairs at QM/MM boundary, e.g. '[[3, 4], [5, 6]]'. "
             "If omitted, cut covalent bonds are assigned from molecular "
             "connectivity."
         ),
