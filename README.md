@@ -11,11 +11,16 @@
 </p>
 
 ---
-## Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
+## Notice: 
+
+If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
 
 GitHub does not natively support forcing links in a *README.md* file to open in a new tab or window. If needed, please use one of the following methods:
+
 Mac: Hold CMD + click the link.
+
 Windows / Linux: Hold CTRL + click the link.
+
 Mouse: Click the link using the middle scroll wheel.
 
 
