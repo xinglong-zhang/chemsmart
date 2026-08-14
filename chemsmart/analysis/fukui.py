@@ -21,6 +21,21 @@ FUKUI_MODES = ("mulliken", "nbo", "hirshfeld", "cm5")
 _FUKUI_OUTPUT_EXTENSIONS = (".log", ".out", ".LOG", ".OUT")
 
 
+def radical_ion_charge_and_multiplicity(charge, multiplicity, delta_charge):
+    """Return charge and multiplicity after changing molecular charge.
+
+    ``delta_charge`` is the change in molecular charge (``+1`` for the
+    radical cation, ``-1`` for the radical anion). Closed-shell singlets
+    become doublets; other multiplicities decrease by one.
+    """
+    ion_charge = charge + delta_charge
+    if multiplicity == 1:
+        ion_multiplicity = 2
+    else:
+        ion_multiplicity = multiplicity - 1
+    return ion_charge, ion_multiplicity
+
+
 def discover_fukui_companion_outputs(neutral_filename):
     """Discover radical-cation / radical-anion outputs from a neutral file.
 

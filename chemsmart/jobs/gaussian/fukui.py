@@ -10,28 +10,16 @@ Post-processing is backend-independent via ``chemsmart run fukui``
 
 import logging
 
-from chemsmart.analysis.fukui import FUKUI_MODES
+from chemsmart.analysis.fukui import (
+    FUKUI_MODES,
+    radical_ion_charge_and_multiplicity,
+)
 from chemsmart.jobs.chain import ChainJob, JobPhase
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 
 logger = logging.getLogger(__name__)
-
-
-def radical_ion_charge_and_multiplicity(charge, multiplicity, delta_charge):
-    """Return charge and multiplicity after changing molecular charge.
-
-    ``delta_charge`` is the change in molecular charge (``+1`` for the
-    radical cation, ``-1`` for the radical anion). Closed-shell singlets
-    become doublets; other multiplicities decrease by one.
-    """
-    ion_charge = charge + delta_charge
-    if multiplicity == 1:
-        ion_multiplicity = 2
-    else:
-        ion_multiplicity = multiplicity - 1
-    return ion_charge, ion_multiplicity
 
 
 class GaussianFukuiJob(ChainJob):

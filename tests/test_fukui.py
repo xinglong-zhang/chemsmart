@@ -1,13 +1,13 @@
 from click.testing import CliRunner
 
-from chemsmart.analysis.fukui import discover_fukui_companion_outputs
+from chemsmart.analysis.fukui import (
+    discover_fukui_companion_outputs,
+    radical_ion_charge_and_multiplicity,
+)
 from chemsmart.cli.fukui import fukui as fukui_analyze
 from chemsmart.cli.run import run
 from chemsmart.jobs.chain import ChainJob
-from chemsmart.jobs.gaussian.fukui import (
-    GaussianFukuiJob,
-    radical_ion_charge_and_multiplicity,
-)
+from chemsmart.jobs.gaussian.fukui import GaussianFukuiJob
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
