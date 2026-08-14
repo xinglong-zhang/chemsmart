@@ -26,6 +26,11 @@ class XTBRoute:
     - Solvation models (ALPB, GBSA, COSMO, etc.)
     - Property calculations (dipole, Mulliken, Wiberg, etc.)
 
+    The name XTBRoute follows the Gaussian/ORCA Route parsing
+    convention in CHEMSMART. For xTB there is no Gaussian-style # route
+    line; the string is the run command printed as "program call" in the
+    xTB main output (e.g. "xtb mol.xyz --gfn 2").
+
     Args:
         route_string (str): xTB program call string
     """
