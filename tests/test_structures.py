@@ -2910,6 +2910,57 @@ class TestQMMMMolecule:
             is None
         )
 
+    def test_qmmm_helpers_for_uncovered_branches(self):
+        assert QMMMMolecule._is_charge_multiplicity_line(["0"]) is False
+        assert QMMMMolecule._is_charge_multiplicity_line(["0", "1"]) is True
+        assert QMMMMolecule._gaussian_link_atom_pair(1, 2, "H", "X") == (
+            None,
+            None,
+        )
+
+        # String medium-layer specs are normalized on level lookup.
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.1, 0.0, 0.0],
+                    [-0.4, 1.0, 0.0],
+                    [-0.4, -1.0, 0.0],
+                ]
+            ),
+            high_level_atoms="1",
+            medium_level_atoms="2",
+            low_level_atoms="3-4",
+        )
+        assert mol._normalize_atom_indices(None) is None
+        assert mol._normalize_atom_indices([1, 2, 3]) == [1, 2, 3]
+        assert mol._normalize_atom_indices("1-2") == [1, 2]
+        assert mol._determine_level_from_atom_index(1) == "H"
+        assert mol._determine_level_from_atom_index(2) == "M"
+        assert isinstance(mol.medium_level_atoms, list)
+
+        # Bonds involving atoms with unknown levels are skipped.
+        class _PartialLevel(QMMMMolecule):
+            def _determine_level_from_atom_index(self, atom_index):
+                if atom_index == 1:
+                    return "H"
+                return None
+
+        partial = _PartialLevel(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=[1],
+        )
+        assert partial._detect_cut_bonds() == []
+
+        no_high = QMMMMolecule(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=None,
+        )
+        assert no_high._determine_level_from_atom_index(1) is None
+
     def test_write_gaussian_connectivity_and_frozen_mm_labels(self):
         mol = QMMMMolecule(
             symbols=["C", "H", "H"],

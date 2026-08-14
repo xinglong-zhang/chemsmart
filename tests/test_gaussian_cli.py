@@ -1224,4 +1224,51 @@ class TestGaussianQMMMCLI:
         assert molecule.bonded_atoms == [[3, 4]]
         assert molecule.scale_factors == {(3, 4): [0.709]}
         assert molecule.frozen_atoms[4] == -1
+
         assert call_kwargs["label"] == "testjob_qmmm"
+
+    def test_opt_qmmm_without_mm_sidecar_options(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Exercise False branches for -mai/-mpf CLI options."""
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "sto-3g",
+                    "-ch",
+                    "0",
+                    "-mh",
+                    "1",
+                    "-ha",
+                    "1-3",
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        settings = mock_job.call_args.kwargs["settings"]
+        assert settings.mm_atom_info_file is None
+        assert settings.mm_parameters_file is None

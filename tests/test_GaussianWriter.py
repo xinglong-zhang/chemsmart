@@ -681,6 +681,76 @@ class TestGaussianInputWriter:
         ):
             GaussianInputWriter(job=job).write(target_directory=tmpdir)
 
+    def test_write_qmmm_inherits_layers_from_molecule(
+        self,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        molecule = QMMMMolecule(
+            symbols=["C", "O", "H"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [1.4, 0.0, 0.0],
+                [1.9, 0.9, 0.0],
+            ],
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+            bonded_atoms=[(1, 2)],
+            scale_factors={(1, 2): [0.7]},
+            mm_parameters="NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n",
+        )
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="sto-3g",
+            medium_level_functional="hf",
+            medium_level_basis="sto-3g",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=None,
+            medium_level_atoms=None,
+            low_level_atoms=None,
+            bonded_atoms=None,
+            scale_factors=None,
+        )
+        job = GaussianQMMMJob(
+            molecule=molecule,
+            settings=settings,
+            label="gaussian_qmmm_inherit",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        GaussianInputWriter(job=job).write(target_directory=tmpdir)
+        out = os.path.join(tmpdir, "gaussian_qmmm_inherit.com")
+        with open(out) as handle:
+            content = handle.read()
+        assert " H" in content
+        assert " M" in content or " L" in content
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in content
+
+    def test_append_mm_parameters_skips_plain_molecule(self):
+        """False branch: molecule is not a QMMMMolecule and has no params file."""
+        from io import StringIO
+
+        molecule = Molecule(symbols=["C"], positions=[[0.0, 0.0, 0.0]])
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="sto-3g",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1],
+        )
+        job = GaussianQMMMJob(
+            molecule=molecule,
+            settings=settings,
+            label="gaussian_qmmm_plain_mm",
+            jobrunner=None,
+        )
+        buf = StringIO()
+        GaussianInputWriter(job=job)._append_mm_parameters(buf)
+        assert buf.getvalue() == ""
+
     def test_write_qmmm_pm6_skips_connectivity_section(
         self,
         tmpdir,
