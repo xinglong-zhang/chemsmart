@@ -37,7 +37,7 @@ def _read_yaml(path: Path):
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _template_text(template_name="SLURM.yaml") -> str:
+def _template_yaml(template_name="SLURM.yaml"):
     template = (
         resources.files("chemsmart.settings")
         / "templates"
@@ -45,11 +45,7 @@ def _template_text(template_name="SLURM.yaml") -> str:
         / "server"
         / template_name
     )
-    return template.read_text(encoding="utf-8")
-
-
-def _template_yaml(template_name="SLURM.yaml"):
-    return yaml.safe_load(_template_text(template_name))
+    return yaml.safe_load(template.read_text(encoding="utf-8"))
 
 
 MINIMAL_SLURM = """
@@ -58,7 +54,13 @@ SERVER:
 """
 
 
-OLD_SERVER_WITH_CUSTOM_GAUSSIAN = """
+MINIMAL_PBS = """
+SERVER:
+    SCHEDULER: PBS
+"""
+
+
+SERVER_WITH_CUSTOM_FIELDS = """
 SERVER:
     SCHEDULER: SLURM
     QUEUE_NAME: custom
@@ -71,23 +73,7 @@ CUSTOM_FIELD:
 """
 
 
-PRESERVED_SECTIONS_YAML = """
-SERVER:
-    SCHEDULER: SLURM
-    QUEUE_NAME: custom
-
-GAUSSIAN:
-    EXEFOLDER: /custom/g16
-
-XTB:
-    EXEFOLDER: /old/xtb
-
-CUSTOM_FIELD:
-    VALUE: keep
-"""
-
-
-def test_update_config_registered_without_field_or_interactive(tmp_path):
+def test_update_config_registered_on_main_cli(tmp_path):
     result = CliRunner().invoke(
         entry_point,
         ["update", "config", "--help"],
@@ -96,20 +82,6 @@ def test_update_config_registered_without_field_or_interactive(tmp_path):
 
     assert result.exit_code == 0
     assert "--server" in result.output
-    assert "--field" not in result.output
-    assert "--interactive" not in result.output
-
-
-@pytest.mark.parametrize("args", [["-f", "XTB"], ["-i"]])
-def test_update_config_removed_options_fail_without_writing(tmp_path, args):
-    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
-    before = slurm.read_text(encoding="utf-8")
-
-    result = _invoke_update_config(tmp_path, args)
-
-    assert result.exit_code != 0
-    assert "No such option" in result.output
-    assert slurm.read_text(encoding="utf-8") == before
 
 
 def test_update_config_default_updates_existing_yaml_only(tmp_path):
@@ -117,7 +89,7 @@ def test_update_config_default_updates_existing_yaml_only(tmp_path):
     pbs = _write_server_yaml(
         tmp_path,
         "PBS.yaml",
-        MINIMAL_SLURM.replace("SCHEDULER: SLURM", "SCHEDULER: PBS"),
+        MINIMAL_PBS,
     )
 
     result = _invoke_update_config(tmp_path)
@@ -126,29 +98,98 @@ def test_update_config_default_updates_existing_yaml_only(tmp_path):
     assert result.exit_code == 0, result.output
     assert "SLURM.yaml:" in result.output
     assert "PBS.yaml:" in result.output
-    assert "XTB" in _read_yaml(slurm)
-    assert "XTB" in _read_yaml(pbs)
-    assert not (server_dir / "local.yaml").exists()
-    assert not (server_dir / "small.yaml").exists()
-    assert not (server_dir / "my_cluster.yaml").exists()
-
-
-@pytest.mark.parametrize("server_arg", ["SLURM", "SLURM.yaml"])
-def test_update_config_server_option_accepts_name_or_yaml(
-    tmp_path, server_arg
-):
-    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
-    pbs = _write_server_yaml(
-        tmp_path,
+    for path, template_name in (
+        (slurm, "SLURM.yaml"),
+        (pbs, "PBS.yaml"),
+    ):
+        data = _read_yaml(path)
+        template = _template_yaml(template_name)
+        for program in ConfigurationUpdater._template_programs(template):
+            assert data[program] == template[program]
+            assert f"added program: {program}" in result.output
+    assert {path.name for path in server_dir.glob("*.yaml")} == {
+        "SLURM.yaml",
         "PBS.yaml",
-        MINIMAL_SLURM.replace("SCHEDULER: SLURM", "SCHEDULER: PBS"),
-    )
+    }
 
-    result = _invoke_update_config(tmp_path, ["-s", server_arg])
+
+def test_update_config_server_option_accepts_multiple_files(
+    tmp_path, monkeypatch
+):
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
+            "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
+            "FAKE_PROGRAM_C": {"EXEFOLDER": None, "LOCAL_RUN": True},
+        }
+    }
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+    )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    a_yaml = _write_server_yaml(
+        tmp_path,
+        "A.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        FAKE_PROGRAM_B:
+            EXEFOLDER: /old/a-fake-b
+        FAKE_PROGRAM_C:
+            EXEFOLDER: /old/a-fake-c
+        """,
+    )
+    b_yaml = _write_server_yaml(
+        tmp_path,
+        "B.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        FAKE_PROGRAM_A:
+            EXEFOLDER: /old/b-fake-a
+        FAKE_PROGRAM_C:
+            EXEFOLDER: /old/b-fake-c
+        """,
+    )
+    c_yaml = _write_server_yaml(tmp_path, "C.yaml", MINIMAL_SLURM)
+    c_before = c_yaml.read_text(encoding="utf-8")
+    prompts = []
+    answers = iter(["/new/fake-a", "/new/fake-b"])
+
+    def prompt_for_program(text, **kwargs):
+        prompts.append(text)
+        return next(answers)
+
+    monkeypatch.setattr(update_module.click, "prompt", prompt_for_program)
+
+    result = _invoke_update_config(tmp_path, ["-s", "A", "-s", "B.yaml"])
 
     assert result.exit_code == 0, result.output
-    assert "XTB" in _read_yaml(slurm)
-    assert "XTB" not in _read_yaml(pbs)
+    assert "A.yaml:" in result.output
+    assert "B.yaml:" in result.output
+    assert "C.yaml:" not in result.output
+    assert len(prompts) == 2
+    assert prompts[0].startswith("FAKE_PROGRAM_A EXEFOLDER")
+    assert prompts[1].startswith("FAKE_PROGRAM_B EXEFOLDER")
+
+    a_data = _read_yaml(a_yaml)
+    b_data = _read_yaml(b_yaml)
+    assert a_data["FAKE_PROGRAM_A"] == {
+        "EXEFOLDER": "/new/fake-a",
+        "LOCAL_RUN": True,
+    }
+    assert a_data["FAKE_PROGRAM_B"] == {"EXEFOLDER": "/old/a-fake-b"}
+    assert a_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/a-fake-c"}
+    assert b_data["FAKE_PROGRAM_A"] == {"EXEFOLDER": "/old/b-fake-a"}
+    assert b_data["FAKE_PROGRAM_B"] == {
+        "EXEFOLDER": "/new/fake-b",
+        "LOCAL_RUN": True,
+    }
+    assert b_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/b-fake-c"}
+    assert c_yaml.read_text(encoding="utf-8") == c_before
 
 
 def test_update_config_missing_server_fails_without_creating_file(tmp_path):
@@ -181,7 +222,6 @@ def test_update_config_server_option_rejects_invalid_values(
     assert result.exit_code != 0
     assert expected in result.output
     assert slurm.read_text(encoding="utf-8") == before
-    assert not (tmp_path / "server" / "SLURM.json").exists()
 
 
 def test_update_config_prefers_same_name_template(tmp_path):
@@ -197,7 +237,10 @@ def test_update_config_prefers_same_name_template(tmp_path):
     result = _invoke_update_config(tmp_path, ["-s", "local"])
 
     assert result.exit_code == 0, result.output
-    assert _read_yaml(local)["XTB"] == _template_yaml("local.yaml")["XTB"]
+    data = _read_yaml(local)
+    template = _template_yaml("local.yaml")
+    for program in ConfigurationUpdater._template_programs(template):
+        assert data[program] == template[program]
 
 
 @pytest.mark.parametrize(
@@ -226,46 +269,277 @@ def test_update_config_custom_file_matches_scheduler(
     result = _invoke_update_config(tmp_path, ["-s", "my_cluster"])
 
     assert result.exit_code == 0, result.output
-    assert _read_yaml(custom)["XTB"] == _template_yaml(template_name)["XTB"]
-
-
-def test_update_config_copies_multiple_missing_programs(tmp_path):
-    slurm = _write_server_yaml(
-        tmp_path, "SLURM.yaml", OLD_SERVER_WITH_CUSTOM_GAUSSIAN
-    )
-
-    result = _invoke_update_config(tmp_path)
-    data = _read_yaml(slurm)
-    template = _template_yaml()
-
-    assert result.exit_code == 0, result.output
-    for program in ["ORCA", "XTB", "NCIPLOT"]:
+    data = _read_yaml(custom)
+    template = _template_yaml(template_name)
+    for program in ConfigurationUpdater._template_programs(template):
         assert data[program] == template[program]
-        assert f"added program: {program}" in result.output
 
 
-def test_update_config_future_template_program_is_discovered(
+def test_update_config_prompts_once_per_program_and_targets_missing_files(
     tmp_path, monkeypatch
 ):
-    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
-    templates = ConfigurationUpdater()._load_server_templates()
-    for template_data in templates.values():
-        template_data["CREST"] = {"EXEFOLDER": None, "LOCAL_RUN": True}
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
+            "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
+        }
+    }
     monkeypatch.setattr(
         ConfigurationUpdater, "_load_server_templates", lambda self: templates
     )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+
+    a_yaml = _write_server_yaml(
+        tmp_path,
+        "A.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        FAKE_PROGRAM_B:
+            EXEFOLDER: /old/a-fake-b
+        """,
+    )
+    b_yaml = _write_server_yaml(
+        tmp_path,
+        "B.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        FAKE_PROGRAM_A:
+            EXEFOLDER: /old/b-fake-a
+        """,
+    )
+    c_yaml = _write_server_yaml(
+        tmp_path,
+        "C.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        """,
+    )
+    prompts = []
+    answers = iter(["/new/fake-a", "/new/fake-b"])
+
+    def prompt_for_program(text, **kwargs):
+        prompts.append(text)
+        return next(answers)
+
+    monkeypatch.setattr(update_module.click, "prompt", prompt_for_program)
 
     result = _invoke_update_config(tmp_path)
 
     assert result.exit_code == 0, result.output
-    assert _read_yaml(slurm)["CREST"] == {
-        "EXEFOLDER": None,
+    assert len(prompts) == 2
+    assert prompts[0].startswith("FAKE_PROGRAM_A EXEFOLDER")
+    assert prompts[1].startswith("FAKE_PROGRAM_B EXEFOLDER")
+    assert not any(
+        filename in prompt
+        for prompt in prompts
+        for filename in ("A.yaml", "B.yaml", "C.yaml")
+    )
+
+    a_data = _read_yaml(a_yaml)
+    b_data = _read_yaml(b_yaml)
+    c_data = _read_yaml(c_yaml)
+    assert a_data["FAKE_PROGRAM_A"] == {
+        "EXEFOLDER": "/new/fake-a",
+        "LOCAL_RUN": True,
+    }
+    assert a_data["FAKE_PROGRAM_B"] == {"EXEFOLDER": "/old/a-fake-b"}
+    assert b_data["FAKE_PROGRAM_A"] == {"EXEFOLDER": "/old/b-fake-a"}
+    assert b_data["FAKE_PROGRAM_B"] == {
+        "EXEFOLDER": "/new/fake-b",
+        "LOCAL_RUN": True,
+    }
+    assert c_data["FAKE_PROGRAM_A"] == {
+        "EXEFOLDER": "/new/fake-a",
+        "LOCAL_RUN": True,
+    }
+    assert c_data["FAKE_PROGRAM_B"] == {
+        "EXEFOLDER": "/new/fake-b",
         "LOCAL_RUN": True,
     }
 
 
+def test_update_config_enter_keeps_each_matched_template_exefolder(
+    tmp_path, monkeypatch
+):
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FAKE_PROGRAM": {"EXEFOLDER": "/template/slurm-fake"},
+        },
+        "PBS.yaml": {
+            "SERVER": {"SCHEDULER": "PBS"},
+            "FAKE_PROGRAM": {"EXEFOLDER": "/template/pbs-fake"},
+        },
+    }
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+    )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    prompt_count = 0
+
+    def use_template_value(text, **kwargs):
+        nonlocal prompt_count
+        prompt_count += 1
+        return ""
+
+    monkeypatch.setattr(update_module.click, "prompt", use_template_value)
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+    pbs = _write_server_yaml(
+        tmp_path,
+        "PBS.yaml",
+        MINIMAL_PBS,
+    )
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert prompt_count == 1
+    assert (
+        _read_yaml(slurm)["FAKE_PROGRAM"]["EXEFOLDER"]
+        == "/template/slurm-fake"
+    )
+    assert _read_yaml(pbs)["FAKE_PROGRAM"]["EXEFOLDER"] == "/template/pbs-fake"
+
+
+def test_update_config_existing_program_missing_exefolder_is_untouched(
+    tmp_path, monkeypatch
+):
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FAKE_PROGRAM": {
+                "EXEFOLDER": "/template/fake",
+                "LOCAL_RUN": True,
+            },
+        }
+    }
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+    )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    monkeypatch.setattr(
+        update_module.click,
+        "prompt",
+        lambda *args, **kwargs: pytest.fail("prompt should not be called"),
+    )
+    slurm = _write_server_yaml(
+        tmp_path,
+        "SLURM.yaml",
+        """
+        SERVER:
+            SCHEDULER: SLURM
+        FAKE_PROGRAM:
+            LOCAL_RUN: false
+        """,
+    )
+    before = slurm.read_text(encoding="utf-8")
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert slurm.read_text(encoding="utf-8") == before
+    assert _read_yaml(slurm)["FAKE_PROGRAM"] == {"LOCAL_RUN": False}
+
+
+def test_update_config_program_without_exefolder_is_copied_without_prompt(
+    tmp_path, monkeypatch
+):
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FUTURE_PROGRAM": {"LOCAL_RUN": True},
+        }
+    }
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+    )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    monkeypatch.setattr(
+        update_module.click,
+        "prompt",
+        lambda *args, **kwargs: pytest.fail("prompt should not be called"),
+    )
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert _read_yaml(slurm)["FUTURE_PROGRAM"] == {"LOCAL_RUN": True}
+
+
+def test_update_config_non_tty_uses_template_without_prompt(
+    tmp_path, monkeypatch
+):
+    templates = {
+        "SLURM.yaml": {
+            "SERVER": {"SCHEDULER": "SLURM"},
+            "FAKE_PROGRAM": {"EXEFOLDER": "/template/fake"},
+        }
+    }
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+    )
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: False)
+    )
+    monkeypatch.setattr(
+        update_module.click,
+        "prompt",
+        lambda *args, **kwargs: pytest.fail("prompt should not be called"),
+    )
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert _read_yaml(slurm)["FAKE_PROGRAM"] == {"EXEFOLDER": "/template/fake"}
+
+
+def test_update_config_abort_during_prompt_writes_nothing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    monkeypatch.setattr(
+        update_module.click,
+        "prompt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            update_module.click.Abort()
+        ),
+    )
+    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
+    pbs = _write_server_yaml(
+        tmp_path,
+        "PBS.yaml",
+        MINIMAL_PBS,
+    )
+    slurm_before = slurm.read_text(encoding="utf-8")
+    pbs_before = pbs.read_text(encoding="utf-8")
+
+    result = _invoke_update_config(tmp_path)
+
+    assert result.exit_code != 0
+    assert slurm.read_text(encoding="utf-8") == slurm_before
+    assert pbs.read_text(encoding="utf-8") == pbs_before
+
+
 def test_update_config_preserves_existing_sections_and_custom_fields(tmp_path):
-    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", PRESERVED_SECTIONS_YAML)
+    slurm = _write_server_yaml(
+        tmp_path, "SLURM.yaml", SERVER_WITH_CUSTOM_FIELDS
+    )
     before = _read_yaml(slurm)
 
     result = _invoke_update_config(tmp_path)
@@ -274,40 +548,50 @@ def test_update_config_preserves_existing_sections_and_custom_fields(tmp_path):
     assert result.exit_code == 0, result.output
     assert after["SERVER"] == before["SERVER"]
     assert after["GAUSSIAN"] == {"EXEFOLDER": "/custom/g16"}
-    assert after["XTB"] == {"EXEFOLDER": "/old/xtb"}
     assert after["CUSTOM_FIELD"] == {"VALUE": "keep"}
-    assert after["ORCA"] == _template_yaml()["ORCA"]
-    assert after["NCIPLOT"] == _template_yaml()["NCIPLOT"]
 
 
-def test_update_config_repeated_execution_is_idempotent(tmp_path):
+def test_update_config_repeated_execution_is_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    prompt_count = 0
+
+    def use_template_value(text, **kwargs):
+        nonlocal prompt_count
+        prompt_count += 1
+        return ""
+
+    monkeypatch.setattr(update_module.click, "prompt", use_template_value)
     slurm = _write_server_yaml(tmp_path, "SLURM.yaml", MINIMAL_SLURM)
 
     first = _invoke_update_config(tmp_path)
     after_first = slurm.read_text(encoding="utf-8")
+    after_first_mtime = slurm.stat().st_mtime_ns
+    first_prompt_count = prompt_count
     second = _invoke_update_config(tmp_path)
 
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output
+    assert first_prompt_count > 0
+    assert prompt_count == first_prompt_count
     assert slurm.read_text(encoding="utf-8") == after_first
+    assert slurm.stat().st_mtime_ns == after_first_mtime
     assert "already up to date" in second.output
-
-
-def test_update_config_complete_yaml_does_not_rewrite_file(tmp_path):
-    slurm = _write_server_yaml(tmp_path, "SLURM.yaml", _template_text())
-    before_mtime = slurm.stat().st_mtime_ns
-
-    result = _invoke_update_config(tmp_path)
-
-    assert result.exit_code == 0, result.output
-    assert slurm.stat().st_mtime_ns == before_mtime
-    assert "already up to date" in result.output
 
 
 @pytest.mark.parametrize("content", ["SERVER: [", "", "- not-a-mapping\n"])
 def test_update_config_invalid_yaml_roots_are_not_overwritten(
-    tmp_path, content
+    tmp_path, monkeypatch, content
 ):
+    monkeypatch.setattr(
+        ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
+    )
+    monkeypatch.setattr(
+        update_module.click,
+        "prompt",
+        lambda *args, **kwargs: pytest.fail("prompt should not be called"),
+    )
     slurm = _write_server_yaml(tmp_path, "SLURM.yaml", content)
     before = slurm.read_text(encoding="utf-8")
 
@@ -469,7 +753,7 @@ def test_update_config_respects_relative_config_dir(tmp_path, monkeypatch):
 
     result = _invoke_update_config(config_root, env_value="cfg")
     assert result.exit_code == 0, result.output
-    assert "XTB" in _read_yaml(slurm)
+    assert set(_template_yaml()) <= set(_read_yaml(slurm))
 
 
 def test_update_config_preserves_comments_order_and_block_scalar(tmp_path):
@@ -508,7 +792,7 @@ def test_update_config_refuses_symlink_without_partial_writes(tmp_path):
     pbs = _write_server_yaml(
         tmp_path,
         "PBS.yaml",
-        MINIMAL_SLURM.replace("SCHEDULER: SLURM", "SCHEDULER: PBS"),
+        MINIMAL_PBS,
     )
     target = tmp_path / "target_SLURM.yaml"
     target.write_text(dedent(MINIMAL_SLURM).lstrip(), encoding="utf-8")
@@ -573,7 +857,7 @@ def test_updated_yaml_can_be_read_by_existing_settings_classes(
 ):
     from chemsmart.io.yaml import YAMLFile
     from chemsmart.settings import executable as executable_module
-    from chemsmart.settings.executable import XTBExecutable
+    from chemsmart.settings.executable import GaussianExecutable
     from chemsmart.settings.server import Server
     from chemsmart.settings.user import CHEMSMARTUserSettings
 
@@ -585,6 +869,8 @@ def test_updated_yaml_can_be_read_by_existing_settings_classes(
     )
 
     assert result.exit_code == 0, result.output
-    assert YAMLFile(filename=str(slurm)).yaml_contents_dict["XTB"]
+    assert YAMLFile(filename=str(slurm)).yaml_contents_dict["GAUSSIAN"]
     assert Server.from_yaml(str(slurm)).scheduler == "SLURM"
-    assert XTBExecutable.from_servername("SLURM").get_executable() == "xtb"
+    assert GaussianExecutable.from_servername("SLURM").get_executable() == str(
+        Path("~/bin/g16/g16").expanduser()
+    )

@@ -6,7 +6,7 @@ import re
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -64,12 +64,14 @@ class _PreparedConfig:
         original_text: Raw file content before any in-memory changes.
         data: Round-trip YAML mapping loaded from the user file.
         template_data: Round-trip YAML mapping loaded from the matched template.
+        missing_programs: Template program sections absent from the user file.
     """
 
     path: Path
     original_text: str
     data: MutableMapping
     template_data: Mapping
+    missing_programs: tuple[str, ...] = ()
 
 
 class Updater(ABC):
@@ -398,20 +400,30 @@ class VersionUpdater(Updater):
 class ConfigurationUpdater(Updater):
     """Handles server YAML configuration updates."""
 
-    def __init__(self, server: str | None = None):
-        self.server = server
+    def __init__(self, server: str | Sequence[str] | None = None):
+        if server is None:
+            self.servers = ()
+        elif isinstance(server, str):
+            self.servers = (server,)
+        else:
+            self.servers = tuple(server)
 
     def update(self) -> list[ConfigUpdateReport]:
         """Update server YAML files with missing top-level program sections.
 
-        When ``server`` is ``None``, all existing ``*.yaml`` files in the
-        resolved server config directory are scanned. When ``server`` is
-        provided, only that existing file is checked; the name may be passed
-        with or without ``.yaml``. Missing server YAML files are not created.
+        When ``servers`` is empty, all existing ``*.yaml`` files in the
+        resolved server config directory are scanned. Otherwise, only the
+        selected existing files are checked; each name may be passed with or
+        without ``.yaml``. Missing server YAML files are not created.
+
+        In an interactive terminal, one optional ``EXEFOLDER`` override is
+        requested for each unique missing program whose template defines that
+        field. Blank input keeps each matched template's value. Overrides are
+        applied only to newly copied program sections.
         """
         self._require_yaml_dependency()
         server_dir = self._server_config_dir()
-        yaml_files = self._select_server_yaml_files(server_dir, self.server)
+        yaml_files = self._select_server_yaml_files(server_dir, self.servers)
         templates = self._load_server_templates()
 
         prepared_configs: list[_PreparedConfig] = []
@@ -422,7 +434,7 @@ class ConfigurationUpdater(Updater):
                 yaml_file.name,
                 data,
                 templates,
-                strict=self.server is not None,
+                strict=bool(self.servers),
             )
             if template_name is None:
                 reports.append(
@@ -443,7 +455,11 @@ class ConfigurationUpdater(Updater):
                 )
             )
 
-        changed_reports = self._build_update_reports(prepared_configs)
+        self._plan_missing_programs(prepared_configs)
+        program_exefolders = self._prompt_program_exefolders(prepared_configs)
+        changed_reports = self._apply_update_plan(
+            prepared_configs, program_exefolders
+        )
         self._write_changed_files(prepared_configs, changed_reports)
         return reports + changed_reports
 
@@ -462,16 +478,25 @@ class ConfigurationUpdater(Updater):
         configured_dir = CHEMSMARTUserSettings.resolve_config_dir()
         return Path(os.path.abspath(configured_dir)) / "server"
 
-    def _select_server_yaml_files(self, server_dir: Path, server: str | None):
+    def _select_server_yaml_files(
+        self, server_dir: Path, servers: Sequence[str]
+    ) -> list[Path]:
         """Select existing server YAML files to process."""
-        if server is not None:
-            server_file = self._normalize_server_filename(server)
-            server_path = server_dir / server_file
-            if not server_path.is_file():
-                raise ConfigUpdateError(
-                    f"Server YAML not found in {server_dir}: {server_file}"
-                )
-            return [server_path]
+        if servers:
+            selected_files: list[Path] = []
+            seen: set[str] = set()
+            for server in servers:
+                server_file = self._normalize_server_filename(server)
+                if server_file in seen:
+                    continue
+                server_path = server_dir / server_file
+                if not server_path.is_file():
+                    raise ConfigUpdateError(
+                        f"Server YAML not found in {server_dir}: {server_file}"
+                    )
+                seen.add(server_file)
+                selected_files.append(server_path)
+            return selected_files
 
         if not server_dir.is_dir():
             raise ConfigUpdateError(
@@ -626,19 +651,79 @@ class ConfigurationUpdater(Updater):
             if str(field).upper() not in RESERVED_TOP_LEVEL_FIELDS
         )
 
-    def _build_update_reports(
+    def _plan_missing_programs(
         self, prepared_configs: list[_PreparedConfig]
+    ) -> None:
+        """Record each config's missing template program sections."""
+        for prepared in prepared_configs:
+            prepared.missing_programs = tuple(
+                program
+                for program in self._template_programs(prepared.template_data)
+                if program not in prepared.data
+            )
+
+    @staticmethod
+    def _programs_with_exefolder(
+        prepared_configs: list[_PreparedConfig],
+    ) -> tuple[str, ...]:
+        """Return unique missing programs whose template has EXEFOLDER."""
+        programs: list[str] = []
+        seen: set[str] = set()
+        for prepared in prepared_configs:
+            for program in prepared.missing_programs:
+                section = prepared.template_data[program]
+                if (
+                    program not in seen
+                    and isinstance(section, Mapping)
+                    and "EXEFOLDER" in section
+                ):
+                    seen.add(program)
+                    programs.append(program)
+        return tuple(programs)
+
+    @staticmethod
+    def _is_interactive() -> bool:
+        """Return whether stdin is an interactive terminal."""
+        return click.get_text_stream("stdin").isatty()
+
+    def _prompt_program_exefolders(
+        self, prepared_configs: list[_PreparedConfig]
+    ) -> dict[str, str]:
+        """Collect one optional EXEFOLDER override per missing program."""
+        if not self._is_interactive():
+            return {}
+
+        overrides: dict[str, str] = {}
+        for program in self._programs_with_exefolder(prepared_configs):
+            folder = click.prompt(
+                f"{program} EXEFOLDER "
+                "(press Enter to use the matched template value)",
+                default="",
+                show_default=False,
+            ).strip()
+            if folder:
+                overrides[program] = folder
+        return overrides
+
+    def _apply_update_plan(
+        self,
+        prepared_configs: list[_PreparedConfig],
+        program_exefolders: Mapping[str, str],
     ) -> list[ConfigUpdateReport]:
-        """Copy missing program sections into prepared user configs."""
+        """Apply planned additions and optional paths to prepared configs."""
         reports: list[ConfigUpdateReport] = []
         for prepared in prepared_configs:
             added_programs: list[str] = []
-            for program in self._template_programs(prepared.template_data):
-                if program not in prepared.data:
-                    prepared.data[program] = copy.deepcopy(
-                        prepared.template_data[program]
-                    )
-                    added_programs.append(program)
+            for program in prepared.missing_programs:
+                section = copy.deepcopy(prepared.template_data[program])
+                if (
+                    program in program_exefolders
+                    and isinstance(section, MutableMapping)
+                    and "EXEFOLDER" in section
+                ):
+                    section["EXEFOLDER"] = program_exefolders[program]
+                prepared.data[program] = section
+                added_programs.append(program)
             reports.append(
                 ConfigUpdateReport(
                     path=prepared.path,
@@ -761,9 +846,13 @@ def version(version_number: str):
     "-s",
     "--server",
     type=str,
-    help="Existing server YAML to update, with or without .yaml.",
+    multiple=True,
+    help=(
+        "Existing server YAML to update, with or without .yaml. "
+        "Repeat to select multiple files."
+    ),
 )
-def config(server: str | None):
+def config(server: tuple[str, ...]):
     """Update existing server YAML program sections from bundled templates."""
 
     try:

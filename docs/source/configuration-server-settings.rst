@@ -41,16 +41,23 @@ updated with:
 
    chemsmart update config
    chemsmart update config -s SLURM
+   chemsmart update config -s SLURM -s PBS
 
-The command only adds missing top-level program configuration sections, such as ``XTB`` or future program sections. It
-does not update ``SERVER``, does not recursively fill missing fields inside an existing program section, and does not
-overwrite existing program sections or existing ``EXEFOLDER`` values. Custom top-level fields are preserved.
+The command compares each selected YAML file with its matched bundled template and only adds missing top-level program
+configuration sections. It does not update ``SERVER``, does not recursively fill missing fields inside an existing
+program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values. Custom top-level
+fields are preserved.
 
-Use ``-s`` / ``--server`` to update one existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
-without ``.yaml``. Without ``-s``, all existing ``*.yaml`` files in the server directory are checked. The command does
-not create missing server YAML files.
+Use ``-s`` / ``--server`` to select an existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
+without ``.yaml``. Repeat the option to select multiple files. Without ``-s``, all existing ``*.yaml`` files in the
+server directory are checked. The command does not create missing server YAML files.
 
-The update is non-interactive and never prompts for input.
+In an interactive terminal, the command prompts at most once for the ``EXEFOLDER`` of each missing program discovered
+across the selected files. Press Enter to keep the value from each file's matched template. A supplied path is applied
+only to newly copied program sections in files that were missing that program; existing program sections and paths are
+never changed. Program names are discovered from the templates rather than maintained in a fixed list.
+
+When standard input is not an interactive terminal, the command does not prompt and uses the matched template values.
 
 Configuration Structure
 =======================
