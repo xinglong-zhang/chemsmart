@@ -3046,6 +3046,16 @@ class TestORCAQMMMJobSettings:
         route = s.qmmm_route_string
         assert "QM/QM2" in route
 
+    def test_embedding_type_helpers(self):
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        mechanical = ORCAQMMMJobSettings(embedding_type="mechanical")
+        assert mechanical._get_embedding_type() == "Embedding Mechanical"
+
+        invalid = ORCAQMMMJobSettings(embedding_type="invalid")
+        with pytest.raises(ValueError, match="Invalid embedding type"):
+            invalid._get_embedding_type()
+
 
 class TestORCANEB:
     def test_read_neb_output(self, orca_neb_output_file):

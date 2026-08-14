@@ -2876,6 +2876,25 @@ class TestQMMMMolecule:
         assert mol_no_links.bonded_atoms == []
         assert "H 1" not in buf_no_links.getvalue()
 
+    def test_mm_atom_info_from_coordinate_lines(self):
+        typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03      0.0 0.0 0.0 H",
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1",
+        ]
+        records = QMMMMolecule.mm_atom_info_from_coordinate_lines(typed_lines)
+        assert records[0] == ("CT", 0.03, None, None)
+        assert records[1][0] == "OH"
+        assert records[1][1] == -0.65
+        assert records[1][2] == "HC"
+        assert records[1][3] == 0.09
+
+        plain_lines = ["0 1", "C 0.0 0.0 0.0 H"]
+        assert (
+            QMMMMolecule.mm_atom_info_from_coordinate_lines(plain_lines)
+            is None
+        )
+
 
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""

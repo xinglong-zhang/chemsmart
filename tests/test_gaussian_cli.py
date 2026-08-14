@@ -17,6 +17,7 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 
@@ -1099,3 +1100,79 @@ class TestGaussianCLIQrcCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianQMMMCLI:
+    """CLI tests for the nested ``opt qmmm`` (and related) subcommands."""
+
+    def test_opt_qmmm_propagates_cli_options_to_settings_and_molecule(
+        self,
+        single_molecule_xyz_file,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        mm_info = os.path.join(tmpdir, "mm_atoms.dat")
+        with open(mm_info, "w") as handle:
+            handle.write("1 C 0.0\n")
+            handle.write("2 H 0.0\n")
+            handle.write("3 H 0.0\n")
+            handle.write("4 H 0.0\n")
+        params = os.path.join(tmpdir, "mm_params.dat")
+        with open(params, "w") as handle:
+            handle.write("NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n")
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "6-31g*",
+                    "-ch",
+                    "1",
+                    "-mh",
+                    "2",
+                    "-ha",
+                    "1-3",
+                    "-mai",
+                    mm_info,
+                    "-mpf",
+                    params,
+                    "-l",
+                    "testjob",
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job.call_args is not None
+        call_kwargs = mock_job.call_args[1]
+        settings = call_kwargs["settings"]
+        molecule = call_kwargs["molecule"]
+
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "6-31g*"
+        assert settings.model_charge == 1
+        assert settings.model_multiplicity == 2
+        assert settings.mm_atom_info_file == mm_info
+        assert settings.mm_parameters_file == params
+        assert settings.parent_jobtype == "opt"
+        assert molecule.high_level_atoms == [1, 2, 3]

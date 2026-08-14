@@ -245,6 +245,22 @@ class TestGetListFromStringRange:
         with pytest.raises(ValueError, match="Invalid atom index token"):
             get_list_from_string_range("1-3,abc")
 
+    @pytest.mark.parametrize("value", ["0", "-1", "3-1", "5:2"])
+    def test_invalid_atom_indices_raise(self, value):
+        """Zero, negative, and reversed ranges are rejected."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range(value)
+
+    def test_none_raises(self):
+        """None input should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="None"):
+            get_list_from_string_range(None)
+
+    def test_non_string_raises(self):
+        """Non-string input should raise TypeError."""
+        with pytest.raises(TypeError, match="Expected a string"):
+            get_list_from_string_range(123)
+
 
 class TestString2Index1Based:
     """Tests for the string2index_1based function."""
