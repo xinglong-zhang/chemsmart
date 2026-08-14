@@ -93,9 +93,7 @@ class Executable(RegistryMixin):
             )
             return cls()
 
-        executable_folder_raw = program_cfg[
-            "EXEFOLDER"
-        ]
+        executable_folder_raw = program_cfg["EXEFOLDER"]
         executable_folder = (
             os.path.expanduser(executable_folder_raw)
             if executable_folder_raw
