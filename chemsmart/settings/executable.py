@@ -80,8 +80,20 @@ class Executable(RegistryMixin):
         )
         server_yaml = YAMLFile(filename=server_yaml_file)
 
-        # Extract configuration for the specific program
-        executable_folder_raw = server_yaml.yaml_contents_dict[cls.PROGRAM][
+        # Extract configuration for the specific program.
+        # If the program block is missing (e.g. user installed before xTB
+        # support was added), fall back to a default instance so that
+        # existing workflows are not broken.
+        program_cfg = server_yaml.yaml_contents_dict.get(cls.PROGRAM)
+        if program_cfg is None:
+            logger.warning(
+                f"No '{cls.PROGRAM}' section found in {server_yaml_file}. "
+                "Using default executable settings. "
+                "Consider updating your server YAML with the latest template."
+            )
+            return cls()
+
+        executable_folder_raw = program_cfg[
             "EXEFOLDER"
         ]
         executable_folder = (
@@ -89,21 +101,11 @@ class Executable(RegistryMixin):
             if executable_folder_raw
             else None
         )
-        local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "LOCAL_RUN", False
-        )
-        conda_env = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "CONDA_ENV", None
-        )
-        modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "MODULES", None
-        )
-        scripts = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "SCRIPTS", None
-        )
-        envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "ENVARS", None
-        )
+        local_run = program_cfg.get("LOCAL_RUN", False)
+        conda_env = program_cfg.get("CONDA_ENV", None)
+        modules = program_cfg.get("MODULES", None)
+        scripts = program_cfg.get("SCRIPTS", None)
+        envars = program_cfg.get("ENVARS", None)
 
         # Strip comments from configuration strings
         if conda_env is not None:
