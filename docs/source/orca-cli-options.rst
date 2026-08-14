@@ -513,7 +513,7 @@ Transition State Search
    -  -  ``neb``
       -  Nudged Elastic Band calculations
    -  -  ``qrc``
-      -  Quadratic reaction coordinate calculations
+      -  Quick reaction coordinate calculations
 
 Direct Input
 ============
