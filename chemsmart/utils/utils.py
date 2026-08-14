@@ -330,12 +330,30 @@ def get_list_from_string_range(string_of_range):
         try:
             if ":" in token:
                 start_s, end_s = token.split(":", 1)
-                indices.extend(range(int(start_s), int(end_s) + 1))
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
             elif "-" in token and not token.startswith("-"):
                 start_s, end_s = token.split("-", 1)
-                indices.extend(range(int(start_s), int(end_s) + 1))
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
             else:
-                indices.append(int(token))
+                value = int(token)
+                if value <= 0:
+                    raise ValueError(
+                        f"Invalid atom index {token!r}. "
+                        "Expected 1-indexed indices such as '1,15' or '15'."
+                    )
+                indices.append(value)
         except ValueError:
             raise ValueError(
                 f"Invalid atom index token {token!r} in {original!r}. "
@@ -1441,7 +1459,9 @@ def check_charge_and_multiplicity(settings):
         ValueError: If charge or multiplicity is None.
     """
     if settings.charge is None or settings.multiplicity is None:
-        raise ValueError("Charge and multiplicity must be specified.")
+        raise ValueError(
+            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
+        )
 
 
 def cmp_with_ignore(f1, f2, ignore_string=None):
