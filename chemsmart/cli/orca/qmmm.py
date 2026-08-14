@@ -67,7 +67,7 @@ def create_orca_qmmm_subcommand(parent_command):
         "--low-level-method",
         "--low-level-force-field",  # legacy alias
         type=str,
-        help="Method/force field for low-level (MM) region",
+        help="ORCA force-field parameter file for the MM region (ORCAFFFilename), e.g. system.ORCAFF.prms",
     )
     @click.option(
         "-ha",

@@ -12,7 +12,7 @@ qmmm:
   intermediate_level_functional: "HF"
   intermediate_level_basis: "STO-3G"
   intermediate_level_atoms: 4-6
-  low_level_method: "AMBER"
+  low_level_method: "system.ORCAFF.prms"
   charge_high: 0
   mult_high: 1
   charge_total: 0

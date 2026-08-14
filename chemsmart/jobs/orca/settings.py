@@ -1672,7 +1672,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         set for intermediate-level (QM2) region
         intermediate_level_method (str): Built-in
         method for intermediate-level (XTB, HF-3C, etc.)
-        low_level_method (str): Method/force field for low-level (MM) region
+        low_level_method (str): ORCA force-field parameter file (ORCAFFFilename)
         high_level_atoms (list): Atom indices for high-level (QM) region
         intermediate_level_atoms (list): Atom
         indices for intermediate-level (QM2) region
@@ -1768,8 +1768,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             for intermediate-level (QM2) region
             intermediate_level_method: Built-in method for
             intermediate-level (XTB, HF-3C, PBEH-3C, etc.)
-            low_level_method: Method/force field for
-            low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
+            low_level_method: ORCA force-field parameter file
+            (ORCAFFFilename, e.g. system.ORCAFF.prms)
             high_level_atoms: Atom indices for high-level (QM) region
             intermediate_level_atoms: Atom indices
             for intermediate-level (QM2) region

@@ -768,7 +768,7 @@ class TestORCAQMMMCLIjobtypeOverride:
         assert settings is not None
         assert settings.jobtype == "QM/QM2"
         assert settings.intermediate_level_atoms == "4-6"
-        assert settings.low_level_method is not None
+        assert settings.low_level_method == "system.ORCAFF.prms"
 
 
 class TestORCAQMMMCLIHighLevelHBondLength:
@@ -788,6 +788,8 @@ class TestORCAQMMMCLIHighLevelHBondLength:
                 "qmmm",
                 "-j",
                 "QMMM",
+                "-lm",
+                "system.ORCAFF.prms",
                 "-ha",
                 "1-3",
                 "-ch",
@@ -795,16 +797,17 @@ class TestORCAQMMMCLIHighLevelHBondLength:
                 "-mh",
                 "1",
                 "-h",
-                "{('C', 'HLA'): 1.09, ('N', 'HLA'): 1.01}",
+                "{'C_H': 1.09, 'N_H': 1.01}",
             ],
             ctx_obj={"jobrunner": MagicMock()},
         )
 
         assert result.exit_code == 0, result.output
         assert settings is not None
+        assert settings.low_level_method == "system.ORCAFF.prms"
         assert settings.high_level_h_bond_length == {
-            ("C", "HLA"): 1.09,
-            ("N", "HLA"): 1.01,
+            "C_H": 1.09,
+            "N_H": 1.01,
         }
         h_block = settings._get_h_bond_length()
         assert "Dist_C_HLA 1.09" in h_block

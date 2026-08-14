@@ -30,13 +30,14 @@ The basic command structure for ORCA QM/MM calculations is:
 
 .. code:: console
 
-   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] qmmm [QMMM_OPTIONS]
+   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] <JOBTYPE> qmmm [QMMM_OPTIONS]
 
-Or using the ``run`` command with project settings:
+where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, ``qrc``, or ``neb``. Or using the ``run``
+command with project settings:
 
 .. code:: console
 
-   chemsmart run [OPTIONS] orca -p qmmm -f <structure_file> qmmm [QMMM_OPTIONS]
+   chemsmart run [OPTIONS] orca -p qmmm -f <structure_file> opt qmmm [QMMM_OPTIONS]
 
 Example with the ``run`` command:
 
@@ -45,13 +46,14 @@ Example with the ``run`` command:
    chemsmart run --no-scratch --fake orca \
      -p qmmm \
      -f tests/data/StructuresTests/xyz/crest_best.xyz \
-     qmmm \
+     opt qmmm \
      -j QM/QM2/MM \
-     -lf amber \
+     -lm system.ORCAFF.prms \
+     -ha 1-15 \
      -ct 0 \
      -mt 1 \
-     -ha 1-15 \
-     -R
+     -ch 0 \
+     -mh 1
 
 **Key Options:**
 
@@ -59,7 +61,7 @@ Example with the ``run`` command:
 -  ``--fake``: Dry run mode (don't actually submit)
 -  ``-p qmmm``: Load settings from ``~/.chemsmart/orca/qmmm.yaml``
 -  ``-f``: Input structure file
--  ``-R``: Run the job after setup
+-  ``opt qmmm``: Parent job type plus nested QM/MM subcommand
 
 ************************
  QM/MM-Specific Options
@@ -100,9 +102,10 @@ Job Type and Theory Level
       -  string
       -  Built-in method for intermediate-level (QM2) region (XTB, HF-3C, PBEH-3C, R2SCAN-3C, PM3, AM1)
 
-   -  -  ``-lf, --low-level-force-field``
+   -  -  ``-lm, --low-level-method``
       -  string
-      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
+      -  ORCA force-field parameter file written as ``ORCAFFFilename`` (e.g. ``system.ORCAFF.prms``). Alias:
+         ``--low-level-force-field``.
 
 Atom Partitioning
 =================
@@ -187,7 +190,7 @@ Advanced QM/MM Options
 
    -  -  ``-h, --high-level-h-bond-length``
       -  string
-      -  Custom high-level-H bond lengths as a string representation of a dict
+      -  Custom high-level-H bond lengths, e.g. ``"{'C_H': 1.09, 'N_H': 1.01}"``.
 
    -  -  ``-d, --delete-la-double-counting``
       -  bool
@@ -266,14 +269,14 @@ Crystal QM/MM Options
 Additive QM/MM
 ==============
 
-Basic additive QM/MM calculation with B3LYP for QM region and AMBER force field:
+Basic additive QM/MM calculation with B3LYP for the QM region and an ORCA force-field parameter file for MM:
 
 .. code:: bash
 
-   chemsmart sub orca -p protein_qmmm -f protein.pdb qmmm \
+   chemsmart sub orca -p protein_qmmm -f protein.pdb opt qmmm \
        -j QMMM \
        -hx B3LYP -hb def2-SVP \
-       -lf amber99 \
+       -lm protein.ORCAFF.prms \
        -ha 1-20 \
        -ch 0 -mh 1 \
        -ct 0 -mt 1
@@ -285,7 +288,7 @@ Two-layer ONIOM calculation with DFT for high level and semi-empirical for inter
 
 .. code:: console
 
-   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm \
+   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz opt qmmm \
      -j QM/QM2 \
      -hx B3LYP -hb def2-TZVP \
      -ix HF -ib STO-3G \
@@ -300,11 +303,11 @@ Three-layer ONIOM with DFT, XTB, and MM:
 
 .. code:: console
 
-   chemsmart sub orca -p complex_system -f system.pdb qmmm \
+   chemsmart sub orca -p complex_system -f system.pdb opt qmmm \
      -j QM/QM2/MM \
      -hx B3LYP -hb def2-SVP \
      -im XTB \
-     -lf amber99 \
+     -lm system.ORCAFF.prms \
      -ha 1-10 -ia 11-30 \
      -ch 0 -mh 1 \
      -ci 0 -mi 1 \
@@ -317,7 +320,7 @@ QM/MM calculation for a molecular crystal:
 
 .. code:: console
 
-   chemsmart sub orca -p molecular_crystal -f crystal.cif qmmm \
+   chemsmart sub orca -p molecular_crystal -f crystal.cif opt qmmm \
      -j MOL-CRYSTAL-QMMM \
      -hx PBE -hb def2-SVP \
      -ha 1-20 \
@@ -331,10 +334,10 @@ QM/MM with custom bond lengths and embedding options:
 
 .. code:: console
 
-   chemsmart sub orca -p advanced_qmmm -f system.xyz qmmm \
+   chemsmart sub orca -p advanced_qmmm -f system.xyz opt qmmm \
      -j QMMM \
      -hx M06-2X -hb def2-TZVP \
-     -lf charmm36 \
+     -lm system.ORCAFF.prms \
      -ha 1-25 \
      -ch -1 -mh 2 \
      -ct -1 -mt 2 \
@@ -348,7 +351,7 @@ QM/MM with custom bond lengths and embedding options:
 
 You can configure QM/MM settings in a YAML file to avoid repetitive CLI options. This is especially useful for running
 multiple jobs with similar settings. Charge and multiplicity are not set in the project YAML; pass them on the command
-line (``-ch``, ``-mh``, ``-ct``, ``-mt``, and for QM/QM2 jobs ``-cm``, ``-mm``).
+line (``-ch``, ``-mh``, ``-ct``, ``-mt``, and for QM/QM2 jobs ``-ci``, ``-mi``).
 
 YAML Configuration Location
 ===========================
@@ -365,7 +368,7 @@ Basic 2-Layer QM/MM Configuration
      jobtype: "QMMM"
      high_level_functional: "B3LYP"
      high_level_basis: "def2-SVP"
-     low_level_force_field: "ff13SB"
+     low_level_method: "system.ORCAFF.prms"
      embedding_type: "Electronic"
      freq: false
 
@@ -389,7 +392,7 @@ Basic 2-Layer QM/MM Configuration
      # intermediate_level_method: "XTB"
 
      # Low-level (MM) region
-     low_level_force_field: "ff13SB"
+     low_level_method: "system.ORCAFF.prms"
 
      # Additional options
      freq: false
@@ -424,17 +427,15 @@ Once you have a YAML file configured, use it with the ``-p`` flag:
 .. code:: console
 
    # Theory from YAML; charge and multiplicity on the CLI
-   chemsmart run orca -p qmmm -f system.pdb qmmm \
+   chemsmart run orca -p qmmm -f system.pdb opt qmmm \
      -ha 1-20 \
-     -ch 0 -mh 1 -ct 0 -mt 1 \
-     -R
+     -ch 0 -mh 1 -ct 0 -mt 1
 
    # Override YAML settings with CLI options
-   chemsmart run orca -p qmmm -f system.pdb qmmm \
+   chemsmart run orca -p qmmm -f system.pdb opt qmmm \
      -ha 1-20 \
      -hx M06-2X \
-     -ch 0 -mh 1 -ct 0 -mt 1 \
-     -R
+     -ch 0 -mh 1 -ct 0 -mt 1
 
 **Settings Priority:**
 
@@ -455,7 +456,7 @@ Complete YAML Example
      high_level_functional: "PBE0"
      high_level_basis: "def2-TZVP"
      intermediate_level_method: "XTB"
-     low_level_force_field: "ff13SB"
+     low_level_method: "system.ORCAFF.prms"
 
      # Atom partitioning (optional, can be set via CLI)
      # high_level_atoms: [1, 2, 3, 4, 5]
@@ -471,7 +472,7 @@ Complete YAML Example
 
 .. code:: console
 
-   chemsmart run orca -p qmmm -f system.pdb qmmm \
+   chemsmart run orca -p qmmm -f system.pdb opt qmmm \
      -ha 1-20 \
      -ch 0 -mh 1 \
      -ct 0 -mt 1
@@ -504,7 +505,7 @@ For more advanced QM/MM workflows, see:
 CLI Option Summary
 ==================
 
-Updated CLI options after refactoring from "medium" to "intermediate" naming:
+``qmmm`` is nested under a parent job type (``opt``, ``ts``, ``sp``, ``scan``, ``modred``, ``qrc``, or ``neb``).
 
 .. list-table:: Key CLI Options
    :header-rows: 1
@@ -550,19 +551,15 @@ Updated CLI options after refactoring from "medium" to "intermediate" naming:
       -  ``--mult-intermediate``
       -  Intermediate multiplicity
 
-   -  -  ``-lf``
-      -  ``--low-level-force-field``
-      -  Low-level (MM) force field
+   -  -  ``-lm``
+      -  ``--low-level-method``
+      -  ORCA force-field parameter file (``ORCAFFFilename``). Alias: ``--low-level-force-field``.
 
-Naming Update Summary
-=====================
+Intermediate Layer Options
+==========================
 
-**Old → New:** The "medium" terminology has been updated to "intermediate" throughout:
-
--  CLI options now use ``-ix/-ib/-im/-ia/-ci/-mi`` for intermediate functionals, bases, methods, atoms, charge, and
-   multiplicity.
--  YAML parameters: ``medium_level_*`` → ``intermediate_level_*``
--  Settings attributes: ``charge_medium`` → ``charge_intermediate``
+Use ``-ix``/``-ib``/``-im``/``-ia``/``-ci``/``-mi`` for the intermediate (QM2) functional, basis, built-in method,
+atoms, charge, and multiplicity. YAML keys are ``intermediate_level_*``.
 
 *******************************
  ORCAQMMMJobSettings Reference
@@ -610,9 +607,10 @@ Job Type and Methods
       -  str
       -  Built-in method for intermediate-level (QM2) (XTB, HF-3C, PBEH-3C, R2SCAN-3C, PM3, AM1)
 
-   -  -  ``low_level_force_field``
+   -  -  ``low_level_method``
       -  str
-      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
+      -  ORCA force-field parameter file for ``ORCAFFFilename`` (e.g. ``system.ORCAFF.prms``). YAML also accepts
+         ``low_level_force_field``.
 
 Settings Comparison and Validation
 ----------------------------------

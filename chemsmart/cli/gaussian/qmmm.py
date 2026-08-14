@@ -8,7 +8,10 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    get_list_from_string_range,
+    parse_qmmm_scale_factors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +174,9 @@ def create_qmmm_subcommand(parent_command):
         "--scale-factors",
         type=str,
         default=None,
-        help="Scale factors for QM/MM calculations as string representation of dict.",
+        help=(
+            "Scale factors as a dict, e.g. '{[3, 4]: [0.709, 0.709, 0.709]}'."
+        ),
     )
     @click.option(
         "-mai",
@@ -379,7 +384,7 @@ def create_qmmm_subcommand(parent_command):
         if bonded_atoms is not None:
             molecule.bonded_atoms = ast.literal_eval(bonded_atoms)
         if scale_factors is not None:
-            molecule.scale_factors = ast.literal_eval(scale_factors)
+            molecule.scale_factors = parse_qmmm_scale_factors(scale_factors)
 
         if parent_jobtype is not None:
             qmmm_settings.parent_jobtype = parent_jobtype

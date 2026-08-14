@@ -2840,6 +2840,19 @@ class TestQMMMMolecule:
         with open(written_input, "r") as f:
             lines = [line.strip() for line in f.readlines()]
         assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+        mol_list_keys = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[[4, 5]]",
+            scale_factors="{[4, 5]: [0.709]}",
+        )
+        with open(written_input, "w") as f:
+            mol_list_keys._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
 
     def test_auto_assigns_link_atoms_for_cut_covalent_bonds(self):
         """Cut covalent bonds become link-atom pairs when bonded_atoms is omitted."""

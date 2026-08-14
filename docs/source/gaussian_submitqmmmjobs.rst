@@ -36,7 +36,8 @@ The basic command structure for Gaussian ONIOM QM/MM calculations is:
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <JOBTYPE> qmmm [QMMM_OPTIONS]
 
-where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, or ``modred``.
+where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, or ``qrc``. There is no standalone ``qmmm``
+command.
 
 ************************
  QM/MM-Specific Options
@@ -114,11 +115,35 @@ Atom Partitioning
 
    -  -  ``-ba, --bonded-atoms``
       -  string
-      -  Bonds crossing layer boundaries: e.g., '(1,2),(5,6)'
+      -  Bonds crossing layer boundaries, e.g. ``'[[3, 4], [5, 6]]'``. Optional; cut covalent bonds are assigned from
+         molecular connectivity if omitted.
 
    -  -  ``-sf, --scale-factors``
       -  dict
-      -  Custom link atom scale factors: {(atom1,atom2): [low,med,high]}
+      -  Custom link atom scale factors, e.g. ``'{[3, 4]: [0.709, 0.709, 0.709]}'``.
+
+MM Atom Types and Parameters
+============================
+
+Required for AMBER (and similar) force fields unless the input ``.com`` already contains ``Element-Type-Charge`` labels
+and SoftFirst/HardFirst parameter lines.
+
+.. list-table:: MM Parameter Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-mai, --mm-atom-info``
+      -  path
+      -  File with MM atom types and partial charges. Format: ``[index] type charge [link_type link_charge]``.
+
+   -  -  ``-mpf, --mm-parameters-file``
+      -  path
+      -  Optional SoftFirst/HardFirst MM parameter lines to append after the molecule specification. Not needed if
+         already present in the input ``.com``.
 
 Charge and Multiplicity
 =======================
@@ -166,7 +191,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(25,26)]'
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[25, 26]]' -mai mm_atoms.dat
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -175,7 +200,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba '[(10,11),(50,51)]'
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba '[[10, 11], [50, 51]]'
 
 Transition State Search
 =======================
@@ -184,7 +209,7 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(30,31)]' -sf '{(30,31): [0.709, 0.709, 0.709]}'
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[30, 31]]' -sf '{[30, 31]: [0.709, 0.709, 0.709]}'
 
 Frequency Analysis
 ==================
@@ -418,7 +443,7 @@ Use the YAML configuration with the project flag:
 
 .. code:: console
 
-   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[(20,21)]'
+   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[20,21]]'
 
 Python Configuration
 ====================
