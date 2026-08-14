@@ -235,6 +235,12 @@ class TestGetListFromStringRange:
         result = get_list_from_string_range("397–469")
         assert result == list(range(397, 470))
 
+    def test_unicode_em_dash_and_spaced_hyphen(self):
+        """Em-dash and spaced hyphens normalize to hyphen ranges."""
+        assert get_list_from_string_range("1—3") == [1, 2, 3]
+        assert get_list_from_string_range("1 - 3") == [1, 2, 3]
+        assert get_list_from_string_range("1−3") == [1, 2, 3]
+
     def test_empty_string_raises(self):
         """Empty string should raise a clear ValueError."""
         with pytest.raises(ValueError, match="empty string"):

@@ -2889,11 +2889,54 @@ class TestQMMMMolecule:
         assert records[1][2] == "HC"
         assert records[1][3] == 0.09
 
+        frozen_typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03  -1  0.0 0.0 0.0 H",
+            "O-OH--0.65  0  1.4 0.0 0.0 L H-HC-0.09 1",
+            "TV 1.0 0.0 0.0",
+            "C-CT        0.0 0.0 1.0 L",
+        ]
+        frozen_records = QMMMMolecule.mm_atom_info_from_coordinate_lines(
+            frozen_typed_lines
+        )
+        assert frozen_records[0] == ("CT", 0.03, None, None)
+        assert frozen_records[1] == ("OH", -0.65, "HC", 0.09)
+        assert frozen_records[2] is None
+        assert QMMMMolecule.parse_element_type_charge("C-CT") is None
+
         plain_lines = ["0 1", "C 0.0 0.0 0.0 H"]
         assert (
             QMMMMolecule.mm_atom_info_from_coordinate_lines(plain_lines)
             is None
         )
+
+    def test_write_gaussian_connectivity_and_frozen_mm_labels(self):
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [-0.4, 1.0, 0.0]]
+            ),
+            high_level_atoms=[1],
+            low_level_atoms=[2, 3],
+            bonded_atoms=[(1, 2)],
+            frozen_atoms=[-1, 0, 0],
+            mm_atom_info=[
+                ("CT", 0.03, None, None),
+                ("HC", 0.09, None, None),
+                ("HC", 0.09, None, None),
+            ],
+        )
+        coords = StringIO()
+        mol._write_gaussian_coordinates(coords)
+        coord_text = coords.getvalue()
+        assert "C-CT-0.03" in coord_text
+        assert "  -1 " in coord_text
+
+        connectivity = StringIO()
+        mol.write_gaussian_connectivity(connectivity)
+        conn_text = connectivity.getvalue()
+        assert "1 2 1.0" in conn_text
+        assert conn_text.endswith("\n\n")
 
 
 class TestInChIKey:

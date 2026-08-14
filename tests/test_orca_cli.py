@@ -731,6 +731,45 @@ class TestORCAQMMMCLIjobtypeOverride:
         assert "Charge_Total 0" in qmmm_block
         assert "Mult_Total 2" in qmmm_block
 
+    def test_cli_qm_qm2_keeps_cli_intermediate_atoms(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """Explicit -ia is kept when overriding QM/QM2/MM YAML to QM/QM2."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            [
+                "-p",
+                "test_qmmm_3layer",
+                "-f",
+                single_molecule_xyz_file,
+                "opt",
+                "qmmm",
+                "-j",
+                "QM/QM2",
+                "-ha",
+                "1-3",
+                "-ia",
+                "4-6",
+                "-ct",
+                "0",
+                "-mt",
+                "2",
+                "-ch",
+                "0",
+                "-mh",
+                "2",
+            ],
+            ctx_obj={"jobrunner": MagicMock()},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.jobtype == "QM/QM2"
+        assert settings.intermediate_level_atoms == "4-6"
+        assert settings.low_level_method is not None
+
 
 class TestORCAQMMMCLIHighLevelHBondLength:
     def test_cli_accepts_dict_string(
