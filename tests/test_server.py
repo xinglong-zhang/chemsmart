@@ -147,38 +147,32 @@ conda activate ~/anaconda3/envs/chemsmart
 
 
 class TestMissingProgramSectionFallback:
-    """Tests that Executable.from_servername falls back gracefully when the
-    program block (e.g. XTB, CREST) is absent from the server YAML.  This
-    covers users who installed CHEMSMART before xTB support was added."""
+    """Tests that Executable.from_servername raises ValueError when the
+    program block (e.g. XTB, CREST) is absent from the server YAML, and
+    that programs which ARE present still parse correctly.
 
-    def test_xtb_missing_section_returns_default(self, legacy_server_yaml):
-        """XTBExecutable.from_servername does not raise when XTB block absent."""
-        exe = XTBExecutable.from_servername(legacy_server_yaml)
-        assert exe.executable_folder is None
-        assert exe.get_executable() == "xtb"
-        assert exe.local_run is False
-        assert exe.conda_env is None
-        assert exe.modules is None
-        assert exe.scripts is None
-        assert exe.envars is None
+    Covers users who installed CHEMSMART before xTB support was added."""
 
-    def test_xtb_missing_section_logs_warning(
-        self, legacy_server_yaml, caplog
-    ):
-        """A warning is logged when the XTB section is absent."""
-        import logging
+    def test_xtb_missing_section_raises(self, legacy_server_yaml):
+        """XTBExecutable.from_servername raises ValueError when XTB block absent."""
+        import pytest
 
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="XTB"):
             XTBExecutable.from_servername(legacy_server_yaml)
-        assert any("XTB" in msg for msg in caplog.messages)
 
-    def test_crest_missing_section_returns_default(self, legacy_server_yaml):
-        """CRESTExecutable.from_servername does not raise when CREST block absent."""
-        exe = CRESTExecutable.from_servername(legacy_server_yaml)
-        assert exe.executable_folder is None
-        assert exe.get_executable() == "crest"
-        assert exe.local_run is False
-        assert exe.conda_env is None
+    def test_xtb_missing_section_error_message(self, legacy_server_yaml):
+        """The ValueError message mentions updating the server YAML."""
+        import pytest
+
+        with pytest.raises(ValueError, match="server YAML"):
+            XTBExecutable.from_servername(legacy_server_yaml)
+
+    def test_crest_missing_section_raises(self, legacy_server_yaml):
+        """CRESTExecutable.from_servername raises ValueError when CREST block absent."""
+        import pytest
+
+        with pytest.raises(ValueError, match="CREST"):
+            CRESTExecutable.from_servername(legacy_server_yaml)
 
     def test_present_section_still_parsed_correctly(self, legacy_server_yaml):
         """Programs that *are* present in the legacy YAML are still parsed."""
