@@ -1423,7 +1423,7 @@ class XTBFileMixin(FileMixin):
     Mixin class for xTB computational chemistry files.
 
     Extends FileMixin with xTB-specific functionality including
-    route string parsing, job type detection, and settings extraction.
+    program call parsing, job type detection, and settings extraction.
     Handles xTB file formats and calculation parameters.
     """
 
@@ -1462,19 +1462,19 @@ class XTBFileMixin(FileMixin):
     @property
     def route_string(self):
         """
-        Get the route string from xTB main output file.
+        Get the program call from xTB main output file.
 
         Returns the computational route string as defined in the
         program call. Implementation is provided by subclasses.
 
         Returns:
-            str: Route string for xTB calculations.
+            str: Program call for xTB calculations.
         """
         return self._get_route()
 
     def _get_route(self):
         """
-        Get route string from file contents.
+        Get program call from file contents.
 
         Default implementation that must be overridden by subclasses
         to provide specific route string extraction logic.
@@ -1487,9 +1487,9 @@ class XTBFileMixin(FileMixin):
     @property
     def route_object(self):
         """
-        Get parsed xTB route object from route string.
+        Get parsed xTB route object from the program call.
 
-        Creates an XTBRoute object from the route string to
+        Creates an XTBRoute object from the program call to
         provide structured access to calculation parameters.
 
         Returns:
@@ -1499,7 +1499,7 @@ class XTBFileMixin(FileMixin):
 
     @property
     def method(self):
-        """Get the computational method from xTB route string or output Hamiltonian."""
+        """Get the computational method from the xTB program call or output Hamiltonian."""
         gfn = self.route_object.method
         if gfn:
             return gfn

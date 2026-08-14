@@ -174,8 +174,8 @@ Examples:
    # GFN-FF single point
    chemsmart run xtb -p test -f molecule.xyz -g gfnff sp
 
-Route and Calculation Options
-=============================
+Calculation Options
+===================
 
 .. list-table::
    :header-rows: 1
