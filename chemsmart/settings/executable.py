@@ -86,12 +86,12 @@ class Executable(RegistryMixin):
         # existing workflows are not broken.
         program_cfg = server_yaml.yaml_contents_dict.get(cls.PROGRAM)
         if program_cfg is None:
-            logger.warning(
-                f"No '{cls.PROGRAM}' section found in {server_yaml_file}. "
-                "Using default executable settings. "
+            raise ValueError(
+                f"No '{cls.PROGRAM}' section found in {server_yaml_file}.\n "
                 "Consider updating your server YAML with the latest template."
+                # "Run `chemsmart update config` to update your server YAML.`"
+                # TODO: to uncomment after this function becomes available.
             )
-            return cls()
 
         executable_folder_raw = program_cfg["EXEFOLDER"]
         executable_folder = (
