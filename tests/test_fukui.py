@@ -148,6 +148,24 @@ class TestFukuiCLI:
         assert result.exit_code == 0, result.output
         assert "\n  fukui" in result.output
 
+    def test_submit_help_via_run(self, single_molecule_xyz_file):
+        runner = CliRunner()
+        result = runner.invoke(
+            run,
+            [
+                "--fake",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "fukui",
+                "--help",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "-m, --mode" in result.output
+
     def test_submit_help_options(self):
         from chemsmart.cli.gaussian.fukui import fukui as fukui_submit
 
