@@ -232,6 +232,16 @@ Solvent options are specified at the xTB group level and apply to all job types.
    CHEMSMART renders solvent flags only when **both** ``solvent_model`` and ``solvent_id`` are set. Specifying only one
    of them leaves the calculation in the gas phase.
 
+.. note::
+
+   See the `xTB documentation on parameterized solvents
+   <https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents>`_ for the authoritative list and
+   model-specific availability tables.
+
+   CHEMSMART does not verify model-specific compatibility at job-setup time. If a ``solvent_id`` is not supported for
+   your chosen model, xTB may fail at runtime. Please check the official xTB documentation before submitting the
+   calculation.
+
 Examples:
 
 .. code:: bash

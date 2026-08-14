@@ -247,6 +247,15 @@ Solvent options are specified at the CREST group level and apply to all job type
    CHEMSMART renders solvent flags only when **both** ``solvent_model`` and ``solvent_id`` are set. Specifying only one
    of them leaves the calculation in the gas phase.
 
+.. note::
+
+   CREST uses the xTB backend for implicit solvation. The list of parameterized solvents and which solvation models
+   support them is maintained in the `xTB documentation on parameterized solvents
+   <https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents>`_.
+
+   CHEMSMART does not verify model-specific compatibility at job-setup time. Please check the official xTB documentation
+   before choosing a ``solvent_model`` / ``solvent_id`` combination.
+
 Examples:
 
 .. code:: bash
