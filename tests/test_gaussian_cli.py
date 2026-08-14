@@ -1184,7 +1184,7 @@ class TestGaussianQMMMCLI:
                     "-ba",
                     "[[3, 4]]",
                     "-sf",
-                    "{(3, 4): [0.709]}",
+                    "{[3, 4]: [0.709]}",
                     "-mai",
                     mm_info,
                     "-mpf",

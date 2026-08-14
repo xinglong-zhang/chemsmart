@@ -512,6 +512,8 @@ Transition State Search
       -  Coordinate scanning
    -  -  ``neb``
       -  Nudged Elastic Band calculations
+   -  -  ``qrc``
+      -  Quadratic reaction coordinate calculations
 
 Direct Input
 ============
@@ -525,6 +527,13 @@ Direct Input
    -  -  ``inp``
       -  Run ORCA input file as-is
 
+QM/MM
+=====
+
+``qmmm`` is nested under a parent job type. Use ``<JOBTYPE> qmmm`` where ``<JOBTYPE>`` is ``opt``, ``ts``, ``sp``,
+``scan``, ``modred``, ``qrc``, or ``neb``. There is no standalone ``qmmm`` command. See
+:doc:`orca-multiscale-calculations`.
+
 ************
  Next Steps
 ************
@@ -534,3 +543,4 @@ For detailed information on each job type:
 -  :doc:`orca-structure-optimization`
 -  :doc:`orca-transition-state`
 -  :doc:`orca-direct-input`
+-  :doc:`orca-multiscale-calculations`

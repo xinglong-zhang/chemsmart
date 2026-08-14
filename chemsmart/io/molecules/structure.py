@@ -3849,7 +3849,11 @@ class QMMMMolecule(Molecule):
                     "bonded atoms."
                 )
                 if isinstance(self.scale_factors, str):
-                    self.scale_factors = ast.literal_eval(self.scale_factors)
+                    from chemsmart.utils.utils import parse_qmmm_scale_factors
+
+                    self.scale_factors = parse_qmmm_scale_factors(
+                        self.scale_factors
+                    )
                 for (
                     atom1,
                     atom2,

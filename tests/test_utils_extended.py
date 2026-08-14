@@ -20,6 +20,7 @@ from chemsmart.utils.utils import (
     iterative_compare,
     kabsch_align,
     kabsch_align2,
+    parse_qmmm_scale_factors,
     return_objects_from_string_index,
     string2index_1based,
     strip_out_comments,
@@ -273,6 +274,18 @@ class TestGetListFromStringRange:
         assert get_list_from_string_range("1,,3") == [1, 3]
         with pytest.raises(ValueError, match="Could not parse atom indices"):
             get_list_from_string_range(",,")
+
+
+class TestParseQMMMScaleFactors:
+    def test_list_and_tuple_keys(self):
+        assert parse_qmmm_scale_factors("{[3, 4]: [0.709]}") == {
+            (3, 4): [0.709]
+        }
+        assert parse_qmmm_scale_factors("{(3, 4): [0.709, 0.709]}") == {
+            (3, 4): [0.709, 0.709]
+        }
+        existing = {(5, 6): [0.7]}
+        assert parse_qmmm_scale_factors(existing) is existing
 
 
 class TestCheckChargeAndMultiplicity:

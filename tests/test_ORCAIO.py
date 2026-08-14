@@ -3072,7 +3072,7 @@ class TestORCAQMMMJobSettings:
             mult_high=1,
             charge_total=0,
             mult_total=1,
-            low_level_method="orca.prms",
+            low_level_method="system.ORCAFF.prms",
             high_level_h_bond_length={("C", "X"): 1.2, ("O", "HLA"): 0.98},
         )
         assert mechanical._get_embedding_type() == "Embedding Mechanical"

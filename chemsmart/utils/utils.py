@@ -6,6 +6,7 @@ data structures, text processing, and system operations. Includes
 specialized decorators for function caching and ordered set implementation.
 """
 
+import ast
 import copy
 import hashlib
 import logging
@@ -366,6 +367,27 @@ def get_list_from_string_range(string_of_range):
             "Pass a range such as '1-10,15' or '1:10 15'."
         )
     return indices
+
+
+def parse_qmmm_scale_factors(scale_factors):
+    """Parse QM/MM scale factors to ``{(atom1, atom2): [factors, ...]}``.
+
+    String input may use list or tuple keys, e.g. ``'{[3, 4]: [0.709]}'``.
+    """
+    if isinstance(scale_factors, str):
+        tree = ast.parse(scale_factors, mode="eval")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                node.keys = [
+                    (
+                        ast.Tuple(elts=key.elts, ctx=key.ctx)
+                        if isinstance(key, ast.List)
+                        else key
+                    )
+                    for key in node.keys
+                ]
+        return ast.literal_eval(tree)
+    return scale_factors
 
 
 def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
