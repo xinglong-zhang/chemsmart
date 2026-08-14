@@ -161,7 +161,8 @@ Method Options
 
    -  -  ``-g, --gfn-version``
       -  choice
-      -  GFN method: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``
+      -  GFN method: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``. If not specified, defaults to the xTB default
+         (``gfn2``).
 
 Examples:
 
@@ -190,7 +191,8 @@ Route and Calculation Options
 
    -  -  ``--grad/--no-grad``
       -  bool
-      -  Enable or disable gradient output (``--grad``)
+      -  Enable or disable gradient output (``--grad``). If not specified, defaults to the xTB default (disable gradient
+         output).
 
 Examples:
 
