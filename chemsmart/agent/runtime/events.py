@@ -53,6 +53,7 @@ class EventKind(str, Enum):
     RESULT_QUANTITIES_EXTRACTED = "result_quantities_extracted"
     THERMOCHEMISTRY_DERIVED = "thermochemistry_derived"
     QUANTITY_EXPRESSION_EVALUATED = "quantity_expression_evaluated"
+    SCIENTIFIC_VALIDATION_EVALUATED = "scientific_validation_evaluated"
     ANALYSIS_CLAIMS_RECORDED = "analysis_claims_recorded"
     ANALYSIS_COMPLETION_EVALUATED = "analysis_completion_evaluated"
     TASK_DEPENDENCY_CONTEXT_SELECTED = "task_dependency_context_selected"
@@ -91,6 +92,9 @@ RESULT_VERIFIED = EventKind.RESULT_VERIFIED.value
 RESULT_QUANTITIES_EXTRACTED = EventKind.RESULT_QUANTITIES_EXTRACTED.value
 THERMOCHEMISTRY_DERIVED = EventKind.THERMOCHEMISTRY_DERIVED.value
 QUANTITY_EXPRESSION_EVALUATED = EventKind.QUANTITY_EXPRESSION_EVALUATED.value
+SCIENTIFIC_VALIDATION_EVALUATED = (
+    EventKind.SCIENTIFIC_VALIDATION_EVALUATED.value
+)
 ANALYSIS_CLAIMS_RECORDED = EventKind.ANALYSIS_CLAIMS_RECORDED.value
 ANALYSIS_COMPLETION_EVALUATED = EventKind.ANALYSIS_COMPLETION_EVALUATED.value
 TASK_DEPENDENCY_CONTEXT_SELECTED = (
@@ -135,6 +139,7 @@ _RECEIPT_EVENTS = frozenset(
         RESULT_QUANTITIES_EXTRACTED,
         THERMOCHEMISTRY_DERIVED,
         QUANTITY_EXPRESSION_EVALUATED,
+        SCIENTIFIC_VALIDATION_EVALUATED,
         ANALYSIS_CLAIMS_RECORDED,
         ANALYSIS_COMPLETION_EVALUATED,
         TASK_DEPENDENCY_CONTEXT_SELECTED,
@@ -375,6 +380,7 @@ def _validate_typed_receipt_payload(
             {"materialized", "validated", "rejected"},
         ),
         SCIENTIFIC_DECISION_RECORDED: ("status", {"recorded"}),
+        SCIENTIFIC_VALIDATION_EVALUATED: ("status", {"evaluated"}),
         ANALYSIS_COMPLETION_EVALUATED: (
             "status",
             {"passed", "blocked"},
@@ -495,6 +501,7 @@ def _validate_typed_receipt_payload(
     if kind in {
         ANALYSIS_COMPLETION_EVALUATED,
         ANALYSIS_CLAIMS_RECORDED,
+        SCIENTIFIC_VALIDATION_EVALUATED,
         SCIENTIFIC_WORKFLOW_MATERIALIZED,
         WORKFLOW_REVIEW_RESOLVED,
         EXECUTION_BUNDLE_CONSUMED,
@@ -507,6 +514,36 @@ def _validate_typed_receipt_payload(
             raise ContractError(f"{kind} requires an embedded canonical record")
         if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
             raise ContractError(f"{kind} record digest mismatch")
+    if kind == SCIENTIFIC_VALIDATION_EVALUATED:
+        record = payload["record"]
+        if (
+            record.get("workflow_id") != payload.get("workflow_id")
+            or record.get("plan_sha256") != payload.get("plan_sha256")
+            or record.get("node_id") != payload.get("node_id")
+            or tuple(record.get("source_receipt_sha256s") or ())
+            != tuple(payload.get("source_receipt_sha256s") or ())
+            or record.get("all_rules_passed")
+            is not payload.get("all_rules_passed")
+            or record.get("status") != payload.get("status")
+        ):
+            raise ContractError(
+                "scientific validation envelope differs from its record"
+            )
+        source_receipts = tuple(payload.get("source_receipt_sha256s") or ())
+        if not source_receipts or source_receipts != tuple(
+            sorted(set(source_receipts))
+        ):
+            raise ContractError(
+                "scientific validation requires sorted source receipts"
+            )
+        for digest in source_receipts:
+            require_sha256(str(digest), "source_receipt_sha256")
+        outputs = tuple(record.get("outputs") or ())
+        rules = tuple(record.get("rule_results") or ())
+        if len(outputs) != 1 or not rules:
+            raise ContractError(
+                "scientific validation requires one verdict and rule results"
+            )
     if kind == ANALYSIS_COMPLETION_EVALUATED:
         record = payload["record"]
         if (
@@ -765,6 +802,7 @@ __all__ = [
     "THERMOCHEMISTRY_DERIVED",
     "TASK_DEPENDENCY_CONTEXT_SELECTED",
     "QUANTITY_EXPRESSION_EVALUATED",
+    "SCIENTIFIC_VALIDATION_EVALUATED",
     "OPTIMIZED_GEOMETRY_HANDED_OFF",
     "RUNTIME_TERMINATED",
     "SAFE_PREVIEWED",

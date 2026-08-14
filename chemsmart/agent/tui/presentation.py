@@ -42,6 +42,7 @@ _VISIBLE_TOOLS = frozenset(
         "extract_result_quantities",
         "derive_thermochemistry",
         "evaluate_quantity_expression",
+        "evaluate_scientific_validation",
         "record_analysis_claims",
         "record_scientific_decision",
     }

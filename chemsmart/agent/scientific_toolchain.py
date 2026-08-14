@@ -19,6 +19,11 @@ from chemsmart.agent._contracts import (
     require_identifier,
 )
 from chemsmart.agent.workflows import CommandNodeIntentV1
+from chemsmart.analysis.quantity_expressions import (
+    QuantityExpressionError,
+    normalize_numeric_value,
+)
+from chemsmart.analysis.result_quantities import DIMENSIONLESS
 
 ANALYSIS_INTENT_KINDS = (
     "claim_rendering",
@@ -285,6 +290,30 @@ class AnalysisNodeIntentV1:
             raise ScientificToolchainContractError(
                 "validation_rules apply only to scientific_validation"
             )
+        if (
+            self.analysis_kind == "scientific_validation"
+            and self.support_state == "planned"
+        ):
+            if not self.validation_rules:
+                raise ScientificToolchainContractError(
+                    "scientific validation requires declared rules"
+                )
+            if len(self.outputs) != 1:
+                raise ScientificToolchainContractError(
+                    "scientific validation requires one verdict output"
+                )
+            try:
+                _value, _unit, dimension = normalize_numeric_value(
+                    0.0, self.outputs[0].unit
+                )
+            except (QuantityExpressionError, ValueError) as exc:
+                raise ScientificToolchainContractError(
+                    "scientific validation verdict unit is invalid"
+                ) from exc
+            if tuple(dimension) != DIMENSIONLESS:
+                raise ScientificToolchainContractError(
+                    "scientific validation verdict must be dimensionless"
+                )
         input_ids = {item.input_id for item in self.inputs}
         for rule in self.validation_rules:
             unknown = set(rule.input_ids).difference(input_ids)
@@ -722,7 +751,11 @@ def project_scientific_toolchain_frontier(
                 reason = f"await {named}"
             else:
                 state = "actionable"
-                reason = "execute the registered analysis operation"
+                reason = (
+                    "evaluate the planned scientific validation"
+                    if node.analysis_kind == "scientific_validation"
+                    else "execute the registered analysis operation"
+                )
         states[node_id] = state
         entry: dict[str, object] = {
             "node_id": node_id,
@@ -734,6 +767,13 @@ def project_scientific_toolchain_frontier(
             entry["waiting_on"] = waiting_on
         if unsatisfied:
             entry["unsatisfied_inputs"] = unsatisfied
+        if (
+            node_id not in plan.calculation_node_ids
+            and state == "actionable"
+            and analysis_by_id[node_id].analysis_kind
+            == "scientific_validation"
+        ):
+            entry["next_tool"] = "evaluate_scientific_validation"
         nodes.append(entry)
     return {
         "schema_version": "chemsmart.scientific-toolchain-frontier.v1",

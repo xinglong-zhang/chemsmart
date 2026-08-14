@@ -36,6 +36,7 @@ class AnalysisReportedQuantityV1:
             "quantity_extraction",
             "thermochemistry",
             "quantity_expression",
+            "scientific_validation",
         }:
             raise ContractError("unsupported analysis claim source kind")
         require_sha256(self.source_receipt_sha256, "source_receipt_sha256")

@@ -167,6 +167,11 @@ from chemsmart.agent.scientific_toolchain import (
     build_scientific_toolchain_plan,
     project_scientific_toolchain_frontier,
 )
+from chemsmart.agent.scientific_validation import (
+    ScientificValidationReceiptV1,
+    evaluate_planned_scientific_validation,
+    scientific_validation_receipt_from_record,
+)
 from chemsmart.agent.tool_specs import (
     REGISTRY_PRODUCERS,
     AgentToolSurfaceV1,
@@ -374,6 +379,7 @@ def _postprocessing_evidence_reference(
         "quantity_extraction_receipt": "quantity_extraction",
         "thermochemistry_receipt": "thermochemistry",
         "quantity_expression_receipt": "quantity_expression",
+        "scientific_validation_receipt": "scientific_validation",
         "analysis_claim_receipt": "analysis_claim",
         "receipt": "generic",
     }
@@ -1310,6 +1316,9 @@ class CommandCompiledToolHostV1:
         self.quantity_expression_requests: dict[
             str, QuantityExpressionRequestV1
         ] = {}
+        self.scientific_validation_receipts: dict[
+            str, ScientificValidationReceiptV1
+        ] = {}
         self.analysis_claim_records: dict[str, Any] = {}
         self.analysis_completion_receipts: dict[str, Any] = {}
         self.counterexamples: dict[str, CommandCounterexampleV1] = {}
@@ -1490,6 +1499,11 @@ class CommandCompiledToolHostV1:
                     record, receipt_sha256=receipt_sha256
                 )
                 self.quantity_expression_receipts[receipt_sha256] = receipt
+            elif event.kind == EventKind.SCIENTIFIC_VALIDATION_EVALUATED.value:
+                receipt = scientific_validation_receipt_from_record(
+                    record, receipt_sha256=receipt_sha256
+                )
+                self.scientific_validation_receipts[receipt_sha256] = receipt
             elif event.kind == EventKind.ANALYSIS_CLAIMS_RECORDED.value:
                 receipt = analysis_claim_record_from_record(
                     dict(record), receipt_sha256=receipt_sha256
@@ -1605,6 +1619,9 @@ class CommandCompiledToolHostV1:
             "extract_result_quantities": self._extract_result_quantities,
             "derive_thermochemistry": self._derive_thermochemistry,
             "evaluate_quantity_expression": self._evaluate_quantity_expression,
+            "evaluate_scientific_validation": (
+                self._evaluate_scientific_validation
+            ),
             "record_analysis_claims": self._record_analysis_claims,
             "record_scientific_decision": self._record_scientific_decision,
             "execute_approved_program_node": self._execute_approved_program_node,
@@ -2066,6 +2083,7 @@ class CommandCompiledToolHostV1:
             self.quantity_extractions,
             self.thermochemistry_receipts,
             self.quantity_expression_receipts,
+            self.scientific_validation_receipts,
             self.analysis_claim_records,
         )
         postprocessing_receipt_sha256s = tuple(
@@ -2115,6 +2133,9 @@ class CommandCompiledToolHostV1:
                     "quantity_extraction": self.quantity_extractions,
                     "thermochemistry": self.thermochemistry_receipts,
                     "quantity_expression": self.quantity_expression_receipts,
+                    "scientific_validation": (
+                        self.scientific_validation_receipts
+                    ),
                     "analysis_claim": self.analysis_claim_records,
                 }
                 if receipt_kind == "generic":
@@ -2880,11 +2901,10 @@ class CommandCompiledToolHostV1:
         already present on both sides: registered result identity, selectors,
         typed output IDs, and receipt-level input dependencies.
 
-        A scientific-validation node is *not* numerically re-graded here.  It
-        is complete only when a task-bound scientific decision cites typed
-        evidence from each completed upstream node.  In this projection,
-        ``completed`` means the planned evaluation was performed and recorded;
-        it does not mean that ChemSmart agrees with the scientific conclusion.
+        A scientific-validation node is complete only when the host has
+        evaluated the exact predicates sealed into that plan node and recorded
+        a typed validation receipt. A failed predicate is still an evaluated
+        scientific determination; completion does not imply a positive verdict.
         """
 
         nodes = {node.node_id: node for node in plan.analysis_nodes}
@@ -3159,14 +3179,22 @@ class CommandCompiledToolHostV1:
                 continue
 
             if node.analysis_kind == "scientific_validation":
-                candidates = []
-                for decision in task_decisions:
-                    evidence = _decision_evidence(decision)
-                    if all(
-                        bool(evidence.intersection(dependency_receipts))
+                candidates = [
+                    receipt.receipt_sha256
+                    for receipt in self.scientific_validation_receipts.values()
+                    if receipt.status == "evaluated"
+                    and receipt.workflow_id == plan.workflow_id
+                    and receipt.plan_sha256 == plan.plan_sha256
+                    and receipt.node_id == node.node_id
+                    and all(
+                        bool(
+                            set(receipt.source_receipt_sha256s).intersection(
+                                dependency_receipts
+                            )
+                        )
                         for dependency_receipts in dependencies.values()
-                    ):
-                        candidates.append(decision.record_sha256)
+                    )
+                ]
                 if candidates:
                     matched[node_id] = tuple(sorted(set(candidates)))
                 continue
@@ -3178,6 +3206,27 @@ class CommandCompiledToolHostV1:
                         claim.source_receipt_sha256
                         for claim in claim_record.claims
                     }
+                    validation_inputs = tuple(
+                        item
+                        for item in node.inputs
+                        if isinstance(item, AnalysisInputIntentV1)
+                        and (
+                            producer := nodes.get(item.producer_node_id)
+                        )
+                        is not None
+                        and producer.analysis_kind
+                        == "scientific_validation"
+                    )
+                    if any(
+                        not any(
+                            claim.source_receipt_sha256
+                            in dependencies.get(item.producer_node_id, set())
+                            and claim.quantity_id == item.producer_output_id
+                            for claim in claim_record.claims
+                        )
+                        for item in validation_inputs
+                    ):
+                        continue
                     for decision in task_decisions:
                         evidence = _decision_evidence(decision)
                         if claim_record.receipt_sha256 not in evidence:
@@ -4861,6 +4910,14 @@ class CommandCompiledToolHostV1:
             plan,
             task_spec_sha256=draft.task_spec_id,
         )
+        required_validation_nodes = {
+            node.node_id
+            for node in plan.analysis_nodes
+            if node.analysis_kind == "scientific_validation"
+            and node.support_state == "planned"
+        }
+        if required_validation_nodes.difference(matched):
+            return ()
         output_producers = {
             output.output_id: node.node_id
             for node in plan.analysis_nodes
@@ -8338,28 +8395,12 @@ class CommandCompiledToolHostV1:
         for item in values["inputs"]:
             input_id = str(item["input_id"])
             receipt_sha256 = str(item["receipt_sha256"])
-            receipt = self.quantity_extractions.get(receipt_sha256)
-            quantity_collection = "quantities"
-            if receipt is None:
-                receipt = self.thermochemistry_receipts.get(receipt_sha256)
-            if receipt is None:
-                receipt = self.quantity_expression_receipts.get(receipt_sha256)
-                quantity_collection = "outputs"
-            if receipt is None:
-                raise ContractError(
-                    "quantity expression references an unknown receipt"
-                )
             quantity_id = str(item["quantity_id"])
-            matches = tuple(
-                quantity
-                for quantity in getattr(receipt, quantity_collection)
-                if quantity.quantity_id == quantity_id
+            _kind, _receipt, source = self._typed_quantity_from_receipt(
+                receipt_sha256=receipt_sha256,
+                quantity_id=quantity_id,
+                operation="quantity expression",
             )
-            if len(matches) != 1:
-                raise ContractError(
-                    "quantity expression input is absent or ambiguous in its receipt"
-                )
-            source = matches[0]
             semantic_role = str(item.get("semantic_role", "")).strip()
             semantic_role_ref = (
                 f";semantic-role:{semantic_role}" if semantic_role else ""
@@ -8432,6 +8473,219 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
+    def _typed_quantity_from_receipt(
+        self,
+        *,
+        receipt_sha256: str,
+        quantity_id: str,
+        operation: str,
+    ) -> tuple[str, Any, QuantityValueV1]:
+        """Resolve one exact typed quantity without accepting a model path."""
+
+        registries = (
+            ("quantity_extraction", self.quantity_extractions, "quantities"),
+            ("thermochemistry", self.thermochemistry_receipts, "quantities"),
+            (
+                "quantity_expression",
+                self.quantity_expression_receipts,
+                "outputs",
+            ),
+            (
+                "scientific_validation",
+                self.scientific_validation_receipts,
+                "outputs",
+            ),
+        )
+        for source_kind, registry, collection in registries:
+            receipt = registry.get(receipt_sha256)
+            if receipt is None:
+                continue
+            matches = tuple(
+                quantity
+                for quantity in getattr(receipt, collection)
+                if quantity.quantity_id == quantity_id
+            )
+            if len(matches) != 1:
+                raise ContractError(
+                    f"{operation} input is absent or ambiguous in its receipt"
+                )
+            return source_kind, receipt, matches[0]
+        raise ContractError(f"{operation} references an unknown receipt")
+
+    def _evaluate_scientific_validation(
+        self, turn_id: str, values: dict
+    ) -> ScientificValidationReceiptV1:
+        """Evaluate one exact validation node without model-authored rules."""
+
+        workflow_id = str(values["workflow_id"])
+        node_id = str(values["node_id"])
+        resolved = self._resolve_program_workflow(workflow_id)
+        plan = resolved.scientific_toolchain_plan
+        if plan is None:
+            raise ContractError("workflow has no scientific analysis toolchain")
+        nodes = tuple(
+            node for node in plan.analysis_nodes if node.node_id == node_id
+        )
+        if len(nodes) != 1:
+            raise ContractError("workflow has no unique validation node ID")
+        node = nodes[0]
+        if (
+            node.analysis_kind != "scientific_validation"
+            or node.support_state != "planned"
+        ):
+            raise ContractError("requested node is not planned validation")
+
+        matched = self._scientific_toolchain_analysis_receipts(
+            plan,
+            task_spec_sha256=resolved.draft.task_spec_id,
+        )
+        input_intents = {
+            item.input_id: item
+            for item in node.inputs
+            if isinstance(item, AnalysisInputIntentV1)
+        }
+        supplied = tuple(values["inputs"])
+        supplied_ids = tuple(sorted(str(item["input_id"]) for item in supplied))
+        if (
+            len(supplied_ids) != len(set(supplied_ids))
+            or supplied_ids != tuple(sorted(input_intents))
+        ):
+            raise ContractError(
+                "scientific validation requires exactly its planned inputs"
+            )
+        producer_nodes = {
+            item.node_id: item for item in plan.analysis_nodes
+        }
+        bound_inputs: dict[str, tuple[str, QuantityValueV1]] = {}
+        for item in supplied:
+            input_id = str(item["input_id"])
+            intent = input_intents[input_id]
+            source_receipt_sha256 = str(item["receipt_sha256"])
+            require_sha256(
+                source_receipt_sha256,
+                "scientific validation source receipt",
+            )
+            if source_receipt_sha256 not in matched.get(
+                intent.producer_node_id, ()
+            ):
+                raise ContractError(
+                    "scientific validation input is not typed evidence from "
+                    "its planned producer"
+                )
+            producer = producer_nodes.get(intent.producer_node_id)
+            if producer is None:
+                raise ContractError(
+                    "scientific validation input producer is not analysis"
+                )
+            expected_kinds = {
+                "result_extraction": "quantity_extraction",
+                "thermochemistry": "thermochemistry",
+                "quantity_expression": "quantity_expression",
+                "scientific_validation": "scientific_validation",
+            }
+            expected_kind = expected_kinds.get(producer.analysis_kind)
+            if expected_kind is None:
+                raise ContractError(
+                    "scientific validation producer has no typed quantities"
+                )
+            source_kind, source_receipt, quantity = (
+                self._typed_quantity_from_receipt(
+                    receipt_sha256=source_receipt_sha256,
+                    quantity_id=str(item["quantity_id"]),
+                    operation="scientific validation",
+                )
+            )
+            if source_kind != expected_kind:
+                raise ContractError(
+                    "scientific validation receipt kind differs from producer"
+                )
+            declared_outputs = tuple(
+                output
+                for output in producer.outputs
+                if output.output_id == intent.producer_output_id
+            )
+            if len(declared_outputs) != 1:
+                raise ContractError(
+                    "scientific validation input lacks a unique planned output"
+                )
+            declared = declared_outputs[0]
+            try:
+                _value, _unit, dimension = normalize_numeric_value(
+                    0.0, declared.unit
+                )
+            except (ContractError, ValueError) as exc:
+                raise ContractError(
+                    "scientific validation producer unit is invalid"
+                ) from exc
+            if tuple(quantity.dimension) != tuple(dimension):
+                raise ContractError(
+                    "scientific validation quantity dimension differs from "
+                    "its planned producer output"
+                )
+            available_ids = {
+                candidate.quantity_id
+                for candidate in getattr(
+                    source_receipt,
+                    "outputs"
+                    if source_kind
+                    in {"quantity_expression", "scientific_validation"}
+                    else "quantities",
+                )
+            }
+            if (
+                intent.producer_output_id in available_ids
+                and quantity.quantity_id != intent.producer_output_id
+            ):
+                raise ContractError(
+                    "scientific validation selected another quantity despite "
+                    "the planned producer output being present"
+                )
+            if source_kind == "quantity_extraction":
+                selector = self.quantity_extraction_bindings.get(
+                    source_receipt_sha256, {}
+                ).get(quantity.quantity_id)
+                if selector not in {
+                    planned.selector for planned in producer.selectors
+                }:
+                    raise ContractError(
+                        "scientific validation extraction quantity is outside "
+                        "the planned selector set"
+                    )
+            bound_inputs[input_id] = (
+                source_receipt_sha256,
+                quantity,
+            )
+
+        receipt = evaluate_planned_scientific_validation(
+            workflow_id=workflow_id,
+            plan_sha256=plan.plan_sha256,
+            node=node,
+            inputs=bound_inputs,
+        )
+        self.scientific_validation_receipts[receipt.receipt_sha256] = receipt
+        record = canonical_data(receipt)
+        record.pop("receipt_sha256")
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.SCIENTIFIC_VALIDATION_EVALUATED.value,
+            payload={
+                "receipt_sha256": receipt.receipt_sha256,
+                "workflow_id": receipt.workflow_id,
+                "plan_sha256": receipt.plan_sha256,
+                "node_id": receipt.node_id,
+                "source_receipt_sha256s": (
+                    receipt.source_receipt_sha256s
+                ),
+                "all_rules_passed": receipt.all_rules_passed,
+                "status": receipt.status,
+                "record": record,
+            },
+            idempotency_key=(
+                "scientific-validation:" + receipt.receipt_sha256
+            ),
+        )
+        return receipt
+
     def _record_analysis_claims(self, turn_id: str, values: dict) -> Any:
         """Render reportable values from exact typed receipt outputs."""
 
@@ -8446,6 +8700,11 @@ class CommandCompiledToolHostV1:
             (
                 "quantity_expression",
                 self.quantity_expression_receipts,
+                "outputs",
+            ),
+            (
+                "scientific_validation",
+                self.scientific_validation_receipts,
                 "outputs",
             ),
         )

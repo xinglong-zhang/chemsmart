@@ -74,6 +74,7 @@ from chemsmart.agent.runtime.events import (
     SUBSTITUTION_ASSESSED,
     THERMOCHEMISTRY_DERIVED,
     QUANTITY_EXPRESSION_EVALUATED,
+    SCIENTIFIC_VALIDATION_EVALUATED,
     VALIDATOR_OBSERVED,
     WORKFLOW_APPROVAL_CONSUMED,
     WORKFLOW_EXECUTION_STARTED,
@@ -1155,6 +1156,18 @@ def _receipt_is_green(
         return value.get("status") == "derived"
     if event.kind == QUANTITY_EXPRESSION_EVALUATED:
         return value.get("status") == "derived"
+    if event.kind == SCIENTIFIC_VALIDATION_EVALUATED:
+        source_receipts = tuple(value.get("source_receipt_sha256s") or ())
+        return bool(
+            value.get("status") == "evaluated"
+            and source_receipts
+            and all(
+                _receipt_is_green(
+                    events, source, _seen | frozenset({digest})
+                )
+                for source in source_receipts
+            )
+        )
     if event.kind == ANALYSIS_CLAIMS_RECORDED:
         source_receipts = tuple(value.get("source_receipt_sha256s") or ())
         return bool(
@@ -1233,6 +1246,7 @@ def _observed_receipts(state: RuntimeState) -> set[str]:
         state.result_quantity_receipts,
         state.thermochemistry_receipts,
         state.quantity_expression_receipts,
+        state.scientific_validation_receipts,
         state.analysis_claim_receipts,
         state.analysis_completion_receipts,
         state.execution_receipts,

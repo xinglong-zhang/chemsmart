@@ -440,7 +440,8 @@ def build_command_compiled_tool_surface(
                     "maxItems": 64,
                     "description": (
                         "Exact receipt_sha256 values returned by quantity "
-                        "extraction, thermochemistry, or quantity-expression "
+                        "extraction, thermochemistry, quantity-expression, "
+                        "scientific-validation, or analysis-claim "
                         "tools. The host validates and canonicalizes them; do "
                         "not embed receipt IDs in free-form evidence strings."
                     ),
@@ -592,7 +593,8 @@ def build_command_compiled_tool_surface(
             "evaluate_quantity_expression",
             (
                 "Evaluate a bounded dimension-aware expression DAG over prior "
-                "extraction, thermochemistry, or quantity-expression receipts, "
+                "extraction, thermochemistry, quantity-expression, or "
+                "scientific-validation receipts, "
                 "or over typed literal nodes when inputs is empty; Python and "
                 "formula strings are not accepted. Expression inputs use local "
                 "input_id aliases, so derived outputs can feed later expressions. "
@@ -635,6 +637,39 @@ def build_command_compiled_tool_surface(
                 },
             },
             ("expression_id", "inputs", "nodes", "output_node_ids"),
+        ),
+        _tool(
+            "evaluate_scientific_validation",
+            (
+                "Evaluate the rules already sealed into one planned "
+                "scientific-validation node against exact upstream typed "
+                "quantities. Supply only receipt bindings; predicates and "
+                "thresholds cannot be restated or weakened at execution."
+            ),
+            {
+                "workflow_id": _public_identifier(),
+                "node_id": _public_identifier(),
+                "inputs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "input_id": _public_identifier(),
+                            "receipt_sha256": digest,
+                            "quantity_id": _public_identifier(),
+                        },
+                        "required": [
+                            "input_id",
+                            "receipt_sha256",
+                            "quantity_id",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ("workflow_id", "node_id", "inputs"),
         ),
         _tool(
             "record_analysis_claims",
@@ -732,7 +767,7 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
         "How the basis is specified: a single set, or split by element class."
     ),
     "claims": (
-        "The reported values, each bound to the extraction or expression "
+        "The reported values, each bound to the typed analysis "
         "receipt that produced it and carrying its display unit."
     ),
     "command_inspection_receipt_sha256": (
@@ -815,8 +850,8 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
     ),
     "input_artifact_id": "The host-bound ID of the input geometry artifact.",
     "inputs": (
-        "The measured quantities the expression consumes, each bound to an "
-        "extraction receipt."
+        "The typed quantities this operation consumes, each bound to an "
+        "exact upstream receipt."
     ),
     "job_families": "The job types this request covers.",
     "jobtype": (
@@ -1350,7 +1385,8 @@ def _analysis_intent_node_schema() -> dict:
                     "Program-neutral validation predicates over named typed "
                     "inputs. Use minimum_greater_equal with threshold 0 cm-1 "
                     "for a no-imaginary-frequency requirement; do not hide "
-                    "criteria only in prose."
+                    "criteria only in prose. A scientific_validation node "
+                    "declares exactly one dimensionless verdict output."
                 ),
                 "items": {
                     "type": "object",
