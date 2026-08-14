@@ -28,7 +28,8 @@ Optimization Options
 
    -  -  ``-O, --optimization-level``
       -  choice
-      -  Convergence level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``
+      -  Convergence level: ``crude``, ``sloppy``, ``loose``, ``lax``, ``normal``, ``tight``, ``vtight``, ``extreme``.
+         If not specified, defaults to the xTB default (``vtight``).
 
    -  -  ``-c, --constrain``
       -  string
