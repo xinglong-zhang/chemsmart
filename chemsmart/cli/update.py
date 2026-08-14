@@ -72,7 +72,8 @@ class Updater(ABC):
 
     @abstractmethod
     def update(self):
-        """Perform the configured update."""
+        """Perform the configured update. Subclasses can implement."""
+        pass
 
 
 class DependencyUpdater(Updater):
