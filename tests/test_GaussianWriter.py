@@ -771,6 +771,32 @@ class TestGaussianInputWriter:
         assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in content
         assert "\n1 2 " in content
 
+    def test_write_qmmm_missing_mm_parameters_file_raises(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1, 2, 3]
+        qmmm_settings.mm_parameters_file = os.path.join(
+            tmpdir, "missing_mm_params.dat"
+        )
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_missing_params",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        with pytest.raises(FileNotFoundError, match="MM parameters file"):
+            GaussianInputWriter(job=job).write(target_directory=tmpdir)
+
     def test_write_qmmm_input_from_logfile(
         self,
         tmpdir,

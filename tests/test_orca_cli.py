@@ -721,6 +721,7 @@ class TestORCAQMMMCLIjobtypeOverride:
         assert settings.intermediate_level_functional == "HF"
         assert settings.intermediate_level_basis == "STO-3G"
         assert settings.intermediate_level_atoms is None
+        assert settings.low_level_method is None
         route = settings.qmmm_route_string
         assert "QM/QM2" in route
         assert "/MM" not in route

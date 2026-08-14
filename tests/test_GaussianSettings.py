@@ -192,6 +192,13 @@ class TestGaussianQMMMJobSettings:
         with pytest.raises(ValueError, match="expected 2"):
             GaussianQMMMJobSettings.load_mm_atom_info(bad, num_atoms=2)
 
+        mixed = os.path.join(tmpdir, "mixed.dat")
+        with open(mixed, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("OH -0.65\n")
+        with pytest.raises(ValueError, match="mixes indexed and unindexed"):
+            GaussianQMMMJobSettings.load_mm_atom_info(mixed, num_atoms=2)
+
     def test_qmmm_settings(self):
         settings1 = GaussianQMMMJobSettings(
             high_level_functional="b3lyp",
