@@ -2974,3 +2974,41 @@ def database_ase_file(database_test_directory):
 @pytest.fixture()
 def database_empty_file(database_test_directory):
     return os.path.join(database_test_directory, "empty.db")
+
+
+# ---------------------------------------------------------------------------
+# Reusable fixture: minimal server YAML without XTB/CREST sections
+# (simulates a pre-xTB CHEMSMART install)
+# ---------------------------------------------------------------------------
+
+_LEGACY_SERVER_YAML = """\
+SERVER:
+    SCHEDULER: PBS
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 375
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: qsub
+    SCRATCH_DIR: null
+    USE_HOSTS: false
+GAUSSIAN:
+    EXEFOLDER: ~/programs/g16
+    LOCAL_RUN: True
+ORCA:
+    EXEFOLDER: ~/programs/orca_6_0_0
+    LOCAL_RUN: False
+"""
+
+
+@pytest.fixture()
+def legacy_server_yaml(tmp_path):
+    """Path to a temporary server YAML that has no XTB or CREST block.
+
+    Simulates a server configuration written before xTB support was added to
+    CHEMSMART, so that tests can verify the graceful fallback behaviour.
+    """
+    yaml_path = tmp_path / "legacy_server.yaml"
+    yaml_path.write_text(_LEGACY_SERVER_YAML)
+    return str(yaml_path)
