@@ -2741,6 +2741,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         if by_index:
             max_index = max(by_index)
             expected = num_atoms if num_atoms is not None else max_index
+            extra = sorted(i for i in by_index if i < 1 or i > expected)
+            if extra:
+                raise ValueError(
+                    f"MM atom info file {path} has out-of-range atom indices: {extra}"
+                )
             missing = [i for i in range(1, expected + 1) if i not in by_index]
             if missing:
                 raise ValueError(

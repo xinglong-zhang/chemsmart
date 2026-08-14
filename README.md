@@ -11,7 +11,18 @@
 </p>
 
 ---
-Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
+## Notice: 
+
+**If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!**
+
+GitHub does not natively support forcing links in a *README.md* file to open in a new tab or window. If needed, please use one of the following methods:
+
+Mac: Hold CMD + click the link.
+
+Windows / Linux: Hold CTRL + click the link.
+
+Mouse: Click the link using the middle scroll wheel.
+
 
 ## Introduction
 
@@ -97,6 +108,13 @@ This section provides guides for running xTB calculations with CHEMSMART, includ
 
 - [xTB CLI Options](https://chemsmart.readthedocs.io/en/latest/xtb-cli-options.html)
 - [Structure Optimization (xTB)](https://chemsmart.readthedocs.io/en/latest/xtb-structure-optimization.html)
+
+**Crest Jobs**
+
+This section provides guides for performing conformational sampling with CREST through CHEMSMART, including general CLI options, free conformational searches, and constrained searches for applications such as transition-state conformer sampling.
+
+- [CREST CLI Options](https://chemsmart.readthedocs.io/en/latest/crest-cli-options.html)
+- [Conformational Search (CREST)](https://chemsmart.readthedocs.io/en/latest/crest-conformational-search.html)
 
 **pKa Calculations**
 
