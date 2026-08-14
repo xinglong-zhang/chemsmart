@@ -16,6 +16,7 @@ Key mixin classes:
 """
 
 import inspect
+import logging
 import os
 import re
 from datetime import datetime
@@ -32,6 +33,8 @@ from chemsmart.utils.repattern import (
     orca_date_pattern,
     xtb_date_pattern,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
@@ -2255,3 +2258,32 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
+
+
+class FolderOutputMixin:
+    """Mixin for output classes that read from a calculation folder."""
+
+    FILE_PARSERS = ()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to internal file parsers.
+
+        Searches the file parsers specified by FILE_PARSERS in order and returns the requested
+        attribute from the first parser that provides it. Parser attributes that are None or do
+        not provide the requested attribute are skipped. Raises AttributeError when no parser
+        provides the requested attribute.
+        """
+        for file_parser in self.FILE_PARSERS:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        continue
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
+                continue
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
