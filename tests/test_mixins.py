@@ -1,6 +1,7 @@
 import os
 
 from chemsmart.utils.mixins import (
+    CRESTFileMixin,
     FileMixin,
     FolderMixin,
     GaussianFileMixin,
@@ -207,6 +208,28 @@ class TestXTBFileMixin:
         assert dummy.grad is True
 
 
+class DummyCRESTFile(CRESTFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def route_string(self):
+        return "crest 1a.xyz --cinp constraints.inp --gfn2 --chrg 0 --uhf 0 --optlev tight"
+
+
+class TestCRESTFileMixin:
+    def test_crest_file_properties(self):
+        dummy = DummyCRESTFile("test.out")
+        assert dummy.jobtype == "conformers"
+        assert dummy.optimization_level == "tight"
+        assert dummy.gfn_version == "gfn2"
+        assert dummy.solvent_model is None
+        assert dummy.solvent_id is None
+        assert dummy.charge == 0
+        assert dummy.uhf == 0
+        assert dummy.constrained is True
+
+
 class TestYAMLFileMixin:
     def test_yaml_file_properties(self, dummy_yaml_file):
         dummy = dummy_yaml_file
@@ -246,6 +269,27 @@ class TestFolderMixin:
         dummy = DummyFolder(folder)
         txt_files = dummy.get_all_files_in_current_folder_by_suffix(".txt")
         assert file1 in txt_files
+
+    def test_suffix_without_dot_excludes_compound_extensions(self, tmpdir):
+        """filetype='xyz' must match .xyz but not .extxyz."""
+        xyz = os.path.join(str(tmpdir), "water.xyz")
+        extxyz = os.path.join(str(tmpdir), "crystal.extxyz")
+        for path, content in (
+            (xyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+            (extxyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+        ):
+            with open(path, "w") as f:
+                f.write(content)
+
+        dummy = DummyFolder(str(tmpdir))
+        files = dummy.get_all_files_in_current_folder_by_suffix("xyz")
+        assert xyz in files
+        assert extxyz not in files
+
+        # Leading-dot form remains supported.
+        files_dotted = dummy.get_all_files_in_current_folder_by_suffix(".xyz")
+        assert xyz in files_dotted
+        assert extxyz not in files_dotted
 
     def test_get_all_files_by_regex(self, temp_folder_with_files):
         folder, file1, file2 = temp_folder_with_files

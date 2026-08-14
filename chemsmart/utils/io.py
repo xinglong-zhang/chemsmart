@@ -334,6 +334,54 @@ def match_outfile_pattern(line):
     return None
 
 
+def is_xyzfile(filepath):
+    """
+    Return True if filepath looks like an XYZ-format coordinate file.
+
+    Reads only the first few non-empty lines and checks the structure:
+    line 1 = positive integer (atom count), line 3 = element + three floats.
+    Useful for detecting XYZ trajectories that use non-.xyz extensions
+    (e.g. CREST crest_dynamics.trj, crestopt.log, xTB xtbopt.log).
+
+    Args:
+        filepath (str): Path to file to detect.
+
+    Returns:
+        bool: Whether the file appears to be XYZ text.
+    """
+    try:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
+            lines = []
+            for raw in f:
+                stripped = raw.strip()
+                if stripped:
+                    lines.append(stripped)
+                if len(lines) >= 3:
+                    break
+    except OSError:
+        return False
+
+    if len(lines) < 3:
+        return False
+    try:
+        num_atoms = int(lines[0])
+    except ValueError:
+        return False
+    if num_atoms <= 0:
+        return False
+
+    parts = lines[2].split()
+    if len(parts) < 4:
+        return False
+    try:
+        float(parts[1])
+        float(parts[2])
+        float(parts[3])
+    except ValueError:
+        return False
+    return True
+
+
 def get_program_type_from_file(filepath):
     """
     Detect the type of quantum chemistry output file.

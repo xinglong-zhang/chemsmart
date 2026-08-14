@@ -51,3 +51,10 @@ XTB:
         source ~/anaconda3/etc/profile.d/conda.sh
         conda activate ~/anaconda3/envs/chemsmart
     ENVARS: null
+
+CREST:
+    EXEFOLDER: null
+    LOCAL_RUN: True
+    CONDA_ENV: |
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart

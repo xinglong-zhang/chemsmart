@@ -1,0 +1,19 @@
+# ORCA three-layer QM/QM2/MM project used by CLI tests.
+gas:
+  functional: B3LYP
+  basis: def2-SVP
+solv:
+  functional: B3LYP
+  basis: def2-SVP
+qmmm:
+  jobtype: "QM/QM2/MM"
+  high_level_functional: "B3LYP"
+  high_level_basis: "def2-SVP"
+  intermediate_level_functional: "HF"
+  intermediate_level_basis: "STO-3G"
+  intermediate_level_atoms: 4-6
+  low_level_method: "system.ORCAFF.prms"
+  charge_high: 0
+  mult_high: 1
+  charge_total: 0
+  mult_total: 1

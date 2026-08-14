@@ -8,7 +8,10 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    get_list_from_string_range,
+    parse_qmmm_scale_factors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,14 +163,43 @@ def create_qmmm_subcommand(parent_command):
         "--bonded-atoms",
         type=str,
         default=None,
-        help="Bonded atom pairs at QM/MM boundary as string representation of dict.",
+        help=(
+            "Bonded atom pairs at QM/MM boundary, e.g. '[[3, 4], [5, 6]]'. "
+            "If omitted, cut covalent bonds are assigned from molecular "
+            "connectivity."
+        ),
     )
     @click.option(
         "-sf",
         "--scale-factors",
         type=str,
         default=None,
-        help="Scale factors for QM/MM calculations as string representation of dict.",
+        help=(
+            "Scale factors as a dict, e.g. '{[3, 4]: [0.709, 0.709, 0.709]}'."
+        ),
+    )
+    @click.option(
+        "-mai",
+        "--mm-atom-info",
+        type=str,
+        default=None,
+        help=(
+            "File with MM atom types and partial charges "
+            "(required for AMBER unless the input .com already has "
+            "Element-Type-Charge labels). Format: [index] type charge "
+            "[link_type link_charge]."
+        ),
+    )
+    @click.option(
+        "-mpf",
+        "--mm-parameters-file",
+        type=str,
+        default=None,
+        help=(
+            "Optional SoftFirst/HardFirst MM parameter lines to append "
+            "after the molecule specification. Not needed if already "
+            "present in the input .com."
+        ),
     )
     @click_job_options
     @click.pass_context
@@ -193,6 +225,8 @@ def create_qmmm_subcommand(parent_command):
         low_level_atoms,
         bonded_atoms,
         scale_factors,
+        mm_atom_info,
+        mm_parameters_file,
         **kwargs,
     ):
         """Run a QM/MM calculation for this job type."""
@@ -275,8 +309,10 @@ def create_qmmm_subcommand(parent_command):
         logger.debug("Applying QMMM-specific CLI options")
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional
+            qmmm_settings.functional = high_level_functional
         if high_level_basis is not None:
             qmmm_settings.high_level_basis = high_level_basis
+            qmmm_settings.basis = high_level_basis
         if high_level_force_field is not None:
             qmmm_settings.high_level_force_field = high_level_force_field
         if medium_level_functional is not None:
@@ -301,8 +337,10 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.mult_intermediate = mult_intermediate
         if charge_high is not None:
             qmmm_settings.charge_high = charge_high
+            qmmm_settings.model_charge = charge_high
         if mult_high is not None:
             qmmm_settings.mult_high = mult_high
+            qmmm_settings.model_multiplicity = mult_high
         if high_level_atoms is not None:
             qmmm_settings.high_level_atoms = high_level_atoms
         if medium_level_atoms is not None:
@@ -313,6 +351,10 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.bonded_atoms = bonded_atoms
         if scale_factors is not None:
             qmmm_settings.scale_factors = scale_factors
+        if mm_atom_info is not None:
+            qmmm_settings.mm_atom_info_file = mm_atom_info
+        if mm_parameters_file is not None:
+            qmmm_settings.mm_parameters_file = mm_parameters_file
 
         # Get molecule
         molecules = ctx.obj["molecules"]
@@ -342,24 +384,7 @@ def create_qmmm_subcommand(parent_command):
         if bonded_atoms is not None:
             molecule.bonded_atoms = ast.literal_eval(bonded_atoms)
         if scale_factors is not None:
-            molecule.scale_factors = ast.literal_eval(scale_factors)
-
-        if parent_settings is not None:
-            inherited_keywords = [
-                "modred",
-                "custom_solvent",
-                "append_additional_info",
-                "additional_route_parameters",
-                "additional_opt_options_in_route",
-            ]
-            try:
-                qmmm_settings = qmmm_settings.merge(
-                    parent_settings, keywords=inherited_keywords
-                )
-            except Exception as exc:
-                logger.debug(
-                    f"Failed to merge parent settings into QMMM: {exc}"
-                )
+            molecule.scale_factors = parse_qmmm_scale_factors(scale_factors)
 
         if parent_jobtype is not None:
             qmmm_settings.parent_jobtype = parent_jobtype
@@ -380,34 +405,3 @@ def create_qmmm_subcommand(parent_command):
         )
 
     return qmmm
-
-
-def _populate_charge_and_multiplicity_on_settings(qs):
-    charge = getattr(qs, "charge", None)
-    mult = getattr(qs, "multiplicity", None)
-
-    if (
-        getattr(qs, "charge_intermediate", None) is not None
-        and getattr(qs, "mult_intermediate", None) is not None
-    ):
-        charge = qs.charge_intermediate
-        mult = qs.mult_intermediate
-    elif (
-        getattr(qs, "charge_high", None) is not None
-        and getattr(qs, "mult_high", None) is not None
-    ):
-        charge = qs.charge_high
-        mult = qs.mult_high
-    elif (
-        getattr(qs, "charge_total", None) is not None
-        and getattr(qs, "mult_total", None) is not None
-    ):
-        charge = qs.charge_total
-        mult = qs.mult_total
-
-    if charge is not None:
-        qs.charge = charge
-        qs.charge_total = charge
-    if mult is not None:
-        qs.multiplicity = mult
-        qs.mult_total = mult

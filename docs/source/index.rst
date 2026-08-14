@@ -7,7 +7,7 @@
    :align: center
 
 CHEMSMART is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
-files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, xTB, and other
+files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, xTB, CREST, and other
 computational chemistry software.
 
 .. toctree::
@@ -26,6 +26,7 @@ computational chemistry software.
    :caption: Configuration
 
    configuration-overview
+   configuration-test
    configuration-user-settings
    configuration-server-settings
    configuration-project-settings
@@ -37,6 +38,7 @@ computational chemistry software.
    cli-overview
    plugins
    molecule-input-formats
+   convert-cli-options
    chemdraw-organometallic
 
 .. toctree::
@@ -50,6 +52,7 @@ computational chemistry software.
    gaussian-qrc
    gaussian-electronic-structure
    gaussian-qmmm-jobs
+   gaussian_submitqmmmjobs
    gaussian-other-jobs
 
 .. toctree::
@@ -61,6 +64,7 @@ computational chemistry software.
    orca-transition-state
    orca-direct-input
    orca-multiscale-calculations
+   orca_submitqmmmjobs
 
 .. toctree::
    :maxdepth: 2
@@ -68,6 +72,13 @@ computational chemistry software.
 
    xtb-cli-options
    xtb-structure-optimization
+
+.. toctree::
+   :maxdepth: 2
+   :caption: CREST Jobs
+
+   crest-cli-options
+   crest-conformational-search
 
 ..
    .. toctree::
