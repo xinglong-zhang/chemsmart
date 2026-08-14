@@ -1596,6 +1596,7 @@ class TestPKa:
     ):
         """ORCA pKa should prepare HA/A opt and SP jobs with Gaussian-style labels."""
         from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.chain import ChainJob
         from chemsmart.jobs.orca.opt import ORCAOptJob
         from chemsmart.jobs.orca.pka import ORCApKaJob
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
@@ -1623,6 +1624,13 @@ class TestPKa:
         )
 
         assert len(job.opt_jobs) == 2
+        assert isinstance(job, ChainJob)
+        assert [phase.name for phase in job.phases] == [
+            "Opt",
+            "Ref Opt",
+            "SP",
+            "Ref SP",
+        ]
         assert isinstance(job.protonated_job, ORCAOptJob)
         assert isinstance(job.conjugate_base_job, ORCAOptJob)
         assert job.protonated_job.label == "1a_pka_HA_opt"
@@ -1708,16 +1716,19 @@ class TestPKa:
 
         captured = {"sp_labels": []}
 
-        def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
+        def _fake_run_phase_jobs(
+            *, jobs=None, jobs_factory=None, phase_label=None, **kwargs
+        ):
             phase_jobs = jobs_factory() if jobs_factory is not None else jobs
+            if phase_label != "SP":
+                return
             for child_job in phase_jobs:
                 captured["sp_labels"].append(child_job.label)
 
         monkeypatch.setattr(
-            "chemsmart.jobs.orca.pka.run_phase_jobs",
+            "chemsmart.jobs.chain.run_phase_jobs",
             _fake_run_phase_jobs,
         )
-        monkeypatch.setattr(job, "_run_opt_jobs", lambda: None)
         monkeypatch.setattr(
             job, "_subjob_output", lambda *args, **kwargs: None
         )
@@ -1791,12 +1802,13 @@ class TestPKa:
 
         captured = {"labels": []}
 
-        def _fake_run_phase_jobs(*, jobs, **kwargs):
-            for child_job in jobs:
+        def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
+            phase_jobs = jobs_factory() if jobs_factory is not None else jobs
+            for child_job in phase_jobs:
                 captured["labels"].append(child_job.label)
 
         monkeypatch.setattr(
-            "chemsmart.jobs.orca.pka.run_phase_jobs",
+            "chemsmart.jobs.chain.run_phase_jobs",
             _fake_run_phase_jobs,
         )
 

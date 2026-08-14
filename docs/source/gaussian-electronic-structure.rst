@@ -284,3 +284,81 @@ Basic Usage
    chemsmart sub gaussian -p project -f opt.log wbi
 
 This adds the keyword ``pop=nboread`` for NBO3.1 software analysis.
+
+.. _fukui-jobs:
+
+************
+ Fukui Jobs
+************
+
+Fukui workflows mirror pKa: a **submission** layer prepares charge-state calculations, and a backend-independent
+**analysis** layer computes condensed Fukui indices from finished outputs.
+
+Submission (``chemsmart sub … gaussian … fukui``)
+=================================================
+
+For a given molecule, submit population calculations on the neutral, radical cation (N−1 electrons), and radical anion
+(N+1 electrons) at the same geometry.
+
+.. code:: bash
+
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] fukui [FUKUI_OPTIONS]
+
+Fukui Submission Options
+------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-m, --mode``
+      -  string
+      -  Population setup for later analysis: ``mulliken`` (default), ``nbo``, ``hirshfeld``, or ``cm5``
+
+   -  -  ``-rcc, --radical-cation-charge``
+      -  int
+      -  Override radical-cation charge (default: derived from neutral)
+
+   -  -  ``-rcm, --radical-cation-multiplicity``
+      -  int
+      -  Override radical-cation multiplicity (default: derived from neutral)
+
+   -  -  ``-rac, --radical-anion-charge``
+      -  int
+      -  Override radical-anion charge (default: derived from neutral)
+
+   -  -  ``-ram, --radical-anion-multiplicity``
+      -  int
+      -  Override radical-anion multiplicity (default: derived from neutral)
+
+The neutral structure comes from the parent Gaussian ``-f`` option. Neutral charge and multiplicity come from parent
+``-c`` / ``-m`` (or the input file).
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f molecule.log -c 0 -m 1 fukui
+
+   chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 fukui -m nbo
+
+   chemsmart sub gaussian -p project -f molecule.log -c 0 -m 1 fukui \\
+     -rcc 1 -rcm 2
+
+This writes ``<label>_n``, ``<label>_rc``, and ``<label>_ra``.
+
+Analysis (``chemsmart run fukui``)
+==================================
+
+Post-processing is program-agnostic (Gaussian ``.log`` or ORCA ``.out``) and matches the historical ``fukui.py`` script
+options:
+
+.. code:: bash
+
+   chemsmart run fukui -n <label>_n.log -c <label>_rc.log -a <label>_ra.log
+
+   chemsmart run fukui -n <label>_n.log -m nbo
+
+When ``-c`` / ``-a`` are omitted, companion ``_rc`` / ``_ra`` files beside ``-n`` are auto-discovered.

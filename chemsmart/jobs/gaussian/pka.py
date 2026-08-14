@@ -13,16 +13,15 @@ solvation free energy calculations.
 import logging
 import os
 
-from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.chain import ChainJob, JobPhase
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
-from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
 
 logger = logging.getLogger(__name__)
 
 
-class GaussianpKaJob(GaussianJob):
+class GaussianpKaJob(ChainJob):
     """
     Gaussian job class for pKa calculations using direct thermodynamic cycle.
 
@@ -42,6 +41,7 @@ class GaussianpKaJob(GaussianJob):
         skip_completed (bool): If True, completed jobs are not rerun.
     """
 
+    PROGRAM = "Gaussian"
     TYPE = "g16pka"
     _shared_reference_molecule_cache = {}
 
@@ -114,6 +114,7 @@ class GaussianpKaJob(GaussianJob):
         )
 
         self._prepare_pka_jobs()
+        self.phases = self._build_phases()
 
     def _prepare_pka_jobs(self):
         """Prepare optimization jobs for target and reference acids."""
@@ -178,75 +179,64 @@ class GaussianpKaJob(GaussianJob):
         )
         return [ref_acid_job, ref_conjugate_base_job]
 
-    def _optimized_molecule_from_job(self, job, fallback_molecule):
-        """Return optimized geometry for a finished job, or a fallback molecule."""
+    def _build_phases(self):
+        """Return ordered opt and solution-phase SP phases for the pKa cycle."""
+        return [
+            JobPhase(
+                name="Opt",
+                jobs=self.opt_jobs,
+                stop_on_incomplete=True,
+                require_complete=True,
+                stop_message="Opt jobs incomplete, halting serial execution.",
+            ),
+            JobPhase(
+                name="Ref Opt",
+                jobs_factory=lambda: self.ref_opt_jobs,
+                skip_if=lambda: not self.has_reference_jobs,
+                stop_on_incomplete=True,
+                require_complete=True,
+                stop_message=(
+                    "Ref Opt jobs incomplete, halting serial execution."
+                ),
+            ),
+            JobPhase(
+                name="SP",
+                jobs_factory=self._sp_jobs_for_phase,
+                stop_on_incomplete=True,
+                require_complete=True,
+                stop_message="SP jobs incomplete, halting serial execution.",
+            ),
+            JobPhase(
+                name="Ref SP",
+                jobs_factory=self._ref_sp_jobs_for_phase,
+                skip_if=lambda: not self.has_reference_jobs,
+                stop_on_incomplete=True,
+                require_complete=True,
+                stop_message=(
+                    "Ref SP jobs incomplete, halting serial execution."
+                ),
+            ),
+        ]
+
+    def _sp_jobs_for_phase(self):
+        if self.sp_jobs is None:
+            self._create_sp_jobs()
+        return self.sp_jobs
+
+    def _ref_sp_jobs_for_phase(self):
+        if not self.has_reference_jobs:
+            return []
+        if self.ref_sp_jobs is None:
+            self._create_ref_sp_jobs()
+        return self.ref_sp_jobs
+
+    @staticmethod
+    def _optimized_molecule_from_job(job, fallback_molecule):
+        """Return optimized geometry for a finished opt job, or a fallback."""
         out = job._output()
         if out is not None and out.normal_termination:
             return out.molecule
         return fallback_molecule
-
-    def _run_opt_jobs(self):
-        """Run gas phase optimization jobs."""
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.opt_jobs,
-            stop_on_incomplete=True,
-            logger_obj=logger,
-            phase_label="gas phase optimization",
-        )
-
-    def _run_ref_opt_jobs(self):
-        """Run reference gas phase optimization jobs."""
-        if not self.has_reference_jobs:
-            return
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.ref_opt_jobs,
-            stop_on_incomplete=True,
-            logger_obj=logger,
-            phase_label="reference gas phase optimization",
-        )
-
-    def _run_sp_jobs(self):
-        """Run solution phase single point jobs using optimized geometries."""
-        if not self._opt_jobs_are_complete():
-            logger.warning(
-                "Optimization jobs not complete. Cannot run SP jobs."
-            )
-            return
-
-        # Create SP jobs if not already created
-        if self.sp_jobs is None:
-            self._create_sp_jobs()
-
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.sp_jobs,
-            stop_on_incomplete=True,
-            logger_obj=logger,
-            phase_label="solution phase SP",
-        )
-
-    def _run_ref_sp_jobs(self):
-        """Run reference solution phase single point jobs."""
-        if not self.has_reference_jobs:
-            return
-        if not self._ref_opt_jobs_are_complete():
-            logger.warning(
-                "Reference optimization jobs not complete. Cannot run reference SP jobs."
-            )
-            return
-
-        if self.ref_sp_jobs is None:
-            self._create_ref_sp_jobs()
-
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.ref_sp_jobs,
-            stop_on_incomplete=True,
-            logger_obj=logger,
-            phase_label="reference solution phase SP",
-        )
 
     def _create_sp_jobs(self):
         """Create solution phase SP jobs from optimized geometries."""
@@ -319,81 +309,6 @@ class GaussianpKaJob(GaussianJob):
             self.ref_acid_sp_job,
             self.ref_conjugate_base_sp_job,
         ]
-
-    def _run(self, **kwargs):
-        """
-        Execute the pKa calculation.
-
-        Runs gas phase optimization jobs followed by solution phase SP jobs.
-        """
-        # Default sequential behaviour
-        # Run gas phase optimization jobs for target acid (HA, A-)
-        self._run_opt_jobs()
-
-        opt_transition = decide_phase_transition(
-            phase_name="Opt",
-            require_complete=True,
-            is_complete=self._opt_jobs_are_complete(),
-            stop_message="Opt jobs incomplete, halting serial execution.",
-        )
-        if not opt_transition.proceed:
-            logger.info(opt_transition.message)
-            return
-
-        # Run gas phase optimization jobs for reference acid (HRef, Ref-) if provided
-        if self.has_reference_jobs:
-            self._run_ref_opt_jobs()
-            ref_opt_transition = decide_phase_transition(
-                phase_name="Ref Opt",
-                require_complete=True,
-                is_complete=self._ref_opt_jobs_are_complete(),
-                stop_message="Ref Opt jobs incomplete, halting serial execution.",
-            )
-            if not ref_opt_transition.proceed:
-                logger.info(ref_opt_transition.message)
-                return
-
-        # Run solution phase SP jobs for target acid
-        self._run_sp_jobs()
-
-        sp_transition = decide_phase_transition(
-            phase_name="SP",
-            require_complete=True,
-            is_complete=self._sp_jobs_are_complete(),
-            stop_message="SP jobs incomplete, halting serial execution.",
-        )
-        if not sp_transition.proceed:
-            logger.info(sp_transition.message)
-            return
-
-        # Run solution phase SP jobs for reference acid if provided
-        if self.has_reference_jobs:
-            self._run_ref_sp_jobs()
-
-    def is_complete(self):
-        """
-        Check if all pKa jobs are complete.
-
-        Returns:
-            bool: True if all optimization jobs and SP jobs
-                have completed successfully (including reference jobs if provided).
-        """
-        # Check target acid optimization jobs
-        if not self._opt_jobs_are_complete():
-            return False
-
-        # Check target acid SP jobs
-        if not self._sp_jobs_are_complete():
-            return False
-
-        # Check reference acid jobs if provided
-        if self.has_reference_jobs:
-            if not self._ref_opt_jobs_are_complete():
-                return False
-            if not self._ref_sp_jobs_are_complete():
-                return False
-
-        return True
 
     def _opt_jobs_are_complete(self):
         """
