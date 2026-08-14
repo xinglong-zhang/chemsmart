@@ -133,8 +133,9 @@ Molecular Properties Options
 
 .. note::
 
-   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m``. CHEMSMART passes charge as ``--chrg``
-   and unpaired electrons as ``--uhf`` (``multiplicity - 1``).
+   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m`` for charge and spin multiplicity.
+   CHEMSMART automatically converts the supplied charge and multiplicity into ``--chrg`` and unpaired electrons
+   ``--uhf`` (= multiplicity - 1), respectively, required by CREST.
 
 Examples:
 

@@ -131,12 +131,14 @@ Molecular Properties Options
 
    -  -  ``-m, --multiplicity``
       -  int
-      -  Molecular multiplicity
+      -  Molecular spin multiplicity, this is the actual spin multiplicity (2S+1) and it will be converted automatically
+         by CHEMSMART to uhf in xTB, which is the number of unpaired electrons.
 
 .. note::
 
-   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m``. CHEMSMART passes charge as ``--chrg``
-   and unpaired electrons as ``--uhf`` (``multiplicity - 1``).
+   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m`` for charge and spin multiplicity.
+   CHEMSMART automatically converts the supplied charge and multiplicity into ``--chrg`` and unpaired electrons
+   ``--uhf`` (= multiplicity - 1), respectively, required by xTB.
 
 Examples:
 
