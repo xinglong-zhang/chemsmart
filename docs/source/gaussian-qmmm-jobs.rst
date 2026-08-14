@@ -36,8 +36,7 @@ The basic command structure for Gaussian ONIOM QM/MM calculations is:
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <JOBTYPE> qmmm [QMMM_OPTIONS]
 
-where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, or ``qrc``. There is no standalone ``qmmm``
-command.
+where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, or ``qrc``.
 
 ************************
  QM/MM-Specific Options
