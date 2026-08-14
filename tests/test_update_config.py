@@ -37,13 +37,9 @@ def _read_yaml(path: Path):
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _template_yaml(template_name="SLURM.yaml"):
+def _template_yaml():
     template = (
-        resources.files("chemsmart.settings")
-        / "templates"
-        / ".chemsmart"
-        / "server"
-        / template_name
+        resources.files("chemsmart.settings") / "templates" / "server.yaml"
     )
     return yaml.safe_load(template.read_text(encoding="utf-8"))
 
@@ -98,12 +94,9 @@ def test_update_config_default_updates_existing_yaml_only(tmp_path):
     assert result.exit_code == 0, result.output
     assert "SLURM.yaml:" in result.output
     assert "PBS.yaml:" in result.output
-    for path, template_name in (
-        (slurm, "SLURM.yaml"),
-        (pbs, "PBS.yaml"),
-    ):
+    template = _template_yaml()
+    for path in (slurm, pbs):
         data = _read_yaml(path)
-        template = _template_yaml(template_name)
         for program in ConfigurationUpdater._template_programs(template):
             assert data[program] == template[program]
             assert f"added program: {program}" in result.output
@@ -116,16 +109,14 @@ def test_update_config_default_updates_existing_yaml_only(tmp_path):
 def test_update_config_server_option_accepts_multiple_files(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
-            "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
-            "FAKE_PROGRAM_C": {"EXEFOLDER": None, "LOCAL_RUN": True},
-        }
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
+        "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
+        "FAKE_PROGRAM_C": {"EXEFOLDER": None, "LOCAL_RUN": True},
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
@@ -224,53 +215,21 @@ def test_update_config_server_option_rejects_invalid_values(
     assert slurm.read_text(encoding="utf-8") == before
 
 
-def test_update_config_prefers_same_name_template(tmp_path):
-    local = _write_server_yaml(
+def test_update_config_uses_server_template_regardless_of_scheduler(tmp_path):
+    custom = _write_server_yaml(
         tmp_path,
-        "local.yaml",
+        "my_cluster.yaml",
         """
         SERVER:
             SCHEDULER: UNKNOWN
         """,
     )
 
-    result = _invoke_update_config(tmp_path, ["-s", "local"])
-
-    assert result.exit_code == 0, result.output
-    data = _read_yaml(local)
-    template = _template_yaml("local.yaml")
-    for program in ConfigurationUpdater._template_programs(template):
-        assert data[program] == template[program]
-
-
-@pytest.mark.parametrize(
-    "scheduler, template_name",
-    [
-        ("SLURM", "SLURM.yaml"),
-        ("pbs", "PBS.yaml"),
-        ("local", "local.yaml"),
-        ("none", "local.yaml"),
-        ("null", "local.yaml"),
-        ("Null", "local.yaml"),
-    ],
-)
-def test_update_config_custom_file_matches_scheduler(
-    tmp_path, scheduler, template_name
-):
-    custom = _write_server_yaml(
-        tmp_path,
-        "my_cluster.yaml",
-        f"""
-        SERVER:
-            SCHEDULER: {scheduler}
-        """,
-    )
-
-    result = _invoke_update_config(tmp_path, ["-s", "my_cluster"])
+    result = _invoke_update_config(tmp_path, ["-s", "my_cluster.yaml"])
 
     assert result.exit_code == 0, result.output
     data = _read_yaml(custom)
-    template = _template_yaml(template_name)
+    template = _template_yaml()
     for program in ConfigurationUpdater._template_programs(template):
         assert data[program] == template[program]
 
@@ -278,15 +237,13 @@ def test_update_config_custom_file_matches_scheduler(
 def test_update_config_prompts_once_per_program_and_targets_missing_files(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
-            "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
-        }
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
+        "FAKE_PROGRAM_B": {"EXEFOLDER": None, "LOCAL_RUN": True},
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
@@ -364,21 +321,15 @@ def test_update_config_prompts_once_per_program_and_targets_missing_files(
     }
 
 
-def test_update_config_enter_keeps_each_matched_template_exefolder(
+def test_update_config_enter_keeps_server_template_exefolder(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FAKE_PROGRAM": {"EXEFOLDER": "/template/slurm-fake"},
-        },
-        "PBS.yaml": {
-            "SERVER": {"SCHEDULER": "PBS"},
-            "FAKE_PROGRAM": {"EXEFOLDER": "/template/pbs-fake"},
-        },
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FAKE_PROGRAM": {"EXEFOLDER": "/template/fake"},
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
@@ -402,27 +353,22 @@ def test_update_config_enter_keeps_each_matched_template_exefolder(
 
     assert result.exit_code == 0, result.output
     assert prompt_count == 1
-    assert (
-        _read_yaml(slurm)["FAKE_PROGRAM"]["EXEFOLDER"]
-        == "/template/slurm-fake"
-    )
-    assert _read_yaml(pbs)["FAKE_PROGRAM"]["EXEFOLDER"] == "/template/pbs-fake"
+    assert _read_yaml(slurm)["FAKE_PROGRAM"]["EXEFOLDER"] == "/template/fake"
+    assert _read_yaml(pbs)["FAKE_PROGRAM"]["EXEFOLDER"] == "/template/fake"
 
 
 def test_update_config_existing_program_missing_exefolder_is_untouched(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FAKE_PROGRAM": {
-                "EXEFOLDER": "/template/fake",
-                "LOCAL_RUN": True,
-            },
-        }
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FAKE_PROGRAM": {
+            "EXEFOLDER": "/template/fake",
+            "LOCAL_RUN": True,
+        },
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
@@ -454,14 +400,12 @@ def test_update_config_existing_program_missing_exefolder_is_untouched(
 def test_update_config_program_without_exefolder_is_copied_without_prompt(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FUTURE_PROGRAM": {"LOCAL_RUN": True},
-        }
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FUTURE_PROGRAM": {"LOCAL_RUN": True},
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: True)
@@ -482,14 +426,12 @@ def test_update_config_program_without_exefolder_is_copied_without_prompt(
 def test_update_config_non_tty_uses_template_without_prompt(
     tmp_path, monkeypatch
 ):
-    templates = {
-        "SLURM.yaml": {
-            "SERVER": {"SCHEDULER": "SLURM"},
-            "FAKE_PROGRAM": {"EXEFOLDER": "/template/fake"},
-        }
+    template = {
+        "SERVER": {"SCHEDULER": "PBS"},
+        "FAKE_PROGRAM": {"EXEFOLDER": "/template/fake"},
     }
     monkeypatch.setattr(
-        ConfigurationUpdater, "_load_server_templates", lambda self: templates
+        ConfigurationUpdater, "_load_server_template", lambda self: template
     )
     monkeypatch.setattr(
         ConfigurationUpdater, "_is_interactive", staticmethod(lambda: False)
@@ -601,40 +543,6 @@ def test_update_config_invalid_yaml_roots_are_not_overwritten(
     assert slurm.read_text(encoding="utf-8") == before
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        """
-        SERVER:
-            SCHEDULER: UNKNOWN
-        """,
-        """
-        SERVER: []
-        """,
-        """
-        SERVER: {}
-        """,
-    ],
-)
-def test_update_config_unmatched_scheduler_is_skipped_by_default(
-    tmp_path, content
-):
-    custom = _write_server_yaml(
-        tmp_path,
-        "custom.yaml",
-        content,
-    )
-    before = custom.read_text(encoding="utf-8")
-
-    result = _invoke_update_config(tmp_path)
-
-    assert result.exit_code == 0, result.output
-    assert (
-        "skipped: could not match a bundled server template" in result.output
-    )
-    assert custom.read_text(encoding="utf-8") == before
-
-
 def test_update_config_missing_server_directory_is_clean_error(tmp_path):
     result = _invoke_update_config(tmp_path)
 
@@ -712,12 +620,12 @@ def test_update_config_user_yaml_read_error_is_clean(tmp_path, monkeypatch):
         ("- invalid\n- template\n", "must contain a mapping"),
     ],
 )
-def test_load_server_templates_rejects_invalid_template(
+def test_load_server_template_rejects_invalid_template(
     tmp_path, monkeypatch, template_content, expected
 ):
-    template_dir = tmp_path / "templates" / ".chemsmart" / "server"
-    template_dir.mkdir(parents=True)
-    (template_dir / "INVALID.yaml").write_text(
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+    (template_dir / "server.yaml").write_text(
         template_content, encoding="utf-8"
     )
     monkeypatch.setattr(
@@ -725,25 +633,7 @@ def test_load_server_templates_rejects_invalid_template(
     )
 
     with pytest.raises(update_module.ConfigUpdateError, match=expected):
-        ConfigurationUpdater()._load_server_templates()
-
-
-def test_update_config_unknown_scheduler_errors_when_selected(tmp_path):
-    custom = _write_server_yaml(
-        tmp_path,
-        "custom.yaml",
-        """
-        SERVER:
-            SCHEDULER: UNKNOWN
-        """,
-    )
-    before = custom.read_text(encoding="utf-8")
-
-    result = _invoke_update_config(tmp_path, ["-s", "custom"])
-
-    assert result.exit_code != 0
-    assert "Could not match a bundled template" in result.output
-    assert custom.read_text(encoding="utf-8") == before
+        ConfigurationUpdater()._load_server_template()
 
 
 def test_update_config_respects_relative_config_dir(tmp_path, monkeypatch):
@@ -871,6 +761,7 @@ def test_updated_yaml_can_be_read_by_existing_settings_classes(
     assert result.exit_code == 0, result.output
     assert YAMLFile(filename=str(slurm)).yaml_contents_dict["GAUSSIAN"]
     assert Server.from_yaml(str(slurm)).scheduler == "SLURM"
+    gaussian_folder = _template_yaml()["GAUSSIAN"]["EXEFOLDER"]
     assert GaussianExecutable.from_servername("SLURM").get_executable() == str(
-        Path("~/bin/g16/g16").expanduser()
+        (Path(gaussian_folder) / "g16").expanduser()
     )

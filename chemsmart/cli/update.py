@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 create_logger(debug=True, stream=True)
 
 RESERVED_TOP_LEVEL_FIELDS = {"SERVER"}
-LOCAL_SCHEDULER_VALUES = {"local", "none", "null"}
 
 
 class ConfigUpdateError(Exception):
@@ -36,34 +35,28 @@ class ConfigUpdateReport:
     Attributes:
         path: Server YAML path that was checked.
         added_programs: Top-level program sections copied from the template.
-        skipped_reason: Reason the file was skipped, if no template matched.
         changed: Whether the in-memory YAML content changed.
     """
 
     path: Path
     added_programs: tuple[str, ...] = ()
-    skipped_reason: str | None = None
     changed: bool = False
 
     @property
     def is_up_to_date(self) -> bool:
-        """Return True when the file needed no update and was not skipped."""
-        return (
-            not self.changed
-            and not self.added_programs
-            and self.skipped_reason is None
-        )
+        """Return True when the file needed no update."""
+        return not self.changed and not self.added_programs
 
 
 @dataclass
 class _PreparedConfig:
-    """User config paired with the matched template before writing.
+    """User config paired with the bundled template before writing.
 
     Attributes:
         path: Server YAML path being updated.
         original_text: Raw file content before any in-memory changes.
         data: Round-trip YAML mapping loaded from the user file.
-        template_data: Round-trip YAML mapping loaded from the matched template.
+        template_data: Round-trip YAML mapping loaded from ``server.yaml``.
         missing_programs: Template program sections absent from the user file.
     """
 
@@ -418,40 +411,23 @@ class ConfigurationUpdater(Updater):
 
         In an interactive terminal, one optional ``EXEFOLDER`` override is
         requested for each unique missing program whose template defines that
-        field. Blank input keeps each matched template's value. Overrides are
+        field. Blank input keeps the bundled template value. Overrides are
         applied only to newly copied program sections.
         """
         self._require_yaml_dependency()
         server_dir = self._server_config_dir()
         yaml_files = self._select_server_yaml_files(server_dir, self.servers)
-        templates = self._load_server_templates()
+        template_data = self._load_server_template()
 
         prepared_configs: list[_PreparedConfig] = []
-        reports: list[ConfigUpdateReport] = []
         for yaml_file in yaml_files:
             original_text, data = self._load_user_yaml(yaml_file)
-            template_name = self._match_template_name(
-                yaml_file.name,
-                data,
-                templates,
-                strict=bool(self.servers),
-            )
-            if template_name is None:
-                reports.append(
-                    ConfigUpdateReport(
-                        path=yaml_file,
-                        skipped_reason=(
-                            "could not match a bundled server template"
-                        ),
-                    )
-                )
-                continue
             prepared_configs.append(
                 _PreparedConfig(
                     path=yaml_file,
                     original_text=original_text,
                     data=data,
-                    template_data=templates[template_name],
+                    template_data=template_data,
                 )
             )
 
@@ -461,7 +437,7 @@ class ConfigurationUpdater(Updater):
             prepared_configs, program_exefolders
         )
         self._write_changed_files(prepared_configs, changed_reports)
-        return reports + changed_reports
+        return changed_reports
 
     @staticmethod
     def _require_yaml_dependency():
@@ -537,48 +513,30 @@ class ConfigurationUpdater(Updater):
         yaml_parser.width = 4096
         return yaml_parser
 
-    def _load_server_templates(self) -> dict[str, Mapping]:
-        """Load bundled server templates keyed by template file name."""
+    def _load_server_template(self) -> Mapping:
+        """Load the bundled ``server.yaml`` update template."""
         from ruamel.yaml.error import YAMLError
 
-        template_dir = (
-            resources.files("chemsmart.settings")
-            / "templates"
-            / ".chemsmart"
-            / "server"
+        template = (
+            resources.files("chemsmart.settings") / "templates" / "server.yaml"
         )
-        templates: dict[str, Mapping] = {}
         yaml_parser = self._yaml()
         try:
-            template_files = list(template_dir.iterdir())
-        except OSError as exc:
+            data = yaml_parser.load(template.read_text(encoding="utf-8"))
+        except YAMLError as exc:
             raise ConfigUpdateError(
-                "Could not read bundled server templates: "
+                f"Bundled template {template.name} is not valid YAML: {exc}"
+            ) from exc
+        except (OSError, UnicodeError) as exc:
+            raise ConfigUpdateError(
+                f"Could not read bundled template {template.name}: "
                 f"{self._format_error(exc)}"
             ) from exc
-
-        for template in template_files:
-            if not template.is_file() or not template.name.endswith(".yaml"):
-                continue
-            try:
-                data = yaml_parser.load(template.read_text(encoding="utf-8"))
-            except YAMLError as exc:
-                raise ConfigUpdateError(
-                    f"Bundled template {template.name} is not valid YAML: "
-                    f"{exc}"
-                ) from exc
-            except (OSError, UnicodeError) as exc:
-                raise ConfigUpdateError(
-                    f"Could not read bundled template {template.name}: "
-                    f"{self._format_error(exc)}"
-                ) from exc
-            if not isinstance(data, Mapping):
-                raise ConfigUpdateError(
-                    f"Bundled template {template.name} must contain a "
-                    "mapping."
-                )
-            templates[template.name] = data
-        return templates
+        if not isinstance(data, Mapping):
+            raise ConfigUpdateError(
+                f"Bundled template {template.name} must contain a mapping."
+            )
+        return data
 
     def _load_user_yaml(self, path: Path) -> tuple[str, MutableMapping]:
         """Load a user server YAML file as round-trip text and mapping."""
@@ -601,46 +559,6 @@ class ConfigurationUpdater(Updater):
                 f"{path.name} must contain a YAML mapping at the top level."
             )
         return original_text, data
-
-    def _match_template_name(
-        self,
-        filename: str,
-        data: Mapping,
-        templates: Mapping[str, Mapping],
-        strict: bool,
-    ) -> str | None:
-        """Choose the bundled template for a user YAML file."""
-        if filename in templates:
-            return filename
-
-        scheduler = self._scheduler_value(data)
-        if scheduler == "slurm" and "SLURM.yaml" in templates:
-            return "SLURM.yaml"
-        if scheduler == "pbs" and "PBS.yaml" in templates:
-            return "PBS.yaml"
-        if scheduler in LOCAL_SCHEDULER_VALUES and "local.yaml" in templates:
-            return "local.yaml"
-
-        if strict:
-            raise ConfigUpdateError(
-                f"Could not match a bundled template for {filename}. "
-                "Set SERVER.SCHEDULER to SLURM, PBS, or Null/local, or "
-                "name the file after an existing template."
-            )
-        return None
-
-    @staticmethod
-    def _scheduler_value(data: Mapping) -> str | None:
-        """Return normalized ``SERVER.SCHEDULER`` or ``None``."""
-        server_data = data.get("SERVER")
-        if not isinstance(server_data, Mapping):
-            return None
-        if "SCHEDULER" not in server_data:
-            return None
-        scheduler = server_data["SCHEDULER"]
-        if scheduler is None:
-            return "null"
-        return str(scheduler).strip().lower()
 
     @staticmethod
     def _template_programs(template_data: Mapping) -> tuple[str, ...]:
@@ -697,7 +615,7 @@ class ConfigurationUpdater(Updater):
         for program in self._programs_with_exefolder(prepared_configs):
             folder = click.prompt(
                 f"{program} EXEFOLDER "
-                "(press Enter to use the matched template value)",
+                "(press Enter to use the bundled template value)",
                 default="",
                 show_default=False,
             ).strip()
@@ -853,7 +771,7 @@ def version(version_number: str):
     ),
 )
 def config(server: tuple[str, ...]):
-    """Update existing server YAML program sections from bundled templates."""
+    """Update existing server YAML program sections from server.yaml."""
 
     try:
         reports = ConfigurationUpdater(server).update()
@@ -870,9 +788,6 @@ def config(server: tuple[str, ...]):
 
     for report in reports:
         click.echo(f"{report.path.name}:")
-        if report.skipped_reason is not None:
-            click.echo(f"  skipped: {report.skipped_reason}")
-            continue
         if report.added_programs:
             for program in report.added_programs:
                 click.echo(f"  added program: {program}")
