@@ -29,7 +29,7 @@ scientific question and molecular artifacts
                   v
        CHEMSMART compile and preview
                   |
-       human approval for exact DAG
+       human review of the displayed DAG
                   |
                   v
         deterministic CLI execution
@@ -39,10 +39,12 @@ scientific question and molecular artifacts
 ```
 
 Planning, YAML generation, CLI compilation, safe preview, and result analysis
-do not start a chemistry engine. Real Agent execution requires a one-shot human
-approval bound to the exact workflow, molecular state, inputs, project files,
-commands, environment, and resources. The approved executor uses no model or
-provider credential.
+do not start a chemistry engine. For a real calculation, the terminal interface
+shows the molecule and electronic state, project settings, compiled ChemSmart
+operations, data flow, environment, and resources. The user enters
+`/approve` once to run that displayed workflow through a provider-free
+executor. Internal receipts preserve provenance; the user does not retype a
+hash or manage an approval token.
 
 ## Human CLI support
 
@@ -62,21 +64,21 @@ chemsmart run PROGRAM --help
 
 ## Agent support in version 3.1.4
 
-| Program | Planning and safe preview | Explicitly approved execution | Result analysis |
+| Program | Planning and safe preview | Release-qualified execution | Result analysis |
 | --- | --- | --- | --- |
 | PySCF CPU | `sp`, `opt`, `hess`; `td` preview | `sp`, `opt`, `hess` | structured HDF5 quantities actually produced |
-| GPU4PySCF | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | the same structured PySCF result path |
-| xTB CPU | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | receipt-bound native quantities, orbitals, frequencies and geometry handoffs; XYZ trajectory analysis uses the shared geometry reader |
-| ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb` | the same six job families | native energies, structures, frequencies, excited states, spin and trajectory evidence actually produced |
-| Gaussian CPU | `sp`, `opt`, `ts`, `irc`, `td`, `link` | the same six job families | normal native outputs supplied by the user, including thermochemistry, excited states, spin and trajectory evidence |
+| GPU4PySCF | `sp`, `opt`, `hess` configuration and preview | not qualified in this release | the structured PySCF result path when a compatible result is supplied |
+| xTB CPU | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | validated native quantities, orbitals, dipoles, frequencies, geometry handoffs, and portable archive analysis |
+| ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb` | qualified for `sp`, optimization/frequency, `ts`, `td`, and serial DAGs; `irc` and `neb` require target qualification | native energies, structures, frequencies, excited states, spin, solvent, auxiliary-basis, and trajectory evidence |
+| Gaussian CPU | `sp`, `opt`, `ts`, `irc`, `td`, `link` project YAML and native-input preview | not qualified in this release | normal native outputs supplied by the user, including thermochemistry, excited states, spin, and trajectory evidence |
 
-The table describes implemented product paths, not the software installed on a
-particular workstation. Before execution, ChemSmart still requires the exact
-program/engine environment to be available and included in the human review.
-Gaussian is separately licensed, GPU4PySCF requires a compatible CUDA stack,
-and neither is implied by installing ChemSmart. NCIPLOT and remaining CLI job
-families without an Agent engine/job declaration stay available to humans but
-are not Agent execution paths in version 3.1.4.
+Planning support, release-qualified execution, and current-host readiness are
+different facts. Before an approved CPU run, ChemSmart still requires the
+selected program environment to be available and shows the requested resources
+in the human review. Gaussian is separately licensed, GPU4PySCF requires a
+compatible CUDA stack, and neither is implied by installing ChemSmart. NCIPLOT
+and remaining CLI job families without an Agent declaration stay available to
+human CLI users but are not Agent execution paths in version 3.1.4.
 
 The Runtime is provider-neutral. Version 3.1.4 ships registered adapters for
 Alibaba Token Plan and DeepSeek. The user profile supplies the provider,
@@ -91,17 +93,18 @@ Across those programs, the public Agent surface includes:
   and validated optimized-geometry handoff;
 - live CLI compilation, generated-artifact inspection, safe preview, and
   program preflight;
-- semantic extraction from Gaussian and ORCA native output, receipt-bound xTB
-  output, structured PySCF HDF5, and XYZ geometries or trajectories;
+- semantic extraction from Gaussian and ORCA native output, validated or
+  relocated xTB result folders, structured PySCF HDF5, and XYZ geometries or
+  trajectories;
 - RRHO and explicitly parameterised quasi-harmonic thermochemistry;
 - unit-aware expressions for energy differences, CBS extrapolation,
-  Boltzmann populations/averages, harmonic ZPE, imaginary-mode counts,
+  Boltzmann populations/averages from vector or scalar state energies,
+  harmonic ZPE, imaginary-mode counts,
   distances, angles, dihedrals, centres of mass, inertia, rotor constants, and
   connectivity changes; and
+- typed text evidence such as solvent treatment and auxiliary-basis role,
+  without assigning fictitious physical units; and
 - evidence-bound numerical claims and a human-readable scientific decision.
-
-These layers are general ChemSmart operations. They do not encode a benchmark
-answer, molecule-specific route, preferred DAG shape, or forced tool order.
 
 ## Installation
 
@@ -193,11 +196,11 @@ chemsmart agent plan \
 ```
 
 The terminal UI presents the planned DAG, molecular and electronic state,
-project YAML, compiled commands, environment, resources, and exact digests.
-The user may approve the complete workflow once, deny it, request revision, or
-quit. An approved packet is executed separately and deterministically with no
-provider call. See [Agent workflows](docs/source/agent-workflows.rst) for the
-interactive and non-interactive commands.
+project YAML, compiled operations, environment, and resources. The user may
+enter `/approve` once to execute the displayed workflow, or use `/deny` or
+`/revise` without launching an engine. The execution stage makes no provider
+call. See [Agent workflows](docs/source/agent-workflows.rst) and the
+[terminal-interface guide](docs/source/agent-tui.rst).
 
 ## Scientific discipline
 

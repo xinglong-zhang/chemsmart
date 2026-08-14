@@ -4,21 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import getpass
 from pathlib import Path
 from typing import TYPE_CHECKING
+import uuid
 
-from chemsmart.agent._contracts import ContractError, file_sha256
+from chemsmart.agent._contracts import ContractError
 
 if TYPE_CHECKING:
+    from chemsmart.agent.execution import WorkflowExecutionReviewV1
     from chemsmart.agent.executor import WorkflowExecutionResultV1
     from chemsmart.agent.live_session import LiveAgentSessionResultV1
-
-from .approval import (
-    ReviewedExecutionApprovalV1,
-    ReviewedExecutionReviewV1,
-    review_execution_approval,
-    review_execution_review,
-)
 
 
 class AgentTuiPhase(str, Enum):
@@ -26,7 +22,6 @@ class AgentTuiPhase(str, Enum):
     PLANNING = "planning"
     PREVIEW_READY = "preview-ready"
     REQUEST_REVIEWED = "request-reviewed"
-    APPROVAL_BOUND = "approval-bound"
     EXECUTING = "executing"
     COMPLETE = "complete"
     BLOCKED = "blocked"
@@ -55,10 +50,9 @@ class AgentSessionConfigV1:
             )
         review = self.review_file
         envelope = self.execution_envelope_file
-        if (envelope is None) != (review is None):
+        if envelope is None and review is not None:
             raise ContractError(
-                "TUI execution review requires both an execution envelope "
-                "and an absolute review output path"
+                "a review export path requires an execution envelope"
             )
         if envelope is not None:
             envelope = envelope.expanduser().resolve()
@@ -66,9 +60,12 @@ class AgentSessionConfigV1:
                 raise ContractError(
                     "TUI execution envelope must be a current regular file"
                 )
-            review = review.expanduser()
-            if not review.is_absolute():
-                raise ContractError("TUI review output file must be absolute")
+            if review is not None:
+                review = review.expanduser()
+                if not review.is_absolute():
+                    raise ContractError(
+                        "TUI review export file must be absolute"
+                    )
         object.__setattr__(self, "workspace", workspace)
         object.__setattr__(self, "secret_file", secret)
         object.__setattr__(self, "execution_envelope_file", envelope)
@@ -83,8 +80,7 @@ class AgentTuiController:
         self.phase = AgentTuiPhase.READY
         self.task = ""
         self.plan_result: LiveAgentSessionResultV1 | None = None
-        self.reviewed_review: ReviewedExecutionReviewV1 | None = None
-        self.reviewed_approval: ReviewedExecutionApprovalV1 | None = None
+        self.prepared_execution: WorkflowExecutionReviewV1 | None = None
         self.execution_result: WorkflowExecutionResultV1 | None = None
 
     def plan(self, task: str) -> LiveAgentSessionResultV1:
@@ -130,139 +126,54 @@ class AgentTuiController:
             raise
         self.task = normalized
         self.plan_result = result
-        self.reviewed_review = None
-        self.reviewed_approval = None
+        self.prepared_execution = result.prepared_execution
         self.execution_result = None
-        if result.execution_review:
-            self.phase = AgentTuiPhase.PREVIEW_READY
+        if self.prepared_execution is not None:
+            self.phase = AgentTuiPhase.REQUEST_REVIEWED
         elif result.terminal_state in {"complete", "planned"}:
             self.phase = AgentTuiPhase.COMPLETE
         else:
             self.phase = AgentTuiPhase.BLOCKED
         return result
 
-    def resolve_review(
-        self,
-        *,
-        decision: str,
-        actor: str,
-        output_file: str | Path | None = None,
-    ):
-        """Record one explicit human decision and optionally bind its bundle."""
+    def decline(self) -> None:
+        """Decline the displayed workflow without creating run authority."""
 
-        if self.reviewed_review is None:
-            raise ContractError("review the execution packet first")
-        if self.reviewed_approval is not None:
-            raise ContractError(
-                "this review already produced an approval bundle; it cannot "
-                "be revoked or replaced in place"
-            )
-        from chemsmart.agent.live_session import (
-            resolve_workflow_execution_review,
-        )
-
-        resolution, bundle = resolve_workflow_execution_review(
-            review_file=self.reviewed_review.path,
-            reviewed_sha256=self.reviewed_review.review.review_sha256,
-            decision=decision,
-            actor=actor,
-            output_file=(
-                Path(output_file).expanduser().resolve()
-                if output_file is not None
-                else None
-            ),
-        )
-        if bundle is None:
-            self.reviewed_review = None
-            self.reviewed_approval = None
-            self.phase = AgentTuiPhase.PREVIEW_READY
-        else:
-            self.reviewed_approval = review_execution_approval(
-                Path(output_file).expanduser().resolve(),
-                reviewed_review=self.reviewed_review,
-            )
-            self.phase = AgentTuiPhase.APPROVAL_BOUND
-        return resolution, self.reviewed_approval
-
-    def review_request(self, path: str | Path) -> ReviewedExecutionReviewV1:
-        if self.plan_result is None or self.phase not in {
-            AgentTuiPhase.PREVIEW_READY,
-            AgentTuiPhase.REQUEST_REVIEWED,
-            AgentTuiPhase.APPROVAL_BOUND,
-        }:
-            raise ContractError(
-                "finish a safe preview before reviewing approval"
-            )
-        reviewed = review_execution_review(
-            path,
-            task_spec_sha256=self.plan_result.task_spec_sha256,
-            workspace=self.config.workspace,
-        )
-        self.reviewed_review = reviewed
-        self.reviewed_approval = None
-        self.phase = AgentTuiPhase.REQUEST_REVIEWED
-        return reviewed
-
-    def bind_approval(self, path: str | Path) -> ReviewedExecutionApprovalV1:
-        if self.reviewed_review is None:
-            raise ContractError("review an execution review packet first")
-        reviewed = review_execution_approval(
-            path, reviewed_review=self.reviewed_review
-        )
-        self.reviewed_approval = reviewed
-        self.phase = AgentTuiPhase.APPROVAL_BOUND
-        return reviewed
-
-    def deny(self) -> None:
-        """Forget a locally loaded chain without recording a human decision."""
-
-        self.reviewed_review = None
-        self.reviewed_approval = None
+        self.prepared_execution = None
         self.phase = (
             AgentTuiPhase.PREVIEW_READY
             if self.plan_result is not None
             else AgentTuiPhase.READY
         )
 
-    def execute(
-        self,
-        *,
-        confirmation_digest: str,
-        run_directory: str | Path,
-    ) -> WorkflowExecutionResultV1:
-        from chemsmart.agent.executor import execute_approved_workflow
+    def approve_and_execute(self) -> WorkflowExecutionResultV1:
+        """Run the displayed ChemSmart workflow after one human action."""
 
-        reviewed = self.reviewed_approval
-        if reviewed is None or self.plan_result is None:
-            raise ContractError("bind a reviewed execution approval first")
-        if reviewed.path.is_symlink() or not reviewed.path.is_file():
+        from chemsmart.agent.executor import execute_prepared_workflow
+
+        prepared = self.prepared_execution
+        if prepared is None or self.phase is not AgentTuiPhase.REQUEST_REVIEWED:
             raise ContractError(
-                "reviewed execution approval is no longer a regular file"
+                "finish planning and review the displayed ChemSmart workflow first"
             )
-        current_artifact_sha256 = file_sha256(reviewed.path)
-        if current_artifact_sha256 != reviewed.artifact_sha256:
-            raise ContractError(
-                "execution approval bytes changed after human review; bind "
-                "and confirm the current file again"
-            )
-        normalized = str(confirmation_digest).strip().lower()
-        if normalized != current_artifact_sha256:
-            raise ContractError(
-                "execution confirmation must equal the complete reviewed "
-                "approval file SHA-256"
-            )
-        target = Path(run_directory).expanduser()
-        if target.exists() and target.is_symlink():
-            raise ContractError("execution run directory cannot be a symlink")
-        target = target.resolve()
+        execution_id = "tui-" + uuid.uuid4().hex
+        target = (
+            self.config.workspace
+            / ".chemsmart-agent"
+            / "executions"
+            / execution_id
+        )
         self.phase = AgentTuiPhase.EXECUTING
+        # Remove the pending authority before launch.  A failed run remains an
+        # observed run; rerunning it requires another explicit plan/review act.
+        self.prepared_execution = None
         try:
-            result = execute_approved_workflow(
-                approval_file=reviewed.path,
+            result = execute_prepared_workflow(
+                review=prepared,
+                actor=getpass.getuser() or "local-user",
+                execution_id=execution_id,
                 workspace=self.config.workspace,
                 run_directory=target,
-                task_spec_sha256=self.plan_result.task_spec_sha256,
-                expected_approval_file_sha256=current_artifact_sha256,
             )
         except Exception:
             self.phase = AgentTuiPhase.ERROR

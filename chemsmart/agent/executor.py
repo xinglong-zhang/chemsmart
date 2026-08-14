@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import shutil
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import (
@@ -25,6 +26,9 @@ from chemsmart.agent.api_access import (
 )
 from chemsmart.agent.cli_schema import build_live_click_schema
 from chemsmart.agent.execution import (
+    WorkflowExecutionApprovalBundleV1,
+    WorkflowExecutionReviewV1,
+    approve_workflow_execution_review,
     build_workflow_run_state,
     derive_ready_node_ids,
     transition_workflow_node,
@@ -209,6 +213,7 @@ class ApprovedWorkflowExecutor:
         run_directory: Path,
         execution_bundle: Any,
         approval_workspace: Path,
+        claim_workspace_bundle: bool = True,
     ) -> None:
         self.host = host
         self.plan = plan
@@ -222,6 +227,7 @@ class ApprovedWorkflowExecutor:
         self.run_directory = run_directory
         self.execution_bundle = execution_bundle
         self.approval_workspace = approval_workspace
+        self.claim_workspace_bundle = bool(claim_workspace_bundle)
         self._bundle_claimed = False
         self._turn = 0
         self._handoff_inputs: dict[str, str] = {}
@@ -258,14 +264,15 @@ class ApprovedWorkflowExecutor:
         )
         if self._bundle_claimed:
             return
-        from chemsmart.agent.live_session import (
-            claim_workflow_execution_approval_bundle,
-        )
+        if self.claim_workspace_bundle:
+            from chemsmart.agent.live_session import (
+                claim_workflow_execution_approval_bundle,
+            )
 
-        claim_workflow_execution_approval_bundle(
-            self.execution_bundle,
-            workspace=self.approval_workspace,
-        )
+            claim_workflow_execution_approval_bundle(
+                self.execution_bundle,
+                workspace=self.approval_workspace,
+            )
         self._bundle_claimed = True
 
     def _input_artifact_id(self, binding: Any) -> str:
@@ -392,10 +399,15 @@ class ApprovedWorkflowExecutor:
                 handoff = (
                     item["handoff"] if isinstance(item, Mapping) else item
                 )
-                artifact = _field(handoff, "geometry_artifact_id")
-                self._handoff_inputs[
-                    _field(handoff, "consumer_node_id")
-                ] = artifact
+                artifact = (
+                    handoff.get("geometry_artifact_id", "")
+                    if isinstance(handoff, Mapping)
+                    else getattr(handoff, "geometry_artifact_id", "")
+                )
+                if artifact:
+                    self._handoff_inputs[
+                        _field(handoff, "consumer_node_id")
+                    ] = artifact
             return ExecutedNodeV1(
                 node_id=node_id,
                 program=binding.program,
@@ -551,58 +563,116 @@ class ApprovedWorkflowExecutor:
         )
 
 
-def execute_approved_workflow(
+def _execution_inputs_from_bundle(
     *,
-    approval_file: Path,
+    bundle: WorkflowExecutionApprovalBundleV1,
     workspace: Path,
     run_directory: Path,
-    task_spec_sha256: str = "",
-    expected_approval_file_sha256: str = "",
-) -> WorkflowExecutionResultV1:
-    """Execute an approved workflow end to end, contacting no provider.
+) -> dict[str, Any]:
+    """Compose the normal ChemSmart execution host from one typed review.
 
-    Every scientific decision is read from the approval; this function chooses
-    nothing except the order in which already-approved nodes become ready,
-    which ``derive_ready_node_ids`` determines from the plan's own edges.
+    This is deliberately object based.  The TUI has already displayed the
+    project settings, molecular state, CLI operations, DAG and resource
+    bounds held by ``bundle``; no approval file or user-entered digest is a
+    second authority over those ChemSmart objects.
     """
 
     from chemsmart.agent.live_session import (
+        _approved_project_artifacts,
+        _parse_bounded_execution_envelope_record,
+        _write_execution_server_profile,
+    )
+
+    approval = bundle.workflow_approval
+    resources = bundle.execution_resources
+    if Path(approval.workspace).resolve() != workspace:
+        raise ContractError("prepared workflow targets another workspace")
+    if approval.task_spec_sha256 != (
+        bundle.approved_scientific_plan.task_spec_sha256
+    ):
+        raise ContractError("prepared workflow targets another task")
+    envelope = _parse_bounded_execution_envelope_record(
+        bundle.execution_envelope,
+        resources=resources,
+    )
+    requested_scratch_root = Path(envelope.scratch_root)
+    if requested_scratch_root.is_symlink():
+        raise ContractError("execution scratch root cannot be a symlink")
+    scratch_root = requested_scratch_root.resolve()
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    server_profile = _write_execution_server_profile(
+        run_directory,
+        resources,
+        scratch_root=scratch_root,
+    )
+    path_value = os.environ.get("PATH", "")
+    xtb_executable = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which(
+        "xtb"
+    )
+    executable_directory = (
+        str(Path(xtb_executable).expanduser().parent)
+        if xtb_executable
+        else ""
+    )
+    environment = {
+        "PATH": (
+            path_value
+            if not executable_directory
+            else (
+                executable_directory
+                if not path_value
+                else executable_directory + os.pathsep + path_value
+            )
+        ),
+        "PYTHONNOUSERSITE": "1",
+    }
+    return {
+        "approved_workspace": workspace,
+        "execution_resources": resources,
+        "workflow_execution_approval": approval,
+        "frozen_workflow_approval": bundle.frozen_workflow_approval,
+        "execution_server": str(server_profile),
+        "execution_environment": environment,
+        "approved_project_artifacts": _approved_project_artifacts(
+            workspace, approval
+        ),
+        "approved_scientific_plan": bundle.approved_scientific_plan,
+        "approved_materialized_workflow": (
+            bundle.approved_materialized_workflow
+        ),
+        "approved_environment_identities": (
+            bundle.approved_environment_identities
+        ),
+        "stationary_point_policy": bundle.stationary_point_policy,
+    }
+
+
+def _execute_workflow_bundle(
+    *,
+    bundle: WorkflowExecutionApprovalBundleV1,
+    workspace: Path,
+    run_directory: Path,
+    claim_workspace_bundle: bool,
+) -> WorkflowExecutionResultV1:
+    """Execute the typed ChemSmart DAG represented by an approved review."""
+
+    from chemsmart.agent.live_session import (
         _bootstrap_conformance,
-        _execution_composition_inputs,
         _observe_environments,
-        load_workflow_execution_approval_bundle,
     )
 
     workspace = Path(workspace).resolve()
     run_directory = Path(run_directory).resolve()
     run_directory.mkdir(parents=True, exist_ok=True)
-
-    approval_file = Path(approval_file).resolve()
-    bundle = load_workflow_execution_approval_bundle(
-        approval_file,
-        expected_file_sha256=expected_approval_file_sha256,
-    )
     effective_task_spec_sha256 = (
-        str(task_spec_sha256).strip()
-        or bundle.approved_scientific_plan.task_spec_sha256
-    )
-    if effective_task_spec_sha256 != (
         bundle.approved_scientific_plan.task_spec_sha256
-    ):
-        raise ContractError("task specification differs from approval bundle")
-    inputs = _execution_composition_inputs(
-        host_type=CommandCompiledToolHostV1,
+    )
+    inputs = _execution_inputs_from_bundle(
+        bundle=bundle,
         workspace=workspace,
         run_directory=run_directory,
-        approval_file=Path(approval_file).resolve(),
-        task_spec_sha256=effective_task_spec_sha256,
     )
     plan = inputs.pop("approved_scientific_plan")
-    if plan is None:
-        raise ContractError(
-            "approval file carries no approved scientific plan, so there is "
-            "no DAG to execute; freeze the plan session's plan into it"
-        )
     materialized = inputs.pop("approved_materialized_workflow", None)
     environment_identities = inputs.pop("approved_environment_identities", ())
     project_artifacts = inputs.pop("approved_project_artifacts")
@@ -659,7 +729,71 @@ def execute_approved_workflow(
         run_directory=run_directory,
         execution_bundle=bundle,
         approval_workspace=workspace,
+        claim_workspace_bundle=claim_workspace_bundle,
     ).run()
+
+
+def execute_prepared_workflow(
+    *,
+    review: WorkflowExecutionReviewV1,
+    actor: str,
+    execution_id: str,
+    workspace: Path,
+    run_directory: Path,
+) -> WorkflowExecutionResultV1:
+    """Approve the displayed in-memory ChemSmart workflow and run it once.
+
+    The explicit TUI action is the authority.  Internal content digests remain
+    provenance and mutation evidence, but the user does not create, reload or
+    retype an approval artifact.  Atomic node-launch reservation prevents an
+    accidental duplicate within this run.
+    """
+
+    bundle = approve_workflow_execution_review(
+        review,
+        approval_id=str(execution_id),
+        approved_review_sha256=review.review_sha256,
+        actor=str(actor).strip(),
+        resolution_id=str(execution_id) + "-approval",
+    )
+    return _execute_workflow_bundle(
+        bundle=bundle,
+        workspace=workspace,
+        run_directory=run_directory,
+        claim_workspace_bundle=False,
+    )
+
+
+def execute_approved_workflow(
+    *,
+    approval_file: Path,
+    workspace: Path,
+    run_directory: Path,
+    task_spec_sha256: str = "",
+    expected_approval_file_sha256: str = "",
+) -> WorkflowExecutionResultV1:
+    """Compatibility adapter for a previously persisted v1 approval file."""
+
+    from chemsmart.agent.live_session import (
+        load_workflow_execution_approval_bundle,
+    )
+
+    bundle = load_workflow_execution_approval_bundle(
+        Path(approval_file).resolve(),
+        expected_file_sha256=expected_approval_file_sha256,
+    )
+    effective_task = (
+        str(task_spec_sha256).strip()
+        or bundle.approved_scientific_plan.task_spec_sha256
+    )
+    if effective_task != bundle.approved_scientific_plan.task_spec_sha256:
+        raise ContractError("task specification differs from approval bundle")
+    return _execute_workflow_bundle(
+        bundle=bundle,
+        workspace=workspace,
+        run_directory=run_directory,
+        claim_workspace_bundle=True,
+    )
 
 
 __all__ = [
@@ -668,4 +802,5 @@ __all__ = [
     "PROGRAM_NODE_SEQUENCE",
     "WorkflowExecutionResultV1",
     "execute_approved_workflow",
+    "execute_prepared_workflow",
 ]

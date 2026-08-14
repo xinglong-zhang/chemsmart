@@ -413,6 +413,8 @@ def _is_token_plan_endpoint(endpoint: str) -> bool:
 
 
 def _http_error_class(exc: HTTPError) -> str:
+    if exc.code == 400:
+        return "request_invalid"
     if exc.code == 401:
         return "credential_invalid"
     if exc.code == 404:

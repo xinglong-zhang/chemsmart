@@ -37,7 +37,7 @@ from chemsmart.analysis.result_quantities import (
     canonical_quantity_sha256,
     make_quantity_value,
 )
-from chemsmart.utils.constants import energy_conversion
+from chemsmart.utils.constants import au_to_debye, energy_conversion
 
 MAX_EXPRESSION_NODES = 128
 MAX_NODE_INPUTS = 64
@@ -149,8 +149,9 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
     "photon_wavelength": "wavelength of a positive excitation energy",
     "boltzmann_populations": (
         "normalized Boltzmann populations of a set of states. Takes the state "
-        "energies and a temperature, in that order, optionally followed by a "
-        "dimensionless vector of per-state degeneracies, and owns the "
+        "energies as one vector or as separate scalar inputs, followed by a "
+        "temperature and optionally a dimensionless vector of per-state "
+        "degeneracies, and owns the "
         "weighting, the gas constant and the unit handling. Supply the "
         "degeneracies whenever states are multiply realizable -- an "
         "enantiomeric pair counts twice. Do not rebuild any of this from exp, "
@@ -481,6 +482,8 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
         "nm": (LENGTH, "angstrom", 10.0),
         "debye": (DIPOLE_MOMENT, "debye", 1.0),
         "d": (DIPOLE_MOMENT, "debye", 1.0),
+        "e bohr": (DIPOLE_MOMENT, "debye", au_to_debye),
+        "e a0": (DIPOLE_MOMENT, "debye", au_to_debye),
         "u": (MASS, "u", 1.0),
         "da": (MASS, "u", 1.0),
         "dalton": (MASS, "u", 1.0),
@@ -1824,20 +1827,17 @@ def _node_value(
         # multiplicities.  Without it a model that knows two gauche forms are
         # enantiomers has to fold the factor into the energies or scale the
         # result by hand, and the factor stops being visible as a scientific
-        # input.  For n-butane it moves the answer by twelve points.
+        # input.
         degeneracies = None
-        if len(inputs) == expected + 1:
+        if len(inputs) >= expected + 1 and (
+            inputs[-1].dimension == DIMENSIONLESS
+        ):
             candidate = inputs[-1]
-            if candidate.dimension != DIMENSIONLESS:
-                raise QuantityExpressionError(
-                    f"the optional last input to {operation} is the "
-                    "per-state degeneracies and must be dimensionless"
-                )
             degeneracies = tuple(
                 float(item) for item in _numeric(candidate).reshape(-1)
             )
             inputs = inputs[:-1]
-        if len(inputs) != expected:
+        if wants_values and len(inputs) != expected:
             raise QuantityExpressionError(
                 f"{operation} requires "
                 + (
@@ -1848,17 +1848,37 @@ def _node_value(
                 + ", optionally followed by the per-state degeneracies; got "
                 + f"{len(inputs)} inputs"
             )
+        if not wants_values and len(inputs) < expected:
+            raise QuantityExpressionError(
+                "boltzmann_populations requires one energy vector or two or "
+                "more scalar state energies followed by a temperature, "
+                "optionally followed by per-state degeneracies"
+            )
         temperature_value = inputs[-1]
         if temperature_value.dimension != TEMPERATURE:
             raise QuantityExpressionError(
                 f"the last input to {operation} must be a temperature"
             )
         temperature = float(_numeric(temperature_value))
-        energies = _numeric(inputs[expected - 2]).reshape(-1)
-        if inputs[expected - 2].dimension != ENERGY:
-            raise QuantityExpressionError(
-                f"{operation} weights states by energy"
-            )
+        if wants_values:
+            energy_inputs = inputs[1:2]
+        else:
+            energy_inputs = inputs[:-1]
+        if any(item.dimension != ENERGY for item in energy_inputs):
+            raise QuantityExpressionError(f"{operation} weights states by energy")
+        if len(energy_inputs) == 1:
+            energies = _numeric(energy_inputs[0]).reshape(-1)
+        else:
+            scalar_energies = []
+            for item in energy_inputs:
+                values = _numeric(item).reshape(-1)
+                if values.size != 1:
+                    raise QuantityExpressionError(
+                        "separate boltzmann_populations energy inputs must be "
+                        "scalars; pass multiple states in one vector instead"
+                    )
+                scalar_energies.append(float(values[0]))
+            energies = np.asarray(scalar_energies, dtype=float)
         try:
             populations = boltzmann_populations(
                 tuple(float(item) for item in energies),

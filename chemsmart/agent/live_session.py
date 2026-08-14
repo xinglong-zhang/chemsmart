@@ -39,7 +39,12 @@ from chemsmart.agent._contracts import (
     require_sha256,
 )
 from chemsmart.agent.analysis_completion import load_analysis_completion_policy
-from chemsmart.agent.api_access import DEFAULT_KEY_LABELS, load_secret_lease
+from chemsmart.agent.api_access import (
+    DEFAULT_KEY_LABELS,
+    PROVIDER_KEY_LABEL_TOKENS,
+    load_secret_lease,
+    normalize_key_label,
+)
 from chemsmart.agent.bootstrap import (
     bootstrap_program_conformance,
     probe_python_compute_environment,
@@ -220,6 +225,8 @@ class _LoggedResultObservation:
     input_artifact_sha256: str
     validation_receipt_sha256: str
     scientific_validation_state: str
+    provenance_status: str = "workspace_exact_validated_native_result"
+    provenance_limitations: tuple[str, ...] = ()
 
     def public_record(self) -> dict[str, Any]:
         return {
@@ -239,7 +246,8 @@ class _LoggedResultObservation:
             "input_artifact_sha256": self.input_artifact_sha256,
             "validation_receipt_sha256": self.validation_receipt_sha256,
             "scientific_validation_state": self.scientific_validation_state,
-            "provenance_status": "workspace_exact_validated_native_result",
+            "provenance_status": self.provenance_status,
+            "provenance_limitations": self.provenance_limitations,
         }
 
 
@@ -265,6 +273,7 @@ class LiveAgentSessionResultV1:
     execution_review: dict[str, Any]
     event_stream_head_sha256: str
     result_sha256: str
+    prepared_execution: WorkflowExecutionReviewV1 | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.live-agent-session-result.v1":
@@ -285,7 +294,7 @@ class LiveAgentSessionResultV1:
         return {
             key: value
             for key, value in asdict(self).items()
-            if key != "result_sha256"
+            if key not in {"result_sha256", "prepared_execution"}
         }
 
     def public_summary_json(self) -> str:
@@ -457,6 +466,11 @@ def run_live_agent_session(
             input_artifact=observations[0].artifact,
             registry_sha256=registry.registry_sha256,
             live_schema=live_schema,
+            resources=(
+                bounded_envelope.resources
+                if bounded_envelope is not None
+                else None
+            ),
         )
         environment_targets, compute_receipts, environment_records = (
             _observe_environments()
@@ -480,7 +494,14 @@ def run_live_agent_session(
     event_store = RuntimeEventStore(
         run_directory / "events.jsonl", session_id=session_id
     )
-    preview_server_path = _ensure_preview_server(run_directory)
+    preview_server_path = _ensure_preview_server(
+        run_directory,
+        resources=(
+            bounded_envelope.resources
+            if bounded_envelope is not None
+            else None
+        ),
+    )
     host_kwargs: dict[str, Any] = {
         "event_store": event_store,
         "artifacts": {
@@ -689,9 +710,42 @@ def run_live_agent_session(
     )
 
     execution_review_record: dict[str, Any] = {}
-    if bounded_envelope is not None and review_file is not None:
+    prepared_execution: WorkflowExecutionReviewV1 | None = None
+    # A resource envelope constrains real engine work; it must not turn an
+    # analysis-only session into an execution-approval request.  The normal
+    # ChemSmart result readers and typed analysis DAG are sufficient when the
+    # scientific plan contains no calculation nodes.
+    calculation_plans = tuple(
+        plan
+        for plan in host.scientific_workflow_plans.values()
+        if plan.nodes
+    )
+    latest_calculation_plan = (
+        calculation_plans[-1] if calculation_plans else None
+    )
+    execution_ineligible_nodes: tuple[str, ...] = ()
+    if bounded_envelope is not None and latest_calculation_plan is not None:
+        ineligible = []
+        for node in latest_calculation_plan.nodes:
+            reason = host.execution_review_ineligibility_reason(
+                plan=latest_calculation_plan,
+                planned_node=node,
+            )
+            if reason:
+                ineligible.append(
+                    f"{node.node_id} ({node.program}/{node.engine}/"
+                    f"{node.stage}: {reason})"
+                )
+        execution_ineligible_nodes = tuple(ineligible)
+    if (
+        bounded_envelope is not None
+        and latest_calculation_plan is not None
+        and not execution_ineligible_nodes
+    ):
         review = host.build_execution_review(workspace=workspace_path)
-        write_workflow_execution_review(review, review_file)
+        prepared_execution = review
+        if review_file is not None:
+            write_workflow_execution_review(review, review_file)
         execution_review_record = {
             "schema_version": "chemsmart.public-workflow-execution-review.v1",
             "status": review.status,
@@ -702,18 +756,20 @@ def run_live_agent_session(
             ),
             "resource_sha256": review.execution_resources.resource_sha256,
             "review_sha256": review.review_sha256,
-            "next_action": (
-                "review this exact digest, then use 'chemsmart agent approve'"
-            ),
+            "next_action": "review the displayed ChemSmart workflow and approve it explicitly",
         }
 
     execution_status = (
         "review_packet_ready"
         if execution_review_record
         else (
-            "preview_only_resource_bounds_loaded"
-            if bounded_envelope is not None
-            else "not_requested"
+            "preview_only_not_execution_eligible"
+            if execution_ineligible_nodes
+            else (
+                "preview_only_resource_bounds_loaded"
+                if bounded_envelope is not None
+                else "not_requested"
+            )
         )
     )
     terminal_state = loop_result.terminal_state
@@ -724,6 +780,16 @@ def run_live_agent_session(
             " Planning, command compilation, and safe preview are complete. "
             "An inert exact review packet was written for human approval. "
             "No chemistry engine was launched."
+        )
+        final_text = (final_text.rstrip() + suffix).strip()
+    elif execution_ineligible_nodes:
+        suffix = (
+            " Planning, project-YAML validation, command compilation, and "
+            "safe preview remain valid. No chemistry engine was launched. "
+            "The following nodes are not eligible for Agent execution on "
+            "this release or fall outside the execution envelope: "
+            + ", ".join(execution_ineligible_nodes)
+            + "."
         )
         final_text = (final_text.rstrip() + suffix).strip()
     body = {
@@ -747,7 +813,9 @@ def run_live_agent_session(
         "event_stream_head_sha256": loop_result.event_stream_head_sha256,
     }
     return LiveAgentSessionResultV1(
-        **body, result_sha256=canonical_sha256(body)
+        **body,
+        result_sha256=canonical_sha256(body),
+        prepared_execution=prepared_execution,
     )
 
 
@@ -924,11 +992,10 @@ def _scan_pyscf_result_artifacts(
     observations: dict[str, _PySCFResultObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     for candidate in sorted(workspace.rglob("*.h5")):
         if any(
             root in candidate.parents
-            for root in (private_root, host_artifact_root, host_node_root)
+            for root in (private_root, host_artifact_root)
         ):
             continue
         if candidate.is_symlink() or not candidate.is_file():
@@ -1028,11 +1095,10 @@ def _scan_xtb_result_artifacts(
     observations: dict[str, _LoggedResultObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     for receipt_path in sorted(workspace.rglob("*.xtb-result-receipt.json")):
         if any(
             root in receipt_path.parents
-            for root in (private_root, host_artifact_root, host_node_root)
+            for root in (private_root, host_artifact_root)
         ):
             continue
         if receipt_path.is_symlink() or not receipt_path.is_file():
@@ -1058,20 +1124,20 @@ def _scan_xtb_result_artifacts(
                         "grad",
                     )
                 },
+                audit_mode="archive",
             )
             if findings:
                 continue
             artifacts = receipt["artifacts"]
-            output_names = tuple(
-                sorted(
-                    name for name in artifacts if str(name).endswith(".out")
-                )
+            receipt_suffix = ".xtb-result-receipt.json"
+            main_output_name = (
+                receipt_path.name[: -len(receipt_suffix)] + ".out"
             )
-            if len(output_names) != 1:
+            if main_output_name not in artifacts:
                 continue
-            output_path = (receipt_path.parent / output_names[0]).resolve()
+            output_path = (receipt_path.parent / main_output_name).resolve()
             output_path.relative_to(workspace)
-            output_record = artifacts[output_names[0]]
+            output_record = artifacts[main_output_name]
             digest = file_sha256(output_path)
             if (
                 output_record.get("sha256") != digest
@@ -1114,6 +1180,11 @@ def _scan_xtb_result_artifacts(
                     scientific_validation_state=str(
                         receipt["validation_state"]
                     ),
+                    provenance_status=str(observation["provenance_status"]),
+                    provenance_limitations=tuple(
+                        str(item)
+                        for item in observation["provenance_limitations"]
+                    ),
                 ),
             )
         except (
@@ -1143,11 +1214,10 @@ def _scan_orca_result_artifacts(
     observations: dict[str, _LoggedResultObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     for candidate in sorted(workspace.rglob("*.out")):
         if any(
             root in candidate.parents
-            for root in (private_root, host_artifact_root, host_node_root)
+            for root in (private_root, host_artifact_root)
         ):
             continue
         if candidate.is_symlink() or not candidate.is_file():
@@ -1161,6 +1231,7 @@ def _scan_orca_result_artifacts(
             positions = molecule.positions
             method = str(output.method or "").strip().lower()
             basis = str(output.basis or "").strip().lower()
+            semiempirical = str(output.semiempirical or "").strip().lower()
             jobtype = str(output.jobtype or "").strip().lower()
             charge = output.charge
             multiplicity = output.multiplicity
@@ -1169,7 +1240,7 @@ def _scan_orca_result_artifacts(
                 or energy is None
                 or not math.isfinite(float(energy))
                 or not method
-                or not basis
+                or (not basis and not semiempirical)
                 or jobtype not in {"sp", "opt", "freq", "td", "ts", "irc"}
                 or not isinstance(charge, int)
                 or not isinstance(multiplicity, int)
@@ -1206,7 +1277,7 @@ def _scan_orca_result_artifacts(
                 program="orca",
                 jobtype=jobtype,
                 method=method,
-                basis=basis,
+                basis=basis or None,
                 engine="cpu",
                 charge=charge,
                 multiplicity=multiplicity,
@@ -1242,7 +1313,6 @@ def _scan_gaussian_result_artifacts(
     observations: dict[str, _LoggedResultObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     candidates = {
         *workspace.rglob("*.log"),
         *workspace.rglob("*.out"),
@@ -1250,7 +1320,7 @@ def _scan_gaussian_result_artifacts(
     for candidate in sorted(candidates):
         if any(
             root in candidate.parents
-            for root in (private_root, host_artifact_root, host_node_root)
+            for root in (private_root, host_artifact_root)
         ):
             continue
         if candidate.is_symlink() or not candidate.is_file():
@@ -1682,6 +1752,7 @@ def _bootstrap_conformance(
     input_artifact: TrustedArtifactRefV1,
     registry_sha256: str,
     live_schema: Any,
+    resources: ExecutionResourceSpecV1 | None = None,
 ) -> tuple[
     tuple[ProgramComponentConformanceReceiptV1, ...],
     tuple[dict[str, Any], ...],
@@ -1699,7 +1770,7 @@ def _bootstrap_conformance(
     server_path = bootstrap_directory / "preview-server.yaml"
     _write_private_exact(
         server_path,
-        _preview_server_profile().encode("utf-8"),
+        _preview_server_profile(resources=resources).encode("utf-8"),
     )
 
     receipts: list[ProgramComponentConformanceReceiptV1] = []
@@ -1756,7 +1827,11 @@ def _bootstrap_conformance(
     return tuple(receipts), tuple(records)
 
 
-def _ensure_preview_server(run_directory: Path) -> Path:
+def _ensure_preview_server(
+    run_directory: Path,
+    *,
+    resources: ExecutionResourceSpecV1 | None = None,
+) -> Path:
     """Materialize the host-selected server used by every safe preview.
 
     Bootstrap conformance already passes this file explicitly.  Normal model
@@ -1770,7 +1845,7 @@ def _ensure_preview_server(run_directory: Path) -> Path:
     server_path = bootstrap_directory / "preview-server.yaml"
     _write_private_exact(
         server_path,
-        _preview_server_profile().encode("utf-8"),
+        _preview_server_profile(resources=resources).encode("utf-8"),
     )
     return server_path
 
@@ -2020,18 +2095,24 @@ def _active_server_program_blocks() -> dict[str, dict[str, Any]]:
     }
 
 
-def _preview_server_profile() -> str:
+def _preview_server_profile(
+    *, resources: ExecutionResourceSpecV1 | None = None
+) -> str:
     """Scheduler-shaped profile for non-submitting run/sub conformance."""
+
+    cores = resources.cores if resources is not None else 4
+    memory_gb = resources.memory_gb if resources is not None else 4
+    gpu_count = resources.gpu_count if resources is not None else 0
 
     return (
         "SERVER:\n"
         "  SCHEDULER: PBS\n"
         "  QUEUE_NAME: preview\n"
         "  NUM_HOURS: 1\n"
-        "  MEM_GB: 4\n"
-        "  NUM_CORES: 4\n"
-        "  NUM_GPUS: 0\n"
-        "  NUM_THREADS: 4\n"
+        f"  MEM_GB: {memory_gb:g}\n"
+        f"  NUM_CORES: {cores}\n"
+        f"  NUM_GPUS: {gpu_count}\n"
+        f"  NUM_THREADS: {cores}\n"
         "  SUBMIT_COMMAND: true\n"
         "  SCRATCH_DIR: null\n"
         "  PROJECT: preview\n"
@@ -2046,6 +2127,38 @@ def _local_program_server_blocks(
 
     if preserve_active:
         active = _active_server_program_blocks()
+        known_provider_labels = {
+            normalize_key_label(label)
+            for labels in DEFAULT_KEY_LABELS.values()
+            for label in labels
+        }
+
+        def is_provider_secret_assignment(line: str) -> bool:
+            match = re.match(
+                r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_-]*)\s*=",
+                line,
+            )
+            if match is None:
+                return False
+            label = normalize_key_label(match.group(1))
+            return label in known_provider_labels or any(
+                token in label for token in PROVIDER_KEY_LABEL_TOKENS.values()
+            )
+
+        for block in active.values():
+            for field in ("ENVARS", "SCRIPTS"):
+                raw = block.get(field)
+                if not isinstance(raw, str):
+                    continue
+                retained = tuple(
+                    line
+                    for line in raw.splitlines()
+                    if not is_provider_secret_assignment(line)
+                )
+                if retained:
+                    block[field] = "\n".join(retained) + "\n"
+                else:
+                    block.pop(field, None)
         pyscf = active.get("PYSCF")
         if pyscf is not None:
             pyscf.setdefault("LOCAL_RUN", True)
@@ -2582,6 +2695,9 @@ def _system_prompt(
         "number and display unit to an exact receipt quantity; the host, not the "
         "model, supplies the value. The host renders the authoritative final numeric "
         "section from that claim record. Report only those host-rendered claim values. "
+        "Keep receipt IDs, digests, and artifact hashes internal unless the user "
+        "explicitly asks for an audit; the public answer should explain the chemistry, "
+        "evidence stage, and limitations rather than reciting bookkeeping. "
         "Never copy a "
         "paper's hidden target value into a tool call, and never replace a required "
         "target-producing calculation or postprocessing step by deleting it from "

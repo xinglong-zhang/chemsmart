@@ -15,8 +15,10 @@ CHEMSMART offers two main execution modes:
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
 The provider-neutral ``chemsmart agent`` command plans through these same
-project loaders and Click commands. It is not a second chemistry execution
-interface; see :doc:`agent-workflows`.
+project loaders and Click commands. ``agent plan`` and ``agent run`` are
+preview-only; ``agent tui`` adds the visible human review and one explicit
+``/approve`` action for release-qualified real execution. See
+:doc:`agent-workflows`.
 
 The basic command structure is:
 
@@ -173,16 +175,16 @@ These options are only available with ``chemsmart sub``:
  Available Commands
 ********************
 
--  ``gaussian``: Run or submit Gaussian jobs
--  ``orca``: Run or submit ORCA jobs
--  ``pyscf``: Run or submit structured PySCF ``sp``, ``opt``, and ``hess`` jobs
--  ``xtb``: Run or submit bounded xTB ``sp``, ``opt``, and ``hess`` jobs
--  ``mol``: Run PyMOL visualization and analysis jobs
--  ``thermochemistry``: Run thermochemistry analysis jobs
--  ``grouper``: Run structure grouping jobs
+Use ``chemsmart run --help`` and ``chemsmart sub --help`` as the live command
+inventory. Both families register Gaussian, ORCA, PySCF, xTB, NCIPLOT,
+molecular/PyMOL operations, pKa and thermochemistry analysis, molecular
+databases, structure grouping, and ITERATE workflows. Program-specific pages
+describe the available leaves and project settings.
 
-Top-level ``chemsmart agent`` additionally exposes ``plan``, ``run``, and
-deterministic approved ``execute`` operations.
+Top-level ``chemsmart agent`` exposes public ``plan``, preview-only ``run``,
+and interactive ``tui`` commands. In the TUI, the human reviews the displayed
+YAML/CLI DAG and enters ``/approve`` once for a real release-qualified run. No
+hash or approval-file token is part of that human interface.
 
 ************
  Next Steps

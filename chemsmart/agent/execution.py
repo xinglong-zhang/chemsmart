@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable, Mapping, Sequence
 
+import numpy as np
+
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
     ContractError,
@@ -1188,6 +1190,7 @@ def build_program_execution_invocation(
     invocation_identity_sha256: str = "",
     auxiliary_input_artifacts: Mapping[str, TrustedArtifactRefV1]
     | None = None,
+    auxiliary_handoffs: Mapping[str, ORCAHessianHandoffV1] | None = None,
 ) -> ProgramExecutionInvocationV1:
     """Resolve a ``node_id`` to an exact invocation using host bindings.
 
@@ -1201,6 +1204,7 @@ def build_program_execution_invocation(
     _require_current_artifact(project_artifact, "project artifact")
     _require_current_artifact(input_artifact, "input artifact")
     auxiliary_input_artifacts = dict(auxiliary_input_artifacts or {})
+    auxiliary_handoffs = dict(auxiliary_handoffs or {})
     auxiliary_input_bindings = tuple(
         AuxiliaryArtifactBindingV1(
             parameter_name=parameter_name,
@@ -1217,7 +1221,39 @@ def build_program_execution_invocation(
             artifact, f"auxiliary input {parameter_name}"
         )
     if auxiliary_input_bindings != node.auxiliary_input_bindings:
-        raise ContractError("auxiliary inputs differ from workflow approval")
+        # A future ORCA Hessian has no bytes at review time.  It is authorized
+        # by the typed producer edge, then checked here against the semantic
+        # handoff selected from the validated TS receipt.
+        future_auxiliary_ok = bool(
+            node.input_mode == "producer"
+            and tuple(auxiliary_input_artifacts) == ("hess_filename",)
+            and tuple(auxiliary_handoffs) == ("hess_filename",)
+        )
+        if future_auxiliary_ok:
+            artifact = auxiliary_input_artifacts["hess_filename"]
+            auxiliary_handoff = auxiliary_handoffs["hess_filename"]
+            matching_edges = tuple(
+                edge
+                for edge in approval.producer_edges
+                if edge.consumer_node_id == node.node_id
+                and edge.artifact_kind == "orca_hessian"
+                and edge.selection_rule
+                == "validated_final_orca_ts_hessian"
+            )
+            future_auxiliary_ok = bool(
+                len(matching_edges) == 1
+                and auxiliary_handoff.producer_edge_sha256
+                == matching_edges[0].edge_sha256
+                and auxiliary_handoff.consumer_node_id == node.node_id
+                and auxiliary_handoff.selected_artifact_id
+                == artifact.artifact_id
+                and auxiliary_handoff.selected_artifact_sha256
+                == artifact.sha256
+                and auxiliary_handoff.consumer_state
+                == (node.charge, node.multiplicity)
+            )
+        if not future_auxiliary_ok:
+            raise ContractError("auxiliary inputs differ from workflow approval")
     if resources.resource_sha256 != approval.resource_sha256:
         raise ContractError("resources differ from workflow approval")
     if project_artifact.sha256 != node.project_artifact_sha256:
@@ -1931,6 +1967,91 @@ class OptimizedGeometryHandoffV1:
             return self.charge, self.multiplicity
         return self.consumer_charge, self.consumer_multiplicity
 
+    @property
+    def selected_artifact_id(self) -> str:
+        return self.geometry_artifact_id
+
+    @property
+    def selected_artifact_sha256(self) -> str:
+        return self.geometry_artifact_sha256
+
+
+@dataclass(frozen=True)
+class ORCAHessianHandoffV1:
+    """Unique final TS Hessian selected by scientific content.
+
+    ORCA may leave more than one ``.hess`` file during an OptTS calculation.
+    The suffix is not a semantic role: this record binds the Hessian whose
+    atoms and frequencies agree with the validated final TS result.
+    """
+
+    schema_version: str
+    producer_node_id: str
+    consumer_node_id: str
+    producer_edge_sha256: str
+    producer_execution_receipt_sha256: str
+    result_artifact_id: str
+    result_artifact_sha256: str
+    hessian_artifact_id: str
+    hessian_artifact_sha256: str
+    atom_count: int
+    symbols: tuple[str, ...]
+    positions_sha256: str
+    frequencies_sha256: str
+    charge: int
+    multiplicity: int
+    consequential_imaginary_mode_count: int
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.orca-hessian-handoff.v1":
+            raise ContractError("unsupported ORCA Hessian handoff")
+        require_identifier(self.producer_node_id, "producer_node_id")
+        require_identifier(self.consumer_node_id, "consumer_node_id")
+        for name, digest in (
+            ("producer_edge_sha256", self.producer_edge_sha256),
+            (
+                "producer_execution_receipt_sha256",
+                self.producer_execution_receipt_sha256,
+            ),
+            ("result_artifact_sha256", self.result_artifact_sha256),
+            ("hessian_artifact_sha256", self.hessian_artifact_sha256),
+            ("positions_sha256", self.positions_sha256),
+            ("frequencies_sha256", self.frequencies_sha256),
+        ):
+            require_sha256(digest, name)
+        if not self.result_artifact_id or not self.hessian_artifact_id:
+            raise ContractError("ORCA Hessian handoff artifact IDs are empty")
+        if self.atom_count < 1 or self.atom_count != len(self.symbols):
+            raise ContractError("ORCA Hessian atom count differs from symbols")
+        _require_nonempty_rows(self.symbols, "symbols")
+        if self.multiplicity < 1:
+            raise ContractError("ORCA Hessian multiplicity must be positive")
+        if self.consequential_imaginary_mode_count != 1:
+            raise ContractError("final TS Hessian requires one imaginary mode")
+        if self.status != "validated_handoff":
+            raise ContractError("ORCA Hessian handoff must be validated")
+        body = {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "receipt_sha256"
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("ORCA Hessian handoff digest mismatch")
+
+    @property
+    def consumer_state(self) -> tuple[int, int]:
+        return self.charge, self.multiplicity
+
+    @property
+    def selected_artifact_id(self) -> str:
+        return self.hessian_artifact_id
+
+    @property
+    def selected_artifact_sha256(self) -> str:
+        return self.hessian_artifact_sha256
+
 
 def _handoff_consumer_fields(
     *,
@@ -2423,6 +2544,310 @@ def handoff_optimized_native_geometry(
 
 
 @dataclass(frozen=True)
+class _ParsedORCAHessian:
+    dimension: int
+    matrix: np.ndarray
+    symbols: tuple[str, ...]
+    positions_bohr: np.ndarray
+    frequencies_cm1: tuple[float, ...]
+
+
+def _orca_hessian_sections(path: Path) -> dict[str, tuple[str, ...]]:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="strict").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise ContractError("ORCA Hessian is not readable text") from exc
+    sections: dict[str, list[str]] = {}
+    active = ""
+    for raw_line in lines:
+        line = raw_line.strip()
+        if line.startswith("$"):
+            active = line.casefold()
+            if active in sections:
+                raise ContractError("ORCA Hessian repeats a required section")
+            sections[active] = []
+            continue
+        if active:
+            sections[active].append(raw_line)
+    return {name: tuple(values) for name, values in sections.items()}
+
+
+def _nonempty_section_lines(
+    sections: Mapping[str, tuple[str, ...]], name: str
+) -> list[str]:
+    values = sections.get(name)
+    if values is None:
+        raise ContractError(f"ORCA Hessian lacks {name}")
+    return [line.strip() for line in values if line.strip()]
+
+
+def _parse_orca_hessian(path: Path) -> _ParsedORCAHessian:
+    """Parse the native Hessian, atoms and frequency blocks fail-closed."""
+
+    sections = _orca_hessian_sections(path)
+    hessian_lines = _nonempty_section_lines(sections, "$hessian")
+    try:
+        dimension = int(hessian_lines[0])
+    except (IndexError, ValueError) as exc:
+        raise ContractError("ORCA Hessian dimension is invalid") from exc
+    if dimension < 3:
+        raise ContractError("ORCA Hessian dimension is too small")
+    matrix = np.full((dimension, dimension), np.nan, dtype=float)
+    cursor = 1
+    try:
+        while cursor < len(hessian_lines):
+            columns = tuple(int(value) for value in hessian_lines[cursor].split())
+            cursor += 1
+            if not columns or any(
+                column < 0 or column >= dimension for column in columns
+            ):
+                raise ValueError
+            for _ in range(dimension):
+                row = hessian_lines[cursor].split()
+                cursor += 1
+                row_index = int(row[0])
+                values = tuple(float(value) for value in row[1:])
+                if (
+                    row_index < 0
+                    or row_index >= dimension
+                    or len(values) != len(columns)
+                ):
+                    raise ValueError
+                matrix[row_index, columns] = values
+    except (IndexError, ValueError) as exc:
+        raise ContractError("ORCA Hessian matrix is malformed") from exc
+    if not np.isfinite(matrix).all():
+        raise ContractError("ORCA Hessian matrix is incomplete or non-finite")
+    if not np.allclose(matrix, matrix.T, rtol=1e-9, atol=1e-10):
+        raise ContractError("ORCA Hessian matrix is not symmetric")
+
+    atom_lines = _nonempty_section_lines(sections, "$atoms")
+    frequency_lines = _nonempty_section_lines(
+        sections, "$vibrational_frequencies"
+    )
+    try:
+        atom_count = int(atom_lines[0])
+        frequency_count = int(frequency_lines[0])
+        atom_rows = tuple(line.split() for line in atom_lines[1:])
+        frequency_rows = tuple(line.split() for line in frequency_lines[1:])
+        if len(atom_rows) != atom_count or len(frequency_rows) != frequency_count:
+            raise ValueError
+        symbols = tuple(row[0] for row in atom_rows)
+        positions_bohr = np.asarray(
+            [[float(value) for value in row[2:5]] for row in atom_rows],
+            dtype=float,
+        )
+        frequencies = tuple(float(row[1]) for row in frequency_rows)
+        if any(int(row[0]) != index for index, row in enumerate(frequency_rows)):
+            raise ValueError
+    except (IndexError, TypeError, ValueError) as exc:
+        raise ContractError("ORCA Hessian atoms or frequencies are malformed") from exc
+    if dimension != 3 * atom_count or frequency_count != dimension:
+        raise ContractError("ORCA Hessian blocks do not have finite 3N shape")
+    if positions_bohr.shape != (atom_count, 3) or not np.isfinite(
+        positions_bohr
+    ).all():
+        raise ContractError("ORCA Hessian atom coordinates are non-finite")
+    if not all(math.isfinite(value) for value in frequencies):
+        raise ContractError("ORCA Hessian frequencies are non-finite")
+    return _ParsedORCAHessian(
+        dimension=dimension,
+        matrix=matrix,
+        symbols=symbols,
+        positions_bohr=positions_bohr,
+        frequencies_cm1=frequencies,
+    )
+
+
+def _same_orca_geometry_up_to_rotation(
+    positions_bohr: np.ndarray, positions_angstrom: np.ndarray
+) -> bool:
+    """Compare one atom-ordered frame while permitting ORCA rigid rotation."""
+
+    from ase import units
+
+    candidate = positions_bohr * float(units.Bohr)
+    reference = np.asarray(positions_angstrom, dtype=float)
+    if candidate.shape != reference.shape or candidate.ndim != 2:
+        return False
+    candidate_centered = candidate - candidate.mean(axis=0)
+    reference_centered = reference - reference.mean(axis=0)
+    try:
+        left, _singular, right = np.linalg.svd(
+            candidate_centered.T @ reference_centered
+        )
+    except np.linalg.LinAlgError:
+        return False
+    rotation = left @ right
+    if np.linalg.det(rotation) < 0:
+        left[:, -1] *= -1
+        rotation = left @ right
+    aligned = candidate_centered @ rotation
+    # ORCA's output geometry is printed to 1e-6 Angstrom, whereas $atoms
+    # retains substantially more digits in Bohr.  This tolerance covers only
+    # that presentation precision, not a changed molecular geometry.
+    return bool(np.max(np.abs(aligned - reference_centered)) <= 2.0e-6)
+
+
+def handoff_final_orca_ts_hessian(
+    *,
+    producer_receipt: ProgramExecutionReceiptV1,
+    result_artifact: TrustedArtifactRefV1,
+    hessian_candidates: Sequence[TrustedArtifactRefV1],
+    producer_edge: ProducerEdgeRuleV1,
+    approved_workspace: str | Path,
+    hessian_artifact_id: str,
+    expected_charge: int,
+    expected_multiplicity: int,
+    imaginary_mode_cutoff_cm1: float = 20.0,
+) -> tuple[TrustedArtifactRefV1, ORCAHessianHandoffV1]:
+    """Select the unique Hessian belonging to a validated final ORCA TS.
+
+    Selection uses the native scientific content.  A numbered filename is
+    never assumed to mean initial or final.
+    """
+
+    if not producer_receipt.validated:
+        raise ContractError("ORCA TS Hessian requires a validated producer")
+    if producer_receipt.node_id != producer_edge.producer_node_id:
+        raise ContractError("ORCA Hessian receipt differs from producer edge")
+    if producer_edge.selection_rule != "validated_final_orca_ts_hessian":
+        raise ContractError("unsupported ORCA Hessian selection rule")
+    if producer_edge.artifact_kind != "orca_hessian":
+        raise ContractError("ORCA Hessian edge has the wrong artifact class")
+    source = _require_current_artifact(result_artifact, "ORCA TS output")
+    if result_artifact.kind != "orca_output" or not any(
+        item.artifact_id == result_artifact.artifact_id
+        and item.sha256 == result_artifact.sha256
+        for item in producer_receipt.output_artifacts
+    ):
+        raise ContractError("ORCA TS output is not bound to the producer")
+    try:
+        from chemsmart.io.orca.output import ORCAOutput
+
+        output = ORCAOutput(str(source))
+        if (
+            not output.normal_termination
+            or output.converged is not True
+            or str(output.jobtype or "").casefold() != "ts"
+        ):
+            raise ContractError("ORCA output is not a converged final TS")
+        if (output.charge, output.multiplicity) != (
+            int(expected_charge),
+            int(expected_multiplicity),
+        ):
+            raise ContractError("ORCA TS state differs from approval")
+        final_symbols = tuple(str(value) for value in output.molecule.chemical_symbols)
+        final_positions = np.asarray(output.molecule.positions, dtype=float)
+        final_frequencies = tuple(
+            float(value) for value in (output.all_vibrational_frequencies or ())
+        )
+    except ContractError:
+        raise
+    except (AttributeError, IndexError, OSError, TypeError, ValueError) as exc:
+        raise ContractError("ORCA final TS output is unreadable") from exc
+    if not final_frequencies or not np.isfinite(final_positions).all():
+        raise ContractError("ORCA final TS lacks geometry or frequencies")
+
+    consequential = tuple(
+        value
+        for value in final_frequencies
+        if value < -abs(float(imaginary_mode_cutoff_cm1))
+    )
+    if len(consequential) != 1:
+        raise ContractError("ORCA final TS does not have one imaginary mode")
+
+    matches: list[tuple[TrustedArtifactRefV1, _ParsedORCAHessian]] = []
+    for candidate in hessian_candidates:
+        if candidate.kind != "orca_hessian" or not any(
+            item.artifact_id == candidate.artifact_id
+            and item.sha256 == candidate.sha256
+            for item in producer_receipt.output_artifacts
+        ):
+            continue
+        path = _require_current_artifact(candidate, "ORCA Hessian candidate")
+        try:
+            parsed = _parse_orca_hessian(path)
+        except ContractError:
+            continue
+        if parsed.symbols != final_symbols or not _same_orca_geometry_up_to_rotation(
+            parsed.positions_bohr, final_positions
+        ):
+            continue
+        if len(parsed.frequencies_cm1) != len(final_frequencies) or any(
+            abs(observed - expected) > 0.02
+            for observed, expected in zip(
+                parsed.frequencies_cm1, final_frequencies
+            )
+        ):
+            continue
+        if (
+            sum(
+                value < -abs(float(imaginary_mode_cutoff_cm1))
+                for value in parsed.frequencies_cm1
+            )
+            != 1
+        ):
+            continue
+        matches.append((candidate, parsed))
+    if len(matches) != 1:
+        raise ContractError(
+            "ORCA final TS Hessian selection is not unique: "
+            f"{len(matches)} semantic matches among {len(hessian_candidates)} candidates"
+        )
+    candidate, parsed = matches[0]
+    candidate_path = _require_current_artifact(
+        candidate, "selected ORCA Hessian"
+    )
+    payload = candidate_path.read_bytes()
+    target = _target_below(
+        _absolute_workspace(approved_workspace),
+        "artifacts",
+        f"{producer_edge.producer_node_id}--{producer_edge.consumer_node_id}.hess",
+    )
+    _write_exact_once(target, payload)
+    artifact = TrustedArtifactRefV1(
+        artifact_id=require_identifier(hessian_artifact_id, "artifact_id"),
+        kind="orca_hessian",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    positions_sha256 = canonical_sha256(
+        {
+            "symbols": parsed.symbols,
+            "positions_bohr": parsed.positions_bohr.tolist(),
+        }
+    )
+    frequencies_sha256 = canonical_sha256(
+        {"frequencies_cm1": parsed.frequencies_cm1}
+    )
+    body = {
+        "schema_version": "chemsmart.orca-hessian-handoff.v1",
+        "producer_node_id": producer_edge.producer_node_id,
+        "consumer_node_id": producer_edge.consumer_node_id,
+        "producer_edge_sha256": producer_edge.edge_sha256,
+        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
+        "result_artifact_id": result_artifact.artifact_id,
+        "result_artifact_sha256": result_artifact.sha256,
+        "hessian_artifact_id": artifact.artifact_id,
+        "hessian_artifact_sha256": artifact.sha256,
+        "atom_count": len(parsed.symbols),
+        "symbols": parsed.symbols,
+        "positions_sha256": positions_sha256,
+        "frequencies_sha256": frequencies_sha256,
+        "charge": int(output.charge),
+        "multiplicity": int(output.multiplicity),
+        "consequential_imaginary_mode_count": 1,
+        "status": "validated_handoff",
+    }
+    return artifact, ORCAHessianHandoffV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
 class FrozenMaterializedNodePreviewV1:
     """Exact green preview admitted for one currently executable node."""
 
@@ -2578,12 +3003,15 @@ def _frozen_producer_edge_rule(
     *,
     environment_receipt_sha256: str,
 ) -> FrozenProducerEdgeRuleV1:
-    if not is_validated_optimized_geometry_edge(plan, edge):
+    if is_validated_optimized_geometry_edge(plan, edge):
+        selection_rule = "validated_optimized_geometry"
+    elif is_validated_orca_ts_hessian_edge(plan, edge):
+        selection_rule = "validated_final_orca_ts_hessian"
+    else:
         raise ContractError(
             "future data edge has no registered exact artifact selection rule: "
-            "validated optimized-geometry selection requires an opt or ts "
-            "producer, a geometry_xyz edge, and producer_output_id "
-            "'optimized_geometry'"
+            "supported edges are an opt/ts geometry_xyz input or an ORCA TS "
+            "orca_hessian input to an IRC hess_filename role"
         )
     body = {
         "schema_version": "chemsmart.frozen-producer-edge-rule.v1",
@@ -2593,7 +3021,7 @@ def _frozen_producer_edge_rule(
         "artifact_class": edge.artifact_class,
         "producer_output_id": edge.producer_output_id,
         "consumer_input_id": edge.consumer_input_id,
-        "selection_rule": "validated_optimized_geometry",
+        "selection_rule": selection_rule,
         "environment_receipt_sha256": require_sha256(
             environment_receipt_sha256,
             "environment_receipt_sha256",
@@ -2616,9 +3044,13 @@ def is_validated_optimized_geometry_edge(
     was consequently rejected even though the producer output was named
     exactly and the same native handoff path supports both stages.
 
-    Keep the accepted output name semantic rather than punctuation-sensitive:
-    historical plans use both ``optimized-geometry`` and
-    ``optimized_geometry``.  No other output is guessed to be a geometry.
+    The output identifier is a workflow-local presentation label.  It does
+    not select a native file: ChemSmart's registered rule below selects the
+    validated final geometry from an ``opt`` or ``ts`` result.  Requiring the
+    model to repeat the literal ``optimized_geometry`` in that local label or
+    observable list created a second authority over the typed stage and edge.
+    The scientific meaning is therefore established by the producer stage and
+    ``geometry_xyz`` artifact class alone.
     """
 
     if edge.edge_kind != "data" or edge.artifact_class != "geometry_xyz":
@@ -2631,11 +3063,36 @@ def is_validated_optimized_geometry_edge(
         ),
         None,
     )
+    return bool(source is not None and source.stage in {"opt", "ts"})
+
+
+def is_validated_orca_ts_hessian_edge(
+    plan: ScientificWorkflowPlanV2,
+    edge: ScientificWorkflowEdgeV2,
+) -> bool:
+    """Whether an edge requests the native Hessian of a final ORCA TS."""
+
+    if (
+        edge.edge_kind != "data"
+        or edge.artifact_class != "orca_hessian"
+        or edge.consumer_input_id != "hess_filename"
+    ):
+        return False
+    source = next(
+        (node for node in plan.nodes if node.node_id == edge.source_node_id),
+        None,
+    )
+    target = next(
+        (node for node in plan.nodes if node.node_id == edge.target_node_id),
+        None,
+    )
     return bool(
         source is not None
-        and source.stage in {"opt", "ts"}
-        and edge.producer_output_id.replace("-", "_")
-        == "optimized_geometry"
+        and target is not None
+        and source.program == "orca"
+        and source.stage == "ts"
+        and target.program == "orca"
+        and target.stage == "irc"
     )
 
 
@@ -3137,7 +3594,11 @@ def environment_review_summary(receipt: Any) -> dict[str, Any]:
         ),
         "observation_method": getattr(receipt, "observation_method", ""),
     }
-    return path_free_review_record(summary)
+    # Reviews cross a JSON boundary before the provider-free executor reloads
+    # them.  Normalize tuples here as JSON arrays so the review builder and
+    # the execution-time comparison see the same value shape as well as the
+    # same scientific environment facts.
+    return canonical_data(path_free_review_record(summary))
 
 
 def build_real_execution_argv(
@@ -4009,11 +4470,11 @@ def build_validated_data_edge_binding(
     producer_edge: ProducerEdgeRuleV1,
     producer_invocation: ProgramExecutionInvocationV1,
     producer_receipt: ProgramExecutionReceiptV1,
-    handoff: OptimizedGeometryHandoffV1,
+    handoff: OptimizedGeometryHandoffV1 | ORCAHessianHandoffV1,
     producer_scientific_identity_sha256: str,
     consumer_scientific_identity_sha256: str,
 ) -> ValidatedDataEdgeBindingV1:
-    """Bind one optimized frame to its exact plan edge and validated producer."""
+    """Bind one semantically selected producer artifact to its DAG edge."""
 
     if not approval.execution_admissible:
         raise ContractError("legacy frozen approval cannot admit data edges")
@@ -4043,7 +4504,7 @@ def build_validated_data_edge_binding(
         rule.selection_rule,
     )
     if observed_roles != expected_roles:
-        raise ContractError("optimized handoff differs from frozen data edge")
+        raise ContractError("producer handoff differs from frozen data edge")
     if (
         handoff.producer_edge_sha256 != producer_edge.edge_sha256
         or handoff.producer_execution_receipt_sha256
@@ -4051,7 +4512,7 @@ def build_validated_data_edge_binding(
         or handoff.producer_node_id != rule.source_node_id
         or handoff.consumer_node_id != rule.target_node_id
     ):
-        raise ContractError("optimized handoff identity differs from producer")
+        raise ContractError("producer handoff identity differs from producer")
     if not producer_receipt.validated or (
         producer_receipt.node_id != rule.source_node_id
     ):
@@ -4106,8 +4567,8 @@ def build_validated_data_edge_binding(
         ),
         "source_artifact_id": handoff.result_artifact_id,
         "source_artifact_sha256": handoff.result_artifact_sha256,
-        "selected_artifact_id": handoff.geometry_artifact_id,
-        "selected_artifact_sha256": handoff.geometry_artifact_sha256,
+        "selected_artifact_id": handoff.selected_artifact_id,
+        "selected_artifact_sha256": handoff.selected_artifact_sha256,
         "producer_scientific_identity_sha256": (
             producer_scientific_identity_sha256
         ),
@@ -4610,6 +5071,7 @@ __all__ = [
     "FrozenMaterializedNodePreviewV1",
     "FrozenProducerEdgeRuleV1",
     "FrozenWorkflowApprovalV1",
+    "ORCAHessianHandoffV1",
     "OptimizedGeometryHandoffV1",
     "ProducerEdgeRuleV1",
     "ProgramConformanceProbeV1",
@@ -4653,6 +5115,8 @@ __all__ = [
     "handoff_optimized_native_geometry",
     "handoff_optimized_pyscf_geometry",
     "handoff_optimized_xtb_geometry",
+    "handoff_final_orca_ts_hessian",
+    "is_validated_orca_ts_hessian_edge",
     "is_validated_optimized_geometry_edge",
     "execution_path_placeholder",
     "execution_server_profile_sha256",

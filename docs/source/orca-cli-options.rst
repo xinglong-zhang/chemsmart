@@ -5,13 +5,21 @@
 This page documents the CLI options available for all ORCA jobs. Use ``chemsmart sub orca --help`` for the complete
 list.
 
+The version-3.1.4 Agent can plan and safely preview ORCA ``sp``, ``opt``,
+``ts``, ``irc``, ``td``, and ``neb`` workflows. Release-qualified CPU
+execution covers single-points, optimization/frequency, transition-state,
+excited-state, and serial producer-to-consumer DAGs. ``irc`` and ``neb`` still
+require qualification on the selected target before being described as a
+completed Agent execution path.
+
 *************************
  Basic Command Structure
 *************************
 
 .. code:: bash
 
-   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
+   chemsmart run [RUN_OPTIONS] orca [ORCA_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
+   chemsmart sub [SUB_OPTIONS] orca [ORCA_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
 .. tip::
 
@@ -131,6 +139,42 @@ Method and Basis Set Options
    -  -  ``-e, --extrapolation-basis``
       -  string
       -  Extrapolation basis set
+
+Project-controlled correlated-method settings
+==============================================
+
+Several ORCA controls belong in project YAML even when they have no shared CLI
+flag.  This keeps the electronic-structure rationale visible and reusable:
+
+.. code:: yaml
+
+   solv:
+     ab_initio: MP2
+     basis: aug-cc-pVTZ
+     aux_basis: aug-cc-pVTZ/C
+     reference: UHF
+     ri_approximation: RI
+     frozen_core: fc_electrons
+     frozen_core_electrons: 2
+     scf_tol: TightSCF
+     freq: false
+
+``reference`` accepts ``rhf``, ``rohf``, or ``uhf``;
+``ri_approximation`` accepts ``none``, ``ri``, ``rijcosx``, or ``rijk``; and
+``frozen_core`` accepts ``fc_electrons``, ``fc_ewin``, or ``fc_none``.
+``frozen_core_electrons`` is meaningful only with ``fc_electrons``.
+``mdci_cutoff`` accepts ``loose``, ``normal``, or ``tight`` for local
+correlation methods.
+
+For MP2, ``ri_approximation: ri`` together with a matching ``/C`` auxiliary
+basis materializes as ORCA ``RI-MP2``. ChemSmart does not also emit bare
+``RI``: that keyword controls RI-J in the reference SCF and would require a
+separate exchange treatment and Coulomb/exchange fitting basis.
+
+A bare ORCA project does not request frequencies. Set ``freq: true`` explicitly
+when an optimization or fixed-geometry calculation must produce vibrational
+evidence. ChemSmart then treats those frequencies as outputs of that same node
+rather than scheduling a duplicate Hessian automatically.
 
 SCF and Grid Options
 ====================

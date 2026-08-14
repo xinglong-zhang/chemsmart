@@ -43,16 +43,18 @@ Organometallic complexes present several challenges when read from ChemDraw file
 -  ChemDraw can store aromatic ligands (e.g. Cp, benzene) as **separate fragments** that need to be combined with the
    metal fragment before 3D coordinates can be generated.
 
-CHEMSMART handles all of these cases automatically. However, as much as our codes try to generate the right structures,
-some complicated organometallic complexes with unusal ligands may not be interpreted perfectly based on chemdraw
-drawings.
+CHEMSMART handles these cases automatically, but difficult organometallic
+complexes with unusual ligands can remain ambiguous in a two-dimensional
+ChemDraw representation. Always inspect the generated three-dimensional
+starting geometry and electronic state before a calculation.
 
 *********************************
  Supported Organometallic Inputs
 *********************************
 
-The following types of organometallic complexes drawn in ChemDraw are supported (other types may be supported but have
-not been rigorously tested):
+The following organometallic drawing patterns have dedicated handling. Other
+patterns may still be read, but should be treated as general initial-geometry
+conversion rather than as a documented hapticity reconstruction:
 
 -  Transition-metal complexes with **η5-cyclopentadienyl (Cp)** ligands, including **Cp\***
    (pentamethylcyclopentadienyl)
@@ -171,8 +173,8 @@ CHEMSMART applies the following pipeline when reading ChemDraw files containing 
  Extracting Ring-Ligand Structures
 ***********************************
 
-The sections below show concrete examples of how to extract and use 3D structures from ChemDraw files that contain ring
-ligands. These are the structures that we have used for testing our codes.
+The sections below show concrete ways to extract and use three-dimensional
+starting structures from ChemDraw files containing ring ligands.
 
 Titanocene Dimethyl (TiCp₂Me₂)
 ==============================

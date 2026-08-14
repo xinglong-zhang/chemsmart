@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from typing import TYPE_CHECKING, Callable
 
@@ -10,20 +11,17 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import Input, RichLog, Static
 
 if TYPE_CHECKING:
+    from chemsmart.agent.execution import WorkflowExecutionReviewV1
     from chemsmart.agent.executor import WorkflowExecutionResultV1
     from chemsmart.agent.live_session import LiveAgentSessionResultV1
 
-from .approval import (
-    ReviewedExecutionApprovalV1,
-    ReviewedExecutionReviewV1,
-)
 from .controller import AgentTuiController, AgentTuiPhase
 from .presentation import session_evidence_blocks
 
@@ -33,21 +31,43 @@ Enter a scientific request to create a project-YAML/CLI plan and safe preview.
 
 Commands:
   /capabilities             show the live Agent program/engine/job surface
-  /request PATH             review an inert approval-request artifact
-  /approve ACTOR OUTPUT     approve this exact review once and write a bundle
-  /approval PATH            bind an approval produced by CLI or another UI
-  /execute SHA256 RUN_DIR   execute only after retyping its full file digest
-  /deny ACTOR               deny an unapproved review
-  /revise ACTOR             request revision of an unapproved review
-  /quit-review ACTOR        record quit without exiting the TUI
+  /approve                  approve the displayed ChemSmart workflow and run
+  /deny                     decline the displayed workflow
+  /revise                   decline it and enter a revised scientific request
   /status                   show the current task and evidence bindings
   /help                     show this guide
   /quit                     exit
 
-Only these explicit human commands can resolve a review. The provider/runtime
-cannot grant itself authority. Approval and execution remain separate acts;
-execution uses the deterministic executor and makes no provider call.
+The provider/runtime cannot grant itself authority. The single /approve action
+ends planning authority and starts the displayed YAML/CLI DAG through the
+provider-free ChemSmart executor. Internal receipts remain provenance; no hash
+or approval-file token is required from the human.
 """
+
+
+_RECEIPT_PLACEHOLDER = re.compile(
+    r"<(?P<role>[a-z0-9-]+):sha256=[0-9a-f]{64}>"
+)
+
+
+def _human_cli_operation(argv: tuple[str, ...]) -> str:
+    """Show ChemSmart input roles without exposing receipt bookkeeping."""
+
+    return " ".join(
+        _RECEIPT_PLACEHOLDER.sub(r"<\g<role>>", token) for token in argv
+    )
+
+
+class ScientificRequestInput(Input):
+    """Single composer that preserves a pasted multi-line scientific task."""
+
+    def _on_paste(self, event: events.Paste) -> None:
+        text = " ".join(
+            line.strip() for line in event.text.splitlines() if line.strip()
+        )
+        if text:
+            self.insert_text_at_cursor(text)
+        event.stop()
 
 
 class ChemSmartAgentApp(App[None]):
@@ -80,14 +100,14 @@ class ChemSmartAgentApp(App[None]):
                 highlight=False,
                 max_lines=4000,
             )
-            yield Input(
+            yield ScientificRequestInput(
                 placeholder=(
                     "Describe a calculation, or type /help for the approval chain"
                 ),
                 id="composer",
             )
             yield Static(
-                "Enter plan · /request review · /approval bind · /execute confirm",
+                "Enter plan · review YAML/CLI DAG · /approve once to run",
                 id="footer",
             )
 
@@ -97,8 +117,8 @@ class ChemSmartAgentApp(App[None]):
                 "## Ready\n\n"
                 "ChemSmart turns scientific intent into canonical project YAML, "
                 "compiled CLI operations, and a safe preview. A calculation "
-                "runs only after an exact request is reviewed, an external "
-                "user approval is bound, and its SHA-256 is confirmed."
+                "runs only after the displayed scientific workflow is reviewed "
+                "and the human enters /approve."
             )
         )
         self._sync_phase("Ready for a scientific request")
@@ -135,13 +155,9 @@ class ChemSmartAgentApp(App[None]):
             "/help": self._show_help,
             "/status": self._show_status,
             "/capabilities": self._show_capabilities,
-            "/request": self._review_request,
             "/approve": self._approve,
-            "/approval": self._bind_approval,
-            "/execute": self._execute,
             "/deny": self._deny,
             "/revise": self._revise,
-            "/quit-review": self._quit_review,
             "/quit": self._quit,
             "/exit": self._quit,
         }
@@ -167,20 +183,18 @@ class ChemSmartAgentApp(App[None]):
         table.add_row("phase", self.controller.phase.value)
         table.add_row("workspace", str(self.controller.config.workspace))
         table.add_row("task", self.controller.task or "not planned")
-        result = self.controller.plan_result
+        prepared = self.controller.prepared_execution
         table.add_row(
-            "task spec",
-            result.task_spec_sha256 if result is not None else "not available",
+            "workflow",
+            prepared.scientific_plan.workflow_id
+            if prepared is not None
+            else "not awaiting approval",
         )
-        request = self.controller.reviewed_review
         table.add_row(
-            "review",
-            request.review.review_sha256 if request else "not reviewed",
-        )
-        approval = self.controller.reviewed_approval
-        table.add_row(
-            "approval file",
-            approval.artifact_sha256 if approval else "not bound",
+            "authority",
+            "human /approve required"
+            if prepared is not None
+            else "none pending",
         )
         self._write(table)
 
@@ -210,124 +224,50 @@ class ChemSmartAgentApp(App[None]):
         self._write(
             "Execution support is a product path, not proof that this host is "
             "ready. Planning must still observe the selected program "
-            "environment, complete safe preview, and produce an exact review."
-        )
-
-    def _review_request(self, tail: list[str]) -> None:
-        if len(tail) != 1:
-            self._usage("usage: /request PATH")
-            return
-        try:
-            reviewed = self.controller.review_request(tail[0])
-        except Exception as exc:
-            self._operation_failed("Approval request", exc)
-            return
-        self._present_request(reviewed)
-        self._sync_phase("Request reviewed; create approval outside the TUI")
-
-    def _bind_approval(self, tail: list[str]) -> None:
-        if len(tail) != 1:
-            self._usage("usage: /approval PATH")
-            return
-        try:
-            reviewed = self.controller.bind_approval(tail[0])
-        except Exception as exc:
-            self._operation_failed("Execution approval", exc)
-            return
-        self._present_approval(reviewed)
-        self._sync_phase(
-            "Approval bound; retype full file SHA-256 with /execute to run"
+            "environment, complete safe preview, and present a ChemSmart "
+            "workflow for human review."
         )
 
     def _approve(self, tail: list[str]) -> None:
-        if len(tail) != 2:
-            self._usage("usage: /approve ACTOR OUTPUT_PATH")
-            return
-        actor, output = tail
-        try:
-            resolution, reviewed = self.controller.resolve_review(
-                decision="approve",
-                actor=actor,
-                output_file=output,
-            )
-        except Exception as exc:
-            self._operation_failed("Approval", exc)
-            return
-        if reviewed is None:  # pragma: no cover - contract narrows this
-            self._operation_failed(
-                "Approval", RuntimeError("approval bundle was not created")
-            )
+        if tail:
+            self._usage("/approve takes no arguments")
             return
         self._write(
             Panel(
-                f"actor: {resolution.actor}\n"
-                f"decision: {resolution.decision}\n"
-                f"resolution SHA-256: {resolution.resolution_sha256}",
-                title="Human decision recorded",
+                "The human approved the displayed molecule, project YAML, "
+                "CLI operations, DAG, observed execution environments and "
+                "resource limits. The provider is "
+                "disconnected before any engine launch.",
+                title="Approve and run",
                 border_style="red",
             )
         )
-        self._present_approval(reviewed)
-        self._sync_phase(
-            "One-shot approval created; retype its full file SHA-256 to execute"
-        )
-
-    def _execute(self, tail: list[str]) -> None:
-        if len(tail) != 2:
-            self._usage("usage: /execute APPROVAL_SHA256 RUN_DIRECTORY")
-            return
         self._busy = True
-        self._sync_phase("Executing exact approved DAG; provider disconnected")
-        self._run_execution(tail[0], tail[1])
+        self._sync_phase("Executing the approved ChemSmart DAG")
+        self._run_execution()
 
     def _deny(self, tail: list[str]) -> None:
-        if len(tail) != 1:
-            self._usage("usage: /deny ACTOR")
+        if tail:
+            self._usage("/deny takes no arguments")
             return
-        self._resolve_without_grant("deny", tail[0])
+        self._decline_review("denied")
 
     def _revise(self, tail: list[str]) -> None:
-        if len(tail) != 1:
-            self._usage("usage: /revise ACTOR")
+        if tail:
+            self._usage("/revise takes no arguments")
             return
-        self._resolve_without_grant("revise", tail[0])
+        self._decline_review("revision requested")
 
-    def _quit_review(self, tail: list[str]) -> None:
-        if len(tail) != 1:
-            self._usage("usage: /quit-review ACTOR")
-            return
-        self._resolve_without_grant("quit", tail[0])
-
-    def _resolve_without_grant(self, decision: str, actor: str) -> None:
-        if self.controller.reviewed_approval is not None:
-            self._operation_failed(
-                "Review decision",
-                RuntimeError(
-                    "an approval bundle has already been written and cannot "
-                    "be revoked by this TUI; do not execute it, or finish a "
-                    "new revised review"
-                ),
-            )
-            return
-        try:
-            resolution, _reviewed = self.controller.resolve_review(
-                decision=decision,
-                actor=actor,
-            )
-        except Exception as exc:
-            self._operation_failed("Review decision", exc)
-            return
+    def _decline_review(self, decision: str) -> None:
+        self.controller.decline()
         self._write(
             Panel(
-                f"actor: {resolution.actor}\n"
-                f"decision: {resolution.decision}\n"
-                f"resolution SHA-256: {resolution.resolution_sha256}\n"
-                "No execution approval was created.",
-                title="Human decision recorded",
+                f"Human decision: {decision}. No chemistry engine was launched.",
+                title="Workflow not executed",
                 border_style="yellow",
             )
         )
-        self._sync_phase("Decision recorded; this review created no authority")
+        self._sync_phase("Enter a revised scientific request when ready")
 
     def _quit(self, tail: list[str]) -> None:
         if tail:
@@ -351,12 +291,9 @@ class ChemSmartAgentApp(App[None]):
         self.call_from_thread(self._plan_finished, result)
 
     @work(thread=True, exclusive=True, group="agent-operation")
-    def _run_execution(self, digest: str, run_directory: str) -> None:
+    def _run_execution(self) -> None:
         try:
-            result = self.controller.execute(
-                confirmation_digest=digest,
-                run_directory=run_directory,
-            )
+            result = self.controller.approve_and_execute()
         except Exception as exc:
             self.call_from_thread(self._operation_failed, "Execution", exc)
             return
@@ -369,10 +306,8 @@ class ChemSmartAgentApp(App[None]):
         table.add_column("Value")
         table.add_row("terminal", result.terminal_state)
         table.add_row("session", result.session_id)
-        table.add_row("task spec", result.task_spec_sha256)
         table.add_row("successful tools", str(result.successful_tool_calls))
         table.add_row("failed tools", str(result.failed_tool_calls))
-        table.add_row("event head", result.event_stream_head_sha256)
         self._write(table)
         for block in session_evidence_blocks(result):
             self._write(
@@ -388,17 +323,17 @@ class ChemSmartAgentApp(App[None]):
             )
         if result.final_text:
             self._write(Panel(Markdown(result.final_text), title="Agent"))
-        if self.controller.phase is AgentTuiPhase.PREVIEW_READY:
-            try:
-                reviewed = self.controller.review_request(
-                    self.controller.config.review_file
+        if self.controller.phase is AgentTuiPhase.REQUEST_REVIEWED:
+            prepared = self.controller.prepared_execution
+            if prepared is None:  # pragma: no cover - phase owns the object
+                self._operation_failed(
+                    "Workflow review",
+                    RuntimeError("prepared workflow is unavailable"),
                 )
-            except Exception as exc:
-                self._operation_failed("Execution review", exc)
                 return
-            self._present_request(reviewed)
+            self._present_request(prepared)
             self._sync_phase(
-                "Review shown; /approve, /deny, /revise, or /quit-review"
+                "Review shown; /approve runs once, /revise or /deny declines"
             )
         elif self.controller.phase is AgentTuiPhase.COMPLETE:
             self._sync_phase(
@@ -411,19 +346,19 @@ class ChemSmartAgentApp(App[None]):
 
     def _execution_finished(self, result: WorkflowExecutionResultV1) -> None:
         self._busy = False
-        table = Table(title="Deterministic execution result")
+        table = Table(title="ChemSmart execution result")
         table.add_column("Node")
         table.add_column("Program")
         table.add_column("Job")
         table.add_column("State")
-        table.add_column("Receipt")
+        table.add_column("Validation")
         for node in result.nodes:
             table.add_row(
                 node.node_id,
                 node.program,
                 node.jobtype,
                 node.state,
-                node.execution_receipt_sha256 or node.failure or "-",
+                "validated" if node.validated else node.failure or "not validated",
             )
         self._write(table)
         self._write(
@@ -442,45 +377,111 @@ class ChemSmartAgentApp(App[None]):
             "workspace and enter a new request for typed analysis"
         )
 
-    def _present_request(self, reviewed: ReviewedExecutionReviewV1) -> None:
-        review = reviewed.review
+    def _present_request(self, review: WorkflowExecutionReviewV1) -> None:
+        resources = review.execution_resources
+        overview = Table(title="ChemSmart workflow awaiting human approval")
+        overview.add_column("Node", style="bold cyan")
+        overview.add_column("Program / engine")
+        overview.add_column("Stage")
+        overview.add_column("Molecule")
+        overview.add_column("Charge / multiplicity")
+        for item in review.node_reviews:
+            identity = item.molecular_identity
+            approved_names = identity.get("approved_names") or ()
+            name = str(approved_names[0]) if approved_names else ""
+            formula = str(identity.get("formula") or "unknown formula")
+            atom_order = identity.get("atom_order") or ()
+            atom_summary = "-".join(str(symbol) for symbol in atom_order)
+            molecule = name or formula
+            if atom_summary:
+                molecule += f" · {atom_summary}"
+            overview.add_row(
+                item.node_id,
+                f"{item.program} / {item.engine}",
+                item.stage,
+                molecule,
+                f"{identity.get('charge')} / {identity.get('multiplicity')}",
+            )
+        self._write(overview)
+        environments = Table(title="Observed execution environments")
+        environments.add_column("Node", style="bold cyan")
+        environments.add_column("Status")
+        environments.add_column("Target")
+        environments.add_column("Version")
+        environments.add_column("Observed by")
+        for item in review.node_reviews:
+            summary = item.environment_summary
+            dependencies = {
+                str(name): str(version)
+                for name, version in summary.get("dependency_versions", ())
+            }
+            version = str(summary.get("observed_version") or "")
+            if not version:
+                version = dependencies.get(item.program, "")
+            if not version and dependencies:
+                version = ", ".join(
+                    f"{name} {value}"
+                    for name, value in sorted(dependencies.items())
+                )
+            environments.add_row(
+                item.node_id,
+                str(summary.get("status") or "unknown"),
+                str(summary.get("target_kind") or "unknown"),
+                version or "not reported",
+                str(summary.get("observation_method") or "host probe"),
+            )
+        self._write(environments)
         self._write(
             Panel(
-                Syntax(
-                    reviewed.canonical_text,
-                    "json",
-                    word_wrap=True,
-                    background_color="default",
-                ),
-                title="Unapproved execution review (inert)",
+                f"cores: {resources.cores}\n"
+                f"memory: {resources.memory_gb:g} GB\n"
+                f"GPUs: {resources.gpu_count}\n"
+                f"node timeout: {resources.node_timeout_seconds} s\n"
+                f"engine-call limit: "
+                f"{review.execution_envelope.get('max_engine_calls')}",
+                title="Execution bounds",
+            )
+        )
+        if review.scientific_plan.edges:
+            edge_table = Table(title="Scientific data flow")
+            edge_table.add_column("Producer")
+            edge_table.add_column("Artifact")
+            edge_table.add_column("Consumer")
+            for edge in review.scientific_plan.edges:
+                edge_table.add_row(
+                    edge.source_node_id,
+                    edge.artifact_class or edge.edge_kind,
+                    edge.target_node_id,
+                )
+            self._write(edge_table)
+        for item in review.node_reviews:
+            command = _human_cli_operation(item.real_execution_argv)
+            self._write(
+                Panel(
+                    Syntax(
+                        item.project_settings_text,
+                        "json",
+                        word_wrap=True,
+                        background_color="default",
+                    ),
+                    title=f"{item.node_id} · effective project settings",
+                )
+            )
+            self._write(
+                Panel(
+                    Text(command),
+                    title=f"{item.node_id} · ChemSmart CLI operation",
+                )
+            )
+        self._write(
+            Panel(
+                "Review the molecule/state, settings, CLI operations, DAG, "
+                "observed execution environments and resource bounds above. "
+                "Enter /approve once to execute this whole workflow. A changed "
+                "scientific request must be replanned.",
+                title="Human decision",
                 border_style="yellow",
             )
-        )
-        self._write(
-            f"review SHA-256: {review.review_sha256}\n"
-            f"file SHA-256: {reviewed.artifact_sha256}"
-        )
-
-    def _present_approval(self, reviewed: ReviewedExecutionApprovalV1) -> None:
-        approval = reviewed.bundle.workflow_approval
-        self._write(
-            Panel(
-                Syntax(
-                    reviewed.canonical_text,
-                    "json",
-                    word_wrap=True,
-                    background_color="default",
-                ),
-                title="User-created execution approval",
-                border_style="red",
-            )
-        )
-        self._write(
-            f"approval bundle SHA-256: {reviewed.bundle.bundle_sha256}\n"
-            f"approval record SHA-256: {approval.approval_sha256}\n"
-            f"approval file SHA-256: {reviewed.artifact_sha256}\n"
-            f"confirmation command: /execute "
-            f"{reviewed.artifact_sha256} RUN_DIRECTORY"
         )
 
     def _operation_failed(self, label: str, exc: Exception) -> None:
@@ -492,7 +493,7 @@ class ChemSmartAgentApp(App[None]):
                 border_style="red",
             )
         )
-        self._sync_phase("No new execution authority was granted")
+        self._sync_phase("Operation stopped; no unreviewed engine launch occurred")
 
     def _usage(self, message: str) -> None:
         self._write(

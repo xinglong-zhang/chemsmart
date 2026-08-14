@@ -317,7 +317,12 @@ def _validate_gaussian_td_input(
     import re
 
     path, parsed = parsed_candidates[0]
-    route = str(getattr(parsed, "route_string", "") or "").casefold()
+    # The semantic settings parser intentionally projects a TD input onto the
+    # base Gaussian SP settings surface. Read the native route from the input
+    # owner so the TD leaf itself is not lost during that projection.
+    from chemsmart.io.gaussian.input import Gaussian16Input
+
+    route = str(Gaussian16Input(filename=str(path)).route_string).casefold()
     match = re.search(r"\btd\s*\(([^)]*)\)", route)
     if match is None:
         return [_missing("td_route", "TD(...) route", path.name)]
@@ -812,6 +817,39 @@ def _settings_match(parsed, expected, *, native_input=None):
 
             if _orca_scf_preset(value) == _orca_scf_preset(observed):
                 continue
+        if is_orca and field == "hess_filename" and native_input is not None:
+            # ORCA receives a portable basename in %irc while the CLI keeps
+            # the approved source path.  Compare the staged native file by
+            # content instead of treating those two filesystem spellings as
+            # different scientific settings.
+            expected_path = Path(str(value))
+            observed_path = Path(str(observed or ""))
+            if not observed_path.is_absolute():
+                observed_path = Path(native_input).parent / observed_path
+            if (
+                expected_path.is_file()
+                and observed_path.is_file()
+                and expected_path.stat().st_size
+                == observed_path.stat().st_size
+                and file_sha256(expected_path) == file_sha256(observed_path)
+            ):
+                continue
+        if (
+            is_orca
+            and field == "jobtype"
+            and str(value).strip().casefold() == "sp"
+            and str(observed).strip().casefold() == "freq"
+            and any(
+                bool(expected.get(mode))
+                for mode in ("freq", "numfreq", "vpt2")
+            )
+        ):
+            # ChemSmart deliberately expresses a fixed-geometry Hessian as
+            # the public ``sp`` leaf plus an explicit frequency setting.
+            # ORCA's native-input reader projects that same operation onto
+            # its program-native ``freq`` job label.  These are two views of
+            # one calculation, not a stage mismatch.
+            continue
         if is_gaussian and field == "dispersion":
             from chemsmart.io.gaussian.route import (
                 normalize_gaussian_dispersion,

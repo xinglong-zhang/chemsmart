@@ -1231,6 +1231,7 @@ def audit_xtb_result_receipt(
     expected_settings=None,
     expected_source_sha256="",
     expected_project_sha256="",
+    audit_mode="strict",
 ):
     """Independently audit a completed xTB receipt for the agent host.
 
@@ -1238,13 +1239,25 @@ def audit_xtb_result_receipt(
     approved-execution host must nevertheless verify its digest, ancestry,
     settings, environment, and artifact bindings rather than trusting three
     status fields.  This second check never reconstructs or reruns the job.
+
+    ``strict`` is the default and remains required for runtime reuse.  The
+    explicit ``archive`` mode is analysis-only: it may accept a missing
+    original source/project path or executable after relocation, but still
+    requires the bound receipt, requested settings and molecule, normal
+    termination, durable execution input, and every local artifact byte to
+    validate.  Any original path that still exists is checked strictly.
     """
+
+    if audit_mode not in {"strict", "archive"}:
+        raise ValueError("audit_mode must be 'strict' or 'archive'")
 
     path = Path(receipt_path)
     rule_ids = []
+    provenance_limitations = []
     observation = {
         "receipt_path": path.name,
         "expected_jobtype": expected_jobtype,
+        "audit_mode": audit_mode,
     }
     try:
         with path.open(encoding="utf-8") as handle:
@@ -1432,7 +1445,26 @@ def audit_xtb_result_receipt(
         rule_ids.append("xtb.result.provenance_binding_digest_mismatch")
     verifiable_binding = {}
     for role, record in binding.items():
-        if record is not None and not isinstance(record, Mapping):
+        required_fields = {
+            "role",
+            "declared_path",
+            "resolved_path",
+            "size",
+            "sha256",
+        }
+        if record is not None and (
+            not isinstance(record, Mapping)
+            or not required_fields.issubset(record)
+            or not isinstance(record.get("declared_path"), str)
+            or not record.get("declared_path")
+            or not isinstance(record.get("resolved_path"), str)
+            or not record.get("resolved_path")
+            or isinstance(record.get("size"), bool)
+            or not isinstance(record.get("size"), int)
+            or record.get("size") < 0
+            or not isinstance(record.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", record.get("sha256")) is None
+        ):
             rule_ids.append(f"xtb.result.{role}_record_invalid")
             verifiable_binding[role] = None
         else:
@@ -1441,14 +1473,35 @@ def audit_xtb_result_receipt(
         "source_artifact": verifiable_binding["source_artifact"],
         "project_artifact": verifiable_binding["project_artifact"],
     }
-    for finding in verify_xtb_provenance_binding(strict_binding):
-        rule_ids.append(str(finding.get("rule_id")))
+    for role, record in strict_binding.items():
+        if record is None:
+            if audit_mode == "archive":
+                provenance_limitations.append(f"{role}_not_declared")
+            continue
+        declared = Path(record["declared_path"])
+        original_path_present = declared.exists() or declared.is_symlink()
+        if audit_mode == "archive" and not original_path_present:
+            provenance_limitations.append(
+                f"{role}_original_path_unavailable"
+            )
+            continue
+        for finding in verify_xtb_provenance_binding({role: record}):
+            rule_ids.append(str(finding.get("rule_id")))
+    execution_input = verifiable_binding["execution_input_artifact"]
+    if audit_mode == "archive" and execution_input is None:
+        rule_ids.append("xtb.result.execution_input_artifact_record_invalid")
     for finding in _audit_xtb_execution_input_binding(
-        verifiable_binding["execution_input_artifact"],
+        execution_input,
         receipt_parent=path.parent,
         artifacts=result.get("artifacts"),
     ):
         rule_ids.append(str(finding.get("rule_id")))
+    if audit_mode == "archive" and execution_input is not None:
+        declared = Path(execution_input["declared_path"])
+        if not (declared.exists() or declared.is_symlink()):
+            provenance_limitations.append(
+                "execution_input_original_path_unavailable_durable_copy_verified"
+            )
     source = binding["source_artifact"]
     project = binding["project_artifact"]
     if expected_source_sha256 and (
@@ -1493,25 +1546,51 @@ def audit_xtb_result_receipt(
             rule_ids.append("xtb.result.environment_receipt_red")
         executable = environment.get("executable")
         executable_sha256 = environment.get("executable_sha256")
-        try:
-            executable_path = Path(str(executable)).resolve(strict=True)
-        except (OSError, RuntimeError):
-            executable_path = None
-        if (
-            executable_path is None
-            or not executable_path.is_file()
-            or sha256_file(executable_path) != executable_sha256
-        ):
-            rule_ids.append("xtb.result.environment_executable_mismatch")
-        elif canonical_argv:
-            try:
-                command_executable = Path(canonical_argv[0]).resolve(
-                    strict=True
+        executable_declared = (
+            Path(executable)
+            if isinstance(executable, str) and executable
+            else None
+        )
+        executable_present = bool(
+            executable_declared is not None
+            and (
+                executable_declared.exists()
+                or executable_declared.is_symlink()
+            )
+        )
+        if audit_mode == "archive" and not executable_present:
+            if (
+                executable_declared is None
+                or not isinstance(executable_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", executable_sha256) is None
+            ):
+                rule_ids.append("xtb.result.environment_executable_mismatch")
+            else:
+                provenance_limitations.append(
+                    "execution_environment_executable_unavailable"
                 )
-            except (OSError, RuntimeError):
-                command_executable = None
-            if command_executable != executable_path:
-                rule_ids.append("xtb.result.command_executable_mismatch")
+                if canonical_argv and canonical_argv[0] != executable:
+                    rule_ids.append("xtb.result.command_executable_mismatch")
+        else:
+            try:
+                executable_path = executable_declared.resolve(strict=True)
+            except (AttributeError, OSError, RuntimeError):
+                executable_path = None
+            if (
+                executable_path is None
+                or not executable_path.is_file()
+                or sha256_file(executable_path) != executable_sha256
+            ):
+                rule_ids.append("xtb.result.environment_executable_mismatch")
+            elif canonical_argv:
+                try:
+                    command_executable = Path(canonical_argv[0]).resolve(
+                        strict=True
+                    )
+                except (OSError, RuntimeError):
+                    command_executable = None
+                if command_executable != executable_path:
+                    rule_ids.append("xtb.result.command_executable_mismatch")
 
     artifacts = result.get("artifacts")
     if not isinstance(artifacts, Mapping):
@@ -1532,6 +1611,14 @@ def audit_xtb_result_receipt(
         rule_ids.append("xtb.result.main_output_missing")
     if not any(str(name).endswith(".xyz") for name in artifacts):
         rule_ids.append("xtb.result.input_geometry_missing")
+
+    provenance_limitations = tuple(sorted(set(provenance_limitations)))
+    observation["provenance_limitations"] = provenance_limitations
+    observation["provenance_status"] = (
+        "archived_validated_native_result_degraded_provenance"
+        if provenance_limitations
+        else "workspace_exact_validated_native_result"
+    )
 
     return observation, tuple(sorted(set(rule_ids)))
 

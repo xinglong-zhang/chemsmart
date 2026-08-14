@@ -19,9 +19,9 @@ else in the extraction path needs to know which programs exist.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 __all__ = [
     "RESULT_READERS",
@@ -76,6 +76,8 @@ SELECTOR_UNITS = {
     "reference_energy": "Eh",
     "correlation_energy": "Eh",
     "dispersion_energy": "Eh",
+    "auxiliary_basis": "",
+    "auxiliary_basis_role": "",
     "dipole_moment": "Debye",
     "dipole_moment_magnitude": "Debye",
     "homo": "eV",
@@ -95,6 +97,8 @@ SELECTOR_UNITS = {
     "trajectory_end_connectivity": "",
     "trajectory_connectivity_changed": "",
     "irc_direction": "",
+    "solvation_model": "",
+    "solvent": "",
 }
 
 
@@ -279,6 +283,8 @@ class ResultReaderV1:
     open_output: Callable[[Path], Any]
     #: Selector name to a callable reading it from the parser object.
     accessors: dict[str, Callable[[Any], Any]]
+    #: Program-native units that differ from the shared selector display unit.
+    source_units: Mapping[str, str] = field(default_factory=dict)
     #: Native program outputs must prove normal termination.  A standalone
     #: geometry artifact is data rather than an engine run, so that format can
     #: opt out while retaining the same typed quantity path.
@@ -318,7 +324,7 @@ class ResultReaderV1:
             raise MissingQuantityError(
                 f"{self.program} result contains no {selector!r} value"
             )
-        return value, SELECTOR_UNITS[selector]
+        return value, self.source_units.get(selector, SELECTOR_UNITS[selector])
 
 
 def _text_output_accessors(
@@ -478,6 +484,89 @@ def _orca_dispersion_energy(output: Any) -> float:
     return float(value)
 
 
+def _orca_auxiliary_basis(output: Any) -> str:
+    value = getattr(output, "aux_basis", None)
+    if not value:
+        raise MissingQuantityError(
+            "ORCA final route contains no explicit auxiliary basis"
+        )
+    return str(value)
+
+
+def _orca_auxiliary_basis_role(output: Any) -> str:
+    value = output.route_object.auxiliary_basis_role
+    if not value or value == "missing":
+        raise MissingQuantityError(
+            "ORCA final route contains no explicit auxiliary-basis role"
+        )
+    return str(value)
+
+
+def _orca_solvation_context(output: Any) -> tuple[str, str | None]:
+    """Read solvent treatment from the final echoed ORCA job route."""
+
+    routes = tuple(getattr(output, "_input_route_strings", ()))
+    if not routes:
+        raise MissingQuantityError(
+            "ORCA result contains no echoed final route for solvent evidence"
+        )
+    final_route = str(routes[-1]).lower()
+    # Simple-input keywords are whitespace-delimited route tokens.  Match a
+    # complete token so a different model such as ``CPCM-X(water)`` cannot be
+    # silently shortened to CPCM.
+    match = re.search(
+        r"(?<!\S)(?P<model>smd|cpcmc|cpcm|cosmors)"
+        r"(?:\((?P<solvent>[^)]+)\))?(?!\S)",
+        final_route,
+    )
+    if match is None:
+        if re.search(
+            r"(?i)(?:"
+            r"\b\S*pcm\S*|\b\S*solv\S*|\b\S*cosmo\S*|"
+            r"\b(?:alpb|ddcosmo|cpcmx|gbsa|tmcosmo)(?:\([^)]*\))?"
+            r")",
+            final_route,
+        ):
+            raise MissingQuantityError(
+                "ORCA final route uses an unrecognized solvent treatment"
+            )
+        return "gas_phase", None
+
+    model = match.group("model")
+    solvent = match.group("solvent")
+    if solvent:
+        return model, solvent.strip().lower()
+
+    lines = tuple(str(line) for line in getattr(output, "contents", ()))
+    markers = tuple(getattr(output, "_orca_job_markers", ()))
+    start = markers[-1][0] if markers else 0
+    pattern = re.compile(
+        r"^\s*Solvent:\s*(?:\.\.\.\s*)?(?P<name>\S.*?)\s*$",
+        re.I,
+    )
+    values = []
+    for line in lines[start:]:
+        native_match = pattern.match(line)
+        if native_match is not None:
+            values.append(native_match.group("name").strip().lower())
+    return model, values[-1] if values else None
+
+
+def _orca_solvation_model(output: Any) -> str:
+    return _orca_solvation_context(output)[0]
+
+
+def _orca_solvent(output: Any) -> str:
+    model, solvent = _orca_solvation_context(output)
+    if model == "gas_phase":
+        raise MissingQuantityError("ORCA final job is explicitly gas phase")
+    if not solvent:
+        raise MissingQuantityError(
+            "ORCA final solvated job contains no explicit solvent name"
+        )
+    return solvent
+
+
 def _orca_positions(output: Any) -> list[list[float]]:
     molecule = output.thermochemistry_molecule
     return [[float(value) for value in row] for row in molecule.positions]
@@ -557,6 +646,10 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             "reference_energy": _orca_scf_energy,
             "correlation_energy": _orca_correlation_energy,
             "dispersion_energy": _orca_dispersion_energy,
+            "auxiliary_basis": _orca_auxiliary_basis,
+            "auxiliary_basis_role": _orca_auxiliary_basis_role,
+            "solvation_model": _orca_solvation_model,
+            "solvent": _orca_solvent,
             "dipole_moment": lambda output: [
                 float(item)
                 for item in output.dipole_moment_in_debye.reshape(-1)
@@ -774,11 +867,15 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         "positions": _positions,
         "connectivity": lambda output: _connectivity_matrix(output.molecule),
         "symbols": _symbols,
-        "dipole_moment": lambda output: [
-            float(item) for item in output.molecular_dipole_full
-        ],
-        "dipole_moment_magnitude": lambda output: float(
-            output.total_molecular_dipole_moment
+        # xTB prints vector components in atomic units but the trailing total
+        # in Debye.  Preserve both native tokens: QuantityValue then exposes
+        # the real source unit and printed precision while its canonical value
+        # remains available in Debye for dimensional arithmetic.
+        "dipole_moment": lambda output: list(
+            output.molecular_dipole_full_tokens
+        ),
+        "dipole_moment_magnitude": lambda output: (
+            output.total_molecular_dipole_moment_token
         ),
         "homo": lambda output: float(output.homo_energy),
         "lumo": lambda output: float(output.lumo_energy),
@@ -876,6 +973,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         parser_id="chemsmart.io.xtb.output.XTBOutput",
         open_output=_xtb_output,
         accessors=_xtb_accessors(),
+        source_units={"dipole_moment": "e bohr"},
     ),
     "xyz": ResultReaderV1(
         program="xyz",
@@ -919,6 +1017,8 @@ _SELECTOR_DIMENSIONS = {
     "reference_energy": "ENERGY",
     "correlation_energy": "ENERGY",
     "dispersion_energy": "ENERGY",
+    "auxiliary_basis": "DIMENSIONLESS",
+    "auxiliary_basis_role": "DIMENSIONLESS",
     "dipole_moment": "DIPOLE_MOMENT",
     "dipole_moment_magnitude": "DIPOLE_MOMENT",
     "homo": "ENERGY",
@@ -938,10 +1038,19 @@ _SELECTOR_DIMENSIONS = {
     "trajectory_end_connectivity": "DIMENSIONLESS",
     "trajectory_connectivity_changed": "DIMENSIONLESS",
     "irc_direction": "DIMENSIONLESS",
+    "solvation_model": "DIMENSIONLESS",
+    "solvent": "DIMENSIONLESS",
 }
 
 _TEXT_SELECTORS = frozenset(
-    {"irc_direction", "wavefunction_stability_verdict"}
+    {
+        "irc_direction",
+        "auxiliary_basis",
+        "auxiliary_basis_role",
+        "solvation_model",
+        "solvent",
+        "wavefunction_stability_verdict",
+    }
 )
 _TEXT_VECTOR_SELECTORS = frozenset(
     {"excited_state_labels", "wavefunction_stability_history"}

@@ -426,9 +426,9 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             )  # populate defaults
             if job == "sp":
                 # A single-point project must not acquire the route-building
-                # program's historical default frequency job merely because
-                # only the solv phase was declared.  An explicit ``freq`` in
-                # the section still overrides this below.
+                # frequency job merely because only the solv phase was
+                # declared. An explicit ``freq`` in the section still
+                # overrides this below.
                 all_project_configs[job]["freq"] = False
             all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
@@ -510,11 +510,10 @@ def read_molecular_job_yaml(filename, program="gaussian"):
 
     if program == "orca" and "neb" in all_project_configs:
         # ``gas:`` supplies the electronic-structure settings shared by the
-        # path calculation, but its historical default ``freq=True`` belongs
-        # to ordinary optimizations.  A NEB job should not silently acquire a
-        # frequency calculation from that borrowed phase section.  A chemist
-        # can still request one explicitly under the job's own ``neb:``
-        # section, which is applied below.
+        # path calculation, but a phase-level ``freq: true`` belongs to the
+        # optimization described by that phase. A NEB job should not silently
+        # acquire it from the borrowed phase section. A chemist can still
+        # request one explicitly under the job's own ``neb:`` section.
         all_project_configs["neb"]["freq"] = False
 
     # check if td settings exist (optional)

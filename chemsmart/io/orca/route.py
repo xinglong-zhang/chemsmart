@@ -80,10 +80,19 @@ class ORCARoute:
             str: Ab initio method name or None if not found
         """
         for route_keyword in self.route_keywords:
-            if route_keyword in ORCA_ALL_AB_INITIO or route_keyword.startswith(
-                ("dlpno-cc", "ro-dlpno-cc")
+            density_fitted_method = (
+                route_keyword[3:]
+                if route_keyword.startswith("ri-")
+                else None
+            )
+            if route_keyword in {"rimp2", "mp2ri"}:
+                return "mp2"
+            if (
+                route_keyword in ORCA_ALL_AB_INITIO
+                or density_fitted_method in ORCA_ALL_AB_INITIO
+                or route_keyword.startswith(("dlpno-cc", "ro-dlpno-cc"))
             ):
-                return route_keyword
+                return density_fitted_method or route_keyword
         return None
 
     @property
@@ -226,6 +235,14 @@ class ORCARoute:
             match = by_keyword.get(route_keyword.lower())
             if match is not None:
                 return match
+        # ``RI-MP2`` owns correlation fitting and does not require the bare
+        # RI-J keyword.  Preserve ChemSmart's typed ``ri`` setting when a
+        # generated native input is read back during fake preview.
+        if any(
+            keyword in {"ri-mp2", "rimp2", "mp2ri"}
+            for keyword in self.route_keywords
+        ):
+            return "ri"
         return None
 
     @property

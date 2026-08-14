@@ -133,7 +133,7 @@ cancellation the difference relies on.
   |---|---|---|---|---|
   | `C1`, `Cs`, `Ci`, `C∞v` | 1 | | `D2h` | 4 |
   | `C2`, `C2v`, `C2h`, `D∞h` | 2 | | `D3h` | 6 |
-  | `C3v` | 3 | | `D3`, `D3h` | 6 |
+  | `C3v` | 3 | | `D3` | 6 |
   | `Td` | 12 | | `Oh` | 24 |
 
 - The modern standard state is **1 bar**. Older tables and some program defaults

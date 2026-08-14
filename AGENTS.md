@@ -21,17 +21,23 @@ The production Agent supports:
 - ChemSmart CLI compilation and safe preview;
 - causal scientific workflow planning;
 - inspection and typed analysis of supported results; and
-- explicitly approved execution through the live program registry: Gaussian
-  CPU ``sp/opt/ts/irc/td/link``; ORCA CPU ``sp/opt/ts/irc/td/neb``; PySCF CPU
-  ``sp/opt/hess``; GPU4PySCF ``sp/opt/hess``; and xTB CPU ``sp/opt/hess``.
+- explicitly approved execution on release-qualified CPU paths: ORCA
+  single-points, optimization/frequency, transition-state, excited-state, and
+  serial DAG workflows; PySCF ``sp/opt/hess``; and xTB ``sp/opt/hess``.
 
-PySCF CPU ``td`` is a planning and preview capability, not an execution path.
-NCIPLOT and additional human CLI job families without a declared Agent
-engine/job pair remain outside the version-3.1.4 Agent execution surface.
-Product support never asserts that a program is installed on the current
-host: Gaussian needs an operator-provided licensed installation, GPU4PySCF a
-compatible CUDA environment, and every engine must pass its normal environment
-probe before it can appear in an executable human review.
+Gaussian ``sp/opt/ts/irc/td/link`` is supported for project YAML, native-input
+generation, safe preview, and parsing of user-supplied completed results; this
+release does not claim Gaussian Agent execution. GPU4PySCF ``sp/opt/hess`` is a
+PySCF-engine configuration and preview surface, not a release-qualified Agent
+execution path. PySCF CPU ``td`` is likewise preview-only. ORCA ``irc`` and
+``neb`` may be planned and previewed, but require target-specific qualification
+before they are described as completed execution. NCIPLOT and additional human
+CLI families without an Agent declaration remain outside the version-3.1.4
+Agent execution surface.
+
+Product support never asserts that an engine is installed on the current host.
+Every real operation must pass its normal environment probe and appear in the
+human review before it can run.
 
 Runtime orchestration is provider-neutral. Version 3.1.4 contains registered
 adapters for Alibaba Token Plan and DeepSeek. A user-selected profile supplies
@@ -43,28 +49,28 @@ code and documentation must not impose a default model.
 Planning, YAML validation, CLI compilation, safe preview, and result analysis
 do not grant engine authority. Real calculation follows this chain:
 
-1. the Agent produces an exact project-backed DAG;
+1. the Agent produces a project-backed DAG;
 2. ChemSmart compiles every node and completes a safe preview;
-3. ChemSmart presents one review packet containing molecular identity,
-   electronic state, project YAML, CLI invocation, dependencies, environment,
-   resources, and content digests;
-4. a human chooses approve once, deny, revise, or quit;
-5. approval is bound to the reviewed bytes and consumed once before launch;
-6. a provider-free executor runs only the approved DAG; and
+3. the terminal interface displays molecular identity, electronic state,
+   effective project settings, CLI operations, dependencies, environment, and
+   resources;
+4. a human enters ``/approve`` once, or chooses ``/deny`` or ``/revise``;
+5. the displayed workflow is removed from the pending state before launch;
+6. a provider-free executor runs that reviewed DAG; and
 7. ChemSmart records engine and validation evidence; a subsequent explicit
    analysis request reads the completed result into typed quantities,
    expressions, thermochemistry, claims, and interpretation.
 
 There is no permanent calculation grant, session-wide "always allow", command
-prefix allow-list, or model-created approval. A change to YAML, geometry,
-charge, multiplicity, state, command, environment, resource allocation, or DAG
-invalidates the approval. A multi-node causal workflow may execute under one
-approval because the complete graph was reviewed; a changed graph requires a
-new review.
+prefix allow-list, or model-created approval. A revised molecule, state,
+project, environment, resource allocation, or DAG is a new workflow and must be
+reviewed again. A multi-node causal workflow needs one human action because the
+complete graph is displayed together.
 
 The terminal UI is a view and controller for this chain. It is not a second
-permission engine. Non-interactive execution fails closed unless supplied a
-valid, unconsumed approval artifact.
+permission engine. Internal receipts and content digests preserve provenance
+and mutation evidence; they are not hashes or approval-file tokens that a human
+must retype in the production TUI.
 
 ## Scientific invariants
 
@@ -106,7 +112,8 @@ multi-program execution authority:
 
 - one public YAML-and-CLI layer instead of model-authored native inputs;
 - molecular, electronic-state, artifact, and geometry-lineage preservation;
-- preview and one-shot approval bound to exact scientific and resource state;
+- preview and one explicit human decision over the displayed scientific and
+  resource state;
 - provider-independent execution semantics;
 - native outputs plus typed, unit-aware analysis rather than transcript-only
   provenance; and

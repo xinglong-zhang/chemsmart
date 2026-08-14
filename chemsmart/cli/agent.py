@@ -216,7 +216,7 @@ def run(
     click.echo(result.public_summary_json())
 
 
-@agent.command("approve")
+@agent.command("approve", hidden=True)
 @click.option(
     "--review-file",
     required=True,
@@ -265,7 +265,7 @@ def approve(
     output,
     decision_log,
 ):
-    """Resolve one reviewed digest without contacting a model or engine."""
+    """Legacy file-based approval compatibility command."""
 
     from chemsmart.agent._contracts import ContractError
     from chemsmart.agent.live_session import resolve_workflow_execution_review
@@ -336,7 +336,10 @@ def approve(
     "--review-file",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
-    help="Absolute inert-review output; use with --execution-envelope.",
+    help=(
+        "Optional audit export of the prepared workflow; it is not required "
+        "for TUI approval or execution."
+    ),
 )
 @click.option(
     "--workspace",
@@ -392,7 +395,7 @@ def tui(
         raise click.ClickException(str(exc)) from exc
 
 
-@agent.command("execute")
+@agent.command("execute", hidden=True)
 @click.option(
     "--approval-file",
     required=True,
@@ -418,7 +421,7 @@ def tui(
     help="Task specification digest the approval was frozen against.",
 )
 def execute(approval_file, workspace, run_directory, task_spec_sha256):
-    """Execute an approved workflow deterministically, with no model.
+    """Legacy file-based execution compatibility command.
 
     Every scientific choice -- program, project YAML, method, node graph,
     charge and multiplicity -- was made when the plan was written and is

@@ -4,7 +4,11 @@ from functools import cached_property
 
 import numpy as np
 
-from chemsmart.utils.constants import cal_to_joules, joule_per_mol_to_hartree
+from chemsmart.utils.constants import (
+    au_to_debye,
+    cal_to_joules,
+    joule_per_mol_to_hartree,
+)
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.repattern import normal_mode_pattern
@@ -579,23 +583,47 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def molecular_dipole_full(self):
-        """Actual dipole moment including both charge distribution
-        and electronic polarization contributions"""
+    def molecular_dipole_full_tokens(self):
+        """Printed full-dipole components, in atomic units.
+
+        Keep the native tokens so typed extraction can retain xTB's printed
+        precision instead of making a three-decimal observation look more
+        precise after conversion to Debye.
+        """
         if self.molecular_dipole_lines is not None:
             for line in self.molecular_dipole_lines:
                 if line.startswith("full:"):
-                    return np.array([float(x) for x in line.split()[1:4]])
+                    return tuple(line.split()[1:4])
+        return None
+
+    @property
+    def molecular_dipole_full(self):
+        """Actual dipole moment including both charge distribution
+        and electronic polarization contributions, in atomic units."""
+        tokens = self.molecular_dipole_full_tokens
+        return np.array([float(x) for x in tokens]) if tokens else None
+
+    @property
+    def molecular_dipole_full_in_debye(self):
+        """Full molecular dipole vector converted from atomic units to Debye."""
+        if self.molecular_dipole_full is None:
+            return None
+        return self.molecular_dipole_full * au_to_debye
+
+    @property
+    def total_molecular_dipole_moment_token(self):
+        """Printed total-dipole token, in Debye."""
+        if self.molecular_dipole_lines is not None:
+            for line in self.molecular_dipole_lines:
+                if line.startswith("full:"):
+                    return line.split()[-1]
         return None
 
     @property
     def total_molecular_dipole_moment(self):
         """Total molecular dipole moment, in Debye."""
-        if self.molecular_dipole_lines is not None:
-            for line in self.molecular_dipole_lines:
-                if line.startswith("full:"):
-                    return float(line.split()[-1])
-        return None
+        token = self.total_molecular_dipole_moment_token
+        return float(token) if token is not None else None
 
     @property
     def molecular_quadrupole_lines(self):

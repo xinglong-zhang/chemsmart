@@ -7,7 +7,9 @@ families as its executable-backed programs. The executable CPU surface is
 ``sp``, ``opt``, and ``hess``. A bounded fixed-geometry, closed-shell,
 gas-phase singlet ``td`` surface is available for safe TDA/TDDFT preview but is
 not authorised for execution. GPU4PySCF 1.8.0 is an execution engine of the
-PySCF program; it is not a separate program.
+PySCF program; it is not a separate program. Version 3.1.4 qualifies real Agent
+execution for the three CPU leaves. GPU4PySCF configuration and safe preview
+are available, but this release does not claim a qualified Agent GPU run.
 
 *************************
  Basic Command Structure
@@ -155,7 +157,8 @@ interpreter rather than to the controller process.  A server block may point
 Before execution, ChemSmart records the interpreter and required dependency
 versions.  A GPU request additionally requires matching GPU4PySCF, CuPy, CUDA,
 cuTENSOR, driver, and device observations.  Merely declaring ``NUM_GPUS`` does
-not establish GPU readiness.
+not establish GPU readiness, and a green preview is not a claim that the GPU
+path has been release-qualified.
 
 ************************
  Results and Completion

@@ -130,6 +130,32 @@ class ORCAInputWriter(InputWriter):
                         destination,
                     )
 
+        # An IRC started from a validated TS Hessian is a two-file job.  Keep
+        # the native input portable: stage the Hessian beside both the job's
+        # durable output directory and the generated input (which may live in
+        # scratch), then write only its basename in %irc.  The absolute path
+        # remains a CLI/runtime concern and never leaks into native input.
+        if (
+            isinstance(self.job.settings, ORCAIRCJobSettings)
+            and str(self.job.settings.inithess or "").casefold() == "read"
+        ):
+            source = os.path.abspath(str(self.job.settings.hess_filename or ""))
+            if not os.path.isfile(source):
+                raise FileNotFoundError(
+                    f"ORCA IRC Hessian does not exist: {source}"
+                )
+            for destination_folder in {folder, self.job.folder}:
+                destination = os.path.join(
+                    destination_folder, os.path.basename(source)
+                )
+                if source != os.path.abspath(destination):
+                    shutil.copy2(source, destination)
+                    logger.info(
+                        "Staged ORCA IRC Hessian %s at %s.",
+                        source,
+                        destination,
+                    )
+
     def _write_all(self, f):
         """
         Write the complete input file with all sections.
@@ -925,7 +951,9 @@ class ORCAInputWriter(InputWriter):
                         self.settings.hess_filename
                     ), f"Hessian file {self.settings.hess_filename} is not found!"
                     f.write(
-                        f'  Hess_Filename "{self.settings.hess_filename}"  # Hessian file\n'
+                        '  Hess_Filename '
+                        f'"{os.path.basename(self.settings.hess_filename)}"'
+                        "  # Hessian file\n"
                     )
             elif (
                 key == "hess_filename"

@@ -5,13 +5,22 @@
 This page documents the CLI options available for all Gaussian jobs. Use ``chemsmart sub gaussian --help`` for the
 complete list.
 
+.. note::
+
+   The human ``run`` and ``sub`` commands can use an operator-provided licensed
+   Gaussian installation.  The version-3.1.4 Agent boundary is narrower:
+   ``sp``, ``opt``, ``ts``, ``irc``, ``td``, and ``link`` support project YAML,
+   generated native input, safe preview, and typed parsing of user-supplied
+   completed outputs, but this release does not claim Gaussian Agent execution.
+
 *************************
  Basic Command Structure
 *************************
 
 .. code:: bash
 
-   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
+   chemsmart run [RUN_OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
+   chemsmart sub [SUB_OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
 ******************
  Gaussian Options

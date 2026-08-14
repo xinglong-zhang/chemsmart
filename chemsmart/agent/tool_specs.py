@@ -290,7 +290,6 @@ def build_command_compiled_tool_surface(
             (
                 "plan_id",
                 "workflow_id",
-                "calculation_nodes",
                 "analysis_nodes",
                 "required_output_ids",
             ),
@@ -515,8 +514,14 @@ def build_command_compiled_tool_surface(
                 "receipt distinguishes thermal_enthalpy_correction = H(T) - "
                 "E_electronic, which includes ZPE, from "
                 "enthalpy_increment_above_zero_point = H(T) - E_electronic - "
-                "ZPE. Use the latter when adding a finite-temperature increment "
-                "to an already ZPE-corrected 0 K quantity."
+                "ZPE. For Grimme/Truhlar or Head-Gordon treatment it also "
+                "provides quasi_harmonic_thermal_gibbs_correction = G_qh(T) "
+                "- E_electronic; use that quantity, not the harmonic "
+                "thermal_gibbs_correction, when composing a high-level "
+                "electronic energy with low-level qRRHO thermochemistry. Use "
+                "enthalpy_increment_above_zero_point when adding a finite-"
+                "temperature increment to an already ZPE-corrected 0 K "
+                "quantity."
             ),
             {
                 "program": thermochemistry_program,
@@ -1159,7 +1164,11 @@ def _workflow_node_schema() -> dict:
                                 "program call use 'filename' for the primary "
                                 "geometry and the exact live ChemSmart job-option "
                                 "parameter for additional artifacts, such as "
-                                "'ending_xyzfile' for an ORCA NEB product."
+                                "'ending_xyzfile' for an ORCA NEB product. "
+                                "An ORCA IRC that reads the final transition-"
+                                "state Hessian has exactly two producer inputs: "
+                                "'filename'/geometry_xyz and "
+                                "'hess_filename'/orca_hessian."
                             ),
                         },
                         "artifact_id": _string(),
@@ -1187,6 +1196,13 @@ def _workflow_node_schema() -> dict:
                     "required": ["output_id", "artifact_class"],
                     "additionalProperties": False,
                 },
+                "description": (
+                    "Typed program artifacts made available to downstream "
+                    "nodes. An ORCA TS with frequencies may declare "
+                    "final_hessian/orca_hessian in addition to its final "
+                    "geometry; ChemSmart selects the unique Hessian bound to "
+                    "the validated final TS rather than guessing a filename."
+                ),
             },
             "unresolved_fields": {
                 "type": "array",
@@ -1195,6 +1211,14 @@ def _workflow_node_schema() -> dict:
             "produces_observables": {
                 "type": "array",
                 "items": _public_identifier(),
+                "description": (
+                    "Scientific quantities produced by this calculation. Match "
+                    "the loader-effective settings returned by "
+                    "validate_project_yaml. In particular, when that tool says "
+                    "the project already requests frequencies, put "
+                    "vibrational_frequencies on this node instead of scheduling "
+                    "a duplicate Hessian at the same geometry and method."
+                ),
             },
             "support_state": {
                 "type": "string",

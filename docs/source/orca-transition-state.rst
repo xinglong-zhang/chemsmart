@@ -430,6 +430,23 @@ IRC with existing Hessian:
 
    chemsmart sub orca -p project -f ts.xyz irc -i read -f hessian.hess
 
+TS-to-IRC data handoff
+======================
+
+An Agent-planned TS-to-IRC workflow passes two typed artifacts into the IRC
+node: the validated final TS geometry as ``filename`` and the final ORCA
+Hessian as ``hess_filename``.  ORCA may leave several ``.hess`` files during a
+transition-state optimization, so ChemSmart does not select one by suffix. It
+requires one Hessian whose atom order, final geometry, frequencies, and single
+consequential imaginary mode agree with the validated TS output. The selected
+file is staged beside the generated IRC input and referenced by basename in the
+native ``%irc`` block.
+
+This handoff makes the generated IRC input scientifically complete. It does
+not, by itself, claim that an IRC engine run has completed on the current
+target; inspect the execution result and both trajectory endpoints before
+assigning reactant and product identities.
+
 *********************
  Coordinate Scanning
 *********************

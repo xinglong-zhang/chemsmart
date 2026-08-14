@@ -1,10 +1,10 @@
 ChemSmart Agent terminal interface
 ==================================
 
-The terminal interface presents the same provider-neutral Runtime V2 used by
-``chemsmart agent plan`` and the same deterministic executor used by
-``chemsmart agent execute``.  It is a human interface, not another chemistry
-engine or approval system.
+The terminal interface is the human-facing route from a scientific request to
+project YAML, compiled ChemSmart CLI operations, a safe preview, and optional
+approved execution.  It does not create a second chemistry engine or ask the
+model to write native program input.
 
 Install and open it
 -------------------
@@ -13,130 +13,141 @@ Install the optional interface dependency alongside ChemSmart::
 
    python -m pip install 'chemsmart[agent-tui]'
 
-Then select an existing provider profile, secret assignment file, and task
-workspace. Planning and existing-result analysis need no execution bounds::
+Planning and existing-result analysis need a provider profile, its separate
+secret assignment file, and a task workspace::
 
    chemsmart agent tui \
-     --provider alibaba-production \
+     --provider PROFILE \
+     --provider-config /path/to/agent.yaml \
      --secret-file /path/to/provider.env \
      --workspace /path/to/task
 
-Add an envelope and review destination only when the session may prepare real
-execution for human approval::
-
-   chemsmart agent tui \
-     --provider alibaba-production \
-     --secret-file /path/to/provider.env \
-     --workspace /path/to/task \
-     --execution-envelope /path/to/bounds.json \
-     --review-file /path/to/task-review.json
-
-Use ``--plain`` for inline rendering without a mouse or animations, such as
-inside a simple SSH terminal.  The supported provider adapters are Alibaba
-Token Plan and DeepSeek; the selected model and credentials remain user
+Use ``--plain`` for inline rendering in a simple SSH terminal.  Alibaba Token
+Plan and DeepSeek are the registered version-3.1.4 adapters.  The selected
+provider, endpoint, model, reasoning setting, and credential label remain user
 configuration.
 
-Plan and safe-preview chain
----------------------------
+Add an execution envelope when the session may run a chemistry engine::
 
-Enter a scientific request at the prompt.  The interface asks Runtime V2 to:
+   chemsmart agent tui \
+     --provider PROFILE \
+     --provider-config /path/to/agent.yaml \
+     --secret-file /path/to/provider.env \
+     --workspace /path/to/task \
+     --execution-envelope /path/to/resources.yaml
 
-#. preserve the user-approved molecular identity and coordinate bytes;
-#. create canonical ChemSmart project YAML;
-#. compile the YAML into the live ChemSmart CLI;
-#. inspect and safely preview the compiled operations; and
-#. show the resulting scientific DAG, findings, and receipt digests.
+``--review-file`` may additionally export the prepared workflow for an audit.
+It is optional and is not an approval token.  A review export requires an
+execution envelope because analysis-only and preview-only sessions have no
+executable workflow to export.
 
-The planning step never launches a chemistry engine.  Canonical YAML and
-action-grade tool results are shown in the transcript; native input remains a
-downstream product of ChemSmart.  The execution envelope supplies explicit
-resource and program bounds but grants no authority.  When the preview is
-ready, the TUI displays the exact inert review artifact and its SHA-256.
+Plan and safe preview
+---------------------
 
-Explicit approval chain
------------------------
+Enter a scientific request at the prompt.  ChemSmart then:
 
-Execution uses four distinct states:
+#. preserves the supplied molecular identity, geometry role, charge,
+   multiplicity, and coordinate units;
+#. creates loader-validated project YAML;
+#. compiles the project through the live ``chemsmart run`` surface;
+#. generates and inspects program-native artifacts in safe-preview mode; and
+#. presents the scientific DAG, effective settings, findings, and typed
+   evidence in the transcript.
 
-#. The host writes and the TUI displays a ``WorkflowExecutionReviewV1``.  The
-   review is inert and carries no grant.
-#. The user reviews its complete scientific plan, materialized CLI operations,
-   resources, environments, and SHA-256 outside the model turn.
-#. The human chooses ``/approve ACTOR OUTPUT``, ``/deny ACTOR``,
-   ``/revise ACTOR``, or ``/quit-review ACTOR``.  The same human-only resolver
-   used by ``chemsmart agent approve`` records the exact decision.  The model
-   and provider runtime cannot invoke this resolver.
-#. Approval creates one exact, one-shot bundle and displays its file SHA-256.
-   ``/execute APPROVAL_FILE_SHA256 RUN_DIRECTORY`` requires the complete file
-   digest to be retyped before calling the provider-free deterministic
-   executor.
+Planning does not launch a chemistry engine.  Native Gaussian, ORCA, xTB, or
+PySCF artifacts remain outputs of ChemSmart rather than a model-authored API.
 
-``/deny`` forgets the current review and approval while retaining the safe
-preview.  An approval cannot be changed into an “always allow” or session-wide
-permission.  It cannot authorize a different plan, resource allocation,
-workspace, environment, or artifact body.
+Approve a displayed workflow
+----------------------------
+
+When an execution envelope is present and every calculation node reaches
+review readiness, the interface shows:
+
+* molecule, charge, and multiplicity for every node;
+* effective project settings;
+* the human-readable ChemSmart CLI operation;
+* producer-to-consumer data handoffs;
+* program and engine observations; and
+* core, memory, GPU, timeout, and engine-call limits.
+
+Review that display and enter ``/approve`` once.  The command takes no
+arguments.  It removes the workflow from the pending state, disconnects the
+provider, and runs the displayed DAG through the normal ChemSmart executor.
+No hash or approval-file token is required from the human.  Internal receipts
+remain available as provenance and mutation evidence.
+
+The run is written below
+``WORKSPACE/.chemsmart-agent/executions/tui-...``.  A failed or completed run
+cannot be started again by repeating ``/approve``; create and review a new
+workflow instead.
 
 Commands
 --------
 
 ``/capabilities``
-   Show the live program, engine and job matrix. This reports implemented
-   product paths; the selected target still needs its own environment probe.
-
-``/help``
-   Show the in-terminal guide.
+   Show the declared Agent program, engine, job, preview, and execution matrix.
+   A declared route is not proof that the selected host has its engine or that
+   the route has been release-qualified there.
 
 ``/status``
-   Show the task specification, review digest, approval file digest, and
-   current state.
+   Show the current phase, workspace, task, workflow awaiting review, and
+   whether human approval is pending.
 
-``/request PATH``
-   Read and display another exact inert execution-review packet for the same
-   task and workspace.  The review configured at launch is displayed
-   automatically after planning.
+``/approve``
+   Approve and run the displayed workflow once.  It accepts no arguments and
+   is available only after a complete safe preview and human review display.
 
-``/approve ACTOR OUTPUT_PATH``
-   Record explicit human approval of the displayed review and create one
-   exact, one-shot bundle.  It does not execute anything.
+``/deny``
+   Decline the displayed workflow without launching an engine.
 
-``/approval PATH``
-   Read a one-shot user-created approval bundle and prove that it binds the
-   displayed review.
+``/revise``
+   Decline the displayed workflow and return to the prompt for a revised
+   scientific request.
 
-``/execute SHA256 RUN_DIRECTORY``
-   Reconfirm the full approval file SHA-256 and invoke deterministic execution.
-   This stage makes no model call.
-
-After a completed execution, put its result artifacts in the task workspace
-and enter a new scientific request to inspect and analyse them. This begins a
-new provider-backed analysis turn; it does not extend the consumed execution
-grant or rerun the engine.
-
-``/deny ACTOR``
-   Record denial of an unapproved review without creating a grant. A bundle
-   already written to disk is not revocable; simply do not execute it and
-   create a new review for revised work.
-
-``/revise ACTOR``
-   Record that an unapproved workflow requires revision, without creating a
-   grant.
-
-``/quit-review ACTOR``
-   Record that review ended without a grant while leaving the TUI open.
+``/help``
+   Show the in-terminal command guide.
 
 ``/quit``
-   Exit when no host operation is running.
+   Exit when no host operation is running.  ``/exit`` is an alias.
+
+Result analysis
+---------------
+
+Analysis does not require an execution envelope or approval.  Put supported
+completed results in the workspace and ask for the quantities, comparisons,
+or interpretation needed.  ChemSmart can register Gaussian and ORCA native
+outputs, validated xTB result folders, structured PySCF HDF5 results, and XYZ
+geometries or trajectories.  It then exposes semantic quantities and
+unit-aware expressions rather than asking the model to copy numbers from a
+terminal transcript.
+
+After an approved run completes, enter a new scientific request over the
+completed result workspace.  This analysis request may contact the selected
+provider, but it does not extend the consumed execution decision or rerun an
+engine.
+
+Version-3.1.4 execution boundary
+--------------------------------
+
+Release-qualified Agent execution includes PySCF CPU ``sp``, ``opt``, and
+``hess``; xTB CPU ``sp``, ``opt``, and ``hess``; and ORCA CPU
+single-point, optimization/frequency, transition-state, excited-state, and
+serial DAG workflows.  ORCA ``irc`` and ``neb`` remain planning and preview
+paths until the selected target is qualified.
+
+Gaussian ``sp``, ``opt``, ``ts``, ``irc``, ``td``, and ``link`` are supported
+for project YAML, native-input generation, safe preview, and analysis of
+user-supplied completed outputs; this release does not claim Gaussian Agent
+execution.  GPU4PySCF ``sp``, ``opt``, and ``hess`` are configuration and
+preview paths until a compatible GPU target is qualified.  PySCF CPU ``td`` is
+preview-only.
 
 What the interface does not do
 ------------------------------
 
-The interface does not generate coordinates, native input, server credentials,
-or hidden resource defaults.  A provider/model turn cannot create an approval;
-only an explicit human TUI or CLI action can.  The interface does not submit
-unreviewed jobs or offer autonomous execution.  The product-capable execution
-matrix is declared by ChemSmart's program registry and includes the documented
-Gaussian, ORCA, xTB, PySCF CPU, and GPU4PySCF pairs.  That matrix does not claim
-that this machine has an engine installed: the exact environment must pass its
-host probe before the review can become executable. Gaussian remains dependent
-on an operator-provided licensed executable and GPU4PySCF on a compatible CUDA
-environment.
+The interface does not invent coordinates, native input, server credentials,
+or hidden resource defaults.  A provider turn cannot invoke ``/approve``.  The
+interface does not submit an unreviewed job, offer an ``always allow`` mode, or
+claim that a configured engine is installed.  Program availability and
+requested resources must be observed on the selected target before a real
+workflow is shown for approval.

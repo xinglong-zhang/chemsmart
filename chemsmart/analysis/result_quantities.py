@@ -110,10 +110,14 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "trajectory_end_connectivity",
         "trajectory_connectivity_changed",
         "irc_direction",
+        "solvation_model",
+        "solvent",
         "scf_energy",
         "reference_energy",
         "correlation_energy",
         "dispersion_energy",
+        "auxiliary_basis",
+        "auxiliary_basis_role",
         "vpt2_harmonic_frequencies",
         "vpt2_fundamental_frequencies",
         "vpt2_zero_point_rovibrational_energy",
@@ -135,6 +139,7 @@ QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
     "quasi_harmonic_entropy": "derive_thermochemistry",
     "quasi_harmonic_entropy_times_temperature": "derive_thermochemistry",
     "quasi_harmonic_gibbs_free_energy": "derive_thermochemistry",
+    "quasi_harmonic_thermal_gibbs_correction": "derive_thermochemistry",
     "thermal_enthalpy_correction": "derive_thermochemistry",
     "enthalpy_increment_above_zero_point": "derive_thermochemistry",
     "thermal_gibbs_correction": "derive_thermochemistry",
@@ -1458,15 +1463,27 @@ def derive_result_thermochemistry(
             quasi_harmonic_gibbs = engine.qrrho_gibbs_free_energy_qs
         else:
             quasi_harmonic_gibbs = engine.qrrho_gibbs_free_energy_qh
-        quantities.append(
-            _thermo_quantity(
-                quantity_id="quasi_harmonic_gibbs_free_energy",
-                value=quasi_harmonic_gibbs,
-                source_unit="J mol^-1",
-                normalized_unit="hartree",
-                dimension=ENERGY,
-                evidence_ref=evidence_ref,
-            )
+        quantities.extend(
+            [
+                _thermo_quantity(
+                    quantity_id="quasi_harmonic_gibbs_free_energy",
+                    value=quasi_harmonic_gibbs,
+                    source_unit="J mol^-1",
+                    normalized_unit="hartree",
+                    dimension=ENERGY,
+                    evidence_ref=evidence_ref,
+                ),
+                _thermo_quantity(
+                    quantity_id=(
+                        "quasi_harmonic_thermal_gibbs_correction"
+                    ),
+                    value=quasi_harmonic_gibbs - engine.electronic_energy,
+                    source_unit="J mol^-1",
+                    normalized_unit="hartree",
+                    dimension=ENERGY,
+                    evidence_ref=evidence_ref,
+                ),
+            ]
         )
     if result_file_sha256(artifact) != request.artifact_sha256:
         raise QuantityExtractionError(

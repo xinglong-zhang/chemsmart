@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -80,6 +80,7 @@ from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
     ExecutionResourceSpecV1,
     FrozenWorkflowApprovalV1,
+    ORCAHessianHandoffV1,
     OptimizedGeometryHandoffV1,
     ProgramExecutionReceiptV1,
     ProgramResultValidationReceiptV1,
@@ -110,13 +111,13 @@ from chemsmart.agent.execution import (
     handoff_optimized_native_geometry,
     handoff_optimized_pyscf_geometry,
     handoff_optimized_xtb_geometry,
+    handoff_final_orca_ts_hessian,
     invocation_identity_sha256,
+    is_validated_orca_ts_hessian_edge,
     is_validated_optimized_geometry_edge,
-    normalized_project_settings_review,
     promote_project_candidate,
     execution_path_placeholder,
     project_real_execution_argv,
-    real_execution_argv_sha256,
 )
 from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
 from chemsmart.agent.knowledge import (
@@ -176,6 +177,7 @@ from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionNodeV1,
     QuantityExpressionRequestV1,
     convert_normalized_value,
+    normalize_numeric_value,
     quantity_expression_receipt_from_record,
 )
 from chemsmart.analysis.result_quantities import (
@@ -229,6 +231,46 @@ class _CommandContext:
     input_artifact: TrustedArtifactRefV1
     scientific_identity: ScientificIdentityBindingV1
     job_artifact_options: tuple[tuple[str, TrustedArtifactRefV1], ...] = ()
+
+
+def _formula_from_symbols(symbols: Sequence[str]) -> str:
+    """Return a compact Hill formula for a human execution review."""
+
+    counts: dict[str, int] = {}
+    for symbol in symbols:
+        canonical = str(symbol)
+        counts[canonical] = counts.get(canonical, 0) + 1
+    if "C" in counts:
+        order = ["C"]
+        if "H" in counts:
+            order.append("H")
+        order.extend(sorted(item for item in counts if item not in {"C", "H"}))
+    else:
+        order = sorted(counts)
+    return "".join(
+        symbol + (str(counts[symbol]) if counts[symbol] != 1 else "")
+        for symbol in order
+    )
+
+
+def _review_molecule_identity(
+    artifact: TrustedArtifactRefV1,
+) -> dict[str, Any]:
+    """Read path-free molecular facts from ChemSmart's trusted geometry."""
+
+    from chemsmart.io.molecules.structure import Molecule
+
+    molecule = Molecule.from_filepath(artifact.path)
+    if molecule is None:
+        raise ContractError("execution review cannot read the molecular input")
+    symbols = tuple(str(symbol) for symbol in molecule.symbols)
+    if not symbols:
+        raise ContractError("execution review molecular input has no atoms")
+    return {
+        "atom_count": len(symbols),
+        "atom_order": symbols,
+        "formula": _formula_from_symbols(symbols),
+    }
 
 
 @dataclass(frozen=True)
@@ -1303,6 +1345,7 @@ class CommandCompiledToolHostV1:
             str, ProgramResultValidationReceiptV1
         ] = {}
         self.handoffs: dict[str, OptimizedGeometryHandoffV1] = {}
+        self.hessian_handoffs: dict[str, ORCAHessianHandoffV1] = {}
         self._command_contexts: dict[str, _CommandContext] = {}
         # A node ID is unique only inside one workflow.  Bind every command
         # prepared through the workflow surface to that exact plan so a later
@@ -1917,6 +1960,37 @@ class CommandCompiledToolHostV1:
             program=receipt.program,
             jobtype=receipt.jobtype,
         )
+        effective_settings = dict(receipt.settings)
+        frequency_modes = tuple(
+            name
+            for name in ("freq", "numfreq", "vpt2")
+            if bool(effective_settings.get(name))
+        )
+        if frequency_modes:
+            frequency_semantics = {
+                "requested": True,
+                "modes": frequency_modes,
+                "produces_observable": "vibrational_frequencies",
+                "planning_guidance": (
+                    f"This {receipt.program}/{receipt.jobtype} project already "
+                    "requests a frequency calculation. Declare "
+                    "vibrational_frequencies on this same scientific node; "
+                    "do not add another frequency node at the same method and "
+                    "geometry unless an independent Hessian is scientifically "
+                    "intended."
+                ),
+            }
+        else:
+            frequency_semantics = {
+                "requested": False,
+                "modes": (),
+                "produces_observable": "",
+                "planning_guidance": (
+                    f"This {receipt.program}/{receipt.jobtype} project does "
+                    "not request a frequency calculation. A distinct frequency "
+                    "node is needed when vibrational evidence is required."
+                ),
+            }
         return {
             **canonical_data(receipt),
             "scientific_materializations": tuple(
@@ -1926,6 +2000,7 @@ class CommandCompiledToolHostV1:
                 materializations
             ),
             "section_application": section_application,
+            "effective_frequency_semantics": frequency_semantics,
             "workflow_binding": self._project_workflow_binding_observation(
                 artifact.artifact_id
             ),
@@ -2306,7 +2381,10 @@ class CommandCompiledToolHostV1:
         asking the model to invent future artifact or receipt hashes.
         """
 
-        calculation_nodes = values["calculation_nodes"]
+        # Analysis-only workflows have no program invocations.  Treat an
+        # omitted calculation list as the natural empty list instead of
+        # making the model restate a documentary placeholder.
+        calculation_nodes = values.get("calculation_nodes", [])
         node_annotations = {
             item["node_id"]: {
                 "produces_observables": tuple(item["produces_observables"]),
@@ -2771,6 +2849,10 @@ class CommandCompiledToolHostV1:
                 "scientific_workflow_plan": scientific_v2,
                 "workflow_context": context,
             }
+        analysis_receipts = self._scientific_toolchain_analysis_receipts(
+            plan,
+            task_spec_sha256=draft.task_spec_id,
+        )
         return {
             "scientific_toolchain_plan": plan,
             "workflow_context": context,
@@ -2779,8 +2861,350 @@ class CommandCompiledToolHostV1:
                 actionable_calculation_node_ids=actionable,
                 unresolved_calculation_node_ids=unresolved,
                 completed_calculation_node_ids=context.completed_node_ids,
+                completed_analysis_node_ids=analysis_receipts,
             ),
         }
+
+    def _scientific_toolchain_analysis_receipts(
+        self,
+        plan: ScientificToolchainPlanV1,
+        *,
+        task_spec_sha256: str,
+    ) -> dict[str, tuple[str, ...]]:
+        """Relate planned analysis nodes to already observed typed evidence.
+
+        Analysis tools intentionally do not accept a plan-node handle.  That
+        keeps the normal extraction, thermochemistry, dimensional-expression,
+        claims, and decision surface useful for creative DAGs and combined
+        expressions.  The host can still recover the relation from semantics
+        already present on both sides: registered result identity, selectors,
+        typed output IDs, and receipt-level input dependencies.
+
+        A scientific-validation node is *not* numerically re-graded here.  It
+        is complete only when a task-bound scientific decision cites typed
+        evidence from each completed upstream node.  In this projection,
+        ``completed`` means the planned evaluation was performed and recorded;
+        it does not mean that ChemSmart agrees with the scientific conclusion.
+        """
+
+        nodes = {node.node_id: node for node in plan.analysis_nodes}
+        matched: dict[str, tuple[str, ...]] = {}
+
+        def _dependency_receipts(node: AnalysisNodeIntentV1) -> dict[str, set[str]]:
+            return {
+                dependency: set(matched.get(dependency, ()))
+                for dependency in node.dependencies
+            }
+
+        def _decision_evidence(decision: ScientificDecisionRecordV1) -> set[str]:
+            evidence: set[str] = set()
+            for reference in decision.evidence_refs:
+                parsed = _postprocessing_evidence_reference(reference)
+                if parsed is not None:
+                    evidence.add(parsed[1])
+            return evidence
+
+        def _unit_dimension(unit: str) -> tuple[int, ...] | None:
+            aliases = {
+                "j/(mol k)": "J mol^-1 K^-1",
+                "kj/(mol k)": "kJ mol^-1 K^-1",
+                "cal/(mol k)": "cal mol^-1 K^-1",
+                "kcal/(mol k)": "kcal mol^-1 K^-1",
+            }
+            candidate = aliases.get(str(unit).strip().lower(), unit)
+            try:
+                _value, _canonical_unit, dimension = normalize_numeric_value(
+                    0.0, candidate
+                )
+            except (ContractError, ValueError):
+                return None
+            return tuple(dimension)
+
+        task_decisions = tuple(
+            decision
+            for decision in self.scientific_decisions.values()
+            if decision.task_spec_sha256 == task_spec_sha256
+        )
+        task_claims = tuple(
+            record
+            for record in self.analysis_claim_records.values()
+            if record.task_spec_sha256 == task_spec_sha256
+        )
+
+        for node_id in plan.node_order:
+            node = nodes.get(node_id)
+            if node is None or node.support_state != "planned":
+                continue
+            dependencies = _dependency_receipts(node)
+            if any(not receipts for receipts in dependencies.values()):
+                continue
+
+            if node.analysis_kind == "result_extraction":
+                registered = tuple(
+                    item
+                    for item in node.inputs
+                    if isinstance(item, RegisteredResultInputIntentV1)
+                )
+                if len(registered) != 1:
+                    continue
+                selectors = {
+                    selector.quantity_id: selector.selector
+                    for selector in node.selectors
+                }
+                exact_candidates = tuple(
+                    receipt.receipt_sha256
+                    for receipt in self.quantity_extractions.values()
+                    if receipt.status == "extracted"
+                    and receipt.artifact_id == registered[0].artifact_id
+                    and all(
+                        self.quantity_extraction_bindings.get(
+                            receipt.receipt_sha256, {}
+                        ).get(quantity_id)
+                        == selector
+                        for quantity_id, selector in selectors.items()
+                    )
+                )
+                candidates = exact_candidates
+                if not candidates and task_claims and task_decisions:
+                    # A parser may expose only the supported subset of a
+                    # broader analysis intent.  Once the final task-bound
+                    # claims and decision explicitly cite that typed subset,
+                    # the extraction stage was performed; the senior
+                    # scientist, not this matcher, judges whether the stated
+                    # limitation is acceptable.  Unknown or mismatched
+                    # selectors still cannot enter through this fallback.
+                    subset_candidates = {
+                        receipt.receipt_sha256
+                        for receipt in self.quantity_extractions.values()
+                        if receipt.status == "extracted"
+                        and receipt.artifact_id == registered[0].artifact_id
+                        and (
+                            bindings := self.quantity_extraction_bindings.get(
+                                receipt.receipt_sha256, {}
+                            )
+                        )
+                        and all(
+                            selectors.get(quantity_id) == selector
+                            for quantity_id, selector in bindings.items()
+                        )
+                    }
+                    claim_digests = {
+                        record.receipt_sha256 for record in task_claims
+                    }
+                    cited = {
+                        digest
+                        for decision in task_decisions
+                        if _decision_evidence(decision).intersection(
+                            claim_digests
+                        )
+                        for digest in _decision_evidence(decision)
+                    }
+                    candidates = tuple(sorted(subset_candidates & cited))
+                if candidates:
+                    matched[node_id] = tuple(sorted(set(candidates)))
+                continue
+
+            if node.analysis_kind == "thermochemistry":
+                source_artifact_ids = {
+                    receipt.artifact_id
+                    for dependency_receipts in dependencies.values()
+                    for digest in dependency_receipts
+                    if (
+                        receipt := self.quantity_extractions.get(digest)
+                    )
+                    is not None
+                }
+                thermochemistry_kind_aliases = {
+                    # Gibbs free-energy correction and thermal free-energy
+                    # correction are the same G(T)-E_electronic quantity; the
+                    # typed engine uses the former canonical label.
+                    "thermal_free_energy_correction": (
+                        "thermal_gibbs_correction"
+                    ),
+                }
+                required_kinds = {
+                    thermochemistry_kind_aliases.get(
+                        output.quantity_kind, output.quantity_kind
+                    ): output.unit
+                    for output in node.outputs
+                }
+                candidates: list[str] = []
+                for receipt in self.thermochemistry_receipts.values():
+                    if (
+                        receipt.status != "derived"
+                        or receipt.artifact_id not in source_artifact_ids
+                        or not math.isclose(
+                            receipt.temperature_k,
+                            float(node.temperature_k),
+                            rel_tol=0.0,
+                            abs_tol=1.0e-12,
+                        )
+                        or not math.isclose(
+                            receipt.pressure_atm,
+                            float(node.pressure_atm),
+                            rel_tol=0.0,
+                            abs_tol=1.0e-12,
+                        )
+                        or receipt.concentration_mol_l
+                        != node.concentration_mol_l
+                        or receipt.entropy_method != node.entropy_method
+                        or receipt.entropy_cutoff_cm1
+                        != node.entropy_cutoff_cm1
+                        or receipt.enthalpy_cutoff_cm1
+                        != node.enthalpy_cutoff_cm1
+                        or receipt.alpha != node.alpha
+                        or receipt.use_weighted_mass
+                        is not node.use_weighted_mass
+                        or not math.isclose(
+                            receipt.frequency_scale_factor,
+                            node.frequency_scale_factor,
+                            rel_tol=0.0,
+                            abs_tol=1.0e-12,
+                        )
+                    ):
+                        continue
+                    quantities = {
+                        quantity.quantity_id: quantity
+                        for quantity in receipt.quantities
+                    }
+                    if not set(required_kinds).issubset(quantities):
+                        continue
+                    compatible = True
+                    for quantity_kind, unit in required_kinds.items():
+                        dimension = _unit_dimension(unit)
+                        if dimension is None:
+                            compatible = False
+                            break
+                        if tuple(quantities[quantity_kind].dimension) != dimension:
+                            compatible = False
+                            break
+                    if compatible:
+                        candidates.append(receipt.receipt_sha256)
+                if candidates:
+                    matched[node_id] = tuple(sorted(set(candidates)))
+                continue
+
+            if node.analysis_kind == "quantity_expression":
+                required_outputs = set(node.expression_output_node_ids)
+                planned_output_operations = {
+                    str(expression.get("operation") or "")
+                    for expression in node.expression_nodes
+                    if str(expression.get("node_id") or "")
+                    in required_outputs
+                }
+                planned_dimensions: set[tuple[int, ...]] = set()
+                for output in node.outputs:
+                    dimension = _unit_dimension(output.unit)
+                    if dimension is not None:
+                        planned_dimensions.add(dimension)
+                candidates: list[str] = []
+                for receipt in self.quantity_expression_receipts.values():
+                    if receipt.status != "derived":
+                        continue
+                    observed_outputs = {
+                        quantity.quantity_id: quantity
+                        for quantity in receipt.outputs
+                    }
+                    selected_outputs = set(required_outputs)
+                    if not required_outputs.issubset(observed_outputs):
+                        # A direct typed expression may be a scientifically
+                        # stronger expansion of a planned abstract output (for
+                        # example, several N-H...O distances instead of one
+                        # placeholder contact).  Preserve that flexibility only
+                        # when the host-observed operation and dimension still
+                        # match the planned typed result.
+                        selected_outputs = {
+                            dependency.output_id
+                            for dependency in receipt.output_dependencies
+                            if planned_output_operations.intersection(
+                                dependency.convention_operations
+                            )
+                            and dependency.output_id in observed_outputs
+                            and (
+                                not planned_dimensions
+                                or tuple(
+                                    observed_outputs[
+                                        dependency.output_id
+                                    ].dimension
+                                )
+                                in planned_dimensions
+                            )
+                        }
+                        observed_operations = {
+                            operation
+                            for dependency in receipt.output_dependencies
+                            if dependency.output_id in selected_outputs
+                            for operation in dependency.convention_operations
+                        }
+                        if (
+                            not selected_outputs
+                            or not planned_output_operations.issubset(
+                                observed_operations
+                            )
+                        ):
+                            continue
+                    sources = {
+                        source
+                        for dependency in receipt.output_dependencies
+                        if dependency.output_id in selected_outputs
+                        for source in dependency.source_receipt_sha256s
+                    }
+                    if all(
+                        bool(sources.intersection(dependency_receipts))
+                        for dependency_receipts in dependencies.values()
+                    ):
+                        candidates.append(receipt.receipt_sha256)
+                if candidates:
+                    matched[node_id] = tuple(sorted(set(candidates)))
+                continue
+
+            if node.analysis_kind == "scientific_validation":
+                candidates = []
+                for decision in task_decisions:
+                    evidence = _decision_evidence(decision)
+                    if all(
+                        bool(evidence.intersection(dependency_receipts))
+                        for dependency_receipts in dependencies.values()
+                    ):
+                        candidates.append(decision.record_sha256)
+                if candidates:
+                    matched[node_id] = tuple(sorted(set(candidates)))
+                continue
+
+            if node.analysis_kind == "claim_rendering":
+                candidates: list[tuple[str, str]] = []
+                for claim_record in task_claims:
+                    claim_sources = {
+                        claim.source_receipt_sha256
+                        for claim in claim_record.claims
+                    }
+                    for decision in task_decisions:
+                        evidence = _decision_evidence(decision)
+                        if claim_record.receipt_sha256 not in evidence:
+                            continue
+                        if all(
+                            bool(
+                                (
+                                    claim_sources
+                                    | evidence
+                                    | {decision.record_sha256}
+                                ).intersection(
+                                    dependency_receipts
+                                )
+                            )
+                            for dependency_receipts in dependencies.values()
+                        ):
+                            candidates.append(
+                                (
+                                    claim_record.receipt_sha256,
+                                    decision.record_sha256,
+                                )
+                            )
+                if candidates:
+                    matched[node_id] = tuple(
+                        sorted({digest for pair in candidates for digest in pair})
+                    )
+        return matched
 
     def _prepare_program_node(self, turn_id: str, values: dict) -> Any:
         """Resolve and safe-preview a planned node without model-carried hashes.
@@ -3157,6 +3581,33 @@ class CommandCompiledToolHostV1:
             turn_id, {"invocation_sha256": invocation.invocation_sha256}
         )
         preview_status = preview["safe_preview"].status
+        preflight = None
+        if preview_status == "previewed" and not preview["critical_findings"]:
+            # Preparation already holds every host-owned input needed by the
+            # deterministic preflight.  Completing it here makes scientific
+            # readiness independent of whether a model memorizes a second
+            # bookkeeping tool name; it still grants no execution authority.
+            preflight = self._preflight_program_node(
+                turn_id,
+                {
+                    "node_id": node.node_id,
+                    "capability_receipt_sha256": capability.receipt_sha256,
+                    "program_binding_sha256": program_binding.binding_sha256,
+                    "engine_binding_sha256": engine_binding.binding_sha256,
+                    "geometry_artifact_sha256": input_artifact.sha256,
+                    "scientific_identity_sha256": identity.binding_sha256,
+                    "charge": identity.charge,
+                    "multiplicity": identity.multiplicity,
+                    "project_validation_receipt_sha256": validation.receipt_sha256,
+                    "invocation_sha256": invocation.invocation_sha256,
+                    "command_inspection_receipt_sha256": compiled[
+                        "inspection"
+                    ].receipt_sha256,
+                    "safe_preview_receipt_sha256": preview[
+                        "safe_preview"
+                    ].receipt_sha256,
+                },
+            )
         return {
             "status": (
                 "previewed"
@@ -3182,6 +3633,7 @@ class CommandCompiledToolHostV1:
             },
             "command": compiled,
             "preview": preview,
+            "preflight": preflight,
             "next_action": (
                 "inspect the workflow frontier"
                 if preview_status == "previewed"
@@ -3231,16 +3683,21 @@ class CommandCompiledToolHostV1:
         )
         resolved: dict[tuple[str, str, str, str], TrustedArtifactRefV1] = {}
         for node in draft.nodes:
-            handoff = self.handoffs.get(node.node_id)
-            if handoff is None or handoff.status != "validated_handoff":
-                continue
-            artifact = self.artifacts.get(handoff.geometry_artifact_id)
-            if (
-                artifact is None
-                or artifact.sha256 != handoff.geometry_artifact_sha256
-            ):
-                continue
             for item in node.inputs:
+                if item.artifact_class == "geometry_xyz":
+                    handoff = self.handoffs.get(node.node_id)
+                elif item.artifact_class == "orca_hessian":
+                    handoff = self.hessian_handoffs.get(node.node_id)
+                else:
+                    handoff = None
+                if handoff is None or handoff.status != "validated_handoff":
+                    continue
+                artifact = self.artifacts.get(handoff.selected_artifact_id)
+                if (
+                    artifact is None
+                    or artifact.sha256 != handoff.selected_artifact_sha256
+                ):
+                    continue
                 if (
                     item.producer_node_id != handoff.producer_node_id
                     or node.node_id != handoff.consumer_node_id
@@ -4366,8 +4823,141 @@ class CommandCompiledToolHostV1:
         )
         return workflow
 
+    def _completion_receipts_for_latest_analysis_toolchain(
+        self,
+    ) -> tuple[str, ...]:
+        """Aggregate a completed registered-result toolchain, if one exists.
+
+        The scientific toolchain itself is the transparent completion policy:
+        required output producers must have typed evidence, and a planned
+        claim-rendering stage must have a task-bound claim record cited by a
+        task-bound scientific decision.  This observes execution of the
+        model's declared analysis DAG; it does not grade the numerical result
+        or force one scientifically preferred DAG.
+        """
+
+        if not self.scientific_toolchain_plans:
+            return ()
+        plan = next(reversed(self.scientific_toolchain_plans.values()))
+        if (
+            not self.workflow_drafts
+            or next(reversed(self.workflow_drafts))
+            != plan.command_workflow_draft_sha256
+        ):
+            return ()
+        command_result = self._scientific_toolchain_command_results.get(
+            plan.plan_sha256
+        )
+        if command_result is None:
+            return ()
+        draft = command_result.get("workflow_draft")
+        if (
+            not isinstance(draft, CommandWorkflowDraftV1)
+            or plan.calculation_node_ids
+            or draft.nodes
+        ):
+            return ()
+        matched = self._scientific_toolchain_analysis_receipts(
+            plan,
+            task_spec_sha256=draft.task_spec_id,
+        )
+        output_producers = {
+            output.output_id: node.node_id
+            for node in plan.analysis_nodes
+            for output in node.outputs
+        }
+        required_producers = {
+            output_producers[output_id]
+            for output_id in plan.required_output_ids
+        }
+        analysis_nodes = {
+            node.node_id: node for node in plan.analysis_nodes
+        }
+        missing_required = {
+            node_id for node_id in required_producers if node_id not in matched
+        }
+        unresolved_required = {
+            node_id
+            for node_id in missing_required
+            if analysis_nodes[node_id].support_state != "blocked_unsupported"
+        }
+        if unresolved_required:
+            return ()
+        claim_nodes = tuple(
+            node.node_id
+            for node in plan.analysis_nodes
+            if node.analysis_kind == "claim_rendering"
+            and node.support_state == "planned"
+        )
+        rendered_claim_nodes = {
+            node_id for node_id in claim_nodes if node_id in matched
+        }
+        if claim_nodes and not rendered_claim_nodes:
+            return ()
+        # A required blocked_unsupported output is a completed limitation only
+        # when the same task reached its recorded claims/decision stage.  Keep
+        # the node visibly blocked in the frontier; do not pretend a missing
+        # parser or Hessian produced a value.
+        if missing_required and not rendered_claim_nodes:
+            return ()
+        source_receipts = tuple(
+            sorted(
+                {
+                    digest
+                    for receipts in matched.values()
+                    for digest in receipts
+                }
+            )
+        )
+        if not source_receipts:
+            return ()
+        body = {
+            "schema_version": "chemsmart.analysis-completion-receipt.v1",
+            # A registered-result scientific toolchain is already a visible,
+            # typed output contract.  Its digest fills the existing aggregate
+            # gate's policy identity without inventing a parallel policy file.
+            "policy_sha256": plan.plan_sha256,
+            "task_spec_sha256": draft.task_spec_id,
+            "source_receipt_sha256s": source_receipts,
+            "status": "passed",
+            "findings": (),
+        }
+        completion = AnalysisCompletionReceiptV1(
+            **body, receipt_sha256=canonical_sha256(body)
+        )
+        self.analysis_completion_receipts[completion.receipt_sha256] = (
+            completion
+        )
+        completion_record = canonical_data(completion)
+        completion_record.pop("receipt_sha256")
+        turn_id = self.event_store.state().turn_id or "analysis-toolchain"
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.ANALYSIS_COMPLETION_EVALUATED.value,
+            payload={
+                "receipt_sha256": completion.receipt_sha256,
+                "policy_sha256": completion.policy_sha256,
+                "task_spec_sha256": completion.task_spec_sha256,
+                "source_receipt_sha256s": completion.source_receipt_sha256s,
+                "status": completion.status,
+                "critical_finding_count": 0,
+                "completion_kind": "scientific_toolchain",
+                "record": completion_record,
+            },
+            idempotency_key=(
+                "scientific-toolchain-completion:" + completion.receipt_sha256
+            ),
+        )
+        return (completion.receipt_sha256,)
+
     def completion_receipts_for_latest_preflight(self) -> tuple[str, ...]:
-        """Return host-derived gates only for a green previewed preflight."""
+        """Return a green analysis-toolchain or command-preflight gate."""
+
+        analysis_completion = (
+            self._completion_receipts_for_latest_analysis_toolchain()
+        )
+        if analysis_completion:
+            return analysis_completion
 
         if not self.preflights:
             raise ContractError("no node preflight has been observed")
@@ -4969,6 +5559,12 @@ class CommandCompiledToolHostV1:
                 plan_sha256=scientific_plan.plan_sha256,
             ),
             auxiliary_input_artifacts=dict(context.job_artifact_options),
+            auxiliary_handoffs=(
+                {"hess_filename": self.hessian_handoffs[node_id]}
+                if "hess_filename" in dict(context.job_artifact_options)
+                and node_id in self.hessian_handoffs
+                else {}
+            ),
         )
         frozen_preview = frozen_approval.preview_binding(node_id)
         if (
@@ -5111,7 +5707,12 @@ class CommandCompiledToolHostV1:
         wrapper_exit_status = process_observation.returncode
         launch_ambiguous = process_observation.state.endswith("_ambiguous")
         outputs = self._execution_output_artifacts(
-            node_id, node_workspace, program=context.proposal.program
+            node_id,
+            node_workspace,
+            program=context.proposal.program,
+            auxiliary_inputs=tuple(
+                artifact for _name, artifact in context.job_artifact_options
+            ),
         )
         pyscf_engine = (
             _inspect_pyscf_engine_observation(
@@ -5294,11 +5895,87 @@ class CommandCompiledToolHostV1:
             "pyscf",
             "xtb",
         }:
-            for edge in approval.producer_edges:
+            outgoing_edges = tuple(
+                sorted(
+                    (
+                        edge
+                        for edge in approval.producer_edges
+                        if edge.producer_node_id == node_id
+                    ),
+                    key=lambda item: (
+                        item.selection_rule
+                        != "validated_optimized_geometry",
+                        item.consumer_node_id,
+                    ),
+                )
+            )
+            for edge in outgoing_edges:
                 if edge.producer_node_id != node_id:
                     continue
                 consumer_binding = approval.node(edge.consumer_node_id)
-                if context.proposal.program == "pyscf":
+                if edge.selection_rule == "validated_final_orca_ts_hessian":
+                    if (
+                        context.proposal.program != "orca"
+                        or context.proposal.jobtype != "ts"
+                    ):
+                        raise ContractError(
+                            "final ORCA Hessian handoff requires an ORCA TS"
+                        )
+                    result_candidates = tuple(
+                        item for item in outputs if item.kind == "orca_output"
+                    )
+                    hessian_candidates = tuple(
+                        item for item in outputs if item.kind == "orca_hessian"
+                    )
+                    if len(result_candidates) != 1 or not hessian_candidates:
+                        raise ContractError(
+                            "validated ORCA TS requires one output and at least "
+                            "one native Hessian candidate"
+                        )
+                    artifact, observed = handoff_final_orca_ts_hessian(
+                        producer_receipt=receipt,
+                        result_artifact=result_candidates[0],
+                        hessian_candidates=hessian_candidates,
+                        producer_edge=edge,
+                        approved_workspace=self.approved_workspace,
+                        hessian_artifact_id=(
+                            f"hessian.{edge.producer_node_id}-to-"
+                            f"{edge.consumer_node_id}"
+                        ),
+                        expected_charge=context.scientific_identity.charge,
+                        expected_multiplicity=(
+                            context.scientific_identity.multiplicity
+                        ),
+                    )
+                    geometry_handoff = self.handoffs.get(edge.consumer_node_id)
+                    if geometry_handoff is None:
+                        raise ContractError(
+                            "ORCA TS Hessian handoff requires its final geometry"
+                        )
+                    if observed.consumer_state != (
+                        consumer_binding.charge,
+                        consumer_binding.multiplicity,
+                    ):
+                        raise ContractError(
+                            "ORCA IRC must remain on the transition-state "
+                            "charge and multiplicity surface"
+                        )
+                    geometry = self.artifacts.get(
+                        geometry_handoff.geometry_artifact_id
+                    )
+                    if geometry is None:
+                        raise ContractError(
+                            "ORCA TS Hessian lacks its selected geometry"
+                        )
+                    identity = build_scientific_identity_binding(
+                        task_spec_sha256=approval.task_spec_sha256,
+                        geometry_artifact=geometry,
+                        charge=consumer_binding.charge,
+                        multiplicity=consumer_binding.multiplicity,
+                    )
+                    self.artifacts[artifact.artifact_id] = artifact
+                    self.hessian_handoffs[edge.consumer_node_id] = observed
+                elif context.proposal.program == "pyscf":
                     candidates = tuple(
                         item for item in outputs if item.kind == "pyscf_hdf5"
                     )
@@ -5306,7 +5983,7 @@ class CommandCompiledToolHostV1:
                         raise ContractError(
                             "validated PySCF OPT requires exactly one HDF5 result"
                         )
-                    geometry, observed = handoff_optimized_pyscf_geometry(
+                    artifact, observed = handoff_optimized_pyscf_geometry(
                         producer_receipt=receipt,
                         result_artifact=candidates[0],
                         producer_edge=edge,
@@ -5333,7 +6010,7 @@ class CommandCompiledToolHostV1:
                         raise ContractError(
                             "validated xTB OPT requires exactly one xtbopt.xyz"
                         )
-                    geometry, observed = handoff_optimized_xtb_geometry(
+                    artifact, observed = handoff_optimized_xtb_geometry(
                         producer_receipt=receipt,
                         result_artifact=candidates[0],
                         input_artifact=context.input_artifact,
@@ -5360,7 +6037,7 @@ class CommandCompiledToolHostV1:
                             f"validated {context.proposal.program} OPT/TS "
                             f"requires exactly one {output_kind}"
                         )
-                    geometry, observed = handoff_optimized_native_geometry(
+                    artifact, observed = handoff_optimized_native_geometry(
                         program=context.proposal.program,
                         producer_receipt=receipt,
                         result_artifact=candidates[0],
@@ -5378,18 +6055,19 @@ class CommandCompiledToolHostV1:
                         consumer_charge=consumer_binding.charge,
                         consumer_multiplicity=(consumer_binding.multiplicity),
                     )
-                consumer_charge, consumer_multiplicity = (
-                    observed.consumer_state
-                )
-                identity = build_scientific_identity_binding(
-                    task_spec_sha256=approval.task_spec_sha256,
-                    geometry_artifact=geometry,
-                    charge=consumer_charge,
-                    multiplicity=consumer_multiplicity,
-                )
-                self.artifacts[geometry.artifact_id] = geometry
-                self.scientific_identities[identity.binding_sha256] = identity
-                self.handoffs[edge.consumer_node_id] = observed
+                if edge.selection_rule == "validated_optimized_geometry":
+                    consumer_charge, consumer_multiplicity = (
+                        observed.consumer_state
+                    )
+                    identity = build_scientific_identity_binding(
+                        task_spec_sha256=approval.task_spec_sha256,
+                        geometry_artifact=artifact,
+                        charge=consumer_charge,
+                        multiplicity=consumer_multiplicity,
+                    )
+                    self.artifacts[artifact.artifact_id] = artifact
+                    self.scientific_identities[identity.binding_sha256] = identity
+                    self.handoffs[edge.consumer_node_id] = observed
                 scientific_edge = next(
                     (
                         item
@@ -5403,26 +6081,27 @@ class CommandCompiledToolHostV1:
                 )
                 if scientific_edge is None:
                     raise ContractError(
-                        "optimized handoff lacks an exact scientific data edge"
+                        "producer handoff lacks an exact scientific data edge"
                     )
                 produced_handoffs.append(
                     {
                         "handoff": observed,
-                        "artifact": geometry,
+                        "artifact": artifact,
                         "scientific_identity": identity,
                     }
                 )
                 pending_data_edges.append(
                     (scientific_edge, edge, observed, identity)
                 )
-                self._emit(
-                    turn_id,
-                    EventKind.OPTIMIZED_GEOMETRY_HANDED_OFF,
-                    observed.receipt_sha256,
-                    status=observed.status,
-                    producer_node_id=edge.producer_node_id,
-                    consumer_node_id=edge.consumer_node_id,
-                )
+                if edge.selection_rule == "validated_optimized_geometry":
+                    self._emit(
+                        turn_id,
+                        EventKind.OPTIMIZED_GEOMETRY_HANDED_OFF,
+                        observed.receipt_sha256,
+                        status=observed.status,
+                        producer_node_id=edge.producer_node_id,
+                        consumer_node_id=edge.consumer_node_id,
+                    )
         if self.frozen_workflow_approval is not None:
             output_sha256s = tuple(
                 sorted(
@@ -5553,6 +6232,50 @@ class CommandCompiledToolHostV1:
             )
         return effective_timeout
 
+    def execution_review_ineligibility_reason(
+        self,
+        *,
+        plan: ScientificWorkflowPlanV2,
+        planned_node: ScientificWorkflowNodeV2,
+    ) -> str:
+        """Explain why one valid plan node cannot enter human execution review."""
+
+        envelope = self.bounded_execution_envelope
+        if envelope is None:
+            return "an explicit execution envelope is required"
+        if not envelope.allows(planned_node.program, planned_node.engine):
+            return "program/engine is outside the execution envelope"
+        program_capability = self.registry.get(planned_node.program)
+        executable_pairs = (
+            set(program_capability.execution_engine_job_pairs)
+            if program_capability is not None
+            else set()
+        )
+        if (planned_node.engine, planned_node.stage) not in executable_pairs:
+            return "job is supported for planning or preview, not Agent execution"
+        if planned_node.program == "orca" and planned_node.stage == "ts":
+            data_target_ids = {
+                edge.target_node_id
+                for edge in plan.edges
+                if edge.edge_kind == "data"
+            }
+            context = self._bounded_node_context(
+                plan=plan,
+                planned_node=planned_node,
+                data_target_ids=data_target_ids,
+            )
+            if context.project_validation is None:
+                raise ContractError(
+                    "ORCA transition-state review lacks validated project settings"
+                )
+            settings = dict(context.project_validation.settings)
+            if not bool(settings.get("freq") or settings.get("numfreq")):
+                return (
+                    "ORCA transition-state execution requires a requested "
+                    "frequency analysis to establish a first-order saddle"
+                )
+        return ""
+
     def build_execution_review(
         self,
         *,
@@ -5605,10 +6328,6 @@ class CommandCompiledToolHostV1:
                 "execution review refuses unsupported or non-causal unresolved "
                 "nodes: " + ", ".join(unsupported)
             )
-        if len(data_target_ids) != len(data_edges):
-            raise ContractError(
-                "execution review supports one molecular data input per node"
-            )
         materialized = self._latest_bounded_materialization(plan)
         producer_edges = []
         for edge in data_edges:
@@ -5617,14 +6336,21 @@ class CommandCompiledToolHostV1:
                 for item in plan.nodes
                 if item.node_id == edge.source_node_id
             )
-            if not is_validated_optimized_geometry_edge(plan, edge):
+            if is_validated_optimized_geometry_edge(plan, edge):
+                selection_rule = "validated_optimized_geometry"
+            elif is_validated_orca_ts_hessian_edge(plan, edge):
+                selection_rule = "validated_final_orca_ts_hessian"
+            else:
                 raise ContractError(
                     "execution review has no exact selection rule for data "
-                    f"edge {edge.edge_id!r}; expected an opt or ts producer "
-                    "output named optimized_geometry with artifact class "
-                    "geometry_xyz"
+                    f"edge {edge.edge_id!r}; expected optimized geometry or "
+                    "an ORCA final-TS Hessian for IRC"
                 )
-            if producer.program not in {"gaussian", "orca", "pyscf", "xtb"}:
+            if (
+                selection_rule == "validated_optimized_geometry"
+                and producer.program
+                not in {"gaussian", "orca", "pyscf", "xtb"}
+            ):
                 raise ContractError(
                     "execution review has no optimized-geometry handoff for "
                     f"producer program {producer.program!r}"
@@ -5634,20 +6360,39 @@ class CommandCompiledToolHostV1:
                     producer_node_id=edge.source_node_id,
                     consumer_node_id=edge.target_node_id,
                     artifact_kind=edge.artifact_class,
-                    selection_rule="validated_optimized_geometry",
+                    selection_rule=selection_rule,
                 )
             )
+        geometry_edges = tuple(
+            edge
+            for edge in producer_edges
+            if edge.selection_rule == "validated_optimized_geometry"
+        )
         edge_by_target = {
-            edge.consumer_node_id: edge for edge in producer_edges
+            edge.consumer_node_id: edge
+            for edge in geometry_edges
         }
+        if (
+            len(edge_by_target) != len(geometry_edges)
+            or set(edge_by_target) != data_target_ids
+        ):
+            raise ContractError(
+                "every producer-dependent calculation requires exactly one "
+                "validated geometry input"
+            )
         node_bindings = []
         environment_bindings = []
         node_reviews: list[WorkflowExecutionNodeReviewV1] = []
         for planned_node in plan.nodes:
-            if not envelope.allows(planned_node.program, planned_node.engine):
+            ineligibility = self.execution_review_ineligibility_reason(
+                plan=plan,
+                planned_node=planned_node,
+            )
+            if ineligibility:
                 raise ContractError(
-                    "workflow uses program/engine outside review allowlist: "
-                    f"{planned_node.program}/{planned_node.engine}"
+                    "workflow node is not eligible for Agent execution: "
+                    f"{planned_node.program}/{planned_node.engine}/"
+                    f"{planned_node.stage}: {ineligibility}"
                 )
             context = self._bounded_node_context(
                 plan=plan,
@@ -5790,6 +6535,7 @@ class CommandCompiledToolHostV1:
             if approved_identity is None:
                 molecular_identity = {
                     "identity_evidence_status": "task-bound-geometry-only",
+                    **_review_molecule_identity(context.input_artifact),
                     "coordinate_identity": coordinate_identity,
                     "input_binding_sha256": review_input_sha256,
                     "charge": target_charge,
@@ -5805,6 +6551,10 @@ class CommandCompiledToolHostV1:
                 molecular_identity = {
                     "identity_evidence_status": "approved-molecular-identity",
                     **approved_identity.public_record(),
+                    "atom_count": len(approved_identity.atom_order),
+                    "formula": _formula_from_symbols(
+                        approved_identity.atom_order
+                    ),
                     "coordinate_identity": coordinate_identity,
                     "input_binding_sha256": review_input_sha256,
                     "charge": target_charge,
@@ -6012,11 +6762,6 @@ class CommandCompiledToolHostV1:
                 "bounded execution refuses unsupported or non-causal unresolved "
                 "nodes: " + ", ".join(unsupported)
             )
-        if len(data_target_ids) != len(data_edges):
-            raise ContractError(
-                "bounded execution supports one molecular data input per node"
-            )
-
         materialized = self._latest_bounded_materialization(plan)
         node_bindings = []
         producer_edges = []
@@ -6026,14 +6771,21 @@ class CommandCompiledToolHostV1:
                 for item in plan.nodes
                 if item.node_id == edge.source_node_id
             )
-            if not is_validated_optimized_geometry_edge(plan, edge):
+            if is_validated_optimized_geometry_edge(plan, edge):
+                selection_rule = "validated_optimized_geometry"
+            elif is_validated_orca_ts_hessian_edge(plan, edge):
+                selection_rule = "validated_final_orca_ts_hessian"
+            else:
                 raise ContractError(
                     "bounded execution has no exact selection rule for data "
-                    f"edge {edge.edge_id!r}; expected an opt or ts producer "
-                    "output named optimized_geometry with artifact class "
-                    "geometry_xyz"
+                    f"edge {edge.edge_id!r}; expected optimized geometry or "
+                    "an ORCA final-TS Hessian for IRC"
                 )
-            if producer.program not in {"gaussian", "orca", "pyscf", "xtb"}:
+            if (
+                selection_rule == "validated_optimized_geometry"
+                and producer.program
+                not in {"gaussian", "orca", "pyscf", "xtb"}
+            ):
                 raise ContractError(
                     "bounded execution has no optimized-geometry handoff for "
                     f"producer program {producer.program!r}"
@@ -6043,12 +6795,26 @@ class CommandCompiledToolHostV1:
                     producer_node_id=edge.source_node_id,
                     consumer_node_id=edge.target_node_id,
                     artifact_kind=edge.artifact_class,
-                    selection_rule="validated_optimized_geometry",
+                    selection_rule=selection_rule,
                 )
             )
+        geometry_edges = tuple(
+            edge
+            for edge in producer_edges
+            if edge.selection_rule == "validated_optimized_geometry"
+        )
         edge_by_target = {
-            edge.consumer_node_id: edge for edge in producer_edges
+            edge.consumer_node_id: edge
+            for edge in geometry_edges
         }
+        if (
+            len(edge_by_target) != len(geometry_edges)
+            or set(edge_by_target) != data_target_ids
+        ):
+            raise ContractError(
+                "every producer-dependent calculation requires exactly one "
+                "validated geometry input"
+            )
         environment_identities = set()
         future_environments = {}
         for planned_node in plan.nodes:
@@ -6244,9 +7010,36 @@ class CommandCompiledToolHostV1:
             ),
             None,
         )
-        if node is None or len(node.inputs) != 1:
+        producer_inputs = tuple(
+            item for item in (node.inputs if node is not None else ())
+            if item.producer_node_id
+        )
+        geometry_inputs = tuple(
+            item
+            for item in producer_inputs
+            if item.artifact_class == "geometry_xyz"
+        )
+        auxiliary_inputs = tuple(
+            item for item in producer_inputs if item not in geometry_inputs
+        )
+        valid_orca_irc_auxiliary = bool(
+            planned_node.program == "orca"
+            and planned_node.stage == "irc"
+            and len(auxiliary_inputs) == 1
+            and len(geometry_inputs) == 1
+            and geometry_inputs[0].binding_id == "filename"
+            and auxiliary_inputs[0].binding_id == "hess_filename"
+            and auxiliary_inputs[0].artifact_class == "orca_hessian"
+        )
+        if (
+            node is None
+            or len(geometry_inputs) != 1
+            or (auxiliary_inputs and not valid_orca_irc_auxiliary)
+        ):
             raise ContractError(
-                "future bounded node lacks one exact data input"
+                "future bounded node requires one filename/geometry_xyz input; "
+                "ORCA IRC may additionally consume one "
+                "hess_filename/orca_hessian input"
             )
         project = self._artifact(node.project_role)
         capabilities = tuple(
@@ -6269,7 +7062,13 @@ class CommandCompiledToolHostV1:
             if binding.capability_receipt_sha256 == capability.receipt_sha256
             and binding.program == planned_node.program
             and binding.selected_engine == planned_node.engine
-            and binding.execution_ready
+            # Provider planning deliberately omits the execution tool, so a
+            # correctly observed program environment is resolved but not
+            # execution-ready in this host.  Review freezes that observed
+            # environment; the provider-free executor rechecks readiness
+            # before any launch.
+            and binding.state == "resolved"
+            and bool(binding.environment_receipt_sha256)
         )
         validation = self._resolve_project_validation(
             project=project,
@@ -6286,6 +7085,8 @@ class CommandCompiledToolHostV1:
             for edge in plan.edges
             if edge.edge_kind == "data"
             and edge.target_node_id == planned_node.node_id
+            and edge.artifact_class == "geometry_xyz"
+            and edge.consumer_input_id == "filename"
         )
         _producer_invocation, producer_context = (
             self._plan_invocation_for_node(plan=plan, node_id=producer)
@@ -6444,7 +7245,13 @@ class CommandCompiledToolHostV1:
         invocation_sha256: str,
         review: WorkflowExecutionNodeReviewV1,
     ) -> tuple[str, ...]:
-        """Prove the next real launch is exactly the path-neutral review."""
+        """Recheck the reviewed scientific meaning before a real launch.
+
+        The live ChemSmart compiler is authoritative for the launch command.
+        Human approval covers molecular state, program/stage, effective project
+        settings, resources and the displayed causal DAG; an argv digest is not
+        a second execution authority.
+        """
 
         if review.node_id != node_id:
             raise ContractError("execution node differs from reviewed command")
@@ -6462,29 +7269,16 @@ class CommandCompiledToolHostV1:
             context.proposal.jobtype,
         ):
             raise ContractError("program command differs from human review")
-        if self.execution_resources is None or (
-            review.resource_sha256
-            != self.execution_resources.resource_sha256
-        ):
+        if self.execution_resources is None or canonical_data(
+            self.execution_resources
+        ) != review.execution_resources:
             raise ContractError("execution resources differ from human review")
         if context.project_artifact is None or context.project_validation is None:
             raise ContractError("reviewed execution requires a validated project")
-        if (
-            context.project_artifact.sha256 != review.project_artifact_sha256
-            or context.project_validation.settings_sha256
-            != review.project_settings_sha256
-        ):
-            raise ContractError("project materialization differs from human review")
-        _settings_text, settings_text_sha256 = normalized_project_settings_review(
-            context.project_validation.settings
-        )
-        if settings_text_sha256 != review.project_settings_text_sha256:
+        reviewed_settings = json.loads(review.project_settings_text)
+        effective_settings = dict(context.project_validation.settings)
+        if canonical_data(effective_settings) != canonical_data(reviewed_settings):
             raise ContractError("effective project settings differ from human review")
-        current_environment_identity = self._environment_identity_for(
-            context.engine_binding.environment_receipt_sha256
-        )
-        if current_environment_identity != review.environment_identity_sha256:
-            raise ContractError("execution environment differs from human review")
         current_environment = self.environments.get(
             context.engine_binding.environment_receipt_sha256
         )
@@ -6545,13 +7339,10 @@ class CommandCompiledToolHostV1:
         if self.execution_server:
             server_path = Path(self.execution_server)
             if (
-                not self.execution_server_file_sha256
-                or not server_path.is_file()
+                not server_path.is_file()
                 or server_path.is_symlink()
-                or file_sha256(server_path)
-                != self.execution_server_file_sha256
             ):
-                raise ContractError("execution server profile changed after setup")
+                raise ContractError("execution server profile is unavailable")
             path_bindings[self.execution_server] = (
                 "server-profile",
                 review.server_profile_sha256,
@@ -6569,23 +7360,43 @@ class CommandCompiledToolHostV1:
             self._real_execution_argv(invocation),
             path_bindings=path_bindings,
         )
-        if (
-            projected != review.real_execution_argv
-            or real_execution_argv_sha256(projected)
-            != review.real_execution_argv_sha256
-        ):
-            raise ContractError("real execution command differs from human review")
+        if projected != review.real_execution_argv:
+            raise ContractError(
+                "recompiled ChemSmart CLI operation differs from human review"
+            )
         return projected
 
     def _execution_output_artifacts(
-        self, node_id: str, workspace: Path, *, program: str = ""
+        self,
+        node_id: str,
+        workspace: Path,
+        *,
+        program: str = "",
+        auxiliary_inputs: Sequence[TrustedArtifactRefV1] = (),
     ) -> tuple[TrustedArtifactRefV1, ...]:
+        auxiliary_by_basename = {
+            (Path(item.path).name, item.size_bytes, item.sha256)
+            for item in auxiliary_inputs
+        }
         artifacts = []
         ordinal = 0
         for path in sorted(workspace.rglob("*")):
             if path.is_symlink():
                 raise ContractError("execution emitted a symbolic link")
             if not path.is_file() or path.name.startswith("controller."):
+                continue
+            size_bytes = path.stat().st_size
+            if any(
+                basename == path.name
+                and expected_size == size_bytes
+                and expected_sha256 == file_sha256(path)
+                for basename, expected_size, expected_sha256 in (
+                    auxiliary_by_basename
+                )
+            ):
+                # A staged multi-file input is launch evidence, not a newly
+                # produced calculation result.  It is checked separately by
+                # _staged_auxiliary_input_findings below.
                 continue
             ordinal += 1
             suffix = path.suffix.lower()
@@ -6594,6 +7405,8 @@ class CommandCompiledToolHostV1:
                 kind = "pyscf_hdf5"
             elif suffix == ".xyz":
                 kind = "geometry_xyz"
+            elif program == "orca" and suffix == ".hess":
+                kind = "orca_hessian"
             elif suffix == ".json":
                 kind = "json"
             elif program == "xtb" and suffix == ".out":
@@ -6898,6 +7711,8 @@ class CommandCompiledToolHostV1:
                 "multiplicity": None,
                 "energy_hartree": None,
                 "vibrational_mode_count": 0,
+                "transition_count": 0,
+                "consequential_imaginary_mode_count": 0,
             }
             if len(candidates) != 1:
                 findings.append("orca.result.output_count")
@@ -6950,6 +7765,16 @@ class CommandCompiledToolHostV1:
                                 + failure_summary.error_class
                             )
                     frequencies = tuple(output.vibrational_frequencies or ())
+                    transitions = tuple(output.excited_state_records or ())
+                    finite_frequencies = bool(frequencies) and all(
+                        math.isfinite(float(value)) for value in frequencies
+                    )
+                    consequential_imaginary_modes = tuple(
+                        float(value)
+                        for value in frequencies
+                        if math.isfinite(float(value))
+                        and float(value) < -20.0
+                    )
                     orca_observation.update(
                         {
                             "normal_termination": bool(
@@ -6960,6 +7785,10 @@ class CommandCompiledToolHostV1:
                             "multiplicity": output.multiplicity,
                             "energy_hartree": output.final_energy,
                             "vibrational_mode_count": len(frequencies),
+                            "transition_count": len(transitions),
+                            "consequential_imaginary_mode_count": len(
+                                consequential_imaginary_modes
+                            ),
                         }
                     )
                     if jobtype == "neb":
@@ -7013,11 +7842,28 @@ class CommandCompiledToolHostV1:
                         )
                     if output.final_energy is None:
                         findings.append("orca.result.energy_missing")
-                    if (
-                        bool((expected_settings or {}).get("freq"))
-                        and not frequencies
-                    ):
+                    requested_frequency_analysis = any(
+                        bool((expected_settings or {}).get(field))
+                        for field in ("freq", "numfreq", "vpt2")
+                    )
+                    if requested_frequency_analysis and not frequencies:
                         findings.append("orca.result.frequencies_missing")
+                    elif requested_frequency_analysis and not finite_frequencies:
+                        findings.append("orca.result.frequencies_invalid")
+                    if jobtype == "ts":
+                        if not finite_frequencies:
+                            if "orca.result.frequencies_invalid" not in findings:
+                                findings.append("orca.result.frequencies_invalid")
+                        elif len(consequential_imaginary_modes) != 1:
+                            findings.append(
+                                "orca.result.ts_imaginary_mode_count"
+                            )
+                    if jobtype == "td":
+                        requested_states = int(
+                            (expected_settings or {}).get("nstates") or 1
+                        )
+                        if len(transitions) < requested_states:
+                            findings.append("orca.result.transitions_missing")
                 except Exception as exc:
                     orca_observation["parser_error_type"] = type(exc).__name__
                     findings.append("orca.result.unreadable")
@@ -7452,6 +8298,29 @@ class CommandCompiledToolHostV1:
         self.thermochemistry_receipts[receipt.receipt_sha256] = receipt
         record = canonical_data(receipt)
         record.pop("receipt_sha256")
+        # Default PySCF RRHO receipts retain the original v1 canonical body so
+        # existing archives and newly derived values share one identity.  The
+        # dataclass also exposes newer optional controls with their defaults;
+        # omitting those defaults from the persisted Runtime record keeps the
+        # event representation identical to the receipt that was actually
+        # derived instead of rejecting valid thermochemistry as a digest
+        # mismatch.
+        if canonical_sha256(record) != receipt.receipt_sha256:
+            legacy_defaults = {
+                "concentration_mol_l": None,
+                "entropy_method": "rrho",
+                "entropy_cutoff_cm1": None,
+                "enthalpy_cutoff_cm1": None,
+                "alpha": 4,
+                "use_weighted_mass": False,
+                "frequency_scale_factor": 1.0,
+            }
+            if receipt.program == "pyscf" and all(
+                record.get(key) == value
+                for key, value in legacy_defaults.items()
+            ):
+                for key in legacy_defaults:
+                    record.pop(key, None)
         self._emit(
             turn_id,
             EventKind.THERMOCHEMISTRY_DERIVED,

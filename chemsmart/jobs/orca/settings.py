@@ -234,6 +234,23 @@ def _is_orca_dlpno_coupled_cluster(value):
     return normalized.startswith(("dlpno-cc", "ro-dlpno-cc"))
 
 
+def _uses_orca_ri_mp2(ab_initio, ri_approximation):
+    """Return whether typed settings request correlation-fitted MP2.
+
+    ORCA's ``RI-MP2`` keyword density-fits the post-SCF correlation
+    integrals with an AuxC basis.  A separate bare ``RI`` keyword instead
+    switches on RI-J for the reference SCF and is invalid for HF exchange
+    unless RIJDX, RIJCOSX, or RIJK (and the corresponding AuxJ/AuxJK basis)
+    is also selected.  ChemSmart's canonical ``mp2`` + ``ri`` + ``/C``
+    spelling therefore materializes as ``RI-MP2`` rather than ``MP2 RI``.
+    """
+
+    if ab_initio is None:
+        return False
+    method = str(ab_initio).strip().casefold().replace("_", "-")
+    return method == "mp2" and ri_approximation == "ri"
+
+
 def _orca_auxiliary_basis_role(value):
     """Classify an ORCA simple-input auxiliary basis by fitting role.
 
@@ -675,7 +692,13 @@ class ORCAJobSettings(MolecularJobSettings):
                 "frozen_core='fc_electrons'."
             )
 
-        if _is_orca_dlpno_coupled_cluster(self.ab_initio):
+        correlation_fitted_method = None
+        if _uses_orca_ri_mp2(self.ab_initio, self.ri_approximation):
+            correlation_fitted_method = "RI-MP2"
+        elif _is_orca_dlpno_coupled_cluster(self.ab_initio):
+            correlation_fitted_method = self.ab_initio
+
+        if correlation_fitted_method is not None:
             aux_role = _orca_auxiliary_basis_role(self.aux_basis)
             if aux_role not in {"correlation", "autoaux"}:
                 if aux_role in {"coulomb", "coulomb_exchange"}:
@@ -691,7 +714,8 @@ class ORCAJobSettings(MolecularJobSettings):
                         "as an AuxC correlation-fitting basis"
                     )
                 raise ValueError(
-                    f"ORCA {self.ab_initio} requires a correlation-fitting "
+                    f"ORCA {correlation_fitted_method} requires a "
+                    "correlation-fitting "
                     f"AuxC basis: {detail}. Set an explicit matching /C "
                     "basis (for example 'def2-TZVP/C') or explicitly choose "
                     "aux_basis='AutoAux'. ChemSmart will not silently add "
@@ -703,7 +727,8 @@ class ORCAJobSettings(MolecularJobSettings):
                 )
             ):
                 raise ValueError(
-                    f"ORCA {self.ab_initio} orbital basis {self.basis!r} "
+                    f"ORCA {correlation_fitted_method} orbital basis "
+                    f"{self.basis!r} "
                     f"does not match correlation-fitting aux_basis "
                     f"{self.aux_basis!r}. Select the /C or -MP2fit basis "
                     "with the same family and zeta level, or explicitly "
@@ -943,7 +968,10 @@ class ORCAJobSettings(MolecularJobSettings):
             charge=None,
             multiplicity=None,
             gbw=True,
-            freq=True,
+            # A bare project or OPT request must not silently add a Hessian.
+            # Combined Opt+Freq remains available through explicit
+            # ``freq: true`` in project YAML.
+            freq=False,
             numfreq=False,
             response_method=None,
             nstates=None,
@@ -1073,7 +1101,9 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {ORCA_RELATIVISTIC_KEYWORDS[self.relativistic]}"
 
         # resolution-of-identity choice, including switching it off explicitly
-        if self.ri_approximation is not None:
+        if self.ri_approximation is not None and not _uses_orca_ri_mp2(
+            self.ab_initio, self.ri_approximation
+        ):
             route_string += f" {ORCA_RI_KEYWORDS[self.ri_approximation]}"
 
         # write grid information
@@ -1189,7 +1219,12 @@ class ORCAJobSettings(MolecularJobSettings):
                     "Please specify one method!"
                 )
         if self.ab_initio is not None:
-            level_of_theory += f"{self.ab_initio}"
+            if _uses_orca_ri_mp2(
+                self.ab_initio, self.ri_approximation
+            ):
+                level_of_theory += "RI-MP2"
+            else:
+                level_of_theory += f"{self.ab_initio}"
         elif self.functional is not None:
             level_of_theory += f"{_normalize_orca_functional(self.functional)}"
 
@@ -2029,10 +2064,10 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         super().__init__(**kwargs)
         # ORCA IRC consumes an initial Hessian through the %irc InitHess
         # semantics; it is not an IRC-plus-Freq compound job.  The generic
-        # ORCA settings default is freq=True, so YAML construction otherwise
-        # advertised a frequency calculation that this class's writer
-        # deliberately removes from the native route.  Keep the in-memory
-        # scientific settings aligned with the input that ChemSmart writes.
+        # IRC consumes an initial Hessian through %irc InitHess; it is not an
+        # IRC-plus-Freq compound job. Keep the in-memory scientific settings
+        # aligned with the input that ChemSmart writes even when an inherited
+        # phase section explicitly requested a frequency calculation.
         self.freq = False
         self.numfreq = False
         self.maxiter = maxiter
@@ -2174,7 +2209,9 @@ class ORCAIRCJobSettings(ORCAJobSettings):
                         f"Hessian file {self.hess_filename} is not found!"
                     )
                     f.write(
-                        f'  Hess_Filename "{self.hess_filename}"  # Hessian file\n'
+                        '  Hess_Filename '
+                        f'"{os.path.basename(self.hess_filename)}"'
+                        "  # Hessian file\n"
                     )
             elif (
                 key == "hess_filename"

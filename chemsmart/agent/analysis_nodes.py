@@ -159,7 +159,10 @@ class AnalysisOutputSpecV1:
 
     def __post_init__(self) -> None:
         _require_symbol(self.quantity_id, "quantity_id")
-        if not str(self.unit).strip():
+        if not str(self.unit).strip() and self.data_kind not in {
+            "text",
+            "text_vector",
+        }:
             raise AnalysisContractError(
                 f"analysis output {self.quantity_id!r} declares no unit; "
                 + DIMENSIONLESS_UNIT_HINT
@@ -780,7 +783,10 @@ class AnalysisOutputQuantityRefV1:
         _require_symbol(self.quantity_id, "quantity_id")
         require_sha256(self.value_sha256, "value_sha256")
         require_sha256(self.source_receipt_sha256, "source_receipt_sha256")
-        if not str(self.unit).strip():
+        if not str(self.unit).strip() and self.data_kind not in {
+            "text",
+            "text_vector",
+        }:
             raise AnalysisContractError(
                 f"analysis output {self.quantity_id!r} declares no unit; "
                 + DIMENSIONLESS_UNIT_HINT

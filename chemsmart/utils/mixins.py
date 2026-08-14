@@ -18,6 +18,7 @@ Key mixin classes:
 import inspect
 import os
 import re
+import shlex
 from datetime import datetime
 from functools import cached_property
 
@@ -1376,6 +1377,73 @@ class ORCAFileMixin(FileMixin):
                 return by_keyword.get(fields[index + 1].casefold())
         return None
 
+    @cached_property
+    def _orca_method_values(self):
+        """Read the last native or echoed ORCA ``%method`` block.
+
+        The project writer materializes frozen-core policy in this block,
+        rather than on the simple-input route.  Parse the same block from a
+        generated input or ORCA's numbered input echo so preview validation
+        observes the method ChemSmart actually wrote.
+        """
+
+        blocks = []
+        current = None
+        echo_pattern = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo_pattern.match(stripped)
+            if match is not None:
+                stripped = match.group(1).strip()
+            stripped = stripped.split("#", 1)[0].strip()
+            if not stripped:
+                continue
+            fields = stripped.split()
+            if fields[0].casefold() == "%method":
+                current = []
+                blocks.append(current)
+                fields = fields[1:]
+            if current is None:
+                continue
+            for field in fields:
+                if field.casefold() == "end":
+                    current = None
+                    break
+                current.append(field)
+
+        if not blocks:
+            return {}
+        fields = blocks[-1]
+        values = {}
+        for index, field in enumerate(fields[:-1]):
+            key = field.casefold()
+            if key == "frozencore":
+                values["frozen_core"] = fields[index + 1]
+            elif key == "ncore":
+                values["frozen_core_electrons"] = int(fields[index + 1])
+        return values
+
+    @property
+    def frozen_core(self):
+        """Return ChemSmart's name for the native frozen-core policy."""
+
+        from chemsmart.jobs.orca.settings import ORCA_FROZEN_CORE_POLICIES
+
+        native = self._orca_method_values.get("frozen_core")
+        if native is None:
+            return None
+        by_keyword = {
+            keyword.casefold(): name
+            for name, keyword in ORCA_FROZEN_CORE_POLICIES.items()
+        }
+        return by_keyword.get(str(native).casefold())
+
+    @property
+    def frozen_core_electrons(self):
+        """Return an explicitly written ORCA ``NCore`` value, if any."""
+
+        return self._orca_method_values.get("frozen_core_electrons")
+
     @property
     def jobtype(self):
         """
@@ -1532,7 +1600,7 @@ class ORCAFileMixin(FileMixin):
             stripped = stripped.split("#", 1)[0].strip()
             if not stripped:
                 continue
-            fields = stripped.split()
+            fields = shlex.split(stripped)
             if fields[0].casefold() == "%irc":
                 current = []
                 blocks.append(current)
@@ -1550,15 +1618,38 @@ class ORCAFileMixin(FileMixin):
         fields = blocks[-1]
         values = {}
         for index, field in enumerate(fields[:-1]):
-            if field.casefold() == "direction":
-                values["direction"] = fields[index + 1].casefold()
+            key = field.casefold()
+            if key in {"direction", "inithess", "hess_filename"}:
+                values[key] = fields[index + 1]
+            elif key == "hessmode":
+                values[key] = int(fields[index + 1])
         return values
 
     @property
     def irc_direction(self):
         """Return only a direction explicitly declared in ``%irc``."""
 
-        return self._orca_irc_values.get("direction")
+        value = self._orca_irc_values.get("direction")
+        return None if value is None else str(value).casefold()
+
+    @property
+    def irc_inithess(self):
+        """Return the native ``InitHess`` strategy declared in ``%irc``."""
+
+        value = self._orca_irc_values.get("inithess")
+        return None if value is None else str(value).casefold()
+
+    @property
+    def irc_hess_filename(self):
+        """Return the native Hessian filename declared in ``%irc``."""
+
+        return self._orca_irc_values.get("hess_filename")
+
+    @property
+    def irc_hessmode(self):
+        """Return the native Hessian mode declared in ``%irc``."""
+
+        return self._orca_irc_values.get("hessmode")
 
     @property
     def response_method(self):
@@ -1617,6 +1708,8 @@ class ORCAFileMixin(FileMixin):
             scf_maxiter=self.scf_maxiter,
             scf_convergence=self.scf_convergence,
             reference=self.reference,
+            frozen_core=self.frozen_core,
+            frozen_core_electrons=self.frozen_core_electrons,
             charge=self.charge,
             multiplicity=self.multiplicity,
             gbw=dv.gbw,
@@ -1649,7 +1742,11 @@ class ORCAFileMixin(FileMixin):
             from chemsmart.jobs.orca.settings import ORCAIRCJobSettings
 
             return ORCAIRCJobSettings(
-                **settings.__dict__, direction=self.irc_direction
+                **settings.__dict__,
+                direction=self.irc_direction,
+                inithess=self.irc_inithess,
+                hess_filename=self.irc_hess_filename,
+                hessmode=self.irc_hessmode,
             )
         return settings
 

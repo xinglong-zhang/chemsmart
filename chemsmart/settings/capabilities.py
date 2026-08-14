@@ -209,6 +209,8 @@ _ORCA_PROJECT_PARAMETERS = tuple(
             "gbw",
             "heavy_elements",
             "heavy_elements_basis",
+            "hessmode",
+            "inithess",
             "light_elements_basis",
             "mdci_cutoff",
             "mdci_density",
@@ -332,12 +334,36 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             project_owned_parameters=_GAUSSIAN_PROJECT_PARAMETERS,
             engines=("cpu",),
             engine_job_capabilities=(
-                EngineJobCapability(engine="cpu", jobtype="irc"),
-                EngineJobCapability(engine="cpu", jobtype="link"),
-                EngineJobCapability(engine="cpu", jobtype="opt"),
-                EngineJobCapability(engine="cpu", jobtype="sp"),
-                EngineJobCapability(engine="cpu", jobtype="td"),
-                EngineJobCapability(engine="cpu", jobtype="ts"),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="irc",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="link",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="opt",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="sp",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="td",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="ts",
+                    execution_supported=False,
+                ),
             ),
             project_section_names=loader_project_section_names("gaussian"),
             project_parameter_domains=(
@@ -373,8 +399,16 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             project_owned_parameters=_ORCA_PROJECT_PARAMETERS,
             engines=("cpu",),
             engine_job_capabilities=(
-                EngineJobCapability(engine="cpu", jobtype="irc"),
-                EngineJobCapability(engine="cpu", jobtype="neb"),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="irc",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="neb",
+                    execution_supported=False,
+                ),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
                 EngineJobCapability(engine="cpu", jobtype="td"),
@@ -453,9 +487,21 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                     jobtype="td",
                     execution_supported=False,
                 ),
-                EngineJobCapability(engine="gpu", jobtype="hess"),
-                EngineJobCapability(engine="gpu", jobtype="opt"),
-                EngineJobCapability(engine="gpu", jobtype="sp"),
+                EngineJobCapability(
+                    engine="gpu",
+                    jobtype="hess",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="gpu",
+                    jobtype="opt",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="gpu",
+                    jobtype="sp",
+                    execution_supported=False,
+                ),
             ),
         ),
         "xtb": ProgramCapability(

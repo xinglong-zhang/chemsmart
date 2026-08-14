@@ -1,6 +1,6 @@
 ---
 name: chemsmart-agent
-description: Operate, audit, document, or improve the production ChemSmart computational-chemistry Agent through canonical project YAML, the live CLI, exact scientific DAGs, safe preview, one-shot human approval, deterministic execution, and typed result analysis. Use for ChemSmart Agent planning, TUI, approval, provider adapters, program support, or scientific workflow work.
+description: Operate, audit, document, or improve the production ChemSmart computational-chemistry Agent through canonical project YAML, the live CLI, scientific DAGs, safe preview, visible human approval, deterministic execution, and typed result analysis. Use for ChemSmart Agent planning, TUI, approval, provider adapters, program support, or scientific workflow work.
 ---
 
 # ChemSmart Agent
@@ -43,13 +43,18 @@ visible.
 
 ## Apply the production support boundary
 
-- Gaussian CPU ``sp/opt/ts/irc/td/link``, ORCA CPU
-  ``sp/opt/ts/irc/td/neb``, PySCF CPU ``sp/opt/hess``, GPU4PySCF
-  ``sp/opt/hess``, and xTB CPU ``sp/opt/hess`` have project-backed planning,
-  safe preview, exact human approval, normal runner execution, and typed
-  analysis for quantities actually produced.
-- PySCF CPU ``td`` is preview-only. NCIPLOT and other human CLI families with
-  no Agent engine/job declaration are not Agent execution paths.
+- Gaussian CPU ``sp/opt/ts/irc/td/link`` has project-backed planning, native
+  input preview, and typed analysis of supplied completed outputs; do not claim
+  Agent execution in version 3.1.4.
+- ORCA CPU planning covers ``sp/opt/ts/irc/td/neb``. Release-qualified
+  execution covers single-points, optimization/frequency, transition-state,
+  excited-state, and serial DAG workflows. Treat ``irc`` and ``neb`` as
+  preview paths until the selected target is qualified.
+- PySCF CPU ``sp/opt/hess`` and xTB CPU ``sp/opt/hess`` have approved real
+  execution paths. PySCF CPU ``td`` is preview-only.
+- GPU4PySCF ``sp/opt/hess`` is a PySCF-engine configuration and preview
+  surface until a compatible GPU target is qualified. NCIPLOT and other human
+  CLI families without an Agent declaration are not Agent execution paths.
 - Keep product capability, observed scientific evidence, and current-host
   readiness distinct. A supported Gaussian path does not imply a licensed
   executable is present; a supported GPU path does not imply a compatible GPU
@@ -60,23 +65,25 @@ visible.
   There is no default model; the profile must explicitly state the selected
   model and its context/output limits.
 
-## Use exact one-shot approval
+## Use visible one-shot approval
 
 Planning, YAML work, CLI compilation, safe preview, and result analysis are
 non-executing. Before an engine launch:
 
 1. produce the complete project-backed DAG;
 2. compile and safely preview every executable node;
-3. present molecular/state identity, YAML, CLI argv, data handoffs,
-   environment, resources, and exact digests;
-4. let the human choose approve once, deny, revise, or quit; and
-5. hand an approved packet to the provider-free deterministic executor.
+3. present molecular/state identity, effective YAML, ChemSmart CLI operations,
+   data handoffs, environment, and resources in the terminal interface;
+4. let the human enter ``/approve`` once, or choose ``/deny`` or ``/revise``;
+   and
+5. hand the displayed workflow to the provider-free deterministic executor.
 
 Never create an approval on the model's behalf. Never offer permanent,
-session-wide, prefix-based, or "always allow" chemistry execution. Any change
-to scientific inputs, project settings, command, environment, resources, or
-DAG requires a new review. A reviewed multi-node DAG needs one approval, not
-one prompt per node.
+session-wide, prefix-based, or "always allow" chemistry execution. A revised
+scientific input, project, environment, resource request, or DAG requires a new
+review. Internal receipts remain provenance; never make a human retype their
+digests as a second scientific authority. A reviewed multi-node DAG needs one
+approval, not one prompt per node.
 
 ## Improve at the owning layer
 

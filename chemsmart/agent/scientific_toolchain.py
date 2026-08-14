@@ -118,12 +118,6 @@ class AnalysisOutputIntentV1:
     def __post_init__(self) -> None:
         _identifier(self.output_id, "analysis output_id")
         _identifier(self.quantity_kind, "analysis quantity_kind")
-        if not str(self.unit).strip():
-            raise ScientificToolchainContractError(
-                f"analysis output {self.output_id!r} "
-                f"({self.quantity_kind}) declares no unit; "
-                + DIMENSIONLESS_UNIT_HINT
-            )
 
 
 @dataclass(frozen=True)
@@ -254,6 +248,14 @@ class AnalysisNodeIntentV1:
             raise ScientificToolchainContractError(
                 "analysis intent must preserve at least one output"
             )
+        if self.analysis_kind != "result_extraction":
+            for output in self.outputs:
+                if not str(output.unit).strip():
+                    raise ScientificToolchainContractError(
+                        f"analysis output {output.output_id!r} "
+                        f"({output.quantity_kind}) declares no unit; "
+                        + DIMENSIONLESS_UNIT_HINT
+                    )
         if self.support_state == "blocked_unsupported":
             if not str(self.blocked_reason).strip():
                 raise ScientificToolchainContractError(
@@ -617,12 +619,14 @@ def project_scientific_toolchain_frontier(
     actionable_calculation_node_ids: Iterable[str] = (),
     unresolved_calculation_node_ids: Iterable[str] = (),
     completed_calculation_node_ids: Iterable[str] = (),
+    completed_analysis_node_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     """Return model-useful next actions without pretending future data exist."""
 
     actionable = set(actionable_calculation_node_ids)
     unresolved = set(unresolved_calculation_node_ids)
     completed = set(completed_calculation_node_ids)
+    completed_analysis = set(completed_analysis_node_ids)
     states: dict[str, str] = {}
     nodes: list[dict[str, object]] = []
     analysis_by_id = {node.node_id: node for node in plan.analysis_nodes}
@@ -668,6 +672,9 @@ def project_scientific_toolchain_frontier(
             if node.support_state == "blocked_unsupported":
                 state = "blocked_unsupported"
                 reason = node.blocked_reason
+            elif node_id in completed_analysis:
+                state = "completed"
+                reason = "typed analysis evidence already exists"
             elif blocked_parents:
                 state = "blocked_upstream"
                 waiting_on = blocked_parents
@@ -677,7 +684,10 @@ def project_scientific_toolchain_frontier(
                     + (" is" if len(blocked_parents) == 1 else " are")
                     + " blocked"
                 )
-            elif node.dependencies:
+            elif node.dependencies and not all(
+                states.get(parent) == "completed"
+                for parent in node.dependencies
+            ):
                 state = "waiting_for_artifact"
                 future_inputs = tuple(
                     edge

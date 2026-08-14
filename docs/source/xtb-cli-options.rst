@@ -117,3 +117,19 @@ artifacts, and source/project provenance.
 GPU execution, arbitrary xcontrol text, molecular dynamics, path following,
 unsupported constraints, and unregistered workflow families are not part of
 this surface.  ChemSmart does not fall back to native xTB input text.
+
+Archive analysis and dipole units
+=================================
+
+Completed xTB result folders may be moved away from their original source or
+executable paths and analysed in explicit archive mode. ChemSmart still
+validates the retained result receipt, requested molecular state and settings,
+normal termination, durable execution input, and local artifact contents. It
+reports unavailable original paths as provenance limitations rather than
+presenting the archive as a new execution proof.
+
+xTB prints dipole-vector components in atomic units (``e bohr``) and the
+trailing magnitude in Debye. The typed result reader preserves those native
+units and printed precision, converts components to Debye for dimensional
+arithmetic, and avoids treating conversion-generated decimal places as extra
+measurement precision.
