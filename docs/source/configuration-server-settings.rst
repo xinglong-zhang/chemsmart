@@ -1181,20 +1181,23 @@ updated with either of the following:
    chemsmart update config -s SLURM
    chemsmart update config -s SLURM -s PBS
 
-`chemsmart update config` updates the server configuration files interactively; `chemsmart update config -s SLURM` updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update config -s SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and `~/.chemsmart/server/PBS.yaml`.
+`chemsmart update config` updates the server configuration files interactively; `chemsmart update config -s SLURM`
+updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update config -s
+SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and
+`~/.chemsmart/server/PBS.yaml`.
 
-The command compares each selected YAML file with the bundled ``server.yaml`` template and only adds missing top-level program
-configuration sections. It does not update fields under``SERVER``, does not recursively fill missing fields inside an existing
-program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values. Custom top-level
-fields are preserved.
+The command compares each selected YAML file with the bundled ``server.yaml`` template and only adds missing top-level
+program configuration sections. It does not update fields under``SERVER``, does not recursively fill missing fields
+inside an existing program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values.
+Custom top-level fields are preserved.
 
 Use ``-s`` / ``--server`` to select an existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
 without ``.yaml``. Repeat the option to select multiple files. Without ``-s``, all existing ``*.yaml`` files in the
 server directory are checked. The command does not create missing server YAML files.
 
 In an interactive terminal, the command prompts at most once for the ``EXEFOLDER`` of each missing program discovered
-across the selected files. Press Enter to keep the value from the bundled template. A supplied path is applied
-only to newly copied program sections in files that were missing that program; existing program sections and paths are
-never changed. Program names are discovered from the template rather than maintained in a fixed list.
+across the selected files. Press Enter to keep the value from the bundled template. A supplied path is applied only to
+newly copied program sections in files that were missing that program; existing program sections and paths are never
+changed. Program names are discovered from the template rather than maintained in a fixed list.
 
 When standard input is not an interactive terminal, the command does not prompt and uses the bundled template values.
