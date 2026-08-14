@@ -3046,15 +3046,46 @@ class TestORCAQMMMJobSettings:
         route = s.qmmm_route_string
         assert "QM/QM2" in route
 
-    def test_embedding_type_helpers(self):
+        custom_file = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            high_level_functional="MN15",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="myQM2Method.txt",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=2,
+            charge_total=0,
+            mult_total=2,
+        )
+        custom_block = custom_file.qmmm_block
+        assert 'QM2CustomFile "myQM2Method.txt"' in custom_block
+        assert 'QM2CustomFile "myQM2Method.txt" end' not in custom_block
+
+    def test_embedding_type_helpers(self, tmp_path):
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
         mechanical = ORCAQMMMJobSettings(embedding_type="mechanical")
         assert mechanical._get_embedding_type() == "Embedding Mechanical"
 
+        electrostatic = ORCAQMMMJobSettings(embedding_type="electrostatic")
+        assert electrostatic._get_embedding_type() is None
+
         invalid = ORCAQMMMJobSettings(embedding_type="invalid")
         with pytest.raises(ValueError, match="Invalid embedding type"):
             invalid._get_embedding_type()
+
+        h_file = tmp_path / "QM_H_dist.txt"
+        h_file.write_text("C 1.09\n")
+        from_file = ORCAQMMMJobSettings(high_level_h_bond_length=str(h_file))
+        assert from_file._get_h_bond_length() == (
+            f'H_Dist_FileName "{h_file}"'
+        )
+
+        missing = ORCAQMMMJobSettings(
+            high_level_h_bond_length=str(tmp_path / "missing.txt")
+        )
+        with pytest.raises(AssertionError, match="does not exist"):
+            missing._get_h_bond_length()
 
 
 class TestORCANEB:

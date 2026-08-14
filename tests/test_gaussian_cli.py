@@ -1139,24 +1139,56 @@ class TestGaussianQMMMCLI:
                     "0",
                     "-m",
                     "1",
+                    "-l",
+                    "testjob",
                     "opt",
+                    "-f",
+                    "5",
                     "qmmm",
                     "-hx",
                     "b3lyp",
                     "-hb",
                     "6-31g*",
+                    "-hff",
+                    "UFF",
+                    "-mx",
+                    "hf",
+                    "-mb",
+                    "sto-3g",
+                    "-mff",
+                    "UFF",
+                    "-lx",
+                    "pm6",
+                    "-lb",
+                    "sto-3g",
+                    "-lff",
+                    "UFF",
+                    "-ct",
+                    "0",
+                    "-mt",
+                    "1",
+                    "-ci",
+                    "0",
+                    "-mi",
+                    "1",
                     "-ch",
                     "1",
                     "-mh",
                     "2",
                     "-ha",
                     "1-3",
+                    "-ma",
+                    "4",
+                    "-la",
+                    "5-6",
+                    "-ba",
+                    "[[3, 4]]",
+                    "-sf",
+                    "{(3, 4): [0.709]}",
                     "-mai",
                     mm_info,
                     "-mpf",
                     params,
-                    "-l",
-                    "testjob",
                 ],
                 obj={"jobrunner": gaussian_jobrunner_no_scratch},
                 catch_exceptions=False,
@@ -1164,15 +1196,32 @@ class TestGaussianQMMMCLI:
 
         assert result.exit_code == 0, result.output
         assert mock_job.call_args is not None
-        call_kwargs = mock_job.call_args[1]
+        call_kwargs = mock_job.call_args.kwargs
         settings = call_kwargs["settings"]
         molecule = call_kwargs["molecule"]
 
         assert settings.functional == "b3lyp"
         assert settings.basis == "6-31g*"
+        assert settings.high_level_force_field == "UFF"
+        assert settings.medium_level_functional == "hf"
+        assert settings.medium_level_basis == "sto-3g"
+        assert settings.medium_level_force_field == "UFF"
+        assert settings.low_level_functional == "pm6"
+        assert settings.low_level_basis == "sto-3g"
+        assert settings.low_level_force_field == "UFF"
+        assert settings.charge_total == 0
+        assert settings.mult_total == 1
+        assert settings.charge_intermediate == 0
+        assert settings.mult_intermediate == 1
         assert settings.model_charge == 1
         assert settings.model_multiplicity == 2
         assert settings.mm_atom_info_file == mm_info
         assert settings.mm_parameters_file == params
         assert settings.parent_jobtype == "opt"
         assert molecule.high_level_atoms == [1, 2, 3]
+        assert molecule.medium_level_atoms == [4]
+        assert molecule.low_level_atoms == [5, 6]
+        assert molecule.bonded_atoms == [[3, 4]]
+        assert molecule.scale_factors == {(3, 4): [0.709]}
+        assert molecule.frozen_atoms[4] == -1
+        assert call_kwargs["label"] == "testjob_qmmm"

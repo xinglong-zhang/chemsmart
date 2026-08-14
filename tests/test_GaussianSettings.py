@@ -199,6 +199,47 @@ class TestGaussianQMMMJobSettings:
         with pytest.raises(ValueError, match="mixes indexed and unindexed"):
             GaussianQMMMJobSettings.load_mm_atom_info(mixed, num_atoms=2)
 
+        with pytest.raises(FileNotFoundError, match="not found"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                os.path.join(tmpdir, "missing.dat"), num_atoms=1
+            )
+
+        short = os.path.join(tmpdir, "short.dat")
+        with open(short, "w") as handle:
+            handle.write("OH\n")
+        with pytest.raises(ValueError, match="Invalid MM atom info line"):
+            GaussianQMMMJobSettings.load_mm_atom_info(short, num_atoms=1)
+
+        bad_charge = os.path.join(tmpdir, "bad_charge.dat")
+        with open(bad_charge, "w") as handle:
+            handle.write("CT not-a-float\n")
+        with pytest.raises(ValueError, match="Invalid MM atom info line"):
+            GaussianQMMMJobSettings.load_mm_atom_info(bad_charge, num_atoms=1)
+
+        out_of_range = os.path.join(tmpdir, "oor.dat")
+        with open(out_of_range, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("3 OH -0.65\n")
+        with pytest.raises(ValueError, match="out-of-range"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                out_of_range, num_atoms=2
+            )
+
+        missing_index = os.path.join(tmpdir, "missing_index.dat")
+        with open(missing_index, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("3 OH -0.65\n")
+        with pytest.raises(ValueError, match="missing atom indices"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                missing_index, num_atoms=3
+            )
+
+        medium_amber = GaussianQMMMJobSettings(
+            medium_level_force_field="amber"
+        )
+        assert medium_amber.uses_builtin_mm()
+        assert medium_amber.requires_mm_atom_info()
+
     def test_qmmm_settings(self):
         settings1 = GaussianQMMMJobSettings(
             high_level_functional="b3lyp",

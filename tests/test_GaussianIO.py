@@ -14,7 +14,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
@@ -447,6 +447,85 @@ class TestGaussian16Input:
         from_filepath = Molecule.from_filepath(str(com))
         assert from_filepath.frozen_atoms == [0, 0, -1, -1]
         assert from_filepath.high_level_atoms == [1, 2]
+
+    def test_oniom_mm_parameters_extracted_after_connectivity(self, tmp_path):
+        com = tmp_path / "oniom_mm_params.com"
+        com.write_text(
+            "%chk=mm.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 1.0\n"
+            "2\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert (
+            "HrmBnd1 CT OH HC 50.0 109.5" in g16_oniom.molecule.mm_parameters
+        )
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in (
+            g16_oniom.molecule.mm_parameters
+        )
+
+    def test_oniom_connectivity_only_has_no_mm_parameters(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert g16_oniom.molecule.mm_parameters is None
+
+    def test_oniom_route_without_layer_labels_returns_plain_molecule(
+        self, tmp_path
+    ):
+        com = tmp_path / "oniom_plain.com"
+        com.write_text(
+            "%chk=plain.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0\n"
+            " H    1.0  0.0  0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        mol = g16_oniom.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+
+    def test_oniom_three_layer_short_charge_line(self, tmp_path):
+        com = tmp_path / "three_layer_short_charge.com"
+        com.write_text(
+            "%chk=short.chk\n"
+            "# oniom(hf/sto-3g:hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 M\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
