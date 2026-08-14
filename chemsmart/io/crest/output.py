@@ -59,13 +59,13 @@ class CRESTOutput:
     @cached_property
     def main_out(self):
         """Main CREST output file parser (CRESTMainOut)."""
-        path = self.folder._crest_out()
+        path = self.folder.crest_out_filepath
         return CRESTMainOut(path) if path else None
 
     @cached_property
     def energies_file(self):
         """Energies file parser (CRESTEnergiesFile)."""
-        path = self.folder._energies()
+        path = self.folder.energies_filepath
         return CRESTEnergiesFile(path) if path else None
 
     @property
@@ -82,7 +82,7 @@ class CRESTOutput:
         Returns:
             list[Molecule]: All conformers sorted by energy, or empty list.
         """
-        path = self.folder._conformers_xyz()
+        path = self.folder.conformers_xyz_filepath
         if path is None:
             return []
         try:
@@ -108,7 +108,7 @@ class CRESTOutput:
             list[Molecule]: All rotamers with energies from the xyz comment
                 lines, or empty list.
         """
-        path = self.folder._rotamers_xyz()
+        path = self.folder.rotamers_xyz_filepath
         if path is None:
             return []
         try:
@@ -130,7 +130,7 @@ class CRESTOutput:
         Returns:
             Molecule or None: The best conformer, or None if unavailable.
         """
-        path = self.folder._best_xyz()
+        path = self.folder.best_xyz_filepath
         if path is None:
             if self.conformers:
                 return self.conformers[0]

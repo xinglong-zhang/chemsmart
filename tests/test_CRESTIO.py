@@ -318,39 +318,46 @@ class TestCRESTFolder:
         octane_folder = CRESTFolder(crest_octane_outfolder)
         assert octane_folder.is_crest_calculation_directory
 
-        assert octane_folder._crest_out() is not None
+        assert octane_folder.crest_out_filepath is not None
         assert (
-            os.path.basename(octane_folder._crest_out())
+            os.path.basename(octane_folder.crest_out_filepath)
             == "octane_conformers.out"
         )
 
-        assert octane_folder._conformers_xyz() is not None
+        assert octane_folder.conformers_xyz_filepath is not None
         assert (
-            os.path.basename(octane_folder._conformers_xyz())
+            os.path.basename(octane_folder.conformers_xyz_filepath)
             == "crest_conformers.xyz"
         )
 
-        assert octane_folder._best_xyz() is not None
-        assert os.path.basename(octane_folder._best_xyz()) == "crest_best.xyz"
-
-        assert octane_folder._rotamers_xyz() is not None
+        assert octane_folder.best_xyz_filepath is not None
         assert (
-            os.path.basename(octane_folder._rotamers_xyz())
+            os.path.basename(octane_folder.best_xyz_filepath)
+            == "crest_best.xyz"
+        )
+
+        assert octane_folder.rotamers_xyz_filepath is not None
+        assert (
+            os.path.basename(octane_folder.rotamers_xyz_filepath)
             == "crest_rotamers.xyz"
         )
 
-        assert octane_folder._energies() is not None
-        assert os.path.basename(octane_folder._energies()) == "crest.energies"
-
-        assert octane_folder._constraints_inp() is None
-
-        assert octane_folder._crestopt_log() is not None
+        assert octane_folder.energies_filepath is not None
         assert (
-            os.path.basename(octane_folder._crestopt_log()) == "crestopt.log"
+            os.path.basename(octane_folder.energies_filepath)
+            == "crest.energies"
         )
 
-        assert octane_folder._coord() is not None
-        assert os.path.basename(octane_folder._coord()) == "coord"
+        assert octane_folder.constraints_inp_filepath is None
+
+        assert octane_folder.crestopt_log_filepath is not None
+        assert (
+            os.path.basename(octane_folder.crestopt_log_filepath)
+            == "crestopt.log"
+        )
+
+        assert octane_folder.coord_filepath is not None
+        assert os.path.basename(octane_folder.coord_filepath) == "coord"
 
     def test_folder_ts1a_constrained(self, crest_ts1a_constrained_outfolder):
         """Test CRESTFolder class with TS1A constrained sampling output."""
@@ -358,40 +365,48 @@ class TestCRESTFolder:
         ts1a_folder = CRESTFolder(crest_ts1a_constrained_outfolder)
         assert ts1a_folder.is_crest_calculation_directory
 
-        assert ts1a_folder._crest_out() is not None
+        assert ts1a_folder.crest_out_filepath is not None
         assert (
-            os.path.basename(ts1a_folder._crest_out()) == "TS1A_conformers.out"
+            os.path.basename(ts1a_folder.crest_out_filepath)
+            == "TS1A_conformers.out"
         )
 
-        assert ts1a_folder._conformers_xyz() is not None
+        assert ts1a_folder.conformers_xyz_filepath is not None
         assert (
-            os.path.basename(ts1a_folder._conformers_xyz())
+            os.path.basename(ts1a_folder.conformers_xyz_filepath)
             == "crest_conformers.xyz"
         )
 
-        assert ts1a_folder._best_xyz() is not None
-        assert os.path.basename(ts1a_folder._best_xyz()) == "crest_best.xyz"
-
-        assert ts1a_folder._rotamers_xyz() is not None
+        assert ts1a_folder.best_xyz_filepath is not None
         assert (
-            os.path.basename(ts1a_folder._rotamers_xyz())
+            os.path.basename(ts1a_folder.best_xyz_filepath) == "crest_best.xyz"
+        )
+
+        assert ts1a_folder.rotamers_xyz_filepath is not None
+        assert (
+            os.path.basename(ts1a_folder.rotamers_xyz_filepath)
             == "crest_rotamers.xyz"
         )
 
-        assert ts1a_folder._energies() is not None
-        assert os.path.basename(ts1a_folder._energies()) == "crest.energies"
-
-        assert ts1a_folder._constraints_inp() is not None
+        assert ts1a_folder.energies_filepath is not None
         assert (
-            os.path.basename(ts1a_folder._constraints_inp())
+            os.path.basename(ts1a_folder.energies_filepath) == "crest.energies"
+        )
+
+        assert ts1a_folder.constraints_inp_filepath is not None
+        assert (
+            os.path.basename(ts1a_folder.constraints_inp_filepath)
             == "constraints.inp"
         )
 
-        assert ts1a_folder._crestopt_log() is not None
-        assert os.path.basename(ts1a_folder._crestopt_log()) == "crestopt.log"
+        assert ts1a_folder.crestopt_log_filepath is not None
+        assert (
+            os.path.basename(ts1a_folder.crestopt_log_filepath)
+            == "crestopt.log"
+        )
 
-        assert ts1a_folder._coord() is not None
-        assert os.path.basename(ts1a_folder._coord()) == "coord"
+        assert ts1a_folder.coord_filepath is not None
+        assert os.path.basename(ts1a_folder.coord_filepath) == "coord"
 
     def test_folder_hexane_failed(self, crest_hexane_failed_outfolder):
         """Test CRESTFolder with a failed hexane conformational search."""
@@ -399,22 +414,25 @@ class TestCRESTFolder:
         hexane_folder = CRESTFolder(crest_hexane_failed_outfolder)
         assert hexane_folder.is_crest_calculation_directory
 
-        assert hexane_folder._crest_out() is not None
-        assert os.path.basename(hexane_folder._crest_out()) == "hexane.out"
-
-        assert hexane_folder._conformers_xyz() is None
-        assert hexane_folder._best_xyz() is None
-        assert hexane_folder._rotamers_xyz() is None
-        assert hexane_folder._energies() is None
-        assert hexane_folder._constraints_inp() is None
-
-        assert hexane_folder._crestopt_log() is not None
+        assert hexane_folder.crest_out_filepath is not None
         assert (
-            os.path.basename(hexane_folder._crestopt_log()) == "crestopt.log"
+            os.path.basename(hexane_folder.crest_out_filepath) == "hexane.out"
         )
 
-        assert hexane_folder._coord() is not None
-        assert os.path.basename(hexane_folder._coord()) == "coord"
+        assert hexane_folder.conformers_xyz_filepath is None
+        assert hexane_folder.best_xyz_filepath is None
+        assert hexane_folder.rotamers_xyz_filepath is None
+        assert hexane_folder.energies_filepath is None
+        assert hexane_folder.constraints_inp_filepath is None
+
+        assert hexane_folder.crestopt_log_filepath is not None
+        assert (
+            os.path.basename(hexane_folder.crestopt_log_filepath)
+            == "crestopt.log"
+        )
+
+        assert hexane_folder.coord_filepath is not None
+        assert os.path.basename(hexane_folder.coord_filepath) == "coord"
 
 
 class TestCRESTOutput:
