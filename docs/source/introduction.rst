@@ -132,5 +132,5 @@ Pedregosa et al., Scikit-learn: Machine Learning in Python, *J. Mach. Learn. Res
 
 .. note::
 
-   Please also cite other relevant software (e.g., Gaussian, ORCA, xTB, NCIPLOT, PyMOL) and DFT functionals and basis
-   sets you use in your research.
+   Please also cite other relevant software (e.g., Gaussian, ORCA, xTB, CREST, NCIPLOT, PyMOL) and DFT functionals and
+   basis sets you use in your research.

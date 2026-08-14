@@ -467,6 +467,27 @@ class TestStructures:
         )
         assert isinstance(molecule, Molecule)
 
+    def test_read_crest_dynamics_trj_as_xyz(self, crest_octane_outfolder):
+        trj = os.path.join(crest_octane_outfolder, "crest_dynamics.trj")
+        frames = Molecule.from_filepath(trj, index=":", return_list=True)
+        assert len(frames) == 472
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.294043900430)
+
+        first = Molecule.from_filepath(trj, index="1", return_list=False)
+        assert first.num_atoms == 26
+        assert np.isclose(first.energy, -26.294043900430)
+
+    def test_read_crestopt_log_as_xyz(self, crest_octane_outfolder):
+        """crestopt.log is XYZ with .log extension."""
+        crestopt_log = os.path.join(crest_octane_outfolder, "crestopt.log")
+        frames = Molecule.from_filepath(
+            crestopt_log, index=":", return_list=True
+        )
+        assert len(frames) == 1
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.3226341540)
+
     def test_molecular_geometry(self):
         """Test molecular geometry calculations."""
         mol = Molecule(

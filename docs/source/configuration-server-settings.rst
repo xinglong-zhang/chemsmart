@@ -37,7 +37,7 @@ Configuration Structure
 Each server configuration file contains:
 
 #. **SERVER** section - Defines scheduler and resource allocation settings
-#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, XTB, NCIPLOT, etc.)
+#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT, etc.)
 
 SERVER Section
 ==============
@@ -275,8 +275,8 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
 Program-Specific Sections
 =========================
 
-Each computational chemistry program (GAUSSIAN, ORCA, XTB, NCIPLOT) has its own configuration section. These sections
-define program-specific paths, execution settings, and environment variables.
+Each computational chemistry program (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT) has its own configuration section. These
+sections define program-specific paths, execution settings, and environment variables.
 
 GAUSSIAN Section
 ----------------
@@ -583,6 +583,100 @@ Full example:
        SCRIPTS: null
        ENVARS: null
 
+CREST Section
+-------------
+
+Configuration for the standalone CREST executable used by CHEMSMART CREST conformational search jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to a CREST installation directory, or ``null`` to use the ``crest`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null  # use crest from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat CREST as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run CREST in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``crest`` (and CHEMSMART). Most CREST
+workflows also requires ``xtb`` to be available on ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string or ``null``
+
+**Description:** Environment variables for CREST runs. Set ``SCRATCH`` if scratch mode is enabled. Packaged templates
+typically use ``null``.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: null
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+
 NCIPLOT Section
 ---------------
 
@@ -740,6 +834,16 @@ Complete example for a SLURM-based HPC cluster:
        MODULES: null
        SCRIPTS: null
        ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -805,6 +909,16 @@ Complete example for a PBS/Torque-based HPC cluster:
        ENVARS: |
            export SCRATCH=~/scratch
    XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
        EXEFOLDER: null
        LOCAL_RUN: True
        SCRATCH: False
@@ -884,6 +998,16 @@ Complete example for a local workstation without a job scheduler:
        MODULES: null
        SCRIPTS: null
        ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -927,9 +1051,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 
 .. note::
 
-   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``, and
-   ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI flag is
-   omitted.
+   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``,
+   ``CREST``, and ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI
+   flag is omitted.
 
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -984,7 +1108,8 @@ Scratch directory path
 
 When scratch mode is ``True``, the scratch directory path is resolved in this order:
 
-#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``NCIPLOT``)
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``CREST`` /
+   ``NCIPLOT``)
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
@@ -1011,8 +1136,9 @@ When customizing server configuration files:
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
 
-#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
-   will be automatically updated when configuring CHEMSMART during the configuration phase.
+#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. For
+   xTB and CREST, ``EXEFOLDER`` may be ``null`` to use ``xtb`` / ``crest`` from the activated conda environment /
+   ``PATH``. Paths for Gaussian, ORCA, and NCIPLOT are updated interactively when configuring CHEMSMART.
 
 #. **Scratch directories**: Configure program ``SCRATCH`` (mode) and a valid scratch path (``ENVARS`` / ``SCRATCH_DIR``
    / user settings). Some HPC systems provide node-local scratch (e.g., ``/tmp``) while others use network-attached

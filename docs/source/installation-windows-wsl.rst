@@ -27,3 +27,9 @@ preferred way of installation, as WSL provides similar terminal environment to L
 
 Since Ubuntu on WSL uses the Linux kernel, follow the instructions in :doc:`installation-linux-macos` to complete the
 CHEMSMART setup.
+
+.. note::
+
+   On WSL, ``make env`` / ``conda env create -f environment.yml`` installs the ``crest`` executable from conda-forge
+   together with ``xtb``. WSL provides a Linux environment, so CREST is included automatically via ``sel(unix): crest``
+   in ``environment.yml``.

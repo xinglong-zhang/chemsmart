@@ -165,6 +165,55 @@ calculation directory must contain exactly one xTB main output.
 
    chemsmart sub -s server gaussian -p project -f co2_ohess/co2_ohess.out sp
 
+CREST Files
+===========
+
+A CREST calculation writes its results to a **directory** (containing ``crest_conformers.xyz``, ``crest.energies``,
+``crest_dynamics.trj``, and other auxiliary files).
+
+CREST Ensemble XYZ Files
+------------------------
+
+These are standard single- or multi-frame XYZ files and can be passed directly with ``-f``: ``crest_best.xyz`` is the
+lowest-energy conformer (a single structure) and the usual starting point for follow-up DFT jobs;
+``crest_conformers.xyz`` is the conformer ensemble sorted by energy, for conformational sampling; and
+``crest_rotamers.xyz`` is the rotamer ensemble, for cases where rotamers rather than only conformers are needed as
+geometry input.
+
+.. code:: bash
+
+   # Using Gaussian via the gaussian subcommand: Optimization on CREST best conformer
+   chemsmart sub -s server gaussian -p project -f crest_best.xyz -c 0 -m 1 opt
+
+   # Using Gaussian via the gaussian subcommand: TS optimization on CREST conformer ensemble
+   chemsmart sub -s server gaussian -p project -f crest_conformers.xyz -c 0 -m 1 crest -j ts
+
+   # Using ORCA via the orca subcommand: Single-point calculation on a selected CREST rotamer
+   chemsmart sub -s server orca -p project -f crest_rotamers.xyz -i 3 -c 0 -m 1 opt
+
+   # Visualize an ensemble
+   chemsmart run mol -f crest_conformers.xyz -i ':' visualize
+   chemsmart run mol -f crest_rotamers.xyz -i ':' visualize
+
+CREST Dynamics Trajectory File
+------------------------------
+
+CREST MD trajectories are saved as ``crest_dynamics.trj``. The trajectory can be inspected with:
+
+.. code:: bash
+
+   chemsmart run mol -f crest_dynamics.trj -i ':' visualize
+
+CREST Optimization Log File
+---------------------------
+
+CREST geometry-optimization intermediates are written to ``crestopt.log``. The optimization trajectory can be inspected
+with:
+
+.. code:: bash
+
+   chemsmart run mol -f crestopt.log -i ':' visualize
+
 ChemDraw Files
 ==============
 
@@ -459,6 +508,7 @@ single-file convert (``-i`` / ``-o``) only. See :doc:`convert-cli-options` for c
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
 -  :doc:`xtb-cli-options`
+-  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`convert-cli-options`
 -  :doc:`database-workflow`
