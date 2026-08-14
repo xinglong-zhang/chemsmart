@@ -1259,10 +1259,15 @@ class Molecule:
         """
         Read Gaussian input file (.com/.gjf) format.
         """
-        from chemsmart.io.gaussian.input import Gaussian16Input
+        from chemsmart.io.gaussian.input import (
+            Gaussian16Input,
+            Gaussian16QMMMInput,
+        )
 
         try:
             g16_input = Gaussian16Input(filename=filepath)
+            if "oniom" in g16_input.route_string:
+                g16_input = Gaussian16QMMMInput(filename=filepath)
             return g16_input.molecule
         except ValueError as e:
             # log the error or raise a more specific exception
