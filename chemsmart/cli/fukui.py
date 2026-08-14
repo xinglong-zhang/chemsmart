@@ -3,7 +3,8 @@
 Registered as ``chemsmart run fukui`` — post-processing only; does not invoke
 Gaussian, ORCA, or any other QC backend.
 
-Job submission lives under ``chemsmart sub … gaussian … fukui``.
+Job submission lives under ``chemsmart sub … gaussian … fukui`` or
+``chemsmart sub … orca … fukui``.
 """
 
 import logging

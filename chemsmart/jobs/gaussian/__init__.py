@@ -5,7 +5,8 @@ This module provides a comprehensive collection of Gaussian job types
 for various computational chemistry calculations including optimization,
 frequency analysis, single point calculations, IRC, NCI analysis,
 and more. Most job classes inherit from the base GaussianJob class.
-Multi-step workflows such as pKa and Fukui inherit from ChainJob.
+Multi-step workflows such as pKa and Fukui use ``ChainMixin`` with
+``GaussianJob``.
 
 The module also includes job runners and utilities for managing
 Gaussian calculations in computational workflows.

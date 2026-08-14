@@ -13,7 +13,8 @@ solvation free energy calculations.
 import logging
 import os
 
-from chemsmart.jobs.chain import ChainJob, JobPhase
+from chemsmart.jobs.chain import ChainMixin, JobPhase
+from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
@@ -21,7 +22,7 @@ from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 logger = logging.getLogger(__name__)
 
 
-class GaussianpKaJob(ChainJob):
+class GaussianpKaJob(ChainMixin, GaussianJob):
     """
     Gaussian job class for pKa calculations using direct thermodynamic cycle.
 
@@ -41,7 +42,6 @@ class GaussianpKaJob(ChainJob):
         skip_completed (bool): If True, completed jobs are not rerun.
     """
 
-    PROGRAM = "Gaussian"
     TYPE = "g16pka"
     _shared_reference_molecule_cache = {}
 
@@ -184,7 +184,7 @@ class GaussianpKaJob(ChainJob):
         return [
             JobPhase(
                 name="Opt",
-                jobs=self.opt_jobs,
+                jobs_factory=lambda: self.opt_jobs,
                 stop_on_incomplete=True,
                 require_complete=True,
                 stop_message="Opt jobs incomplete, halting serial execution.",

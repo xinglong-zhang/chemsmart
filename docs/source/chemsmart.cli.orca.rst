@@ -6,6 +6,15 @@
  Submodules
 ************
 
+*********************************
+ chemsmart.cli.orca.fukui module
+*********************************
+
+.. automodule:: chemsmart.cli.orca.fukui
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 *******************************
  chemsmart.cli.orca.inp module
 *******************************

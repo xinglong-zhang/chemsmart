@@ -1596,7 +1596,7 @@ class TestPKa:
     ):
         """ORCA pKa should prepare HA/A opt and SP jobs with Gaussian-style labels."""
         from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.jobs.chain import ChainJob
+        from chemsmart.jobs.orca.job import ORCAJob
         from chemsmart.jobs.orca.opt import ORCAOptJob
         from chemsmart.jobs.orca.pka import ORCApKaJob
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
@@ -1624,7 +1624,7 @@ class TestPKa:
         )
 
         assert len(job.opt_jobs) == 2
-        assert isinstance(job, ChainJob)
+        assert isinstance(job, ORCAJob)
         assert [phase.name for phase in job.phases] == [
             "Opt",
             "Ref Opt",
@@ -1812,7 +1812,7 @@ class TestPKa:
             _fake_run_phase_jobs,
         )
 
-        job._run_opt_jobs()
+        job.run_phase("Opt")
         assert captured["labels"] == ["1a_pka_HA_opt", "1a_pka_A_opt"]
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])

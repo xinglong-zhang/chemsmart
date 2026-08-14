@@ -1478,9 +1478,9 @@ class TestGaussianpKaJobSettings:
         assert isinstance(job, GaussianpKaJob)
         assert job.TYPE == "g16pka"
         assert job.label == "test_pka"
-        from chemsmart.jobs.chain import ChainJob
+        from chemsmart.jobs.gaussian.job import GaussianJob
 
-        assert isinstance(job, ChainJob)
+        assert isinstance(job, GaussianJob)
         assert [phase.name for phase in job.phases] == [
             "Opt",
             "Ref Opt",

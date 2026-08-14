@@ -7,8 +7,8 @@ from chemsmart.analysis.fukui import (
 )
 from chemsmart.cli.fukui import fukui as fukui_analyze
 from chemsmart.cli.run import run
-from chemsmart.jobs.chain import ChainJob
 from chemsmart.jobs.gaussian.fukui import GaussianFukuiJob
+from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
@@ -119,7 +119,7 @@ class TestGaussianFukuiJob:
             jobrunner=gaussian_jobrunner_no_scratch,
         )
 
-        assert isinstance(job, ChainJob)
+        assert isinstance(job, GaussianJob)
         assert job.TYPE == "g16fukui"
         assert [phase.name for phase in job.phases] == ["Fukui"]
         assert isinstance(job.neutral_job, GaussianSinglePointJob)
@@ -185,6 +185,125 @@ class TestGaussianFukuiJob:
         assert job.anion_job.settings.multiplicity == 1
 
 
+class TestORCAFukuiJob:
+    def test_creates_neutral_cation_and_anion_jobs(
+        self, single_molecule_xyz_file, orca_jobrunner_no_scratch
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.fukui import ORCAFukuiJob
+        from chemsmart.jobs.orca.job import ORCAJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+        from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        settings = ORCAJobSettings(
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        job = ORCAFukuiJob(
+            molecule=mol,
+            settings=settings,
+            label="phenol_fukui",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+
+        assert isinstance(job, ORCAJob)
+        assert job.TYPE == "orcafukui"
+        assert [phase.name for phase in job.phases] == ["Fukui"]
+        assert isinstance(job.neutral_job, ORCASinglePointJob)
+        assert job.neutral_job.label == "phenol_fukui_n"
+        assert job.cation_job.label == "phenol_fukui_rc"
+        assert job.anion_job.label == "phenol_fukui_ra"
+        assert job.cation_job.settings.charge == 1
+        assert job.cation_job.settings.multiplicity == 2
+        assert job.anion_job.settings.charge == -1
+        assert job.anion_job.settings.multiplicity == 2
+
+    def test_hirshfeld_mode_adds_route_keyword(
+        self, single_molecule_xyz_file, orca_jobrunner_no_scratch
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.fukui import ORCAFukuiJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = ORCAJobSettings(
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        job = ORCAFukuiJob(
+            molecule=mol,
+            settings=settings,
+            label="phenol_fukui",
+            jobrunner=orca_jobrunner_no_scratch,
+            mode="hirshfeld",
+        )
+
+        assert (
+            job.neutral_job.settings.additional_route_parameters == "Hirshfeld"
+        )
+
+    def test_nbo_mode_adds_route_keyword(
+        self, single_molecule_xyz_file, orca_jobrunner_no_scratch
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.fukui import ORCAFukuiJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = ORCAJobSettings(
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        job = ORCAFukuiJob(
+            molecule=mol,
+            settings=settings,
+            label="phenol_fukui",
+            jobrunner=orca_jobrunner_no_scratch,
+            mode="nbo",
+        )
+
+        assert job.neutral_job.settings.additional_route_parameters == "NBO"
+
+    def test_user_overrides_ion_charge_and_multiplicity(
+        self, single_molecule_xyz_file, orca_jobrunner_no_scratch
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.fukui import ORCAFukuiJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = ORCAJobSettings(
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        job = ORCAFukuiJob(
+            molecule=mol,
+            settings=settings,
+            label="phenol_fukui",
+            jobrunner=orca_jobrunner_no_scratch,
+            radical_cation_charge=2,
+            radical_cation_multiplicity=1,
+            radical_anion_charge=-2,
+            radical_anion_multiplicity=1,
+        )
+
+        assert job.cation_job.settings.charge == 2
+        assert job.cation_job.settings.multiplicity == 1
+        assert job.anion_job.settings.charge == -2
+        assert job.anion_job.settings.multiplicity == 1
+
+
 class TestFukuiCLI:
     def test_gaussian_runner_accepts_fukui_type(self, pbs_server):
         from types import SimpleNamespace
@@ -197,9 +316,25 @@ class TestFukuiCLI:
         )
         assert isinstance(runner, FakeGaussianJobRunner)
 
+    def test_orca_runner_accepts_fukui_type(self, pbs_server):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcafukui"),
+            server=pbs_server,
+            scratch=False,
+            fake=True,
+        )
+        assert isinstance(runner, FakeORCAJobRunner)
+
     def test_help_lists_fukui_submit_subcommand(self):
         runner = CliRunner()
         result = runner.invoke(run, ["gaussian", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "\n  fukui" in result.output
+        result = runner.invoke(run, ["orca", "--help"])
         assert result.exit_code == 0, result.output
         assert "\n  fukui" in result.output
 
@@ -228,16 +363,23 @@ class TestFukuiCLI:
         assert "-m, --mode" in result.output
 
     def test_submit_help_options(self):
-        from chemsmart.cli.gaussian.fukui import fukui as fukui_submit
+        from chemsmart.cli.gaussian.fukui import fukui as gaussian_fukui_submit
+        from chemsmart.cli.orca.fukui import fukui as orca_fukui_submit
 
         runner = CliRunner()
-        result = runner.invoke(fukui_submit, ["--help"])
+        result = runner.invoke(gaussian_fukui_submit, ["--help"])
         assert result.exit_code == 0, result.output
         assert "-m, --mode" in result.output
         assert "--radical-cation-charge" in result.output
         assert "--radical-anion-multiplicity" in result.output
         assert "-c, --radical-cation" not in result.output
         assert "-a, --radical-anion" not in result.output
+
+        result = runner.invoke(orca_fukui_submit, ["--help"])
+        assert result.exit_code == 0, result.output
+        assert "-m, --mode" in result.output
+        assert "--radical-cation-charge" in result.output
+        assert "--radical-anion-multiplicity" in result.output
 
     def test_analyze_help_matches_script_options(self):
         runner = CliRunner()

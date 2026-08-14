@@ -1,10 +1,9 @@
 """Ordered multi-job workflows.
 
-``ChainJob`` runs an ordered list of ``JobPhase`` objects. Each phase contains
-one or more child jobs that execute before the next phase starts. Later phases
-may be built from earlier phase results via ``jobs_factory``. How those results
-are interpreted (optimized geometry, wavefunction, energies, etc.) is left to
-the concrete workflow. pKa and Fukui jobs use ``ChainJob``.
+``ChainMixin`` adds phased child-job orchestration to a program job class.
+``ChainJob`` is a minimal standalone ``Job`` for tests and generic chains.
+pKa and Fukui workflow jobs inherit ``(ChainMixin, GaussianJob)`` or
+``(ChainMixin, ORCAJob)``.
 """
 
 import logging
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class JobPhase:
-    """One step in a ``ChainJob`` workflow.
+    """One step in a chained workflow.
 
     Attributes:
         name (str): Label used in logs and phase-transition messages.
@@ -89,45 +88,11 @@ class JobPhase:
         )
 
 
-class ChainJob(Job):
-    """Job that runs child jobs in ordered phases.
+class ChainMixin:
+    """Phase orchestration mixin for multi-step workflow jobs."""
 
-    Subclasses prepare child jobs and assign ``self.phases``. Execution,
-    phase-to-phase gating, and overall completeness are handled here.
-    """
-
-    TYPE = "chain"
-
-    def __init__(
-        self,
-        molecule,
-        label,
-        jobrunner=None,
-        settings=None,
-        phases=None,
-        skip_completed=True,
-        **kwargs,
-    ):
-        if molecule is not None and not isinstance(molecule, Molecule):
-            raise ValueError(
-                f"Molecule must be instance of Molecule for {self}, "
-                f"but is {molecule} instead!"
-            )
-
-        super().__init__(
-            molecule=molecule,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
-        )
-
-        self.molecule = molecule.copy() if molecule is not None else None
-        self.settings = settings.copy() if settings is not None else None
-
-        if label is None and self.molecule is not None:
-            self.label = self.molecule.get_chemical_formula(empirical=True)
-
+    def __init__(self, *args, phases=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self._phases = list(phases) if phases is not None else []
 
     @property
@@ -137,9 +102,6 @@ class ChainJob(Job):
     @phases.setter
     def phases(self, phases):
         self._phases = list(phases) if phases is not None else []
-
-    def add_phase(self, phase: JobPhase) -> None:
-        self._phases.append(phase)
 
     def phase_by_name(self, name: str) -> Optional[JobPhase]:
         for phase in self._phases:
@@ -180,3 +142,40 @@ class ChainJob(Job):
         if not active_phases:
             return False
         return all(phase.is_complete() for phase in active_phases)
+
+
+class ChainJob(ChainMixin, Job):
+    """Standalone job that runs child jobs in ordered phases."""
+
+    TYPE = "chain"
+
+    def __init__(
+        self,
+        molecule,
+        label,
+        jobrunner=None,
+        settings=None,
+        phases=None,
+        skip_completed=True,
+        **kwargs,
+    ):
+        if molecule is not None and not isinstance(molecule, Molecule):
+            raise ValueError(
+                f"Molecule must be instance of Molecule for {self}, "
+                f"but is {molecule} instead!"
+            )
+
+        super().__init__(
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            phases=phases,
+            **kwargs,
+        )
+
+        self.molecule = molecule.copy() if molecule is not None else None
+        self.settings = settings.copy() if settings is not None else None
+
+        if label is None and self.molecule is not None:
+            self.label = self.molecule.get_chemical_formula(empirical=True)

@@ -12,13 +12,14 @@ solvation free energy calculations.
 
 import os
 
-from chemsmart.jobs.chain import ChainJob, JobPhase
+from chemsmart.jobs.chain import ChainMixin, JobPhase
+from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 
 
-class ORCApKaJob(ChainJob):
+class ORCApKaJob(ChainMixin, ORCAJob):
     """
     ORCA job class for pKa calculations using the dual-level proton exchange cycle.
 
@@ -38,7 +39,6 @@ class ORCApKaJob(ChainJob):
         skip_completed (bool): If True, completed jobs are not rerun.
     """
 
-    PROGRAM = "ORCA"
     TYPE = "orcapka"
     _shared_reference_molecule_cache = {}
 
@@ -520,18 +520,6 @@ class ORCApKaJob(ChainJob):
 
     def _reset_ref_sp_jobs(self):
         self._ref_sp_jobs = None
-
-    def _run_opt_jobs(self):
-        self.run_phase("Opt")
-
-    def _run_ref_opt_jobs(self):
-        self.run_phase("Ref Opt")
-
-    def _run_sp_jobs(self):
-        self.run_phase("SP")
-
-    def _run_ref_sp_jobs(self):
-        self.run_phase("Ref SP")
 
     # ------------------------------------------------------------------
     # Output accessors

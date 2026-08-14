@@ -1,5 +1,5 @@
 """
-Gaussian Fukui calculation job implementation.
+ORCA Fukui calculation job implementation.
 
 Runs population calculations for the neutral, radical cation (N-1 electrons),
 and radical anion (N+1 electrons) at the same geometry.
@@ -15,25 +15,24 @@ from chemsmart.analysis.fukui import (
     radical_ion_charge_and_multiplicity,
 )
 from chemsmart.jobs.chain import ChainMixin, JobPhase
-from chemsmart.jobs.gaussian.job import GaussianJob
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
-from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
+from chemsmart.jobs.orca.job import ORCAJob
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 
 logger = logging.getLogger(__name__)
 
 
-class GaussianFukuiJob(ChainMixin, GaussianJob):
+class ORCAFukuiJob(ChainMixin, ORCAJob):
     """
-    Gaussian job class for Fukui charge-state calculations.
+    ORCA job class for Fukui charge-state calculations.
 
     Runs population calculations at the same geometry for the neutral,
     radical cation (N-1 electrons), and radical anion (N+1 electrons).
 
     Attributes:
-        TYPE (str): Job type identifier ('g16fukui').
+        TYPE (str): Job type identifier ('orcafukui').
         molecule (Molecule): Neutral molecular structure.
-        settings (GaussianJobSettings): Population-job configuration.
+        settings (ORCAJobSettings): Population-job configuration.
         label (str): Base job identifier used for file naming.
         jobrunner (JobRunner): Execution backend that runs the jobs.
         skip_completed (bool): If True, completed jobs are not rerun.
@@ -46,7 +45,7 @@ class GaussianFukuiJob(ChainMixin, GaussianJob):
             multiplicity.
     """
 
-    TYPE = "g16fukui"
+    TYPE = "orcafukui"
 
     def __init__(
         self,
@@ -62,9 +61,9 @@ class GaussianFukuiJob(ChainMixin, GaussianJob):
         radical_anion_multiplicity=None,
         **kwargs,
     ):
-        if not isinstance(settings, GaussianJobSettings):
+        if not isinstance(settings, ORCAJobSettings):
             raise ValueError(
-                f"Settings must be instance of GaussianJobSettings for "
+                f"Settings must be instance of ORCAJobSettings for "
                 f"{self.__class__.__name__}, but is {settings} instead!"
             )
 
@@ -115,36 +114,36 @@ class GaussianFukuiJob(ChainMixin, GaussianJob):
             return
         self._create_charge_jobs(self.molecule)
 
-    def _population_job_class(self):
+    def _population_route_extra(self):
         if self.mode == "nbo":
-            return GaussianWBIJob
-        return GaussianSinglePointJob
+            return "NBO"
+        if self.mode in ("hirshfeld", "cm5"):
+            return "Hirshfeld"
+        return None
 
     def _population_settings(self, charge, multiplicity):
         settings = self.settings.copy()
         settings.charge = charge
         settings.multiplicity = multiplicity
         settings.freq = False
-        if self.mode == "nbo":
-            settings.jobtype = "wbi"
-        else:
-            settings.jobtype = "sp"
-            if self.mode in ("hirshfeld", "cm5"):
-                extra = "pop=hirshfeld"
-                current = settings.additional_route_parameters
-                if current:
-                    settings.additional_route_parameters = f"{current} {extra}"
-                else:
-                    settings.additional_route_parameters = extra
+        settings.jobtype = "sp"
+        route_extra = self._population_route_extra()
+        if route_extra is not None:
+            current = settings.additional_route_parameters
+            if current:
+                settings.additional_route_parameters = (
+                    f"{current} {route_extra}"
+                )
+            else:
+                settings.additional_route_parameters = route_extra
         return settings
 
     def _create_charge_jobs(self, molecule):
         """Create neutral / cation / anion population jobs at ``molecule``."""
         charge = self.settings.charge
         multiplicity = self.settings.multiplicity
-        job_cls = self._population_job_class()
 
-        self.neutral_job = job_cls(
+        self.neutral_job = ORCASinglePointJob(
             molecule=molecule,
             settings=self._population_settings(charge, multiplicity),
             label=f"{self.label}_n",
@@ -159,7 +158,7 @@ class GaussianFukuiJob(ChainMixin, GaussianJob):
             cation_charge = self.radical_cation_charge
         if self.radical_cation_multiplicity is not None:
             cation_mult = self.radical_cation_multiplicity
-        self.cation_job = job_cls(
+        self.cation_job = ORCASinglePointJob(
             molecule=molecule,
             settings=self._population_settings(cation_charge, cation_mult),
             label=f"{self.label}_rc",
@@ -174,7 +173,7 @@ class GaussianFukuiJob(ChainMixin, GaussianJob):
             anion_charge = self.radical_anion_charge
         if self.radical_anion_multiplicity is not None:
             anion_mult = self.radical_anion_multiplicity
-        self.anion_job = job_cls(
+        self.anion_job = ORCASinglePointJob(
             molecule=molecule,
             settings=self._population_settings(anion_charge, anion_mult),
             label=f"{self.label}_ra",

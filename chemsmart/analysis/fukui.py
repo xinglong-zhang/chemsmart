@@ -1,8 +1,9 @@
 """Condensed Fukui index analysis from charge-state outputs.
 
 Post-processes finished neutral / radical-cation / radical-anion calculations.
-Job submission lives under ``chemsmart sub … gaussian … fukui``; analysis is
-exposed as ``chemsmart run fukui``.
+Job submission lives under ``chemsmart sub … gaussian … fukui`` or
+``chemsmart sub … orca … fukui``; analysis is exposed as
+``chemsmart run fukui``.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ def discover_fukui_companion_outputs(neutral_filename):
     """Discover radical-cation / radical-anion outputs from a neutral file.
 
     Expects job labels ``<base>_n``, ``<base>_rc``, and ``<base>_ra`` as written
-    by ``GaussianFukuiJob``.
+    by ``GaussianFukuiJob`` and ``ORCAFukuiJob``.
     """
     path = Path(neutral_filename)
     stem = path.stem

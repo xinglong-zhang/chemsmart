@@ -492,6 +492,8 @@ Structure Optimization
       -  Geometry optimization
    -  -  ``sp``
       -  Single point calculation
+   -  -  ``fukui``
+      -  Fukui charge-state calculations (N / N±1); analyze with ``chemsmart run fukui``
 
 Transition State Search
 =======================
