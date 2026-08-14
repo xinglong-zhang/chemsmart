@@ -13,6 +13,8 @@ group and :mod:`unittest.mock` to intercept the job constructor so that
 the merged settings can be inspected without running an actual calculation.
 """
 
+from unittest.mock import MagicMock
+
 
 class TestORCASolventCLISpCommand:
     """CLI solvent options propagated to the ``sp`` subcommand."""
@@ -677,3 +679,136 @@ class TestORCALabelAndAuxBasisOptions:
         assert result.exit_code == 0, result.output
         assert mock.call_args is not None
         assert mock.call_args.kwargs["settings"].aux_basis == "def2/J"
+
+
+class TestORCAQMMMCLIjobtypeOverride:
+    def test_cli_qm_qm2_uses_three_layer_yaml_lot(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """CLI -j QM/QM2 keeps YAML per-layer theory and drops the MM layer."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            [
+                "-p",
+                "test_qmmm_3layer",
+                "-f",
+                single_molecule_xyz_file,
+                "opt",
+                "qmmm",
+                "-j",
+                "QM/QM2",
+                "-ha",
+                "1-3",
+                "-ct",
+                "0",
+                "-mt",
+                "2",
+                "-ch",
+                "0",
+                "-mh",
+                "2",
+            ],
+            ctx_obj={"jobrunner": MagicMock()},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.jobtype == "QM/QM2"
+        assert settings.high_level_functional == "B3LYP"
+        assert settings.high_level_basis == "def2-SVP"
+        assert settings.intermediate_level_functional == "HF"
+        assert settings.intermediate_level_basis == "STO-3G"
+        assert settings.intermediate_level_atoms is None
+        assert settings.low_level_method is None
+        route = settings.qmmm_route_string
+        assert "QM/QM2" in route
+        assert "/MM" not in route
+        qmmm_block = settings.qmmm_block
+        assert "QM2Atoms" not in qmmm_block
+        assert "ORCAFFFilename" not in qmmm_block
+        assert "Charge_Total 0" in qmmm_block
+        assert "Mult_Total 2" in qmmm_block
+
+    def test_cli_qm_qm2_keeps_cli_intermediate_atoms(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """Explicit -ia is kept when overriding QM/QM2/MM YAML to QM/QM2."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            [
+                "-p",
+                "test_qmmm_3layer",
+                "-f",
+                single_molecule_xyz_file,
+                "opt",
+                "qmmm",
+                "-j",
+                "QM/QM2",
+                "-ha",
+                "1-3",
+                "-ia",
+                "4-6",
+                "-ct",
+                "0",
+                "-mt",
+                "2",
+                "-ch",
+                "0",
+                "-mh",
+                "2",
+            ],
+            ctx_obj={"jobrunner": MagicMock()},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.jobtype == "QM/QM2"
+        assert settings.intermediate_level_atoms == "4-6"
+        assert settings.low_level_method == "system.ORCAFF.prms"
+
+
+class TestORCAQMMMCLIHighLevelHBondLength:
+    def test_cli_accepts_dict_string(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "opt",
+                "qmmm",
+                "-j",
+                "QMMM",
+                "-lm",
+                "system.ORCAFF.prms",
+                "-ha",
+                "1-3",
+                "-ch",
+                "0",
+                "-mh",
+                "1",
+                "-h",
+                "{'C_H': 1.09, 'N_H': 1.01}",
+            ],
+            ctx_obj={"jobrunner": MagicMock()},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.low_level_method == "system.ORCAFF.prms"
+        assert settings.high_level_h_bond_length == {
+            "C_H": 1.09,
+            "N_H": 1.01,
+        }
+        h_block = settings._get_h_bond_length()
+        assert "Dist_C_HLA 1.09" in h_block
+        assert "Dist_N_HLA 1.01" in h_block
