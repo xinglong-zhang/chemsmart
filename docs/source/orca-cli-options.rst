@@ -531,8 +531,7 @@ QM/MM
 =====
 
 ``qmmm`` is nested under a parent job type. Use ``<JOBTYPE> qmmm`` where ``<JOBTYPE>`` is ``opt``, ``ts``, ``sp``,
-``scan``, ``modred``, ``qrc``, or ``neb``. There is no standalone ``qmmm`` command. See
-:doc:`orca-multiscale-calculations`.
+``scan``, ``modred``, ``qrc``, or ``neb``. See :doc:`orca-multiscale-calculations`.
 
 ************
  Next Steps
