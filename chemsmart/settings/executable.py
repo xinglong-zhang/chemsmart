@@ -80,30 +80,30 @@ class Executable(RegistryMixin):
         )
         server_yaml = YAMLFile(filename=server_yaml_file)
 
-        # Extract configuration for the specific program
-        executable_folder_raw = server_yaml.yaml_contents_dict[cls.PROGRAM][
-            "EXEFOLDER"
-        ]
+        # Extract configuration for the specific program.
+        # If the program block is missing (e.g. user installed before xTB
+        # support was added), fall back to a default instance so that
+        # existing workflows are not broken.
+        program_cfg = server_yaml.yaml_contents_dict.get(cls.PROGRAM)
+        if program_cfg is None:
+            raise ValueError(
+                f"No '{cls.PROGRAM}' section found in {server_yaml_file}.\n "
+                "Consider updating your server YAML with the latest template."
+                # "Run `chemsmart update config` to update your server YAML.`"
+                # TODO: to uncomment after this function becomes available.
+            )
+
+        executable_folder_raw = program_cfg["EXEFOLDER"]
         executable_folder = (
             os.path.expanduser(executable_folder_raw)
             if executable_folder_raw
             else None
         )
-        local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "LOCAL_RUN", False
-        )
-        conda_env = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "CONDA_ENV", None
-        )
-        modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "MODULES", None
-        )
-        scripts = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "SCRIPTS", None
-        )
-        envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "ENVARS", None
-        )
+        local_run = program_cfg.get("LOCAL_RUN", False)
+        conda_env = program_cfg.get("CONDA_ENV", None)
+        modules = program_cfg.get("MODULES", None)
+        scripts = program_cfg.get("SCRIPTS", None)
+        envars = program_cfg.get("ENVARS", None)
 
         # Strip comments from configuration strings
         if conda_env is not None:
@@ -306,7 +306,7 @@ class XTBExecutable(Executable):
 
         Args:
             executable_folder (str, optional):
-            Path to xTB executable directory. If omitted, ``xtb`` is resolved
+            Path to xTB executable directory. If omitted, xtb is resolved
             from PATH, e.g. from an activated conda environment.
             **kwargs: Additional arguments passed to parent Executable class.
         """
@@ -318,11 +318,43 @@ class XTBExecutable(Executable):
 
         Returns:
             str: Full path to xtb if executable_folder is set, otherwise
-            ``xtb`` to use PATH resolution.
+            xtb to use PATH resolution.
         """
         if self.executable_folder is not None:
             return os.path.join(self.executable_folder, "xtb")
         return "xtb"
+
+
+class CRESTExecutable(Executable):
+    """
+    Executable handler for CREST conformer-rotamer ensemble sampling tool.
+    """
+
+    PROGRAM = "CREST"
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize CRESTExecutable instance.
+
+        Args:
+            executable_folder (str, optional):
+            Path to CREST executable directory. If omitted, crest is
+            resolved from PATH, e.g. from an activated conda environment.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the full path to the CREST executable.
+
+        Returns:
+            str: Full path to crest if executable_folder is set, otherwise
+            crest to use PATH resolution.
+        """
+        if self.executable_folder is not None:
+            return os.path.join(self.executable_folder, "crest")
+        return "crest"
 
 
 class NCIPLOTExecutable(Executable):

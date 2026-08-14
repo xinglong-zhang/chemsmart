@@ -63,6 +63,17 @@ XTB:
     SCRIPTS: null
     ENVARS: null
 
+CREST:
+    EXEFOLDER: null  # use crest from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
+    CONDA_ENV: |
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: null
+
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot
     LOCAL_RUN: False  # local run True to use serial_command

@@ -41,6 +41,14 @@ This guide covers installing CHEMSMART on Windows using the Anaconda or Minicond
       cd chemsmart
       conda env create -f environment.yml
 
+.. note::
+
+   ``environment.yml`` does **not** install ``crest`` automatically on native Windows (conda-forge has no ``win-64``
+   build). ``xtb`` is installed. You can still use CREST on Windows by installing manually — for example from
+   precompiled binaries or by compiling from source; see the `CREST installation guide
+   <https://crest-lab.github.io/crest-docs/page/installation>`_ — then ensure ``crest`` is on ``PATH`` or set
+   ``EXEFOLDER`` in the server YAML.
+
 #. Activate the environment:
 
    .. code:: powershell

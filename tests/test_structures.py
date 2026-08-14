@@ -467,6 +467,27 @@ class TestStructures:
         )
         assert isinstance(molecule, Molecule)
 
+    def test_read_crest_dynamics_trj_as_xyz(self, crest_octane_outfolder):
+        trj = os.path.join(crest_octane_outfolder, "crest_dynamics.trj")
+        frames = Molecule.from_filepath(trj, index=":", return_list=True)
+        assert len(frames) == 472
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.294043900430)
+
+        first = Molecule.from_filepath(trj, index="1", return_list=False)
+        assert first.num_atoms == 26
+        assert np.isclose(first.energy, -26.294043900430)
+
+    def test_read_crestopt_log_as_xyz(self, crest_octane_outfolder):
+        """crestopt.log is XYZ with .log extension."""
+        crestopt_log = os.path.join(crest_octane_outfolder, "crestopt.log")
+        frames = Molecule.from_filepath(
+            crestopt_log, index=":", return_list=True
+        )
+        assert len(frames) == 1
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.3226341540)
+
     def test_molecular_geometry(self):
         """Test molecular geometry calculations."""
         mol = Molecule(
@@ -2803,6 +2824,184 @@ class TestQMMMMolecule:
             q._get_partition_levels()
         assert "out of range" in str(exc.value)
 
+    def test_qmmm_string_layer_specs_with_link_atoms(self, tmpdir):
+        """String layer specs must still produce link-atom lines."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[(4, 5)]",
+            scale_factors="{(4, 5): [0.709]}",
+        )
+        written_input = os.path.join(tmpdir, "tmp.com")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+        mol_list_keys = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[[4, 5]]",
+            scale_factors="{[4, 5]: [0.709]}",
+        )
+        with open(written_input, "w") as f:
+            mol_list_keys._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+
+    def test_auto_assigns_link_atoms_for_cut_covalent_bonds(self):
+        """Cut covalent bonds become link-atom pairs when bonded_atoms is omitted."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [-0.48611108, -0.34722222, 0.00000000],
+                    [-0.12945666, -1.35603222, 0.00000000],
+                    [-0.12943824, 0.15717597, -0.87365150],
+                    [-1.55611108, -0.34720903, 0.00000000],
+                    [0.02723114, 0.37873406, 1.25740497],
+                    [-0.32782521, 1.38810715, 1.25642745],
+                    [-0.33103797, -0.12453438, 2.13105486],
+                    [1.09722933, 0.37702737, 1.25838372],
+                ]
+            ),
+            high_level_atoms=[1, 2, 3, 4],
+        )
+        buf = StringIO()
+        mol._write_gaussian_coordinates(buf)
+        text = buf.getvalue()
+        assert mol.bonded_atoms == [(1, 5)]
+        assert "L H 1" in text
+        # Explicit empty list disables auto-assignment.
+        mol_no_links = QMMMMolecule(
+            symbols=mol.symbols,
+            positions=mol.positions,
+            high_level_atoms=[1, 2, 3, 4],
+            bonded_atoms=[],
+        )
+        buf_no_links = StringIO()
+        mol_no_links._write_gaussian_coordinates(buf_no_links)
+        assert mol_no_links.bonded_atoms == []
+        assert "H 1" not in buf_no_links.getvalue()
+
+    def test_mm_atom_info_from_coordinate_lines(self):
+        typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03      0.0 0.0 0.0 H",
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1",
+        ]
+        records = QMMMMolecule.mm_atom_info_from_coordinate_lines(typed_lines)
+        assert records[0] == ("CT", 0.03, None, None)
+        assert records[1][0] == "OH"
+        assert records[1][1] == -0.65
+        assert records[1][2] == "HC"
+        assert records[1][3] == 0.09
+
+        frozen_typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03  -1  0.0 0.0 0.0 H",
+            "O-OH--0.65  0  1.4 0.0 0.0 L H-HC-0.09 1",
+            "TV 1.0 0.0 0.0",
+            "C-CT        0.0 0.0 1.0 L",
+        ]
+        frozen_records = QMMMMolecule.mm_atom_info_from_coordinate_lines(
+            frozen_typed_lines
+        )
+        assert frozen_records[0] == ("CT", 0.03, None, None)
+        assert frozen_records[1] == ("OH", -0.65, "HC", 0.09)
+        assert frozen_records[2] is None
+        assert QMMMMolecule.parse_element_type_charge("C-CT") is None
+
+        plain_lines = ["0 1", "C 0.0 0.0 0.0 H"]
+        assert (
+            QMMMMolecule.mm_atom_info_from_coordinate_lines(plain_lines)
+            is None
+        )
+
+    def test_qmmm_helpers_for_uncovered_branches(self):
+        assert QMMMMolecule._is_charge_multiplicity_line(["0"]) is False
+        assert QMMMMolecule._is_charge_multiplicity_line(["0", "1"]) is True
+        assert QMMMMolecule._gaussian_link_atom_pair(1, 2, "H", "X") == (
+            None,
+            None,
+        )
+
+        # String medium-layer specs are normalized on level lookup.
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.1, 0.0, 0.0],
+                    [-0.4, 1.0, 0.0],
+                    [-0.4, -1.0, 0.0],
+                ]
+            ),
+            high_level_atoms="1",
+            medium_level_atoms="2",
+            low_level_atoms="3-4",
+        )
+        assert mol._normalize_atom_indices(None) is None
+        assert mol._normalize_atom_indices([1, 2, 3]) == [1, 2, 3]
+        assert mol._normalize_atom_indices("1-2") == [1, 2]
+        assert mol._determine_level_from_atom_index(1) == "H"
+        assert mol._determine_level_from_atom_index(2) == "M"
+        assert isinstance(mol.medium_level_atoms, list)
+
+        # Bonds involving atoms with unknown levels are skipped.
+        class _PartialLevel(QMMMMolecule):
+            def _determine_level_from_atom_index(self, atom_index):
+                if atom_index == 1:
+                    return "H"
+                return None
+
+        partial = _PartialLevel(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=[1],
+        )
+        assert partial._detect_cut_bonds() == []
+
+        no_high = QMMMMolecule(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=None,
+        )
+        assert no_high._determine_level_from_atom_index(1) is None
+
+    def test_write_gaussian_connectivity_and_frozen_mm_labels(self):
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [-0.4, 1.0, 0.0]]
+            ),
+            high_level_atoms=[1],
+            low_level_atoms=[2, 3],
+            bonded_atoms=[(1, 2)],
+            frozen_atoms=[-1, 0, 0],
+            mm_atom_info=[
+                ("CT", 0.03, None, None),
+                ("HC", 0.09, None, None),
+                ("HC", 0.09, None, None),
+            ],
+        )
+        coords = StringIO()
+        mol._write_gaussian_coordinates(coords)
+        coord_text = coords.getvalue()
+        assert "C-CT-0.03" in coord_text
+        assert "  -1 " in coord_text
+
+        connectivity = StringIO()
+        mol.write_gaussian_connectivity(connectivity)
+        conn_text = connectivity.getvalue()
+        assert "1 2 1.0" in conn_text
+        assert conn_text.endswith("\n\n")
+
 
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""
@@ -3986,6 +4185,16 @@ H 1.0 0.0 0.0 L
             bonded_atoms="[(1, 2)]",
         )
         q4._write_gaussian_coordinates(StringIO())
+        # Gaussian permits only one link-atom specification per atom
+        bad3 = QMMMMolecule(
+            symbols=["C", "C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0], [3.0, 0, 0]]),
+            high_level_atoms=[1, 2],
+            low_level_atoms=[3],
+            bonded_atoms=[(1, 3), (2, 3)],
+        )
+        with pytest.raises(ValueError, match="only one link-atom"):
+            bad3._write_gaussian_coordinates(StringIO())
 
     def test_qmmm_partition_validation(self):
         q = QMMMMolecule(
@@ -4141,3 +4350,12 @@ H 1.0 0.0 0.0 L
         )
         assert q.charge == 1
         assert q.multiplicity == 2
+
+        q0 = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert q0.charge == 0
+        assert q0.multiplicity == 1

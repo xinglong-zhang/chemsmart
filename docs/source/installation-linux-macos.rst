@@ -25,7 +25,8 @@ more information.
       cd chemsmart
       make env
 
-   This creates a conda environment named ``chemsmart`` with all required Python packages.
+   This creates a conda environment named ``chemsmart`` with all required Python packages. The environment also installs
+   the ``xtb`` and ``crest`` command-line executables from conda-forge.
 
    If conda is not installed, you can use virtualenv instead:
 

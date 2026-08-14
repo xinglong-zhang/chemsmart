@@ -1672,7 +1672,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         set for intermediate-level (QM2) region
         intermediate_level_method (str): Built-in
         method for intermediate-level (XTB, HF-3C, etc.)
-        low_level_method (str): Method/force field for low-level (MM) region
+        low_level_method (str): ORCA force-field parameter file (ORCAFFFilename)
         high_level_atoms (list): Atom indices for high-level (QM) region
         intermediate_level_atoms (list): Atom
         indices for intermediate-level (QM2) region
@@ -1768,8 +1768,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             for intermediate-level (QM2) region
             intermediate_level_method: Built-in method for
             intermediate-level (XTB, HF-3C, PBEH-3C, etc.)
-            low_level_method: Method/force field for
-            low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
+            low_level_method: ORCA force-field parameter file
+            (ORCAFFFilename, e.g. system.ORCAFF.prms)
             high_level_atoms: Atom indices for high-level (QM) region
             intermediate_level_atoms: Atom indices
             for intermediate-level (QM2) region
@@ -2065,7 +2065,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             level_of_theory = f"! {self.jobtype.upper()}"
         else:
             level_of_theory = "!"
-            parent_jobtype = self.parent_jobtype.lower()
+            parent_jobtype = (
+                self.parent_jobtype.lower() if self.parent_jobtype else None
+            )
             if parent_jobtype in ("opt", "modred", "scan"):
                 level_of_theory += " Opt"
             elif parent_jobtype == "ts":
@@ -2098,9 +2100,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                     level_of_theory += " QM"
                     # only "!QMMM" will be used for additive QMMM
                     level_of_theory += f"/{self.intermediate_level_of_theory}"
-                    print(
-                        f"+++++++++++\n{self.intermediate_level_of_theory}\n+++++++++++"
-                    )
                     if self.low_level_method is not None:
                         level_of_theory += f"/{self.low_level_of_theory}"
             level_of_theory += f" {self.high_level_of_theory}"
@@ -2145,9 +2144,13 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 atom_pair,
                 bond_length,
             ) in self.high_level_h_bond_length.items():
-                h_bond_length += (
-                    f"Dist_{atom_pair[0]}_{atom_pair[1]} {bond_length}\n"
-                )
+                if isinstance(atom_pair, str):
+                    atom1, atom2 = atom_pair.split("_", 1)
+                else:
+                    atom1, atom2 = atom_pair[0], atom_pair[1]
+                if str(atom2).upper() in {"H", "HLA"}:
+                    atom2 = "HLA"
+                h_bond_length += f"Dist_{atom1}_{atom2} {bond_length}\n"
             return h_bond_length
         elif isinstance(self.high_level_h_bond_length, str):
             # if the user provided a file with the d0_X-H values
@@ -2166,17 +2169,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             ValueError: If invalid embedding type specified
         """
-        embedding_type = "Embedding "
-        if self.embedding_type.lower() == "electronic":
-            embedding_type += "Electronic"
-        elif self.embedding_type.lower() == "mechanical":
-            embedding_type += "Mechanical"
-        else:
-            raise ValueError(
-                f"Invalid embedding type: {self.embedding_type}. "
-                "Valid options are 'Electronic' or 'Mechanical'."
-            )
-        return embedding_type
+        embedding = self.embedding_type.lower()
+        if embedding in ("electronic", "electrostatic"):
+            return None
+        if embedding == "mechanical":
+            return "Embedding Mechanical"
+        raise ValueError(
+            f"Invalid embedding type: {self.embedding_type}. "
+            "Valid options are 'electronic' or 'mechanical'."
+        )
 
     def _get_charge_and_multiplicity(self):
         """
@@ -2363,7 +2364,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             ):
                 # intermediate-level method provided via external file
                 full_qm_block += (
-                    f'QM2CustomFile "{self.intermediate_level_method}" end\n'
+                    f'QM2CustomFile "{self.intermediate_level_method}"\n'
                 )
         else:
             # If custom intermediate-level
@@ -2372,13 +2373,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 self.intermediate_level_functional is not None
                 and self.intermediate_level_functional.strip()
             ):
-                full_qm_block += f'QM2CUSTOMMETHOD "{self.intermediate_level_functional}" end\n'
+                full_qm_block += (
+                    f'QM2CUSTOMMETHOD "{self.intermediate_level_functional}"\n'
+                )
             if (
                 self.intermediate_level_basis is not None
                 and self.intermediate_level_basis.strip()
             ):
                 full_qm_block += (
-                    f'QM2CUSTOMBASIS "{self.intermediate_level_basis}" end\n'
+                    f'QM2CUSTOMBASIS "{self.intermediate_level_basis}"\n'
                 )
 
         # Add force field for specific job types
@@ -2417,11 +2420,13 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
 
         # Add double-counting removal options
         if self.delete_la_double_counting is True:
-            full_qm_block += "Delete_LA_Double_Counting true\n"
+            full_qm_block += "DeleteLADoubleCounting true\n"
         if self.delete_la_bond_double_counting_atoms:
             full_qm_block += "DeleteLABondDoubleCounting true\n"
         if self.embedding_type is not None:
-            full_qm_block += f"{self._get_embedding_type()}\n"
+            embedding_line = self._get_embedding_type()
+            if embedding_line:
+                full_qm_block += f"{embedding_line}\n"
 
         # Add crystal QM/MM parameters if any
         crystal_sub = self._write_crystal_qmmm_subblock()

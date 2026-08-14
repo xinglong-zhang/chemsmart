@@ -11,7 +11,20 @@
 </p>
 
 ---
-Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
+## Notice: 
+
+**If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!**
+
+GitHub does not natively support forcing links in a *README.md* file to open in a new tab or window. If needed, please use one of the following methods:
+
+Mac: Hold CMD + click the link.
+
+Windows / Linux: Hold CTRL + click the link.
+
+Mouse: Click the link using the middle scroll wheel.
+
+
+## Introduction
 
 CHEMSMART is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
@@ -19,567 +32,139 @@ It uses the same submission command regardless of the queueing systems (SLURM, T
 
 Users can customize their own HPC server settings and project settings to run different jobs, without modifying the codes in this package.
 
-## Installation
-
-Users are recommended to install conda environments to mange the packages required by this software toolkit. Either Anaconda3 or Miniconda3 may be installed; see more information on conda installation process at [Conda Installation Page](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html).
-
-Once conda has been installed successfully, one can clone this package to a local directory via
-
-```bash
-git clone https://github.com/xinglong-zhang/chemsmart.git
-```
-First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run 
-
-```bash
-make env
-```
-to create a running environment.
-
-By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
-
-If conda is not installed, one can run
-
-```bash
-make env USE_CONDA=false
-```
-
-or 
-
-```bash
-make virtualenv
-```
-to install using virtualenv. It is, however, recommended that `conda` be used.
-
-Help options are available by typing `make help`.
-
-After the virtual conda environment is created and activated via `conda activate chemsmart`, one can run
-
-```bash
-make install
-```
-which installs the packages and dependencies required for `chemsmart` package.
-
-For developers, one may run
-
-```bash
-make install-dev
-```
-which installs additional packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing the `chemsmart` package.
-
-Next, run
-```bash
-make configure
-```
-to set up the user-specific directory `~/.chemsmart` automatically. You will be prompted to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
-
-The configuration also adds the environment variables for chemsmart to the user `~/.bashrc` file.
-
------
-The `~/.chemsmart/usersettings.yaml` file contains informations such as project number or account number that are required in a typical submission script that specifies the account for use at some HPC servers. It can also contain options specifying user's email to inform user of the job start and job end once a job is submitted. If more features are needed, please submit a request via `Issues`. A typical `~/.chemsmart/usersettings.yaml` file looks like this:
-```text
-PROJECT: 1234567  # alias ACCOUNT FOR SLURM
-EMAIL: abc@gmail.com
-```
------
-The `~/.chemsmart/server/` directory contains files related to server setup for a particular HPC cluster that the user is using. For example, we can specify a SLURM based server setting as `~/.chemsmart/server/shared.yaml` with the following information:
-
-```text
-SERVER:
-    SCHEDULER: SLURM
-    QUEUE_NAME: RM-shared
-    NUM_HOURS: 48
-    MEM_GB: 100
-    NUM_CORES: 64
-    NUM_GPUS: Null
-    NUM_THREADS: 64
-    SUBMIT_COMMAND: sbatch
-    ##PROJECT: 13003611
-    ##PROJECT: 13002374
-    SCRATCH_DIR: null
-    USE_HOSTS: true
-    EXTRA_COMMANDS: |
-        export PATH=$HOME/bin/chemsmart:$PATH
-        export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
-        export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
-        export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
-GAUSSIAN:
-    EXEFOLDER: ~/bin/g16 
-    LOCAL_RUN: True 
-    SCRATCH: True  # set scratch to True to run in scratch folder
-    CONDA_ENV: |   # program-specific conda env
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda activate chemsmart
-    MODULES: |
-        module purge
-        # module load craype-x86-rome
-        # module load libfabric/1.11.0.4.125
-    SCRIPTS: |
-        tcsh -c "source ~/programs/g16/bsd/g16.login"
-    ENVARS: |
-        export SCRATCH=/tmp # required if scratch is true
-        export GAUSS_EXEDIR=~/bin/g16
-        export g16root=~/bin/g16
-           
-ORCA:
-    EXEFOLDER: ~/bin/orca_6_0_1
-    LOCAL_RUN: False 
-    ENVARS: |
-        export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
-        export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
-XTB:
-    EXEFOLDER: null
-    LOCAL_RUN: True
-    SCRATCH: False
-    CONDA_ENV: |
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda activate chemsmart
-    ENVARS: null
-```
-This file can be customized by user for different submission systems. This file contains the server configuration information that is needed for chemsmart to automatically write the submission script for each job.
-
------
-The `~/.chemsmart/gaussian/` directory contains files related to gaussian project settings, which contain DFT functional and basis set etc, that is required to write the input file for running a gaussian job. For example, we can specify a test project settings in `~/.chemsmart/gaussian/test.yaml` with the following information:
-
-```test
-gas:
-  functional: m062x  # quotes required for string with spaces
-  basis: def2svp
-  solvent_model: smd
-  solvent_id: dichloroethane
-solv: 
-  functional: m062x
-  basis: def2tzvp
-  freq: False
-  solvent_model: smd
-  solvent_id: dichloroethane
-td:
-  functional: cam-b3lyp
-  basis: genecp
-  heavy_elements: ['I']
-  heavy_elements_basis: def2-SVPD
-  light_elements_basis: def2SVP
-  freq: False
-  ##solvent_model: smd
-  ##solvent_id: DiethylEther
-```
-By default, the `gas` phase settings are used for all jobs such as geometry optimization, transition state search etc, and the `solv` settings are used for single point calculations; the `td` settings are used to run TD-DFT calculations. One can specify additional project settings in `~/.chemsmart/gaussian/` in a similar way to adapt to each project that one wishes to run. If setting
-```text
-gas: Null
-```
-Then all jobs will use settings specified in `solv`, i.e., all calculations will be run in implicit solvation model.
-
-**Note on GEN/GENECP basis sets**: When using `basis: genecp` with `heavy_elements` specified, CHEMSMART automatically determines whether to use the `gen` or `genecp` keyword in the Gaussian input file based on the elements present:
-- If no heavy elements are present in the molecule, the `light_elements_basis` is used directly
-- If all heavy elements have atomic number ≤ 36 (up to Kr), the `gen` keyword is used  
-- If any heavy element has atomic number > 36 (Rb and beyond), the `genecp` keyword is used
-
-For example, with `heavy_elements: ['I', 'Br']`, a molecule containing only Br (Z=35) will use `gen`, while a molecule containing I (Z=53) will use `genecp`.
-This is useful when simulating different structures using one single project settings .yaml file.
-
----
-The `~/.chemsmart/orca/` directory contains files related to ORCA project settings, which contain DFT functional and basis set etc, that is required to write the input file for running an ORCA job. For example, we can specify a test project settings in `~/.chemsmart/orca/test.yaml` with the following information:
-
-```text
-gas:
-  functional: M062X
-  basis: def2-SVP
-solv:
-  ab_initio: DLPNO-CCSD(T)
-  functional: Null
-  basis: Extrapolate(2/3,cc)
-  aux_basis: AutoAux
-  defgrid: DEFGRID3
-  freq: False
-  scf_tol: TightSCF
-  scf_algorithm: KDIIS
-  scf_maxiter: 500
-  mdci_cutoff: Normal
-  mdci_density: None    
-  dipole: False
-  solvent_model: SMD
-  solvent_id: "toluene"
-```
-This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
-
----
-The `~/.chemsmart/xtb/` directory contains files related to xTB project settings. xTB support currently covers command-line job submission for geometry optimization (`opt`), single point (`sp`), and Hessian/frequency (`hess`) calculations. For xTB optimization jobs, CHEMSMART follows the same convention as Gaussian: `opt` defaults to `freq: true`, which generates an xTB `--ohess` command unless `freq: false` is set explicitly. Calculations are executed using the `xtb` executable, which must be available either in the configured conda environment or on the system `PATH` specified in the server YAML `XTB` section.
-
-For example, one can specify `~/.chemsmart/xtb/test.yaml` with:
-
-```text
-sp:
-  gfn_version: gfn2
-  solvent_model: null
-  solvent_id: null
-  grad: false
-
-opt:
-  gfn_version: gfn2
-  optimization_level: vtight
-  freq: true
-  solvent_model: null
-  solvent_id: null
-  grad: false
-
-hess:
-  gfn_version: gfn2
-  solvent_model: null
-  solvent_id: null
-  grad: false
-```
-
-Solvent can be added to any xTB job settings by specifying both `solvent_model` and `solvent_id`, for example `solvent_model: alpb` and `solvent_id: water`. CHEMSMART only renders solvent flags when both values are present.
-
----
-Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
-
-One also needs to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in a scratch folder). One may do `ln -s /path/to/scratch/ ~/scratch`.
-
-Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
-
-The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do 
-
-```bash
-source ~/.bashrc
-```
-
-to effect the changes.
-
-<!-- ---
-Once `make configure` is done, one can optionally run 
-```bash
-make fmt
-```
-and
-
-```bash
-make lint
-```
-to format and lint the codes (this should have been handled by the developers). Also optionally, one can run 
-
-```bash
-make test
-```
-
-to make sure that all tests in chemsmart pass.
-
----
-Finally one can clean up by running
-
-```bash
-make clean
-``` -->
-
-## Testing Installations
-
-Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
-
-```bash
-chemsmart --version
-```
-to get the current version of CHEMSMART, and
-
-```bash
-chemsmart --help
-```
-to get the options for running CHEMSMART package.
-
-## Usage
-
-With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).
-
-To submit (and run) a geometry optimization job, do:
-
-```py
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> opt
-```
-where `<server_name>` is the one of the servers specified in `~/.chemsmart/server/*.yaml` files, without `.yaml` extension; `<project>` is one of the project settings specified in `~/.chemsmart/gaussian/*.yaml` files, without `.yaml` extension; and `<input_file>` is an input file the user wishes to run job on. Note that this input file can be any format, such as `.xyz`, Gaussian `.com`, `.gjf` or `.log` file, ORCA `.inp` or `.out` file, or an xTB main `.out` file.
-
----
-
-If one wants to submit geometry optimization with frozen atoms in the molecule (such as https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it), one can do:
-
-```bash 
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> opt -f <indices_of_atoms_to_freeze>
-```
-For example, to submit the geometry optimization job with atoms numbered 1 to 10 frozen, one can do
-
-```bash 
-chemsmart sub -s shared gaussian -p test -f input.com opt -f 1-10
-```
-Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization software for molecules is 1-indexed.
-
----
-To submit transition state modredundant job (frozen coordinates optimization), do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> modred -c <list_of_coords_to_constraint>
-```
-For example, to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom 10, do:
-```bash
-chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17],[9,10]]
-```
-
----
-To submit transition state search job, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> ts
-```
-
----
-To submit intrinsic reaction coordinate (IRC) job, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> irc
-```
-
----
-To submit relaxed potential energy surface (PES) scan, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> scan -c <list_of_coords_to_constraint> -s <scan_step_size> -n <num_scan_steps>
-```
-
-For example, to submit the PES scan job with along bond between atom 4 and atom 17 for 10 steps with 0.1Å increment per step:
-
-```bash
-chemsmart sub -s shared gaussian -p test -f input.com scan -c [[4,17]] -s 0.1 -n 10
-```
-
----
-To submit single point job, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> sp
-```
-
-For single-point job that user wants to test which uses different solvent model and id from that specified in `<project>`, one can do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> sp -sm <user_solvent_model> -si <user_solvent_id>
-```
-to specify a different solvent model `<user_solvent_model>` and solvent `<user_solvent_id>`.
-
----
-To submit non-covalent interaction job, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> nci
-```
-
----
-To submit RESP charges fitting job, do:
-
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> resp
-```
-
-Note that this creates an input file with fix route for RESP job:
-
-```text
-HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)
-```
-
-To run opt or modred or ts conformers from crest run output, do:
+For completed introduction videos, please refer to [YouTube](https://www.youtube.com/watch?v=hAQOqj9c_4w) and [Bilibili](https://www.bilibili.com/video/BV1d59LBiEb5/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380).
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j opt
-```
-or
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j modred -c [1,4]
-```
+## Tutorial
 
-or 
+Full tutorials are available on [Read the Docs](https://chemsmart.readthedocs.io/en/latest/).
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j ts
-```
-respectively
+**Getting Started**
 
-This optimizes all the conformers available in the `<input_file>`. Typically, the `<input_file>` is a list of all conformers obtained by CREST program and named `crest_conformers.xyz`.
+First, users can select the appropriate installation method for their operating system.
 
-To optimize a fixed number of lowest energy conformers, `n_conformers_to_opt`, do:
+- [Installation (Linux and macOS)](https://chemsmart.readthedocs.io/en/latest/installation-linux-macos.html)
+- [Installation (Windows WSL/Ubuntu)](https://chemsmart.readthedocs.io/en/latest/installation-windows-wsl.html)
+- [Installation (Windows Git Bash)](https://chemsmart.readthedocs.io/en/latest/installation-windows-gitbash.html)
+- [Installation (Windows Anaconda PowerShell)](https://chemsmart.readthedocs.io/en/latest/installation-windows-powershell.html)
+- [Installation (HPC Cluster)](https://chemsmart.readthedocs.io/en/latest/installation-hpc-cluster.html)
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j opt -n <n_conformers_to_opt>
-```
+For Windows users, it is recommended to install using Windows WSL for full functionality support. 
 
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever an .xyz file is used as input, the charge and multiplicity should be specified via `-c <charge> -m <multiplicity>` via CLI.
+The corresponding tutorial video for installation is available on [YouTube](https://www.youtube.com/watch?v=VtY7fhvfptQ) and [Bilibili](https://www.bilibili.com/video/BV1abQtBZEKf/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380).
 
----
+**Configuration**
 
-To optimize unique structure from an md trajectory file, do:
+After installation, users can configure their user settings, server settings, and project settings according to their needs.
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj 
-```
-This optimizes all the unique structures available in the md trajectory `<input_file>`. Typically, the `<input_file>` is a list of all structures on an md trajectory obtained by ASE md run and named `md.traj`. (TODO: this method is not properly implemented in chemsmart yet.)
+- [Configuration Overview](https://chemsmart.readthedocs.io/en/latest/configuration-overview.html)
+- [User Settings](https://chemsmart.readthedocs.io/en/latest/configuration-user-settings.html)
+- [Server Settings](https://chemsmart.readthedocs.io/en/latest/configuration-server-settings.html)
+- [Project Settings](https://chemsmart.readthedocs.io/en/latest/configuration-project-settings.html)
 
-To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>`, do:
+The corresponding tutorial video for configuration is available on [YouTube](https://www.youtube.com/watch?v=orvZhi7FFBs) and [Bilibili](https://www.bilibili.com/video/BV1dDRMBQEQt/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380).
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj -n <n_conformers_to_opt>
-```
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
+**CLI Reference**
 
-Two grouper types for determining/clustering unique structures are available from CLI option `-g`:
+Before starting computational workflows with CHEMSMART, we recommend taking a few minutes to familiarize yourself with the basic command-line interface, molecular input options, file conversion, and ChemDraw-based structure preparation.
 
-1) Sequential grouper (default), selected by option value of seq, which sequentially checks for unique structures in a given list of md structures, and 
+- [Command Line Interface Overview](https://chemsmart.readthedocs.io/en/latest/cli-overview.html)
+  Tutorial video: [YouTube](https://www.youtube.com/watch?v=ydZFesfYO3k) and [Bilibili](https://www.bilibili.com/video/BV1NjVw67Ejw/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380).
 
-2) Self-consistent grouper, selected by option value of sc, which self-consistently checks for unique structures in a given list of md structures using the reverse Cuthill–McKee algorithm for structure clustering. By default, only the last 0.1 proportion of the structures of the md.traj file is considered. This can be changed via cli option `-x <proportion_structures_to_use>`.
+- [Molecule Input Formats](https://chemsmart.readthedocs.io/en/latest/molecule-input-formats.html)
+- [Convert CLI Options](https://chemsmart.readthedocs.io/en/latest/convert-cli-options.html)
+- [ChemDraw Files](https://chemsmart.readthedocs.io/en/latest/chemdraw-organometallic.html)
 
-For example, to consider the last 20% of the structures in md.traj trajectory file, then uses Sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:
+**Gaussian Jobs**
 
-```bash
-chemsmart sub -s shared gaussian -p test -f imd.traj traj -x 0.2 -n 10 -g seq
-```
+This section provides practical guides for setting up and running Gaussian calculations with CHEMSMART, covering geometry optimization, transition-state searches, conformational sampling, QRC calculations, electronic-structure analyses, QM/MM ONIOM calculations, and other common workflows.
 
----
-To run distortion-interaction/activation-strain (DI-AS) job, do:
+- [Gaussian CLI Options](https://chemsmart.readthedocs.io/en/latest/gaussian-cli-options.html)
+- [Structure Optimization (Gaussian)](https://chemsmart.readthedocs.io/en/latest/gaussian-structure-optimization.html)
+- [Transition State Search (Gaussian)](https://chemsmart.readthedocs.io/en/latest/gaussian-transition-state.html)
+- [Conformational Sampling & Dynamics (Gaussian)](https://chemsmart.readthedocs.io/en/latest/gaussian-conformational-sampling.html)
+- [Quick Reaction Coordinate (QRC) Jobs](https://chemsmart.readthedocs.io/en/latest/gaussian-qrc.html)
+- [Electronic Structure Properties & Analyses (Gaussian)](https://chemsmart.readthedocs.io/en/latest/gaussian-electronic-structure.html)
+- [Gaussian QM/MM ONIOM Calculations Guide](https://chemsmart.readthedocs.io/en/latest/gaussian-qmmm-jobs.html)
+- [Other Gaussian Jobs](https://chemsmart.readthedocs.io/en/latest/gaussian-other-jobs.html)
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <irc_output_file_for_dias> dias -i <indices_of_any_one_fragment> -n <number_of_every_n_step_along_irc_to_run>
-```
+Two Gaussian tutorial videos are available:
+Gaussian Jobs part I: [YouTube](https://www.youtube.com/watch?v=NIlXvSMUXYo) | [Bilibili](https://www.bilibili.com/video/BV1hSVB68EtA/?spm_id_from=333.1387.homepage.video_card.click)
+Gaussian Jobs part II: [YouTube](https://www.youtube.com/watch?v=F8dKqplusgA) | [Bilibili](https://www.bilibili.com/video/BV1wGEb6YEqh/?spm_id_from=333.1387.homepage.video_card.click&vd_source=fd103f8baa97dc76be9c7402dceee380)
 
-For example to run DI-AS job for fragment 1 with atoms numbered from 5-17 at every 10 steps along the irc.log file:
+**ORCA Jobs**
 
-```bash
-chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10
-```
+This section provides practical guides for setting up and running ORCA calculations with CHEMSMART, including geometry optimization, single-point calculations, transition-state and reaction-path searches, direct ORCA input, and multiscale QM/MM calculations.
 
----
-If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly using:
+- [ORCA CLI Options](https://chemsmart.readthedocs.io/en/latest/orca-cli-options.html)
+- [Structure Optimization (ORCA)](https://chemsmart.readthedocs.io/en/latest/orca-structure-optimization.html)
+- [Transition State Search (ORCA)](https://chemsmart.readthedocs.io/en/latest/orca-transition-state.html)
+- [Direct ORCA Input](https://chemsmart.readthedocs.io/en/latest/orca-direct-input.html)
+- [ORCA QM/MM Multiscale Calculations Guide](https://chemsmart.readthedocs.io/en/latest/orca-multiscale-calculations.html)
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <any_project_settings> -f <input_file> com
-```
+**xTB Jobs**
 
----
-Generally, if a user wants to run job that is currently not present in our package, one can run custom job using:
+This section provides guides for running xTB calculations with CHEMSMART, including geometry optimization, single-point calculations, Hessian and frequency calculations, and related CLI options.
 
-```bash
-chemsmart sub -s <server_name> gaussian -p <any_project_settings> -f <input_file> userjob -r <user_defined_gaussian_route> -a <appending_information_as_string_at_the_end_of_input_file_after_coordinates_specification>
-```
+- [xTB CLI Options](https://chemsmart.readthedocs.io/en/latest/xtb-cli-options.html)
+- [Structure Optimization (xTB)](https://chemsmart.readthedocs.io/en/latest/xtb-structure-optimization.html)
 
-For example, to create an input file named `user_defined_job.com` with user-specified route `mnr functional/basis solvent` etc and `B 1 2 F\nA 1 2 3 F` at the end of the input file after the specification of coordinates, run
+**Crest Jobs**
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r 'mnr functional/basis solvent etc' -a 'B 1 2 F\nA 1 2 3 F'
-```
+This section provides guides for performing conformational sampling with CREST through CHEMSMART, including general CLI options, free conformational searches, and constrained searches for applications such as transition-state conformer sampling.
 
----
+- [CREST CLI Options](https://chemsmart.readthedocs.io/en/latest/crest-cli-options.html)
+- [Conformational Search (CREST)](https://chemsmart.readthedocs.io/en/latest/crest-conformational-search.html)
 
-### General options available to all jobs:
+**pKa Calculations**
 
-Users can specify the name of the file to be created for the job, without file extension, they want to run by using the option `-l`, e.g.:
+This section describes how to set up, run, and analyze pKa calculations using CHEMSMART, including single-system and batch workflows.
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -l custom_job_name opt
-```
+- [pKa Calculations](https://chemsmart.readthedocs.io/en/latest/pka-calculations.html)
 
-will create input file named `custom_job_name.com` instead of the default `test_opt.com`.
+**Thermochemistry**
 
-Users can also simply append a string to the base name of the filename supplied, e.g.:
+This section introduces thermochemistry analysis for Gaussian, ORCA, and xTB calculations, including single-file and batch-processing workflows.
 
+- [Thermochemistry Analysis](https://chemsmart.readthedocs.io/en/latest/thermochemistry-analysis.html)
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -a append_string ts
-```
+**PyMOL Visualization**
 
-will create input file named `test_append_string.com` instead of the default `test_ts.com`.
+This section provides guides for molecular visualization and analysis with PyMOL, including basic visualization, reaction analysis, electronic-structure analysis, and noncovalent interaction analysis.
 
----
-Users can also modify the charge and multiplicity from the CLI, e.g.:
+- [PyMOL CLI Options](https://chemsmart.readthedocs.io/en/latest/pymol-cli-options.html)
+- [Basic Visualization (PyMOL)](https://chemsmart.readthedocs.io/en/latest/pymol-visualization.html)
+- [Reaction Analysis (PyMOL)](https://chemsmart.readthedocs.io/en/latest/pymol-reaction-analysis.html)
+- [Electronic Structure Analysis (PyMOL)](https://chemsmart.readthedocs.io/en/latest/pymol-electronic-structure.html)
+- [Interaction Analysis (PyMOL)](https://chemsmart.readthedocs.io/en/latest/pymol-interaction-analysis.html)
 
-Modify the charge in ``test.com`` to charge of +1 in the newly created input file ``test_charge.com`` via:
+**Grouper Tool**
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -c 1 -a charge opt
-```
+This section introduces the CHEMSMART Grouper tool for clustering and selecting molecular structures using different strategies, together with workflows for CREST conformer ensembles and molecular trajectories.
 
-Modify the multiplicity in ``test.com`` to multiplicity of 3 in the newly created input file ``test_multiplicity.com`` via
+- [Grouper CLI Options](https://chemsmart.readthedocs.io/en/latest/grouper-cli-options.html)
+- [Grouping Strategies](https://chemsmart.readthedocs.io/en/latest/grouper-strategies.html)
+- [CREST and Trajectory Workflows](https://chemsmart.readthedocs.io/en/latest/grouper-crest-or-traj-workflow.html)
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -m 3 -a multiplicity opt
-```
+**NCIPLOT**
 
-Modify the charge to +1 and multiplicity to 2 in the newly created input file ``test_charge_multiplicity.com`` via:
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -c 1 -m 2 -l test_charge_multiplicity opt
-```
+This section provides a tutorial for performing and visualizing noncovalent interaction analysis with NCIPLOT.
 
-This can be useful when, e.g., using optimized structure of a neutral closed-shell (charge 0, multiplicity 1) system to run a charged radical ion (e.g., charge +1 and multiplicity 2 in radical cation).
+- [NCIPLOT Tutorial](https://chemsmart.readthedocs.io/en/latest/nciplot-tutorial.html)
 
----
-Users can also modify the functional and basis from the CLI to differ from those in project settings, e.g.:
+**Auxiliary Scripts**
 
-Modify the functional to `b3lyp` in the newly created input file ``test_functional.com`` via
+This section introduces auxiliary scripts for common data-processing tasks, including file management and electronic-structure analysis.
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -x b3lyp -a functional opt
-```
+- [Auxiliary Scripts Overview](https://chemsmart.readthedocs.io/en/latest/scripts-overview.html)
+- [File Management](https://chemsmart.readthedocs.io/en/latest/scripts-data-management.html)
+- [Electronic Structure Analysis](https://chemsmart.readthedocs.io/en/latest/scripts-electronic-analysis.html)
 
-Modify the basis to `6-31G*` in the newly created input file ``test_basis.com`` via
+**API Reference**
 
+This section provides the API reference for CHEMSMART modules, classes, and functions.
 
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -b "6-31G*" -a basis opt
-```
-
-Users can also specify additional optimization options for `opt=()` in the route, for example,
-
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com -o maxstep=8,maxsize=12 -a opt_options opt
-```
-
-will create `opt=(maxstep=8,maxsize=12)` as part of the route in the newly created input file `test_opt_options.com`.
-
-Users can also add in additional parameters used in the route, e.g.,
-
-```bash
-chemsmart sub -s shared gaussian -p test -f test.com --r nosymm -a route_params opt
-```
-
-will add in `nosymm` as part of the route in the newly created input file `test_route_params.com`.
-
-If one has more than one structure in the supplied file for input preparation, one can select the particular structure to perform job on by using the `-i/--index` option, e.g.:
-
-```bash
-chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
-```
-will take the 5th structure (1-indexed, as in chemsmart) from ase database file, `small.db`, to create the input file for geometry optimization.
-
----
-Similar commands exist for ORCA job submissions. One can run 
-
-```bash
-chemsmart sub orca --help
-```
-to find out more.
-
----
-### xTB job submission
-
-xTB jobs use the same `run` and `sub` entry points as Gaussian and ORCA jobs. The supported xTB job types are `opt`, `sp`, and `hess`. Inputs can be `.xyz` files, Gaussian/ORCA outputs, an existing xTB main `.out`, a chemsmart database, or a PubChem query.
-
-```bash
-chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
-chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
-chemsmart run xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
-```
-
-To generate scheduler scripts without submitting them, use `sub --test`:
-
-```bash
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 opt
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 sp
-chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> -c 0 -m 1 hess
-```
-
-Shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `-r/--additional-flags`, `-sm/--solvent-model`, `-si/--solvent-id`, `--remove-solvent/--no-remove-solvent`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. Geometry optimization also accepts `-O/--optimization-level`, `-c/--constrain`, and `-f/--force-constant` on the `opt` subcommand. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set. When `-c/--constrain` is given, CHEMSMART also writes `{label}.inp` (xcontrol `$constrain`) and adds `--input {label}.inp`.
+- [CHEMSMART Modules](https://chemsmart.readthedocs.io/en/latest/modules.html)
 
 ## Development
 
