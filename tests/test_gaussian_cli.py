@@ -987,7 +987,7 @@ class TestGaussianCLICrestCommand:
 
 
 class TestGaussianCLIQrcCommand:
-    """CLI tests for the ``qrc`` (Quadratic Reaction Coordinate) subcommand."""
+    """CLI tests for the ``qrc`` (Quick Reaction Coordinate) subcommand."""
 
     def test_basic_qrc_job_creation(
         self,
