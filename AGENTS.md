@@ -50,13 +50,16 @@ Planning, YAML validation, CLI compilation, safe preview, and result analysis
 do not grant engine authority. Real calculation follows this chain:
 
 1. the Agent produces a project-backed DAG;
-2. ChemSmart compiles every node and completes a safe preview;
-3. the terminal interface displays molecular identity, electronic state,
+2. ChemSmart compiles and safely previews every executable node while retaining
+   any scientifically necessary release-unsupported stage as explicit
+   non-executable intent;
+3. the terminal interface displays the complete plan, marks non-executable
+   stages and their reasons, and displays molecular identity, electronic state,
    effective project settings, CLI operations, dependencies, environment, and
-   resources;
+   resources for the executable partition;
 4. a human enters ``/approve`` once, or chooses ``/deny`` or ``/revise``;
 5. the displayed workflow is removed from the pending state before launch;
-6. a provider-free executor runs that reviewed DAG; and
+6. a provider-free executor runs only that reviewed executable partition; and
 7. ChemSmart records engine and validation evidence; a subsequent explicit
    analysis request reads the completed result into typed quantities,
    expressions, thermochemistry, claims, and interpretation.
@@ -65,7 +68,8 @@ There is no permanent calculation grant, session-wide "always allow", command
 prefix allow-list, or model-created approval. A revised molecule, state,
 project, environment, resource allocation, or DAG is a new workflow and must be
 reviewed again. A multi-node causal workflow needs one human action because the
-complete graph is displayed together.
+complete graph is displayed together; a displayed non-executable stage remains
+unapproved and unlaunched.
 
 The terminal UI is a view and controller for this chain. It is not a second
 permission engine. Internal receipts and content digests preserve provenance

@@ -29,6 +29,7 @@ def test_readiness_names_the_blocking_nodes_not_only_a_count():
     source = inspect.getsource(CommandCompiledToolHostV1._approval_readiness)
     assert "blocking_node_ids" in source
     assert "deferred_node_ids" in source
+    assert "non_executable_node_ids" in source
     assert "deferred_admissible" in source
     assert "approvable" in source
 
@@ -60,14 +61,45 @@ def test_the_prompt_preserves_bounded_causal_future_nodes():
     from chemsmart.agent import live_session
 
     prompt = live_session._system_prompt(
-        {"authorization_mode": "bounded_local"}
+        {}, bounded_review_requested=True
     )
     for phrase in (
         "When the task names a program, plan that program",
         "cannot preview green",
         "deferred_admissible",
         "keep that causal stage",
+        "non_executable",
+        "will not be approved or launched",
         "approval_readiness",
     ):
         assert phrase in prompt, phrase
+    assert "inert exact workflow review" in prompt
+    assert "Execution is not exposed" in prompt
+    assert "execute_approved_program_node" not in prompt
     assert "plan again without" not in prompt
+
+    context = live_session._public_context(
+        task="bounded review",
+        task_spec_sha256="a" * 64,
+        observations=(),
+        conformance_records=(),
+        registry_sha256="b" * 64,
+        live_schema_sha256="c" * 64,
+        execution_requested=False,
+        execution_available=False,
+        execution_review_requested=True,
+        bounded_execution_record={
+            "schema_version": (
+                "chemsmart.public-bounded-execution-envelope.v1"
+            ),
+            "mode": "bounded-local",
+            "resources": {"cores": 1, "memory_gb": 4},
+        },
+    )
+
+    assert context["execution_requested"] is False
+    assert context["execution_tool_available"] is False
+    assert context["execution_review_requested"] is True
+    assert context["approved_execution_contract"] == {}
+    assert context["bounded_execution_envelope"]["mode"] == "bounded-local"
+    assert "scratch_root" not in context["bounded_execution_envelope"]

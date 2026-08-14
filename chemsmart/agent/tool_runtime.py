@@ -4189,13 +4189,29 @@ class CommandCompiledToolHostV1:
         nodes = []
         blocking = []
         deferred_ids = self._bounded_deferred_target_ids(plan)
+        non_executable_ids = (
+            self._release_non_executable_node_ids(plan)
+            if self.bounded_execution_envelope is not None
+            else frozenset()
+        )
+        planned_ids = {
+            node.node_id for node in getattr(plan, "nodes", ())
+        }
+        executable_ids = planned_ids - non_executable_ids
         for node in getattr(plan, "nodes", ()):
             node_id = node.node_id
             previewed = self._node_is_previewed(
                 node_id, plan_sha256=plan.plan_sha256
             )
-            deferred = not previewed and node_id in deferred_ids
-            blocks_approval = not previewed and not deferred
+            non_executable = node_id in non_executable_ids
+            deferred = (
+                not previewed
+                and not non_executable
+                and node_id in deferred_ids
+            )
+            blocks_approval = (
+                not previewed and not deferred and not non_executable
+            )
             if blocks_approval:
                 blocking.append(node_id)
             nodes.append(
@@ -4204,20 +4220,25 @@ class CommandCompiledToolHostV1:
                     "program": getattr(node, "program", ""),
                     "previewed": previewed,
                     "deferred_admissible": deferred,
+                    "non_executable": non_executable,
                     "approval_state": (
-                        "previewed"
-                        if previewed
+                        "non_executable"
+                        if non_executable
                         else (
-                            "deferred_admissible"
-                            if deferred
-                            else "preview_required"
+                            "previewed"
+                            if previewed
+                            else (
+                                "deferred_admissible"
+                                if deferred
+                                else "preview_required"
+                            )
                         )
                     ),
                     "blocks_approval": blocks_approval,
                 }
             )
         return {
-            "approvable": not blocking,
+            "approvable": not blocking and bool(executable_ids),
             "authorization_mode": (
                 "bounded_local"
                 if getattr(self, "bounded_execution_envelope", None)
@@ -4230,6 +4251,16 @@ class CommandCompiledToolHostV1:
                 for node in nodes
                 if node["deferred_admissible"]
             ),
+            "non_executable_node_ids": tuple(
+                node["node_id"]
+                for node in nodes
+                if node["non_executable"]
+            ),
+            "workflow_blocked_reason": (
+                "the workflow has no release-executable stage to review"
+                if planned_ids and not executable_ids
+                else ""
+            ),
             "nodes": tuple(nodes),
             "rule": (
                 (
@@ -4237,6 +4268,11 @@ class CommandCompiledToolHostV1:
                     "before execution. Under bounded local execution, "
                     "an exact producer-data target is deferred_admissible "
                     "until its producer materializes the optimized geometry. "
+                    "A release-unsupported stage marked non_executable is "
+                    "retained as scientific intent but is not approved or "
+                    "launched and does not require a green preview. "
+                    "At least one release-executable stage is required for "
+                    "human execution review. "
                     "Repair a preview_required node using the findings "
                     "returned by preview_command; do not delete a "
                     "scientifically required causal stage merely because "
@@ -6289,13 +6325,53 @@ class CommandCompiledToolHostV1:
             )
         return effective_timeout
 
+    def _release_non_executable_node_ids(
+        self, plan: ScientificWorkflowPlanV2
+    ) -> frozenset[str]:
+        """Plan stages this release cannot execute, whatever the plan asked for.
+
+        Release maturity is a host fact, not a planning choice.  A scientific
+        workflow is required to keep a stage it cannot materialize rather than
+        silently drop it, so such a stage must not also block the human review
+        of the stages that *can* run.  It is displayed with the workflow,
+        excluded from the approval, and never launched.
+        """
+
+        non_executable: set[str] = set()
+        for node in plan.nodes:
+            capability = self.registry.get(node.program)
+            executable = (
+                set(capability.execution_engine_job_pairs)
+                if capability is not None
+                else set()
+            )
+            if (node.engine, node.stage) in executable:
+                continue
+            if node.support_state != "blocked_unsupported":
+                continue
+            non_executable.add(node.node_id)
+        return frozenset(non_executable)
+
     def execution_review_ineligibility_reason(
         self,
         *,
         plan: ScientificWorkflowPlanV2,
         planned_node: ScientificWorkflowNodeV2,
     ) -> str:
-        """Explain why one valid plan node cannot enter human execution review."""
+        """Explain why one valid plan node cannot enter human execution review.
+
+        A stage this release declares preview-only is deferred rather than
+        ineligible: see ``_release_non_executable_node_ids``.
+        """
+
+        non_executable = self._release_non_executable_node_ids(plan)
+        if planned_node.node_id in non_executable:
+            if non_executable == {node.node_id for node in plan.nodes}:
+                return (
+                    "workflow has no release-executable stage to approve; "
+                    "retain this stage as non-executable scientific intent"
+                )
+            return ""
 
         envelope = self.bounded_execution_envelope
         if envelope is None:
@@ -6309,7 +6385,11 @@ class CommandCompiledToolHostV1:
             else set()
         )
         if (planned_node.engine, planned_node.stage) not in executable_pairs:
-            return "job is supported for planning or preview, not Agent execution"
+            return (
+                "job is supported for planning or preview, not Agent "
+                "execution; keep the stage and declare it blocked_unsupported "
+                "so the executable stages can still be reviewed"
+            )
         if planned_node.program == "orca" and planned_node.stage == "ts":
             data_target_ids = {
                 edge.target_node_id
@@ -6361,18 +6441,39 @@ class CommandCompiledToolHostV1:
         plan = plans[-1]
         if plan.task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("review workflow belongs to another task")
-        if len(plan.nodes) > envelope.max_engine_calls:
+        non_executable_ids = self._release_non_executable_node_ids(plan)
+        executable_nodes = tuple(
+            item
+            for item in plan.nodes
+            if item.node_id not in non_executable_ids
+        )
+        if not executable_nodes:
+            raise ContractError(
+                "execution review requires at least one executable node"
+            )
+        if len(executable_nodes) > envelope.max_engine_calls:
             raise ContractError(
                 "scientific workflow exceeds bounded engine-call budget: "
-                f"{len(plan.nodes)} nodes for {envelope.max_engine_calls} calls"
+                f"{len(executable_nodes)} nodes for "
+                f"{envelope.max_engine_calls} calls"
             )
         data_edges = tuple(
-            edge for edge in plan.edges if edge.edge_kind == "data"
+            edge
+            for edge in plan.edges
+            if edge.edge_kind == "data"
+            and edge.target_node_id not in non_executable_ids
         )
+        if any(
+            edge.source_node_id in non_executable_ids for edge in data_edges
+        ):
+            raise ContractError(
+                "an executed node cannot consume the output of a stage this "
+                "release cannot execute"
+            )
         data_target_ids = {edge.target_node_id for edge in data_edges}
         unsupported = tuple(
             item.node_id
-            for item in plan.nodes
+            for item in executable_nodes
             if item.support_state == "blocked_unsupported"
             or (
                 item.support_state == "unresolved_future"
@@ -6440,7 +6541,7 @@ class CommandCompiledToolHostV1:
         node_bindings = []
         environment_bindings = []
         node_reviews: list[WorkflowExecutionNodeReviewV1] = []
-        for planned_node in plan.nodes:
+        for planned_node in executable_nodes:
             ineligibility = self.execution_review_ineligibility_reason(
                 plan=plan,
                 planned_node=planned_node,
@@ -6740,6 +6841,7 @@ class CommandCompiledToolHostV1:
                 sorted(node_reviews, key=lambda item: item.node_id)
             ),
             stationary_point_policy=self.stationary_point_policy,
+            non_executable_node_ids=tuple(sorted(non_executable_ids)),
         )
 
     def _admit_bounded_workflow(
@@ -7014,20 +7116,28 @@ class CommandCompiledToolHostV1:
             for item in materialized.nodes
             if item.state == "previewed"
         }
+        non_executable_ids = self._release_non_executable_node_ids(plan)
         data_targets = {
             edge.target_node_id
             for edge in plan.edges
             if edge.edge_kind == "data"
+            and edge.source_node_id not in non_executable_ids
+            and edge.target_node_id not in non_executable_ids
         }
-        initial_ids = {item.node_id for item in plan.nodes}.difference(
-            data_targets
+        initial_ids = (
+            {item.node_id for item in plan.nodes}
+            - data_targets
+            - non_executable_ids
         )
         if not initial_ids or not initial_ids.issubset(previewed_ids):
             raise ContractError(
                 "every initial workflow node requires a green preview before "
                 "bounded execution"
             )
-        if set(materialized.unresolved_node_ids) != data_targets:
+        unresolved_ids = (
+            set(materialized.unresolved_node_ids) - non_executable_ids
+        )
+        if unresolved_ids != data_targets:
             raise ContractError(
                 "only exact producer-dependent nodes may remain unresolved"
             )

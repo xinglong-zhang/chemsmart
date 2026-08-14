@@ -21,22 +21,37 @@ from chemsmart.agent.workflows import (
 )
 
 
-def _frontier(tmp_path):
+def _frontier(tmp_path, *, with_non_executable=False):
+    nodes = [
+        ScientificWorkflowNodeV2(
+            node_id="sp-initial",
+            stage="sp",
+            requested_program="pyscf",
+            program="pyscf",
+            engine="cpu",
+            project_role="water-project",
+            unresolved_fields=(),
+        )
+    ]
+    if with_non_executable:
+        nodes.append(
+            ScientificWorkflowNodeV2(
+                node_id="irc-non-executable",
+                stage="irc",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="reaction-path",
+                unresolved_fields=(),
+                support_state="blocked_unsupported",
+                blocked_reason="IRC execution is not release-qualified",
+            )
+        )
     plan = build_scientific_workflow_plan(
         workflow_id="water-workflow",
         task_spec_sha256="a" * 64,
         scientific_identity_sha256="b" * 64,
-        nodes=(
-            ScientificWorkflowNodeV2(
-                node_id="sp-initial",
-                stage="sp",
-                requested_program="pyscf",
-                program="pyscf",
-                engine="cpu",
-                project_role="water-project",
-                unresolved_fields=(),
-            ),
-        ),
+        nodes=tuple(nodes),
     )
     resources = build_execution_resource_spec(
         execution_target="run",
@@ -84,8 +99,10 @@ def _frontier(tmp_path):
                 state="previewed",
             ),
         ),
-        unresolved_node_ids=(),
-        status="ready_for_approval",
+        unresolved_node_ids=(
+            ("irc-non-executable",) if with_non_executable else ()
+        ),
+        status=("partial" if with_non_executable else "ready_for_approval"),
     )
     approval = build_frozen_workflow_approval(
         approval_id="water-approval",
@@ -93,6 +110,9 @@ def _frontier(tmp_path):
         materialized_workflow=materialized,
         resources=resources,
         environment_identity_sha256s=("1" * 64,),
+        non_executable_node_ids=(
+            ("irc-non-executable",) if with_non_executable else ()
+        ),
     )
     return plan, materialized, approval, invocation
 
@@ -132,6 +152,34 @@ def test_launch_reservation_is_one_atomic_full_frontier_event(tmp_path):
     assert frontier.invocations == (invocation,)
     assert frontier.legacy_incomplete is False
     assert store.state().consumed_workflow_approval_ids == ["water-approval"]
+
+
+def test_launch_replay_preserves_non_executable_node_as_deferred(tmp_path):
+    store = RuntimeEventStore(
+        tmp_path / "events" / "runtime.jsonl", session_id="mixed-session"
+    )
+    plan, materialized, approval, invocation = _frontier(
+        tmp_path, with_non_executable=True
+    )
+
+    store.reserve_workflow_node_launch(
+        turn_id="turn-1",
+        plan=plan,
+        materialized_workflow=materialized,
+        approval=approval,
+        invocation=invocation,
+        run_id="run.water-approval",
+        timestamp="2026-08-04T00:00:00+00:00",
+    )
+    frontier = store.workflow_frontier(
+        workflow_id=plan.workflow_id, run_id="run.water-approval"
+    )
+
+    assert frontier.run_state is not None
+    assert {node.node_id: node.state for node in frontier.run_state.nodes} == {
+        "irc-non-executable": "deferred",
+        "sp-initial": "running",
+    }
 
 
 def test_unresolved_reservation_blocks_relaunch(tmp_path):

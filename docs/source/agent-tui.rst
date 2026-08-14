@@ -60,10 +60,12 @@ PySCF artifacts remain outputs of ChemSmart rather than a model-authored API.
 Approve a displayed workflow
 ----------------------------
 
-When an execution envelope is present and every calculation node reaches
-review readiness, the interface shows:
+When an execution envelope is present and every executable calculation node
+reaches review readiness, the interface shows:
 
-* molecule, charge, and multiplicity for every node;
+* every planned stage, with any release-unsupported stage marked deferred and
+  its reason shown;
+* molecule, charge, and multiplicity for every executable node;
 * effective project settings;
 * the human-readable ChemSmart CLI operation;
 * producer-to-consumer data handoffs;
@@ -72,9 +74,11 @@ review readiness, the interface shows:
 
 Review that display and enter ``/approve`` once.  The command takes no
 arguments.  It removes the workflow from the pending state, disconnects the
-provider, and runs the displayed DAG through the normal ChemSmart executor.
-No hash or approval-file token is required from the human.  Internal receipts
-remain available as provenance and mutation evidence.
+provider, and runs the displayed executable partition through the normal
+ChemSmart executor.  A deferred stage stays unapproved and is named again in
+the execution result.  No hash or approval-file token is required from the
+human.  Internal receipts remain available as provenance and mutation
+evidence.
 
 The run is written below
 ``WORKSPACE/.chemsmart-agent/executions/tui-...``.  A failed or completed run
@@ -94,8 +98,9 @@ Commands
    whether human approval is pending.
 
 ``/approve``
-   Approve and run the displayed workflow once.  It accepts no arguments and
-   is available only after a complete safe preview and human review display.
+   Approve and run the displayed executable stages once.  It accepts no
+   arguments and is available only after their complete safe preview and the
+   full-plan human review display.
 
 ``/deny``
    Decline the displayed workflow without launching an engine.

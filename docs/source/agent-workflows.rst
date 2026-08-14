@@ -155,11 +155,14 @@ able to provide it.  Open the terminal interface with the envelope:
      --workspace /absolute/path/task-workspace \
      --execution-envelope /absolute/path/resources.yaml
 
-After planning and safe preview, the interface displays every molecule and
+After planning and safe preview, the interface displays every planned stage,
+including a release-unsupported stage that remains scientifically necessary.
+It marks that stage deferred, gives its reason, and displays the molecule and
 state, effective project setting, ChemSmart CLI operation, data handoff,
-program environment, and resource bound.  Enter ``/approve`` once to execute
-that displayed DAG, or use ``/deny`` or ``/revise`` without launching an
-engine.  The provider is disconnected before execution.
+program environment, and resource bound for every executable stage.  Enter
+``/approve`` once to execute only those reviewed executable stages; deferred
+stages remain unapproved and are not launched.  Use ``/deny`` or ``/revise``
+without launching an engine.  The provider is disconnected before execution.
 
 The human does not retype a hash or create an approval-file token.  Internal
 receipts and content digests remain provenance.  The pending workflow is

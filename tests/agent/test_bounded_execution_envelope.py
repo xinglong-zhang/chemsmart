@@ -819,6 +819,129 @@ def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
     assert exact_readiness["deferred_node_ids"] == ()
 
 
+def test_bounded_materialization_ignores_non_executable_root_stage():
+    plan = build_scientific_workflow_plan(
+        workflow_id="mixed-release-plan",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="opt-executable",
+                stage="opt",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="project.opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="irc-non-executable",
+                stage="irc",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="project.irc",
+                unresolved_fields=(),
+                support_state="blocked_unsupported",
+                blocked_reason="IRC execution is not release-qualified",
+            ),
+        ),
+        edges=(),
+    )
+    materialized = build_materialized_workflow(
+        plan=plan,
+        live_cli_schema_sha256="c" * 64,
+        resource_sha256="d" * 64,
+        nodes=(
+            MaterializedNodeV1(
+                node_id="opt-executable",
+                input_artifact_sha256="e" * 64,
+                project_artifact_sha256="f" * 64,
+                project_validation_receipt_sha256="1" * 64,
+                environment_receipt_sha256="2" * 64,
+                invocation_sha256="3" * 64,
+                preflight_receipt_sha256="4" * 64,
+                state="previewed",
+            ),
+        ),
+        unresolved_node_ids=("irc-non-executable",),
+        status="partial",
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.registry = {
+        "orca": SimpleNamespace(
+            execution_engine_job_pairs=frozenset({("cpu", "opt")})
+        )
+    }
+    host.materialized_workflows = {
+        materialized.materialized_sha256: materialized
+    }
+
+    assert host._latest_bounded_materialization(plan) is materialized
+    host.bounded_execution_envelope = SimpleNamespace()
+    host._node_is_previewed = lambda node_id, **_kwargs: (
+        node_id == "opt-executable"
+    )
+
+    readiness = host._approval_readiness(plan)
+
+    assert readiness["approvable"] is True
+    assert readiness["blocking_node_ids"] == ()
+    assert readiness["deferred_node_ids"] == ()
+    assert readiness["non_executable_node_ids"] == (
+        "irc-non-executable",
+    )
+    states = {node["node_id"]: node for node in readiness["nodes"]}
+    assert states["irc-non-executable"]["approval_state"] == (
+        "non_executable"
+    )
+    assert states["irc-non-executable"]["blocks_approval"] is False
+
+
+def test_all_non_executable_plan_is_preview_only_not_approvable():
+    plan = build_scientific_workflow_plan(
+        workflow_id="preview-only-plan",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="irc-non-executable",
+                stage="irc",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="project.irc",
+                unresolved_fields=(),
+                support_state="blocked_unsupported",
+                blocked_reason="IRC execution is not release-qualified",
+            ),
+        ),
+        edges=(),
+    )
+    host = object.__new__(CommandCompiledToolHostV1)
+    host.registry = {
+        "orca": SimpleNamespace(
+            execution_engine_job_pairs=frozenset({("cpu", "opt")})
+        )
+    }
+    host.bounded_execution_envelope = SimpleNamespace()
+    host._node_is_previewed = lambda *_args, **_kwargs: False
+
+    readiness = host._approval_readiness(plan)
+    reason = host.execution_review_ineligibility_reason(
+        plan=plan,
+        planned_node=plan.nodes[0],
+    )
+
+    assert readiness["approvable"] is False
+    assert readiness["blocking_node_ids"] == ()
+    assert readiness["non_executable_node_ids"] == (
+        "irc-non-executable",
+    )
+    assert readiness["workflow_blocked_reason"]
+    assert "no release-executable stage" in reason
+
+
 def test_validated_geometry_handoff_clears_only_stale_input_markers(tmp_path):
     path = tmp_path / "optimized.xyz"
     path.write_text("1\noptimized\nH 0 0 0\n", encoding="utf-8")

@@ -72,11 +72,14 @@ non-executing. Before an engine launch:
 
 1. produce the complete project-backed DAG;
 2. compile and safely preview every executable node;
-3. present molecular/state identity, effective YAML, ChemSmart CLI operations,
-   data handoffs, environment, and resources in the terminal interface;
+3. present every planned stage, marking any release-unsupported stage deferred
+   with its reason, and present molecular/state identity, effective YAML,
+   ChemSmart CLI operations, data handoffs, environment, and resources for the
+   executable stages in the terminal interface;
 4. let the human enter ``/approve`` once, or choose ``/deny`` or ``/revise``;
    and
-5. hand the displayed workflow to the provider-free deterministic executor.
+5. hand only the displayed executable partition to the provider-free
+   deterministic executor; deferred stages remain visible but unapproved.
 
 Never create an approval on the model's behalf. Never offer permanent,
 session-wide, prefix-based, or "always allow" chemistry execution. A revised

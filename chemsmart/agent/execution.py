@@ -782,6 +782,14 @@ class WorkflowExecutionApprovalV1:
         edge_by_digest = {
             item.edge_sha256: item for item in self.producer_edges
         }
+        for edge in self.producer_edges:
+            if (
+                edge.producer_node_id not in node_ids
+                or edge.consumer_node_id not in node_ids
+            ):
+                raise ContractError(
+                    "approval producer edge endpoints must both be approved"
+                )
         for binding in self.node_bindings:
             if binding.input_mode == "producer":
                 edge = edge_by_digest.get(binding.producer_edge_sha256)
@@ -3285,8 +3293,15 @@ def build_frozen_workflow_approval(
     future_node_environment_identity_sha256s: Mapping[str, str] | None = None,
     environment_identity_by_receipt: Mapping[str, str] | None = None,
     stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
+    non_executable_node_ids: Sequence[str] = (),
 ) -> FrozenWorkflowApprovalV1:
-    """Freeze one plan without pretending future data artifacts exist."""
+    """Freeze one plan without pretending future data artifacts exist.
+
+    ``non_executable_node_ids`` names plan stages this release cannot execute.
+    They receive no execution admission or frozen future input, even when a
+    preview-only root stage was materialized before its release support was
+    classified.
+    """
 
     if materialized_workflow.workflow_id != plan.workflow_id:
         raise ContractError("materialized workflow belongs to another plan")
@@ -3308,8 +3323,40 @@ def build_frozen_workflow_approval(
     # Preview materialization may carry the preview sentinel.  Human review
     # binds the concrete resources, while a real-profile materialization must
     # already match them exactly.
-    unresolved = set(materialized_workflow.unresolved_node_ids)
-    data_edges = tuple(edge for edge in plan.edges if edge.edge_kind == "data")
+    planned_by_id = {node.node_id: node for node in plan.nodes}
+    non_executable = set(str(item) for item in non_executable_node_ids)
+    if not non_executable.issubset(planned_by_id):
+        raise ContractError(
+            "a non-executable node must belong to the approved plan"
+        )
+    for node_id in non_executable:
+        if planned_by_id[node_id].support_state != "blocked_unsupported":
+            raise ContractError(
+                "a non-executable approval node must be blocked unsupported"
+            )
+    executed = set(planned_by_id) - non_executable
+    if not executed:
+        raise ContractError("an approval requires an executable node")
+    if any(
+        edge.source_node_id in non_executable
+        and edge.target_node_id in executed
+        for edge in plan.edges
+    ):
+        raise ContractError(
+            "an executed node cannot consume a non-executable node's output"
+        )
+    # A non-executable stage is not a future producer target the approval has
+    # to freeze an input rule for.
+    unresolved = (
+        set(materialized_workflow.unresolved_node_ids) - non_executable
+    )
+    data_edges = tuple(
+        edge
+        for edge in plan.edges
+        if edge.edge_kind == "data"
+        and edge.source_node_id not in non_executable
+        and edge.target_node_id not in non_executable
+    )
     data_targets = {edge.target_node_id for edge in data_edges}
     if len(data_targets) != len(data_edges):
         raise ContractError(
@@ -3324,6 +3371,7 @@ def build_frozen_workflow_approval(
             (
                 _frozen_preview_binding(node)
                 for node in materialized_workflow.nodes
+                if node.node_id not in non_executable
             ),
             key=lambda item: item.node_id,
         )
@@ -3391,11 +3439,14 @@ def build_frozen_workflow_approval(
             raise ContractError(
                 "stationary point policy belongs to another task"
             )
-        if stationary_point_policy.hessian_node_id not in {
-            node.node_id for node in plan.nodes
-        }:
+        if stationary_point_policy.hessian_node_id not in planned_by_id:
             raise ContractError(
                 "stationary point policy names an unknown node"
+            )
+        if stationary_point_policy.hessian_node_id not in executed:
+            raise ContractError(
+                "execution stationary point policy requires an executable "
+                "Hessian node"
             )
     producer_digests = tuple(
         sorted(item.scientific_edge_sha256 for item in producer_rules)
@@ -3425,7 +3476,9 @@ def build_frozen_workflow_approval(
         "resource_sha256": resources.resource_sha256,
         "environment_identity_sha256s": normalized_environment_receipts,
         "approved_node_ids": tuple(
-            sorted(node.node_id for node in plan.nodes)
+            sorted(
+                node.node_id for node in plan.nodes if node.node_id in executed
+            )
         ),
         "producer_edge_sha256s": producer_digests,
         "stationary_point_policy_sha256": (
@@ -3864,10 +3917,18 @@ class WorkflowExecutionReviewV1:
     stationary_point_policy: StationaryPointValidationPolicyV1 | None
     status: str
     review_sha256: str
+    #: Plan nodes this release cannot execute.  They stay in the scientific
+    #: plan, are displayed to the human, and are never approved or launched.
+    non_executable_node_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-execution-review.v1":
             raise ContractError("unsupported workflow execution review schema")
+        object.__setattr__(
+            self,
+            "non_executable_node_ids",
+            tuple(self.non_executable_node_ids),
+        )
         if self.status != "unapproved":
             raise ContractError("an execution review is inert and unapproved")
         object.__setattr__(
@@ -3898,30 +3959,51 @@ class WorkflowExecutionReviewV1:
             self.execution_resources.resource_sha256,
         }:
             raise ContractError("review materialization differs from resources")
+        planned_by_id = {
+            node.node_id: node for node in self.scientific_plan.nodes
+        }
+        non_executable = self.non_executable_node_ids
+        if non_executable != tuple(sorted(set(non_executable))):
+            raise ContractError(
+                "non-executable node ids must be sorted and unique"
+            )
+        if not set(non_executable).issubset(planned_by_id):
+            raise ContractError("a non-executable node must belong to the plan")
+        for node_id in non_executable:
+            if planned_by_id[node_id].support_state != "blocked_unsupported":
+                raise ContractError(
+                    "a non-executable review node must declare why it is unsupported"
+                )
+        executed_ids = set(planned_by_id) - set(non_executable)
+        if not executed_ids:
+            raise ContractError("an execution review requires an executable node")
+        for edge in self.scientific_plan.edges:
+            if (
+                edge.source_node_id in set(non_executable)
+                and edge.target_node_id in executed_ids
+            ):
+                raise ContractError(
+                    "an executed node cannot consume a non-executable node's output"
+                )
         node_ids = tuple(item.node_id for item in self.environment_bindings)
         if node_ids != tuple(sorted(set(node_ids))):
             raise ContractError(
                 "review environment bindings must be sorted and node-unique"
             )
-        if set(node_ids) != {node.node_id for node in self.scientific_plan.nodes}:
-            raise ContractError("review environments must cover every workflow node")
+        if set(node_ids) != executed_ids:
+            raise ContractError("review environments must cover every executed node")
         review_node_ids = tuple(item.node_id for item in self.node_reviews)
         if review_node_ids != tuple(sorted(set(review_node_ids))):
             raise ContractError("node reviews must be sorted and node-unique")
-        if set(review_node_ids) != {
-            node.node_id for node in self.scientific_plan.nodes
-        }:
-            raise ContractError("node reviews must cover every workflow node")
-        planned_by_id = {
-            node.node_id: node for node in self.scientific_plan.nodes
-        }
+        if set(review_node_ids) != executed_ids:
+            raise ContractError("node reviews must cover every executed node")
         binding_by_id = {
             item.node_id: item for item in self.request.node_bindings
         }
         environment_by_id = {
             item.node_id: item for item in self.environment_bindings
         }
-        if set(binding_by_id) != set(planned_by_id):
+        if set(binding_by_id) != executed_ids:
             raise ContractError("review node bindings are incomplete")
         for item in self.node_reviews:
             planned = planned_by_id[item.node_id]
@@ -3989,15 +4071,25 @@ class WorkflowExecutionReviewV1:
                 self.scientific_plan.task_spec_sha256
             ):
                 raise ContractError("stationary-point policy belongs to another task")
+            if self.stationary_point_policy.hessian_node_id not in executed_ids:
+                raise ContractError(
+                    "execution stationary-point policy requires an executable "
+                    "Hessian node"
+                )
         if self.review_sha256 != canonical_sha256(self._body()):
             raise ContractError("workflow execution review digest mismatch")
 
     def _body(self) -> dict[str, Any]:
-        return {
+        body = {
             key: value
             for key, value in self.__dict__.items()
             if key != "review_sha256"
         }
+        # This additive v1 field was introduced after review packets existed.
+        # Preserve their canonical body when the new semantic is absent.
+        if not self.non_executable_node_ids:
+            body.pop("non_executable_node_ids", None)
+        return body
 
 
 def build_workflow_execution_review(
@@ -4010,10 +4102,19 @@ def build_workflow_execution_review(
     environment_bindings: Sequence[WorkflowEnvironmentBindingV1],
     node_reviews: Sequence[WorkflowExecutionNodeReviewV1],
     stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
+    non_executable_node_ids: Sequence[str] = (),
 ) -> WorkflowExecutionReviewV1:
-    """Assemble one self-verifying review packet without granting authority."""
+    """Assemble one self-verifying review packet without granting authority.
 
-    body = {
+    ``non_executable_node_ids`` names plan stages this release cannot execute.
+    They are displayed with the workflow and never approved.  A nonempty set
+    is digest-bound; its absence retains the original v1 canonical body.
+    """
+
+    non_executable = tuple(
+        sorted(set(str(item) for item in non_executable_node_ids))
+    )
+    body: dict[str, Any] = {
         "schema_version": "chemsmart.workflow-execution-review.v1",
         "request": request,
         "scientific_plan": scientific_plan,
@@ -4025,6 +4126,8 @@ def build_workflow_execution_review(
         "stationary_point_policy": stationary_point_policy,
         "status": "unapproved",
     }
+    if non_executable:
+        body["non_executable_node_ids"] = non_executable
     return WorkflowExecutionReviewV1(
         **body, review_sha256=canonical_sha256(body)
     )
@@ -4111,10 +4214,18 @@ class WorkflowExecutionApprovalBundleV1:
     one_shot: bool
     status: str
     bundle_sha256: str
+    #: Approved-plan stages this release cannot execute.  The executor never
+    #: launches them; they remain in the plan as declared scientific intent.
+    non_executable_node_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-execution-approval-bundle.v1":
             raise ContractError("unsupported execution approval bundle schema")
+        object.__setattr__(
+            self,
+            "non_executable_node_ids",
+            tuple(self.non_executable_node_ids),
+        )
         require_sha256(self.review_sha256, "review_sha256")
         object.__setattr__(
             self, "execution_envelope", canonical_data(self.execution_envelope)
@@ -4154,20 +4265,90 @@ class WorkflowExecutionApprovalBundleV1:
             )
         if identities != frozen.environment_identity_sha256s:
             raise ContractError("execution bundle environments differ from approval")
+        planned_by_id = {
+            item.node_id: item for item in self.approved_scientific_plan.nodes
+        }
+        non_executable = self.non_executable_node_ids
+        if non_executable != tuple(sorted(set(non_executable))):
+            raise ContractError(
+                "non-executable node ids must be sorted and unique"
+            )
+        if not set(non_executable).issubset(planned_by_id):
+            raise ContractError(
+                "a non-executable node must belong to the approved plan"
+            )
+        executed_ids = set(planned_by_id) - set(non_executable)
+        if not executed_ids:
+            raise ContractError("an execution bundle requires an executable node")
+        for node_id in non_executable:
+            if planned_by_id[node_id].support_state != "blocked_unsupported":
+                raise ContractError(
+                    "a non-executable bundle node must be blocked unsupported"
+                )
+        if any(
+            edge.source_node_id in set(non_executable)
+            and edge.target_node_id in executed_ids
+            for edge in self.approved_scientific_plan.edges
+        ):
+            raise ContractError(
+                "an executed node cannot consume a non-executable node's output"
+            )
+        if set(frozen.approved_node_ids) != executed_ids:
+            raise ContractError(
+                "frozen approval differs from executable workflow nodes"
+            )
+        approval_edge_projection = tuple(
+            sorted(
+                (
+                    edge.producer_node_id,
+                    edge.consumer_node_id,
+                    edge.artifact_kind,
+                    edge.selection_rule,
+                )
+                for edge in approval.producer_edges
+            )
+        )
+        frozen_edge_projection = tuple(
+            sorted(
+                (
+                    edge.source_node_id,
+                    edge.target_node_id,
+                    edge.artifact_class,
+                    edge.selection_rule,
+                )
+                for edge in frozen.producer_edge_rules
+            )
+        )
+        if approval_edge_projection != frozen_edge_projection:
+            raise ContractError(
+                "workflow and frozen approval producer edges differ"
+            )
+        policy_sha256 = (
+            self.stationary_point_policy.policy_sha256
+            if self.stationary_point_policy is not None
+            else ""
+        )
+        if frozen.stationary_point_policy_sha256 != policy_sha256:
+            raise ContractError(
+                "execution bundle stationary-point policy differs from approval"
+            )
+        if (
+            self.stationary_point_policy is not None
+            and self.stationary_point_policy.hessian_node_id not in executed_ids
+        ):
+            raise ContractError(
+                "execution stationary-point policy requires an executable "
+                "Hessian node"
+            )
         node_ids = tuple(item.node_id for item in self.node_reviews)
         if node_ids != tuple(sorted(set(node_ids))):
             raise ContractError("execution bundle node reviews must be unique")
-        if set(node_ids) != {
-            node.node_id for node in self.approved_scientific_plan.nodes
-        }:
+        if set(node_ids) != executed_ids:
             raise ContractError("execution bundle node reviews are incomplete")
         binding_by_id = {
             item.node_id: item for item in approval.node_bindings
         }
-        planned_by_id = {
-            item.node_id: item for item in self.approved_scientific_plan.nodes
-        }
-        if set(binding_by_id) != set(planned_by_id):
+        if set(binding_by_id) != executed_ids:
             raise ContractError("execution bundle node bindings are incomplete")
         for item in self.node_reviews:
             binding = binding_by_id[item.node_id]
@@ -4228,11 +4409,16 @@ class WorkflowExecutionApprovalBundleV1:
             raise ContractError("workflow execution approval bundle digest mismatch")
 
     def _body(self) -> dict[str, Any]:
-        return {
+        body = {
             key: value
             for key, value in self.__dict__.items()
             if key != "bundle_sha256"
         }
+        # This additive v1 field was introduced after approval bundles existed.
+        # Preserve their canonical body when the new semantic is absent.
+        if not self.non_executable_node_ids:
+            body.pop("non_executable_node_ids", None)
+        return body
 
     def node_review(self, node_id: str) -> WorkflowExecutionNodeReviewV1:
         """Return the exact human-reviewed projection for one workflow node."""
@@ -4267,10 +4453,13 @@ def approve_workflow_execution_review(
         item.environment_receipt_sha256: item.environment_identity_sha256
         for item in review.environment_bindings
     }
+    non_executable = set(review.non_executable_node_ids)
     data_targets = {
         edge.target_node_id
         for edge in review.scientific_plan.edges
         if edge.edge_kind == "data"
+        and edge.source_node_id not in non_executable
+        and edge.target_node_id not in non_executable
     }
     future_environments = {
         item.node_id: item.environment_receipt_sha256
@@ -4294,6 +4483,7 @@ def approve_workflow_execution_review(
         future_node_environment_identity_sha256s=future_environments,
         environment_identity_by_receipt=identity_by_receipt,
         stationary_point_policy=review.stationary_point_policy,
+        non_executable_node_ids=review.non_executable_node_ids,
     )
     resolution = build_workflow_review_resolution(
         resolution_id=resolution_id,
@@ -4302,7 +4492,7 @@ def approve_workflow_execution_review(
         actor=actor,
         approval_id=approval_id,
     )
-    body = {
+    body: dict[str, Any] = {
         "schema_version": "chemsmart.workflow-execution-approval-bundle.v1",
         "review_sha256": review.review_sha256,
         "resolution": resolution,
@@ -4318,6 +4508,8 @@ def approve_workflow_execution_review(
         "one_shot": True,
         "status": "approved",
     }
+    if review.non_executable_node_ids:
+        body["non_executable_node_ids"] = review.non_executable_node_ids
     return WorkflowExecutionApprovalBundleV1(
         **body, bundle_sha256=canonical_sha256(body)
     )
@@ -4602,6 +4794,7 @@ class WorkflowNodeRunStateV1:
         require_identifier(self.node_id, "node_id")
         if self.state not in {
             "pending",
+            "deferred",
             "running",
             "engine_complete",
             "validated",
@@ -4628,7 +4821,7 @@ class WorkflowNodeRunStateV1:
             raise ContractError("failure_rule_ids must be sorted and unique")
         for rule_id in self.failure_rule_ids:
             require_identifier(rule_id, "failure_rule_id")
-        if self.state == "pending" and any(
+        if self.state in {"pending", "deferred"} and any(
             (
                 self.invocation_sha256,
                 self.execution_receipt_sha256,
@@ -4637,7 +4830,9 @@ class WorkflowNodeRunStateV1:
                 self.failure_rule_ids,
             )
         ):
-            raise ContractError("pending node cannot carry execution evidence")
+            raise ContractError(
+                f"{self.state} node cannot carry execution evidence"
+            )
         if self.state == "running" and not self.invocation_sha256:
             raise ContractError("running node requires an invocation")
         if self.state in {"engine_complete", "validated"}:
@@ -4740,9 +4935,24 @@ def build_workflow_run_state(
         raise ContractError("approval belongs to another workflow")
     if approval.plan_sha256 != plan.plan_sha256:
         raise ContractError("approval plan digest differs")
-    node_ids = tuple(sorted(node.node_id for node in plan.nodes))
-    if node_ids != approval.approved_node_ids:
-        raise ContractError("approval does not cover every workflow node")
+    planned_by_id = {node.node_id: node for node in plan.nodes}
+    node_ids = tuple(sorted(planned_by_id))
+    approved = set(approval.approved_node_ids)
+    if not approved or not approved.issubset(planned_by_id):
+        raise ContractError("approval does not match the reviewed workflow")
+    deferred = set(planned_by_id) - approved
+    for node_id in deferred:
+        if planned_by_id[node_id].support_state != "blocked_unsupported":
+            raise ContractError(
+                "an unapproved workflow node must be blocked unsupported"
+            )
+    if any(
+        edge.source_node_id in deferred and edge.target_node_id in approved
+        for edge in plan.edges
+    ):
+        raise ContractError(
+            "an approved node cannot consume a deferred node's output"
+        )
     body = {
         "schema_version": "chemsmart.workflow-run-state.v1",
         "run_id": require_identifier(run_id, "run_id"),
@@ -4755,7 +4965,7 @@ def build_workflow_run_state(
         "nodes": tuple(
             WorkflowNodeRunStateV1(
                 node_id=node_id,
-                state="pending",
+                state=("pending" if node_id in approved else "deferred"),
                 invocation_sha256="",
                 execution_receipt_sha256="",
                 validator_receipt_sha256s=(),
@@ -4888,6 +5098,7 @@ def transition_workflow_node(
         raise ContractError("workflow run state has no such node")
     allowed = {
         "pending": {"running", "blocked"},
+        "deferred": set(),
         "running": {"engine_complete", "failed", "ambiguous"},
         "engine_complete": {"validated", "failed"},
         "validated": set(),
@@ -4965,19 +5176,22 @@ def transition_workflow_node(
     if plan is not None:
         nodes = _block_failed_descendants(plan, nodes)
     node_states = {node.state for node in nodes}
-    if "ambiguous" in node_states:
+    executable_states = node_states - {"deferred"}
+    if "ambiguous" in executable_states:
         workflow_state = "ambiguous"
-    elif node_states.intersection({"pending", "running", "engine_complete"}):
+    elif executable_states.intersection(
+        {"pending", "running", "engine_complete"}
+    ):
         # A failed branch is not a failed workflow while an independent branch
         # remains runnable.  The exact DAG below has already converted only
         # causal descendants into ``blocked``; pending siblings therefore keep
         # the workflow active until the frontier is exhausted.
         workflow_state = "running"
-    elif node_states == {"validated"}:
+    elif executable_states == {"validated"}:
         workflow_state = "validated"
-    elif "failed" in node_states:
+    elif "failed" in executable_states:
         workflow_state = "failed"
-    elif "blocked" in node_states:
+    elif "blocked" in executable_states:
         workflow_state = "blocked"
     else:
         workflow_state = "running"

@@ -18,8 +18,10 @@ from chemsmart.agent.execution import (
     build_workflow_execution_review,
     build_workflow_execution_node_review,
     build_workflow_review_resolution,
+    execution_server_profile_sha256,
     execution_path_placeholder,
     project_real_execution_argv,
+    workflow_execution_approval_bundle_json,
     workflow_execution_review_json,
 )
 from chemsmart.agent.executor import (
@@ -123,7 +125,10 @@ def _review(tmp_path):
         resources=resources,
         node_bindings=(binding,),
     )
-    server_profile_sha256 = "7" * 64
+    server_profile_sha256 = execution_server_profile_sha256(
+        resources=resources,
+        scratch_root=envelope.scratch_root,
+    )
     node_review = build_workflow_execution_node_review(
         node_id="sp",
         stage="sp",
@@ -199,6 +204,61 @@ def _review(tmp_path):
     )
 
 
+def _mixed_review(tmp_path):
+    base = _review(tmp_path)
+    plan = build_scientific_workflow_plan(
+        workflow_id=base.scientific_plan.workflow_id,
+        task_spec_sha256=base.scientific_plan.task_spec_sha256,
+        scientific_identity_sha256=(
+            base.scientific_plan.scientific_identity_sha256
+        ),
+        nodes=(
+            *base.scientific_plan.nodes,
+            ScientificWorkflowNodeV2(
+                node_id="irc-non-executable",
+                stage="irc",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="reaction-path",
+                unresolved_fields=(),
+                support_state="blocked_unsupported",
+                blocked_reason="IRC execution is not release-qualified",
+            ),
+        ),
+        edges=(),
+    )
+    materialized = build_materialized_workflow(
+        plan=plan,
+        live_cli_schema_sha256=(
+            base.materialized_workflow.live_cli_schema_sha256
+        ),
+        resource_sha256=base.materialized_workflow.resource_sha256,
+        nodes=base.materialized_workflow.nodes,
+        unresolved_node_ids=("irc-non-executable",),
+        status="partial",
+    )
+    request = build_workflow_approval_request(
+        request_id="review-water-sp-mixed",
+        workflow_id=plan.workflow_id,
+        workflow_sha256=plan.plan_sha256,
+        task_spec_sha256=plan.task_spec_sha256,
+        workspace=base.request.workspace,
+        resources=base.execution_resources,
+        node_bindings=base.request.node_bindings,
+    )
+    return build_workflow_execution_review(
+        request=request,
+        scientific_plan=plan,
+        materialized_workflow=materialized,
+        execution_resources=base.execution_resources,
+        execution_envelope=base.execution_envelope,
+        environment_bindings=base.environment_bindings,
+        node_reviews=base.node_reviews,
+        non_executable_node_ids=("irc-non-executable",),
+    )
+
+
 def test_review_is_inert_and_exactly_loadable(tmp_path):
     review = _review(tmp_path)
     path = tmp_path / "review.json"
@@ -213,6 +273,70 @@ def test_review_is_inert_and_exactly_loadable(tmp_path):
     assert '"basis":"def2-svp"' in node.project_settings_text
     assert "--no-fake" in node.real_execution_argv
     assert str(tmp_path) not in " ".join(node.real_execution_argv)
+
+
+def test_v1_packets_without_non_executable_field_remain_loadable(tmp_path):
+    review = _review(tmp_path)
+    legacy_review = canonical_data(review)
+    legacy_review.pop("non_executable_node_ids")
+    review_path = tmp_path / "legacy-review.json"
+    review_path.write_text(
+        json.dumps({"workflow_execution_review": legacy_review}),
+        encoding="utf-8",
+    )
+
+    observed_review = load_workflow_execution_review(review_path)
+
+    assert observed_review == review
+    bundle = approve_workflow_execution_review(
+        review,
+        approval_id="approval-water-sp",
+        approved_review_sha256=review.review_sha256,
+        actor="human",
+        resolution_id="resolution-water-sp",
+    )
+    legacy_bundle = canonical_data(bundle)
+    legacy_bundle.pop("non_executable_node_ids")
+    bundle_path = tmp_path / "legacy-approval.json"
+    bundle_path.write_text(
+        json.dumps({"workflow_execution_approval_bundle": legacy_bundle}),
+        encoding="utf-8",
+    )
+
+    assert load_workflow_execution_approval_bundle(bundle_path) == bundle
+
+
+def test_non_executable_partition_round_trips_through_review_and_bundle(tmp_path):
+    review = _mixed_review(tmp_path)
+    review_path = tmp_path / "mixed-review.json"
+    review_path.write_text(
+        workflow_execution_review_json(review), encoding="utf-8"
+    )
+
+    loaded_review = load_workflow_execution_review(review_path)
+    bundle = approve_workflow_execution_review(
+        loaded_review,
+        approval_id="approval-water-sp-mixed",
+        approved_review_sha256=loaded_review.review_sha256,
+        actor="human",
+        resolution_id="resolution-water-sp-mixed",
+    )
+    bundle_path = tmp_path / "mixed-approval.json"
+    bundle_path.write_text(
+        workflow_execution_approval_bundle_json(bundle), encoding="utf-8"
+    )
+
+    loaded_bundle = load_workflow_execution_approval_bundle(bundle_path)
+
+    assert loaded_review.non_executable_node_ids == (
+        "irc-non-executable",
+    )
+    assert loaded_bundle.non_executable_node_ids == (
+        "irc-non-executable",
+    )
+    assert loaded_bundle.frozen_workflow_approval.approved_node_ids == (
+        "sp",
+    )
 
 
 def test_changed_review_digest_cannot_be_approved(tmp_path):

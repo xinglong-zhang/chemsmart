@@ -378,6 +378,7 @@ def run_live_agent_session(
         if execution_envelope_file is not None
         else None
     )
+    bounded_review_requested = bounded_envelope is not None
     if execution_enabled:
         raise ContractError(
             "live provider sessions are planning and safe-preview only"
@@ -589,10 +590,6 @@ def run_live_agent_session(
                 envelope=bounded_envelope,
             )
         )
-        approved_workflow_record = {
-            "authorization_mode": "bounded_local",
-            "operating_bounds": bounded_envelope.public_record(),
-        }
     if use_execution_surface:
         provider_secret_labels = {
             profile.api_key_env,
@@ -617,6 +614,12 @@ def run_live_agent_session(
         live_schema_sha256=live_schema.schema_sha256,
         execution_requested=execution_enabled,
         execution_available=use_execution_surface,
+        execution_review_requested=bounded_review_requested,
+        bounded_execution_record=(
+            bounded_envelope.public_record()
+            if bounded_envelope is not None
+            else None
+        ),
         approved_project_records=approved_project_records,
         approved_workflow_record=approved_workflow_record,
         provider_record=_provider_public_record(
@@ -641,6 +644,7 @@ def run_live_agent_session(
     base_messages = _coordinator_base_messages(
         context=context,
         approved_workflow=approved_workflow_record,
+        bounded_review_requested=bounded_review_requested,
         task=task,
     )
     messages = [
@@ -756,6 +760,7 @@ def run_live_agent_session(
             ),
             "resource_sha256": review.execution_resources.resource_sha256,
             "review_sha256": review.review_sha256,
+            "non_executable_node_ids": review.non_executable_node_ids,
             "next_action": "review the displayed ChemSmart workflow and approve it explicitly",
         }
 
@@ -781,6 +786,16 @@ def run_live_agent_session(
             "An inert exact review packet was written for human approval. "
             "No chemistry engine was launched."
         )
+        non_executable = tuple(
+            execution_review_record.get("non_executable_node_ids") or ()
+        )
+        if non_executable:
+            suffix += (
+                " The following planned stages remain in the workflow as "
+                "declared scientific intent but are not executable in this "
+                "release, so they are displayed with the review and will not "
+                "run: " + ", ".join(non_executable) + "."
+            )
         final_text = (final_text.rstrip() + suffix).strip()
     elif execution_ineligible_nodes:
         suffix = (
@@ -886,6 +901,7 @@ def _coordinator_base_messages(
     *,
     context: Mapping[str, Any],
     approved_workflow: Mapping[str, Any] | None,
+    bounded_review_requested: bool = False,
     task: str = "",
 ) -> list[dict[str, str]]:
     _, documents = activated_skill_documents(task)
@@ -894,6 +910,7 @@ def _coordinator_base_messages(
             "role": "system",
             "content": _system_prompt(
                 approved_workflow,
+                bounded_review_requested=bounded_review_requested,
                 skill_index=tuple(item.index_entry() for item in documents),
             ),
         },
@@ -2434,6 +2451,8 @@ def _public_context(
     live_schema_sha256: str,
     execution_requested: bool,
     execution_available: bool,
+    execution_review_requested: bool = False,
+    bounded_execution_record: Mapping[str, Any] | None = None,
     approved_project_records: tuple[dict[str, Any], ...] = (),
     approved_workflow_record: Mapping[str, Any] | None = None,
     provider_record: Mapping[str, Any] | None = None,
@@ -2464,6 +2483,10 @@ def _public_context(
         "conformance_observations": conformance_records,
         "execution_requested": bool(execution_requested),
         "execution_tool_available": bool(execution_available),
+        "execution_review_requested": bool(execution_review_requested),
+        "bounded_execution_envelope": dict(
+            bounded_execution_record or {}
+        ),
         "authority": (
             "Use artifact IDs and typed tool fields only. The host owns paths, "
             "CLI argv, project materialization, validation, approval, and execution."
@@ -2520,6 +2543,7 @@ def _workflow_context_sentence() -> str:
 def _system_prompt(
     approved_workflow: Mapping[str, Any] | None,
     *,
+    bounded_review_requested: bool = False,
     skill_index: tuple[str, ...] = (),
 ) -> str:
     execution_available = bool(approved_workflow)
@@ -2528,6 +2552,7 @@ def _system_prompt(
         and approved_workflow.get("authorization_mode")
         in {"bounded_local", "bounded_continuous"}
     )
+    bounded_review = bool(bounded_review_requested or bounded_execution)
     execution_sentence = (
         "Execution is exposed as execute_approved_program_node(node_id) under "
         "science-free operating bounds. First express the complete scientific "
@@ -2556,13 +2581,20 @@ def _system_prompt(
         )
     )
     approval_readiness_sentence = (
-        "Every initially runnable node needs a green preview before bounded "
+        "The supplied operating bounds request an inert exact workflow review "
+        "after this planning turn; they do not expose engine execution or "
+        "human approval to the provider. Every initially runnable node needs "
+        "a green preview before bounded "
         "execution. An exact producer-data target may instead appear as "
         "deferred_admissible until its validated upstream geometry exists; "
         "keep that causal stage in the workflow and execute its producer "
-        "first. Read approval_readiness for preview_required and deferred "
-        "nodes. "
-        if bounded_execution
+        "first. A release-unsupported stage may instead appear as "
+        "non_executable: retain it as scientific intent, but it needs no "
+        "green preview and will not be approved or launched. At least one "
+        "release-executable stage is required for human execution review. "
+        "Read approval_readiness for preview_required, deferred, and "
+        "non-executable nodes. "
+        if bounded_review
         else (
             "Every currently materialized node needs a green preview before "
             "an exact approval can execute. Read approval_readiness for the "

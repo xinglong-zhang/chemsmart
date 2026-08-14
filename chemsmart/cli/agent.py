@@ -446,6 +446,7 @@ def execute(approval_file, workspace, run_directory, task_spec_sha256):
                 "approval_sha256": result.approval_sha256,
                 "status": result.status,
                 "provider_calls": result.provider_calls,
+                "non_executable_node_ids": result.non_executable_node_ids,
                 "run_directory": result.run_directory,
                 "nodes": [
                     {

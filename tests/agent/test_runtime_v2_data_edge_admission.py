@@ -247,6 +247,123 @@ def test_frozen_approval_records_preview_and_exact_future_selection_rule():
     assert rule.preserve_electronic_state is True
 
 
+def test_deferred_preview_is_not_admitted_and_run_finishes_validated():
+    plan = build_scientific_workflow_plan(
+        workflow_id="mixed-release-workflow",
+        task_spec_sha256="a" * 64,
+        scientific_identity_sha256="b" * 64,
+        nodes=(
+            ScientificWorkflowNodeV2(
+                node_id="opt-initial",
+                stage="opt",
+                requested_program="pyscf",
+                program="pyscf",
+                engine="cpu",
+                project_role="water-opt",
+                unresolved_fields=(),
+            ),
+            ScientificWorkflowNodeV2(
+                node_id="irc-deferred",
+                stage="irc",
+                requested_program="orca",
+                program="orca",
+                engine="cpu",
+                project_role="water-irc",
+                unresolved_fields=(),
+                support_state="blocked_unsupported",
+                blocked_reason="IRC execution is not release-qualified",
+            ),
+        ),
+        edges=(),
+    )
+    resources = build_execution_resource_spec(
+        execution_target="run",
+        cores=4,
+        memory_gb=4,
+        gpu_count=0,
+        scratch_policy="none",
+        node_timeout_seconds=600,
+    )
+    materialized = build_materialized_workflow(
+        plan=plan,
+        live_cli_schema_sha256="3" * 64,
+        resource_sha256=resources.resource_sha256,
+        nodes=(
+            MaterializedNodeV1(
+                node_id="opt-initial",
+                input_artifact_sha256="c" * 64,
+                project_artifact_sha256="d" * 64,
+                project_validation_receipt_sha256="e" * 64,
+                environment_receipt_sha256="f" * 64,
+                invocation_sha256="1" * 64,
+                preflight_receipt_sha256="2" * 64,
+                state="previewed",
+            ),
+            MaterializedNodeV1(
+                node_id="irc-deferred",
+                input_artifact_sha256="4" * 64,
+                project_artifact_sha256="5" * 64,
+                project_validation_receipt_sha256="6" * 64,
+                environment_receipt_sha256="f" * 64,
+                invocation_sha256="7" * 64,
+                preflight_receipt_sha256="8" * 64,
+                state="previewed",
+            ),
+        ),
+        unresolved_node_ids=(),
+        status="previewed",
+    )
+    approval = build_frozen_workflow_approval(
+        approval_id="mixed-approval",
+        plan=plan,
+        materialized_workflow=materialized,
+        resources=resources,
+        environment_identity_sha256s=("f" * 64,),
+        non_executable_node_ids=("irc-deferred",),
+    )
+
+    assert approval.approved_node_ids == ("opt-initial",)
+    assert tuple(
+        item.node_id for item in approval.materialized_preview_bindings
+    ) == ("opt-initial",)
+    run = build_workflow_run_state(
+        run_id="run.mixed-approval",
+        plan=plan,
+        approval=approval,
+        approval_consumed=True,
+    )
+    assert {node.node_id: node.state for node in run.nodes} == {
+        "irc-deferred": "deferred",
+        "opt-initial": "pending",
+    }
+    run = transition_workflow_node(
+        run,
+        node_id="opt-initial",
+        new_state="running",
+        invocation_sha256="1" * 64,
+        timestamp="2026-08-04T00:00:00+00:00",
+    )
+    run = transition_workflow_node(
+        run,
+        node_id="opt-initial",
+        new_state="engine_complete",
+        execution_receipt_sha256="4" * 64,
+        timestamp="2026-08-04T00:00:01+00:00",
+    )
+    validation = _result_validation_receipt()
+    run = transition_workflow_node(
+        run,
+        node_id="opt-initial",
+        new_state="validated",
+        validator_receipt_sha256s=(validation.receipt_sha256,),
+        result_validation_receipt=validation,
+        timestamp="2026-08-04T00:00:02+00:00",
+    )
+
+    assert run.state == "validated"
+    assert run.finished_at == "2026-08-04T00:00:02+00:00"
+
+
 def test_ts_producer_is_deferred_under_the_same_exact_geometry_rule():
     plan, _, approval = _approval(producer_stage="ts")
 

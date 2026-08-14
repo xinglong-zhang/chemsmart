@@ -106,6 +106,26 @@ class WorkflowExecutionResultV1:
     nodes: tuple[ExecutedNodeV1, ...]
     status: str
     provider_calls: int = 0
+    non_executable_node_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "non_executable_node_ids",
+            tuple(self.non_executable_node_ids),
+        )
+        if self.non_executable_node_ids != tuple(
+            sorted(set(self.non_executable_node_ids))
+        ):
+            raise ContractError(
+                "non-executable result node ids must be sorted and unique"
+            )
+        if set(self.non_executable_node_ids).intersection(
+            node.node_id for node in self.nodes
+        ):
+            raise ContractError(
+                "a non-executable workflow node cannot have an execution result"
+            )
 
     @property
     def executed_node_ids(self) -> tuple[str, ...]:
@@ -518,13 +538,19 @@ class ApprovedWorkflowExecutor:
         executed: list[ExecutedNodeV1] = []
         seen: set[str] = set()
         data_edge_bindings = ()
+        # The approval, not the plan, names what may run.  A scientific plan
+        # keeps a stage this release cannot execute rather than dropping it,
+        # and such a stage carries no approved binding.
+        approved_node_ids = {
+            binding.node_id for binding in self.approval.node_bindings
+        }
         while True:
             ready = tuple(
                 node_id
                 for node_id in derive_ready_node_ids(
                     self.plan, run_state, data_edge_bindings
                 )
-                if node_id not in seen
+                if node_id not in seen and node_id in approved_node_ids
             )
             if not ready:
                 break
@@ -549,9 +575,8 @@ class ApprovedWorkflowExecutor:
                 progressed = progressed or outcome.validated
             if not progressed:
                 break
-        planned = {node.node_id for node in self.plan.nodes}
         done = {item.node_id for item in executed if item.validated}
-        status = "completed" if done == planned else "partial"
+        status = "completed" if done == approved_node_ids else "partial"
         return WorkflowExecutionResultV1(
             workflow_id=self.plan.workflow_id,
             plan_sha256=self.plan.plan_sha256,
@@ -560,6 +585,9 @@ class ApprovedWorkflowExecutor:
             nodes=tuple(executed),
             status=status,
             provider_calls=0,
+            non_executable_node_ids=(
+                self.execution_bundle.non_executable_node_ids
+            ),
         )
 
 
