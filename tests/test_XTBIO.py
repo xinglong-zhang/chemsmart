@@ -976,6 +976,17 @@ class TestXTBFolder:
         )
         assert cyclopentadienyl_anion_folder._xtbtopo_mol() is not None
 
+    def test_folder_never_selects_xtbhess_as_input_geometry(self, tmp_path):
+        input_geometry = tmp_path / "job.xyz"
+        generated_displacement = tmp_path / "xtbhess.xyz"
+        input_geometry.write_text("1\ninput\nH 0 0 0\n", encoding="utf-8")
+        generated_displacement.write_text(
+            "1\ndisplaced\nH 0 0 0.1\n", encoding="utf-8"
+        )
+
+        folder = XTBFolder(tmp_path)
+        assert folder._input_geometry() == str(input_geometry)
+
     def test_folder_p_benzyne_sp(self, xtb_p_benzyne_sp_outfolder):
         """Test XTBFolder with p-benzyne sp calculation output."""
         assert os.path.exists(xtb_p_benzyne_sp_outfolder)

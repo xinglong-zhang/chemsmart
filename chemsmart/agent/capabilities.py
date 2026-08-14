@@ -457,6 +457,26 @@ class CapabilityQueryV1:
 
 
 @dataclass(frozen=True)
+class JobResultSelectorCoverageV1:
+    """Job-scoped selectors the parser supports when the engine emits them."""
+
+    jobtype: str
+    artifact_kind: str
+    parser_id: str
+    selectors: tuple[str, ...]
+    coverage_semantics: str = "parser_supported_when_emitted"
+
+    def __post_init__(self) -> None:
+        require_identifier(self.jobtype, "jobtype")
+        require_identifier(self.artifact_kind, "artifact_kind")
+        if not self.parser_id.strip():
+            raise ContractError("result parser_id must not be empty")
+        _require_sorted_unique(self.selectors, "result selectors")
+        if self.coverage_semantics != "parser_supported_when_emitted":
+            raise ContractError("unsupported result selector coverage semantics")
+
+
+@dataclass(frozen=True)
 class CapabilityQueryReceiptV1:
     schema_version: str
     query: CapabilityQueryV1
@@ -471,6 +491,7 @@ class CapabilityQueryReceiptV1:
     rule_ids: tuple[str, ...]
     receipt_sha256: str
     effective_engine_job_pairs: tuple[tuple[str, str], ...] = ()
+    job_result_selector_coverage: JobResultSelectorCoverageV1 | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.capability-query-receipt.v1":
@@ -497,6 +518,17 @@ class CapabilityQueryReceiptV1:
         if self.effective_engine_job_pairs:
             body["effective_engine_job_pairs"] = (
                 self.effective_engine_job_pairs
+            )
+        if self.job_result_selector_coverage is not None:
+            if (
+                self.job_result_selector_coverage.jobtype
+                != self.query.jobtype
+            ):
+                raise ContractError(
+                    "job-result selector coverage must bind the queried jobtype"
+                )
+            body["job_result_selector_coverage"] = (
+                self.job_result_selector_coverage
             )
         expected = canonical_sha256(body)
         if self.receipt_sha256 != expected:
@@ -1315,6 +1347,7 @@ def query_capability(
     rule_ids: tuple[str, ...] = ()
     status = CapabilityQueryStatus.UNKNOWN_PROGRAM
     overlay_sha256 = overlay.overlay_sha256 if overlay is not None else ""
+    job_result_selector_coverage: JobResultSelectorCoverageV1 | None = None
 
     if capability is not None:
         effective_jobtypes = capability.jobtypes
@@ -1376,6 +1409,26 @@ def query_capability(
         else:
             status = CapabilityQueryStatus.SUPPORTED
 
+    if query.jobtype:
+        # Result readers own extractable quantities. Keep this projection out
+        # of the execution registry, and expose it only when a reader has made
+        # a job-type declaration rather than treating its program-wide union
+        # as applicable to every job. Method/settings can still govern whether
+        # the engine emits a parser-supported value (for example GFN-FF has no
+        # molecular-orbital frontier energies).
+        from chemsmart.analysis.result_readers import reader_for
+
+        reader = reader_for(query.program)
+        if reader is not None:
+            selectors = reader.selectors_for_jobtype(query.jobtype)
+            if selectors is not None:
+                job_result_selector_coverage = JobResultSelectorCoverageV1(
+                    jobtype=query.jobtype,
+                    artifact_kind=reader.artifact_kind,
+                    parser_id=reader.parser_id,
+                    selectors=selectors,
+                )
+
     body = {
         "schema_version": "chemsmart.capability-query-receipt.v1",
         "query": query,
@@ -1391,6 +1444,8 @@ def query_capability(
     }
     if effective_engine_job_pairs:
         body["effective_engine_job_pairs"] = effective_engine_job_pairs
+    if job_result_selector_coverage is not None:
+        body["job_result_selector_coverage"] = job_result_selector_coverage
     return CapabilityQueryReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )

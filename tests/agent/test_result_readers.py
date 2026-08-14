@@ -11,12 +11,14 @@ the thing being verified is that the shipped parsers answer the shared
 selector vocabulary.
 """
 
+import dataclasses
 import hashlib
 from pathlib import Path
 
 import pytest
 
-from chemsmart.agent._contracts import TrustedArtifactRefV1
+from chemsmart.agent._contracts import ContractError, TrustedArtifactRefV1
+from chemsmart.agent.capabilities import CapabilityQueryV1, query_capability
 from chemsmart.agent.analysis_nodes import (
     ResultQuantitySelectorV1,
     build_default_result_parser_registry,
@@ -115,6 +117,40 @@ def test_model_tool_surface_exposes_the_registered_result_plane():
             "description"
         ]
     )
+
+
+def test_xtb_capability_receipt_binds_exact_job_result_coverage():
+    hess = query_capability(CapabilityQueryV1("xtb", "hess", "cpu"))
+    opt = query_capability(CapabilityQueryV1("xtb", "opt", "cpu"))
+
+    hess_coverage = hess.job_result_selector_coverage
+    opt_coverage = opt.job_result_selector_coverage
+    assert hess_coverage is not None
+    assert opt_coverage is not None
+    assert hess_coverage.artifact_kind == "xtb_output"
+    assert hess_coverage.parser_id == "chemsmart.io.xtb.output.XTBOutput"
+    assert {
+        "dipole_moment",
+        "dipole_moment_magnitude",
+        "energy",
+        "gap",
+        "homo",
+        "lumo",
+        "vibrational_frequencies",
+    } <= set(hess_coverage.selectors)
+    assert "vibrational_frequencies" not in opt_coverage.selectors
+    tampered_coverage = dataclasses.replace(
+        hess_coverage,
+        selectors=tuple(
+            selector
+            for selector in hess_coverage.selectors
+            if selector != "gap"
+        ),
+    )
+    with pytest.raises(ContractError, match="digest mismatch"):
+        dataclasses.replace(
+            hess, job_result_selector_coverage=tampered_coverage
+        )
 
 
 def test_registered_xyz_geometry_enters_the_typed_quantity_plane(tmp_path):

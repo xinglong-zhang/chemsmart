@@ -29,6 +29,7 @@ __all__ = [
     "ResultReaderV1",
     "SELECTOR_UNITS",
     "reader_for",
+    "registered_reader_jobtype_selectors",
     "registered_reader_programs",
     "registered_reader_selectors",
 ]
@@ -285,14 +286,51 @@ class ResultReaderV1:
     accessors: dict[str, Callable[[Any], Any]]
     #: Program-native units that differ from the shared selector display unit.
     source_units: Mapping[str, str] = field(default_factory=dict)
+    #: Selectors this parser can extract from a program job type when the
+    #: chosen method/settings emit them. Missing coverage means unknown, never
+    #: that the job produces no quantities.
+    jobtype_selectors: tuple[tuple[str, tuple[str, ...]], ...] = ()
     #: Native program outputs must prove normal termination.  A standalone
     #: geometry artifact is data rather than an engine run, so that format can
     #: opt out while retaining the same typed quantity path.
     requires_normal_termination: bool = True
 
+    def __post_init__(self) -> None:
+        jobtypes = tuple(item[0] for item in self.jobtype_selectors)
+        if jobtypes != tuple(sorted(set(jobtypes))):
+            raise ValueError(
+                "jobtype selector declarations must be sorted and unique"
+            )
+        for jobtype, selectors in self.jobtype_selectors:
+            if not jobtype or jobtype != jobtype.strip().lower():
+                raise ValueError("jobtype selector keys must be normalized")
+            if selectors != tuple(sorted(set(selectors))):
+                raise ValueError(
+                    f"{jobtype} selector declaration must be sorted and unique"
+                )
+            undeclared = set(selectors) - self.selectors
+            if undeclared:
+                raise ValueError(
+                    f"{jobtype} selector declaration is not implemented: "
+                    f"{sorted(undeclared)}"
+                )
+
     @property
     def selectors(self) -> frozenset[str]:
         return frozenset(self.accessors)
+
+    def selectors_for_jobtype(self, jobtype: str) -> tuple[str, ...] | None:
+        """Return exact declared coverage, or ``None`` when it is unknown."""
+
+        normalized = str(jobtype).strip().lower()
+        return next(
+            (
+                selectors
+                for declared_jobtype, selectors in self.jobtype_selectors
+                if declared_jobtype == normalized
+            ),
+            None,
+        )
 
     def read(self, output: Any, selector: str) -> tuple[Any, str]:
         """Return ``(value, unit)`` for ``selector``.
@@ -974,6 +1012,42 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         open_output=_xtb_output,
         accessors=_xtb_accessors(),
         source_units={"dipole_moment": "e bohr"},
+        jobtype_selectors=(
+            (
+                "hess",
+                (
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "energy",
+                    "gap",
+                    "homo",
+                    "lumo",
+                    "vibrational_frequencies",
+                ),
+            ),
+            (
+                "opt",
+                (
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "energy",
+                    "gap",
+                    "homo",
+                    "lumo",
+                ),
+            ),
+            (
+                "sp",
+                (
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "energy",
+                    "gap",
+                    "homo",
+                    "lumo",
+                ),
+            ),
+        ),
     ),
     "xyz": ResultReaderV1(
         program="xyz",
@@ -1169,6 +1243,17 @@ def registered_reader_programs() -> tuple[str, ...]:
     """Return every program with a registered log reader, sorted."""
 
     return tuple(sorted(RESULT_READERS))
+
+
+def registered_reader_jobtype_selectors(
+    program: str, jobtype: str
+) -> tuple[str, ...] | None:
+    """Return job-scoped parser support, conditional on engine emission."""
+
+    reader = reader_for(program)
+    if reader is None:
+        return None
+    return reader.selectors_for_jobtype(jobtype)
 
 
 def registered_reader_selectors() -> dict[str, tuple[str, ...]]:

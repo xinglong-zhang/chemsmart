@@ -46,6 +46,11 @@ class XTBFolder(BaseFolder):
         "xtbtopo.mol",
         "wbo",
     )
+    # xTB writes these geometry-like sidecars itself.  In particular,
+    # ``xtbhess.xyz`` is a frequency-displacement structure, not the geometry
+    # supplied to the Hessian calculation, so it must never satisfy input
+    # provenance merely because it appears first in ``os.listdir``.
+    XTB_GENERATED_GEOMETRY_PREFIXES = ("xtbhess", "xtbopt")
 
     @property
     def is_xtb_calculation_directory(self):
@@ -147,24 +152,45 @@ class XTBFolder(BaseFolder):
 
     def _input_geometry(self):
         """Return the path to input geometry file used in the XTB calculation."""
+        # ChemSmart executions preserve the label for both the main output and
+        # copied input geometry.  Prefer that exact, deterministic pairing
+        # before considering legacy result folders whose input had a different
+        # basename.
+        main_output = self._xtb_out()
+        if main_output is not None:
+            main_stem = os.path.splitext(os.path.basename(main_output))[0]
+            if not main_stem.startswith(
+                self.XTB_GENERATED_GEOMETRY_PREFIXES
+            ):
+                for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
+                    candidate = os.path.join(
+                        self.folder, f"{main_stem}{ext}"
+                    )
+                    if os.path.isfile(candidate) and os.path.getsize(candidate):
+                        logger.debug(f"Found input geometry file: {candidate}")
+                        return candidate
         # Try parseable formats first
         for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
-            geometry_files = self.get_all_files_in_current_folder_by_suffix(
-                ext
+            geometry_files = sorted(
+                self.get_all_files_in_current_folder_by_suffix(ext)
             )
             for filepath in geometry_files:
                 basename = os.path.basename(filepath)
-                if not basename.startswith("xtbopt"):
+                if not basename.startswith(
+                    self.XTB_GENERATED_GEOMETRY_PREFIXES
+                ):
                     logger.debug(f"Found input geometry file: {filepath}")
                     return filepath
         # Check if unsupported format exists
         for ext in self.UNSUPPORTED_GEOMETRY_EXTENSIONS:
-            geometry_files = self.get_all_files_in_current_folder_by_suffix(
-                ext
+            geometry_files = sorted(
+                self.get_all_files_in_current_folder_by_suffix(ext)
             )
             for filepath in geometry_files:
                 basename = os.path.basename(filepath)
-                if not basename.startswith("xtbopt"):
+                if not basename.startswith(
+                    self.XTB_GENERATED_GEOMETRY_PREFIXES
+                ):
                     logger.warning(
                         f"Found input geometry file {filepath}, but format {ext} "
                         "is not yet supported by CHEMSMART."

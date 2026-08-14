@@ -57,9 +57,12 @@ def build_command_compiled_tool_surface(
         "enum": list(result_programs),
         "description": (
             "Select the parser matching the registered artifact. Current "
-            "reader selector inventory: "
+            "program-wide reader selector union (not a promise for every job "
+            "type): "
             f"{reader_selector_inventory}. PySCF uses its structured HDF5 "
-            "result registry."
+            "result registry. Query inspect_program_capability for job-scoped "
+            "parser support where declared; the selected method/settings must "
+            "still emit the quantity."
         ),
     }
     thermochemistry_program = {
@@ -85,7 +88,14 @@ def build_command_compiled_tool_surface(
     tools = (
         _tool(
             "inspect_program_capability",
-            "Join core capability, active support overlay, and live Click schema.",
+            (
+                "Join core capability, active support overlay, and live Click "
+                "schema. For an exact job type, the receipt also returns "
+                "parser-established job_result_selector_coverage when declared; "
+                "coverage_semantics=parser_supported_when_emitted means the "
+                "selected method/settings must still emit those quantities. "
+                "This is not evidence that a particular run completed."
+            ),
             {"program": program, "jobtype": _string(), "engine": _string()},
             ("program", "jobtype", "engine"),
         ),
