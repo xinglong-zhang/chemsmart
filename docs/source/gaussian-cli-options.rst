@@ -355,7 +355,7 @@ Transition State Search
    -  -  ``scan``
       -  Potential energy surface scanning
    -  -  ``qrc``
-      -  Quadratic reaction coordinate calculations
+      -  Quick reaction coordinate calculations
 
 Electronic Structure Properties
 ===============================
