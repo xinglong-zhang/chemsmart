@@ -527,6 +527,107 @@ class TestGaussian16Input:
         assert g16_oniom.int_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
 
+    def test_oniom_model_charge_defaults_when_absent(self, tmp_path):
+        """Fallback when model charge/mult keys are missing from the ONIOM dict."""
+        from unittest.mock import patch
+
+        com = tmp_path / "fallback.com"
+        com.write_text(
+            "%chk=fallback.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        with patch.object(
+            g16,
+            "_get_oniom_charge_and_multiplicity",
+            return_value=(
+                {"charge_total": "-1"},
+                {"real_multiplicity": "2"},
+            ),
+        ):
+            assert g16.model_charge == -1
+            assert g16.model_multiplicity == 2
+
+    def test_oniom_partition_recursion_error_is_tolerated(self, tmp_path):
+        com = tmp_path / "recurse.com"
+        com.write_text(
+            "%chk=recurse.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        from unittest.mock import PropertyMock, patch
+
+        with patch.object(
+            type(g16),
+            "partition",
+            new_callable=PropertyMock,
+            side_effect=RecursionError,
+        ):
+            charge, mult = g16._get_oniom_charge_and_multiplicity()
+        assert charge["charge_total"] == "0"
+        assert mult["real_multiplicity"] == "1"
+
+    def test_oniom_mm_parameters_empty_parts_and_groups(self):
+        """Cover empty groups/lines and non-float connectivity tokens."""
+
+        class _Fake:
+            content_groups = [
+                ["header"],
+                ["title"],
+                ["0 1", "C 0 0 0 H"],
+                [],
+                ["   "],
+                ["1 2 foo"],
+                ["HrmBnd1 CT OH HC 50.0 109.5"],
+            ]
+
+            def _get_mm_parameters_text(self):
+                return Gaussian16QMMMInput._get_mm_parameters_text(self)
+
+        params = _Fake()._get_mm_parameters_text()
+        assert "HrmBnd1" in params
+
+    def test_oniom_mm_parameters_skips_empty_and_non_mm_groups(self, tmp_path):
+        com = tmp_path / "mm_edge.com"
+        # content_groups layout depends on blank-line splitting; include
+        # empty groups, a bogus non-connectivity/non-MM block, and MM params.
+        com.write_text(
+            "%chk=mm_edge.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 foo\n"
+            "\n"
+            "\n"
+            "not-a-mm-keyword 1 2 3\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        params = g16._get_mm_parameters_text()
+        assert params is not None
+        assert "HrmBnd1 CT OH HC 50.0 109.5" in params
+
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
         g16_modred = Gaussian16Input(filename=gaussian_modred_inputfile)

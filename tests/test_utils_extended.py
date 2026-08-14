@@ -8,6 +8,7 @@ import pytest
 
 from chemsmart.utils.utils import (
     OrderedSet,
+    check_charge_and_multiplicity,
     content_blocks_by_paragraph,
     convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
@@ -266,6 +267,22 @@ class TestGetListFromStringRange:
         """Non-string input should raise TypeError."""
         with pytest.raises(TypeError, match="Expected a string"):
             get_list_from_string_range(123)
+
+    def test_empty_tokens_and_empty_result(self):
+        """Blank tokens are skipped; all-blank token strings raise."""
+        assert get_list_from_string_range("1,,3") == [1, 3]
+        with pytest.raises(ValueError, match="Could not parse atom indices"):
+            get_list_from_string_range(",,")
+
+
+class TestCheckChargeAndMultiplicity:
+    def test_raises_when_missing(self):
+        class _Settings:
+            charge = None
+            multiplicity = 1
+
+        with pytest.raises(ValueError, match="Charge and multiplicity"):
+            check_charge_and_multiplicity(_Settings())
 
 
 class TestString2Index1Based:

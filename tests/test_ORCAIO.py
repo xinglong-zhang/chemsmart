@@ -3064,8 +3064,22 @@ class TestORCAQMMMJobSettings:
     def test_embedding_type_helpers(self, tmp_path):
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
-        mechanical = ORCAQMMMJobSettings(embedding_type="mechanical")
+        mechanical = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            embedding_type="mechanical",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=1,
+            charge_total=0,
+            mult_total=1,
+            low_level_method="orca.prms",
+            high_level_h_bond_length={("C", "X"): 1.2, ("O", "HLA"): 0.98},
+        )
         assert mechanical._get_embedding_type() == "Embedding Mechanical"
+        block = mechanical.qmmm_block
+        assert "Embedding Mechanical" in block
+        assert "Dist_C_X 1.2" in block
+        assert "Dist_O_HLA 0.98" in block
 
         electrostatic = ORCAQMMMJobSettings(embedding_type="electrostatic")
         assert electrostatic._get_embedding_type() is None
