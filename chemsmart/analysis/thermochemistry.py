@@ -29,6 +29,17 @@ from chemsmart.utils.references import (
 logger = logging.getLogger(__name__)
 
 
+#: A Hessian's six translational and rotational modes come out numerically
+#: near zero rather than exactly zero, and a floppy torsion can push one of
+#: them slightly below it.  A mode of a few wavenumbers on the wrong side of
+#: zero is that numerical noise, not a reaction coordinate: a genuine
+#: imaginary mode of a saddle point is hundreds of wavenumbers.  xTB draws the
+#: same line at 20 cm^-1 and reports such a structure as having no imaginary
+#: modes, so treat that as the shared convention rather than contradicting the
+#: program that produced the Hessian.
+NEAR_ZERO_FREQUENCY_TOLERANCE_CM = 20.0
+
+
 class Thermochemistry:
     """Class for thermochemistry analysis using SI units.
 
@@ -77,6 +88,7 @@ class Thermochemistry:
         frequency_scale_factor=1.0,
         energy_units="hartree",
         check_imaginary_frequencies=True,
+        near_zero_frequency_tolerance_cm=None,
         rotational_mode="physical",
         **kwargs,
     ):
@@ -88,6 +100,11 @@ class Thermochemistry:
             self.molecule = Molecule.from_filepath(filename)
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.near_zero_frequency_tolerance_cm = (
+            NEAR_ZERO_FREQUENCY_TOLERANCE_CM
+            if near_zero_frequency_tolerance_cm is None
+            else float(near_zero_frequency_tolerance_cm)
+        )
         self.rotational_mode = rotational_mode
         # Keep original cm^-1 values for replacing imaginary frequencies
         self.s_freq_cutoff_cm = s_freq_cutoff
@@ -367,10 +384,18 @@ class Thermochemistry:
 
     @property
     def imaginary_frequencies(self):
-        """Obtain the imaginary vibrational frequencies of the molecule."""
+        """Obtain the genuine imaginary vibrational frequencies.
+
+        A mode is imaginary when it lies below
+        ``-near_zero_frequency_tolerance_cm``.  A value a few wavenumbers on
+        the wrong side of zero is numerical noise in one of the six modes that
+        should be exactly zero, not a reaction coordinate, and calling it
+        imaginary would contradict the program that produced the Hessian.
+        """
         if self.vibrational_frequencies is None:
             return None
-        return [k for k in self.vibrational_frequencies if k < 0.0]
+        tolerance = abs(self.near_zero_frequency_tolerance_cm)
+        return [k for k in self.vibrational_frequencies if k < -tolerance]
 
     @property
     def cleaned_frequencies(self):
@@ -421,6 +446,15 @@ class Thermochemistry:
         imaginary_indices = [
             i for i, freq in enumerate(frequencies) if freq < 0.0
         ]
+        # Only a mode well below zero is a real imaginary mode, on the same
+        # definition as :attr:`imaginary_frequencies`.  The rest are near-zero
+        # noise, still replaced by the cutoff below so the partition functions
+        # stay defined, but never a reason to refuse the result.
+        genuine_imaginary_indices = [
+            i
+            for i, freq in enumerate(frequencies)
+            if freq < -abs(self.near_zero_frequency_tolerance_cm)
+        ]
 
         if not imaginary_indices:
             return frequencies
@@ -445,18 +479,18 @@ class Thermochemistry:
             )
 
         if self.jobtype == "ts":
-            # Valid TS: exactly one imaginary frequency.
+            # Valid TS: exactly one genuine imaginary frequency.
             # Remove it from thermochemistry.
-            if len(imaginary_indices) == 1:
-                reaction_coordinate_index = imaginary_indices[0]
+            if len(genuine_imaginary_indices) == 1:
+                reaction_coordinate_index = genuine_imaginary_indices[0]
                 return [
                     freq
                     for i, freq in enumerate(frequencies)
                     if i != reaction_coordinate_index
                 ]
 
-            # Invalid TS: more than one imaginary frequency.
-            if self.check_imaginary_frequencies:
+            # Invalid TS: not exactly one genuine imaginary frequency.
+            if self.check_imaginary_frequencies and genuine_imaginary_indices:
                 raise ValueError(
                     f"!! ERROR: Detected multiple imaginary frequencies in "
                     f"TS calculation for {self.filename}. Only one "
@@ -467,7 +501,9 @@ class Thermochemistry:
             # Permissive mode:
             # remove first imaginary frequency as reaction coordinate;
             # replace all remaining imaginary frequencies by cutoff.
-            reaction_coordinate_index = imaginary_indices[0]
+            reaction_coordinate_index = (
+                genuine_imaginary_indices or imaginary_indices
+            )[0]
 
             return [
                 freq_cutoff if freq < 0.0 else freq
@@ -475,8 +511,9 @@ class Thermochemistry:
                 if i != reaction_coordinate_index
             ]
 
-        # Non-TS jobs: any imaginary frequency is invalid in strict mode.
-        if self.check_imaginary_frequencies:
+        # Non-TS jobs: a genuine imaginary frequency is invalid in strict
+        # mode; near-zero noise is replaced by the cutoff instead.
+        if self.check_imaginary_frequencies and genuine_imaginary_indices:
             raise ValueError(
                 f"!! ERROR: Detected imaginary frequencies in geometry "
                 f"optimization for {self.filename}. A valid optimized "
