@@ -83,6 +83,9 @@ What ``make configure`` does on Linux and macOS:
 
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~/.chemsmart``.
 
+#. **Updates project templates** — adds missing project directories and files from newer bundled templates without
+   overwriting existing or user-created files.
+
 #. **Updates your shell rc file** — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines to ``~/.bashrc``
    (bash) or ``~/.zshrc`` (zsh) so that the ``chemsmart`` command is available in new terminal sessions.
 

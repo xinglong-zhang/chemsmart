@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
@@ -35,6 +36,10 @@ def _represent_explicit_yaml_null(representer, _value):
 
 class ConfigUpdateError(Exception):
     """Raised when a config update cannot be planned or written safely."""
+
+
+class ProjectUpdateError(Exception):
+    """Raised when project templates cannot be added safely."""
 
 
 @dataclass(frozen=True)
@@ -398,6 +403,118 @@ class VersionUpdater(Updater):
                 )
 
         logger.info(f"Version update to {version_number} completed.")
+
+
+class ProjectsUpdater(Updater):
+    """Add missing project template directories and files."""
+
+    def update(self) -> tuple[str, ...]:
+        """Copy missing project template content into the user config.
+
+        Existing files are never overwritten. Top-level template directories
+        are discovered automatically, except ``server``, which is managed by
+        :class:`ConfigurationUpdater`.
+
+        Returns:
+            Names of project directories that received missing content.
+        """
+        config_dir = self._config_dir()
+        updated_projects: list[str] = []
+
+        try:
+            self._ensure_directory(config_dir)
+            with resources.as_file(
+                self._template_config_dir()
+            ) as template_dir:
+                project_templates = sorted(
+                    (
+                        path
+                        for path in template_dir.iterdir()
+                        if path.name != "server" and path.is_dir()
+                    ),
+                    key=lambda path: path.name.casefold(),
+                )
+                for project_template in project_templates:
+                    destination = config_dir / project_template.name
+                    if self._copy_missing(project_template, destination):
+                        updated_projects.append(project_template.name)
+        except OSError as exc:
+            message = exc.strerror or str(exc)
+            raise ProjectUpdateError(
+                f"Could not update project templates: {message}"
+            ) from exc
+
+        return tuple(updated_projects)
+
+    @staticmethod
+    def _config_dir() -> Path:
+        """Return the resolved user configuration directory."""
+        from chemsmart.settings.user import CHEMSMARTUserSettings
+
+        configured_dir = CHEMSMARTUserSettings.resolve_config_dir()
+        return Path(os.path.abspath(configured_dir))
+
+    @staticmethod
+    def _template_config_dir():
+        """Return the bundled ``.chemsmart`` template directory."""
+        return (
+            resources.files("chemsmart.settings") / "templates" / ".chemsmart"
+        )
+
+    @staticmethod
+    def _ensure_directory(path: Path) -> None:
+        """Create a missing directory and reject unsafe path conflicts."""
+        if path.is_symlink():
+            raise ProjectUpdateError(f"Refusing to update symlink: {path}")
+        if path.exists() and not path.is_dir():
+            raise ProjectUpdateError(f"Expected a directory: {path}")
+        path.mkdir(parents=True, exist_ok=True)
+
+    def _copy_missing(self, source: Path, destination: Path) -> bool:
+        """Recursively copy missing content without replacing destinations."""
+        if source.is_symlink() or destination.is_symlink():
+            raise ProjectUpdateError(
+                f"Refusing to update symlink: {destination}"
+            )
+
+        if source.is_dir():
+            changed = not destination.exists()
+            self._ensure_directory(destination)
+            for child in sorted(
+                source.iterdir(), key=lambda path: path.name.casefold()
+            ):
+                changed = (
+                    self._copy_missing(child, destination / child.name)
+                    or changed
+                )
+            return changed
+
+        if not source.is_file():
+            raise ProjectUpdateError(
+                f"Unsupported project template entry: {source}"
+            )
+        if destination.exists():
+            if not destination.is_file():
+                raise ProjectUpdateError(f"Expected a file: {destination}")
+            return False
+
+        created = False
+        try:
+            with (
+                source.open("rb") as source_file,
+                destination.open("xb") as destination_file,
+            ):
+                created = True
+                shutil.copyfileobj(source_file, destination_file)
+            shutil.copystat(source, destination)
+        except BaseException:
+            if created:
+                try:
+                    destination.unlink()
+                except FileNotFoundError:
+                    pass
+            raise
+        return True
 
 
 class ConfigurationUpdater(Updater):
@@ -780,6 +897,23 @@ def version(version_number: str):
     logger.info("Updating version number...")
     VersionUpdater(version_number).update()
     logger.info("Update complete.")
+
+
+@update.command(name="projects")
+def projects():
+    """Add missing project directories and files from bundled templates."""
+
+    try:
+        updated_projects = ProjectsUpdater().update()
+    except ProjectUpdateError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if updated_projects:
+        click.echo("Updated project templates:")
+        for project in updated_projects:
+            click.echo(f"  added missing content: {project}")
+    else:
+        click.echo("Project templates are already up to date.")
 
 
 @update.command(name="config")
