@@ -365,6 +365,32 @@ class ResultReaderV1:
             None,
         )
 
+    def available_selectors(self, output: Any) -> tuple[str, ...]:
+        """Return the selectors this one opened result actually resolves.
+
+        A program's selector set is what its parser implements.  What any
+        single result carries is narrower, and the difference is a property of
+        the job that produced it rather than of the program: a single point has
+        no Hessian, a spin-restricted run prints no ``<S^2>``, and a job run
+        without a frequency step has no thermochemistry.  ``jobtype_selectors``
+        can only ever describe a job type, so it cannot answer this question
+        for a specific artifact; probing the accessors can, exactly.
+
+        Reporting the inventory keeps a reader from discovering the shape of a
+        result one failed extraction at a time, and keeps the host descriptive:
+        it states what this artifact holds without choosing which quantity the
+        scientific question needs.
+        """
+
+        available = []
+        for selector in sorted(self.accessors):
+            try:
+                self.read(output, selector)
+            except Exception:  # noqa: BLE001 - absence is the answer here
+                continue
+            available.append(selector)
+        return tuple(available)
+
     def read(self, output: Any, selector: str) -> tuple[Any, str]:
         """Return ``(value, unit)`` for ``selector``.
 
@@ -1206,7 +1232,14 @@ def extract_logged_quantities(
         try:
             source_value, source_unit = reader.read(output, selector.selector)
         except MissingQuantityError as exc:
-            raise rq.QuantityExtractionError(str(exc)) from exc
+            # Name what this artifact does hold.  Without it the only way to
+            # learn the shape of a result is one refused selector at a time,
+            # and a quantity that was never asked for looks the same as one
+            # the run never produced.
+            available = reader.available_selectors(output)
+            raise rq.QuantityExtractionError(
+                f"{exc}. This result resolves: {', '.join(available)}"
+            ) from exc
         dimension = getattr(rq, _SELECTOR_DIMENSIONS[selector.selector])
         if selector.selector in {"symbols", *_TEXT_VECTOR_SELECTORS}:
             value = source_value
