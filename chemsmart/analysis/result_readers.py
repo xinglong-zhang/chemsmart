@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from chemsmart.io.molecules import DEFAULT_BUFFER
+
 __all__ = [
     "RESULT_READERS",
     "MissingQuantityError",
@@ -166,9 +168,19 @@ def _connectivity_matrix(molecule: Any) -> list[list[int]]:
     and covalent-radius perception is appropriate for deciding whether two
     path ends have different molecular graphs while leaving chemical
     interpretation to the scientist.
+
+    Perception uses the shared molecular-graph tolerance
+    :data:`chemsmart.io.molecules.DEFAULT_BUFFER` so that typed analysis and
+    the rest of ChemSmart answer the bonded/not-bonded question the same way.
+    ``adjust_H`` keeps the tighter hydrogen tolerances, so the shared buffer
+    applies to heavy-atom pairs, where a tighter tolerance would drop real
+    bonds between small electronegative atoms.
     """
 
-    graph = molecule.to_graph(bond_cutoff_buffer=0.05, adjust_H=True)
+    graph = molecule.to_graph(
+        bond_cutoff_buffer=DEFAULT_BUFFER,
+        adjust_H=True,
+    )
     size = int(molecule.num_atoms)
     matrix = [[0 for _ in range(size)] for _ in range(size)]
     for first, second in graph.edges:

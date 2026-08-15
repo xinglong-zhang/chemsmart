@@ -707,6 +707,59 @@ def test_pyscf_connectivity_uses_the_structured_final_geometry():
     )
 
 
+def test_geometry_connectivity_recognizes_a_peroxide_bond():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.io.molecules.structure import Molecule
+
+    molecule = Molecule(
+        symbols=["H", "O", "O", "H"],
+        positions=np.array(
+            [
+                [-0.96, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [1.45, 0.0, 0.0],
+                [2.41, 0.0, 0.0],
+            ]
+        ),
+    )
+
+    connectivity, unit = reader_for("xyz").read(
+        SimpleNamespace(molecule=molecule), "connectivity"
+    )
+
+    assert unit == ""
+    assert connectivity == [
+        [0, 1, 0, 0],
+        [1, 0, 1, 0],
+        [0, 1, 0, 1],
+        [0, 0, 1, 0],
+    ]
+
+
+def test_geometry_connectivity_keeps_separated_atoms_disconnected():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.io.molecules.structure import Molecule
+
+    molecule = Molecule(
+        symbols=["O", "O", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.2, 0.0, 0.0]]
+        ),
+    )
+
+    connectivity, _ = reader_for("xyz").read(
+        SimpleNamespace(molecule=molecule), "connectivity"
+    )
+
+    assert connectivity == [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+
+
 def test_irc_trajectory_selectors_report_observed_endpoint_topology():
     from types import SimpleNamespace
 
