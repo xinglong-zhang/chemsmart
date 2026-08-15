@@ -2936,16 +2936,9 @@ class CommandCompiledToolHostV1:
             return evidence
 
         def _unit_dimension(unit: str) -> tuple[int, ...] | None:
-            aliases = {
-                "j/(mol k)": "J mol^-1 K^-1",
-                "kj/(mol k)": "kJ mol^-1 K^-1",
-                "cal/(mol k)": "cal mol^-1 K^-1",
-                "kcal/(mol k)": "kcal mol^-1 K^-1",
-            }
-            candidate = aliases.get(str(unit).strip().lower(), unit)
             try:
                 _value, _canonical_unit, dimension = normalize_numeric_value(
-                    0.0, candidate
+                    0.0, unit
                 )
             except (ContractError, ValueError):
                 return None

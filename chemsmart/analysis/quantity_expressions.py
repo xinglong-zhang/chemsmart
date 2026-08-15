@@ -341,7 +341,21 @@ def _normalized_unit_key(unit: str) -> str:
         .replace("−", "-")
         .replace("⁻", "-")
     )
-    return " ".join(normalized.split())
+    normalized = " ".join(normalized.split())
+    # A bracketed denominator is the SI-recommended spelling of a compound
+    # unit, and it is how a chemist writes molar entropy: "J/(mol K)" is the
+    # same unit as the already supported "J/mol/K".  Spacing around the
+    # solidus and inside the bracket carries no meaning, so normalise it away
+    # and distribute the solidus over the bracketed factors.  That keeps one
+    # vocabulary for both spellings instead of duplicating every alias.
+    normalized = re.sub(r"\s*/\s*", "/", normalized)
+    normalized = re.sub(r"\(\s*", "(", normalized)
+    normalized = re.sub(r"\s*\)", ")", normalized)
+    return re.sub(
+        r"/\(([^()]+)\)",
+        lambda match: "/" + "/".join(match.group(1).split()),
+        normalized,
+    )
 
 
 def _compound_unit_spec(
