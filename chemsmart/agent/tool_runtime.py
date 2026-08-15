@@ -2978,21 +2978,27 @@ class CommandCompiledToolHostV1:
                 )
                 if len(registered) != 1:
                     continue
-                selectors = {
-                    selector.quantity_id: selector.selector
-                    for selector in node.selectors
-                }
+                # Typed extraction evidence is the triple (registered result,
+                # selector, value).  ``quantity_id`` is the model's own label
+                # for that value, and a plan node and the extraction call that
+                # satisfies it are authored independently, so the same
+                # scientist may reasonably name the same selector differently
+                # in each.  Match on the selector set, exactly as the
+                # policy-driven completion gate already does; requiring the
+                # two labels to coincide would gate completion on naming
+                # luck rather than on evidence.
+                selectors = frozenset(
+                    selector.selector for selector in node.selectors
+                )
                 exact_candidates = tuple(
                     receipt.receipt_sha256
                     for receipt in self.quantity_extractions.values()
                     if receipt.status == "extracted"
                     and receipt.artifact_id == registered[0].artifact_id
-                    and all(
-                        self.quantity_extraction_bindings.get(
-                            receipt.receipt_sha256, {}
-                        ).get(quantity_id)
-                        == selector
-                        for quantity_id, selector in selectors.items()
+                    and selectors.issubset(
+                        self.quantity_extraction_selectors.get(
+                            receipt.receipt_sha256, ()
+                        )
                     )
                 )
                 candidates = exact_candidates
@@ -3010,14 +3016,11 @@ class CommandCompiledToolHostV1:
                         if receipt.status == "extracted"
                         and receipt.artifact_id == registered[0].artifact_id
                         and (
-                            bindings := self.quantity_extraction_bindings.get(
-                                receipt.receipt_sha256, {}
+                            observed := self.quantity_extraction_selectors.get(
+                                receipt.receipt_sha256, ()
                             )
                         )
-                        and all(
-                            selectors.get(quantity_id) == selector
-                            for quantity_id, selector in bindings.items()
-                        )
+                        and selectors.issuperset(observed)
                     }
                     claim_digests = {
                         record.receipt_sha256 for record in task_claims
