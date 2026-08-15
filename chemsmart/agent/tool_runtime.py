@@ -6553,7 +6553,7 @@ class CommandCompiledToolHostV1:
         node_bindings = []
         environment_bindings = []
         node_reviews: list[WorkflowExecutionNodeReviewV1] = []
-        unbindable_ids: set[str] = set()
+        unbindable: list[tuple[str, str]] = []
         for planned_node in executable_nodes:
             ineligibility = self.execution_review_ineligibility_reason(
                 plan=plan,
@@ -6575,18 +6575,21 @@ class CommandCompiledToolHostV1:
                 # The release can run this stage, but its project, capability
                 # or environment evidence does not resolve to exactly one
                 # record -- most often because the plan explored more than one
-                # program and left ambiguous artifacts behind.  That is a
-                # reviewable fact about one node, not a reason to destroy the
-                # whole review: keep the stage in the displayed plan, mark it
-                # non-executable with its reason, and let the human decide on
-                # the stages that did bind.  It is excluded from the approval
-                # and never launched, exactly like a preview-only stage.
+                # program and left ambiguous artifacts behind.  Collect every
+                # such node before reporting, so one message names all of them
+                # and their reasons instead of stopping at whichever happened
+                # to be visited first.
+                #
+                # The host does not mark them non-executable on the model's
+                # behalf: a plan states its own unsupported stages, its digest
+                # covers that statement, and rewriting it here would forge the
+                # provenance of a plan the model did not author.
                 logger.warning(
                     "node %s cannot enter execution review: %s",
                     planned_node.node_id,
                     exc,
                 )
-                unbindable_ids.add(planned_node.node_id)
+                unbindable.append((planned_node.node_id, str(exc)))
                 continue
             environment_receipt_sha256 = (
                 context.engine_binding.environment_receipt_sha256
@@ -6845,6 +6848,17 @@ class CommandCompiledToolHostV1:
                     ),
                 )
             )
+        if unbindable:
+            detail = "; ".join(
+                f"{node_id}: {reason}" for node_id, reason in sorted(unbindable)
+            )
+            raise ContractError(
+                "these workflow nodes have no unique project, capability and "
+                f"environment evidence, so they cannot be reviewed: {detail}. "
+                "Resolve the ambiguity, or declare the stage "
+                "blocked_unsupported in the plan with its reason so the rest "
+                "of the workflow can still be reviewed"
+            )
         if not node_reviews:
             raise ContractError(
                 "no workflow node could be bound to unique project, "
@@ -6878,9 +6892,7 @@ class CommandCompiledToolHostV1:
                 sorted(node_reviews, key=lambda item: item.node_id)
             ),
             stationary_point_policy=self.stationary_point_policy,
-            non_executable_node_ids=tuple(
-                sorted(set(non_executable_ids) | unbindable_ids)
-            ),
+            non_executable_node_ids=tuple(sorted(non_executable_ids)),
         )
 
     def _admit_bounded_workflow(
