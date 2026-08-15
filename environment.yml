@@ -9,6 +9,7 @@ dependencies:
   - openbabel          # includes Python bindings on conda-forge
   - xtb                # provides the xtb command-line executable via conda-forge
   - sel(unix): crest   # Linux/macOS (including WSL); no win-64 build on conda-forge
+  - ruamel.yaml>=0.18.16
   - pip
   - pip:
       - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
