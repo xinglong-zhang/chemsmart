@@ -159,6 +159,7 @@ DERIVABLE_THERMOCHEMISTRY_QUANTITIES: tuple[str, ...] = (
     "gibbs_free_energy",
     "heat_capacity_cv",
     "internal_energy",
+    "near_zero_mode_count",
     "pressure",
     "temperature",
     "thermal_enthalpy_correction",
@@ -1464,6 +1465,15 @@ def derive_result_thermochemistry(
                 value=request.pressure_atm,
                 unit="atm",
                 dimension=PRESSURE,
+                evidence_ref=evidence_ref,
+            ),
+            _make_quantity(
+                quantity_id="near_zero_mode_count",
+                source_value=engine.near_zero_mode_count,
+                source_unit="1",
+                value=engine.near_zero_mode_count,
+                unit="1",
+                dimension=DIMENSIONLESS,
                 evidence_ref=evidence_ref,
             ),
             _thermo_quantity(

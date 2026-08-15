@@ -398,6 +398,28 @@ class Thermochemistry:
         return [k for k in self.vibrational_frequencies if k < -tolerance]
 
     @property
+    def near_zero_mode_count(self):
+        """How many real modes lie below the near-zero tolerance.
+
+        A harmonic oscillator is not a meaningful description of a mode of a
+        few wavenumbers: its entropy diverges as the frequency goes to zero, so
+        one such mode can contribute more to a free-energy difference than the
+        electronic structure being compared.  The count is reported as typed
+        evidence rather than silently corrected, because damping those modes is
+        a convention choice the scientist owns -- ``entropy_method`` already
+        offers the quasi-harmonic treatments.
+        """
+
+        if self.vibrational_frequencies is None:
+            return None
+        tolerance = abs(self.near_zero_frequency_tolerance_cm)
+        return sum(
+            1
+            for frequency in self.vibrational_frequencies
+            if 0.0 <= frequency < tolerance
+        )
+
+    @property
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
