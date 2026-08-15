@@ -24,7 +24,11 @@ from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionError,
     normalize_numeric_value,
 )
-from chemsmart.analysis.result_quantities import DIMENSIONLESS
+from chemsmart.analysis.result_quantities import (
+    DIMENSIONLESS,
+    canonical_thermochemistry_quantity,
+    derivable_thermochemistry_quantities,
+)
 
 ANALYSIS_INTENT_KINDS = (
     "claim_rendering",
@@ -294,6 +298,31 @@ class AnalysisNodeIntentV1:
                 raise ScientificToolchainContractError(
                     "selectors apply only to result extraction"
                 )
+            # The RRHO engine writes a fixed vocabulary of quantity IDs.  A
+            # node that names an output outside it is asking for something its
+            # own receipt will never carry, and nothing downstream can bind:
+            # the node stays unmatched and starves every dependent expression,
+            # validation and claim, so the failure would surface far away from
+            # its cause.  Refuse it here and name what is available, the way
+            # the extraction plane answers an unknown selector.
+            if self.support_state == "planned":
+                available = derivable_thermochemistry_quantities(
+                    self.entropy_method
+                )
+                for output in self.outputs:
+                    if (
+                        canonical_thermochemistry_quantity(
+                            output.quantity_kind
+                        )
+                        in available
+                    ):
+                        continue
+                    raise ScientificToolchainContractError(
+                        f"analysis output {output.output_id!r} declares "
+                        f"quantity_kind {output.quantity_kind!r}, which "
+                        f"thermochemistry does not derive; it derives "
+                        f"{list(available)}"
+                    )
         elif any(
             isinstance(item, RegisteredResultInputIntentV1)
             for item in self.inputs

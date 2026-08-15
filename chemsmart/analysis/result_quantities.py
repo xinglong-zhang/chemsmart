@@ -147,6 +147,64 @@ QUANTITIES_FROM_ANOTHER_TOOL: Mapping[str, str] = {
     "zero_point_energy": "derive_thermochemistry",
 }
 
+#: Quantity IDs ``derive_result_thermochemistry`` writes into every receipt.
+#: A planned thermochemistry node names its outputs from this vocabulary, so
+#: the list lives beside the builder where drift between the two is visible.
+DERIVABLE_THERMOCHEMISTRY_QUANTITIES: tuple[str, ...] = (
+    "electronic_energy",
+    "enthalpy",
+    "enthalpy_increment_above_zero_point",
+    "entropy",
+    "entropy_times_temperature",
+    "gibbs_free_energy",
+    "heat_capacity_cv",
+    "internal_energy",
+    "pressure",
+    "temperature",
+    "thermal_enthalpy_correction",
+    "thermal_gibbs_correction",
+    "thermal_internal_energy_correction",
+    "zero_point_energy",
+)
+
+#: Written only when a quasi-harmonic entropy method is requested.  A strict
+#: RRHO request never produces them, so a node that asks for one under 'rrho'
+#: is asking for a quantity its own receipt will not carry.
+QUASI_HARMONIC_THERMOCHEMISTRY_QUANTITIES: tuple[str, ...] = (
+    "quasi_harmonic_entropy",
+    "quasi_harmonic_entropy_times_temperature",
+    "quasi_harmonic_gibbs_free_energy",
+    "quasi_harmonic_thermal_gibbs_correction",
+)
+
+#: Names a scientist may reasonably use for one of the canonical IDs.  The
+#: receipt writes the canonical name, so the plan-time contract and the
+#: completion matcher both resolve through this one table.
+THERMOCHEMISTRY_QUANTITY_ALIASES: Mapping[str, str] = {
+    # Gibbs free-energy correction and thermal free-energy correction are the
+    # same G(T)-E_electronic quantity; the typed engine uses the former label.
+    "thermal_free_energy_correction": "thermal_gibbs_correction",
+}
+
+
+def canonical_thermochemistry_quantity(name: str) -> str:
+    """Return the receipt's own ID for a declared thermochemistry quantity."""
+
+    key = str(name).strip().lower()
+    return THERMOCHEMISTRY_QUANTITY_ALIASES.get(key, key)
+
+
+def derivable_thermochemistry_quantities(
+    entropy_method: str | None = "rrho",
+) -> tuple[str, ...]:
+    """Return the quantity IDs a receipt will carry for this entropy method."""
+
+    names = set(DERIVABLE_THERMOCHEMISTRY_QUANTITIES)
+    if str(entropy_method or "rrho").strip().lower() != "rrho":
+        names.update(QUASI_HARMONIC_THERMOCHEMISTRY_QUANTITIES)
+    return tuple(sorted(names))
+
+
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
 _CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
 _SELECTOR_RESULT_UNITS = {

@@ -190,6 +190,7 @@ from chemsmart.analysis.result_quantities import (
     QuantitySelectorV1,
     QuantityValueV1,
     ThermochemistryReceiptV1,
+    canonical_thermochemistry_quantity,
     make_quantity_value,
     quantity_extraction_receipt_from_record,
     thermochemistry_receipt_from_record,
@@ -3049,17 +3050,9 @@ class CommandCompiledToolHostV1:
                         )
                         is not None
                     }
-                thermochemistry_kind_aliases = {
-                    # Gibbs free-energy correction and thermal free-energy
-                    # correction are the same G(T)-E_electronic quantity; the
-                    # typed engine uses the former canonical label.
-                    "thermal_free_energy_correction": (
-                        "thermal_gibbs_correction"
-                    ),
-                }
                 required_kinds = {
-                    thermochemistry_kind_aliases.get(
-                        output.quantity_kind, output.quantity_kind
+                    canonical_thermochemistry_quantity(
+                        output.quantity_kind
                     ): output.unit
                     for output in node.outputs
                 }
