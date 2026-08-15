@@ -916,7 +916,7 @@ def projects():
         click.echo("Project templates are already up to date.")
 
 
-@update.command(name="config")
+@update.command(name="configs")
 @click.option(
     "-s",
     "--server",
@@ -927,7 +927,7 @@ def projects():
         "Repeat to select multiple files."
     ),
 )
-def config(server: tuple[str, ...]):
+def configs(server: tuple[str, ...]):
     """Update existing server YAML program sections from server.yaml."""
 
     try:
@@ -935,7 +935,7 @@ def config(server: tuple[str, ...]):
     except ModuleNotFoundError as exc:
         if exc.name in {"ruamel", "ruamel.yaml"}:
             raise click.ClickException(
-                "ruamel.yaml is required for 'chemsmart update config'.\n"
+                "ruamel.yaml is required for 'chemsmart update configs'.\n"
                 "Install it with `pip install 'ruamel.yaml>=0.18.16'`\n"
                 "or rerun `make env`."
             ) from exc

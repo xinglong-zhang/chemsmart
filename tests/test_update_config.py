@@ -20,7 +20,7 @@ def _write_server_yaml(config_root: Path, name: str, content: str) -> Path:
 def _invoke_update_config(config_root: Path, args=None):
     return CliRunner().invoke(
         update,
-        ["config"] + (args or []),
+        ["configs"] + (args or []),
         env={"CHEMSMART_CONFIG_DIR": str(config_root)},
     )
 

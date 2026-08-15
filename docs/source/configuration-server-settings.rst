@@ -1177,12 +1177,12 @@ updated with either of the following:
 
 .. code:: bash
 
-   chemsmart update config
-   chemsmart update config -s SLURM
-   chemsmart update config -s SLURM -s PBS
+   chemsmart update configs
+   chemsmart update configs -s SLURM
+   chemsmart update configs -s SLURM -s PBS
 
-`chemsmart update config` updates the server configuration files interactively; `chemsmart update config -s SLURM`
-updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update config -s
+`chemsmart update configs` updates the server configuration files interactively; `chemsmart update configs -s SLURM`
+updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update configs -s
 SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and
 `~/.chemsmart/server/PBS.yaml`.
 

@@ -142,7 +142,7 @@ ifeq ($(OS_FAMILY),Windows)
 	@echo Updating chemsmart project templates...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
 	@echo Updating existing chemsmart server configurations...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update config || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
@@ -160,7 +160,7 @@ else
 	@echo Updating chemsmart project templates...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
 	@echo Updating existing chemsmart server configurations...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update config || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
