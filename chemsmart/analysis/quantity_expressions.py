@@ -158,9 +158,16 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "scale, divide and sum"
     ),
     "boltzmann_average": (
-        "Boltzmann-weighted average of a property. Takes the per-state values, "
-        "the state energies and a temperature, in that order, optionally "
-        "followed by the per-state degeneracies"
+        "Boltzmann-weighted **linear** average of a property. Takes the "
+        "per-state values, the state energies and a temperature, in that "
+        "order, optionally followed by the per-state degeneracies. Supply the "
+        "degeneracies whenever states are multiply realizable, exactly as for "
+        "boltzmann_populations. The linear mean is the ensemble value only for "
+        "a property that averages linearly. A quantity reported as the "
+        "magnitude of a vector -- a dipole moment is the common case -- does "
+        "not: its measured ensemble value is the root-mean-square average, so "
+        "average the squares and take the square root instead of averaging the "
+        "magnitudes"
     ),
     "imaginary_mode_count": (
         "how many harmonic modes are imaginary, from one frequency vector, "
