@@ -7299,13 +7299,27 @@ class CommandCompiledToolHostV1:
                 f"future node {planned_node.node_id!r} lacks unique project/environment evidence"
             )
         producer = next(
-            edge.source_node_id
-            for edge in plan.edges
-            if edge.edge_kind == "data"
-            and edge.target_node_id == planned_node.node_id
-            and edge.artifact_class == "geometry_xyz"
-            and edge.consumer_input_id == "filename"
+            (
+                edge.source_node_id
+                for edge in plan.edges
+                if edge.edge_kind == "data"
+                and edge.target_node_id == planned_node.node_id
+                and edge.artifact_class == "geometry_xyz"
+                and edge.consumer_input_id == "filename"
+            ),
+            None,
         )
+        if producer is None:
+            # This node was classified as consuming a producer's geometry, but
+            # the plan carries no such edge for it.  Say so: a bare
+            # StopIteration escapes every caller that expects a contract
+            # failure and leaves the operator with no statement of what is
+            # wrong.
+            raise ContractError(
+                f"future node {planned_node.node_id!r} consumes a produced "
+                "geometry but the plan declares no geometry_xyz data edge "
+                "into its 'filename' input"
+            )
         _producer_invocation, producer_context = (
             self._plan_invocation_for_node(plan=plan, node_id=producer)
         )
