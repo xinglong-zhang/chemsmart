@@ -32,6 +32,8 @@ def _read_yaml(path: Path):
 def test_update_config_updates_selected_files_by_missing_program(
     tmp_path, monkeypatch
 ):
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))
     template = {
         "SERVER": {"TEMPLATE_VALUE": "should-not-be-copied"},
         "FAKE_PROGRAM_A": {"EXEFOLDER": None, "LOCAL_RUN": True},
@@ -90,7 +92,7 @@ def test_update_config_updates_selected_files_by_missing_program(
     unselected_before = unselected.read_text(encoding="utf-8")
 
     prompts = []
-    answers = iter(["/new/fake-a", "/new/fake-b"])
+    answers = iter(["~/path/to/fake-a", "nUlL"])
 
     def prompt_for_program(text, **kwargs):
         prompts.append(text)
@@ -119,28 +121,31 @@ def test_update_config_updates_selected_files_by_missing_program(
     a_data = _read_yaml(a_yaml)
     b_data = _read_yaml(b_yaml)
     c_data = _read_yaml(c_yaml)
+    expanded_fake_a = str(fake_home / "path" / "to" / "fake-a")
     assert a_data["SERVER"] == {"USER_VALUE": "preserved"}
     assert a_data["FAKE_PROGRAM_A"] == {
-        "EXEFOLDER": "/new/fake-a",
+        "EXEFOLDER": expanded_fake_a,
         "LOCAL_RUN": True,
     }
     assert a_data["FAKE_PROGRAM_B"] == {"EXEFOLDER": "/old/a-fake-b"}
     assert a_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/a-fake-c"}
     assert b_data["FAKE_PROGRAM_A"] == {"EXEFOLDER": "/old/b-fake-a"}
     assert b_data["FAKE_PROGRAM_B"] == {
-        "EXEFOLDER": "/new/fake-b",
+        "EXEFOLDER": None,
         "LOCAL_RUN": True,
     }
     assert b_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/b-fake-c"}
     assert c_data["FAKE_PROGRAM_A"] == {
-        "EXEFOLDER": "/new/fake-a",
+        "EXEFOLDER": expanded_fake_a,
         "LOCAL_RUN": True,
     }
     assert c_data["FAKE_PROGRAM_B"] == {
-        "EXEFOLDER": "/new/fake-b",
+        "EXEFOLDER": None,
         "LOCAL_RUN": True,
     }
     assert c_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/c-fake-c"}
+    assert "EXEFOLDER: Null" in b_yaml.read_text(encoding="utf-8")
+    assert "EXEFOLDER: Null" in c_yaml.read_text(encoding="utf-8")
     assert unselected.read_text(encoding="utf-8") == unselected_before
 
 

@@ -24,6 +24,18 @@ create_logger(debug=True, stream=True)
 RESERVED_TOP_LEVEL_FIELDS = {"SERVER"}
 
 
+class _ExplicitYamlNull:
+    """Marker serialized as an explicit, unquoted YAML ``Null`` value."""
+
+
+_EXPLICIT_YAML_NULL = _ExplicitYamlNull()
+
+
+def _represent_explicit_yaml_null(representer, _value):
+    """Represent the interactive null marker as a YAML null scalar."""
+    return representer.represent_scalar("tag:yaml.org,2002:null", "Null")
+
+
 class ConfigUpdateError(Exception):
     """Raised when a config update cannot be planned or written safely."""
 
@@ -509,6 +521,9 @@ class ConfigurationUpdater(Updater):
         from ruamel.yaml import YAML
 
         yaml_parser = YAML()
+        yaml_parser.representer.add_representer(
+            _ExplicitYamlNull, _represent_explicit_yaml_null
+        )
         yaml_parser.preserve_quotes = True
         yaml_parser.indent(mapping=4, sequence=4, offset=2)
         yaml_parser.width = 4096
@@ -607,12 +622,16 @@ class ConfigurationUpdater(Updater):
 
     def _prompt_program_exefolders(
         self, prepared_configs: list[_PreparedConfig]
-    ) -> dict[str, str]:
-        """Collect one optional EXEFOLDER override per missing program."""
+    ) -> dict[str, str | _ExplicitYamlNull]:
+        """Collect one normalized EXEFOLDER override per missing program.
+
+        Case-insensitive ``null`` input becomes an explicit YAML null value;
+        all other non-empty input has its user-home marker expanded.
+        """
         if not self._is_interactive():
             return {}
 
-        overrides: dict[str, str] = {}
+        overrides: dict[str, str | _ExplicitYamlNull] = {}
         for program in self._programs_with_exefolder(prepared_configs):
             folder = click.prompt(
                 f"{program} EXEFOLDER "
@@ -621,13 +640,17 @@ class ConfigurationUpdater(Updater):
                 show_default=False,
             ).strip()
             if folder:
-                overrides[program] = folder
+                overrides[program] = (
+                    _EXPLICIT_YAML_NULL
+                    if folder.casefold() == "null"
+                    else os.path.expanduser(folder)
+                )
         return overrides
 
     def _apply_update_plan(
         self,
         prepared_configs: list[_PreparedConfig],
-        program_exefolders: Mapping[str, str],
+        program_exefolders: Mapping[str, str | _ExplicitYamlNull],
     ) -> list[ConfigUpdateReport]:
         """Apply planned additions and optional paths to prepared configs."""
         reports: list[ConfigUpdateReport] = []
