@@ -145,6 +145,27 @@ def _orca_excitation_energies(output: Any) -> list[float]:
     return [float(item) for item in output.excitation_energies_eV]
 
 
+def _last_spin_square(output: Any, key: str | None = None) -> float:
+    """Return the last printed ``<S^2>``, or say why the run has none.
+
+    A spin-restricted closed-shell calculation never prints an expectation
+    value, because its wavefunction is an eigenfunction of ``S^2`` by
+    construction.  That is a property of the calculation rather than a gap in
+    the parser, so name the reason and point at the state evidence the result
+    does carry instead of surfacing an index error.
+    """
+
+    history = getattr(output, "spin_square_history", None) or ()
+    if not history:
+        raise MissingQuantityError(
+            "this result prints no <S^2> expectation value; a spin-restricted "
+            "closed-shell calculation is an eigenfunction of S^2 by "
+            "construction, so read 'multiplicity' for its electronic state"
+        )
+    entry = history[-1]
+    return float(entry if key is None else entry[key])
+
+
 def _spin_square_target(output: Any) -> float:
     multiplicity = getattr(output, "multiplicity", None)
     if not isinstance(multiplicity, int) or multiplicity <= 0:
@@ -716,15 +737,13 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             "vpt2_zero_point_rovibrational_energy": lambda output: float(
                 output.vpt2_zero_point_rovibrational_energy
             ),
-            "spin_square": lambda output: float(
-                output.spin_square_history[-1]
-            ),
+            "spin_square": _last_spin_square,
             "spin_square_target": _spin_square_target,
             "spin_square_deviation": lambda output: float(
-                output.spin_square_history[-1] - _spin_square_target(output)
+                _last_spin_square(output) - _spin_square_target(output)
             ),
             "effective_multiplicity": lambda output: _effective_multiplicity(
-                float(output.spin_square_history[-1])
+                _last_spin_square(output)
             ),
             "trajectory_frame_count": lambda output: len(
                 _irc_structures(output)
@@ -849,19 +868,19 @@ def _gaussian_accessors() -> dict[str, Callable[[Any], Any]]:
             "dipole_moment_magnitude": lambda output: float(
                 output.all_dipole_moment_magnitudes[-1]
             ),
-            "spin_square": lambda output: float(
-                output.spin_square_history[-1]["before_annihilation"]
+            "spin_square": lambda output: _last_spin_square(
+                output, "before_annihilation"
             ),
             "spin_square_after_annihilation": (
                 _gaussian_spin_square_after_annihilation
             ),
             "spin_square_target": _spin_square_target,
             "spin_square_deviation": lambda output: float(
-                output.spin_square_history[-1]["before_annihilation"]
+                _last_spin_square(output, "before_annihilation")
                 - _spin_square_target(output)
             ),
             "effective_multiplicity": lambda output: _effective_multiplicity(
-                float(output.spin_square_history[-1]["before_annihilation"])
+                _last_spin_square(output, "before_annihilation")
             ),
             "wavefunction_stability_verdict": lambda output: str(
                 output.wavefunction_stability_history[-1]
