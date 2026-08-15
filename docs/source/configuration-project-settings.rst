@@ -8,7 +8,7 @@ Configure project-specific settings for Gaussian, ORCA, xTB, and CREST calculati
  Updating Project Templates
 ****************************
 
-To add project directories and files introduced in newer CHEMSMART templates, run:
+To add project directories and files introduced in newer CHEMSMART version, run:
 
 .. code:: bash
 
