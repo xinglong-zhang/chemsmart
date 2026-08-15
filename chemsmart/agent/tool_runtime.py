@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -225,6 +226,9 @@ from chemsmart.utils.process_observation import (
     observe_process,
 )
 
+
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _CommandContext:
@@ -6549,6 +6553,7 @@ class CommandCompiledToolHostV1:
         node_bindings = []
         environment_bindings = []
         node_reviews: list[WorkflowExecutionNodeReviewV1] = []
+        unbindable_ids: set[str] = set()
         for planned_node in executable_nodes:
             ineligibility = self.execution_review_ineligibility_reason(
                 plan=plan,
@@ -6560,11 +6565,29 @@ class CommandCompiledToolHostV1:
                     f"{planned_node.program}/{planned_node.engine}/"
                     f"{planned_node.stage}: {ineligibility}"
                 )
-            context = self._bounded_node_context(
-                plan=plan,
-                planned_node=planned_node,
-                data_target_ids=data_target_ids,
-            )
+            try:
+                context = self._bounded_node_context(
+                    plan=plan,
+                    planned_node=planned_node,
+                    data_target_ids=data_target_ids,
+                )
+            except ContractError as exc:
+                # The release can run this stage, but its project, capability
+                # or environment evidence does not resolve to exactly one
+                # record -- most often because the plan explored more than one
+                # program and left ambiguous artifacts behind.  That is a
+                # reviewable fact about one node, not a reason to destroy the
+                # whole review: keep the stage in the displayed plan, mark it
+                # non-executable with its reason, and let the human decide on
+                # the stages that did bind.  It is excluded from the approval
+                # and never launched, exactly like a preview-only stage.
+                logger.warning(
+                    "node %s cannot enter execution review: %s",
+                    planned_node.node_id,
+                    exc,
+                )
+                unbindable_ids.add(planned_node.node_id)
+                continue
             environment_receipt_sha256 = (
                 context.engine_binding.environment_receipt_sha256
             )
@@ -6822,6 +6845,12 @@ class CommandCompiledToolHostV1:
                     ),
                 )
             )
+        if not node_reviews:
+            raise ContractError(
+                "no workflow node could be bound to unique project, "
+                "capability and environment evidence, so there is nothing to "
+                "review"
+            )
         review_request_id = (
             str(request_id).strip()
             or "review-" + plan.plan_sha256[:16]
@@ -6849,7 +6878,9 @@ class CommandCompiledToolHostV1:
                 sorted(node_reviews, key=lambda item: item.node_id)
             ),
             stationary_point_policy=self.stationary_point_policy,
-            non_executable_node_ids=tuple(sorted(non_executable_ids)),
+            non_executable_node_ids=tuple(
+                sorted(set(non_executable_ids) | unbindable_ids)
+            ),
         )
 
     def _admit_bounded_workflow(
