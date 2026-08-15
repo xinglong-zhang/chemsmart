@@ -416,7 +416,7 @@ class Thermochemistry:
         return sum(
             1
             for frequency in self.vibrational_frequencies
-            if 0.0 <= frequency < tolerance
+            if -tolerance < frequency < tolerance
         )
 
     @property
@@ -502,11 +502,16 @@ class Thermochemistry:
 
         if self.jobtype == "ts":
             # Valid TS: exactly one genuine imaginary frequency.
-            # Remove it from thermochemistry.
+            # Remove it from thermochemistry.  Any remaining negative is
+            # near-zero noise by construction -- a genuine second imaginary
+            # mode would have made this an invalid TS -- and it still has to be
+            # replaced by the cutoff, because the partition functions take the
+            # logarithm of 1 - exp(-theta/T) and a negative frequency makes
+            # that undefined.
             if len(genuine_imaginary_indices) == 1:
                 reaction_coordinate_index = genuine_imaginary_indices[0]
                 return [
-                    freq
+                    freq_cutoff if freq < 0.0 else freq
                     for i, freq in enumerate(frequencies)
                     if i != reaction_coordinate_index
                 ]
