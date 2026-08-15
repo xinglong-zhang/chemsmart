@@ -28,9 +28,6 @@ class _ExplicitYamlNull:
     """Marker serialized as an explicit, unquoted YAML ``Null`` value."""
 
 
-_EXPLICIT_YAML_NULL = _ExplicitYamlNull()
-
-
 def _represent_explicit_yaml_null(representer, _value):
     """Represent the interactive null marker as a YAML null scalar."""
     return representer.represent_scalar("tag:yaml.org,2002:null", "Null")
@@ -641,7 +638,7 @@ class ConfigurationUpdater(Updater):
             ).strip()
             if folder:
                 overrides[program] = (
-                    _EXPLICIT_YAML_NULL
+                    _ExplicitYamlNull()
                     if folder.casefold() == "null"
                     else os.path.expanduser(folder)
                 )
@@ -659,11 +656,13 @@ class ConfigurationUpdater(Updater):
             for program in prepared.missing_programs:
                 section = copy.deepcopy(prepared.template_data[program])
                 if (
-                    program in program_exefolders
-                    and isinstance(section, MutableMapping)
+                    isinstance(section, MutableMapping)
                     and "EXEFOLDER" in section
                 ):
-                    section["EXEFOLDER"] = program_exefolders[program]
+                    if program in program_exefolders:
+                        section["EXEFOLDER"] = program_exefolders[program]
+                    elif section["EXEFOLDER"] is None:
+                        section["EXEFOLDER"] = _ExplicitYamlNull()
                 prepared.data[program] = section
                 added_programs.append(program)
             reports.append(

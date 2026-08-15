@@ -77,8 +77,6 @@ def test_update_config_updates_selected_files_by_missing_program(
         """
         SERVER:
             USER_VALUE: preserved
-        FAKE_PROGRAM_C:
-            EXEFOLDER: /old/c-fake-c
         """,
     )
     unselected = _write_server_yaml(
@@ -92,7 +90,7 @@ def test_update_config_updates_selected_files_by_missing_program(
     unselected_before = unselected.read_text(encoding="utf-8")
 
     prompts = []
-    answers = iter(["~/path/to/fake-a", "nUlL"])
+    answers = iter(["~/path/to/fake-a", "nUlL", ""])
 
     def prompt_for_program(text, **kwargs):
         prompts.append(text)
@@ -109,9 +107,10 @@ def test_update_config_updates_selected_files_by_missing_program(
     assert "B.yaml:" in result.output
     assert "C.yaml:" in result.output
     assert "unselected.yaml:" not in result.output
-    assert len(prompts) == 2
+    assert len(prompts) == 3
     assert prompts[0].startswith("FAKE_PROGRAM_A EXEFOLDER")
     assert prompts[1].startswith("FAKE_PROGRAM_B EXEFOLDER")
+    assert prompts[2].startswith("FAKE_PROGRAM_C EXEFOLDER")
     assert not any(
         filename in prompt
         for prompt in prompts
@@ -143,9 +142,15 @@ def test_update_config_updates_selected_files_by_missing_program(
         "EXEFOLDER": None,
         "LOCAL_RUN": True,
     }
-    assert c_data["FAKE_PROGRAM_C"] == {"EXEFOLDER": "/old/c-fake-c"}
+    assert c_data["FAKE_PROGRAM_C"] == {
+        "EXEFOLDER": None,
+        "LOCAL_RUN": True,
+    }
     assert "EXEFOLDER: Null" in b_yaml.read_text(encoding="utf-8")
-    assert "EXEFOLDER: Null" in c_yaml.read_text(encoding="utf-8")
+    c_text = c_yaml.read_text(encoding="utf-8")
+    assert c_text.count("EXEFOLDER: Null") == 2
+    assert "&id" not in c_text
+    assert "*id" not in c_text
     assert unselected.read_text(encoding="utf-8") == unselected_before
 
 
