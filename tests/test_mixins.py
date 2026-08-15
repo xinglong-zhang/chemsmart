@@ -1,9 +1,12 @@
 import os
 
+import pytest
+
 from chemsmart.utils.mixins import (
     CRESTFileMixin,
     FileMixin,
     FolderMixin,
+    FolderOutputMixin,
     GaussianFileMixin,
     ORCAFileMixin,
     RegistryMixin,
@@ -299,3 +302,45 @@ class TestFolderMixin:
         )
         assert file2 in log_files
         assert file1 not in log_files
+
+
+class DummyParser:
+    def __init__(self, **attrs):
+        for name, value in attrs.items():
+            setattr(self, name, value)
+
+
+class DummyFolderOutput(FolderOutputMixin):
+    FILE_PARSERS = ("main_out", "secondary_out")
+
+    def __init__(self, main_out=None, secondary_out=None):
+        self.main_out = main_out
+        self.secondary_out = secondary_out
+
+
+class TestFolderOutputMixin:
+    def test_delegates_to_first_parser(self):
+        output = DummyFolderOutput(
+            main_out=DummyParser(total_energy=-123.45),
+            secondary_out=DummyParser(total_energy=-123),
+        )
+        assert output.total_energy == -123.45
+
+    def test_falls_back_to_next_parser(self):
+        output = DummyFolderOutput(
+            main_out=DummyParser(),
+            secondary_out=DummyParser(charge=0),
+        )
+        assert output.charge == 0
+
+    def test_skips_none_parser(self):
+        output = DummyFolderOutput(
+            main_out=None,
+            secondary_out=DummyParser(multiplicity=1),
+        )
+        assert output.multiplicity == 1
+
+    def test_raises_attribute_error_when_not_found(self):
+        output = DummyFolderOutput()
+        with pytest.raises(AttributeError, match="no attribute 'missing'"):
+            _ = output.missing

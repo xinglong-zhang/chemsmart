@@ -1027,44 +1027,53 @@ class TestXTBFolder:
         co2_folder = XTBFolder(xtb_co2_outfolder)
         assert co2_folder.is_xtb_calculation_directory
 
-        assert co2_folder._xtb_out() is not None
-        assert os.path.basename(co2_folder._xtb_out()) == "co2_ohess.out"
+        assert co2_folder.xtb_out_filepath is not None
+        assert os.path.basename(co2_folder.xtb_out_filepath) == "co2_ohess.out"
 
-        assert co2_folder._xtbopt_log() is not None
-        assert os.path.basename(co2_folder._xtbopt_log()) == "xtbopt.log"
+        assert co2_folder.xtbopt_log_filepath is not None
+        assert os.path.basename(co2_folder.xtbopt_log_filepath) == "xtbopt.log"
 
-        assert co2_folder._charges() is not None
-        assert os.path.basename(co2_folder._charges()) == "charges"
+        assert co2_folder.charges_filepath is not None
+        assert os.path.basename(co2_folder.charges_filepath) == "charges"
 
-        assert co2_folder._energy() is not None
-        assert os.path.basename(co2_folder._energy()) == "energy"
+        assert co2_folder.energy_filepath is not None
+        assert os.path.basename(co2_folder.energy_filepath) == "energy"
 
-        assert co2_folder._engrad() is not None
-        assert os.path.basename(co2_folder._engrad()) == "co2.engrad"
+        assert co2_folder.engrad_filepath is not None
+        assert os.path.basename(co2_folder.engrad_filepath) == "co2.engrad"
 
-        assert co2_folder._g98_out() is not None
-        assert os.path.basename(co2_folder._g98_out()) == "g98.out"
+        assert co2_folder.g98_out_filepath is not None
+        assert os.path.basename(co2_folder.g98_out_filepath) == "g98.out"
 
-        assert co2_folder._gradient() is not None
-        assert os.path.basename(co2_folder._gradient()) == "gradient"
+        assert co2_folder.gradient_filepath is not None
+        assert os.path.basename(co2_folder.gradient_filepath) == "gradient"
 
-        assert co2_folder._hessian() is not None
-        assert os.path.basename(co2_folder._hessian()) == "hessian"
+        assert co2_folder.hessian_filepath is not None
+        assert os.path.basename(co2_folder.hessian_filepath) == "hessian"
 
-        assert co2_folder._vibspectrum() is not None
-        assert os.path.basename(co2_folder._vibspectrum()) == "vibspectrum"
+        assert co2_folder.vibspectrum_filepath is not None
+        assert (
+            os.path.basename(co2_folder.vibspectrum_filepath) == "vibspectrum"
+        )
 
-        assert co2_folder._wbo() is not None
-        assert os.path.basename(co2_folder._wbo()) == "wbo"
+        assert co2_folder.wbo_filepath is not None
+        assert os.path.basename(co2_folder.wbo_filepath) == "wbo"
 
-        assert co2_folder._input_geometry() is not None
-        assert os.path.basename(co2_folder._input_geometry()) == "co2.xyz"
+        assert co2_folder.input_geometry_filepath is not None
+        assert (
+            os.path.basename(co2_folder.input_geometry_filepath) == "co2.xyz"
+        )
 
-        assert co2_folder._xtbopt_geometry() is not None
-        assert os.path.basename(co2_folder._xtbopt_geometry()) == "xtbopt.xyz"
+        assert co2_folder.xtbopt_geometry_filepath is not None
+        assert (
+            os.path.basename(co2_folder.xtbopt_geometry_filepath)
+            == "xtbopt.xyz"
+        )
 
-        assert co2_folder._xtbtopo_mol() is not None
-        assert os.path.basename(co2_folder._xtbtopo_mol()) == "xtbtopo.mol"
+        assert co2_folder.xtbtopo_mol_filepath is not None
+        assert (
+            os.path.basename(co2_folder.xtbtopo_mol_filepath) == "xtbtopo.mol"
+        )
 
     def test_folder_cyclopentadienyl_anion(
         self, xtb_cyclopentadienyl_anion_outfolder
@@ -1076,42 +1085,46 @@ class TestXTBFolder:
         )
         assert cyclopentadienyl_anion_folder.is_xtb_calculation_directory
 
-        assert cyclopentadienyl_anion_folder._xtb_out() is not None
+        assert cyclopentadienyl_anion_folder.xtb_out_filepath is not None
         assert (
-            os.path.basename(cyclopentadienyl_anion_folder._xtb_out())
+            os.path.basename(cyclopentadienyl_anion_folder.xtb_out_filepath)
             == "cyclopentadienyl_anion_opt.out"
         )
 
-        assert cyclopentadienyl_anion_folder._xtbopt_log() is not None
-        assert cyclopentadienyl_anion_folder._charges() is not None
+        assert cyclopentadienyl_anion_folder.xtbopt_log_filepath is not None
+        assert cyclopentadienyl_anion_folder.charges_filepath is not None
         assert (
-            cyclopentadienyl_anion_folder._energy() is None
+            cyclopentadienyl_anion_folder.energy_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            cyclopentadienyl_anion_folder._engrad() is None
+            cyclopentadienyl_anion_folder.engrad_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            cyclopentadienyl_anion_folder._g98_out() is None
+            cyclopentadienyl_anion_folder.g98_out_filepath is None
         )  # --hess calculation is not enabled
         assert (
-            cyclopentadienyl_anion_folder._gradient() is None
+            cyclopentadienyl_anion_folder.gradient_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            cyclopentadienyl_anion_folder._hessian() is None
+            cyclopentadienyl_anion_folder.hessian_filepath is None
         )  # --hess calculation is not enabled
         assert (
-            cyclopentadienyl_anion_folder._vibspectrum() is None
+            cyclopentadienyl_anion_folder.vibspectrum_filepath is None
         )  # --hess calculation is not enabled
-        assert cyclopentadienyl_anion_folder._wbo() is not None
+        assert cyclopentadienyl_anion_folder.wbo_filepath is not None
         assert (
-            os.path.basename(cyclopentadienyl_anion_folder._input_geometry())
+            os.path.basename(
+                cyclopentadienyl_anion_folder.input_geometry_filepath
+            )
             == "cyclopentadienyl_anion.coord"
         )
         assert (
-            os.path.basename(cyclopentadienyl_anion_folder._xtbopt_geometry())
+            os.path.basename(
+                cyclopentadienyl_anion_folder.xtbopt_geometry_filepath
+            )
             == "xtbopt.coord"
         )
-        assert cyclopentadienyl_anion_folder._xtbtopo_mol() is not None
+        assert cyclopentadienyl_anion_folder.xtbtopo_mol_filepath is not None
 
     def test_folder_p_benzyne_sp(self, xtb_p_benzyne_sp_outfolder):
         """Test XTBFolder with p-benzyne sp calculation output."""
@@ -1119,40 +1132,40 @@ class TestXTBFolder:
         p_benzyne_sp_folder = XTBFolder(xtb_p_benzyne_sp_outfolder)
         assert p_benzyne_sp_folder.is_xtb_calculation_directory
 
-        assert p_benzyne_sp_folder._xtb_out() is not None
+        assert p_benzyne_sp_folder.xtb_out_filepath is not None
         assert (
-            os.path.basename(p_benzyne_sp_folder._xtb_out())
+            os.path.basename(p_benzyne_sp_folder.xtb_out_filepath)
             == "p_benzyne_sp_alpb_toluene.out"
         )
 
         assert (
-            p_benzyne_sp_folder._xtbopt_log() is None
+            p_benzyne_sp_folder.xtbopt_log_filepath is None
         )  # no optimization performed
-        assert p_benzyne_sp_folder._charges() is not None
+        assert p_benzyne_sp_folder.charges_filepath is not None
         assert (
-            p_benzyne_sp_folder._energy() is None
+            p_benzyne_sp_folder.energy_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            p_benzyne_sp_folder._engrad() is None
+            p_benzyne_sp_folder.engrad_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            p_benzyne_sp_folder._g98_out() is None
+            p_benzyne_sp_folder.g98_out_filepath is None
         )  # --hess calculation is not enabled
         assert (
-            p_benzyne_sp_folder._gradient() is None
+            p_benzyne_sp_folder.gradient_filepath is None
         )  # --grad calculation is not enabled
         assert (
-            p_benzyne_sp_folder._hessian() is None
+            p_benzyne_sp_folder.hessian_filepath is None
         )  # --hess calculation is not enabled
         assert (
-            p_benzyne_sp_folder._vibspectrum() is None
+            p_benzyne_sp_folder.vibspectrum_filepath is None
         )  # --hess calculation is not enabled
-        assert p_benzyne_sp_folder._wbo() is not None
+        assert p_benzyne_sp_folder.wbo_filepath is not None
         assert (
-            p_benzyne_sp_folder._xtbopt_geometry() is None
+            p_benzyne_sp_folder.xtbopt_geometry_filepath is None
         )  # no optimization performed
-        assert p_benzyne_sp_folder._input_geometry() is not None
-        assert p_benzyne_sp_folder._xtbtopo_mol() is not None
+        assert p_benzyne_sp_folder.input_geometry_filepath is not None
+        assert p_benzyne_sp_folder.xtbtopo_mol_filepath is not None
 
 
 class TestXTBOutput:

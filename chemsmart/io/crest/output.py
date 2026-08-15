@@ -5,11 +5,12 @@ from chemsmart.io.crest.file import CRESTEnergiesFile, CRESTMainOut
 from chemsmart.io.crest.folder import CRESTFolder
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
+from chemsmart.utils.mixins import FolderOutputMixin
 
 logger = logging.getLogger(__name__)
 
 
-class CRESTOutput:
+class CRESTOutput(FolderOutputMixin):
     """
     Integrates and exposes all relevant data from a CREST calculation directory.
 
@@ -22,50 +23,26 @@ class CRESTOutput:
             CRESTFolder instance.
     """
 
+    FILE_PARSERS = (
+        "main_out",
+        "energies_file",
+    )
+
     def __init__(self, folder):
         self.folder = (
             folder if isinstance(folder, CRESTFolder) else CRESTFolder(folder)
         )
 
-    def __getattr__(self, name):
-        """
-        Delegate attribute access to internal file parsers or cached properties.
-
-        This allows CRESTOutput to transparently expose all properties and methods
-        from CRESTMainOut, CRESTEnergiesFile, and any future parsers.
-        """
-        # List of internal parsers to search, in order of priority
-        file_parsers = [
-            "main_out",
-            "energies_file",
-        ]
-        # Try to get from each parser in order
-        for file_parser in file_parsers:
-            try:
-                parser = object.__getattribute__(self, file_parser)
-                if parser is not None:
-                    try:
-                        return getattr(parser, name)
-                    except AttributeError:
-                        # This parser doesn't have the attribute, try next one
-                        continue
-            except Exception as e:
-                logger.debug(f"Failed to access parser {file_parser}: {e}")
-                continue
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
-
     @cached_property
     def main_out(self):
         """Main CREST output file parser (CRESTMainOut)."""
-        path = self.folder._crest_out()
+        path = self.folder.crest_out_filepath
         return CRESTMainOut(path) if path else None
 
     @cached_property
     def energies_file(self):
         """Energies file parser (CRESTEnergiesFile)."""
-        path = self.folder._energies()
+        path = self.folder.energies_filepath
         return CRESTEnergiesFile(path) if path else None
 
     @property
@@ -82,7 +59,7 @@ class CRESTOutput:
         Returns:
             list[Molecule]: All conformers sorted by energy, or empty list.
         """
-        path = self.folder._conformers_xyz()
+        path = self.folder.conformers_xyz_filepath
         if path is None:
             return []
         try:
@@ -108,7 +85,7 @@ class CRESTOutput:
             list[Molecule]: All rotamers with energies from the xyz comment
                 lines, or empty list.
         """
-        path = self.folder._rotamers_xyz()
+        path = self.folder.rotamers_xyz_filepath
         if path is None:
             return []
         try:
@@ -130,7 +107,7 @@ class CRESTOutput:
         Returns:
             Molecule or None: The best conformer, or None if unavailable.
         """
-        path = self.folder._best_xyz()
+        path = self.folder.best_xyz_filepath
         if path is None:
             if self.conformers:
                 return self.conformers[0]
