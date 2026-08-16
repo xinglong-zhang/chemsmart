@@ -173,7 +173,16 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "how many harmonic modes are imaginary, from one frequency vector, "
         "optionally followed by a frequency cutoff below which a near-zero "
         "mode is ignored. Owns the sign convention: a minimum has zero, a "
-        "transition state exactly one. Do not rebuild it from comparisons"
+        "transition state exactly one. Do not rebuild it from comparisons. "
+        "The cutoff defaults to zero, so every negative counts; ChemSmart's "
+        "thermochemistry instead treats a mode within 20 cm^-1 of zero as "
+        "numerical noise in a translation or rotation rather than a reaction "
+        "coordinate. A floppy torsion landing at, say, -12 cm^-1 therefore "
+        "counts as imaginary here while the same result derives "
+        "thermochemistry as a minimum. Pass 20 cm^-1 to ask the question the "
+        "thermochemistry answers, or leave the default to ask the strict "
+        "one -- but say which you asked, because the two disagree exactly "
+        "where a structure is nearly, not quite, relaxed"
     ),
     "harmonic_zero_point_energy": (
         "harmonic zero-point vibrational energy from one frequency vector in "
