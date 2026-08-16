@@ -1194,13 +1194,17 @@ def _semantic_role_identifier() -> dict:
     return {
         **identifier,
         "description": (
-            "Which occurrence this input is, when the same named source "
-            "quantity is supplied more than once in one expression: for "
-            "example 'anti' and 'gauche' for two conformers, or 'reactant' "
-            "and 'product' for a difference. Omit it when a source quantity "
-            "appears only once. When it appears more than once, give every "
-            "occurrence its own distinct role, or they collapse onto one and "
-            "the expression is refused. " + identifier["description"]
+            "Which occurrence this input is. Repetition is judged on the "
+            "quantity_id inside the producing receipt, not on your input_id: "
+            "four thermochemistry receipts each yield a quantity named "
+            "'gibbs_free_energy', so drawing all four into one expression "
+            "repeats that name four times however distinctly you alias them. "
+            "Whenever several inputs name the same quantity_id, give each its "
+            "own role -- 'reactant' and 'product' for a difference, 'anti' "
+            "and 'gauche' for two conformers, one per species for a set. "
+            "Omit it only when a quantity_id is drawn once. Occurrences left "
+            "without distinct roles collapse onto one and the expression is "
+            "refused. " + identifier["description"]
         ),
     }
 
