@@ -8681,8 +8681,28 @@ class CommandCompiledToolHostV1:
                 if quantity.quantity_id == quantity_id
             )
             if len(matches) != 1:
+                # Absence and ambiguity are different faults with different
+                # repairs, and one message for both names neither.  Say which
+                # it is, and for an absent quantity name what the receipt does
+                # carry, so the reason does not have to be guessed from the
+                # shape of the failure.
+                carried = ", ".join(
+                    sorted(
+                        {
+                            quantity.quantity_id
+                            for quantity in getattr(receipt, collection)
+                        }
+                    )
+                )
+                if not matches:
+                    raise ContractError(
+                        f"{operation} input {quantity_id!r} is not in this "
+                        f"{source_kind} receipt, which carries: {carried}"
+                    )
                 raise ContractError(
-                    f"{operation} input is absent or ambiguous in its receipt"
+                    f"{operation} input {quantity_id!r} appears "
+                    f"{len(matches)} times in this {source_kind} receipt, so "
+                    "the receipt alone cannot say which one is meant"
                 )
             return source_kind, receipt, matches[0]
         raise ContractError(f"{operation} references an unknown receipt")
