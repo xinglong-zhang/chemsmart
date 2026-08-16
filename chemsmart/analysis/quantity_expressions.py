@@ -925,19 +925,24 @@ def quantity_expression_semantic_signature(
     for quantity in request.inputs:
         role_matches = _SEMANTIC_ROLE_REF.findall(quantity.evidence_ref)
         source_quantity_id = source_quantity_ids[quantity.quantity_id]
+        # A source quantity drawn once names its own role, which keeps the
+        # signature readable.  Once the same source name arrives more than
+        # once it can no longer identify anything, so a declared role decides,
+        # and failing that the input's own id does: it is already required to
+        # be unique within the expression, so it is a role by construction and
+        # can never be ambiguous.
+        #
+        # Falling back to the shared source name instead, as this did, made
+        # the collision automatic: comparing two structures repeats a quantity
+        # name by definition, so any session that did not hand-author a role
+        # for every occurrence was refused.  Three cycles of explaining that
+        # requirement each halved the failure without clearing it.  The host
+        # can derive what it was asking the model to supply.
         semantic_role = (
             source_quantity_id
             if source_quantity_id
             and source_quantity_counts[source_quantity_id] == 1
-            else (
-                role_matches[-1]
-                if role_matches
-                else (
-                    source_quantity_id
-                    if source_quantity_id
-                    else quantity.quantity_id
-                )
-            )
+            else (role_matches[-1] if role_matches else quantity.quantity_id)
         )
         owner = role_owners.setdefault(semantic_role, quantity.quantity_id)
         if owner != quantity.quantity_id:
