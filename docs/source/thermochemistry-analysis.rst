@@ -148,6 +148,29 @@ Options
       -  bool
       -  Skip or rerun completed jobs
 
+Near-zero frequencies
+=====================
+
+A Hessian's six translational and rotational modes come out numerically near zero rather than exactly zero, and a floppy
+torsion can push one of them slightly below it. CHEMSMART treats a mode within **20 cm-1 of zero** as that numerical
+noise rather than as a reaction coordinate, so a structure whose only negative frequency is, say, -12 cm-1 is accepted
+as a minimum and its thermochemistry is derived. A genuine saddle point has an imaginary mode of hundreds of
+wavenumbers and is unaffected. The same convention is what xTB applies when it reports such a structure as having no
+imaginary modes.
+
+Two consequences are worth knowing:
+
+- ``-i, --check-imaginary-frequencies`` refuses a minimum that carries a genuine imaginary mode beyond that threshold,
+  not one that merely dips a few wavenumbers below zero.
+- A structure with a small negative mode is reported as a minimum here, while a strict count of negative frequencies
+  would call it imaginary. Both readings are defensible; they answer different questions, and they part company exactly
+  where a structure is nearly, but not quite, relaxed. When comparing against a count from another tool, check which
+  convention that tool used.
+
+The threshold is a property of the analysis rather than of any one program, so it applies identically to Gaussian,
+ORCA, and xTB results.
+
+
 Examples
 ========
 
