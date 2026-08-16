@@ -1629,6 +1629,15 @@ class TestGaussianpKaJobSettings:
         assert isinstance(job, GaussianpKaJob)
         assert job.TYPE == "g16pka"
         assert job.label == "test_pka"
+        from chemsmart.jobs.gaussian.job import GaussianJob
+
+        assert isinstance(job, GaussianJob)
+        assert [phase.name for phase in job.phases] == [
+            "Opt",
+            "Ref Opt",
+            "SP",
+            "Ref SP",
+        ]
 
     def test_init_invalid_settings_type(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch

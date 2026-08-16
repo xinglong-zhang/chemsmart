@@ -7,6 +7,7 @@ including geometry optimizations, transition state searches, IRC calculations,
 single point calculations, and constrained optimizations.
 """
 
+from .fukui import fukui
 from .inp import inp
 from .irc import irc
 from .modred import modred
@@ -22,6 +23,7 @@ from .singlepoint import sp
 from .ts import ts
 
 __all__ = [
+    "fukui",
     "inp",
     "irc",
     "modred",

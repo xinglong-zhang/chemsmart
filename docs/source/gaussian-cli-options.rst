@@ -378,6 +378,8 @@ Electronic Structure Properties
       -  Time-dependent DFT calculations
    -  -  ``wbi``
       -  Wiberg Bond Index analysis
+   -  -  ``fukui``
+      -  Fukui charge-state calculations (N / N±1); analyze with ``chemsmart run fukui``
 
 Other Jobs
 ==========

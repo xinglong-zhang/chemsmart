@@ -83,6 +83,7 @@ class GaussianJobRunner(JobRunner):
         "g16ts",
         "g16uvvis",
         "g16wbi",
+        "g16fukui",
         "g16",
         "g16com",
         "g16link",

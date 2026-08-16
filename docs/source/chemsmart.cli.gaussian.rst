@@ -168,6 +168,15 @@
    :undoc-members:
    :show-inheritance:
 
+*************************************
+ chemsmart.cli.gaussian.fukui module
+*************************************
+
+.. automodule:: chemsmart.cli.gaussian.fukui
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 *****************
  Module contents
 *****************

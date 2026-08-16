@@ -10,19 +10,16 @@ Using the same level of theory ensures proper error cancellation for
 solvation free energy calculations.
 """
 
-import logging
 import os
 
+from chemsmart.jobs.chain import ChainMixin, JobPhase
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
-from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
-
-logger = logging.getLogger(__name__)
 
 
-class ORCApKaJob(ORCAJob):
+class ORCApKaJob(ChainMixin, ORCAJob):
     """
     ORCA job class for pKa calculations using the dual-level proton exchange cycle.
 
@@ -104,6 +101,7 @@ class ORCApKaJob(ORCAJob):
         self._sp_jobs = None
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
+        self.phases = self._build_phases()
 
     # ------------------------------------------------------------------
     # Basename helpers for label derivation
@@ -476,130 +474,52 @@ class ORCApKaJob(ORCAJob):
     # Execution
     # ------------------------------------------------------------------
 
-    def _run_opt_jobs(self):
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.opt_jobs,
-            stop_on_incomplete=False,
-            logger_obj=logger,
-            phase_label="opt",
-        )
-
-    def _run_ref_opt_jobs(self):
-        if not self.has_reference_jobs:
-            return
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=self.ref_opt_jobs,
-            stop_on_incomplete=False,
-            logger_obj=logger,
-            phase_label="ref opt",
-        )
-
-    def _run_sp_jobs(self):
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=None,
-            jobs_factory=lambda: self.sp_jobs,
-            stop_on_incomplete=True,
-            before_run=lambda: setattr(self, "_sp_jobs", None),
-            logger_obj=logger,
-            phase_label="sp",
-        )
-
-    def _run_ref_sp_jobs(self):
-        if not self.has_reference_jobs:
-            return
-        run_phase_jobs(
-            parent_runner=self.jobrunner,
-            jobs=None,
-            jobs_factory=lambda: self.ref_sp_jobs,
-            stop_on_incomplete=True,
-            before_run=lambda: setattr(self, "_ref_sp_jobs", None),
-            logger_obj=logger,
-            phase_label="ref sp",
-        )
-
-    def _make_sp_job(self, opt_job, fallback_molecule, sp_settings, sp_label):
-        """Create SP job using optimized geometry if available."""
-        out = opt_job._output()
-        if out is not None and out.normal_termination is True:
-            mol = out.molecule
-        else:
-            mol = fallback_molecule
-
-        sp_job = ORCASinglePointJob(
-            molecule=mol,
-            settings=sp_settings,
-            label=sp_label,
-            jobrunner=self.jobrunner,
-            skip_completed=self.skip_completed,
-        )
-        return sp_job
-
-    def _run(self):
-        self._run_opt_jobs()
-
-        opt_transition = decide_phase_transition(
-            phase_name="Opt",
-            require_complete=True,
-            is_complete=all(j.is_complete() for j in self.opt_jobs),
-            stop_message="Opt jobs incomplete, halting serial execution.",
-        )
-        if not opt_transition.proceed:
-            logger.info(opt_transition.message)
-            return
-
-        if self.has_reference_jobs:
-            self._run_ref_opt_jobs()
-            ref_opt_transition = decide_phase_transition(
-                phase_name="Ref Opt",
+    def _build_phases(self):
+        """Return ordered opt and solution-phase SP phases for the pKa cycle."""
+        return [
+            JobPhase(
+                name="Opt",
+                jobs_factory=lambda: self.opt_jobs,
+                stop_on_incomplete=False,
                 require_complete=True,
-                is_complete=all(j.is_complete() for j in self.ref_opt_jobs),
-                stop_message="Ref Opt jobs incomplete, halting serial execution.",
-            )
-            if not ref_opt_transition.proceed:
-                logger.info(ref_opt_transition.message)
-                return
+                stop_message="Opt jobs incomplete, halting serial execution.",
+            ),
+            JobPhase(
+                name="Ref Opt",
+                jobs_factory=lambda: self.ref_opt_jobs,
+                skip_if=lambda: not self.has_reference_jobs,
+                stop_on_incomplete=False,
+                require_complete=True,
+                stop_message=(
+                    "Ref Opt jobs incomplete, halting serial execution."
+                ),
+            ),
+            JobPhase(
+                name="SP",
+                jobs_factory=lambda: self.sp_jobs,
+                stop_on_incomplete=True,
+                require_complete=True,
+                before_run=self._reset_sp_jobs,
+                stop_message="SP jobs incomplete, halting serial execution.",
+            ),
+            JobPhase(
+                name="Ref SP",
+                jobs_factory=lambda: self.ref_sp_jobs,
+                skip_if=lambda: not self.has_reference_jobs,
+                stop_on_incomplete=True,
+                require_complete=True,
+                before_run=self._reset_ref_sp_jobs,
+                stop_message=(
+                    "Ref SP jobs incomplete, halting serial execution."
+                ),
+            ),
+        ]
 
-        self._run_sp_jobs()
+    def _reset_sp_jobs(self):
+        self._sp_jobs = None
 
-        if self.sp_jobs is None:
-            # Should have been created
-            return
-
-        sp_transition = decide_phase_transition(
-            phase_name="SP",
-            require_complete=True,
-            is_complete=all(j.is_complete() for j in self.sp_jobs),
-            stop_message="SP jobs incomplete, halting serial execution.",
-        )
-        if not sp_transition.proceed:
-            logger.info(sp_transition.message)
-            return
-
-        if self.has_reference_jobs:
-            self._run_ref_sp_jobs()
-
-    # ------------------------------------------------------------------
-    # Completion checks
-    # ------------------------------------------------------------------
-
-    def is_complete(self):
-        if not all(j.is_complete() for j in self.opt_jobs):
-            return False
-        if self.sp_jobs is None or not all(
-            j.is_complete() for j in self.sp_jobs
-        ):
-            return False
-        if self.has_reference_jobs:
-            if not all(j.is_complete() for j in self.ref_opt_jobs):
-                return False
-            if self.ref_sp_jobs is None or not all(
-                j.is_complete() for j in self.ref_sp_jobs
-            ):
-                return False
-        return True
+    def _reset_ref_sp_jobs(self):
+        self._ref_sp_jobs = None
 
     # ------------------------------------------------------------------
     # Output accessors

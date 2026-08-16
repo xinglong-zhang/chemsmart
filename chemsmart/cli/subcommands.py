@@ -1,6 +1,7 @@
 from chemsmart.cli.convert import convert
 from chemsmart.cli.crest import crest
 from chemsmart.cli.database import database
+from chemsmart.cli.fukui import fukui
 from chemsmart.cli.gaussian import gaussian
 from chemsmart.cli.grouper import grouper
 from chemsmart.cli.iterate import iterate
@@ -19,6 +20,7 @@ subcommands = [
     orca,
     xtb,
     pka,
+    fukui,
     mol,
     nciplot,
     thermochemistry,
