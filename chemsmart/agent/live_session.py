@@ -227,6 +227,12 @@ class _LoggedResultObservation:
     scientific_validation_state: str
     provenance_status: str = "workspace_exact_validated_native_result"
     provenance_limitations: tuple[str, ...] = ()
+    #: The dispersion correction the run actually applied, when the native
+    #: output names one.  A functional and its dispersion correction are not
+    #: the same method, and for some observables the correction is the larger
+    #: part of the answer, so reporting only the functional understates what
+    #: was run rather than merely abbreviating it.
+    dispersion: str | None = None
 
     def public_record(self) -> dict[str, Any]:
         return {
@@ -238,6 +244,7 @@ class _LoggedResultObservation:
             "jobtype": self.jobtype,
             "requested_method": self.method,
             "applied_method": self.method,
+            "dispersion": self.dispersion,
             "basis": self.basis,
             "engine": self.engine,
             "charge": self.charge,
@@ -1248,6 +1255,7 @@ def _scan_orca_result_artifacts(
             positions = molecule.positions
             method = str(output.method or "").strip().lower()
             basis = str(output.basis or "").strip().lower()
+            dispersion = str(output.dispersion or "").strip().lower()
             semiempirical = str(output.semiempirical or "").strip().lower()
             jobtype = str(output.jobtype or "").strip().lower()
             charge = output.charge
@@ -1295,6 +1303,7 @@ def _scan_orca_result_artifacts(
                 jobtype=jobtype,
                 method=method,
                 basis=basis or None,
+                dispersion=dispersion or None,
                 engine="cpu",
                 charge=charge,
                 multiplicity=multiplicity,
