@@ -18,6 +18,7 @@ import hashlib
 import inspect
 import json
 import math
+import logging
 import os
 import re
 import shutil
@@ -194,6 +195,7 @@ def _resolve_pyscf_interpreter() -> Path:
 
 
 _PYSCF_INTERPRETER = _resolve_pyscf_interpreter()
+logger = logging.getLogger(__name__)
 _PRIVATE_ROOT_NAME = ".chemsmart-agent"
 
 
