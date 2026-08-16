@@ -808,23 +808,38 @@ def run_live_agent_session(
         # is rather than losing the transcript to an unhandled refusal.
         and host.bounded_review_is_materialized()
     ):
-        review = host.build_execution_review(workspace=workspace_path)
-        prepared_execution = review
-        if review_file is not None:
-            write_workflow_execution_review(review, review_file)
-        execution_review_record = {
-            "schema_version": "chemsmart.public-workflow-execution-review.v1",
-            "status": review.status,
-            "workflow_id": review.scientific_plan.workflow_id,
-            "plan_sha256": review.scientific_plan.plan_sha256,
-            "materialized_workflow_sha256": (
-                review.materialized_workflow.materialized_sha256
-            ),
-            "resource_sha256": review.execution_resources.resource_sha256,
-            "review_sha256": review.review_sha256,
-            "non_executable_node_ids": review.non_executable_node_ids,
-            "next_action": "review the displayed ChemSmart workflow and approve it explicitly",
-        }
+        try:
+            review = host.build_execution_review(workspace=workspace_path)
+        except ContractError as exc:
+            # The refusal itself is correct -- a plan that exceeds the engine
+            # budget, or reaches a stage this release cannot execute, must not
+            # become an approvable packet.  Losing the whole session to it is
+            # not: the model has planned, compiled and previewed real work, and
+            # an operator who sees only a traceback cannot tell whether to
+            # widen the envelope or narrow the plan.  Record the reason and let
+            # the existing preview-only status carry it.
+            logger.warning("execution review refused: %s", exc)
+            execution_ineligible_nodes = execution_ineligible_nodes + (
+                f"workflow ({latest_calculation_plan.workflow_id}: {exc})",
+            )
+            review = None
+        if review is not None:
+            prepared_execution = review
+            if review_file is not None:
+                write_workflow_execution_review(review, review_file)
+            execution_review_record = {
+                "schema_version": "chemsmart.public-workflow-execution-review.v1",
+                "status": review.status,
+                "workflow_id": review.scientific_plan.workflow_id,
+                "plan_sha256": review.scientific_plan.plan_sha256,
+                "materialized_workflow_sha256": (
+                    review.materialized_workflow.materialized_sha256
+                ),
+                "resource_sha256": review.execution_resources.resource_sha256,
+                "review_sha256": review.review_sha256,
+                "non_executable_node_ids": review.non_executable_node_ids,
+                "next_action": "review the displayed ChemSmart workflow and approve it explicitly",
+            }
 
     execution_status = (
         "review_packet_ready"
