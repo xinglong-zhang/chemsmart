@@ -621,7 +621,7 @@ def build_command_compiled_tool_surface(
                         "type": "object",
                         "properties": {
                             "input_id": _public_identifier(),
-                            "semantic_role": _public_identifier(),
+                            "semantic_role": _semantic_role_identifier(),
                             "receipt_sha256": digest,
                             "quantity_id": _public_identifier(),
                         },
@@ -1170,7 +1170,37 @@ def _public_identifier() -> dict:
         "pattern": "^[a-z][a-z0-9_.-]*$",
         "description": (
             "Lower-case public identifier; use dots, dashes, or underscores "
-            "instead of spaces, parentheses, hashes, or placeholder syntax."
+            "instead of spaces, parentheses, hashes, or placeholder syntax. "
+            "It must begin with a letter, so a name taken from a compound "
+            "whose locants come first needs a leading word: "
+            "'dfe-12-rotamers', not '12-difluoroethane'."
+        ),
+    }
+
+
+def _semantic_role_identifier() -> dict:
+    """Which occurrence of a repeated source quantity this input is.
+
+    An expression identifies its inputs by the quantity they came from.  When
+    the same named quantity arrives twice -- the two conformers of a
+    population, the reactant and product of a difference, the two states of a
+    gap -- that name no longer distinguishes them, and without a role the two
+    occupy one slot and the expression is refused.  Comparing two structures
+    is the commonest thing asked of this tool chain, so say so here rather
+    than only in the refusal.
+    """
+
+    identifier = _public_identifier()
+    return {
+        **identifier,
+        "description": (
+            "Which occurrence this input is, when the same named source "
+            "quantity is supplied more than once in one expression: for "
+            "example 'anti' and 'gauche' for two conformers, or 'reactant' "
+            "and 'product' for a difference. Omit it when a source quantity "
+            "appears only once. When it appears more than once, give every "
+            "occurrence its own distinct role, or they collapse onto one and "
+            "the expression is refused. " + identifier["description"]
         ),
     }
 
