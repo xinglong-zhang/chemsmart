@@ -1173,7 +1173,11 @@ def _public_identifier() -> dict:
             "instead of spaces, parentheses, hashes, or placeholder syntax. "
             "It must begin with a letter, so a name taken from a compound "
             "whose locants come first needs a leading word: "
-            "'dfe-12-rotamers', not '12-difluoroethane'."
+            "'dfe-12-rotamers', not '12-difluoroethane'. Chemical notation is "
+            "mixed case and this field is not: unit symbols and quantity "
+            "names must be folded down, so write 'gap-adiab-ev' not "
+            "'gap-adiab-eV', 'delta-e' not 'dE', and 'ddg-compose' not "
+            "'compose-ddG'. Fold the case; do not drop the letters."
         ),
     }
 
