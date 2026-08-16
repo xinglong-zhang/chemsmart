@@ -6425,6 +6425,31 @@ class CommandCompiledToolHostV1:
                 )
         return ""
 
+    def bounded_review_is_materialized(self) -> bool:
+        """Whether the plan a review would use has been materialised.
+
+        ``build_execution_review`` refuses an unmaterialised plan, which is
+        the right contract at the wrong moment.  A session that inspected
+        capability, bound an environment, rendered, promoted and validated
+        project YAML, planned a workflow and then ran out of turns has
+        produced real evidence a human should still see; raising instead of
+        reporting discards the whole record, transcript included.  Asking
+        first lets the caller report the session it actually got, using the
+        preview-only status the result vocabulary already carries.
+
+        This answers exactly the question the review builder would fail on,
+        so a deliberate refusal -- an unsupported node, an exceeded engine
+        budget -- still surfaces as before.
+        """
+
+        plans = tuple(self.scientific_workflow_plans.values())
+        if not plans:
+            return False
+        return any(
+            workflow.plan_sha256 == plans[-1].plan_sha256
+            for workflow in self.materialized_workflows.values()
+        )
+
     def build_execution_review(
         self,
         *,

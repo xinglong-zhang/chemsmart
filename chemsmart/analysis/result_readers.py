@@ -1176,6 +1176,91 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         parser_id="chemsmart.io.gaussian.output.Gaussian16Output",
         open_output=_gaussian_output,
         accessors=_gaussian_accessors(),
+        # Coverage is ``parser_supported_when_emitted``, as for ORCA: it
+        # states what a job of this type can be asked for, while route and
+        # settings still decide what Gaussian prints.  The spin family, the
+        # dipole and the wavefunction-stability pair are settings-dependent
+        # rather than job-dependent -- an unrestricted reference or a
+        # stability check can accompany any job -- so they belong to every
+        # declaration.  Frequencies and the thermochemistry derived from
+        # them appear where a frequency step runs, and the excited-state
+        # family where a TD route does.  Job types with no grounding
+        # artifact stay undeclared rather than guessed.
+        jobtype_selectors=(
+            (
+                "opt",
+                (
+                    "charge",
+                    "connectivity",
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "effective_multiplicity",
+                    "energies",
+                    "energy",
+                    "gibbs_free_energy",
+                    "multiplicity",
+                    "positions",
+                    "spin_square",
+                    "spin_square_after_annihilation",
+                    "spin_square_deviation",
+                    "spin_square_target",
+                    "symbols",
+                    "vibrational_frequencies",
+                    "wavefunction_stability_history",
+                    "wavefunction_stability_verdict",
+                ),
+            ),
+            (
+                "sp",
+                (
+                    "absorption_wavelengths",
+                    "charge",
+                    "connectivity",
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "effective_multiplicity",
+                    "energies",
+                    "energy",
+                    "excitation_energies",
+                    "excited_state_indices",
+                    "excited_state_labels",
+                    "excited_state_spin_square",
+                    "multiplicity",
+                    "oscillator_strengths",
+                    "positions",
+                    "spin_square",
+                    "spin_square_after_annihilation",
+                    "spin_square_deviation",
+                    "spin_square_target",
+                    "symbols",
+                    "wavefunction_stability_history",
+                    "wavefunction_stability_verdict",
+                ),
+            ),
+            (
+                "ts",
+                (
+                    "charge",
+                    "connectivity",
+                    "dipole_moment",
+                    "dipole_moment_magnitude",
+                    "effective_multiplicity",
+                    "energies",
+                    "energy",
+                    "gibbs_free_energy",
+                    "multiplicity",
+                    "positions",
+                    "spin_square",
+                    "spin_square_after_annihilation",
+                    "spin_square_deviation",
+                    "spin_square_target",
+                    "symbols",
+                    "vibrational_frequencies",
+                    "wavefunction_stability_history",
+                    "wavefunction_stability_verdict",
+                ),
+            ),
+        ),
     ),
     "xtb": ResultReaderV1(
         program="xtb",

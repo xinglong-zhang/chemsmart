@@ -138,11 +138,62 @@ from chemsmart.analysis.result_quantities import (
 
 _SESSION_WALL_TIME_SECONDS = 90 * 60
 _MAX_TOOL_CALLS = 256
-_PYSCF_INTERPRETER = (
-    Path(os.environ.get("CHEMSMART_PYSCF_INTERPRETER", sys.executable))
-    .expanduser()
-    .resolve()
-)
+def _declared_pyscf_interpreter() -> Path | None:
+    """Return the interpreter the server YAML declares for PySCF, if any.
+
+    The server YAML is this file's stated canonical source for which programs
+    an installation controls, but PySCF was resolved from ``sys.executable``
+    instead.  On any host that installs PySCF in its own environment -- the
+    ordinary arrangement, since it pins numpy and h5py -- that answers about
+    the controller interpreter, the probe reports the required packages
+    missing, and the engine is declared unavailable while it is installed and
+    working.  Reading the operator's declaration is honouring it; substituting
+    the controller environment for it is the implicit replacement the project
+    forbids.
+    """
+
+    try:
+        from chemsmart.io.yaml import YAMLFile
+        from chemsmart.settings.user import CHEMSMARTUserSettings
+
+        settings = CHEMSMARTUserSettings()
+        available = list(settings.all_available_servers or ())
+        preferred = os.environ.get("CHEMSMART_AGENT_SERVER") or "local"
+        name = (
+            preferred
+            if preferred in available
+            else (available[0] if available else "")
+        )
+        if not name:
+            return None
+        path = Path(settings.user_server_dir) / f"{name}.yaml"
+        if not path.is_file():
+            return None
+        block = YAMLFile(filename=str(path)).yaml_contents_dict.get("PYSCF")
+        folder = str((block or {}).get("EXEFOLDER") or "").strip()
+        if not folder:
+            return None
+        candidate = Path(folder).expanduser() / "python"
+        if candidate.is_file():
+            return candidate.resolve()
+    except Exception:  # noqa: BLE001 - fall back rather than fail to start
+        return None
+    return None
+
+
+def _resolve_pyscf_interpreter() -> Path:
+    """Explicit override first, then the declaration, then this process."""
+
+    override = os.environ.get("CHEMSMART_PYSCF_INTERPRETER")
+    if override:
+        return Path(override).expanduser().resolve()
+    declared = _declared_pyscf_interpreter()
+    if declared is not None:
+        return declared
+    return Path(sys.executable).expanduser().resolve()
+
+
+_PYSCF_INTERPRETER = _resolve_pyscf_interpreter()
 _PRIVATE_ROOT_NAME = ".chemsmart-agent"
 
 
@@ -752,6 +803,10 @@ def run_live_agent_session(
         bounded_envelope is not None
         and latest_calculation_plan is not None
         and not execution_ineligible_nodes
+        # A planned but unmaterialised workflow is a session that stopped
+        # early, not a broken contract.  Report it as the preview-only run it
+        # is rather than losing the transcript to an unhandled refusal.
+        and host.bounded_review_is_materialized()
     ):
         review = host.build_execution_review(workspace=workspace_path)
         prepared_execution = review
