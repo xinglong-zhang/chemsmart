@@ -700,7 +700,9 @@ def build_command_compiled_tool_surface(
                             "claim_id": _public_identifier(),
                             "receipt_sha256": digest,
                             "quantity_id": _public_identifier(),
-                            "display_unit": _string(),
+                            "display_unit": _unit_string(
+                                "Unit to display the bound quantity in."
+                            ),
                         },
                         "required": [
                             "claim_id",
@@ -1120,6 +1122,30 @@ def _string() -> dict:
     return {"type": "string"}
 
 
+def _unit_string(lead: str) -> dict:
+    """A unit field that states the convention where the unit is written.
+
+    The typed vocabulary takes units, not quantity names and not rescalings,
+    and a dimensionless quantity is spelled ``1``.  Chemists write "percent",
+    "count" and "mole fraction" by habit, so say so here rather than only in
+    the refusal: this text is read on every call, while a refusal is only read
+    once the call has already been spent.
+    """
+
+    return {
+        "type": "string",
+        "description": (
+            f"{lead} Give a unit, not a quantity name and not a rescaling. "
+            "A dimensionless quantity -- a count, population, mole fraction, "
+            "branching ratio, equilibrium constant or oscillator strength -- "
+            "takes '1'; 'percent' is a rescaling of a dimensionless value, "
+            "not a unit, so report the fraction and describe it as a "
+            "percentage in prose. Energies accept hartree, eV, kJ/mol or "
+            "kcal/mol; frequencies cm^-1; temperatures K."
+        ),
+    }
+
+
 def _nullable_positive_number() -> dict:
     """A positive number, or an explicit null where the concept does not apply.
 
@@ -1395,7 +1421,9 @@ def _analysis_intent_node_schema() -> dict:
                     "properties": {
                         "output_id": _public_identifier(),
                         "quantity_kind": _public_identifier(),
-                        "unit": _string(),
+                        "unit": _unit_string(
+                            "Physical unit this output is declared in."
+                        ),
                     },
                     "required": ["output_id", "quantity_kind", "unit"],
                     "additionalProperties": False,
