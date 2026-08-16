@@ -217,6 +217,38 @@ def _approved_initial_artifacts(
     return artifacts
 
 
+def _execution_failure_summary(receipt: Any) -> str:
+    """Describe why a node did not succeed, from its own receipt.
+
+    Empty for a node that succeeded.  Otherwise name the terminal state and
+    whatever the receipt actually observed -- the wrapper and child exit
+    statuses, and any findings -- so a reader knows the run failed, roughly
+    where, and that the program output is the next place to look.  This does
+    not interpret the engine's message; it reports that there is one.
+    """
+
+    state = str(_field(receipt, "execution_state") or "")
+    if state in {"validated", "engine_complete"}:
+        return ""
+    parts = [f"execution_state={state or 'unknown'}"]
+    for label in ("wrapper_exit_status", "child_exit_status"):
+        # These are optional on the receipt, and a summary must never be the
+        # thing that fails: a reader who has already lost the run should not
+        # also lose the reason to a missing field.
+        try:
+            value = _field(receipt, label)
+        except ContractError:
+            continue
+        if value not in (None, ""):
+            parts.append(f"{label}={value}")
+    try:
+        findings = tuple(_field(receipt, "findings") or ())
+    except ContractError:
+        findings = ()
+    if findings:
+        parts.append("findings=" + ", ".join(str(item) for item in findings))
+    return "; ".join(parts)
+
 class ApprovedWorkflowExecutor:
     """Walk an approved DAG, dispatching host tools with host-computed args."""
 
@@ -436,7 +468,12 @@ class ApprovedWorkflowExecutor:
                 invocation_identity_sha256=identity_sha256,
                 execution_receipt_sha256=_field(receipt, "receipt_sha256"),
                 rule_ids=tuple(_field(receipt, "findings") or ()),
-                failure="",
+                # A node whose engine run failed reported nothing but the word
+                # "failed": the reason sat in its own receipt and never reached
+                # the operator, who had to open the raw program output to learn
+                # that the engine had refused the route.  Say what the receipt
+                # knows.
+                failure=_execution_failure_summary(receipt),
                 validated=bool(_field(receipt, "validated")),
                 result_validation_receipt_sha256=_field(
                     receipt, "result_validation_receipt_sha256"
