@@ -1199,11 +1199,14 @@ def _semantic_role_identifier() -> dict:
             "four thermochemistry receipts each yield a quantity named "
             "'gibbs_free_energy', so drawing all four into one expression "
             "repeats that name four times however distinctly you alias them. "
-            "Whenever several inputs name the same quantity_id, give each its "
-            "own role -- 'reactant' and 'product' for a difference, 'anti' "
-            "and 'gauche' for two conformers, one per species for a set. "
-            "Omit it only when a quantity_id is drawn once. Occurrences left "
-            "without distinct roles collapse onto one and the expression is "
+            "A role names one input, not one species. Every input carrying a "
+            "repeated quantity_id needs its own role, unique across the whole "
+            "expression, so four species each contributing an energy and a "
+            "Gibbs term need eight roles and not four: pair the species with "
+            "the quantity, as 'gauche-energy' and 'gauche-gibbs', never "
+            "'gauche' for both. Omit it only when a quantity_id is drawn "
+            "once. Two inputs sharing a role collapse onto one, which would "
+            "make the evidence reference ambiguous, so the expression is "
             "refused. " + identifier["description"]
         ),
     }
