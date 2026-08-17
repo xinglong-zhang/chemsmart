@@ -24,7 +24,13 @@ from chemsmart.agent.scientific_toolchain import (
     RegisteredResultInputIntentV1,
     build_scientific_toolchain_plan,
 )
-from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+from chemsmart.agent.tool_runtime import (
+    CommandCompiledToolHostV1,
+    _validate_tool_arguments,
+)
+from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
+
+_SURFACE = build_command_compiled_tool_surface()
 
 
 def _extraction_node(node_id, *, output_id, unit="hartree"):
@@ -242,4 +248,55 @@ def test_an_approved_workflow_cannot_be_amended_in_place(host_with_plan):
                     "outputs": [{"output_id": "e-a", "unit": "1"}],
                 }
             ],
+        )
+
+
+def test_the_advertised_schema_accepts_a_full_repair():
+    """The shape the model must author has to survive the real validator."""
+
+    _validate_tool_arguments(
+        _SURFACE,
+        "amend_scientific_workflow",
+        {
+            "workflow_id": "branching",
+            "analysis_repairs": [
+                {
+                    "node_id": "extract-b",
+                    "outputs": [
+                        {
+                            "output_id": "e-b",
+                            "unit": "1",
+                            "quantity_kind": "count",
+                        }
+                    ],
+                    "selectors": [
+                        {"quantity_id": "q1", "selector": "scf_energy"}
+                    ],
+                    "inputs": [
+                        {"input_id": "in1", "producer_output_id": "out1"}
+                    ],
+                }
+            ],
+        },
+    )
+
+
+def test_a_name_being_authored_still_follows_the_naming_rule():
+    """Addresses are exempt from it; a new name is not."""
+
+    with pytest.raises(ContractError, match="required pattern"):
+        _validate_tool_arguments(
+            _SURFACE,
+            "amend_scientific_workflow",
+            {
+                "workflow_id": "branching",
+                "analysis_repairs": [
+                    {
+                        "node_id": "extract-a",
+                        "outputs": [
+                            {"output_id": "e-a", "new_output_id": "Bad-ID"}
+                        ],
+                    }
+                ],
+            },
         )
