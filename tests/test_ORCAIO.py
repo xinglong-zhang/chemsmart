@@ -3928,6 +3928,49 @@ class TestORCAOutputDirectPropertyCoverage:
         assert len(structures) == 1
         assert structures[0].is_optimized_structure is True
 
+    def test_single_point_energy_none_without_marker(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "no_sp_energy.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.single_point_energy is None
+
+    def test_get_optimized_scf_energy_inner_loop_natural_exhaustion(
+        self, tmp_path
+    ):
+        """TOTAL SCF ENERGY is found but "Total Energy       :" never
+        follows it -- the inner loop exhausts without returning."""
+        content = "THE OPTIMIZATION HAS CONVERGED\nTOTAL SCF ENERGY\n"
+        path = _write_orca_output(tmp_path, "no_total_energy.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.optimized_output_lines != []
+        assert oo.final_scf_energy is None
+
+    def test_sp_scf_energy_and_final_structure_dead_branches(
+        self, tmp_path, mocker
+    ):
+        """final_scf_energy's "return self._get_sp_scf_energy()" line
+        and _get_sp_scf_energy's own body are unreachable through any
+        real call path, since optimized_output_lines is never actually
+        None (see BUGS_FOUND.md #71) -- force it to None here to cover
+        the otherwise-dead lines directly. This also surfaces a second,
+        compounding bug: final_scf_energy calls
+        "self._get_sp_scf_energy()" with parentheses even though
+        _get_sp_scf_energy is a @property (not a method), so it always
+        raises TypeError rather than returning the computed value."""
+        content = "Total Energy       :   -76.000000 Eh    -2068.123 eV\n"
+        path = _write_orca_output(tmp_path, "sp_energy.out", content)
+        oo = ORCAOutput(filename=path)
+        mocker.patch.object(
+            type(oo),
+            "optimized_output_lines",
+            new_callable=mocker.PropertyMock,
+            return_value=None,
+        )
+        assert oo._get_sp_scf_energy == -76.0
+        with pytest.raises(TypeError):
+            _ = oo.final_scf_energy
+
     def test_get_molecule_from_sp_output_file_xyz_branch_crashes(
         self, tmp_path
     ):
