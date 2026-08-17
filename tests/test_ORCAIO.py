@@ -4383,6 +4383,37 @@ class TestORCAEngrad:
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
 
+    def test_engrad_properties_none_without_markers(self, tmp_path):
+        path = tmp_path / "empty.engrad"
+        path.write_text("UNRELATED LINE\n")
+        orca_engrad = ORCAEngradFile(filename=str(path))
+        assert orca_engrad.num_atoms is None
+        assert orca_engrad.energy is None
+        assert orca_engrad.gradient is None
+        assert orca_engrad.molecule is None
+
+    def test_engrad_num_atoms_and_energy_skip_unparseable_lines(
+        self, tmp_path
+    ):
+        """The marker is found, but the 3 lines that follow it all fail
+        to parse -- the inner loop's try/except exhausts without
+        returning, instead of raising or falling back."""
+        content = (
+            "Number of atoms\n"
+            "not a number\n"
+            "also not a number\n"
+            "still not a number\n"
+            "# current total energy in Hartree\n"
+            "not a float\n"
+            "also not a float\n"
+            "still not a float\n"
+        )
+        path = tmp_path / "unparseable.engrad"
+        path.write_text(content)
+        orca_engrad = ORCAEngradFile(filename=str(path))
+        assert orca_engrad.num_atoms is None
+        assert orca_engrad.energy is None
+
 
 class TestORCAQMMM:
     def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
