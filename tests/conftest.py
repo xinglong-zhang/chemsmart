@@ -3,6 +3,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from textwrap import dedent
 from unittest.mock import MagicMock, patch
 
 import click
@@ -120,6 +121,106 @@ def invoke_config_server():
     def _invoke(args=None):
         runner = CliRunner()
         return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
+def write_server_yaml():
+    """Return a callable that writes a server YAML file under
+    ``<config_root>/server/<name>``.
+
+    The content is dedented and left-stripped before being written, so
+    tests can pass indented triple-quoted strings.
+
+    Usage in tests::
+
+        def test_something(write_server_yaml, tmp_path):
+            path = write_server_yaml(
+                tmp_path, "A.yaml", "SERVER:\n    USER_VALUE: preserved\n"
+            )
+    """
+
+    def _write(config_root, name, content):
+        server_dir = Path(config_root) / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        path = server_dir / name
+        path.write_text(dedent(content).lstrip(), encoding="utf-8")
+        return path
+
+    return _write
+
+
+@pytest.fixture()
+def invoke_update_configs():
+    """Return a callable that invokes 'chemsmart update configs' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_update_configs, tmp_path):
+            result = invoke_update_configs(tmp_path, ["-s", "A"])
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.update import update
+
+    def _invoke(config_root, args=None):
+        return CliRunner().invoke(
+            update,
+            ["configs"] + (args or []),
+            env={"CHEMSMART_CONFIG_DIR": str(config_root)},
+        )
+
+    return _invoke
+
+
+@pytest.fixture()
+def read_yaml_file():
+    """Return a callable that reads and parses a YAML file at the given path."""
+
+    def _read(path):
+        return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+
+    return _read
+
+
+@pytest.fixture()
+def write_text_file():
+    """Return a callable that writes text content to a path, creating
+    parent directories as needed.
+
+    Usage in tests::
+
+        def test_something(write_text_file, tmp_path):
+            path = write_text_file(tmp_path / "a" / "b.yaml", "content\n")
+    """
+
+    def _write(path, content):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    return _write
+
+
+@pytest.fixture()
+def invoke_update_projects():
+    """Return a callable that invokes 'chemsmart update projects' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_update_projects, tmp_path):
+            result = invoke_update_projects(tmp_path)
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.update import update
+
+    def _invoke(config_root):
+        return CliRunner().invoke(
+            update,
+            ["projects"],
+            env={"CHEMSMART_CONFIG_DIR": str(config_root)},
+        )
 
     return _invoke
 

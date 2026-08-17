@@ -17,12 +17,13 @@ from chemsmart.io.xtb.file import (
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.io import create_molecule_list
+from chemsmart.utils.mixins import FolderOutputMixin
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
 
-class XTBOutput:
+class XTBOutput(FolderOutputMixin):
     """
     Integrates and exposes all relevant data from an xTB calculation directory.
 
@@ -35,115 +36,87 @@ class XTBOutput:
         folder (str or XTBFolder): Path to xTB calculation folder or XTBFolder instance.
     """
 
+    FILE_PARSERS = (
+        "main_out",
+        "charges_file",
+        "energy_file",
+        "engrad_file",
+        "g98_file",
+        "gradient_file",
+        "hessian_file",
+        "vibspectrum_file",
+        "wbo_file",
+    )
+
     def __init__(self, folder):
-        """
-        Initialize XTBOutput with a folder path or XTBFolder instance.
-        """
         self.folder = (
             folder if isinstance(folder, XTBFolder) else XTBFolder(folder)
-        )
-
-    def __getattr__(self, name):
-        """
-        Delegate attribute access to internal file parsers or cached properties.
-
-        This allows XTBOutput to transparently expose all properties and methods
-        from XTBMainOut, XTBEngradFile, XTBChargesFile, XTBWibergBondOrderFile,
-        XTBHessianFile, XTBGradientFile, XTBVibSpectrumFile, and any future parsers.
-        """
-        # List of internal parsers to search, in order of priority
-        file_parsers = [
-            "main_out",
-            "charges_file",
-            "energy_file",
-            "engrad_file",
-            "g98_file",
-            "gradient_file",
-            "hessian_file",
-            "vibspectrum_file",
-            "wbo_file",
-        ]
-        # Try to get from each parser in order
-        for file_parser in file_parsers:
-            try:
-                parser = object.__getattribute__(self, file_parser)
-                if parser is not None:
-                    try:
-                        return getattr(parser, name)
-                    except AttributeError:
-                        # This parser doesn't have the attribute, try next one
-                        continue
-            except Exception as e:
-                logger.debug(f"Failed to access parser {file_parser}: {e}")
-                continue
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
     @cached_property
     def main_out(self):
         """Main xTB output file parser (XTBMainOut)."""
-        path = self.folder._xtb_out()
+        path = self.folder.xtb_out_filepath
         return XTBMainOut(path) if path else None
 
     @cached_property
     def charges_file(self):
         """Atomic partial charges file parser (XTBChargesFile)."""
-        path = self.folder._charges()
+        path = self.folder.charges_filepath
         return XTBChargesFile(path) if path else None
 
     @cached_property
     def energy_file(self):
         """Energy file parser (XTBEnergyFile)."""
-        path = self.folder._energy()
+        path = self.folder.energy_filepath
         return XTBEnergyFile(path) if path else None
 
     @cached_property
     def engrad_file(self):
         """Energy and gradient file parser (XTBEngradFile)."""
-        path = self.folder._engrad()
+        path = self.folder.engrad_filepath
         return XTBEngradFile(path) if path else None
 
     @cached_property
     def g98_file(self):
         """GAUSSIAN-format vibrational frequencies file parser (XTBG98File)."""
-        path = self.folder._g98_out()
+        path = self.folder.g98_out_filepath
         return XTBG98File(path) if path else None
 
     @cached_property
     def gradient_file(self):
         """Gradient file parser (XTBGradientFile)."""
-        path = self.folder._gradient()
+        path = self.folder.gradient_filepath
         return XTBGradientFile(path) if path else None
 
     @cached_property
     def hessian_file(self):
         """Hessian matrix file parser (XTBHessianFile)."""
-        path = self.folder._hessian()
+        path = self.folder.hessian_filepath
         return XTBHessianFile(path) if path else None
 
     @cached_property
     def vibspectrum_file(self):
         """Vibrational spectrum file parser (XTBVibSpectrumFile)."""
-        path = self.folder._vibspectrum()
+        path = self.folder.vibspectrum_filepath
         return XTBVibSpectrumFile(path) if path else None
 
     @cached_property
     def wbo_file(self):
         """Wiberg bond order file parser (XTBWibergBondOrderFile)."""
-        path = self.folder._wbo()
+        path = self.folder.wbo_filepath
         return XTBWibergBondOrderFile(path) if path else None
 
     @cached_property
     def xtbopt_log_file(self):
         """Optimization trajectory log file parser (XYZFile)."""
-        path = self.folder._xtbopt_log()
+        path = self.folder.xtbopt_log_filepath
         return XYZFile(path) if path else None
 
     @cached_property
     def xtbopt_geometry_file(self):
         """Optimized geometry file parser (XYZFile, SDFFile, or PDBFile)."""
-        path = self.folder._xtbopt_geometry()
+        path = self.folder.xtbopt_geometry_filepath
         if not path:
             return None
         if path.endswith(".xyz"):
@@ -158,7 +131,7 @@ class XTBOutput:
     @cached_property
     def input_geometry_file(self):
         """Input geometry file parser (XYZFile, SDFFile, or PDBFile)."""
-        path = self.folder._input_geometry()
+        path = self.folder.input_geometry_filepath
         if not path:
             return None
         if path.endswith(".xyz"):
@@ -283,7 +256,7 @@ class XTBOutput:
     @cached_property
     def xtbopt_geometry(self):
         """Read geometry from xtbopt.* file and return as Molecule object."""
-        path = self.folder._xtbopt_geometry()
+        path = self.folder.xtbopt_geometry_filepath
         molecule = self._read_geometry_file(path)
         if molecule:
             # Enrich molecule with properties from main output
@@ -301,7 +274,7 @@ class XTBOutput:
     @cached_property
     def input_geometry(self):
         """Read geometry from input geometry file and return as Molecule object."""
-        path = self.folder._input_geometry()
+        path = self.folder.input_geometry_filepath
         molecule = self._read_geometry_file(path)
         if molecule:
             if self.charge is not None:

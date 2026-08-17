@@ -89,8 +89,7 @@ class Executable(RegistryMixin):
             raise ValueError(
                 f"No '{cls.PROGRAM}' section found in {server_yaml_file}.\n "
                 "Consider updating your server YAML with the latest template."
-                # "Run `chemsmart update config` to update your server YAML.`"
-                # TODO: to uncomment after this function becomes available.
+                "Run `chemsmart update configs` to update your server YAML.`"
             )
 
         executable_folder_raw = program_cfg["EXEFOLDER"]
