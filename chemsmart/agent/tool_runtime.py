@@ -9170,6 +9170,7 @@ def _validate_tool_arguments(
     schema = definition["parameters"]
     required = set(schema.get("required", ()))
     properties = schema.get("properties", {})
+    findings: list[str] = []
     missing = sorted(required.difference(arguments))
     if missing:
         # A caller that is told only the field name has to go back to the
@@ -9184,15 +9185,46 @@ def _validate_tool_arguments(
             )
             for name in missing
         )
-        raise ContractError(f"{tool_name} requires {described}")
+        findings.append(f"{tool_name} requires {described}")
     unknown = sorted(set(arguments).difference(properties))
     if unknown:
-        raise ContractError(
+        findings.append(
             f"{tool_name} does not accept {unknown}; it accepts "
             f"{sorted(properties)}"
         )
     for name, value in arguments.items():
-        _validate_json_value(name, value, properties[name])
+        # An unknown name has already been reported and has no schema to
+        # check it against.
+        if name in properties:
+            _collect_json_violations(name, value, properties[name], findings)
+    if findings:
+        raise ContractError(_combined_violation_text(findings))
+
+
+#: How many violations one rejection may enumerate.  A systematic mistake in a
+#: large DAG can produce a violation per node; the caller needs enough to fix a
+#: batch in one revision, not a message longer than the payload it describes.
+_REPORTED_VIOLATIONS = 12
+
+
+def _combined_violation_text(findings: list[str]) -> str:
+    """Render one rejection covering every violation that was found.
+
+    A single violation keeps its exact wording, so nothing that reads these
+    messages has to learn a second shape for the common case.
+    """
+
+    if len(findings) == 1:
+        return findings[0]
+    shown = findings[:_REPORTED_VIOLATIONS]
+    body = "; ".join(
+        f"({index}) {message}" for index, message in enumerate(shown, 1)
+    )
+    text = f"{len(findings)} arguments are invalid: {body}"
+    remaining = len(findings) - len(shown)
+    if remaining:
+        text += f"; and {remaining} more not listed"
+    return text
 
 
 #: How much of an offending value a rejection may quote back.  Long enough to
@@ -9221,6 +9253,36 @@ def _validate_json_value(
     A caller that is told only which field is wrong has to guess at the value
     and the constraint, and a model that guesses generally resubmits the same
     argument.  Every message here therefore carries all three.
+
+    This raises on the first violation it finds.  Whole-payload validation goes
+    through :func:`_collect_json_violations` instead, so one submission can be
+    told about every independent slip at once.
+    """
+
+    findings: list[str] = []
+    _collect_json_violations(name, value, schema, findings)
+    if findings:
+        raise ContractError(findings[0])
+
+
+def _collect_json_violations(
+    name: str,
+    value: Any,
+    schema: Mapping[str, Any],
+    findings: list[str],
+) -> None:
+    """Append every violation under ``name`` rather than raising the first.
+
+    A workflow DAG is authored in one payload, so a single bad identifier in
+    node ten used to cost a full resubmission of all ten nodes -- and then the
+    next independent slip cost another.  Across the recorded sessions, most
+    multi-failure streaks carried violations on entirely different fields, so
+    reporting them one per turn was pure round-trip tax rather than a cascade
+    that had to be unwound in order.
+
+    Descent stops at a value whose *type* is already wrong: checking a pattern
+    or a minimum against it would only add noise about a value the caller is
+    going to replace anyway.
     """
 
     alternatives = schema.get("oneOf")
@@ -9229,18 +9291,17 @@ def _validate_json_value(
         for alternative in alternatives:
             if not isinstance(alternative, Mapping):
                 continue
-            try:
-                _validate_json_value(name, value, alternative)
-            except ContractError:
-                continue
-            matches += 1
+            probe: list[str] = []
+            _collect_json_violations(name, value, alternative, probe)
+            if not probe:
+                matches += 1
         if matches != 1:
             shapes = ", ".join(
                 str(item.get("type", "?"))
                 for item in alternatives
                 if isinstance(item, Mapping)
             )
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {_offending_text(value)}, which "
                 f"matches {matches} of the allowed shapes; exactly one must "
                 f"match. Allowed shapes: {shapes}"
@@ -9268,64 +9329,66 @@ def _validate_json_value(
     if isinstance(expected, list):
         allowed = [str(item) for item in expected]
         if not any(_matches(kind) for kind in allowed):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} must be one of {allowed}, but got "
                 f"{type(value).__name__} {_offending_text(value)}"
             )
+            return
         if value is None:
             # No further keyword applies to an explicit null.
             return
     elif not _matches(expected):
-        raise ContractError(
+        findings.append(
             f"tool argument {name} must be {expected}, but got "
             f"{type(value).__name__} {_offending_text(value)}"
         )
+        return
     if "enum" in schema and value not in schema["enum"]:
         allowed = list(schema["enum"])
-        raise ContractError(
+        findings.append(
             f"tool argument {name} is {_offending_text(value)}, which is not "
             f"one of {allowed}"
         )
     if isinstance(value, str) and schema.get("pattern"):
         pattern = str(schema["pattern"])
         if re.fullmatch(pattern, value) is None:
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {_offending_text(value)}, which "
                 f"does not match the required pattern {pattern}"
             )
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < float(schema["minimum"]):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {value}, below its minimum "
                 f"{schema['minimum']}"
             )
         if "maximum" in schema and value > float(schema["maximum"]):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {value}, above its maximum "
                 f"{schema['maximum']}"
             )
         if "exclusiveMinimum" in schema and value <= float(
             schema["exclusiveMinimum"]
         ):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {value}, which must be greater than "
                 f"{schema['exclusiveMinimum']}"
             )
         if "exclusiveMaximum" in schema and value >= float(
             schema["exclusiveMaximum"]
         ):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is {value}, which must be less than "
                 f"{schema['exclusiveMaximum']}"
             )
     if isinstance(value, list):
         if "minItems" in schema and len(value) < int(schema["minItems"]):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} has {len(value)} items, fewer than the "
                 f"required {schema['minItems']}"
             )
         if "maxItems" in schema and len(value) > int(schema["maxItems"]):
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} has {len(value)} items, more than the "
                 f"allowed {schema['maxItems']}"
             )
@@ -9333,21 +9396,23 @@ def _validate_json_value(
         for index, item in enumerate(value):
             # Index the path: "outputs[]" tells a caller with eight outputs
             # nothing about which one to change.
-            _validate_json_value(f"{name}[{index}]", item, schema["items"])
+            _collect_json_violations(
+                f"{name}[{index}]", item, schema["items"], findings
+            )
     if isinstance(value, dict):
         properties = schema.get("properties", {})
         additional = schema.get("additionalProperties")
         required = set(schema.get("required", ()))
         missing = sorted(required.difference(value))
         if missing:
-            raise ContractError(
+            findings.append(
                 f"tool argument {name} is missing {missing}; it supplied "
                 f"{sorted(value)}"
             )
         if schema.get("additionalProperties") is False:
             unknown = sorted(set(value).difference(properties))
             if unknown:
-                raise ContractError(
+                findings.append(
                     f"tool argument {name} supplied {unknown}, which this "
                     f"object does not accept; it accepts {sorted(properties)}"
                 )
@@ -9356,8 +9421,11 @@ def _validate_json_value(
             if child_schema is None and isinstance(additional, Mapping):
                 child_schema = additional
             if child_schema is not None:
-                _validate_json_value(
-                    f"{name}.{child_name}", child_value, child_schema
+                _collect_json_violations(
+                    f"{name}.{child_name}",
+                    child_value,
+                    child_schema,
+                    findings,
                 )
 
 
