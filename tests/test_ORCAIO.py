@@ -3490,6 +3490,90 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.kinetic_energy is None
         assert oo.dfet_embed_energy is None
 
+    def test_orbital_energies_absent_returns_empty(self, tmp_path):
+        """No ORBITAL ENERGIES/MULLIKEN POPULATION ANALYSIS section at
+        all -> both _get_last_orbital_energies_section and
+        _get_orbital_energies_and_occupancy fall through their loops
+        with zero iterations, returning empty results."""
+        path = _write_orca_output(
+            tmp_path, "no_orbitals.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.orbital_energies == []
+        assert oo.orbital_occupancy == []
+
+    def test_spin_resolved_orbital_eigenvalue_properties(
+        self, fe2_triplet_output
+    ):
+        """fe2_triplet_output is a real unrestricted calculation with
+        multiple alpha/beta orbitals -- exercises the spin-resolved
+        parsing loop's continuation across multiple entries in each
+        spin channel, and the non-empty alpha_e/beta_e branches of the
+        four eigenvalue properties."""
+        oo = ORCAOutput(filename=fe2_triplet_output)
+        assert oo.is_unrestricted is True
+
+        alpha_occ = oo.alpha_occ_eigenvalues
+        alpha_virt = oo.alpha_virtual_eigenvalues
+        beta_occ = oo.beta_occ_eigenvalues
+        beta_virt = oo.beta_virtual_eigenvalues
+
+        assert len(alpha_occ) > 1
+        assert len(alpha_virt) > 1
+        assert len(beta_occ) > 1
+        assert len(beta_virt) > 1
+        assert max(alpha_occ) == oo.alpha_homo_energy
+        assert min(alpha_virt) == oo.alpha_lumo_energy
+        assert max(beta_occ) == oo.beta_homo_energy
+        assert min(beta_virt) == oo.beta_lumo_energy
+
+    def test_spin_resolved_orbital_data_skips_unparseable_line(self, tmp_path):
+        """A 4-field orbital line whose occupancy/energy fields aren't
+        floats is skipped (except ValueError: continue) rather than
+        crashing the parse."""
+        content = (
+            "ORBITAL ENERGIES\n"
+            "------------------\n"
+            "  NO   OCC          E(Eh)            E(eV)\n"
+            "SPIN UP ORBITALS\n"
+            "   0   bogus         bogus            bogus\n"
+            "   1   1.0000       -0.500000        -13.6057\n"
+            "SPIN DOWN ORBITALS\n"
+            "   0   1.0000       -0.400000        -10.8845\n"
+            "* MULLIKEN POPULATION ANALYSIS *\n"
+        )
+        path = _write_orca_output(tmp_path, "unparseable.out", content)
+        oo = ORCAOutput(filename=path)
+        alpha_e, alpha_occ, beta_e, beta_occ = oo._spin_resolved_orbital_data
+        assert alpha_e == [-0.5 * units.Hartree]
+        assert beta_e == [-0.4 * units.Hartree]
+
+    def test_unrestricted_with_no_spin_sections_falls_back_to_restricted(
+        self, tmp_path
+    ):
+        """is_unrestricted True but the orbital section has no SPIN
+        UP/DOWN markers at all (e.g. a malformed/truncated file) ->
+        alpha_e/beta_e come back empty, so each eigenvalue property
+        falls back to the restricted-case logic instead of returning
+        the (missing) spin-resolved data."""
+        content = (
+            "Kohn-Sham wavefunction type       ... UKS\n"
+            "ORBITAL ENERGIES\n"
+            "------------------\n"
+            "  NO   OCC          E(Eh)            E(eV)\n"
+            "   0   2.0000       -0.500000        -13.6057\n"
+            "   1   0.0000       -0.100000         -2.7211\n"
+            "* MULLIKEN POPULATION ANALYSIS *\n"
+        )
+        path = _write_orca_output(tmp_path, "no_spin_sections.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.is_unrestricted is True
+        assert oo._spin_resolved_orbital_data == ([], [], [], [])
+        assert oo.alpha_occ_eigenvalues == [-0.5 * units.Hartree]
+        assert oo.alpha_virtual_eigenvalues == [-0.1 * units.Hartree]
+        assert oo.beta_occ_eigenvalues == [-0.5 * units.Hartree]
+        assert oo.beta_virtual_eigenvalues == [-0.1 * units.Hartree]
+
     def test_final_scf_energy_and_single_point_energy_for_sp_job(
         self, water_sp_gas_path
     ):
