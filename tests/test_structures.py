@@ -5025,6 +5025,56 @@ class TestMoleculeWriteMethods:
         with pytest.raises(ImportError, match="openbabel"):
             water_molecule.write_pdb_pybabel(str(outfile))
 
+    def test_write_pdb_pybabel_importerror_no_cleanup(
+        self, mocker, water_molecule, tmp_path
+    ):
+        """cleanup=False skips the temp-file removal attempt entirely
+        in the ImportError branch."""
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        outfile = tmp_path / "out_pybabel3b.pdb"
+        with pytest.raises(ImportError, match="openbabel"):
+            water_molecule.write_pdb_pybabel(str(outfile), cleanup=False)
+
+    def test_write_pdb_pybabel_importerror_cleanup_oserror_is_swallowed(
+        self, mocker, water_molecule, tmp_path
+    ):
+        """If the temp XYZ file cannot be removed during ImportError
+        cleanup, the OSError is swallowed and the original ImportError
+        still propagates."""
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        mocker.patch("os.remove", side_effect=OSError("locked"))
+        outfile = tmp_path / "out_pybabel4.pdb"
+        with pytest.raises(ImportError, match="openbabel"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+
+    def test_write_pdb_pybabel_raises_when_xyz_unreadable(
+        self, mocker, water_molecule, tmp_path
+    ):
+        mocker.patch("openbabel.pybel.readfile", return_value=iter([]))
+        outfile = tmp_path / "out_pybabel5.pdb"
+        with pytest.raises(ValueError, match="Unable to read molecule"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+
+    def test_write_pdb_pybabel_final_cleanup_oserror_logs_warning(
+        self, mocker, water_molecule, tmp_path, caplog
+    ):
+        """If the temp XYZ file cannot be removed after a successful
+        conversion, the OSError is caught and logged as a warning
+        rather than propagating."""
+        mocker.patch("os.remove", side_effect=OSError("locked"))
+        outfile = tmp_path / "out_pybabel6.pdb"
+        with caplog.at_level("WARNING"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+        assert outfile.exists()
+        assert any(
+            "Failed to remove temporary file" in record.message
+            for record in caplog.records
+        )
+
 
 class TestMoleculeBondingAndGraphExtra:
     def test_bond_lengths_matches_get_all_distances(self, water_molecule):
