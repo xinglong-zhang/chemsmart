@@ -1,5 +1,7 @@
 """Domain-knowledge skill resolution, authority limits, and skills-off parity."""
 
+import re
+
 import pytest
 
 from chemsmart.agent._contracts import ContractError
@@ -116,12 +118,16 @@ def test_conventions_are_partitioned_by_scope():
     assert all(item.scope == "thermochemistry" for item in thermo)
 
 
-def test_packs_surface_the_conventions_skill():
+def test_packs_surface_the_cross_program_skills():
     receipt = activate_program_knowledge(
         request=_CH2_TASK, program="pyscf", engine="cpu"
     )
     assert receipt.advisory_only is True
-    assert skills_for_activation(receipt) == ("scientific-conventions",)
+    assert skills_for_activation(receipt) == (
+        "method-adequacy",
+        "scientific-conventions",
+        "typed-analysis-contract",
+    )
 
 
 def test_pack_activation_still_respects_exclusions():
@@ -198,14 +204,76 @@ _BENCHMARK_PROBE_TERMS = (
 )
 
 
-def test_skill_states_general_principles_not_benchmark_systems():
-    body = resolve_skill("scientific-conventions").body.lower()
+#: Every skill is held to the authoring norm, not just the first one written.
+_GENERAL_SKILLS = (
+    "method-adequacy",
+    "scientific-conventions",
+    "typed-analysis-contract",
+)
+
+
+@pytest.mark.parametrize("skill_id", _GENERAL_SKILLS)
+def test_skill_states_general_principles_not_benchmark_systems(skill_id):
+    body = resolve_skill(skill_id).body.lower()
     named = [term for term in _BENCHMARK_PROBE_TERMS if term in body]
     assert not named, (
-        "scientific-conventions must generalise: it names the benchmark probe "
+        f"{skill_id} must generalise: it names the benchmark probe "
         f"system(s) {named}. State the principle that generates the fact "
         "instead of the fact for one system."
     )
+
+
+@pytest.mark.parametrize("skill_id", _GENERAL_SKILLS)
+def test_skill_encodes_no_expected_value_or_tolerance(skill_id):
+    """A skill states principles; a number in one is an answer in disguise.
+
+    Cutoffs, tolerances and expected magnitudes belong to the validators and
+    the project settings, which own them and can be checked against a result.
+    A skill asserting one would be a second, unfalsifiable control plane.
+    """
+
+    body = resolve_skill(skill_id).body
+    for pattern in (
+        r"\d+\s*(?:kcal|kj)\b",
+        r"\bwithin\s+\d",
+        r"\btolerance of\b",
+        r"\bcutoff of\b",
+        r"\bmust be (?:below|above|less than|greater than)\b",
+    ):
+        assert not re.search(pattern, body, re.IGNORECASE), (
+            f"{skill_id} states a numeric expectation matching {pattern!r}; "
+            "skills carry principles, not thresholds or answers"
+        )
+
+
+def test_method_adequacy_covers_the_gaps_it_exists_for():
+    """The two failures that motivated it, plus the neighbouring ones."""
+
+    body = resolve_skill("method-adequacy").body.lower()
+    for concept in (
+        "diffuse",
+        "dispersion",
+        "superposition",
+        "cancel",
+        "conformer",
+        "uncertainty",
+        "multireference",
+        "spin",
+    ):
+        assert concept in body, f"method-adequacy omits: {concept}"
+
+
+def test_the_analysis_contract_skill_does_not_restate_a_stale_demand():
+    """It must describe the contract as implemented, not as it once was.
+
+    The semantic role is derived by the host now.  A skill that revived the
+    old instruction to author one per input would reintroduce the failure the
+    prompt and the argument description were repaired to stop.
+    """
+
+    body = resolve_skill("typed-analysis-contract").body.lower()
+    assert "optional" in body
+    assert "unique within its request" in body or "unique within" in body
 
 
 def test_skill_covers_more_than_one_quantity_class():

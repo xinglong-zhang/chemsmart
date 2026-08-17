@@ -240,6 +240,75 @@ Before using a value, check molecular identity and atom order, charge and
 multiplicity, method and program semantics, convergence, stationary-point
 evidence, geometry handoff, physical conditions, signs, dimensions, and units.
 
+When a node fails
+=================
+
+A node whose engine run did not succeed reports its terminal state, the wrapper
+and child exit statuses, the validator findings, and a bounded quotation of what
+the program itself printed about the failure.
+
+That quotation is the program's own text, not a ChemSmart claim.  It is evidence
+that a diagnosis exists and what it said; it never establishes readiness,
+validity, or what to do next.  URLs, absolute and home-relative paths, e-mail
+addresses, and credential-like assignments are removed from it.
+
+A run that did not terminate normally still yields no scientific quantities.
+Typed extraction continues to require a normally terminated result, so a failed
+run can be read for its reason and not for its numbers.
+
+Re-running an approved workflow
+===============================
+
+``chemsmart agent replay`` re-presents a stored execution review so the same
+workflow can be decided on again::
+
+   chemsmart agent replay \
+     --review-file review.json \
+     --workspace /path/to/workspace
+
+With no ``--decision`` it reports only: the review digest, the workflow, whether
+every approved artifact is still present under the workspace, and which approval
+identities for this review have already been consumed.  Adding
+``--decision approve --actor NAME`` records a new human decision and writes a new
+one-shot bundle.
+
+This does not reuse a spent approval.  Approvals remain one-shot and bound to the
+exact request digest; replay obtains the *current* decision that the approval
+chain requires for a launch, over an unchanged displayed plan.
+
+Differences between the approval and the present workspace are displayed rather
+than silently accepted, and they change no enforcement: the environment and
+command comparison that runs immediately before the first dispatch still refuses
+a launch whose facts have drifted from the reviewed ones.  Approved input bytes
+that are no longer present under the workspace are refused before a decision is
+offered, because resolving them would fail before anything could run.
+
+Domain-knowledge skills
+=======================
+
+The Agent can consult short, advisory skill documents that describe general
+computational-chemistry practice.  They are surfaced by name in the planning
+prompt and fetched on request; they are advisory only and never establish
+readiness, approval, terminal state, or an accuracy claim, and they never
+replace a typed host receipt.
+
+Released skills:
+
+* ``scientific-conventions`` — how computed quantities are conventionally
+  defined and reported: the direction of every difference quantity, adiabatic
+  versus vertical geometry, which energy terms are included, and thermochemistry
+  standard states.
+* ``method-adequacy`` — whether a chosen method, basis set, solvation model or
+  conformer sample can answer the question being asked: which errors cancel in a
+  comparison and which do not, and how to state the resulting uncertainty.
+* ``typed-analysis-contract`` — how the typed analysis layer expects intent to be
+  expressed: identifiers, units, declared quantity kinds, and evidence
+  references.
+
+Set ``CHEMSMART_SKILL_ROOT`` to add or override skills from a directory of your
+own; set ``CHEMSMART_AGENT_SKILLS=0`` to remove the skill index and the
+consultation tool entirely.
+
 Analyse completed results
 =========================
 

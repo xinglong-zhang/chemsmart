@@ -5,9 +5,23 @@ from __future__ import annotations
 from chemsmart.agent.knowledge_packs.contracts import build_pack
 from chemsmart.agent.skills.conventions import BUILTIN_CONVENTION_RULE_SHA256S
 
-#: Every program pack surfaces the cross-program conventions skill; program
-#: bodies stay resolvable through :mod:`chemsmart.agent.skills`.
-_CONVENTIONS_SKILL = ("scientific-conventions",)
+#: Every program pack surfaces the cross-program skills; program bodies stay
+#: resolvable through :mod:`chemsmart.agent.skills`.
+#:
+#: All three are program-neutral, so they are shared rather than split across
+#: packs: activation fires per (program, engine), and a skill reaches the prompt
+#: index only through an activated pack, so a chemistry-general skill given its
+#: own pack would need its own activation terms and would simply never fire.
+#:
+#: ``scientific-conventions`` covers how a result is expressed,
+#: ``method-adequacy`` whether the method could answer the question at all, and
+#: ``typed-analysis-contract`` how to express the analysis so the host can carry
+#: the evidence.
+_CONVENTIONS_SKILL = (
+    "method-adequacy",
+    "scientific-conventions",
+    "typed-analysis-contract",
+)
 
 
 BUILTIN_PROGRAM_PACKS = (
