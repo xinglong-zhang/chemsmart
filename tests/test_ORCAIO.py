@@ -1271,6 +1271,7 @@ class TestORCAOutput:
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
         assert orca_out.total_mass_in_amu == 18.02
+        assert orca_out.mass == orca_out.total_mass_in_amu
         assert math.isclose(
             orca_out.internal_energy, -76.29889480, rel_tol=1e-4
         )  # in Hartrees, default unit in ORCA output file
@@ -3224,6 +3225,7 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.all_vibrational_frequencies is None
         assert oo.vibrational_frequencies == []
         assert oo.num_vib_frequencies == 0
+        assert oo.num_translation_and_rotation_modes is None
         assert oo.temperature_in_K is None
         assert oo.pressure_in_atm is None
         assert oo.total_mass_in_amu is None
