@@ -5146,6 +5146,19 @@ class TestMoleculeBondingAndGraphExtra:
         )
         assert result.GetNumAtoms() == 3
 
+    def test_add_bonds_to_rdkit_mol_vectorized_non_h_pair_uses_default_buffer(
+        self, gaussian_acetone_opt_outfile
+    ):
+        """adjust_H=True (default) with a pair of non-H atoms exercises
+        the plain bond_cutoff_buffer branch, distinct from the H-H and
+        H-heavy special cases covered by the water_molecule tests."""
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        rdkit_mol = Chem.RWMol()
+        for symbol in acetone.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+        result = acetone._add_bonds_to_rdkit_mol_vectorized(rdkit_mol)
+        assert result.GetNumBonds() > 0
+
     def test_rdkit_fingerprints(self, water_molecule):
         fp = water_molecule.rdkit_fingerprints
         assert fp is not None
@@ -5154,6 +5167,18 @@ class TestMoleculeBondingAndGraphExtra:
         orders = water_molecule.get_bond_orders_from_graph()
         assert len(orders) == 2
         assert all(o > 0 for o in orders)
+
+    def test_bond_orders_falls_back_to_rdkit_on_graph_failure(
+        self, mocker, water_molecule
+    ):
+        mocker.patch.object(
+            type(water_molecule),
+            "get_bond_orders_from_graph",
+            side_effect=RuntimeError("graph failure"),
+        )
+        assert water_molecule.bond_orders == (
+            water_molecule.get_bond_orders_from_rdkit_mol()
+        )
 
     def test_to_graph_non_vectorized(self, water_molecule):
         graph = water_molecule.to_graph_non_vectorized()
@@ -5243,6 +5268,21 @@ class TestMoleculeDeleteAtomsByIndicesExtra:
         assert len(result.forces) == 2
         assert len(result.velocities) == 2
         assert len(result.frozen_atoms) == 2
+
+    def test_delete_atoms_leaves_mismatched_length_seq_unfiltered(self):
+        """A per-atom-shaped attribute whose length does not match
+        the number of atoms (e.g. a stale/malformed frozen_atoms list)
+        is returned unchanged rather than filtered."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+            frozen_atoms=[0, 0],
+        )
+        result = mol.delete_atoms_by_indices(2)
+        assert result.num_atoms == 2
+        assert result.frozen_atoms == [0, 0]
 
     def test_delete_atoms_filters_vibrational_modes(self):
         mol = Molecule(
