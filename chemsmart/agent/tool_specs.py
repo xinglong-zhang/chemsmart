@@ -305,18 +305,24 @@ def build_command_compiled_tool_surface(
             ),
         ),
         _tool(
-            "rebind_scientific_workflow_projects",
+            "amend_scientific_workflow",
             (
-                "Replace only project-artifact roles in the latest scientific "
-                "workflow after a corrected project has been promoted and "
-                "validated. The host preserves calculation identities, inputs, "
-                "outputs, dependencies, analysis nodes, and required outputs. "
-                "Use this instead of resubmitting the entire DAG after a "
-                "project-only repair."
+                "Repair how part of the latest scientific workflow is "
+                "expressed, without resubmitting the whole DAG. Use it after a "
+                "rejection that names a field: an identifier's case, a missing "
+                "or wrong unit, a declared quantity kind the operation does not "
+                "derive, a selector the result does not resolve, or a project "
+                "role whose corrected project has since been promoted and "
+                "validated. The host preserves every node, binding, dependency "
+                "and receipt you do not name. It refuses anything that changes "
+                "the science rather than its expression: molecular identity, "
+                "state, program, job type, an analysis kind, which producer an "
+                "input reads from, thermochemical conditions, and validation "
+                "thresholds are all a new workflow and need their own review."
             ),
             {
                 "workflow_id": _public_identifier(),
-                "replacements": {
+                "project_replacements": {
                     "type": "array",
                     "description": (
                         "Project-only repairs. Each item binds one existing "
@@ -324,7 +330,6 @@ def build_command_compiled_tool_surface(
                         "all scientific inputs, outputs, and dependencies are "
                         "preserved by the host."
                     ),
-                    "minItems": 1,
                     "maxItems": 64,
                     "items": {
                         "type": "object",
@@ -336,8 +341,73 @@ def build_command_compiled_tool_surface(
                         "additionalProperties": False,
                     },
                 },
+                "analysis_repairs": {
+                    "type": "array",
+                    "description": (
+                        "Expression repairs to named analysis nodes. Each "
+                        "entry addresses elements that already exist on that "
+                        "node and replaces only the fields named."
+                    ),
+                    "maxItems": 128,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "node_id": _public_identifier(),
+                            "outputs": {
+                                "type": "array",
+                                "maxItems": 64,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "output_id": _public_identifier(),
+                                        "new_output_id": _public_identifier(),
+                                        "quantity_kind": _public_identifier(),
+                                        "unit": _unit_string(
+                                            "Corrected unit for this output."
+                                        ),
+                                    },
+                                    "required": ["output_id"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "selectors": {
+                                "type": "array",
+                                "maxItems": 64,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "quantity_id": _public_identifier(),
+                                        "selector": _string(),
+                                    },
+                                    "required": ["quantity_id", "selector"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "inputs": {
+                                "type": "array",
+                                "maxItems": 64,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "input_id": _public_identifier(),
+                                        "producer_output_id": (
+                                            _public_identifier()
+                                        ),
+                                    },
+                                    "required": [
+                                        "input_id",
+                                        "producer_output_id",
+                                    ],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                        "required": ["node_id"],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            ("workflow_id", "replacements"),
+            ("workflow_id",),
         ),
         _tool(
             "inspect_workflow_frontier",

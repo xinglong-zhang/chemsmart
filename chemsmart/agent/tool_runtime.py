@@ -1611,9 +1611,7 @@ class CommandCompiledToolHostV1:
             "validate_project_yaml": self._validate_project_yaml,
             "plan_command_workflow": self._plan_command_workflow,
             "plan_scientific_workflow": self._plan_scientific_workflow,
-            "rebind_scientific_workflow_projects": (
-                self._rebind_scientific_workflow_projects
-            ),
+            "amend_scientific_workflow": self._amend_scientific_workflow,
             "inspect_workflow_frontier": self._inspect_workflow_frontier,
             "prepare_program_node": self._prepare_program_node,
             "synthesize_command": self._synthesize_command,
@@ -2071,7 +2069,7 @@ class CommandCompiledToolHostV1:
                 "active_project_roles": active_roles,
                 "next_action": (
                     "if this project repairs an active node, call "
-                    "rebind_scientific_workflow_projects"
+                    "amend_scientific_workflow"
                 ),
             }
         return {"status": "no_scientific_workflow_planned"}
@@ -2640,6 +2638,181 @@ class CommandCompiledToolHostV1:
             )
         return next(iter(programs))
 
+    def _amend_scientific_workflow(self, turn_id: str, values: dict) -> Any:
+        """Repair how one part of a planned DAG is expressed.
+
+        A DAG arrives in one payload of roughly thirteen kilobytes over nine
+        nodes, and a single mistyped identifier used to cost a resubmission of
+        the whole graph.  Most rejections are about *expression* -- an
+        identifier's case, a missing unit, a declared kind the operation does
+        not derive, a selector the result does not resolve -- and repairing one
+        node should not mean re-authoring the other eight.
+
+        This is deliberately the same operation as rebinding a project, because
+        it is the same act: clone the latest plan, change how one part is
+        stated, append the result under its own digest.  Nothing is mutated in
+        place, so the previous revision stays addressable, and every downstream
+        digest still changes, so an amended plan goes through the normal
+        materialise, review and approve cycle exactly as a fresh one would.
+
+        What it will not do is change the science.  Molecular identity, state,
+        program, job type, the producing node an input reads from, an analysis
+        kind, the thermochemical conditions, and validation thresholds are all
+        refused: those redefine the question rather than fix how it was
+        written, and they belong in a new plan that a human reviews.
+        """
+
+        project_replacements = tuple(values.get("project_replacements") or ())
+        analysis_repairs = tuple(values.get("analysis_repairs") or ())
+        if not project_replacements and not analysis_repairs:
+            raise ContractError(
+                "an amendment must supply project_replacements or "
+                "analysis_repairs; it changes something or it is not an "
+                "amendment"
+            )
+        return self._rebind_scientific_workflow_projects(
+            turn_id,
+            {
+                "workflow_id": values["workflow_id"],
+                "replacements": project_replacements,
+                "analysis_repairs": analysis_repairs,
+            },
+        )
+
+    def _repaired_analysis_nodes(
+        self, nodes: tuple, repairs: tuple
+    ) -> tuple[tuple, dict[str, str]]:
+        """Apply expression-level repairs to named analysis nodes.
+
+        Each repair addresses an element that already exists -- an output, a
+        selector, or an input -- and replaces only the field named.  Addressing
+        something absent is refused with the inventory that node does carry,
+        because a caller guessing at a name is the failure this exists to end.
+
+        Returns the revised nodes and any output renames, so the caller can
+        carry them into the required-output set.  Renaming an output otherwise
+        orphans a requirement that names the old id, and asking the caller to
+        restate the requirement is the kind of bookkeeping this whole change
+        exists to stop demanding.
+        """
+
+        renames: dict[str, str] = {}
+        if not repairs:
+            return nodes, renames
+        nodes_by_id = {node.node_id: node for node in nodes}
+        unknown = sorted(
+            {str(item["node_id"]) for item in repairs}.difference(nodes_by_id)
+        )
+        if unknown:
+            raise ContractError(
+                f"analysis repairs reference unknown nodes {unknown}; this "
+                f"workflow has {sorted(nodes_by_id)}"
+            )
+
+        revised = dict(nodes_by_id)
+        for repair in repairs:
+            node = revised[str(repair["node_id"])]
+            outputs = list(node.outputs)
+            selectors = list(node.selectors)
+            inputs = list(node.inputs)
+
+            for item in repair.get("outputs") or ():
+                target = str(item["output_id"])
+                index = next(
+                    (
+                        position
+                        for position, output in enumerate(outputs)
+                        if output.output_id == target
+                    ),
+                    None,
+                )
+                if index is None:
+                    raise ContractError(
+                        f"analysis node {node.node_id!r} has no output "
+                        f"{target!r}; it declares "
+                        f"{[output.output_id for output in outputs]}"
+                    )
+                current = outputs[index]
+                renamed = str(item.get("new_output_id") or target)
+                if renamed != target:
+                    renames[target] = renamed
+                outputs[index] = AnalysisOutputIntentV1(
+                    output_id=renamed,
+                    quantity_kind=str(
+                        item.get("quantity_kind") or current.quantity_kind
+                    ),
+                    unit=str(item.get("unit") or current.unit),
+                )
+
+            for item in repair.get("selectors") or ():
+                target = str(item["quantity_id"])
+                index = next(
+                    (
+                        position
+                        for position, selector in enumerate(selectors)
+                        if selector.quantity_id == target
+                    ),
+                    None,
+                )
+                if index is None:
+                    raise ContractError(
+                        f"analysis node {node.node_id!r} has no selector for "
+                        f"{target!r}; it declares "
+                        f"{[item.quantity_id for item in selectors]}"
+                    )
+                selectors[index] = AnalysisSelectorIntentV1(
+                    quantity_id=target,
+                    selector=str(item["selector"]),
+                )
+
+            for item in repair.get("inputs") or ():
+                target = str(item["input_id"])
+                index = next(
+                    (
+                        position
+                        for position, value in enumerate(inputs)
+                        if getattr(value, "input_id", "") == target
+                    ),
+                    None,
+                )
+                if index is None:
+                    raise ContractError(
+                        f"analysis node {node.node_id!r} has no input "
+                        f"{target!r}; it declares "
+                        f"{[getattr(value, 'input_id', '') for value in inputs]}"
+                    )
+                current = inputs[index]
+                if not isinstance(current, AnalysisInputIntentV1):
+                    raise ContractError(
+                        f"input {target!r} reads a registered result, whose "
+                        "artifact is scientific intent rather than an "
+                        "expression; plan that as a new workflow"
+                    )
+                # Only which named output of the *same* producer is read.
+                # Repointing to another producer substitutes a different
+                # calculation's result, which is a different question.
+                inputs[index] = replace(
+                    current,
+                    producer_output_id=str(item["producer_output_id"]),
+                )
+
+            revised[node.node_id] = replace(
+                node,
+                outputs=tuple(
+                    sorted(outputs, key=lambda value: value.output_id)
+                ),
+                selectors=tuple(
+                    sorted(selectors, key=lambda value: value.quantity_id)
+                ),
+                inputs=tuple(
+                    sorted(
+                        inputs,
+                        key=lambda value: getattr(value, "input_id", ""),
+                    )
+                ),
+            )
+        return tuple(revised[node.node_id] for node in nodes), renames
+
     def _rebind_scientific_workflow_projects(
         self, turn_id: str, values: dict
     ) -> Any:
@@ -2658,6 +2831,15 @@ class CommandCompiledToolHostV1:
             current_plan.plan_sha256
         ]
         current_draft = current_result["workflow_draft"]
+        if (
+            self.frozen_workflow_approval is not None
+            and self.frozen_workflow_approval.plan_sha256
+            == current_plan.plan_sha256
+        ):
+            raise ContractError(
+                "this workflow already carries a frozen execution approval; "
+                "an amended plan is a new workflow and needs its own review"
+            )
         nodes_by_id = {node.node_id: node for node in current_draft.nodes}
         replacements = {
             item["node_id"]: item["project_role"]
@@ -2709,7 +2891,15 @@ class CommandCompiledToolHostV1:
             }
             for node in (scientific_v2.nodes if scientific_v2 else ())
         }
-        command_result = self._plan_command_workflow(
+        # Recompiling the calculation side is only needed when a project
+        # binding changed.  An analysis-only repair leaves every command,
+        # binding and receipt on that side exactly as reviewed, so it is
+        # carried by digest rather than rebuilt -- the mirror image of the way
+        # this function has always carried the analysis side verbatim.
+        command_result = (
+            current_result
+            if not replacements
+            else self._plan_command_workflow(
             turn_id,
             {
                 "workflow_id": current_draft.workflow_id,
@@ -2753,17 +2943,25 @@ class CommandCompiledToolHostV1:
                 ),
             },
             node_annotations=annotations,
+            )
         )
         draft = command_result["workflow_draft"]
         observables = dict(current_plan.calculation_observables)
+        revised_analysis, renames = self._repaired_analysis_nodes(
+            current_plan.analysis_nodes,
+            tuple(values.get("analysis_repairs") or ()),
+        )
         revised_plan = build_scientific_toolchain_plan(
             plan_id=current_plan.plan_id,
             workflow_id=current_plan.workflow_id,
             command_workflow_draft_sha256=draft.draft_sha256,
             calculation_nodes=draft.nodes,
             calculation_observables=observables,
-            analysis_nodes=current_plan.analysis_nodes,
-            required_output_ids=current_plan.required_output_ids,
+            analysis_nodes=revised_analysis,
+            required_output_ids=tuple(
+                renames.get(output_id, output_id)
+                for output_id in current_plan.required_output_ids
+            ),
         )
         self.scientific_toolchain_plans[revised_plan.plan_sha256] = (
             revised_plan

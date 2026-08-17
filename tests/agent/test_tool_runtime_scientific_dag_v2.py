@@ -302,10 +302,10 @@ def test_validated_project_repair_can_rebind_without_rewriting_analysis_dag(
 
     revised = host.dispatch(
         turn_id="turn-1",
-        tool_name="rebind_scientific_workflow_projects",
+        tool_name="amend_scientific_workflow",
         arguments={
             "workflow_id": "workflow.ds-pm-003",
-            "replacements": [
+            "project_replacements": [
                 {"node_id": "node.opt", "project_role": replacement_id},
                 {"node_id": "node.hess", "project_role": replacement_id},
             ],
