@@ -4321,6 +4321,38 @@ class TestMoleculeSimpleProperties:
         water_molecule.pbc_conditions = [1, 0, 0]
         assert water_molecule.pbc is False
 
+    def test_from_ase_atoms(self):
+        atoms = Atoms(
+            symbols=["O", "H", "H"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [0.9572, 0.0, 0.0],
+                [-0.239, 0.927, 0.0],
+            ],
+        )
+        molecule = Molecule.from_ase_atoms(atoms)
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_symbols == ["O", "H", "H"]
+
+    def test_from_filepath_wraps_single_molecule_in_list(
+        self, gaussian_opt_inputfile
+    ):
+        """_read_gaussian_inputfile (for .com/.gjf) always returns a
+        bare Molecule, ignoring return_list -- from_filepath must
+        wrap it in a list itself when return_list=True."""
+        result = Molecule.from_filepath(
+            gaussian_opt_inputfile, return_list=True
+        )
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], Molecule)
+
+    def test_mass_weighted_properties(self, water_molecule):
+        assert water_molecule.mass > 0
+        assert water_molecule.natural_abundance_weighted_mass > 0
+        assert water_molecule.most_abundant_mass > 0
+        assert water_molecule.center_of_mass.shape == (3,)
+
     def test_is_multicomponent_single_fragment(self, water_molecule):
         assert water_molecule.is_multicomponent is False
 
@@ -4871,6 +4903,22 @@ class TestMoleculeWriteMethods:
         with open(outfile, "w") as f:
             with pytest.raises(ValueError, match="not supported for writing"):
                 water_molecule.write_coordinates(f, program="nwchem")
+
+    def test_write_coordinates_default_program_is_gaussian(
+        self, water_molecule, tmp_path
+    ):
+        outfile = tmp_path / "out_default.txt"
+        with open(outfile, "w") as f:
+            water_molecule.write_coordinates(f, program=None)
+        content = outfile.read_text()
+        assert "O" in content
+
+    def test_write_coordinates_orca_program(self, water_molecule, tmp_path):
+        outfile = tmp_path / "out_orca.txt"
+        with open(outfile, "w") as f:
+            water_molecule.write_coordinates(f, program="orca")
+        content = outfile.read_text()
+        assert "O" in content
 
     def test_write_unsupported_format_raises(self, water_molecule, tmp_path):
         outfile = tmp_path / "out.foo"
