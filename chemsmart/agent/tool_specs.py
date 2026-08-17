@@ -352,16 +352,20 @@ def build_command_compiled_tool_surface(
                     "items": {
                         "type": "object",
                         "properties": {
-                            "node_id": _public_identifier(),
+                            "node_id": _string(),
                             "outputs": {
                                 "type": "array",
                                 "maxItems": 64,
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "output_id": _public_identifier(),
+                                        # An address into what the node
+                                        # already declares, not a name being
+                                        # authored, so the naming rule does
+                                        # not apply and is not repeated here.
+                                        "output_id": _string(),
                                         "new_output_id": _public_identifier(),
-                                        "quantity_kind": _public_identifier(),
+                                        "quantity_kind": _string(),
                                         "unit": _unit_string(
                                             "Corrected unit for this output."
                                         ),
@@ -376,7 +380,7 @@ def build_command_compiled_tool_surface(
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "quantity_id": _public_identifier(),
+                                        "quantity_id": _string(),
                                         "selector": _string(),
                                     },
                                     "required": ["quantity_id", "selector"],
@@ -389,10 +393,8 @@ def build_command_compiled_tool_surface(
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "input_id": _public_identifier(),
-                                        "producer_output_id": (
-                                            _public_identifier()
-                                        ),
+                                        "input_id": _string(),
+                                        "producer_output_id": _string(),
                                     },
                                     "required": [
                                         "input_id",
