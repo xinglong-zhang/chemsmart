@@ -4341,3 +4341,30 @@ Despite its name closely matching `input_coordinates_block`, that property actua
 **Impact:** Low-medium for (a)/(b) -- both are common cases (any output without a gradient print, or without active geometry constraints) that would currently crash callers relying on these properties as a lightweight "is this present" check. Low for (c) -- purely wasted code, but harmless since `input_coordinates_block` (the only plausibly-intended caller) already works via the other method.
 
 **Suggested direction:** (a) guard `num_forces` with `len(self.forces) if self.forces is not None else 0`. (b) add a fallback `return ({}, {}, {})` after `_get_constraints`'s loop, matching the "always return a value, never implicitly `None`" convention used elsewhere in this file. (c) delete `_get_input_structure_coordinates_block_in_output` (and its docstring/pattern usage) as dead code, or rename it and wire it up if it was meant to be used instead of `_get_first_structure_coordinates_block_in_output`.
+
+---
+
+## 100. A whole family of population-analysis/dipole/rotational-constant properties crash with `IndexError` instead of returning `None`/`{}` when their section marker is absent
+
+**Location:** `chemsmart/io/orca/output.py:1707-2262` -- `mulliken_atomic_charges`, `loewdin_atomic_charges`, `mayer_mulliken_gross_atomic_population`, `mayer_total_nuclear_charge`, `mayer_mulliken_gross_atomic_charge`, `mayer_total_valence`, `mayer_bonded_valence`, `mayer_free_valence`, `mayer_bond_orders_larger_than_zero_point_one`, `total_integrated_alpha_density`, `total_integrated_beta_density`, `_get_hirshfeld_charges_and_spins` (and its `hirshfeld_charges`/`hirshfeld_spin_densities` wrappers), `dipole_moment_electric_contribution`, `dipole_moment_nuclear_contribution`, `dipole_moment_in_au`, `dipole_moment_magnitude_in_au`, `dipole_moment_magnitude_in_debye`, `dipole_moment_along_axis_in_au`, `dipole_moment_along_axis_in_debye`, `rotational_constants_in_wavenumbers`, `rotational_constants_in_MHz` (17 distinct properties, all following the identical shape)
+
+```python
+@property
+def mulliken_atomic_charges(self):
+    all_mulliken_atomic_charges = []
+    for i, line_i in enumerate(self.contents):
+        if "MULLIKEN ATOMIC CHARGES" in line_i:
+            ...
+            all_mulliken_atomic_charges.append(mulliken_atomic_charges)
+    return all_mulliken_atomic_charges[-1]   # <-- crashes if never appended to
+```
+
+Every one of these properties/helpers builds a list by appending once per occurrence of its section marker, then unconditionally returns `accumulator[-1]` with no `if accumulator:`/`if len(accumulator) != 0:` guard (unlike, e.g., `energies`, `_get_max_cosx_asymmetry_energy`, or `all_vibrational_frequencies`, which all correctly guard this same shape elsewhere in the file). Any ORCA output that doesn't happen to print the corresponding section -- e.g. a job run without `%output Print[P_Mayer] 1`, without a dipole calculation, or a single-point job with no `Rotational spectrum` block -- makes the property raise `IndexError: list index out of range` instead of the `None`/`{}` that every other "marker absent" property in this file returns.
+
+This has a further knock-on effect: `rotational_constants_in_Hz` (`:2264-2275`) and `rotational_temperatures` (`:2277-2288`) both guard with `if self.rotational_constants_in_MHz is None: return None` -- but since `rotational_constants_in_MHz` can now only ever return real data or raise (never `None`), that guard's `None` branch is unreachable *because the bug forecloses the only input that would reach it*, exactly the same secondary effect documented for bug #98's `*_eV` properties. The `IndexError` simply propagates up through both.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_population_dipole_rotational_properties_crash_when_absent` -- a minimal `.out` file with none of the relevant section markers reproduces `IndexError` for all 21 attributes (17 directly-affected properties/helpers plus `rotational_constants_in_Hz`/`rotational_temperatures` inheriting the crash).
+
+**Impact:** Medium-high -- this is the single largest source of crash-instead-of-`None` behavior in the file by property count. Any ORCA output missing one of these fairly common but non-default print sections (population analyses, dipole moments, rotational spectra) makes the corresponding property entirely unusable rather than gracefully reporting "not present."
+
+**Suggested direction:** add `if accumulator: return accumulator[-1]` / `return accumulator[-1] if accumulator else None` (or the dict-equivalent `{}`/`None`) to each of the 17 directly-affected properties, mirroring the guard pattern already used correctly by `energies`, `_get_max_cosx_asymmetry_energy`, and `all_vibrational_frequencies` elsewhere in this same file. No change needed to `rotational_constants_in_Hz`/`rotational_temperatures` once their dependency is fixed.

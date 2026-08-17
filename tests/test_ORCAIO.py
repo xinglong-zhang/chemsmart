@@ -3261,6 +3261,53 @@ class TestORCAOutputDirectPropertyCoverage:
         with pytest.raises(TypeError):
             oo.dfet_embed_energy_eV
 
+    def test_population_dipole_rotational_properties_crash_when_absent(
+        self, tmp_path
+    ):
+        """A whole family of properties accumulate per-marker results
+        into a list and unconditionally index `[-1]` at the end, with
+        no `if len(...) == 0` guard -- so every one of them raises
+        IndexError (instead of returning None/{}) when its section
+        marker never appears. See BUGS_FOUND.md #100."""
+        path = _write_orca_output(
+            tmp_path, "no_population_sections.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        for attr in (
+            "mulliken_atomic_charges",
+            "loewdin_atomic_charges",
+            "mayer_mulliken_gross_atomic_population",
+            "mayer_total_nuclear_charge",
+            "mayer_mulliken_gross_atomic_charge",
+            "mayer_total_valence",
+            "mayer_bonded_valence",
+            "mayer_free_valence",
+            "mayer_bond_orders_larger_than_zero_point_one",
+            "total_integrated_alpha_density",
+            "total_integrated_beta_density",
+            "hirshfeld_charges",
+            "hirshfeld_spin_densities",
+            "dipole_moment_electric_contribution",
+            "dipole_moment_nuclear_contribution",
+            "dipole_moment_in_au",
+            "dipole_moment_magnitude_in_au",
+            "dipole_moment_magnitude_in_debye",
+            "dipole_moment_along_axis_in_au",
+            "dipole_moment_along_axis_in_debye",
+            "rotational_constants_in_wavenumbers",
+            "rotational_constants_in_MHz",
+        ):
+            with pytest.raises(IndexError):
+                getattr(oo, attr)
+        # rotational_constants_in_Hz/rotational_temperatures guard against
+        # rotational_constants_in_MHz being *None*, but it never is --
+        # it crashes instead, so the guard's None branch is unreachable
+        # and the crash simply propagates.
+        with pytest.raises(IndexError):
+            oo.rotational_constants_in_Hz
+        with pytest.raises(IndexError):
+            oo.rotational_temperatures
+
     def test_spin_wavefunction_type_not_r_or_u_returns_none(self, tmp_path):
         """Covers the branch where the wavefunction-type line is found but
         its value doesn't start with 'R' or 'U'."""
@@ -3764,6 +3811,44 @@ class TestORCAOutputDirectPropertyCoverage:
         path = _write_orca_output(tmp_path, "no_coords.out", content)
         oo = ORCAOutput(filename=path)
         assert oo.all_structures == []
+
+    def test_abnormal_termination_with_multiple_structures_keeps_earlier_ones(
+        self, tmp_path
+    ):
+        """Abnormal termination with 2 coordinate blocks: the last
+        (likely-incomplete) one is excluded, but num_structures is not
+        0, so all_structures still returns the earlier structure(s)."""
+        content = (
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.087341\n"
+            "  H  -0.755205   0.000000  -0.509670\n"
+            "  H   0.755205   0.000000  -0.509670\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.000000\n"
+            "\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.090000\n"
+            "  H  -0.755205   0.000000  -0.510000\n"
+            "  H   0.755205   0.000000  -0.510000\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.100000\n"
+            "\n"
+            "MULLIKEN ATOMIC CHARGES\n"
+            "----------------------------\n"
+            "   0   O :   -0.354299\n"
+            "   1   H :    0.177149\n"
+            "   2   H :    0.177150\n"
+            "Sum of atomic charges:    0.0000000\n"
+        )
+        path = _write_orca_output(tmp_path, "abnormal_multi.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.normal_termination is False
+        assert len(oo._get_all_orientations()) == 2
+        structures = oo.all_structures
+        assert len(structures) == 1
+        assert structures[0].chemical_symbols == ["O", "H", "H"]
 
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
