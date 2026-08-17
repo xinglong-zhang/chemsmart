@@ -1,9 +1,26 @@
 """Bounded, parser-owned summaries of native program failures.
 
 The summaries in this module are deliberately much smaller than a native
-output file. They retain only a stable failure class and parser-owned canonical
-diagnostic templates. Matched raw lines, input echoes, native Link identifiers,
-paths, URLs, and credential-like values never enter the public record.
+output file, and they carry two different kinds of statement.
+
+``diagnostic_lines`` are parser-owned canonical templates keyed by a stable
+``error_class``.  They are host statements: short, predictable, and safe to
+match on.
+
+``engine_lines`` are the program's *own* words about the failure, quoted
+verbatim and bounded.  They exist because the canonical vocabulary is closed:
+a failure mode nobody anticipated classifies as ``native_runtime`` and its
+template says only that an error occurred, which is no more useful than
+silence.  A run once died because canonical CCSD under the RIJK approximation
+is not size-consistent -- a qualitative error for exactly the interaction
+energy being computed -- and the program said so plainly while the host
+reported nothing.  Quoting the engine is not re-implementing its rules, so no
+second validation system appears here; the quote is evidence about the run,
+never a host claim, and never readiness or validation.
+
+Paths, URLs, and credential-like values are redacted from quoted lines. Input
+echoes may appear in a quoted engine line, because what the program objected to
+is usually the thing a reader needs to see.
 """
 
 from __future__ import annotations
@@ -18,6 +35,23 @@ _SCHEMA_VERSION = "chemsmart.native-failure-summary.v1"
 _MAX_DIAGNOSTICS = 3
 _MAX_DIAGNOSTIC_CHARS = 160
 
+#: Programs whose output this module knows how to classify.
+_SUPPORTED_PROGRAMS = frozenset({"gaussian", "orca", "xtb"})
+
+#: Engines state the diagnosis and then abort, so the terminating line is
+#: frequently the least informative one in the block: ORCA's abort marker
+#: literally elides its own reason, and the four lines naming the rule and its
+#: remedy come before it.  Quote a bounded window on both sides of the match.
+_LEADING_ENGINE_LINES = 4
+_TRAILING_ENGINE_LINES = 2
+
+#: Engine lines are quoted rather than templated, so the block needs room for a
+#: rule, its consequence and its remedy on either side of the marker.  Still
+#: tightly bounded: at most this many lines, each truncated to the shared
+#: per-line limit, so the worst case is a little over a kilobyte against a
+#: native output of megabytes.
+_MAX_ENGINE_LINES = 7
+
 
 @dataclass(frozen=True)
 class NativeFailureSummaryV1:
@@ -28,25 +62,33 @@ class NativeFailureSummaryV1:
     termination_state: str
     error_class: str
     diagnostic_lines: tuple[str, ...]
+    engine_lines: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != _SCHEMA_VERSION:
             raise ValueError("unsupported native failure summary")
-        if self.program not in {"orca", "gaussian"}:
+        if self.program not in _SUPPORTED_PROGRAMS:
             raise ValueError("unsupported native failure program")
         if self.termination_state not in {"error_termination", "incomplete"}:
             raise ValueError("unsupported native termination state")
         if not re.fullmatch(r"[a-z][a-z0-9_]*", self.error_class):
             raise ValueError("native failure class is not stable")
-        if len(self.diagnostic_lines) > _MAX_DIAGNOSTICS:
-            raise ValueError("native failure diagnostics are not bounded")
-        if len(set(self.diagnostic_lines)) != len(self.diagnostic_lines):
-            raise ValueError("native failure diagnostics are not unique")
-        for line in self.diagnostic_lines:
-            if not line or "\n" in line or "\r" in line:
-                raise ValueError("native failure diagnostic is not one line")
-            if len(line) > _MAX_DIAGNOSTIC_CHARS:
-                raise ValueError("native failure diagnostic is too long")
+        for label, lines, limit in (
+            ("diagnostics", self.diagnostic_lines, _MAX_DIAGNOSTICS),
+            ("engine lines", self.engine_lines, _MAX_ENGINE_LINES),
+        ):
+            if len(lines) > limit:
+                raise ValueError(f"native failure {label} are not bounded")
+            if len(set(lines)) != len(lines):
+                raise ValueError(f"native failure {label} are not unique")
+            for line in lines:
+                if not line or "\n" in line or "\r" in line:
+                    raise ValueError(f"native failure {label} is not one line")
+                if len(line) > _MAX_DIAGNOSTIC_CHARS:
+                    raise ValueError(f"native failure {label} is too long")
+        for line in self.engine_lines:
+            if _REDACTION_REQUIRED.search(line):
+                raise ValueError("native failure engine line is not redacted")
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -55,6 +97,7 @@ class NativeFailureSummaryV1:
             "termination_state": self.termination_state,
             "error_class": self.error_class,
             "diagnostic_lines": self.diagnostic_lines,
+            "engine_lines": self.engine_lines,
         }
 
 
@@ -143,11 +186,45 @@ _GAUSSIAN_RULES = (
     ),
 )
 
+_XTB_RULES = (
+    (
+        "scf_convergence",
+        (
+            re.compile(r"\bSCC\b.*\bnot converged\b", re.I),
+            re.compile(r"\bself-consistent charge\b.*\bfailed\b", re.I),
+            re.compile(r"\bconvergence\b.*\bnot\b.*\breached\b", re.I),
+        ),
+    ),
+    (
+        "geometry_optimization",
+        (
+            re.compile(r"\bFAILED TO CONVERGE GEOMETRY\b", re.I),
+            re.compile(r"\bgeometry optimization\b.*\bfailed\b", re.I),
+        ),
+    ),
+    (
+        "input_syntax",
+        (
+            re.compile(r"\bcould not read\b.*\b(?:file|input|geometry)\b", re.I),
+            re.compile(r"\bunknown\b.*\b(?:argument|option|keyword)\b", re.I),
+        ),
+    ),
+    (
+        "method_unavailable",
+        (
+            re.compile(r"\bparameter(?:s|isation|ization)?\b.*\bnot\b.*\bavailable\b", re.I),
+            re.compile(r"\bno parameters\b.*\belement\b", re.I),
+        ),
+    ),
+)
+
 _ORCA_NORMAL = re.compile(r"ORCA TERMINATED NORMALLY", re.I)
 _ORCA_ERROR = re.compile(r"ORCA finished by error termination", re.I)
 _ORCA_ABORT = re.compile(r"\bError \(ORCA_MAIN\):.*\baborting the run\b", re.I)
 _GAUSSIAN_NORMAL = re.compile(r"Normal termination of Gaussian", re.I)
 _GAUSSIAN_ERROR = re.compile(r"Error termination via", re.I)
+_XTB_NORMAL = re.compile(r"\*\s*finished run on", re.I)
+_XTB_ERROR = re.compile(r"\[ERROR\]|\babnormal termination of xtb\b", re.I)
 
 _CANONICAL_DIAGNOSTICS = {
     "orca": {
@@ -168,6 +245,18 @@ _CANONICAL_DIAGNOSTICS = {
         "memory_resource": ("Gaussian reported insufficient memory.",),
         "storage_io": ("Gaussian reported a storage I/O failure.",),
         "native_runtime": ("Gaussian reported an error termination.",),
+        "incomplete_output": (),
+    },
+    "xtb": {
+        "scf_convergence": ("xTB self-consistent charges did not converge.",),
+        "geometry_optimization": (
+            "xTB geometry optimization did not converge.",
+        ),
+        "input_syntax": ("xTB rejected its input or command line.",),
+        "method_unavailable": (
+            "xTB has no parameters for the requested method or element.",
+        ),
+        "native_runtime": ("xTB reported an error termination.",),
         "incomplete_output": (),
     },
 }
@@ -203,6 +292,26 @@ def summarize_gaussian_native_failure(
     )
 
 
+def summarize_xtb_native_failure(
+    output_lines: Iterable[str],
+    *,
+    diagnostic_lines: Iterable[str] = (),
+) -> NativeFailureSummaryV1 | None:
+    """Classify an abnormal xTB run.
+
+    xTB is one of the three programs this release actually executes, so a run
+    of it that fails deserves the same account as ORCA or Gaussian.
+    """
+
+    return _summarize(
+        program="xtb",
+        lines=chain(output_lines, diagnostic_lines),
+        rules=_XTB_RULES,
+        normal_pattern=_XTB_NORMAL,
+        error_patterns=(_XTB_ERROR,),
+    )
+
+
 def _summarize(
     *,
     program: str,
@@ -215,6 +324,9 @@ def _summarize(
     last_normal_index = -1
     last_error_index = -1
     explicit_error = False
+    engine_lines: list[str] = []
+    recent: list[str] = []
+    trailing = 0
 
     for line_index, raw_line in enumerate(lines):
         line = " ".join(str(raw_line).strip().split())
@@ -222,14 +334,31 @@ def _summarize(
             continue
         if normal_pattern.search(line):
             last_normal_index = line_index
+        matched = False
         if any(pattern.search(line) for pattern in error_patterns):
             explicit_error = True
             last_error_index = line_index
+            matched = True
         for error_class, patterns in rules:
             if any(pattern.search(line) for pattern in patterns):
                 explicit_error = True
                 last_error_index = line_index
                 matches[error_class] = True
+                matched = True
+        # Quote a window around the line the program failed on.  The lines
+        # before it carry the diagnosis and usually the remedy; the matched
+        # line itself is often only the abort marker.
+        if matched:
+            for earlier in recent:
+                _append_engine_line(engine_lines, earlier)
+            _append_engine_line(engine_lines, _redact(line))
+            trailing = _TRAILING_ENGINE_LINES
+        elif trailing:
+            _append_engine_line(engine_lines, _redact(line))
+            trailing -= 1
+        if _carries_a_diagnosis(line):
+            recent.append(_redact(line))
+            del recent[:-_LEADING_ENGINE_LINES]
 
     if last_normal_index >= 0 and last_normal_index > last_error_index:
         return None
@@ -253,6 +382,7 @@ def _summarize(
         ),
         error_class=error_class,
         diagnostic_lines=tuple(diagnostics),
+        engine_lines=tuple(engine_lines),
     )
 
 
@@ -261,8 +391,60 @@ def _append_bounded(values: list[str], line: str) -> None:
         values.append(line[:_MAX_DIAGNOSTIC_CHARS])
 
 
+def _append_engine_line(values: list[str], line: str) -> None:
+    if line and line not in values and len(values) < _MAX_ENGINE_LINES:
+        values.append(line[:_MAX_DIAGNOSTIC_CHARS])
+
+
+def _carries_a_diagnosis(line: str) -> bool:
+    """Whether a preceding line could hold the reason, or is only framing.
+
+    Program output around a failure is full of banner frames and separator
+    rules.  They are worth skipping when looking *backwards* for the
+    diagnosis, because a fixed window spent on framing crowds out a remedy the
+    engine printed after the error instead of before it.
+    """
+
+    substance = [character for character in line if character.isalnum()]
+    return len(substance) >= 8 and len(substance) >= 0.4 * len(line)
+
+
+#: A URL, an absolute filesystem path of at least two segments, a home-relative
+#: path, an e-mail address, an authorization scheme, or an assignment whose name
+#: reads like a credential.  Anything matching this must not survive into a
+#: quoted line.
+#:
+#: A credential assignment is consumed to the end of the line rather than to the
+#: next space, because a secret may contain spaces and half of one is still one.
+_REDACTION_REQUIRED = re.compile(
+    r"""
+    https?://\S+
+    | (?:/[\w.+-]+){2,}/?
+    | ~/[\w.+-/]+
+    | \b[\w.+-]+@[\w-]+\.[\w.-]+\b
+    | \b(?:bearer|basic)\s+\S+.*
+    | \b(?:authorization|api[_-]?key|access[_-]?token|token|secret
+        |password|passwd|credential)s?\b\s*[:=]\s*.*
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _redact(line: str) -> str:
+    """Remove locators and credential-like values from an engine line.
+
+    What the program objected to is usually the thing a reader needs, so this
+    removes only what identifies *this host or account* rather than the
+    science: URLs, absolute and home-relative paths, e-mail addresses, and
+    assignments whose name reads like a credential.
+    """
+
+    return _REDACTION_REQUIRED.sub("<redacted>", line)
+
+
 __all__ = [
     "NativeFailureSummaryV1",
     "summarize_gaussian_native_failure",
     "summarize_orca_native_failure",
+    "summarize_xtb_native_failure",
 ]

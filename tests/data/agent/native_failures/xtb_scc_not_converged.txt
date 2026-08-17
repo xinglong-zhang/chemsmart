@@ -1,0 +1,7 @@
+Synthetic parser fixture; this is not a complete xTB output.
+      -------------------------------------------------
+     |                   G F N 2 - x T B                |
+      -------------------------------------------------
+[ERROR] Program stopped due to fatal error
+-1- scf: SCC is not converged properly!
+iterations exceeded, consider increasing --iterations or loosening --acc

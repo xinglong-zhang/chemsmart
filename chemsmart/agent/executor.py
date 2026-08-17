@@ -217,14 +217,49 @@ def _approved_initial_artifacts(
     return artifacts
 
 
-def _execution_failure_summary(receipt: Any) -> str:
+def _engine_lines_for(receipt: Any, host: Any) -> tuple[str, ...]:
+    """Recover the program's own words about this failure, if it left any.
+
+    The parser already quotes them into the result-validation receipt's
+    observations; they simply never travelled any further.  Everything here is
+    read defensively, because a reader who has already lost the run must not
+    also lose the reason to a missing field.
+    """
+
+    if host is None:
+        return ()
+    try:
+        digest = _field(receipt, "result_validation_receipt_sha256")
+        validation = host.result_validation_receipts.get(digest)
+        observations = getattr(validation, "observations", None) or {}
+    except (ContractError, AttributeError):
+        return ()
+    for observation in observations.values():
+        if not isinstance(observation, Mapping):
+            continue
+        failure = observation.get("native_failure")
+        if isinstance(failure, Mapping):
+            lines = failure.get("engine_lines") or ()
+            if isinstance(lines, (list, tuple)):
+                return tuple(str(item) for item in lines if str(item).strip())
+    return ()
+
+
+def _execution_failure_summary(receipt: Any, host: Any = None) -> str:
     """Describe why a node did not succeed, from its own receipt.
 
     Empty for a node that succeeded.  Otherwise name the terminal state and
     whatever the receipt actually observed -- the wrapper and child exit
-    statuses, and any findings -- so a reader knows the run failed, roughly
-    where, and that the program output is the next place to look.  This does
-    not interpret the engine's message; it reports that there is one.
+    statuses, any findings, and the program's own account of the failure.
+
+    That last part matters more than the rest.  The host's own vocabulary of
+    failure classes is closed, so an unanticipated failure classifies as
+    ``native_runtime`` and its canonical template says only that an error
+    occurred.  Four coupled-cluster nodes once died because the requested
+    approximation is not size-consistent -- fatal for exactly the quantity
+    being computed -- and the engine explained that plainly while every layer
+    above it reported the empty string.  Quoting the engine is not
+    interpreting it, and it is what lets the reason reach whoever must re-plan.
     """
 
     state = str(_field(receipt, "execution_state") or "")
@@ -247,6 +282,13 @@ def _execution_failure_summary(receipt: Any) -> str:
         findings = ()
     if findings:
         parts.append("findings=" + ", ".join(str(item) for item in findings))
+    engine_lines = _engine_lines_for(receipt, host)
+    if engine_lines:
+        # Attributed, so nothing downstream mistakes the engine's words for a
+        # host claim about readiness, validity, or what to do next.
+        parts.append(
+            "engine reported (verbatim): " + " | ".join(engine_lines)
+        )
     return "; ".join(parts)
 
 class ApprovedWorkflowExecutor:
@@ -473,7 +515,7 @@ class ApprovedWorkflowExecutor:
                 # the operator, who had to open the raw program output to learn
                 # that the engine had refused the route.  Say what the receipt
                 # knows.
-                failure=_execution_failure_summary(receipt),
+                failure=_execution_failure_summary(receipt, self.host),
                 validated=bool(_field(receipt, "validated")),
                 result_validation_receipt_sha256=_field(
                     receipt, "result_validation_receipt_sha256"

@@ -1,0 +1,10 @@
+Synthetic parser fixture; this is not a complete ORCA output.
+Shaped after a real failure: the diagnosis and its remedy are stated, and only
+then does the program abort, on a line whose own reason is elided. Matching no
+rule in the closed vocabulary is the point -- the words must still get out.
+                                 SCF CONVERGED
+WARNING: Canonical CCSD/QCISD calculations with the RIJK approximation are not size-consistent.
+       : The size-inconsistency errors are on the order of the RI error itself.
+       : This may introduce qualitative errors, especially for non-covalent binding energies.
+   ===>: Please turn off RIJK. See /opt/chem/orca/6.1.1/manual for details.
+[file orca_main/main_input_check.cpp, line 8560]: Error (ORCA_MAIN): ... aborting the run
