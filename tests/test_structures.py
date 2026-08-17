@@ -246,6 +246,44 @@ class TestStructures:
         rdkit_molecule = molecule.to_rdkit()
         assert isinstance(rdkit_molecule, RDKitMolecule)
 
+    def test_xyz_file_repr_and_str(self, single_molecule_xyz_file):
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert repr(xyz_file) == f"XYZFile({single_molecule_xyz_file})"
+        assert str(xyz_file) == (
+            f"XYZFile object with filename: {single_molecule_xyz_file}"
+        )
+
+    def test_xyz_file_molecule_and_comments_properties(
+        self, single_molecule_xyz_file
+    ):
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert isinstance(xyz_file.molecule, Molecule)
+        assert xyz_file.comments == xyz_file.get_comments(index="-1")
+
+    def test_xyz_file_get_comments(self, multiple_molecules_xyz_file):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        all_comments = xyz_file.get_comments(index=":", return_list=True)
+        assert isinstance(all_comments, list)
+        assert len(all_comments) > 1
+        assert all(isinstance(c, str) for c in all_comments)
+
+        last_comment = xyz_file.get_comments(index="-1")
+        assert last_comment == all_comments[-1]
+
+    def test_xyz_file_empty_file_returns_none(self, tmp_path):
+        empty_file = tmp_path / "empty.xyz"
+        empty_file.write_text("")
+        xyz_file = XYZFile(filename=str(empty_file))
+        assert xyz_file.get_molecules(index=":", return_list=False) is None
+        assert xyz_file.get_molecules(index=":", return_list=True) == []
+
+    def test_xyz_file_zero_atoms_raises(self, tmp_path):
+        bad_file = tmp_path / "zero_atoms.xyz"
+        bad_file.write_text("0\ncomment\n")
+        xyz_file = XYZFile(filename=str(bad_file))
+        with pytest.raises(ValueError, match="Number of atoms .* is zero"):
+            xyz_file.get_molecules()
+
     def test_read_molecule_energy_from_xyz_file(
         self,
         xtb_optimized_xyz_file,
