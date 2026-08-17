@@ -4427,3 +4427,31 @@ Note this branch is only reachable at all via a direct call to `_get_molecule_fr
 **Impact:** Low today (unreachable through any live call path, same as bug #71's fallback chain), but would immediately break any future fix to bug #71 that made this fallback reachable again -- an ORCA single-point job that reads its structure from a referenced `.xyz` file would crash instead of loading it.
 
 **Suggested direction:** use `self.filepath_directory` (`FileMixin`'s own `os.path.split(self.filepath)[0]` property, `:55-63`) instead of `self.folder` -- `folderpath` is not a fix either, since it also just wraps `self.folder`.
+
+---
+
+## 103. `ORCAOutput.normal_modes` crashes with `ValueError` instead of skipping a malformed coordinate line
+
+**Location:** `chemsmart/io/orca/output.py:2321-2393`
+
+```python
+pre_modes = []
+for k in range(coord_lines_to_read):
+    coord_line = self.contents[j + 1 + k]
+    if re.fullmatch(orca_line_integer_followed_by_floats, coord_line):
+        values = [float(val) for val in coord_line.split()[1:]]
+        pre_modes.append(values)   # <-- only appended if it matched
+...
+pre_modes = np.asarray(pre_modes)
+for mode_col in range(num_modes_in_block):
+    mode_column = pre_modes[:, mode_col]
+    mode_data = mode_column.reshape(self.num_atoms, 3)  # <-- assumes exactly num_atoms*3 rows
+```
+
+The inner loop reads exactly `3 * self.num_atoms` lines following a mode-number row, but only appends a row to `pre_modes` when it matches `orca_line_integer_followed_by_floats` -- there is no `else` branch, so a single malformed/unparseable coordinate line within that fixed-size window is silently dropped rather than causing the block to be skipped or padded. `pre_modes` then has fewer than `num_atoms * 3` rows, so `mode_column.reshape(self.num_atoms, 3)` raises `ValueError: cannot reshape array of size N into shape (num_atoms,3)` instead of either skipping the malformed block gracefully or raising a clearer, more diagnostic error.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_normal_modes_crashes_on_malformed_coordinate_line` -- a synthetic `NORMAL MODES` block for a 1-atom system where the middle of the 3 expected coordinate lines is replaced with a non-matching line reproduces the `ValueError`.
+
+**Impact:** Low -- real ORCA output is always well-formed here, so this would only manifest on a truncated/corrupted output file (e.g. a job killed mid-write during the `NORMAL MODES` print).
+
+**Suggested direction:** track how many lines actually matched vs. how many were expected, and either `break`/skip the whole mode block (logging a warning) when the count doesn't match `3 * num_atoms`, or raise a clear, purpose-built error identifying the offending line instead of letting the `reshape` call fail with a generic shape-mismatch message.

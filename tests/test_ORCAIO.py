@@ -4122,6 +4122,86 @@ class TestORCAOutputDirectPropertyCoverage:
         params = oo.get_optimized_parameters()
         assert params == {"B(H2,O1)": 0.9627}
 
+    def test_normal_modes_runs_to_natural_exhaustion(self, tmp_path):
+        """The NORMAL MODES section ends exactly at EOF with no trailing
+        blank line, so the inner while loop exits via its own
+        condition (j >= len(contents)) rather than the inner break on
+        a blank line."""
+        content = (
+            "Number of atoms                             ...      1\n"
+            "NORMAL MODES\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "filler4\n"
+            "filler5\n"
+            "filler6\n"
+            "                  0\n"
+            "      0       0.077325\n"
+            "      1       0.000000\n"
+            "      2      -0.000000\n"
+        )
+        path = _write_orca_output(tmp_path, "normal_modes_trunc.out", content)
+        oo = ORCAOutput(filename=path)
+        modes = oo.normal_modes
+        assert len(modes) == 1
+        assert modes[0].shape == (1, 3)
+
+    def test_normal_modes_skips_non_mode_number_lines(self, tmp_path):
+        """A line between the header and the first mode-number row that
+        isn't all-integers is skipped (j += 1) rather than treated as
+        a mode block."""
+        content = (
+            "Number of atoms                             ...      1\n"
+            "NORMAL MODES\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "filler4\n"
+            "filler5\n"
+            "filler6\n"
+            "not an all-integer line\n"
+            "                  0\n"
+            "      0       0.077325\n"
+            "      1       0.000000\n"
+            "      2      -0.000000\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "normal_modes_skip.out", content)
+        oo = ORCAOutput(filename=path)
+        modes = oo.normal_modes
+        assert len(modes) == 1
+        assert modes[0].shape == (1, 3)
+
+    def test_normal_modes_crashes_on_malformed_coordinate_line(self, tmp_path):
+        """A coordinate line within a mode block that doesn't match the
+        expected pattern is silently skipped rather than appended, so
+        pre_modes ends up with fewer rows than num_atoms * 3 -- the
+        subsequent .reshape(num_atoms, 3) then crashes with
+        ValueError instead of e.g. skipping the malformed block. A
+        real crash bug, not previously exercised."""
+        content = (
+            "Number of atoms                             ...      1\n"
+            "NORMAL MODES\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "filler4\n"
+            "filler5\n"
+            "filler6\n"
+            "                  0\n"
+            "      0       0.077325\n"
+            "not a coordinate line\n"
+            "      2      -0.000000\n"
+            "\n"
+        )
+        path = _write_orca_output(
+            tmp_path, "normal_modes_malformed.out", content
+        )
+        oo = ORCAOutput(filename=path)
+        with pytest.raises(ValueError):
+            oo.normal_modes
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):
