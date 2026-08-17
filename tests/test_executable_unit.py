@@ -142,3 +142,57 @@ class TestFromServername:
         assert executable.executable_folder == os.path.expanduser(
             "~/programs/g16"
         )
+
+    def test_from_servername_program_block_without_envars(self, tmp_path):
+        yaml_file = tmp_path / "minimal.yaml"
+        yaml_file.write_text("GAUSSIAN:\n    EXEFOLDER: ~/programs/g16\n")
+        executable = GaussianExecutable.from_servername(str(yaml_file))
+        assert executable.envars is None
+
+
+class TestProgramScratchFromServername:
+    def test_none_when_program_unset(self):
+        assert Executable.program_scratch_from_servername("anything") is None
+
+    def test_none_when_servername_falsy(self):
+        assert GaussianExecutable.program_scratch_from_servername("") is None
+
+    def test_appends_yaml_suffix_when_missing(self, server_yaml_file):
+        bare_name = server_yaml_file[: -len(".yaml")]
+        assert (
+            GaussianExecutable.program_scratch_from_servername(bare_name)
+            is True
+        )
+
+    def test_accepts_direct_yaml_file_path(self, server_yaml_file):
+        assert (
+            GaussianExecutable.program_scratch_from_servername(
+                server_yaml_file
+            )
+            is True
+        )
+
+    def test_none_when_scratch_key_null(self, tmp_path):
+        yaml_file = tmp_path / "server.yaml"
+        yaml_file.write_text(
+            "GAUSSIAN:\n    EXEFOLDER: ~/programs/g16\n    SCRATCH: null\n"
+        )
+        assert (
+            GaussianExecutable.program_scratch_from_servername(str(yaml_file))
+            is None
+        )
+
+    def test_none_when_scratch_key_missing(self, tmp_path):
+        yaml_file = tmp_path / "server.yaml"
+        yaml_file.write_text("GAUSSIAN:\n    EXEFOLDER: ~/programs/g16\n")
+        assert (
+            GaussianExecutable.program_scratch_from_servername(str(yaml_file))
+            is None
+        )
+
+    def test_none_on_missing_file(self, tmp_path):
+        missing = tmp_path / "does_not_exist.yaml"
+        assert (
+            GaussianExecutable.program_scratch_from_servername(str(missing))
+            is None
+        )
