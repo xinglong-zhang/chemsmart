@@ -261,6 +261,14 @@ class TestCleanRotationalConstantsByGeometry:
         assert np.allclose(cleaned, [5.0, 8.30647, 8.30647])
         assert status == "nonlinear"
 
+    def test_return_status_false_returns_only_cleaned_array(self):
+        """With the default return_status=False, only the cleaned
+        array is returned (not a tuple)."""
+        cleaned = clean_rotational_constants_by_geometry(
+            [5.0, 8.30647, 8.30647], mode="physical"
+        )
+        assert np.allclose(cleaned, [5.0, 8.30647, 8.30647])
+
 
 class TestCalculateVoronoiDirichletOccupiedVolume:
     def test_mismatched_lengths_raises(self):
@@ -496,6 +504,18 @@ class TestCalculateMolecularVolumeVDP:
                 coordinates=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]],
                 vdw_radii=[1.0, 1.0],
             )
+
+    def test_unbounded_region_is_skipped(self, mocker):
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[-1, 0, 1]]
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
 
     def test_region_with_fewer_than_four_vertices_is_skipped(self, mocker):
         """A Voronoi cell with fewer than 4 vertices cannot form a
@@ -739,6 +759,34 @@ class TestGetCoordinatingAtoms:
                 [0.0, 0.0, 0.0],
                 [c_dist, 0.0, 0.0],
                 [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_excludes_atom_beyond_cutoff(self):
+        """An atom too far from every primary-sphere atom is left out
+        of the expansion (the np.min(partner_dists) <= expand_cutoff
+        check evaluates False and the loop continues, unlike the CO
+        oxygen case above where it evaluates True)."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        far_dist = c_dist + 20.0
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+                [far_dist, 0.0, 0.0],
             ]
         )
 
