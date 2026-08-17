@@ -4270,6 +4270,38 @@ class TestORCAOutputDirectPropertyCoverage:
         oo3 = ORCAOutput(filename=path)
         assert oo3.transition_dipole_deriv_norm == [0.05]
 
+    def test_thermochemistry_properties_natural_exhaustion(self, tmp_path):
+        """THERMOCHEMISTRY/INNER ENERGY/ENTHALPY markers are all
+        present, but none of the specific label lines each property
+        looks for ever appear -- every one of these properties' inner
+        loops runs to natural exhaustion instead of returning early."""
+        content = (
+            "THERMOCHEMISTRY\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "INNER ENERGY\n"
+            "filler1\n"
+            "ENTHALPY\n"
+            "filler1\n"
+        )
+        path = _write_orca_output(tmp_path, "thermo_no_labels.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.temperature_in_K is None
+        assert oo.pressure_in_atm is None
+        assert oo.total_mass_in_amu is None
+        assert oo.internal_energy is None
+        assert oo.electronic_energy is None
+        assert oo.zero_point_energy is None
+        assert oo.thermal_vibration_correction is None
+        assert oo.thermal_rotation_correction is None
+        assert oo.thermal_translation_correction is None
+        assert oo.thermal_energy_correction is None
+        assert oo.enthalpy is None
+        assert oo.thermal_enthalpy_correction is None
+        with pytest.raises(TypeError):
+            _ = oo.total_thermal_correction_due_to_trans_rot_vib
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):
