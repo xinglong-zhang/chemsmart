@@ -3449,6 +3449,47 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.dfet_embed_energy_eV == oo.dfet_embed_energy * units.Hartree
         assert oo.empirical_formula == "H2O"
 
+    def test_ev_sibling_properties_crash_when_hartree_data_absent(
+        self, tmp_path
+    ):
+        """See BUGS_FOUND.md: the *_eV siblings of max_cosx_asymmetry_energy,
+        potential_energy, kinetic_energy, and dfet_embed_energy all crash
+        with TypeError instead of returning None when the underlying
+        Hartree data is absent, because their _get_*_hartree() helpers
+        return None on no-match (via `if len(...) != 0: return ...`,
+        implicitly returning None otherwise) but the *_eV helpers call
+        len()/iterate over that result without a None check first.
+        xc_energy_eV instead crashes with IndexError -- and so does the
+        plain xc_energy property itself: unlike its four siblings,
+        _get_xc_energy_hartree() has no `if len(...) != 0:` guard at
+        all (always returns a list, even empty), so xc_energy's own
+        `is not None` check is always True and `[-1]` indexing into an
+        empty list fails."""
+        path = _write_orca_output(
+            tmp_path, "no_energy_components.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+
+        with pytest.raises(TypeError):
+            _ = oo.max_cosx_asymmetry_energy_eV
+        with pytest.raises(TypeError):
+            _ = oo.potential_energy_eV
+        with pytest.raises(TypeError):
+            _ = oo.kinetic_energy_eV
+        with pytest.raises(TypeError):
+            _ = oo.dfet_embed_energy_eV
+        with pytest.raises(IndexError):
+            _ = oo.xc_energy_eV
+        with pytest.raises(IndexError):
+            _ = oo.xc_energy
+
+        # The other Hartree-valued siblings, by contrast, correctly
+        # return None (no crash) when the data is absent.
+        assert oo.max_cosx_asymmetry_energy is None
+        assert oo.potential_energy is None
+        assert oo.kinetic_energy is None
+        assert oo.dfet_embed_energy is None
+
     def test_final_scf_energy_and_single_point_energy_for_sp_job(
         self, water_sp_gas_path
     ):

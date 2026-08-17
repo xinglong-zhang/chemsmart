@@ -4242,3 +4242,38 @@ Same pattern as bug #81 (`jobs/orca/writer.py`'s analogous modred/scan-coordinat
 **Impact:** None -- purely redundant code with no behavioral effect, since `get_prepend_string_for_modred`'s return domain is fixed to exactly three values.
 
 **Suggested direction:** no action needed; could be simplified to a plain `else:` now that the three-value domain is confirmed (consistent with the suggested fix for bug #81's identical pattern).
+
+---
+
+## 98. Five `ORCAOutput` energy-component `*_eV` properties (and `xc_energy` itself) crash instead of returning `None` when the underlying data is absent
+
+**Location:** `chemsmart/io/orca/output.py:1322-1529` (`max_cosx_asymmetry_energy_eV`/`potential_energy_eV`/`kinetic_energy_eV`/`xc_energy_eV`/`dfet_embed_energy_eV` and their `_get_*` helpers)
+
+```python
+def _get_max_cosx_asymmetry_energy(self):
+    max_cosx_asymmetry_energy_hartree = []
+    for line in self.contents:
+        if "Max COSX asymmetry :" in line:
+            ...
+            max_cosx_asymmetry_energy_hartree.append(energy_in_hartree)
+    if len(max_cosx_asymmetry_energy_hartree) != 0:
+        return max_cosx_asymmetry_energy_hartree
+    # implicit `return None` when no matching lines found
+
+def _get_max_cosx_asymmetry_energy_eV(self):
+    max_cosx_asymmetry_energy_hartree = self._get_max_cosx_asymmetry_energy()
+    if len(max_cosx_asymmetry_energy_hartree) != 0:   # <-- len(None) crashes
+        ...
+```
+
+Four of these five property pairs (`max_cosx_asymmetry_energy`, `potential_energy`, `kinetic_energy`, `dfet_embed_energy`) follow the pattern above: the plain (Hartree) `_get_*` helper correctly returns `None` when no matching lines are found (via `if len(...) != 0: return ...`, with an implicit `return None` otherwise), and the plain property correctly guards with `if ... is not None:`. But each `_get_*_eV` sibling calls `len(...)` (three of them) or directly iterates (`_get_kinetic_energy_eV`, via a list comprehension with no guard at all) over that same helper's result *without* checking for `None` first -- so whenever the underlying data is absent, calling the `*_eV` property raises `TypeError: object of type 'NoneType' has no len()` (or `'NoneType' object is not iterable` for `kinetic_energy_eV`) instead of returning `None` like its Hartree sibling does.
+
+The fifth, `xc_energy`/`xc_energy_eV`, has a related but distinct bug: `_get_xc_energy_hartree()` has *no* `if len(...) != 0:` guard at all -- it always returns a list, even an empty one, never `None`. So both `xc_energy` (the plain Hartree property) and `xc_energy_eV` see `is not None` as always `True` and unconditionally index `[-1]` into what can be an *empty* list, raising `IndexError: list index out of range` instead of returning `None`.
+
+A further consequence: because `_get_*_eV()` can only ever return real data or raise (never `None`) for the four `TypeError` cases, the outer `*_eV` *property*'s own `is not None` guard can never see a `None` to act on -- its False arm is unreachable not because of a fixed value domain (like bugs #81/#97) but *because the bug itself forecloses the only input that would reach it*.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_ev_sibling_properties_crash_when_hartree_data_absent` -- a minimal `.out` file with none of the five marker strings present reproduces all five crashes (`TypeError` for the first four, `IndexError` for `xc_energy`/`xc_energy_eV`), while confirming `max_cosx_asymmetry_energy`/`potential_energy`/`kinetic_energy`/`dfet_embed_energy` correctly return `None` for the same input.
+
+**Impact:** Medium -- any ORCA output that doesn't happen to print these specific energy-decomposition lines (e.g. a calculation without the relevant SCF print level, or a non-DFT method for `xc_energy`) makes these five properties entirely unusable, crashing instead of the `None`-on-absent behavior every other property in this file provides.
+
+**Suggested direction:** for the four `TypeError` cases, add an `is not None` (or truthiness) check on the Hartree helper's result before calling `len()`/iterating in each `_get_*_eV()` method, mirroring the pattern already used correctly by the plain (non-eV) properties. For `xc_energy`/`xc_energy_eV`, add the same `if len(xc_energy_hartree) != 0: return xc_energy_hartree` guard to `_get_xc_energy_hartree()` that all four sibling Hartree helpers already have.
