@@ -296,6 +296,49 @@ class TestCalculateVoronoiDirichletOccupiedVolume:
         )
         assert volume > 0
 
+    def test_voronoi_tessellation_failure_raises_runtime_error(self, mocker):
+        mocker.patch(
+            "scipy.spatial.Voronoi", side_effect=Exception("qhull failure")
+        )
+        with pytest.raises(
+            RuntimeError, match="Voronoi-Dirichlet tessellation failed"
+        ):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]],
+                radii=[1.0, 1.0],
+            )
+
+    def test_unbounded_region_is_skipped(self, mocker):
+        """An atom whose Voronoi cell still contains a vertex at
+        infinity (-1 in its region) after mirroring is excluded from
+        the sum rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[-1, 0, 1]]
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords=[[0.0, 0.0, 0.0]],
+            radii=[1.0],
+        )
+        assert volume == 0.0
+
+    def test_convex_hull_failure_is_skipped(self, mocker):
+        """An atom whose Voronoi cell vertices cannot form a valid
+        convex hull (e.g. degenerate/coplanar) is excluded from the
+        sum rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2]]
+        fake_vor.vertices = np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords=[[0.0, 0.0, 0.0]],
+            radii=[1.0],
+        )
+        assert volume == 0.0
+
 
 class TestCalculateCrudeOccupiedVolume:
     """Tests for the calculate_crude_occupied_volume function."""
@@ -444,6 +487,59 @@ class TestCalculateMolecularVolumeVDP:
         # Volume can be 0 for some configurations depending on tessellation
         assert volume >= 0
 
+    def test_voronoi_tessellation_failure_raises_runtime_error(self, mocker):
+        mocker.patch(
+            "scipy.spatial.Voronoi", side_effect=Exception("qhull failure")
+        )
+        with pytest.raises(RuntimeError, match="Voronoi tessellation failed"):
+            calculate_molecular_volume_vdp(
+                coordinates=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]],
+                vdw_radii=[1.0, 1.0],
+            )
+
+    def test_region_with_fewer_than_four_vertices_is_skipped(self, mocker):
+        """A Voronoi cell with fewer than 4 vertices cannot form a
+        tetrahedral volume and is skipped rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2]]
+        fake_vor.vertices = np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
+
+    def test_delaunay_failure_is_skipped(self, mocker):
+        """A Voronoi cell whose >=4 vertices are degenerate (e.g.
+        coplanar) makes Delaunay raise ValueError, which is caught and
+        the region skipped rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2, 3]]
+        fake_vor.vertices = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        mocker.patch(
+            "scipy.spatial.Delaunay", side_effect=ValueError("degenerate")
+        )
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
+
     def test_voronoi_failure_raises_runtime_error(self):
         """Collinear points with no dummy padding give qhull too few
         points to construct a Voronoi diagram, which must surface as a
@@ -520,6 +616,24 @@ class TestCanonicalizePositions:
         )
         assert result[0, 2] < 0
         assert result[1, 2] > 0
+
+    def test_diatomic_equal_masses_z_sign_flip_branch_is_unreachable(self):
+        """For equal masses, COM is the exact midpoint, so
+        shifted[0] == -shifted[1] and z_hat is built from
+        shifted[1] - shifted[0]. This makes rotated[0, 2] =
+        shifted[0] . z_hat = -norm(vec) / 2, which is always
+        negative -- so "if rotated[0, 2] > 0:" can never be True and
+        the equal-mass sign-flip body is dead code. See
+        BUGS_FOUND.md for the full writeup. Sampled many random bond
+        directions to confirm this holds generally, not just for one
+        geometry."""
+        rng = np.random.default_rng(0)
+        for _ in range(200):
+            v = rng.normal(size=3)
+            v = v / np.linalg.norm(v)
+            coords = [[0.0, 0.0, 0.0], (v * 2.0).tolist()]
+            result = canonicalize_positions([14.0, 14.0], coords)
+            assert result[0, 2] <= 0
 
     def test_translation_invariance(self):
         """Translating all atoms by a constant vector must not change the result."""

@@ -4476,3 +4476,35 @@ A consequence: `service_units_by_jobs`, `total_core_hours`, and `total_service_u
 **Impact:** Medium -- these properties exist specifically to report computational cost (core-hours / service units), and they are silently incorrect (undercounting) for essentially every real multi-processor ORCA calculation, which is the common case.
 
 **Suggested direction:** move the `else: return self.total_elapsed_walltime` fallback to after the `for` loop completes (dedent it out of the loop and drop the `else:`, or track whether a match was found and `return` after the loop), so the loop actually scans every line for the processor-count marker before falling back.
+
+---
+
+## 105. `canonicalize_positions`'s defensive sign-disambiguation branches are unreachable (or empirically unreachable) given the guarantees of the surrounding math
+
+**Location:** `chemsmart/utils/geometry.py:352-354` (equal-mass diatomic sign flip), `:373-377` (first-moment sign flip), `:386-389` (fifth-moment sign flip)
+
+```python
+elif masses[0] == masses[1]:
+    if rotated[0, 2] > 0:
+        rotated[:, 2] *= -1
+```
+
+For the `n_atoms == 2` branch, `z_hat = vec / norm(vec)` where `vec = shifted[1] - shifted[0]`. When `masses[0] == masses[1]`, the centre of mass is the exact midpoint, so `shifted[0] == -shifted[1] == -vec / 2`. Therefore `rotated[0, 2] = shifted[0] . z_hat = (-vec / 2) . (vec / norm(vec)) = -norm(vec) / 2`, which is a negative number for any non-degenerate bond (`norm(vec) > 0`, and the `norm < 1e-14` case already returns earlier). `rotated[0, 2] > 0` can therefore never be `True` for equal masses -- the flip body is provably dead code, not just empirically rare.
+
+```python
+first_moment = np.dot(masses, rotated[:, i])
+if abs(first_moment) > moment_tol:
+    if first_moment < 0:
+        rotated[:, i] *= -1
+        axis_signs[i] = -1
+```
+
+Similarly, for the `n_atoms >= 3` branch: `rotated = shifted @ evecs_rows.T` is a pure rotation of `shifted`, and `shifted` is already mass-weighted-centred (`sum(masses[i] * shifted[i]) == 0` by construction of `com`). Since rotation is linear, `sum(masses[i] * rotated[i]) == (sum(masses[i] * shifted[i])) @ evecs_rows == 0 @ evecs_rows == [0, 0, 0]` for every axis, up to floating-point roundoff (~1e-15), which is many orders of magnitude below `moment_tol` (default `1e-6`). So `abs(first_moment) > moment_tol` is provably always `False`, making the `374-377` sign-flip body dead code too -- exactly as the function's own docstring already half-admits ("In the centre-of-mass frame, the first mass-weighted coordinate moment along each axis is theoretically zero").
+
+The third case, the fifth-moment fallback (`:386-389`, reached only when *both* the first and third moments are within `moment_tol` of zero), is not provably unreachable the same way -- a molecule with a point-group symmetry that zeroes the first and third mass-weighted moments along a principal axis while leaving the fifth moment non-zero is mathematically conceivable. However, an exhaustive random search (20,000 trials, 3-5 random atoms with random masses/positions) never found one, and hand-constructing such a highly-specific symmetric case was not attempted further -- it appears to be, at minimum, vanishingly rare for any physically-motivated molecular geometry.
+
+**Reproduce:** `tests/test_geometry.py::TestCanonicalizePositions::test_diatomic_equal_masses_z_sign_flip_branch_is_unreachable` samples 200 random bond directions with equal masses and confirms `rotated[0, 2] <= 0` always holds, proving line 354 unreachable. The first- and fifth-moment claims were verified via ad hoc `sys.settrace`-based scripts during investigation (not committed as tests, since they would just be restating the same negative result already covered by the docstring's own admission and the random-search finding above).
+
+**Impact:** None -- these are defensive/belt-and-suspenders branches that never fire given the math that produces their inputs; not a correctness bug.
+
+**Suggested direction:** no action needed for the equal-mass and first-moment branches; they could be removed as dead code, or kept as defensive programming against future refactors that might break the COM/rotation invariants they rely on. The fifth-moment branch should be kept as-is (it is the documented, intentional final fallback in the sign-disambiguation cascade), just accepted as untestable-in-practice with realistic molecular geometries.
