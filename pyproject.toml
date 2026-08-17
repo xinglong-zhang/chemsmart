@@ -73,7 +73,6 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
-
 [project.urls]
 ##"Documentation" = "https://documentation_url"
 homepage = "https://github.com/xinglong-zhang/chemsmart/"

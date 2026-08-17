@@ -233,6 +233,16 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		--tb=short \
 		tests/
 
+.PHONY: test-soap
+test-soap: coverage-clean ## Branch coverage for SOAP analysis.
+	$(ENV_PREFIX)pytest tests/test_soap.py \
+		--cov=chemsmart.analysis.soap \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage-soap.xml \
+		--cov-fail-under=90 \
+		-v
+
 .PHONY: test-cov-io
 test-cov-io: coverage-clean ## Branch coverage for converter.py + structure.py (target ≥90% each).
 	$(ENV_PREFIX)pytest tests/ \
