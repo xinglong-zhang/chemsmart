@@ -3277,6 +3277,83 @@ class TestORCAOutputDirectPropertyCoverage:
         with pytest.raises(TypeError):
             oo.dfet_embed_energy_eV
 
+    def test_dipole_rotational_properties_natural_exhaustion(self, tmp_path):
+        """Every marker below is present, but none of the label lines
+        each property looks for ever appear, and there is no blank
+        line anywhere in the file -- every one of these properties'
+        inner loops runs to natural exhaustion instead of breaking or
+        returning early."""
+        content = (
+            "DIPOLE MOMENT\n"
+            "f1\n"
+            "f2\n"
+            "junk after dipole moment with no blank line\n"
+            "Dipole components along the rotational axes:\n"
+            "junk axis line\n"
+            "ENTHALPY\n"
+            "junk enthalpy line\n"
+            "Rotational spectrum\n"
+            "f1\n"
+            "f2\n"
+            "junk rotational spectrum line\n"
+            "VIBRATIONAL FREQUENCIES\n"
+            "f1\n"
+            "f2\n"
+            "f3\n"
+            "f4\n"
+            "0 0.0\n"
+        )
+        path = _write_orca_output(
+            tmp_path, "dipole_rotational_trunc.out", content
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.dipole_moment_electric_contribution.tolist() == [
+            [0.0],
+            [0.0],
+            [0.0],
+        ]
+        oo2 = ORCAOutput(filename=path)
+        assert oo2.dipole_moment_nuclear_contribution.tolist() == [
+            [0.0],
+            [0.0],
+            [0.0],
+        ]
+        oo3 = ORCAOutput(filename=path)
+        assert oo3.dipole_moment_in_au.tolist() == [[0.0], [0.0], [0.0]]
+        oo4 = ORCAOutput(filename=path)
+        assert oo4.dipole_moment_magnitude_in_au == 0.0
+        oo5 = ORCAOutput(filename=path)
+        assert oo5.dipole_moment_magnitude_in_debye == 0.0
+        oo6 = ORCAOutput(filename=path)
+        assert oo6.dipole_moment_along_axis_in_au.tolist() == [
+            [0.0],
+            [0.0],
+            [0.0],
+        ]
+        oo7 = ORCAOutput(filename=path)
+        assert oo7.dipole_moment_along_axis_in_debye.tolist() == [
+            [0.0],
+            [0.0],
+            [0.0],
+        ]
+        oo8 = ORCAOutput(filename=path)
+        assert oo8.rotational_symmetry_number is None
+        oo9 = ORCAOutput(filename=path)
+        assert oo9.point_group is None
+        oo10 = ORCAOutput(filename=path)
+        # rotational_constants_in_wavenumbers/MHz only append to their
+        # outer accumulator inside the "label found" branch (unlike
+        # the dipole properties above, which always append their
+        # default), so "marker found but label absent" crashes with
+        # IndexError here too -- the same bug #100 pattern.
+        with pytest.raises(IndexError):
+            _ = oo10.rotational_constants_in_wavenumbers
+        oo11 = ORCAOutput(filename=path)
+        with pytest.raises(IndexError):
+            _ = oo11.rotational_constants_in_MHz
+        oo12 = ORCAOutput(filename=path)
+        assert oo12.all_vibrational_frequencies == [0.0]
+
     def test_hirshfeld_total_integrated_densities_found(self, tmp_path):
         content = (
             "HIRSHFELD ANALYSIS\n"
