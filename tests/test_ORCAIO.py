@@ -19,7 +19,10 @@ from chemsmart.io.orca.output import (
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.jobs.orca.settings import ORCANEBJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
-from chemsmart.utils.constants import energy_conversion
+from chemsmart.utils.constants import (
+    energy_conversion,
+    joule_per_mol_to_hartree,
+)
 
 
 class TestORCARoute:
@@ -1319,6 +1322,17 @@ class TestORCAOutput:
         )
         assert math.isclose(
             orca_out.entropy_times_temperature, 0.02143089, rel_tol=1e-4
+        )
+        assert orca_out.electronic_entropy == 0.0
+        assert orca_out.vibrational_entropy is not None
+        assert orca_out.rotational_entropy is not None
+        assert orca_out.translational_entropy is not None
+        assert orca_out.entropy_in_J_per_mol_per_K is not None
+        assert orca_out.entropy is not None
+        assert math.isclose(
+            orca_out.entropy_in_J_per_mol_per_K * joule_per_mol_to_hartree,
+            orca_out.entropy,
+            rel_tol=1e-8,
         )
 
         assert orca_out.mulliken_atomic_charges == {
@@ -4301,6 +4315,26 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.thermal_enthalpy_correction is None
         with pytest.raises(TypeError):
             _ = oo.total_thermal_correction_due_to_trans_rot_vib
+
+    def test_entropy_properties_natural_exhaustion(self, tmp_path):
+        """ENTROPY marker is present, but none of the specific entropy
+        label lines ever appear -- every entropy-family property's
+        inner loop runs to natural exhaustion instead of returning
+        early."""
+        content = "ENTROPY\n" + "filler\n" * 10
+        path = _write_orca_output(tmp_path, "entropy_no_labels.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.electronic_entropy_no_temperature_in_SI is None
+        assert oo.vibrational_entropy_no_temperature_in_SI is None
+        assert oo.rotational_entropy_no_temperature_in_SI is None
+        assert oo.translational_entropy_no_temperature_in_SI is None
+        assert oo.entropy_times_temperature is None
+        assert oo.electronic_entropy is None
+        assert oo.vibrational_entropy is None
+        assert oo.rotational_entropy is None
+        assert oo.translational_entropy is None
+        assert oo.entropy_in_J_per_mol_per_K is None
+        assert oo.entropy is None
 
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
