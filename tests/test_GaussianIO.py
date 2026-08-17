@@ -5007,7 +5007,11 @@ class TestGaussian16OutputAdditionalCoverage:
         wrapper properties directly (not just the underlying _get_...
         helper), and exercises both the 'This molecule' terminator-absent
         EOF loop-exhaustion arc and the 'non-4-token line inside the
-        block' skip arc (the header row '1  2  3' has 3 tokens, not 4)."""
+        block' skip arc. Real Gaussian output prints its '1  2  3' column
+        header immediately after the section marker, which falls outside
+        the self.contents[i+2:] scan window; a junk 3-token row is placed
+        after the 'Eigenvalues --' row instead so it actually falls
+        inside the scanned window."""
         outputfile = tmp_path / "moments_no_terminator.log"
         outputfile.write_text(
             "\n".join(
@@ -5015,6 +5019,7 @@ class TestGaussian16OutputAdditionalCoverage:
                     " Principal axes and moments of inertia in atomic units:",
                     "                            1         2         3",
                     "     Eigenvalues --    10.0      20.0      30.0",
+                    "           extra   junk   row",
                     "           X            1.0       0.0       0.0",
                     "           Y            0.0       1.0       0.0",
                     "           Z            0.0       0.0       1.0",
@@ -5067,3 +5072,142 @@ class TestGaussian16OutputAdditionalCoverage:
         vals, status = result[0]
         assert isinstance(status, str)
         assert vals.shape[0] >= 1
+
+    def test_oniom_partition_first_format_edge_cases(self, tmp_path):
+        """Covers, all in the 'first ONIOM format' branch (coordinates
+        start 4 lines after 'Symbolic Z-matrix:'): a 5-token row (no
+        frozen-flag column) using the `tokens[4]` layer fallback for both
+        a recognized ('M') and an unrecognized ('X', falls through every
+        elif without appending) layer letter, and a too-short junk line
+        (<=4 characters, but non-empty) that is skipped and looped back
+        on rather than breaking the block. See BUGS_FOUND.md #108 for why
+        the sibling 'loop is empty' arc for this format is unreachable
+        (unlike the alternative format, covered separately below)."""
+        outputfile = tmp_path / "oniom_first_format_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  1 Multiplicity = 2 for low   level calculation on real  system.",
+                    " Charge =  1 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  1 Multiplicity = 1 for low   level calculation on model system.",
+                    " O                    0    -12.48248   5.30094  -8.00429  H",
+                    " C                    -13.21397   6.08531  -7.06089  M",
+                    " N                    -12.6012   5.91137  -5.65849  X",
+                    " ab",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        partition = g16.oniom_partition
+        assert partition["high level atoms"] == ["1"]
+        assert partition["medium level atoms"] == ["2"]
+        assert "low level atoms" not in partition
+
+    def test_oniom_partition_alt_format_empty_loop(self, tmp_path):
+        """'Symbolic Z-matrix:' is close enough to EOF (only 5 lines,
+        including 5 Charge lines, follow it) that the 'alternative
+        format' inner loop's iterable (self.contents[i+7:]) is empty,
+        so it runs zero iterations."""
+        outputfile = tmp_path / "oniom_alt_format_empty_loop.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on real  system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on model system.",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.oniom_partition == {}
+
+    def test_oniom_partition_alt_format_edge_cases(self, tmp_path):
+        """Mirrors test_oniom_partition_first_format_edge_cases but for
+        the 'alternative ONIOM format' branch (coordinates start 7 lines
+        after the marker, triggered when the 4th line after the marker
+        is itself still a 'Charge =' line): the tokens[4] layer fallback
+        (5-token row) and the too-short junk-line skip-and-loop-back
+        arc."""
+        outputfile = tmp_path / "oniom_alt_format_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on real  system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on model system.",
+                    " C                    -2.98798  -1.16645  -0.64775  H",
+                    " ab",
+                    " O                    0    -3.58797   0.11588  -0.84912  X",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        partition = g16.oniom_partition
+        assert partition["high level atoms"] == ["1"]
+        assert "medium level atoms" not in partition
+        assert "low level atoms" not in partition
+
+    def test_natural_population_analysis_blank_line_within_block(
+        self, tmp_path
+    ):
+        """A blank line appearing between two data rows inside the NPA
+        table is skipped (does not terminate the block or crash), unlike
+        the block-terminating '===...' divider or EOF."""
+        outputfile = tmp_path / "npa_blank_line.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Atom  No    Charge         Core      Valence    Rydberg      Total",
+                    " ---------------------------------------------------------------------",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                    "",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                    " =======================================================================",
+                ]
+            )
+        )
+        g16 = Gaussian16WBIOutput(filename=str(outputfile))
+        assert g16.natural_charges == {"Ni1": 0.52827}
+
+    def test_pbc_input_translation_vectors_divider_and_non_tv_rows(
+        self, tmp_path
+    ):
+        """A synthetic PBC block where `num_atoms` (used to size the
+        scanned window ending just before 'Lengths of translation
+        vectors:') is deliberately larger than the number of real TV
+        rows, so the scanned window also picks up the coordinate table's
+        own dashed divider (skipped via `continue`) and two non-TV
+        (real-atom) rows (skipped via the loop-continues arc), in
+        addition to the one genuine TV row."""
+        outputfile = tmp_path / "pbc_translation_vectors_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " NAtoms=      5 NQM=        5 NQMF=       0",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    "      2          6           0        1.000000    0.000000    0.000000",
+                    "      3          6           0        2.000000    0.000000    0.000000",
+                    "      4         -2           0        3.000000    0.000000    0.000000",
+                    " ---------------------------------------------------------------------",
+                    " Lengths of translation vectors:      3.000000",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16OutputWithPBC(filename=str(outputfile))
+        assert g16.num_atoms == 5
+        result = g16.input_translation_vectors
+        assert result.tolist() == [[3.0, 0.0, 0.0]]
