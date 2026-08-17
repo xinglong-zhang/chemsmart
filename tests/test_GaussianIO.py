@@ -4816,3 +4816,119 @@ class TestGaussian16OutputAdditionalCoverage:
             True,
             True,
         ]
+
+    def test_energies_uses_mp2_energies_when_present(self, tmp_path):
+        """When EUMP2 lines are present, `energies` returns mp2_energies
+        rather than falling back to scf_energies."""
+        outputfile = tmp_path / "mp2_energies.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " SCF Done:  E(RHF) =  -76.0000000     A.U. after   10 cycles",
+                    " EUMP2 =    -0.7635026712D+02",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.scf_energies == [-76.0]
+        assert g16.mp2_energies == [-76.35026712]
+        assert g16.energies == [-76.35026712]
+
+    def test_modredundant_group_none_when_route_has_no_modred(self, tmp_path):
+        outputfile = tmp_path / "no_modred_route.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.modredundant_group is None
+
+    def test_modredundant_group_no_terminator_runs_to_eof(self, tmp_path):
+        """The ModRedundant section is the last content in the file, so
+        the inner blank-line-terminator search loop exhausts
+        self.contents instead of hitting `break`."""
+        outputfile = tmp_path / "modred_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt modredundant mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " The following ModRedundant input section has been read:",
+                    " B 1 2 F",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.modredundant_group == ["B 1 2 F"]
+
+    def test_gen_genecp_none_for_non_gen_basis(self, tmp_path):
+        """A basis set string that does not contain 'gen' (e.g. a
+        standard Pople/Karlsruhe basis) makes _get_gen_genecp fall
+        through to its final `return None`."""
+        outputfile = tmp_path / "non_gen_basis.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.basis is not None
+        assert "gen" not in g16.basis
+        assert g16.gen_genecp is None
+
+    def test_basis_function_counts_parsed_from_header_line(self, tmp_path):
+        """A single real-format 'N basis functions, M primitive
+        gaussians, K cartesian basis functions' line satisfies all
+        three properties' search conditions at once."""
+        outputfile = tmp_path / "basis_counts.log"
+        outputfile.write_text(
+            "    43 basis functions,    85 primitive gaussians,"
+            "    46 cartesian basis functions\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.num_basis_functions == 43
+        assert g16.num_primitive_gaussians == 85
+        assert g16.num_cartesian_basis_functions == 46
+
+    def test_vibrational_modes_empty_when_frequencies_line_near_eof(
+        self, tmp_path
+    ):
+        """A 'Frequencies --' line within the last 4 lines of the file
+        makes the mode-row inner loop's iterable (self.contents[i+5:])
+        empty, so it runs zero iterations instead of collecting rows or
+        breaking on a mismatch."""
+        outputfile = tmp_path / "vib_modes_near_eof.log"
+        outputfile.write_text(" Frequencies --   123.4")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        modes = g16.vibrational_modes
+        assert len(modes) == 3
+        assert all(m.size == 0 for m in modes)
+
+    def test_entropy_in_j_per_mol_per_k_with_real_thermochemistry_data(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        """A real fixture with a full 'E (Thermal) ... CV ... S' table
+        (including its 'Total' row) exercises the successful-parse
+        return path of entropy_in_J_per_mol_per_K, and by extension
+        entropy and entropy_times_temperature."""
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        assert g16.entropy_in_J_per_mol_per_K is not None
+        assert g16.entropy is not None
+        assert g16.entropy > 0
+        if g16.temperature_in_K:
+            assert g16.entropy_times_temperature is not None
