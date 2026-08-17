@@ -1183,35 +1183,35 @@ def _public_identifier() -> dict:
 
 
 def _semantic_role_identifier() -> dict:
-    """Which occurrence of a repeated source quantity this input is.
+    """An optional readable label for one occurrence of a repeated quantity.
 
-    An expression identifies its inputs by the quantity they came from.  When
-    the same named quantity arrives twice -- the two conformers of a
+    An expression identifies its inputs by the quantity they came from, and
+    the same named quantity routinely arrives twice -- the two conformers of a
     population, the reactant and product of a difference, the two states of a
-    gap -- that name no longer distinguishes them, and without a role the two
-    occupy one slot and the expression is refused.  Comparing two structures
-    is the commonest thing asked of this tool chain, so say so here rather
-    than only in the refusal.
+    gap.  The host resolves that repetition itself, from each input's own id,
+    which the expression contract already requires to be unique.
+
+    This field therefore buys readability, not correctness.  Demanding it
+    instead cost five cycles of refusals: the requirement was stated in terms
+    of receipt internals the model cannot see, and each attempt to explain it
+    better halved the failure without clearing it.  Describe what supplying a
+    role is *for*, and let the host derive what it can derive.
     """
 
     identifier = _public_identifier()
     return {
         **identifier,
         "description": (
-            "Which occurrence this input is. Repetition is judged on the "
-            "quantity_id inside the producing receipt, not on your input_id: "
-            "four thermochemistry receipts each yield a quantity named "
-            "'gibbs_free_energy', so drawing all four into one expression "
-            "repeats that name four times however distinctly you alias them. "
-            "A role names one input, not one species. Every input carrying a "
-            "repeated quantity_id needs its own role, unique across the whole "
-            "expression, so four species each contributing an energy and a "
-            "Gibbs term need eight roles and not four: pair the species with "
-            "the quantity, as 'gauche-energy' and 'gauche-gibbs', never "
-            "'gauche' for both. Omit it only when a quantity_id is drawn "
-            "once. Two inputs sharing a role collapse onto one, which would "
-            "make the evidence reference ambiguous, so the expression is "
-            "refused. " + identifier["description"]
+            "Optional. Which occurrence this input is, when the same source "
+            "quantity is drawn more than once. You do not have to supply it: "
+            "the host falls back to this input's own id, which is unique "
+            "within the expression, so an omitted role is never ambiguous. "
+            "Supply one only to label an occurrence more readably than its "
+            "input id does, as 'gauche-gibbs' rather than 'in7'. If you do "
+            "supply roles, keep them distinct -- two inputs sharing one role "
+            "would collapse onto a single slot and make the evidence "
+            "reference ambiguous, so that is refused. Never use a receipt "
+            "hash as a role. " + identifier["description"]
         ),
     }
 
