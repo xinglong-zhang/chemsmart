@@ -3850,6 +3850,84 @@ class TestORCAOutputDirectPropertyCoverage:
         assert len(structures) == 1
         assert structures[0].chemical_symbols == ["O", "H", "H"]
 
+    def test_all_structures_marks_optimized_indices_when_intermediate_included(
+        self, tmp_path
+    ):
+        """optimized_steps_indices/include_intermediate are attributes
+        that GaussianOutput sets on itself and ORCAOutput's
+        all_structures reads defensively via getattr/hasattr, but
+        nothing in the codebase ever sets them on an ORCAOutput
+        instance -- this code is copy-pasted from GaussianOutput and
+        otherwise dead for ORCA. Set them directly to cover it."""
+        content = (
+            "****ORCA TERMINATED NORMALLY****\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.087341\n"
+            "  H  -0.755205   0.000000  -0.509670\n"
+            "  H   0.755205   0.000000  -0.509670\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.000000\n"
+            "\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.090000\n"
+            "  H  -0.755205   0.000000  -0.510000\n"
+            "  H   0.755205   0.000000  -0.510000\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.100000\n"
+            "\n"
+            "MULLIKEN ATOMIC CHARGES\n"
+            "----------------------------\n"
+            "   0   O :   -0.354299\n"
+            "   1   H :    0.177149\n"
+            "   2   H :    0.177150\n"
+            "Sum of atomic charges:    0.0000000\n"
+        )
+        path = _write_orca_output(tmp_path, "two_structures.out", content)
+        oo = ORCAOutput(filename=path)
+        oo.optimized_steps_indices = [0]
+        oo.include_intermediate = True
+        structures = oo.all_structures
+        assert len(structures) == 2
+        assert structures[0].is_optimized_structure is True
+        assert structures[1].is_optimized_structure is False
+
+    def test_all_structures_filters_to_optimized_steps_without_intermediate(
+        self, tmp_path
+    ):
+        content = (
+            "****ORCA TERMINATED NORMALLY****\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.087341\n"
+            "  H  -0.755205   0.000000  -0.509670\n"
+            "  H   0.755205   0.000000  -0.509670\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.000000\n"
+            "\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.090000\n"
+            "  H  -0.755205   0.000000  -0.510000\n"
+            "  H   0.755205   0.000000  -0.510000\n"
+            "\n"
+            "FINAL SINGLE POINT ENERGY   -76.100000\n"
+            "\n"
+            "MULLIKEN ATOMIC CHARGES\n"
+            "----------------------------\n"
+            "   0   O :   -0.354299\n"
+            "   1   H :    0.177149\n"
+            "   2   H :    0.177150\n"
+            "Sum of atomic charges:    0.0000000\n"
+        )
+        path = _write_orca_output(tmp_path, "two_structures2.out", content)
+        oo = ORCAOutput(filename=path)
+        oo.optimized_steps_indices = [0]
+        structures = oo.all_structures
+        assert len(structures) == 1
+        assert structures[0].is_optimized_structure is True
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):

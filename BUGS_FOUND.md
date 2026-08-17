@@ -4368,3 +4368,35 @@ This has a further knock-on effect: `rotational_constants_in_Hz` (`:2264-2275`) 
 **Impact:** Medium-high -- this is the single largest source of crash-instead-of-`None` behavior in the file by property count. Any ORCA output missing one of these fairly common but non-default print sections (population analyses, dipole moments, rotational spectra) makes the corresponding property entirely unusable rather than gracefully reporting "not present."
 
 **Suggested direction:** add `if accumulator: return accumulator[-1]` / `return accumulator[-1] if accumulator else None` (or the dict-equivalent `{}`/`None`) to each of the 17 directly-affected properties, mirroring the guard pattern already used correctly by `energies`, `_get_max_cosx_asymmetry_energy`, and `all_vibrational_frequencies` elsewhere in this same file. No change needed to `rotational_constants_in_Hz`/`rotational_temperatures` once their dependency is fixed.
+
+---
+
+## 101. `ORCAOutput.all_structures`'s `optimized_steps_indices`/`include_intermediate` handling is copy-pasted from `GaussianOutput` and dead in practice
+
+**Location:** `chemsmart/io/orca/output.py:754-761, 783-793`
+
+```python
+optimized_indices = getattr(self, "optimized_steps_indices", None)
+include_intermediate = getattr(self, "include_intermediate", False)
+if optimized_indices and include_intermediate:
+    for idx in optimized_indices:
+        if 0 <= idx < len(is_optimized):
+            is_optimized[idx] = True
+elif self.normal_termination:
+    is_optimized[-1] = True
+...
+if (
+    hasattr(self, "optimized_steps_indices")
+    and self.optimized_steps_indices
+    and not hasattr(self, "include_intermediate")
+):
+    all_structures = [all_structures[i] for i in self.optimized_steps_indices]
+```
+
+`GaussianOutput` (`chemsmart/io/gaussian/output.py:66-73, 762-809`) is constructed with an `include_intermediate` constructor argument and defines an `optimized_steps_indices` property, and its own `all_structures` reads them directly (`self.optimized_steps_indices`, `self.include_intermediate`). `ORCAOutput` has neither: no constructor argument, no property, nothing anywhere in the codebase (`grep -rn "ORCAOutput("` across all non-test callers) ever sets `optimized_steps_indices` or `include_intermediate` on an `ORCAOutput` instance. The defensive `getattr`/`hasattr` calls mean these branches simply never fire through any real call path -- this looks like the `GaussianOutput` logic was copy-pasted into `ORCAOutput.all_structures` without also porting the constructor argument/property it depends on.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_all_structures_marks_optimized_indices_when_intermediate_included` and `::test_all_structures_filters_to_optimized_steps_without_intermediate` cover both branches by setting the attributes directly on an `ORCAOutput` instance after construction (`oo.optimized_steps_indices = [...]`) -- something no production code path does.
+
+**Impact:** None currently -- dead code, not a behavioral bug, since the branches are simply unreachable rather than reachable-and-wrong.
+
+**Suggested direction:** either port `include_intermediate`/`optimized_steps_indices` from `GaussianOutput` to `ORCAOutput` properly (constructor argument + property) if per-step optimization filtering is actually wanted for ORCA outputs, or delete this dead branch and always fall through to the `elif self.normal_termination: is_optimized[-1] = True` behavior.
