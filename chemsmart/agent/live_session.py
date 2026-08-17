@@ -3797,6 +3797,120 @@ def resolve_workflow_execution_review(
     return resolution, bundle
 
 
+def inspect_workflow_execution_replay(
+    *,
+    review_file: str | Path,
+    workspace: str | Path,
+    task_spec_sha256: str = "",
+) -> dict[str, Any]:
+    """Report what re-running a stored review would put in front of a human.
+
+    A review is inert and re-loadable, and neither its digest nor an approval
+    bundle's contains a run directory, a session id, or a clock, so the same
+    stored workflow re-presents identically on an undrifted host.  What was
+    missing was a way to *see* that before deciding, and a decision identity
+    distinct from the one already spent.
+
+    Drift is reported rather than refused, because the human decides over the
+    displayed scientific state.  Approved bytes that are no longer anywhere
+    under the workspace are reported as ``missing_approved_artifacts``: they
+    make execution certain to fail while resolving inputs, before anything is
+    dispatched, so a caller must not offer a decision on them -- but deciding
+    that is the command's job, not this function's.
+
+    This reports; it never approves, consumes, or launches.  The argv gate that
+    runs immediately before dispatch is untouched, so nothing decided here can
+    let drift through to an engine.
+    """
+
+    from chemsmart.agent.executor import _locate_by_digest
+
+    root = _validated_workspace(workspace)
+    review = load_workflow_execution_review(
+        Path(review_file).expanduser().resolve()
+    )
+    if Path(review.request.workspace).resolve() != root:
+        raise ContractError("execution review targets another workspace")
+    expected_task = str(task_spec_sha256).strip()
+    if (
+        expected_task
+        and review.scientific_plan.task_spec_sha256 != expected_task
+    ):
+        raise ContractError("execution review targets another task")
+
+    missing: list[str] = []
+    present: list[str] = []
+    for binding in review.request.node_bindings:
+        for label, digest in (
+            ("input", binding.initial_artifact_sha256),
+            ("project", binding.project_artifact_sha256),
+        ):
+            if not digest:
+                continue
+            record = f"{binding.node_id}:{label}:{digest[:16]}"
+            try:
+                _locate_by_digest(root, digest)
+            except ContractError:
+                missing.append(record)
+            else:
+                present.append(record)
+
+    spent = _spent_approval_ids(root, review.review_sha256)
+    return {
+        "review_sha256": review.review_sha256,
+        "workflow_id": review.request.workflow_id,
+        "workspace": str(root),
+        "task_spec_sha256": review.scientific_plan.task_spec_sha256,
+        "node_count": len(review.request.node_bindings),
+        "non_executable_node_ids": list(review.non_executable_node_ids),
+        "approved_artifacts_present": sorted(set(present)),
+        "missing_approved_artifacts": sorted(set(missing)),
+        "previously_consumed_approval_ids": spent,
+        "canonical_review": canonical_json(
+            {"workflow_execution_review": canonical_data(review)}
+        ),
+    }
+
+
+def _spent_approval_ids(workspace: Path, review_sha256: str) -> list[str]:
+    """Which approval ids for this review have already been burned here.
+
+    The ledger is per approval id, so a second genuine decision needs a
+    different one.  Reporting the spent ids is what turns "already consumed"
+    from a dead end into an instruction.
+    """
+
+    ledger_root = workspace / _PRIVATE_ROOT_NAME / "approvals"
+    if not ledger_root.is_dir():
+        return []
+    spent: list[str] = []
+    for entry in sorted(ledger_root.iterdir()):
+        events = entry / "consumption-events.jsonl"
+        if not entry.is_dir() or not events.is_file():
+            continue
+        try:
+            text = events.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if review_sha256 in text or entry.name.endswith(review_sha256[:16]):
+            spent.append(entry.name)
+    return spent
+
+
+def replay_approval_id() -> str:
+    """A decision identity that cannot collide with one already spent.
+
+    The default approval id is derived from the review digest alone, so a
+    second honest decision on an identical review reproduces the first one's
+    id and its resolution event, and the append is refused as a conflicting
+    idempotency key before any bundle is written.  A replay therefore has to
+    carry its own identity, the way the interactive path already mints one per
+    execution.
+    """
+
+    return "replay-" + uuid.uuid4().hex[:16]
+
+
 def claim_workflow_execution_approval_bundle(
     bundle: WorkflowExecutionApprovalBundleV1,
     *,

@@ -307,6 +307,133 @@ def approve(
     )
 
 
+@agent.command("replay")
+@click.option(
+    "--review-file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A stored workflow execution review to re-present unchanged.",
+)
+@click.option(
+    "--workspace",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="The exact workspace the review was produced in.",
+)
+@click.option(
+    "--decision",
+    default=None,
+    type=click.Choice(("approve", "deny"), case_sensitive=False),
+    help="Omit to preview only; supply one to record a fresh human decision.",
+)
+@click.option(
+    "--actor",
+    default=None,
+    help="Human actor recorded with the decision; required with --decision.",
+)
+@click.option(
+    "--approval-id",
+    default=None,
+    help="Decision identity; a fresh replay id is minted when omitted.",
+)
+@click.option(
+    "--task-spec-sha256",
+    default=None,
+    help="Optional: refuse unless the review targets this exact task.",
+)
+def replay(
+    review_file, workspace, decision, actor, approval_id, task_spec_sha256
+):
+    """Re-present a stored workflow for a fresh decision, then run it.
+
+    Re-running approved work needed a distinct approval id *and* a distinct
+    decision log, on two hidden legacy commands, or the second decision
+    collided with the first and no bundle was written at all. The science was
+    reproducible; deciding on it twice was not.
+
+    This does not reuse a spent approval and does not weaken the one-shot rule.
+    It re-displays the identical plan and takes the current human decision the
+    approval chain requires.
+    """
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.live_session import (
+        inspect_workflow_execution_replay,
+        replay_approval_id,
+        resolve_workflow_execution_review,
+    )
+
+    normalized = (decision or "").lower()
+    if normalized and not actor:
+        raise click.UsageError("--actor is required with --decision")
+    try:
+        report = inspect_workflow_execution_replay(
+            review_file=review_file,
+            workspace=workspace,
+            task_spec_sha256=str(task_spec_sha256 or ""),
+        )
+    except ContractError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    summary = {
+        key: value
+        for key, value in report.items()
+        if key != "canonical_review"
+    }
+    if not normalized:
+        summary["decision"] = "not taken; pass --decision to decide"
+        click.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+
+    if report["missing_approved_artifacts"]:
+        # Resolving inputs would fail before anything is dispatched, so a
+        # decision here would be spent on a run that cannot start.
+        raise click.ClickException(
+            "these approved bytes are no longer under the workspace, so this "
+            "workflow cannot execute as approved: "
+            f"{report['missing_approved_artifacts']}. Plan it again rather "
+            "than deciding on a run that must fail."
+        )
+    chosen = str(approval_id or "").strip() or replay_approval_id()
+    scope = (
+        Path(workspace).resolve() / ".chemsmart-agent" / "replays" / chosen
+    )
+    scope.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        resolution, bundle = resolve_workflow_execution_review(
+            review_file=review_file,
+            reviewed_sha256=report["review_sha256"],
+            decision=normalized,
+            actor=actor,
+            # Scope both per decision: the default decision log is shared by
+            # every approval of one review, and a second append under the same
+            # resolution id is refused before a bundle can be written.
+            output_file=(
+                scope / "bundle.json" if normalized == "approve" else None
+            ),
+            decision_log=scope / "decisions.jsonl",
+            approval_id=chosen,
+        )
+    except ContractError as exc:
+        raise click.ClickException(str(exc)) from exc
+    summary.update(
+        {
+            "decision": resolution.decision,
+            "approval_id": resolution.approval_id,
+            "resolution_sha256": resolution.resolution_sha256,
+            "bundle_sha256": bundle.bundle_sha256 if bundle else "",
+            "bundle_file": str(scope / "bundle.json") if bundle else "",
+            "next": (
+                f"chemsmart agent execute --approval-file {scope}/bundle.json"
+                f" --workspace {Path(workspace).resolve()}"
+                if bundle
+                else ""
+            ),
+        }
+    )
+    click.echo(json.dumps(summary, indent=2, sort_keys=True))
+
+
 @agent.command("tui")
 @click.option(
     "--provider",
