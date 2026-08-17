@@ -4405,3 +4405,414 @@ class TestGaussian16OutputAdditionalCoverage:
         transitions = g16.transitions
         assert transitions[0] == ["104A -> 108A"]
         assert transitions[1] == []
+
+    def test_genecp_info_heavy_elements_none_when_gen_genecp_none(
+        self, gaussian_semiempirical_pm6_output_file
+    ):
+        """When gen_genecp is None (e.g. semiempirical calc), _genecp_info
+        returns its all-None defaults immediately without ever touching
+        self.symbols."""
+        g16 = Gaussian16Output(filename=gaussian_semiempirical_pm6_output_file)
+        assert g16.gen_genecp is None
+        assert g16.heavy_elements is None
+        assert g16.heavy_elements_basis is None
+        assert g16.heavy_elements_ecp is None
+        assert g16.light_elements is None
+        assert g16.light_elements_basis is None
+
+    def test_genecp_info_not_atom_symbols_branch_is_dead_code(
+        self, monkeypatch, tmp_path
+    ):
+        """BUG (#105): _genecp_info's `if not atom_symbols: return result`
+        can never fire through any real call path, since self.symbols
+        either raises (caught above) or returns a non-empty list. Forcing
+        it via monkeypatch is the only way to reach it directly."""
+        outputfile = tmp_path / "genecp_dead_branch.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        monkeypatch.setattr(type(g16), "symbols", property(lambda self: []))
+        assert g16.heavy_elements is None
+        assert g16.light_elements is None
+
+    def test_genecp_info_general_basis_marker_at_eof(self, tmp_path):
+        """'General basis read from cards:' is the very last line in the
+        file, so the while loop's condition is False on its very first
+        check (j >= len(self.contents) immediately, before the loop body
+        ever runs)."""
+        outputfile = tmp_path / "genecp_marker_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements is None
+        assert g16.heavy_elements is None
+
+    def test_genecp_info_blank_line_between_centers_and_basis_name(
+        self, tmp_path
+    ):
+        """A blank line between 'Centers:' and its basis-name content
+        line exercises the 'skip blank lines' inner loop."""
+        outputfile = tmp_path / "genecp_centers_blank.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:       1",
+                    "",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements == ["C"]
+        assert g16.light_elements_basis == "def2svp"
+
+    def test_genecp_info_out_of_range_center_numbers(self, tmp_path):
+        """A 'Centers:' line listing a center number outside
+        1..len(atom_symbols) is silently skipped for both the heavy
+        (explicit-orbital) and light (named-basis) branches, without
+        crashing or being recorded."""
+        outputfile = tmp_path / "genecp_out_of_range_centers.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:      99",
+                    " S   1 1.00",
+                    "     Exponent=  1.0000000000D+01 Coefficients=  1.0000000000D+00",
+                    " ****",
+                    " Centers:      99",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.heavy_elements is None
+        assert g16.light_elements is None
+
+    def test_parse_pseudopotential_section_returns_empty_when_symbols_fail(
+        self, tmp_path
+    ):
+        """Calling _parse_pseudopotential_section directly on a file whose
+        self.symbols raises exercises its own try/except (independent of
+        _genecp_info's identical guard, which is never reached since this
+        method is called directly here)."""
+        outputfile = tmp_path / "no_symbols_for_ecp.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Just some text with no coordinate block at all.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        with pytest.raises(ValueError):
+            g16.symbols
+        assert g16._parse_pseudopotential_section() == {}
+
+    def test_parse_pseudopotential_section_line_matching_term_shape_but_not_is_term(
+        self, tmp_path
+    ):
+        """A line with exactly 4 tokens whose first token is a digit but
+        whose second token has no '.' fails the stricter is_term token
+        check yet still matches the looser ecp_term_pattern regex, so
+        the final 'channel name' elif's `not term_re.match(line)` is
+        False and the line falls through untouched back to the next
+        loop iteration instead of being treated as a channel name."""
+        outputfile = tmp_path / "ecp_channel_fallthrough.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " Ag                    0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " Pseudopotential Parameters",
+                    " ======================================================================",
+                    " ======================================================================",
+                    " Center     Number     Number of atoms",
+                    " ----------------------------------------------------------------------",
+                    "   1     19",
+                    " 1 abc def ghi",
+                    " ======================================================================",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16._parse_pseudopotential_section() == {}
+
+    def test_link_job_drop_first_and_keep_last_only_falsy_branches(
+        self, tmp_path
+    ):
+        """A minimal link-sp job (normal termination, jobtype 'sp') with
+        two Standard orientation frames and a Forces block, but no SCF
+        energies, no rotational constants, and no point group data,
+        exercises the falsy (data-absent) branches of both drop_first()
+        and keep_last_only() inside _get_all_molecular_structures --
+        except for their `if orientations:`/`if orientations_pbc:`
+        guards, which are dead code (see BUGS_FOUND.md #107): orientations
+        is always non-empty when drop_first/keep_last_only run (guarded
+        by their call sites), and orientations_pbc always mirrors
+        orientations' length 1:1. Also covers keep_last_only's forces
+        truthy branch, since Forces data (but not energies/rot_consts/
+        point_groups) is present here."""
+        outputfile = tmp_path / "link_sp_falsy_branches.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # um062x def2tzvp stable=opt guess=mix",
+                    " ----------------------------------------------------------------------",
+                    " # um062x def2tzvp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    "                         Standard orientation:",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    " ---------------------------------------------------------------------",
+                    "                         Standard orientation:",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    1.000000",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                    " -------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.is_link
+        assert g16.jobtype == "sp"
+        assert g16.normal_termination
+        assert g16.energies == []
+        assert g16.all_rotational_constants(mode="physical") == []
+        assert g16.all_point_groups == []
+        structures = g16.all_structures
+        assert len(structures) == 1
+        assert structures[-1].positions.tolist() == [[0.0, 0.0, 1.0]]
+
+    def test_forces_no_terminator_at_true_eof(self, tmp_path):
+        """The Forces block's inner loop exhausts self.contents cleanly
+        (no closing divider) when the block is the literal last content
+        in the file, with nothing after it to trip up the parser."""
+        outputfile = tmp_path / "forces_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        forces = g16.forces
+        assert len(forces) == 1
+        assert forces[0].shape == (1, 3)
+
+    def test_forces_no_terminator_followed_by_trailing_content_crashes(
+        self, tmp_path
+    ):
+        """BUG (#106): when a Forces block has no closing divider AND is
+        followed by further non-blank content later in the file (e.g.
+        the standard termination line), the parser keeps scanning and
+        tries to parse that trailing content as force data, crashing
+        with ValueError instead of stopping at the table's natural
+        end."""
+        outputfile = tmp_path / "forces_no_terminator_trailing.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        with pytest.raises(ValueError):
+            g16.forces
+
+    def test_align_lengths_to_orientations_trims_longer_energies(
+        self, tmp_path
+    ):
+        """Two identical Standard orientation frames get deduplicated
+        down to one by clean_duplicate_structure, but the two SCF Done
+        energies printed alongside them are untouched by dedup, so
+        align_lengths_to_orientations must right-trim energies (now
+        longer than the deduplicated orientations list) back down to
+        match."""
+        std_block = [
+            "                         Standard orientation:",
+            " ---------------------------------------------------------------------",
+            " Center     Atomic      Atomic             Coordinates (Angstroms)",
+            " Number     Number       Type             X           Y           Z",
+            " ---------------------------------------------------------------------",
+            "      1          6           0        0.000000    0.000000    0.000000",
+            " ---------------------------------------------------------------------",
+        ]
+        lines = [
+            " ----------------------------------------------------------------------",
+            " # opt mn15/def2svp",
+            " ----------------------------------------------------------------------",
+            " Symbolic Z-matrix:",
+            " Charge =  0 Multiplicity = 1",
+            " C                     0.0000    0.0000    0.0000",
+            "",
+            " NAtoms=      1 NQM=        1 NQMF=       0",
+        ]
+        lines += std_block
+        lines.append(
+            " SCF Done:  E(RHF) =  -38.0000000     A.U. after   10 cycles"
+        )
+        lines += std_block
+        lines.append(
+            " SCF Done:  E(RHF) =  -38.0000001     A.U. after   10 cycles"
+        )
+        lines.append(
+            " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023."
+        )
+        outputfile = tmp_path / "align_lengths_trim.log"
+        outputfile.write_text("\n".join(lines) + "\n")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.standard_orientations) == 2
+        assert g16.energies == [-38.0, -38.0000001]
+        structures = g16.all_structures
+        assert len(structures) == 1
+        assert structures[0].energy == -38.0
+
+    def test_include_intermediate_scan_multiple_optimized_indices(
+        self, tmp_path
+    ):
+        """A synthetic multi-scan-point job with two fully-completed scan
+        points (each with its own final optimized step) gives
+        optimized_steps_indices more than one entry, so the
+        is_optimized-tagging loop in _get_all_molecular_structures
+        actually iterates more than once. A third scan point is recorded
+        (via a 'Step number ... on scan point 3 out of 3' line) without a
+        corresponding fourth orientation frame, so its mapped index (3)
+        falls outside the valid range for the 3-frame is_optimized list,
+        exercising the loop's `0 <= idx < len(is_optimized)` False branch
+        (which loops back without setting anything) in addition to the
+        True branch."""
+        std_block_lines = [
+            "                         Standard orientation:",
+            " ---------------------------------------------------------------------",
+            " Center     Atomic      Atomic             Coordinates (Angstroms)",
+            " Number     Number       Type             X           Y           Z",
+            " ---------------------------------------------------------------------",
+            "      1          6           0        0.000000    0.000000    0.000000",
+            " ---------------------------------------------------------------------",
+        ]
+        lines = [
+            " ----------------------------------------------------------------------",
+            " # opt modredundant mn15/def2svp",
+            " ----------------------------------------------------------------------",
+            " Symbolic Z-matrix:",
+            " Charge =  0 Multiplicity = 1",
+            " C                     0.0000    0.0000    0.0000",
+            "",
+            " NAtoms=      1 NQM=        1 NQMF=       0",
+        ]
+        lines += std_block_lines
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     1 out of     2"
+        )
+        lines += std_block_lines
+        lines.append(
+            " Step number   2 out of a maximum of  100 on scan point"
+            "     1 out of     2"
+        )
+        lines += std_block_lines
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     2 out of     2"
+        )
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     3 out of     3"
+        )
+        outputfile = tmp_path / "multi_scan_point.log"
+        outputfile.write_text("\n".join(lines) + "\n")
+        g16 = Gaussian16Output(
+            filename=str(outputfile), include_intermediate=True
+        )
+        assert g16.optimized_steps_indices == [1, 2, 3]
+        structures = g16.all_structures
+        assert len(structures) == 3
+        assert [s.is_optimized_structure for s in structures] == [
+            False,
+            True,
+            True,
+        ]

@@ -4536,3 +4536,106 @@ The fifth instance is structurally different but the same root cause: `string2in
 **Impact:** None -- dead code with no behavioral effect, since these fallbacks can never be reached with any input.
 
 **Suggested direction:** delete all five `else` fallbacks (or, if kept for defensive-programming reasons, replace the misleading "Just a negative number" comments with a note explaining they are intentionally-unreachable safety nets, since the current comments describe inputs that cannot reach that code).
+
+---
+
+## 107. `Gaussian16Output._genecp_info`'s `if not atom_symbols: return result` is unreachable dead code
+
+**Location:** `chemsmart/io/gaussian/output.py:175-180`
+
+```python
+try:
+    atom_symbols = self.symbols
+except Exception:
+    return result
+if not atom_symbols:
+    return result
+```
+
+`self.symbols` (`GaussianFileMixin.symbols`, `chemsmart/utils/mixins.py:137-145`) always returns `self.input_coordinates_block.chemical_symbols`, which is `CoordinateBlock._get_symbols()` (`chemsmart/io/molecules/structure.py:2803-2864`). That method has exactly two outcomes: it raises `ValueError("No symbols found in the coordinate block: ...")` when the parsed symbols list would be empty (`:2860-2863`), or it returns a non-empty list. There is no code path in which it returns an empty list without raising. Consequently, by the time execution reaches line 179, `atom_symbols` is guaranteed to be a non-empty list (the empty case was already caught and handled by the `except Exception: return result` above it), so `if not atom_symbols:` can never be `True`.
+
+**Reproduce:** `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_genecp_info_not_atom_symbols_branch_is_dead_code` forces the branch via `monkeypatch` (setting `type(g16).symbols` to a `property` returning `[]`) since no real/synthetic output file can reach it through the normal `self.symbols` call path.
+
+**Impact:** None -- dead code with no behavioral effect; the preceding `try`/`except` already handles every real "no symbols" scenario.
+
+**Suggested direction:** remove the redundant `if not atom_symbols: return result` guard, since it can never fire given `self.symbols`'s actual contract.
+
+---
+
+## 108. `Gaussian16Output._get_forces_for_molecules_and_pbc` crashes with `ValueError` when a "Forces" block has no closing divider and is followed by other content later in the file
+
+**Location:** `chemsmart/io/gaussian/output.py:1667-1694`
+
+```python
+for j_line in self.contents[i + 3 :]:
+    if "---------------------------" in j_line:
+        break
+    if j_line.startswith("-2"):
+        forces_pbc.append([float(val) for val in j_line.split()[1:4]])
+    else:
+        forces.append([float(val) for val in j_line.split()[2:5]])
+```
+
+The inner loop scans every remaining line in the file looking for the closing `"---------------------------"` divider that normally terminates a `Forces (Hartrees/Bohr)` table. If that divider is missing (e.g. a truncated/corrupted output file) but the file still has further content afterward -- even just the standard `Normal termination of Gaussian...` trailer line -- the loop does not stop; it falls into the `else` branch and attempts `[float(val) for val in j_line.split()[2:5]]` on that unrelated line, e.g. `"Normal termination of Gaussian 16 at ..."` splits to tokens `["Normal", "termination", "of", "Gaussian", ...]`, and `float("of")` raises `ValueError: could not convert string to float: 'of'`. So an interrupted/re-run job whose Forces table lost its closing divider (but is not literally the last thing in the file) crashes `forces`/`all_structures`/etc. instead of gracefully treating "no divider found" as "end of the forces table."
+
+**Reproduce:** confirmed interactively -- a synthetic file with a `Forces (Hartrees/Bohr)` header, one data row, no closing divider, followed by a `Normal termination of Gaussian...` line raises `ValueError` from `g16.forces`. (Only the clean "block is the literal last content in the file" case is exercised by `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_forces_no_terminator_at_true_eof`, which does not hit this crash since the loop simply exhausts `self.contents` with nothing left to misparse.)
+
+**Impact:** Low-medium -- real, non-corrupted Gaussian output always closes the Forces table with its divider, so this only manifests for truncated/interrupted output files, but when it does, it crashes ungracefully rather than either stopping at the table's natural end or raising a clearer diagnostic.
+
+**Suggested direction:** also break when a line fails to parse as force data (e.g. wrap the row parse in `try/except ValueError: break`), or track "am I still inside the table" via a stricter shape check (e.g. requiring the line to start with an integer atom index) rather than relying solely on the divider to terminate.
+
+---
+
+## 109. `_get_all_molecular_structures`'s local `drop_first()` helper has two guards that can never be `False`
+
+**Location:** `chemsmart/io/gaussian/output.py:648-660, 699-717`
+
+```python
+def drop_first():
+    nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
+    if orientations:
+        orientations = orientations[1:]
+    if orientations_pbc:
+        orientations_pbc = orientations_pbc[1:]
+    ...
+
+if self.is_link:
+    if self.normal_termination:
+        if orientations:  # drop carried-over first frame if present
+            drop_first()
+        ...
+    else:
+        if len(orientations) > 1:
+            drop_first()
+```
+
+Both call sites already guard on `orientations` being non-empty (`if orientations:` / `if len(orientations) > 1:`) before invoking `drop_first()`, so by the time `drop_first()` runs, `if orientations:` (its first line) is always `True`. Similarly, `orientations_pbc` is built 1:1 with `orientations` by `_get_standard_orientations_and_pbc`/`_get_input_orientations_and_pbc` (every appended orientation has a corresponding `orientations_pbc` entry, even if that entry is `None`), so whenever `orientations` is non-empty, `orientations_pbc` (assigned via `list(self.standard_orientations_pbc or [])` at the same length) is also non-empty. Both `if` guards inside `drop_first()` are therefore always `True` when reached, making the guards themselves dead code (the `[1:]` slicing always executes). The outer call-site guard `if orientations:` at line 704 is dead for the identical reason one level up: by the time execution reaches line 699 (`if self.is_link:`), `orientations` was already established as non-empty at lines 632-639 (the function returns `[]` early at line 639 otherwise), so line 704's check is always `True` too.
+
+**Reproduce:** confirmed via `coverage report` -- branches `651->653` (orientations False) and `653->655` (orientations_pbc False) inside `drop_first()`, and `704->708` (the outer call-site guard False) remain unreachable even with `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_link_job_drop_first_and_keep_last_only_falsy_branches`, which exercises every other falsy branch in the same function (`energies`, `rot_consts`, `point_groups`) via a minimal synthetic link-job output. Since `drop_first` is a local closure (not a method), it cannot be invoked directly from a test to force these guards False without a real call path.
+
+**Impact:** None -- dead code with no behavioral effect, since the guarded statements are exactly what should always execute given the guaranteed non-empty inputs.
+
+**Suggested direction:** drop both redundant guards (`orientations = orientations[1:]` and `orientations_pbc = orientations_pbc[1:]` unconditionally), since the callers already ensure non-emptiness.
+
+---
+
+## 110. `oniom_partition`'s "first ONIOM format" inner loop can never be empty
+
+**Location:** `chemsmart/io/gaussian/output.py:2691-2697`
+
+```python
+for i, line in enumerate(self.contents):
+    if "Symbolic Z-matrix:" in line:
+        if "Charge" not in self.contents[i + 4]:
+            atom_index = 1
+            for j_line in self.contents[i + 4 :]:
+                ...
+```
+
+Reaching the inner `for j_line in self.contents[i + 4 :]:` loop requires that `self.contents[i + 4]` was already successfully indexed on the line above (to check `"Charge" not in ...`). Successfully indexing `self.contents[i + 4]` guarantees `len(self.contents) > i + 4`, which in turn guarantees `self.contents[i + 4:]` has at least one element. So the "loop executes zero times" arc for this particular loop is unreachable -- unlike its sibling "alternative ONIOM format" loop a few lines below (`for j_line in self.contents[i + 7 :]:`, `:2717`), which genuinely can be empty (e.g. if the file ends between `i+5` and `i+6` lines after the marker, since only `self.contents[i+4]` -- not `self.contents[i+7]` -- was validated by the preceding `if`).
+
+**Reproduce:** confirmed via `coverage report` -- branch `2697->2691` remains in the missing-branches list even after `tests/test_GaussianIO.py::TestGaussian16OutputAdditionalCoverage::test_oniom_partition_first_format_edge_cases` exercises every other branch of the same loop (short lines, unrecognized layer letters, the `tokens[4]` fallback), while the sibling `2717->2691` (alternative format) is covered by a dedicated truncated-file test.
+
+**Impact:** None -- dead code with no behavioral effect.
+
+**Suggested direction:** none needed; this is an inherent consequence of the preceding bounds check and not worth restructuring.
