@@ -4455,3 +4455,38 @@ The inner loop reads exactly `3 * self.num_atoms` lines following a mode-number 
 **Impact:** Low -- real ORCA output is always well-formed here, so this would only manifest on a truncated/corrupted output file (e.g. a job killed mid-write during the `NORMAL MODES` print).
 
 **Suggested direction:** track how many lines actually matched vs. how many were expected, and either `break`/skip the whole mode block (logging a warning) when the count doesn't match `3 * num_atoms`, or raise a clear, purpose-built error identifying the offending line instead of letting the `reshape` call fail with a generic shape-mismatch message.
+
+---
+
+## 104. `ORCAOutput.cpu_runtime_by_jobs_core_hours` never actually multiplies by the processor count for any real ORCA output, because its `else` is attached to the wrong `if`
+
+**Location:** `chemsmart/io/orca/output.py:3138-3154`
+
+```python
+@cached_property
+def cpu_runtime_by_jobs_core_hours(self):
+    """CPU run time in core hours is total run time in hours times num
+    of parallel processors."""
+    for line in self.contents:
+        if (
+            "Program running with" in line
+            and "parallel MPI-processes" in line
+        ):
+            match = re.search(orca_nproc_used_line_pattern, line)
+            if match:
+                n_processors = int(match.group(1))
+                cpu_times = n_processors * self.total_elapsed_walltime
+                return cpu_times
+        else:
+            return self.total_elapsed_walltime
+```
+
+The `else` is attached to the *outer* `if` (the marker-line check), not the inner `if match:`. So for the very first line of `self.contents` that does not contain both `"Program running with"` and `"parallel MPI-processes"` -- which, for any real ORCA output file, is simply the first line of the file, since the processor-count line is printed deep into the header, not on line 1 -- the loop immediately takes the `else` branch and returns `self.total_elapsed_walltime` (i.e. `n_processors=1`), without ever reaching the line that would have told it the actual processor count. The intended logic (only fall back to `total_elapsed_walltime` after scanning the whole file and never finding a usable processor-count line) never runs, because the loop can never even complete its first iteration on real input without hitting the `else`.
+
+A consequence: `service_units_by_jobs`, `total_core_hours`, and `total_service_unit` (all thin wrappers around `cpu_runtime_by_jobs_core_hours`) are silently wrong for every multi-processor ORCA job -- they report the same core-hours as a 1-processor job would take, understating actual resource usage by a factor of `n_processors`.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAEngrad::test_cpu_runtime_and_service_units` (using the real `water_output_gas_path` fixture, whose `"Program running with"` line is not the first line of the file) shows `cpu_runtime_by_jobs_core_hours == total_elapsed_walltime` even though the file was run with multiple processors. `::test_cpu_runtime_with_parallel_mpi_processes_line` shows the multiplication *only* works when the processor-count line is artificially placed as the literal first line of the file. `::test_cpu_runtime_by_jobs_core_hours_line_without_regex_match` shows that even with the marker on the first line, a regex-mismatch still falls through to the same `else` on the very next line, before any real content is scanned. `::test_cpu_runtime_by_jobs_core_hours_empty_file_returns_none` shows the function's implicit-`None` fallthrough is reachable only for a completely empty file, since any non-empty content triggers the misplaced `else` on its first line.
+
+**Impact:** Medium -- these properties exist specifically to report computational cost (core-hours / service units), and they are silently incorrect (undercounting) for essentially every real multi-processor ORCA calculation, which is the common case.
+
+**Suggested direction:** move the `else: return self.total_elapsed_walltime` fallback to after the `for` loop completes (dedent it out of the loop and drop the `else:`, or track whether a match was found and `return` after the loop), so the loop actually scans every line for the processor-count marker before falling back.

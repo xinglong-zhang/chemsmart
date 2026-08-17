@@ -4336,6 +4336,65 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.entropy_in_J_per_mol_per_K is None
         assert oo.entropy is None
 
+    def test_rotational_entropy_symmetry_correction_natural_exhaustion(
+        self, tmp_path
+    ):
+        """Section has data but no trailing blank line, so the inner
+        loop runs off the end of self.contents instead of breaking."""
+        content = (
+            "THERMOCHEMISTRY\n"
+            "f1\n"
+            "f2\n"
+            "   Temperature         ...   298.15 K\n"
+            "rotational entropy values for sn=1,12:\n"
+            "\n"
+            " non-linear molecules -----------------------------------\n"
+            "|  sn= 1 | S(rot)=       0.01277695 Eh      8.02 kcal/mol|\n"
+        )
+        path = _write_orca_output(tmp_path, "rot_entropy_trunc.out", content)
+        oo = ORCAOutput(filename=path)
+        result = oo.rotational_entropy_symmetry_correction_J_per_mol_per_K
+        assert list(result.keys()) == ["sn=1"]
+
+    def test_gibbs_free_energy_properties_natural_exhaustion(self, tmp_path):
+        """GIBBS FREE ENERGY marker is present, but neither "Final
+        Gibbs free energy" nor "G-E(el)" ever appears."""
+        content = "GIBBS FREE ENERGY\nUNRELATED LINE\n"
+        path = _write_orca_output(tmp_path, "gibbs_no_labels.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.gibbs_free_energy is None
+        assert oo.thermal_gibbs_free_energy_correction is None
+
+    def test_cpu_runtime_by_jobs_core_hours_empty_file_returns_none(
+        self, tmp_path
+    ):
+        """A completely empty file means the for loop never executes
+        even once, so the property falls off the end of the function
+        with no explicit return, implicitly returning None. See
+        BUGS_FOUND.md #104 for why any non-empty file bypasses this
+        branch entirely, regardless of its content."""
+        path = _write_orca_output(tmp_path, "empty_contents.out", "")
+        oo = ORCAOutput(filename=path)
+        assert oo.cpu_runtime_by_jobs_core_hours is None
+
+    def test_cpu_runtime_by_jobs_core_hours_line_without_regex_match(
+        self, tmp_path
+    ):
+        """The processor-count marker is on the *first* line but
+        doesn't match orca_nproc_used_line_pattern -- match is None,
+        so the loop continues to the next line, which (being anything
+        other than a second processor-count line) immediately falls
+        into the misplaced else branch documented in BUGS_FOUND.md
+        #104 and returns total_elapsed_walltime without ever
+        multiplying by a processor count."""
+        content = (
+            "Program running with weird formatting parallel MPI-processes\n"
+            "TOTAL RUN TIME: 0 days 0 hours 0 minutes 1 seconds 0 msec\n"
+        )
+        path = _write_orca_output(tmp_path, "bad_processor_line.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.cpu_runtime_by_jobs_core_hours == oo.total_elapsed_walltime
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):
