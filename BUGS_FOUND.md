@@ -4215,3 +4215,30 @@ Both `entries` lists are built via `TabularDataset.to_entries()` (`chemsmart/io/
 **Impact:** None -- purely redundant defensive code with no behavioral effect; the earlier, differently-worded guard in `TabularDataset.parse_table` already covers this case.
 
 **Suggested direction:** no action needed; could be removed (or the message text merged into `TabularDataset.parse_table`'s guard) now that the duplication is confirmed.
+
+---
+
+## 97. `PyMOLJobRunner._add_coordinates_labels`'s `elif prepend_string.startswith("D"):` is a tautological branch that is always true when reached
+
+**Location:** `chemsmart/jobs/mol/runner.py:543-559`
+
+```python
+prepend_string_list = get_prepend_string_list_from_modred_free_format(
+    input_modred=job.coordinates, program="pymol"
+)
+for prepend_string in prepend_string_list:
+    if prepend_string.startswith("B"):
+        distances.append(...)
+    elif prepend_string.startswith("A"):
+        angles.append(...)
+    elif prepend_string.startswith("D"):
+        dihedrals.append(...)
+```
+
+Same pattern as bug #81 (`jobs/orca/writer.py`'s analogous modred/scan-coordinate loop): `get_prepend_string_for_modred` (`chemsmart/utils/utils.py:1221-1243`), which `get_prepend_string_list_from_modred_free_format` calls for every coordinate group, raises `ValueError` for any coordinate list not of length 2, 3, or 4 and otherwise returns exactly `"B"`, `"A"`, or `"D"`. So every `prepend_string` reaching this loop starts with one of exactly those three letters -- by the time the `elif ... "D"` condition is evaluated (i.e. the string didn't start with `"B"` or `"A"`), it is guaranteed to start with `"D"`, and the condition's false arm (which would silently skip the entry, appending it to none of `distances`/`angles`/`dihedrals`) can never execute.
+
+**Reproduce:** `tests/test_PyMOLJobs.py::TestPyMOLJobRunnerHelpers::test_add_coordinates_labels_handles_angles_and_dihedrals` exercises a mix of bond/angle/dihedral coordinates (including a dihedral followed by another entry, to force the loop to continue past a matched "D"); `coverage report -m --include="*jobs/mol/runner.py"` still shows arc `556->549` (the elif's false arm) as unreachable regardless of coordinate combinations, confirming the same fixed-domain guarantee as bug #81.
+
+**Impact:** None -- purely redundant code with no behavioral effect, since `get_prepend_string_for_modred`'s return domain is fixed to exactly three values.
+
+**Suggested direction:** no action needed; could be simplified to a plain `else:` now that the three-value domain is confirmed (consistent with the suggested fix for bug #81's identical pattern).

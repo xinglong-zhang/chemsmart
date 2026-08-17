@@ -1611,7 +1611,7 @@ class TestPyMOLNCIJobRunnerHelpers:
         command = runner._run_nci_command(job, "cmd")
         assert command == f"cmd; {expected_fragment}"
 
-    def test_add_nci_specific_commands_chains_all_steps(self, mocker):
+    def test_job_specific_commands_chains_all_steps(self, mocker):
         from chemsmart.jobs.mol.runner import PyMOLNCIJobRunner
 
         runner = PyMOLNCIJobRunner.__new__(PyMOLNCIJobRunner)
@@ -1631,7 +1631,7 @@ class TestPyMOLNCIJobRunnerHelpers:
             )
             calls.append(name)
 
-        result = runner._add_nci_specific_commands(job, "cmd")
+        result = runner._job_specific_commands(job, "cmd")
         assert result == "cmd" + "".join(f";{n}" for n in calls)
 
 
@@ -1783,6 +1783,25 @@ class TestPyMOLMOJobRunnerHelpers:
         with pytest.raises(ValueError, match="No MO specified"):
             runner._generate_mo_cube_file(job)
 
+    def test_write_molecular_orbital_pml_fresh_file(self, tmp_path):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            mo_basename="mol_LUMO",
+            isosurface_value=0.05,
+            transparency_value=0.3,
+            surface_quality=1,
+            antialias_value=2,
+        )
+        pml_path = tmp_path / "mol_LUMO.pml"
+        assert not pml_path.exists()
+
+        runner._write_molecular_orbital_pml(job)
+
+        assert "load mol_LUMO.cube" in pml_path.read_text()
+
     def test_write_molecular_orbital_pml_overwrites_existing(self, tmp_path):
         from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
 
@@ -1818,6 +1837,18 @@ class TestPyMOLMOJobRunnerHelpers:
         job = SimpleNamespace(folder="/tmp/testjob", mo_basename="mol_HOMO")
         command = runner._call_pml(job, "cmd")
         assert command == "cmd; load /tmp/testjob/mol_HOMO.pml"
+
+    def test_job_specific_commands_chains_hide_pml_and_ray(self):
+        from chemsmart.jobs.mol.runner import PyMOLMOJobRunner
+
+        runner = PyMOLMOJobRunner.__new__(PyMOLMOJobRunner)
+        job = SimpleNamespace(
+            folder="/tmp/testjob", mo_basename="mol_HOMO", trace=True
+        )
+        command = runner._job_specific_commands(job, "cmd")
+        assert "hide labels" in command
+        assert "load /tmp/testjob/mol_HOMO.pml" in command
+        assert "ray 2400,1800" in command
 
 
 class TestPyMOLSpinJobRunnerHelpers:
@@ -1859,6 +1890,26 @@ class TestPyMOLSpinJobRunnerHelpers:
             == "/opt/g16/cubegen 0 spin mol.fchk mol.cube 100"
         )
 
+    def test_write_spin_density_pml_fresh_file(self, tmp_path):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        job = SimpleNamespace(
+            folder=str(tmp_path),
+            spin_basename="mol_spin2",
+            isosurface_value=0.004,
+            transparency_value=0.3,
+            surface_quality=1,
+            antialias_value=2,
+            ray_trace_mode=1,
+        )
+        pml_path = tmp_path / "mol_spin2.pml"
+        assert not pml_path.exists()
+
+        runner._write_spin_density_pml(job)
+
+        assert "load mol_spin2.cube" in pml_path.read_text()
+
     def test_write_spin_density_pml_overwrites_existing(self, tmp_path):
         from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
 
@@ -1882,6 +1933,31 @@ class TestPyMOLSpinJobRunnerHelpers:
         assert "isosurface pos_iso_spin, mol_spin, 0.004" in content
         assert "isosurface neg_iso_spin, mol_spin, -0.004" in content
         assert "set ray_trace_mode, 1" in content
+
+    def test_prerun_chains_all_setup_steps(self, mocker):
+        from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
+
+        runner = PyMOLSpinJobRunner.__new__(PyMOLSpinJobRunner)
+        job = SimpleNamespace()
+        mock_assign = mocker.patch.object(
+            PyMOLSpinJobRunner, "_assign_variables"
+        )
+        mock_fchk = mocker.patch.object(
+            PyMOLSpinJobRunner, "_generate_fchk_file"
+        )
+        mock_cube = mocker.patch.object(
+            PyMOLSpinJobRunner, "_generate_spin_cube_file"
+        )
+        mock_pml = mocker.patch.object(
+            PyMOLSpinJobRunner, "_write_spin_density_pml"
+        )
+
+        runner._prerun(job)
+
+        mock_assign.assert_called_once_with(job)
+        mock_fchk.assert_called_once_with(job)
+        mock_cube.assert_called_once_with(job)
+        mock_pml.assert_called_once_with(job)
 
     def test_job_specific_commands_chains_hide_pml_and_ray(self, mocker):
         from chemsmart.jobs.mol.runner import PyMOLSpinJobRunner
@@ -2164,6 +2240,56 @@ class TestPyMOLAlignJobRunnerBatchProcessing:
         "style,expected_cmd",
         [
             (None, "pymol_style"),
+            ("cylview", "cylview_style"),
+            ("cylview-flat", "cylview_flat_style"),
+        ],
+    )
+    def test_execute_batch_subsequent_batch_style_variants(
+        self, mocker, style, expected_cmd
+    ):
+        """Subsequent batches (batch_idx > 0) apply style via their own
+        inline load-and-style loop, separate from batch 0's style
+        handling -- exercised here for each style branch."""
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=3, style=style)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        mock_create = mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_create_process",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch.object(PyMOLAlignJobRunner, "_run")
+
+        runner._execute_batch(
+            job, 1, job.xyz_absolute_paths[1:], ["mol1", "mol2"]
+        )
+
+        command = mock_create.call_args.args[1]
+        assert f"{expected_cmd} mol1" in command
+        assert f"{expected_cmd} mol2" in command
+
+    def test_execute_batch_subsequent_batch_invalid_style_raises(self, mocker):
+        runner = self._make_runner()
+        job = self._make_job(n_molecules=3, style="bogus_style")
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+
+        with pytest.raises(ValueError, match="not available"):
+            runner._execute_batch(
+                job, 1, job.xyz_absolute_paths[1:], ["mol1", "mol2"]
+            )
+
+    @pytest.mark.parametrize(
+        "style,expected_cmd",
+        [
+            (None, "pymol_style"),
             ("pymol", "pymol_style"),
             ("cylview", "cylview_style"),
             ("cylview-flat", "cylview_flat_style"),
@@ -2302,6 +2428,24 @@ class TestPyMOLAlignJobRunnerNonBatchCommandHelpers:
         with pytest.raises(FileNotFoundError, match="does not exist"):
             runner._add_style_script(job, "cmd")
 
+    def test_add_style_script_generated_script_missing_leaves_command_unchanged(
+        self, tmp_path, mocker
+    ):
+        """When no folder-level style file exists and the freshly
+        generated style script also doesn't end up on disk, the
+        command is returned unchanged (no -r flag added)."""
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(pymol_script=None, folder=str(tmp_path))
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_generate_visualization_style_script",
+            return_value=str(tmp_path / "never_written.py"),
+        )
+
+        command = runner._add_style_script(job, "cmd")
+
+        assert command == "cmd"
+
     def test_get_visualization_command_raises_when_no_xyz_files(self, mocker):
         runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
         mocker.patch.object(
@@ -2336,6 +2480,29 @@ class TestPyMOLAlignJobRunnerNonBatchCommandHelpers:
         command = runner._get_visualization_command(job)
 
         assert command == "/usr/bin/pymol /tmp/m0.xyz -q -c"
+
+    def test_get_visualization_command_no_flags(self, mocker):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "executable",
+            new_callable=mocker.PropertyMock,
+            return_value="/usr/bin/pymol",
+        )
+        mocker.patch.object(
+            PyMOLAlignJobRunner,
+            "_add_style_script",
+            side_effect=lambda job, cmd: cmd,
+        )
+        job = SimpleNamespace(
+            xyz_absolute_paths=["/tmp/m0.xyz"],
+            quiet_mode=False,
+            command_line_only=False,
+        )
+
+        command = runner._get_visualization_command(job)
+
+        assert command == "/usr/bin/pymol /tmp/m0.xyz"
 
     def test_setup_style_cylview(self):
         runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
