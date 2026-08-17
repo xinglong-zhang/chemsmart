@@ -3928,6 +3928,45 @@ class TestORCAOutputDirectPropertyCoverage:
         assert len(structures) == 1
         assert structures[0].is_optimized_structure is True
 
+    def test_get_molecule_from_sp_output_file_xyz_branch_crashes(
+        self, tmp_path
+    ):
+        """The "coordinates will be read from file:" branch reads
+        self.folder, but ORCAOutput (unlike consumers of BaseFolder)
+        never sets that attribute, so this branch always crashes with
+        AttributeError rather than reading the referenced .xyz file.
+        See BUGS_FOUND.md #102."""
+        content = "coordinates will be read from file: coords.xyz\n"
+        path = _write_orca_output(tmp_path, "reads_xyz.out", content)
+        oo = ORCAOutput(filename=path)
+        with pytest.raises(AttributeError, match="folder"):
+            oo._get_molecule_from_sp_output_file()
+
+    def test_get_molecule_from_sp_output_file_falls_back_to_input_structure(
+        self, tmp_path
+    ):
+        content = (
+            "some unrelated line\n"
+            "| 20> * xyz 0 1\n"
+            "| 21> O -0.00000000323406   0.00000000000000   0.08734060152197\n"
+            "| 22> H -0.75520523910536   0.00000000000000  -0.50967029975151\n"
+            "| 23> *\n"
+        )
+        path = _write_orca_output(tmp_path, "fallback_input.out", content)
+        oo = ORCAOutput(filename=path)
+        molecule = oo._get_molecule_from_sp_output_file()
+        assert molecule.chemical_symbols == ["O", "H"]
+
+    def test_get_input_structure_in_output_raises_when_no_matches(
+        self, tmp_path
+    ):
+        path = _write_orca_output(
+            tmp_path, "no_input_structure.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        with pytest.raises(ValueError, match="No structure found"):
+            oo._get_input_structure_in_output()
+
     def test_get_all_structures_is_dead_code(self, tmp_path):
         """_get_all_structures (distinct from _get_all_orientations,
         which all_structures actually uses) has no callers anywhere in

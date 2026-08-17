@@ -4402,3 +4402,28 @@ if (
 **Impact:** None currently -- dead code, not a behavioral bug, since the branches are simply unreachable rather than reachable-and-wrong.
 
 **Suggested direction:** either port `include_intermediate`/`optimized_steps_indices` from `GaussianOutput` to `ORCAOutput` properly (constructor argument + property) if per-step optimization filtering is actually wanted for ORCA outputs, or delete this dead branch and always fall through to the `elif self.normal_termination: is_optimized[-1] = True` behavior.
+
+---
+
+## 102. `ORCAOutput._get_molecule_from_sp_output_file`'s ".xyz file" branch always crashes with `AttributeError` because `self.folder` is never set
+
+**Location:** `chemsmart/io/orca/output.py:1011-1034`
+
+```python
+def _get_molecule_from_sp_output_file(self):
+    molecule = None
+    for line in self.contents:
+        if "coordinates will be read from file:" in line:
+            xyz_file = line.strip().split("file: ")[-1]
+            xyz_filepath = os.path.join(self.folder, xyz_file)  # <-- AttributeError
+```
+
+`self.folder` is documented in `chemsmart/utils/mixins.py` (the `folderpath` property's docstring, `:1780-1794`) as an attribute that "consumers are expected to set... (e.g., via `BaseFolder` or a subclass)". `ORCAOutput` is not such a consumer -- nothing in its class hierarchy (`ORCAFileMixin` -> `FileMixin`) ever sets `self.folder`, so any code path that reaches this line raises `AttributeError: 'ORCAOutput' object has no attribute 'folder'` before it can even build the `.xyz` path, let alone read it.
+
+Note this branch is only reachable at all via a direct call to `_get_molecule_from_sp_output_file()` -- its only real caller, `final_structure`'s `except (ValueError, IndexError):` fallback (`:980-987`), is itself dead code per bug #71 (`optimized_output_lines is not None` is always `True`), so in practice this crash can currently only be triggered by calling the private method directly.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_get_molecule_from_sp_output_file_xyz_branch_crashes`.
+
+**Impact:** Low today (unreachable through any live call path, same as bug #71's fallback chain), but would immediately break any future fix to bug #71 that made this fallback reachable again -- an ORCA single-point job that reads its structure from a referenced `.xyz` file would crash instead of loading it.
+
+**Suggested direction:** use `self.filepath_directory` (`FileMixin`'s own `os.path.split(self.filepath)[0]` property, `:55-63`) instead of `self.folder` -- `folderpath` is not a fix either, since it also just wraps `self.folder`.
