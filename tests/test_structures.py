@@ -5186,6 +5186,16 @@ class TestMoleculeBondingAndGraphExtra:
         assert graph.number_of_nodes() == 3
         assert graph.number_of_edges() == 2
 
+    def test_to_graph_non_vectorized_non_h_pair_uses_default_buffer(
+        self, gaussian_acetone_opt_outfile
+    ):
+        """adjust_H=True (default) with a pair of non-H atoms exercises
+        the plain bond_cutoff_buffer branch, distinct from the H-H and
+        H-heavy special cases covered by the water_molecule tests."""
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        graph = acetone.to_graph_non_vectorized()
+        assert graph.number_of_edges() > 0
+
     def test_to_graph_non_vectorized_no_adjust_h(self, water_molecule):
         graph = water_molecule.to_graph_non_vectorized(adjust_H=False)
         assert isinstance(graph, nx.Graph)
