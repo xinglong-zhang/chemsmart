@@ -3277,6 +3277,41 @@ class TestORCAOutputDirectPropertyCoverage:
         with pytest.raises(TypeError):
             oo.dfet_embed_energy_eV
 
+    def test_hirshfeld_total_integrated_densities_found(self, tmp_path):
+        content = (
+            "HIRSHFELD ANALYSIS\n"
+            "filler1\n"
+            "filler2\n"
+            "Total integrated alpha density      :    5.000000\n"
+            "Total integrated beta density       :    3.000000\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "hirshfeld_densities.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.total_integrated_alpha_density == 5.0
+        oo2 = ORCAOutput(filename=path)
+        assert oo2.total_integrated_beta_density == 3.0
+
+    def test_hirshfeld_total_integrated_densities_natural_exhaustion(
+        self, tmp_path
+    ):
+        """No trailing blank line after the data -- the inner loop runs
+        off the end of self.contents instead of breaking."""
+        content = (
+            "HIRSHFELD ANALYSIS\n"
+            "filler1\n"
+            "filler2\n"
+            "Total integrated alpha density      :    5.000000\n"
+            "Total integrated beta density       :    3.000000\n"
+        )
+        path = _write_orca_output(
+            tmp_path, "hirshfeld_densities_trunc.out", content
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.total_integrated_alpha_density == 5.0
+        oo2 = ORCAOutput(filename=path)
+        assert oo2.total_integrated_beta_density == 3.0
+
     def test_population_dipole_rotational_properties_crash_when_absent(
         self, tmp_path
     ):
