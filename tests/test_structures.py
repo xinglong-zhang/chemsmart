@@ -4894,6 +4894,15 @@ class TestMoleculeDetermineLevelFromAtomIndexBaseClass:
         water_molecule.medium_level_atoms = None
         assert water_molecule._determine_level_from_atom_index(3) == "L"
 
+    def test_returns_none_when_not_high_and_not_in_medium_level_atoms(
+        self, water_molecule
+    ):
+        """medium_level_atoms is set (truthy) but the atom index is
+        not in it -- falls through without an explicit return."""
+        water_molecule.high_level_atoms = ["1"]
+        water_molecule.medium_level_atoms = ["2"]
+        assert water_molecule._determine_level_from_atom_index(3) is None
+
 
 class TestMoleculeWriteMethods:
     def test_write_coordinates_unsupported_program_raises(
@@ -4924,6 +4933,29 @@ class TestMoleculeWriteMethods:
         outfile = tmp_path / "out.foo"
         with pytest.raises(ValueError, match="not supported for writing"):
             water_molecule.write(str(outfile), format="foo")
+
+    def test_str_representation(self, water_molecule):
+        water_molecule.energy = -76.0
+        assert str(water_molecule) == (
+            f"Molecule<{water_molecule.empirical_formula},energy: -76.0>"
+        )
+
+    def test_to_cosmorsxyz(self, water_molecule):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        result = water_molecule.to_cosmorsxyz()
+        lines = result.split("\n")
+        assert lines[0] == "3"
+        assert lines[1] == "0 1"
+        assert len(lines) == 5
+
+    def test_write_cosmorsxyz(self, water_molecule, tmp_path):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        outfile = tmp_path / "out.cosmorsxyz"
+        water_molecule.write_cosmorsxyz(str(outfile))
+        content = outfile.read_text()
+        assert content == water_molecule.to_cosmorsxyz()
 
     def test_write_com_format(self, water_molecule, tmp_path):
         water_molecule.charge = 0
