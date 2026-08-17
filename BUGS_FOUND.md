@@ -4277,3 +4277,67 @@ A further consequence: because `_get_*_eV()` can only ever return real data or r
 **Impact:** Medium -- any ORCA output that doesn't happen to print these specific energy-decomposition lines (e.g. a calculation without the relevant SCF print level, or a non-DFT method for `xc_energy`) makes these five properties entirely unusable, crashing instead of the `None`-on-absent behavior every other property in this file provides.
 
 **Suggested direction:** for the four `TypeError` cases, add an `is not None` (or truthiness) check on the Hartree helper's result before calling `len()`/iterating in each `_get_*_eV()` method, mirroring the pattern already used correctly by the plain (non-eV) properties. For `xc_energy`/`xc_energy_eV`, add the same `if len(xc_energy_hartree) != 0: return xc_energy_hartree` guard to `_get_xc_energy_hartree()` that all four sibling Hartree helpers already have.
+
+---
+
+## 99. `ORCAOutput.num_forces`, `constrained_bond_lengths`/`constrained_bond_angles`/`constrained_dihedral_angles`, and `_get_input_structure_coordinates_block_in_output` -- three more instances of the "crashes/dead code when marker absent" pattern
+
+**Location:** `chemsmart/io/orca/output.py:105-142` (`forces`/`num_forces`/`_get_forces_for_molecules`), `:249-330` (`constrained_*`/`_get_constraints`), `:170-202` (`_get_input_structure_coordinates_block_in_output`)
+
+**(a) `num_forces` crashes instead of returning `0`:**
+
+```python
+def _get_forces_for_molecules(self):
+    ...
+    if len(list_of_all_forces) == 0:
+        return None          # <-- forces is None, not [], when absent
+    return list_of_all_forces
+
+@cached_property
+def num_forces(self):
+    return len(self.forces)  # <-- len(None) crashes
+```
+
+Same shape as bug #98: `forces` correctly returns `None` when no `"CARTESIAN GRADIENT"` section exists, but `num_forces` calls `len()` on it unconditionally, so `oo.num_forces` raises `TypeError: object of type 'NoneType' has no len()` instead of `0` on any output file without a gradient calculation.
+
+**(b) `constrained_bond_lengths`/`_angles`/`_dihedral_angles` crash instead of returning `{}`:**
+
+```python
+@cached_property
+def _get_constraints(self):
+    ...
+    for i, line in enumerate(self.contents):
+        if "Redundant Internal Coordinates" in line:
+            ...
+            return (constrained_bond_lengths, constrained_bond_angles, constrained_dihedral_angles)
+    # implicit `return None` if the marker is never found
+
+@property
+def constrained_bond_lengths(self):
+    constrained_bond_lengths, _, _ = self._get_constraints  # <-- unpacking None crashes
+    return constrained_bond_lengths
+```
+
+`_get_constraints` has no fallback `return ({}, {}, {})` after its loop, so it implicitly returns `None` for any output file that never prints a `"Redundant Internal Coordinates"` block (e.g. a single-point job, or an optimization with no active constraints). All three public properties then crash with `TypeError: cannot unpack non-iterable NoneType object` instead of returning an empty dict, unlike almost every other "marker absent" property in this file.
+
+Additionally, `_get_constraints`'s inner loop (`for j, line_j in enumerate(self.contents[i + 5:])`) has no fallback for running off the end of the file without hitting a blank-line terminator -- it still falls through to the same `return (...)` afterward, so that arc is harmless, just previously uncovered.
+
+**(c) `_get_input_structure_coordinates_block_in_output` is unreachable dead code:**
+
+```python
+@cached_property
+def input_coordinates_block(self):
+    return self._get_first_structure_coordinates_block_in_output()
+
+def _get_input_structure_coordinates_block_in_output(self):
+    """In ORCA output file, the input structure is rewritten..."""
+    ...
+```
+
+Despite its name closely matching `input_coordinates_block`, that property actually calls `_get_first_structure_coordinates_block_in_output` (a different, similarly-named method that scans for `"CARTESIAN COORDINATES (ANGSTROEM)"` instead of `"INPUT FILE"`). Nothing else in the codebase calls `_get_input_structure_coordinates_block_in_output` -- it is entirely unreferenced.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_num_forces_crashes_when_forces_absent`, `::test_get_constraints_absent_crashes_dependent_properties`, `::test_get_constraints_runs_to_natural_exhaustion`, and `::test_get_input_structure_coordinates_block_in_output_is_dead_code` (the last calls the method directly, since nothing else does).
+
+**Impact:** Low-medium for (a)/(b) -- both are common cases (any output without a gradient print, or without active geometry constraints) that would currently crash callers relying on these properties as a lightweight "is this present" check. Low for (c) -- purely wasted code, but harmless since `input_coordinates_block` (the only plausibly-intended caller) already works via the other method.
+
+**Suggested direction:** (a) guard `num_forces` with `len(self.forces) if self.forces is not None else 0`. (b) add a fallback `return ({}, {}, {})` after `_get_constraints`'s loop, matching the "always return a value, never implicitly `None`" convention used elsewhere in this file. (c) delete `_get_input_structure_coordinates_block_in_output` (and its docstring/pattern usage) as dead code, or rename it and wire it up if it was meant to be used instead of `_get_first_structure_coordinates_block_in_output`.

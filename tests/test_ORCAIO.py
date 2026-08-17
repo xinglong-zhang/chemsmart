@@ -3574,6 +3574,159 @@ class TestORCAOutputDirectPropertyCoverage:
         assert oo.beta_occ_eigenvalues == [-0.5 * units.Hartree]
         assert oo.beta_virtual_eigenvalues == [-0.1 * units.Hartree]
 
+    def test_has_forces_false_without_marker(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "no_forces.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.has_forces is False
+
+    def test_num_forces_crashes_when_forces_absent(self, tmp_path):
+        """forces returns None (not []) when no "CARTESIAN GRADIENT"
+        section is present, so len(self.forces) in num_forces crashes
+        instead of returning 0 -- an undocumented real bug."""
+        path = _write_orca_output(
+            tmp_path, "no_forces.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.forces is None
+        with pytest.raises(TypeError):
+            _ = oo.num_forces
+
+    def test_get_forces_for_molecules_runs_to_natural_exhaustion(
+        self, tmp_path
+    ):
+        """No blank line terminates the gradient block, so the inner
+        loop runs off the end of self.contents instead of breaking."""
+        content = (
+            "CARTESIAN GRADIENT\n"
+            "\n"
+            "\n"
+            "   1   O   :    0.000100    0.000200    0.000300\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_gradient.out", content)
+        oo = ORCAOutput(filename=path)
+        forces = oo.forces
+        assert len(forces) == 1
+        assert forces[0].tolist() == [[0.0001, 0.0002, 0.0003]]
+
+    def test_get_forces_for_molecules_skips_non_six_element_lines(
+        self, tmp_path
+    ):
+        content = (
+            "CARTESIAN GRADIENT\n"
+            "\n"
+            "\n"
+            "   this line has five elements\n"
+            "   1   O   :    0.000100    0.000200    0.000300\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "skip_gradient.out", content)
+        oo = ORCAOutput(filename=path)
+        forces = oo.forces
+        assert len(forces) == 1
+        assert forces[0].tolist() == [[0.0001, 0.0002, 0.0003]]
+
+    def test_get_input_structure_coordinates_block_in_output_is_dead_code(
+        self, tmp_path
+    ):
+        """_get_input_structure_coordinates_block_in_output is never
+        called by any live code path -- input_coordinates_block (its
+        only plausible caller, by name) actually calls
+        _get_first_structure_coordinates_block_in_output instead. See
+        BUGS_FOUND.md #99. Call it directly to cover the otherwise
+        dead lines."""
+        content = (
+            "INPUT FILE\n"
+            "| 20> * xyz 0 1\n"
+            "| 21> O -0.00000000323406   0.00000000000000   0.08734060152197\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "input_file.out", content)
+        oo = ORCAOutput(filename=path)
+        cb = oo._get_input_structure_coordinates_block_in_output()
+        assert isinstance(cb, CoordinateBlock)
+        assert cb.coordinate_block == [
+            "O  -0.00000000323406  0.00000000000000  0.08734060152197"
+        ]
+
+    def test_get_first_structure_coordinates_block_header_never_found(
+        self, tmp_path
+    ):
+        path = _write_orca_output(
+            tmp_path, "no_cartesian.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        cb = oo.input_coordinates_block
+        assert isinstance(cb, CoordinateBlock)
+        assert cb.coordinate_block == []
+
+    def test_get_constraints_absent_crashes_dependent_properties(
+        self, tmp_path
+    ):
+        """_get_constraints returns None (implicit) when "Redundant
+        Internal Coordinates" is never found, so unpacking it in the
+        constrained_bond_lengths/angles/dihedral_angles properties
+        crashes with TypeError instead of e.g. returning {} -- an
+        undocumented real bug. See BUGS_FOUND.md #99."""
+        path = _write_orca_output(
+            tmp_path, "no_redundant.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo._get_constraints is None
+        with pytest.raises(TypeError):
+            _ = oo.constrained_bond_lengths
+        with pytest.raises(TypeError):
+            _ = oo.constrained_bond_angles
+        with pytest.raises(TypeError):
+            _ = oo.constrained_dihedral_angles
+
+    def test_get_constraints_runs_to_natural_exhaustion(self, tmp_path):
+        """The Redundant Internal Coordinates block has no blank-line
+        terminator, so the inner loop runs off the end of the file
+        instead of breaking -- still reaches the return statement."""
+        content = (
+            "Redundant Internal Coordinates\n"
+            "line 2\n"
+            "line 3\n"
+            "line 4\n"
+            "line 5\n"
+            "1. B(H  1,O  0)   0.9627   1.033064   C\n"
+        )
+        path = _write_orca_output(tmp_path, "trunc_redundant.out", content)
+        oo = ORCAOutput(filename=path)
+        bond_lengths, bond_angles, dihedral_angles = oo._get_constraints
+        assert bond_lengths == {"B(H2,O1)": 0.9627}
+        assert bond_angles == {}
+        assert dihedral_angles == {}
+
+    def test_scf_convergence_found(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path,
+            "scf_conv.out",
+            "|  5> ! SCF Convergence Tight\n",
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.scf_convergence == "tight"
+
+    def test_dipole_found(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path,
+            "dipole.out",
+            "|  5> %elprop Dipole True end\n",
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.dipole == "true"
+
+    def test_quadrupole_found(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path,
+            "quadrupole.out",
+            "|  5> %elprop Quadrupole True end\n",
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.quadrupole == "true"
+
     def test_final_scf_energy_and_single_point_energy_for_sp_job(
         self, water_sp_gas_path
     ):
