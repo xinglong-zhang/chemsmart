@@ -216,8 +216,12 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
  Constructor Parameters
 ******************************
 
-.. autoclass:: chemsmart.io.molecules.structure.Molecule
-   :members: __init__
+The constructor accepts the following parameters. Parameters typed in
+**bold** are required; the rest are optional and are typically populated
+automatically when reading calculation output files (Gaussian ``.log``,
+ORCA ``.out``, xTB, etc.).
+
+.. automethod:: chemsmart.io.molecules.structure.Molecule.__init__
    :noindex:
 
 .. list-table::
@@ -228,13 +232,13 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
       -  Type
       -  Description
 
-   -  -  ``symbols``
+   -  -  **symbols**
       -  list
-      -  List of atomic symbols (e.g. ``["C", "O", "O"]``). **Required.**
+      -  List of atomic symbols (e.g. ``["C", "O", "O"]``).
 
-   -  -  ``positions``
+   -  -  **positions**
       -  ndarray
-      -  ``(N, 3)`` array of Cartesian coordinates in Ångströms. **Required.**
+      -  ``(N, 3)`` array of Cartesian coordinates in Ångströms.
 
    -  -  ``charge``
       -  int
@@ -287,14 +291,6 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
    -  -  ``info``
       -  dict
       -  Arbitrary extra metadata stored with the molecule
-
-.. note::
-
-   The full constructor also accepts ``vibrational_reduced_masses``, ``vibrational_force_constants``,
-   ``vibrational_ir_intensities``, ``vibrational_mode_symmetries``, ``structure_index_in_file``,
-   ``rotational_symmetry_number``, ``mulliken_atomic_charges``, ``mulliken_spin_densities``,
-   ``is_optimized_structure``, ``dipole_moment_magnitude``, and ``rotational_constants``. These are typically
-   populated automatically when reading calculation output files rather than being set manually.
 
 ***********************
  Indexing and Copies
@@ -545,6 +541,19 @@ CHEMSMART provides several identifiers for molecules and structures:
 Counts and Symbols
 ===================
 
+.. code:: python
+
+   # Use a real calculation output so all metadata is populated
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+
+   print(mol.num_atoms)            # 3
+   print(list(mol.symbols))        # ['C', 'O', 'O']
+   print(mol.chemical_symbols)     # ['C', 'O', 'O']
+   print(mol.positions.shape)      # (3, 3)
+   print(mol.positions)            # Cartesian coordinates in Å
+
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.num_atoms
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.symbols
@@ -567,6 +576,8 @@ CHEMSMART supports three mass conventions:
    print(mol.mass)                              # ~18.015 amu
    print(mol.natural_abundance_weighted_mass)  # weighted by isotope abundance
    print(mol.most_abundant_mass)                # using most abundant isotopes
+   print(mol.masses)                            # list of per-atom masses
+   print(mol.most_abundant_masses)              # per-atom most-abundant isotope masses
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.mass
 
@@ -583,6 +594,22 @@ CHEMSMART supports three mass conventions:
 Energy, Forces, and Velocities
 ================================
 
+These are populated from calculation output files (Gaussian ``.log``,
+ORCA ``.out``, xTB, etc.).
+
+.. code:: python
+
+   # Total energy (Hartree)
+   print(mol.energy)                  # e.g. -4.17657788 Hartree for CO2 at xTB
+
+   # Forces on each atom (Hartree/Bohr), shape (N, 3)
+   print(mol.forces.shape)            # (3, 3) for CO2
+   print(mol.forces)                  # force components per atom
+
+   # Atomic velocities (if available, N, 3)
+   if mol.velocities is not None:
+       print(mol.velocities.shape)
+
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.energy
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.forces
@@ -597,7 +624,34 @@ Energy, Forces, and Velocities
 Electronic and Thermochemical Properties
 =========================================
 
-These properties are typically populated when reading calculation output files:
+These properties are typically populated when reading calculation output files.
+The example below uses a real Gaussian output file:
+
+.. code:: python
+
+   mol = Molecule.from_filepath("tests/data/GaussianTests/outputs/co2.log")
+
+   # Basic electronic properties
+   print(mol.charge, mol.multiplicity)          # 0 1
+
+   # Dipole moment
+   if mol.dipole_moment is not None:
+       print("Dipole (Debye):", mol.dipole_moment)         # [X, Y, Z] components
+       print("|μ|:", mol.dipole_moment_magnitude)           # total magnitude
+
+   # Point group / rotational constants / symmetry number
+   print("Point group:", mol.point_group)                    # e.g. "D∞H" or "CS"
+   print("Rot. const. (Hz):", mol.rotational_constants)     # [A, B, C]
+   print("Rot. symm. #:", mol.rotational_symmetry_number)   # e.g. 2
+
+   # Per-atom Mulliken charges and spin densities
+   if mol.mulliken_atomic_charges is not None:
+       print("Mulliken charges:", mol.mulliken_atomic_charges)  # {"C1": 0.84, "O2": -0.42, ...}
+   if mol.mulliken_spin_densities is not None:
+       print("Mulliken spins:", mol.mulliken_spin_densities)
+
+   # Optimization flag
+   print("Is optimized?", mol.is_optimized_structure)       # True / False / None
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.charge
 
@@ -621,6 +675,13 @@ These properties are typically populated when reading calculation output files:
 
 Atomic Radii
 =============
+
+.. code:: python
+
+   # Covalent radii (Å)
+   print(mol.atomic_radii_list)      # e.g. [0.77, 0.73, 0.73] for CO2
+   # Van der Waals radii (Å)
+   print(mol.vdw_radii_list)         # e.g. [1.70, 1.52, 1.52] for CO2
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.atomic_radii_list
 
@@ -695,6 +756,27 @@ perception of the 3D geometry (bonds, rings, stereochemistry).
 Periodic Boundary Conditions
 =============================
 
+.. code:: python
+
+   import numpy as np
+   from chemsmart.io.molecules.structure import Molecule
+
+   # Build a periodic molecule with an orthorhombic cell
+   symbols = ["Si", "Si"]
+   positions = np.array([[0.0, 0.0, 0.0], [1.36, 1.36, 1.36]])
+   cell = np.array([[2.72, 0.0, 0.0], [0.0, 2.72, 0.0], [0.0, 0.0, 2.72]])
+
+   mol = Molecule(
+       symbols=symbols,
+       positions=positions,
+       pbc_conditions=[True, True, True],
+       translation_vectors=cell.tolist(),
+   )
+
+   print(mol.pbc)                    # [True, True, True]
+   print(mol.pbc_conditions)          # [True, True, True]
+   print(mol.translation_vectors)     # 3x3 cell matrix
+
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.pbc
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.pbc_conditions
@@ -704,6 +786,25 @@ Periodic Boundary Conditions
 Frozen Atoms
 =============
 
+.. code:: python
+
+   from chemsmart.io.molecules.structure import Molecule
+   import numpy as np
+
+   # Build a CO2 molecule with the two oxygen atoms frozen
+   symbols = ["C", "O", "O"]
+   positions = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.16], [0.0, 0.0, -1.16]])
+
+   mol = Molecule(
+       symbols=symbols,
+       positions=positions,
+       frozen_atoms=[0, -1, -1],  # 0 = relax C, -1 = freeze O atoms
+   )
+
+   print(mol.frozen_atoms)            # [0, -1, -1]
+   frozen_indices = [i+1 for i, f in enumerate(mol.frozen_atoms) if f == -1]
+   print("Frozen atoms:", frozen_indices)  # [2, 3]
+
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.frozen_atoms
 
 .. note::
@@ -712,6 +813,19 @@ Frozen Atoms
 
 Miscellaneous
 =============
+
+.. code:: python
+
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+
+   # User-defined metadata dict
+   if mol.info is not None:
+       print("Info keys:", list(mol.info.keys()))
+
+   # 1-based position of this structure within the source file
+   print("Structure index in file:", mol.structure_index_in_file)  # e.g. 1
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.info
 
@@ -843,9 +957,23 @@ integration. All volumes are in cubic Ångströms (Å³).
 
 .. code:: python
 
-   print(mol.crude_volume_by_vdw_radii)     # crude estimate
-   print(mol.vdw_volume)                    # pairwise corrected
-   print(mol.grid_vdw_volume)               # grid-based (recommended)
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+
+   # Crude estimates (no overlap correction)
+   print(mol.crude_volume_by_atomic_radii)   # via covalent radii (Å³)
+   print(mol.crude_volume_by_vdw_radii)      # via van der Waals radii (Å³)
+
+   # Better estimates
+   print(mol.vdw_volume)                     # pairwise overlap-corrected (Å³)
+   print(mol.grid_vdw_volume)                # grid-based VDW, recommended (Å³)
+   print(mol.vdw_volume_from_rdkit)          # RDKit grid-based volume (Å³)
+
+   # Advanced
+   print(mol.voronoi_dirichlet_occupied_volume)   # V-D tessellation (Å³)
+   print(mol.voronoi_dirichlet_polyhedra_occupied_volume)  # VDP (Å³)
+   print(mol.estimated_dispersion)                 # dispersion energy estimate
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.crude_volume_by_atomic_radii
 
@@ -871,14 +999,36 @@ Bond orders are inferred from interatomic distances using covalent radii and a t
 
 .. code:: python
 
-   # Get all bond orders
-   bond_orders = mol.bond_orders               # e.g. [1.0, 1.0, 2.0]
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+   print(mol.chemical_formula)   # CO2
 
-   # Get bond orders from molecular graph
-   bond_orders = mol.get_bond_orders_from_graph()
+   # --- All bonds (heuristic from 3D geometry) ---
+   print("Bond orders:", mol.bond_orders)          # e.g. [2.0, 2.0] (C=O double bonds)
 
-   # RDKit fingerprints
+   # --- Bond orders extracted from RDKit connectivity ---
+   bo_graph = mol.get_bond_orders_from_graph()
+   print("Bond orders (from graph):", bo_graph)    # same structure as bond_orders
+
+   # --- RDKit-based bond orders (requires RDKit) ---
+   bo_rdkit = mol.get_bond_orders_from_rdkit_mol()
+   if bo_rdkit is not None:
+       print("Bond orders (RDKit):", bo_rdkit)
+
+   # --- Query a single bond pair (1-based atom indices) ---
+   # Between atom 1 (C) and atom 2 (O)
+   single_bo = mol.determine_bond_order_one_bond(1, 2)
+   print("Bond order 1–2:", single_bo)             # 2.0 for C=O
+
+   # --- Full bond-order list (lower-level) ---
+   all_bos = mol.determine_bond_order()
+   print("All bond orders list:", all_bos)         # all detected bonds
+
+   # --- RDKit Morgan fingerprint (for ML / similarity tasks) ---
    fp = mol.rdkit_fingerprints
+   if fp is not None:
+       print("Fingerprint shape:", fp.shape)        # e.g. (1, 2048)
 
 .. autoattribute:: chemsmart.io.molecules.structure.Molecule.bond_orders
 
@@ -1041,6 +1191,36 @@ CoordinateBlock
 
 A helper class that parses a Gaussian-style coordinate block text into a :class:`Molecule`:
 
+.. code:: python
+
+   from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+
+   # Example: a Gaussian-style Z-matrix / Cartesian block with constraints
+   block_text = """
+   C  0  0  0.000000  0.000000  0.000000
+   O  0  0  0.000000  0.000000  1.160000
+   O -1  0  0.000000  0.000000 -1.160000
+   """
+
+   cb = CoordinateBlock(block_text)
+
+   # Parsed chemical symbols
+   print("Symbols:", cb.chemical_symbols)                 # ['C', 'O', 'O']
+
+   # Per-atom constraints (-1 = frozen, 0 = relaxed)
+   print("Constraints:", cb.constrained_atoms)           # [0, 0, -1]
+
+   # Cartesian positions
+   print("Positions (Å):", cb.positions)
+
+   # Atom partition levels (for QM/MM ONIOM-like partitions)
+   print("Partitions:", cb.partitions)                   # [0, 0, 0]
+
+   # Directly convert to a Molecule
+   mol = cb.molecule
+   mol_or = cb.convert_coordinate_block_list_to_molecule(block_text.splitlines())
+   print("Formula via Molecule:", mol.chemical_formula)  # CO2
+
 .. autoclass:: chemsmart.io.molecules.structure.CoordinateBlock
    :members:
    :inherited-members:
@@ -1054,13 +1234,34 @@ A thin wrapper around ASE :class:`ase.Atoms` that additionally stores ``charge``
 
 .. code:: python
 
+   from chemsmart.io.molecules.structure import Molecule
    from chemsmart.io.molecules.atoms import AtomsChargeMultiplicity
 
-   # From ASE Atoms → Molecule
-   mol = Molecule.from_ase_atoms(atoms)
+   # 1. Build a CHEMSMART Molecule
+   mol = Molecule(symbols=["C", "O", "O"],
+                  positions=[[0, 0, 0], [0, 0, 1.16], [0, 0, -1.16]],
+                  charge=0,
+                  multiplicity=1)
 
-   # From Molecule → ASE Atoms (with charge and multiplicity)
+   # 2. Molecule → ASE Atoms (wrapped as AtomsChargeMultiplicity, preserves charge/mult)
    atoms = mol.to_ase()
+   print(type(atoms).__name__)                # AtomsChargeMultiplicity
+   print("Atoms charge / mult:", atoms.charge, atoms.multiplicity)   # 0 1
+
+   # 3. ASE Atoms → Molecule (round-trip back)
+   mol2 = Molecule.from_ase_atoms(atoms)
+   print("Round-trip formula:", mol2.chemical_formula)               # CO2
+   print(mol2.charge, mol2.multiplicity)                              # 0 1
+
+   # 4. Direct AtomsChargeMultiplicity construction
+   import numpy as np
+   acm = AtomsChargeMultiplicity(
+       symbols=["H", "H", "O"],
+       positions=np.array([[0.96, 0.0, 0.0], [-0.96, 0.0, 0.0], [0.0, 0.0, 0.0]]),
+       charge=0,
+       multiplicity=1,
+   )
+   print("ACM symbols:", list(acm.symbols))     # ['H', 'H', 'O']
 
 .. autoclass:: chemsmart.io.molecules.atoms.AtomsChargeMultiplicity
    :members:
@@ -1074,12 +1275,45 @@ A thin wrapper around ASE :class:`ase.Atoms` that additionally stores ``charge``
 Bond Cutoffs and Covalent Radii
 =================================
 
+Helper functions for computing covalent radii and bond cutoff distances:
+
+.. code:: python
+
+   from chemsmart.io.molecules import get_covalent_radius, get_bond_cutoff
+
+   # Get covalent radius of an element (in Ångströms)
+   r_C = get_covalent_radius("C")   # ~0.77 Å
+   r_O = get_covalent_radius("O")   # ~0.73 Å
+
+   # Compute a bond cutoff for a pair of elements (includes a buffer)
+   cutoff_CO = get_bond_cutoff("C", "O")   # r_C + r_O + 0.3 (default buffer)
+   cutoff_CH = get_bond_cutoff("C", "H", buffer=0.2)   # custom buffer
+
 .. autofunction:: chemsmart.io.molecules.get_covalent_radius
 
 .. autofunction:: chemsmart.io.molecules.get_bond_cutoff
 
 PubChem Search
 ==============
+
+Programmatic search of the PubChem database:
+
+.. code:: python
+
+   from chemsmart.io.molecules.pubchem import pubchem_search
+
+   # Search by compound name
+   result = pubchem_search("aspirin", fail_silently=True)
+
+   # Search by CID
+   result = pubchem_search(cid="2244", fail_silently=True)
+
+   # Search by SMILES
+   result = pubchem_search(smiles="CC(=O)OC1=CC=CC=C1C(=O)O", fail_silently=True)
+
+   # Low-level raw search
+   from chemsmart.io.molecules.pubchem import search_pubchem_raw
+   raw = search_pubchem_raw("aspirin", "name", suffix="3d")
 
 .. autofunction:: chemsmart.io.molecules.pubchem.pubchem_search
 
