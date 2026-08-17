@@ -4925,6 +4925,34 @@ class TestMoleculeWriteMethods:
         with pytest.raises(ValueError, match="not supported for writing"):
             water_molecule.write(str(outfile), format="foo")
 
+    def test_write_com_format(self, water_molecule, tmp_path):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        outfile = tmp_path / "out.com"
+        water_molecule.write(str(outfile), format="com")
+        content = outfile.read_text()
+        assert "%chk=out.chk" in content
+        assert "0 1\n" in content
+
+    def test_write_com_uses_default_charge_multiplicity_when_unset(
+        self, water_molecule, tmp_path
+    ):
+        water_molecule.charge = None
+        water_molecule.multiplicity = None
+        outfile = tmp_path / "out_default.com"
+        water_molecule.write_com(str(outfile), charge=2, multiplicity=3)
+        content = outfile.read_text()
+        assert "2 3\n" in content
+
+    def test_write_xyz_includes_energy_when_present(
+        self, water_molecule, tmp_path
+    ):
+        water_molecule.energy = -76.123456
+        outfile = tmp_path / "out_energy.xyz"
+        water_molecule.write(str(outfile), format="xyz")
+        content = outfile.read_text()
+        assert "Energy(Hartree): -76.123456" in content
+
     def test_write_extxyz_without_forces(self, water_molecule, tmp_path):
         outfile = tmp_path / "out.extxyz"
         water_molecule.write(str(outfile), format="extxyz")
