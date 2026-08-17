@@ -97,7 +97,33 @@ def test_a_tool_specific_description_is_not_overwritten_by_the_shared_one():
 
 #: Arguments described for a tool that is built but deliberately withheld.
 #: Keeping the text means re-exposing the tool is a one-line surface change.
-_WITHHELD = {"counterexample_id"}
+#:
+#: ``repair_command`` reads a counterexample registry with no producer.  The
+#: rest belong to the two tools withheld for the same reason once the
+#: reachability rule was checked against every late-bound registry rather than
+#: the three someone had remembered to list: ``inspect_calculation_artifact``
+#: reads run receipts and settings objects, ``assess_program_candidate`` reads
+#: claim evidence, and Runtime V2 binds none of the three.
+_WITHHELD = {
+    "counterexample_id",
+    # inspect_calculation_artifact
+    "run_receipt_id",
+    "settings_id",
+    # assess_program_candidate
+    "basis_mode",
+    "constraint_kinds",
+    "job_families",
+    "method_family",
+    "method_name",
+    "request_id",
+    "requested_engine",
+    "requested_program",
+    "requires_double_hybrid",
+    "requires_post_hf",
+    "selected_engine",
+    "selected_program",
+    "source_claim_sha256s",
+}
 
 
 def test_the_registry_carries_no_entry_no_surface_uses():

@@ -724,6 +724,11 @@ def build_command_compiled_tool_surface(
             for item in tools
             if item["function"]["name"] != "consult_domain_skill"
         )
+    # Advertise only what this runtime can actually deliver.  The handlers and
+    # contracts stay, so restoring one of these is a producer away.
+    tools = tuple(
+        item for item in tools if not _requires_an_unbound_registry(item)
+    )
     tools = _describe_tool_definitions(tools)
     return AgentToolSurfaceV1(
         schema_version="chemsmart.agent-tool-surface.v1",
@@ -1050,6 +1055,37 @@ LATE_BOUND_ARGUMENTS: dict[str, str] = {
     "settings_id": "settings object",
     "source_claim_sha256s": "scientific claim evidence",
 }
+
+
+#: Registries the externally-seeded V1 surface filled but Runtime V2 never
+#: binds: nothing writes them during a session, and no live entry point seeds
+#: them at construction.  A tool requiring one cannot succeed here at all, so
+#: advertising it can only invite a guess at an identifier that will never
+#: exist -- the same defect ``repair_command`` had, and the same rule the
+#: capability registry applies when it declares an unsupported job type instead
+#: of offering it as runnable.
+#:
+#: This is deliberately a property of the *registry* rather than a list of tool
+#: names, so a tool becomes reachable again by giving its registry a producer,
+#: not by editing a second list that can drift from the first.
+UNBOUND_RUNTIME_V2_REGISTRIES: frozenset[str] = frozenset(
+    {
+        "run receipt",
+        "scientific claim evidence",
+        "settings object",
+    }
+)
+
+
+def _requires_an_unbound_registry(definition: dict) -> bool:
+    """Whether this tool can never succeed on the active runtime."""
+
+    parameters = definition["function"].get("parameters") or {}
+    for name in parameters.get("required", ()):
+        label = LATE_BOUND_ARGUMENTS.get(name)
+        if label in UNBOUND_RUNTIME_V2_REGISTRIES:
+            return True
+    return False
 
 
 def _precondition_sentence(properties) -> str:

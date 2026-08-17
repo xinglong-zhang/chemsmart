@@ -17,6 +17,7 @@ registry already applies when it declares PySCF ``td`` as
 """
 
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -34,16 +35,45 @@ _SURFACES = (
 
 #: Registry attribute on the host for each late-bound argument, so "can this
 #: ever be filled?" is answered from code rather than from belief.
+#:
+#: The last three were missing, and their absence is why an unfillable tool
+#: stayed advertised in the preview surface for so long: the rule below was
+#: stated generally but only ever checked against the registries someone had
+#: remembered to list here.  Every label in ``LATE_BOUND_ARGUMENTS`` that names
+#: a host registry now appears, and the test below asserts that too, so the
+#: next omission fails rather than passing silently.
 _REGISTRY_ATTRIBUTES = {
     "counterexample": "counterexamples",
     "canonical invocation": "invocations",
     "command inspection receipt": "command_inspections",
+    "run receipt": "run_receipts",
+    "settings object": "settings_objects",
+    "scientific claim evidence": "scientific_claim_evidence",
 }
+
+#: Entry points that construct the live host.  A registry with no in-session
+#: writer could still be filled at construction, so both are checked before a
+#: tool is called unreachable.
+_LIVE_ENTRY_POINTS = (
+    "chemsmart/agent/live_session.py",
+    "chemsmart/agent/bootstrap.py",
+    "chemsmart/cli/agent.py",
+)
 
 
 def _has_a_producer(attribute: str) -> bool:
+    """Whether anything can put an entry in this registry during a session."""
+
     source = inspect.getsource(tool_runtime)
-    return f"self.{attribute}[" in source
+    if f"self.{attribute}[" in source:
+        return True
+    # Constructor seeding counts too: the V1 surface was filled that way.
+    root = Path(inspect.getsourcefile(tool_runtime)).parents[2]
+    return any(
+        attribute in (root / entry).read_text(encoding="utf-8")
+        for entry in _LIVE_ENTRY_POINTS
+        if (root / entry).exists()
+    )
 
 
 @pytest.mark.parametrize("build", _SURFACES)
@@ -84,12 +114,20 @@ def test_repair_command_is_not_offered_while_it_cannot_work(build):
     assert "repair_command" not in exposed
 
 
-def test_approved_execution_does_not_offer_the_legacy_seeded_result_verifier():
-    """Runtime V2 execution has no legacy settings/run-ID producers.
+def test_the_legacy_seeded_verifier_is_offered_by_neither_surface():
+    """Runtime V2 has no legacy settings/run-ID producers -- in either surface.
 
-    Newly executed results are validated by the execution receipt and then
-    exposed through typed quantity extraction.  Offering the older verifier
-    here can only induce guesses at IDs that the live host never binds.
+    This test previously asserted the verifier belonged in the preview surface
+    and only had to go from the execution one.  That was belief, not evidence:
+    ``settings_objects`` and ``run_receipts`` are constructor-injected only, no
+    live entry point seeds them, and nothing writes them during a session, so
+    the tool could never succeed in *either* surface.  Advertising it could
+    only induce guesses at identifiers the live host never binds -- the same
+    defect as ``repair_command``, missed because the general rule above was
+    checked against an incomplete registry list.
+
+    ``assess_program_candidate`` is here for the same reason: it reads claim
+    evidence, which is equally unbound.
     """
 
     preview_tools = {
@@ -100,9 +138,47 @@ def test_approved_execution_does_not_offer_the_legacy_seeded_result_verifier():
         item["function"]["name"]
         for item in build_approved_execution_tool_surface().tool_definitions
     }
-    assert "inspect_calculation_artifact" in preview_tools
-    assert "inspect_calculation_artifact" not in execution_tools
+    for withheld in (
+        "inspect_calculation_artifact",
+        "assess_program_candidate",
+    ):
+        assert withheld not in preview_tools
+        assert withheld not in execution_tools
     assert "execute_approved_program_node" in execution_tools
+
+
+def test_every_late_bound_registry_is_actually_checked():
+    """The omission that let an unfillable tool stay advertised.
+
+    ``LATE_BOUND_ARGUMENTS`` names the registry behind each deferred argument.
+    Any of those that is a host registry must appear in the map above, or the
+    reachability rule silently stops applying to it.
+    """
+
+    host_registries = {
+        label
+        for label in LATE_BOUND_ARGUMENTS.values()
+        if hasattr(tool_runtime.CommandCompiledToolHostV1, "__init__")
+        and label not in {"project render receipt"}
+    }
+    missing = sorted(host_registries.difference(_REGISTRY_ATTRIBUTES))
+    assert not missing, (
+        "these late-bound registries are never checked for a producer, so a "
+        f"tool needing one could be advertised unreachably: {missing}"
+    )
+
+
+def test_tools_needing_an_unbound_registry_keep_their_handlers():
+    """Withholding a tool must not mean deleting the feature."""
+
+    source = inspect.getsource(tool_runtime)
+    for handler in (
+        "_inspect_calculation_artifact",
+        "_assess_program_candidate",
+    ):
+        assert handler in source, (
+            f"{handler} must survive so re-exposing it is a surface change"
+        )
 
 
 def test_the_handler_and_contract_are_kept_so_re_enabling_is_one_change():
