@@ -508,29 +508,20 @@ CHEMSMART provides several identifiers for molecules and structures:
    print(mol.structure_id)           # a1b2c3d4e5f6...
    print(mol.structure_label)        # str-H2O-a1b2c3d4e5f6
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.smiles
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.cxsmiles
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.inchi
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.inchikey
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.molecule_id
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.molecule_label
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.structure_id
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.structure_label
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.chemical_formula
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.empirical_formula
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.elements
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.element_counts
+-  ``smiles`` (str or None) — SMILES string (convenience, equivalent to ``to_smiles()``).
+-  ``cxsmiles`` (str or None) — CXSMILES string (extended SMILES with 3D/stereo info, via RDKit).
+-  ``inchi`` (str or None) — InChI string (via RDKit).
+-  ``inchikey`` (str or None) — InChIKey string (27 characters, via Open Babel).
+-  ``molecule_id`` (str or None) — Unique molecular identifier (InChIKey).
+-  ``molecule_label`` (str or None) — Human-readable label, e.g. ``"mol-C6H6-UHOVQNZJYSORNB-UHFFFAOYSA-N"``.
+-  ``structure_id`` (str) — SHA-256 hex digest of canonical geometry + charge + multiplicity.
+-  ``structure_label`` (str) — Human-readable label, e.g. ``"str-C6H6-a1b2c3d4e5f6"``.
+-  ``chemical_formula`` (str) — Chemical formula in Hill notation.
+-  ``empirical_formula`` (str) — Empirical formula in Hill notation.
+-  ``elements`` (list) — Sorted unique element symbols, e.g. ``["C", "O"]``.
+-  ``element_counts`` (dict) — Per-element counts, e.g. ``{"C": 1, "O": 2}``.
 
 .. automethod:: chemsmart.io.molecules.structure.Molecule.get_chemical_formula
 
@@ -554,13 +545,12 @@ Counts and Symbols
    print(mol.positions.shape)      # (3, 3)
    print(mol.positions)            # Cartesian coordinates in Å
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.num_atoms
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.symbols
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.positions
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.chemical_symbols
+-  ``num_atoms`` (int) — Number of atoms in the molecule.
+-  ``symbols`` (Symbols) — A ``Symbols`` object wrapping the chemical symbols.
+-  ``positions`` (numpy.ndarray) — ``(N, 3)`` array of Cartesian coordinates in Ångströms.
+-  ``chemical_symbols`` (list) — List of chemical symbol strings (e.g. ``["C", "O", "O"]``).
 
 Masses
 =======
@@ -610,11 +600,11 @@ ORCA ``.out``, xTB, etc.).
    if mol.velocities is not None:
        print(mol.velocities.shape)
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.energy
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.forces
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.velocities
+-  ``energy`` (float or None) — Total molecular energy in Hartree.
+-  ``forces`` (numpy.ndarray or None) — ``(N, 3)`` array of forces in Hartree/Bohr.
+-  ``velocities`` (numpy.ndarray or None) — ``(N, 3)`` array of atomic velocities.
 
 .. note::
 
@@ -653,25 +643,18 @@ The example below uses a real Gaussian output file:
    # Optimization flag
    print("Is optimized?", mol.is_optimized_structure)       # True / False / None
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.charge
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.multiplicity
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.dipole_moment
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.dipole_moment_magnitude
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.rotational_constants
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.point_group
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.rotational_symmetry_number
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.mulliken_atomic_charges
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.mulliken_spin_densities
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.is_optimized_structure
+-  ``charge`` (int or None) — Molecular charge.
+-  ``multiplicity`` (int or None) — Spin multiplicity (2S + 1).
+-  ``dipole_moment`` (numpy.ndarray or None) — Dipole moment ``[X, Y, Z]`` in Debye.
+-  ``dipole_moment_magnitude`` (float or None) — Total dipole moment magnitude in Debye.
+-  ``rotational_constants`` (numpy.ndarray or None) — Rotational constants ``[A, B, C]`` in Hz.
+-  ``point_group`` (str or None) — Molecular point group (e.g. ``"CS"``, ``"C2V"``).
+-  ``rotational_symmetry_number`` (int or None) — Rotational symmetry number.
+-  ``mulliken_atomic_charges`` (dict or None) — Per-atom Mulliken charges keyed like ``"O1"``, ``"C2"``.
+-  ``mulliken_spin_densities`` (dict or None) — Per-atom Mulliken spin densities.
+-  ``is_optimized_structure`` (bool or None) — Whether the structure is an optimized / final geometry.
 
 Atomic Radii
 =============
@@ -683,9 +666,8 @@ Atomic Radii
    # Van der Waals radii (Å)
    print(mol.vdw_radii_list)         # e.g. [1.70, 1.52, 1.52] for CO2
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.atomic_radii_list
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vdw_radii_list
+-  ``atomic_radii_list`` (list) — Covalent radii (Å) for each atom, from ASE's ``covalent_radii`` table.
+-  ``vdw_radii_list`` (list) — Van der Waals radii (Å) for each atom, from ASE's ``vdW_radii`` table.
 
 **************************
  Structure Classification
@@ -777,11 +759,11 @@ Periodic Boundary Conditions
    print(mol.pbc_conditions)          # [True, True, True]
    print(mol.translation_vectors)     # 3x3 cell matrix
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.pbc
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.pbc_conditions
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.translation_vectors
+-  ``pbc`` (bool) — ``True`` if the molecule has no periodic boundary conditions (all entries in ``pbc_conditions`` are 0).
+-  ``pbc_conditions`` (list) — Periodic boundary conditions ``[x, y, z]``.
+-  ``translation_vectors`` (list) — Cell / translation vectors for periodic systems.
 
 Frozen Atoms
 =============
@@ -805,7 +787,7 @@ Frozen Atoms
    frozen_indices = [i+1 for i, f in enumerate(mol.frozen_atoms) if f == -1]
    print("Frozen atoms:", frozen_indices)  # [2, 3]
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.frozen_atoms
+-  ``frozen_atoms`` (list) — Per-atom constraint flags following the Gaussian convention: ``-1`` = frozen, ``0`` = relaxed.
 
 .. note::
 
@@ -827,9 +809,8 @@ Miscellaneous
    # 1-based position of this structure within the source file
    print("Structure index in file:", mol.structure_index_in_file)  # e.g. 1
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.info
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.structure_index_in_file
+-  ``info`` (dict) — Arbitrary extra metadata stored with the molecule.
+-  ``structure_index_in_file`` (int or None) — 1-based position of this structure within the source file.
 
 ************************
  Geometry Analysis
@@ -1085,23 +1066,17 @@ Vibrational properties are typically populated when reading frequency calculatio
        # Generate a 20-frame trajectory for animation
        frames = mol.vibrationally_displaced(mode_idx=1, amp=0.1, nframes=20)
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_frequencies
+**Attributes:**
 
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_reduced_masses
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_force_constants
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_ir_intensities
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_mode_symmetries
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.vibrational_modes
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.has_vibrations
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.num_vib_frequencies
-
-.. autoattribute:: chemsmart.io.molecules.structure.Molecule.num_vib_modes
+-  ``vibrational_frequencies`` (list) — Vibrational frequencies in cm⁻¹.
+-  ``vibrational_reduced_masses`` (list) — Reduced masses per mode in amu.
+-  ``vibrational_force_constants`` (list) — Force constants per mode in mDyne/Å.
+-  ``vibrational_ir_intensities`` (list) — IR intensities in km/mol.
+-  ``vibrational_mode_symmetries`` (list) — Irreducible representation labels (e.g. ``"A1"``).
+-  ``vibrational_modes`` (list) — Each entry is an ``(N, 3)`` mass-weighted normal-mode displacement.
+-  ``has_vibrations`` (bool) — ``True`` if any vibrational frequencies are present.
+-  ``num_vib_frequencies`` (int) — Number of vibrational frequencies available.
+-  ``num_vib_modes`` (int) — Number of normal modes available.
 
 .. automethod:: chemsmart.io.molecules.structure.Molecule.vibrationally_displaced
 
