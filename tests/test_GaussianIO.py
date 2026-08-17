@@ -4932,3 +4932,138 @@ class TestGaussian16OutputAdditionalCoverage:
         assert g16.entropy > 0
         if g16.temperature_in_K:
             assert g16.entropy_times_temperature is not None
+
+    def test_input_orientations_no_terminator_runs_to_eof(self, tmp_path):
+        """'Input orientation:' is close enough to EOF that the inner
+        coordinate-row loop exhausts self.contents instead of hitting
+        the dashed-divider break."""
+        outputfile = tmp_path / "input_orientation_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Input orientation:",
+                    "---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    "---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.input_orientations) == 1
+        assert g16.input_orientations[0].tolist() == [[0.0, 0.0, 0.0]]
+
+    def test_standard_orientations_no_terminator_with_tv_row(self, tmp_path):
+        """Covers both the standard-orientation no-terminator EOF loop
+        exhaustion and the PBC ('-2' atomic number, translation-vector)
+        row-handling branch in a single minimal block."""
+        outputfile = tmp_path / "standard_orientation_tv_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Standard orientation:",
+                    "---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    "---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    "      2         -2           0        1.000000    0.000000    0.000000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.standard_orientations) == 1
+        assert g16.standard_orientations[0].tolist() == [[0.0, 0.0, 0.0]]
+        assert g16.standard_orientations_pbc[0].tolist() == [[1.0, 0.0, 0.0]]
+
+    def test_tddft_transitions_skips_partial_regex_match(self, tmp_path):
+        """An 'Excited State' line missing the oscillator-strength token
+        ('f=...') fails the combined eV/nm/f match, so the transition is
+        skipped and the loop continues to the next line instead of
+        appending anything."""
+        outputfile = tmp_path / "tddft_partial_match.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Excited State   1:  Singlet-A  1.0 eV  100.0 nm",
+                    "Excited State   2:  Singlet-A  2.0 eV  200.0 nm  f=0.2",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.tddft_transitions == [(2.0, 200.0, 0.2)]
+
+    def test_mass_parsed_from_real_fixture(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        assert g16.mass == pytest.approx(55.96645)
+
+    def test_moments_of_inertia_wrapper_properties_and_eof_handling(
+        self, tmp_path
+    ):
+        """Covers the moments_of_inertia/moments_of_inertia_principal_axes
+        wrapper properties directly (not just the underlying _get_...
+        helper), and exercises both the 'This molecule' terminator-absent
+        EOF loop-exhaustion arc and the 'non-4-token line inside the
+        block' skip arc (the header row '1  2  3' has 3 tokens, not 4)."""
+        outputfile = tmp_path / "moments_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Principal axes and moments of inertia in atomic units:",
+                    "                            1         2         3",
+                    "     Eigenvalues --    10.0      20.0      30.0",
+                    "           X            1.0       0.0       0.0",
+                    "           Y            0.0       1.0       0.0",
+                    "           Z            0.0       0.0       1.0",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        moments = g16.moments_of_inertia
+        axes = g16.moments_of_inertia_principal_axes
+        assert moments is not None
+        assert len(moments) == 3
+        assert axes.shape == (3, 3)
+
+    def test_rotational_temperatures_and_constants_no_marker(self, tmp_path):
+        """No 'Rotational temperature'/'Rotational constant' marker line
+        is present at all, so both reversed-scan loops exhaust without
+        ever returning, falling through to the implicit None."""
+        outputfile = tmp_path / "no_rotational_marker.log"
+        outputfile.write_text(" Just some unrelated content.\n")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.rotational_temperatures is None
+        assert g16.rotational_constants_in_Hz is None
+
+    def test_rotational_temperatures_and_constants_overflow_dedup(
+        self, gaussian_koh_opt_outfile
+    ):
+        """KOH.log (a linear molecule) prints an overflow token
+        ('************') for the axial rotational temperature/constant
+        and duplicate values for the two degenerate perpendicular axes,
+        exercising both the overflow-token-skip branch and the
+        duplicate-collapsing dedup loop for both properties."""
+        g16 = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        rot_temps = g16.rotational_temperatures
+        rot_consts = g16.rotational_constants_in_Hz
+        assert rot_temps == [pytest.approx(0.39865)]
+        assert rot_consts == [pytest.approx(8306469999.999999)]
+
+    def test_all_rotational_constants_with_return_status(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        """Calling all_rotational_constants with return_status=True (not
+        exercised by the default-arg call inside
+        _get_all_molecular_structures) exercises the
+        (vals_ghz, status)-tuple-appending branch."""
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        result = g16.all_rotational_constants(
+            mode="physical", return_status=True
+        )
+        assert len(result) > 0
+        vals, status = result[0]
+        assert isinstance(status, str)
+        assert vals.shape[0] >= 1
