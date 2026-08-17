@@ -4280,9 +4280,11 @@ A further consequence: because `_get_*_eV()` can only ever return real data or r
 
 ---
 
-## 99. `ORCAOutput.num_forces`, `constrained_bond_lengths`/`constrained_bond_angles`/`constrained_dihedral_angles`, and `_get_input_structure_coordinates_block_in_output` -- three more instances of the "crashes/dead code when marker absent" pattern
+## 99. `ORCAOutput.num_forces` and `constrained_bond_lengths`/`constrained_bond_angles`/`constrained_dihedral_angles` -- two more instances of the "crashes when marker absent" pattern
 
-**Location:** `chemsmart/io/orca/output.py:105-142` (`forces`/`num_forces`/`_get_forces_for_molecules`), `:249-330` (`constrained_*`/`_get_constraints`), `:170-202` (`_get_input_structure_coordinates_block_in_output`)
+**Location:** `chemsmart/io/orca/output.py:105-142` (`forces`/`num_forces`/`_get_forces_for_molecules`), `:249-330` (`constrained_*`/`_get_constraints`)
+
+(Note: `_get_input_structure_coordinates_block_in_output` and `_get_all_structures`, both unreferenced dead methods in this same file, were independently found and are already documented as bugs #74 and #73 respectively -- see those entries rather than duplicating here.)
 
 **(a) `num_forces` crashes instead of returning `0`:**
 
@@ -4322,27 +4324,11 @@ def constrained_bond_lengths(self):
 
 Additionally, `_get_constraints`'s inner loop (`for j, line_j in enumerate(self.contents[i + 5:])`) has no fallback for running off the end of the file without hitting a blank-line terminator -- it still falls through to the same `return (...)` afterward, so that arc is harmless, just previously uncovered.
 
-**(c) `_get_input_structure_coordinates_block_in_output` is unreachable dead code:**
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_num_forces_crashes_when_forces_absent`, `::test_get_constraints_absent_crashes_dependent_properties`, `::test_get_constraints_runs_to_natural_exhaustion`. (`::test_get_input_structure_coordinates_block_in_output_is_dead_code` and `::test_get_all_structures_is_dead_code` also exist, covering bugs #74 and #73 respectively, by calling those dead methods directly.)
 
-```python
-@cached_property
-def input_coordinates_block(self):
-    return self._get_first_structure_coordinates_block_in_output()
+**Impact:** Low-medium -- both (a) and (b) are common cases (any output without a gradient print, or without active geometry constraints) that would currently crash callers relying on these properties as a lightweight "is this present" check.
 
-def _get_input_structure_coordinates_block_in_output(self):
-    """In ORCA output file, the input structure is rewritten..."""
-    ...
-```
-
-Despite its name closely matching `input_coordinates_block`, that property actually calls `_get_first_structure_coordinates_block_in_output` (a different, similarly-named method that scans for `"CARTESIAN COORDINATES (ANGSTROEM)"` instead of `"INPUT FILE"`). Nothing else in the codebase calls `_get_input_structure_coordinates_block_in_output` -- it is entirely unreferenced.
-
-**(d)** `_get_all_structures` (`:856-871`) is a second, separate instance of the same unreferenced-method problem: it duplicates most of `_get_all_orientations`'s logic (the method `all_structures`/`last_structure`/etc. actually use) but nothing anywhere calls `_get_all_structures` itself.
-
-**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_num_forces_crashes_when_forces_absent`, `::test_get_constraints_absent_crashes_dependent_properties`, `::test_get_constraints_runs_to_natural_exhaustion`, `::test_get_input_structure_coordinates_block_in_output_is_dead_code`, and `::test_get_all_structures_is_dead_code` (the last two call their respective methods directly, since nothing else does).
-
-**Impact:** Low-medium for (a)/(b) -- both are common cases (any output without a gradient print, or without active geometry constraints) that would currently crash callers relying on these properties as a lightweight "is this present" check. Low for (c) -- purely wasted code, but harmless since `input_coordinates_block` (the only plausibly-intended caller) already works via the other method.
-
-**Suggested direction:** (a) guard `num_forces` with `len(self.forces) if self.forces is not None else 0`. (b) add a fallback `return ({}, {}, {})` after `_get_constraints`'s loop, matching the "always return a value, never implicitly `None`" convention used elsewhere in this file. (c) delete `_get_input_structure_coordinates_block_in_output` (and its docstring/pattern usage) as dead code, or rename it and wire it up if it was meant to be used instead of `_get_first_structure_coordinates_block_in_output`.
+**Suggested direction:** (a) guard `num_forces` with `len(self.forces) if self.forces is not None else 0`. (b) add a fallback `return ({}, {}, {})` after `_get_constraints`'s loop, matching the "always return a value, never implicitly `None`" convention used elsewhere in this file.
 
 ---
 

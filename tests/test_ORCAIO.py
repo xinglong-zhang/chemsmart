@@ -4505,6 +4505,7 @@ class TestORCAQMMM:
         assert oq.scaling_factor_qm2 is None
         assert oq.number_of_link_atoms is None
         assert oq.qm_plus_link_atoms_size is None
+        assert oq.qm_region == []
         (
             qm2_large,
             qm2_small,
@@ -4645,6 +4646,22 @@ class TestORCANEB:
         assert len(neb._get_geometries()) == 1
         with pytest.raises(IndexError):
             neb.product
+
+    def test_get_geometries_product_block_natural_exhaustion(self, tmp_path):
+        """The PRODUCT (ANGSTROEM) block has no trailing blank line, so
+        its inner loop runs off the end of self.contents instead of
+        breaking."""
+        content = (
+            "PRODUCT (ANGSTROEM)\n"
+            "  O     -0.000000    0.000000    0.087341\n"
+            "  H     -0.755205    0.000000   -0.509670\n"
+            "  H      0.755205    0.000000   -0.509670\n"
+        )
+        path = _write_orca_output(tmp_path, "product_only.out", content)
+        neb = ORCANEBOutput(filename=path)
+        geometries = neb._get_geometries()
+        assert len(geometries) == 1
+        assert geometries[0].chemical_symbols == ["O", "H", "H"]
 
 
 class TestORCANEBJobSettings:
