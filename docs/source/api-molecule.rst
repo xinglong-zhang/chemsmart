@@ -392,11 +392,24 @@ Use :meth:`Molecule.write` to export molecules to various formats:
 
 CHEMSMART provides bidirectional conversion with popular chemistry libraries:
 
+.. note::
+
+   Always start a format-conversion workflow from a **calculation output file**
+   (``xTB .out``, ``Gaussian .log``, ``ORCA .out``, etc.). Plain ``.xyz``
+   files contain only atomic coordinates — they carry *no* charge or spin
+   multiplicity information, so ``charge`` and ``multiplicity`` will be
+   ``None`` and downstream conversions to libraries such as **pymatgen** or
+   **ASE** will fail with a ``TypeError`` (e.g.
+   ``unsupported operand type(s) for -=: 'float' and 'NoneType'``).
+
 .. code:: python
 
-   # Start from a molecule with charge and multiplicity set (e.g. from Gaussian)
-   mol = Molecule.from_filepath("tests/data/GaussianTests/outputs/benzene.log")
-   print(mol.chemical_formula)   # C6H6
+   # xTB output file — contains charge, multiplicity, coordinates, energy, forces
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+   print(mol.chemical_formula)   # CO2
+   print(mol.charge, mol.multiplicity)   # 0 1
 
    # To ASE Atoms (energy converted from Hartree to eV, forces to eV/Å)
    atoms = mol.to_ase()
@@ -412,7 +425,7 @@ CHEMSMART provides bidirectional conversion with popular chemistry libraries:
 
    # To SMILES string
    smiles = mol.to_smiles()
-   print(smiles)   # e.g. "c1ccccc1"
+   print(smiles)   # e.g. "O=C=O"
 
    # To PDB string
    pdb_string = mol.to_pdb()
@@ -420,7 +433,7 @@ CHEMSMART provides bidirectional conversion with popular chemistry libraries:
 
    # To NetworkX graph (nodes = atoms, edges = bonds with bond_order)
    graph = mol.to_graph()
-   print(graph.number_of_nodes(), graph.number_of_edges())   # 12 12
+   print(graph.number_of_nodes(), graph.number_of_edges())   # 3 2
 
    # To ML feature vector
    X = mol.to_X_data()
