@@ -4202,6 +4202,74 @@ class TestORCAOutputDirectPropertyCoverage:
         with pytest.raises(ValueError):
             oo.normal_modes
 
+    def test_vib_freq_scale_factor_none_cases(self, tmp_path):
+        path_no_marker = _write_orca_output(
+            tmp_path, "no_vib_freq_marker.out", "UNRELATED LINE\n"
+        )
+        oo_no_marker = ORCAOutput(filename=path_no_marker)
+        assert oo_no_marker.vib_freq_scale_factor is None
+
+        path_no_scaling_line = _write_orca_output(
+            tmp_path,
+            "no_scaling_line.out",
+            "VIBRATIONAL FREQUENCIES\nUNRELATED LINE\n",
+        )
+        oo_no_scaling_line = ORCAOutput(filename=path_no_scaling_line)
+        assert oo_no_scaling_line.vib_freq_scale_factor is None
+
+    def test_ir_spectrum_properties_none_without_marker(self, tmp_path):
+        path = _write_orca_output(
+            tmp_path, "no_ir_spectrum.out", "UNRELATED LINE\n"
+        )
+        oo = ORCAOutput(filename=path)
+        assert oo.molar_absorption_coefficients is None
+        assert oo.integrated_absorption_coefficients is None
+        assert oo.transition_dipole_deriv_norm is None
+        assert oo.transition_dipoles == []
+
+    def test_transition_dipoles_runs_to_natural_exhaustion(self, tmp_path):
+        """IR SPECTRUM section with no trailing blank line -- the inner
+        loop runs off the end of self.contents instead of breaking."""
+        content = (
+            "IR SPECTRUM\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "filler4\n"
+            "filler5\n"
+            "   1:      1500.00   1.5   10.0   0.05  (0.010   0.020   0.030)\n"
+        )
+        path = _write_orca_output(tmp_path, "ir_spectrum_trunc.out", content)
+        oo = ORCAOutput(filename=path)
+        dipoles = oo.transition_dipoles
+        assert len(dipoles) == 1
+        assert dipoles[0].tolist() == [0.010, 0.020, 0.030]
+
+    def test_ir_spectrum_coefficient_properties_natural_exhaustion(
+        self, tmp_path
+    ):
+        """IR SPECTRUM section with data but no terminating
+        "* The epsilon..." comment line and no trailing blank line --
+        the inner loop runs off the end of self.contents for each of
+        molar_absorption_coefficients/integrated_absorption_coefficients/
+        transition_dipole_deriv_norm."""
+        content = (
+            "IR SPECTRUM\n"
+            "filler1\n"
+            "filler2\n"
+            "filler3\n"
+            "filler4\n"
+            "filler5\n"
+            "   1:      1500.00   1.5   10.0   0.05  (0.010   0.020   0.030)\n"
+        )
+        path = _write_orca_output(tmp_path, "ir_spectrum_no_end.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.molar_absorption_coefficients == [1.5]
+        oo2 = ORCAOutput(filename=path)
+        assert oo2.integrated_absorption_coefficients == [10.0]
+        oo3 = ORCAOutput(filename=path)
+        assert oo3.transition_dipole_deriv_norm == [0.05]
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):
