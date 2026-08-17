@@ -49,21 +49,34 @@ From Files
 
 CHEMSMART supports a wide range of file formats via :meth:`Molecule.from_filepath`:
 
+The following examples use real test files shipped with the CHEMSMART repository (under ``tests/data/``):
+
 .. code:: python
 
    from chemsmart.io.molecules.structure import Molecule
 
-   # From an XYZ file
-   mol = Molecule.from_filepath("benzene.xyz")
+   # From an XYZ file (methane, 5 atoms)
+   mol = Molecule.from_filepath("tests/data/StructuresTests/canonical/methane.xyz")
+   print(mol.chemical_formula)   # CH4
 
-   # From a Gaussian output file (last structure by default)
-   mol = Molecule.from_filepath("optimization.log")
+   # From a Gaussian output file (benzene, last structure by default)
+   mol = Molecule.from_filepath("tests/data/GaussianTests/outputs/benzene.log")
+   print(mol.chemical_formula)   # C6H6
 
-   # Use a specific structure from a multi-structure file (1-based index)
-   mol = Molecule.from_filepath("scan.log", index=5)
+   # Use a specific structure from a multi-step optimization (1-based index)
+   # Note: ``index`` must be a string (``"5"``, ``"-1"``, or ``":"`` for all)
+   mol = Molecule.from_filepath(
+       "tests/data/GaussianTests/outputs/collidine_opt.log", index="5"
+   )
+   print(mol.chemical_formula)   # C8H11N
 
-   # Get all structures as a list
-   mols = Molecule.from_filepath("conformers.xyz", index=":", return_list=True)
+   # Get all conformers as a list (18 structures in this file)
+   mols = Molecule.from_filepath(
+       "tests/data/StructuresTests/xyz/crest_conformers.xyz",
+       index=":",
+       return_list=True,
+   )
+   print(len(mols))   # 18
 
 .. list-table::
    :header-rows: 1
@@ -113,11 +126,17 @@ CHEMSMART supports a wide range of file formats via :meth:`Molecule.from_filepat
 From a Calculation Directory
 ============================
 
-For xTB calculations, use :meth:`Molecule.from_directorypath`:
+For xTB calculations, use :meth:`Molecule.from_directorypath`. The example below uses a real
+xTB Hessian calculation directory shipped with the CHEMSMART test suite:
 
 .. code:: python
 
-   mol = Molecule.from_directorypath("co2_ohess/", program="xtb")
+   # CO2 molecule from a real xTB calculation directory
+   mol = Molecule.from_directorypath(
+       "tests/data/XTBTests/outputs/co2_ohess/", program="xtb"
+   )
+   print(mol.chemical_formula)   # CO2
+   print(mol.num_atoms)          # 3
 
 From PubChem
 ============
@@ -126,19 +145,33 @@ Query PubChem directly by name, CID, or SMILES string:
 
 .. code:: python
 
-   # By compound name
-   mol = Molecule.from_pubchem("aspirin")
-
-   # By SMILES string
-   mol = Molecule.from_pubchem("CC(=O)OC1=CC=CC=C1C(=O)O")
-
-   # By CID (Compound ID)
+   # By CID (Compound ID) — unambiguous, no fallback errors
    mol = Molecule.from_pubchem("2244")
+   print(mol.chemical_formula)   # C9H8O4
+
+   # By SMILES string — unambiguous, no fallback errors
+   mol = Molecule.from_pubchem("CC(=O)OC1=CC=CC=C1C(=O)O")
+   print(mol.chemical_formula)   # C9H8O4
+
+   # By compound name — CHEMSMART tries SMILES first (which fails for a
+   # plain name) and then falls back to name search. The intermediate
+   # "400 PUGREST.BadRequest" message for the SMILES attempt is normal
+   # and the result is still returned correctly:
+   mol = Molecule.from_pubchem("aspirin")
+   print(mol.chemical_formula)   # C9H8O4
 
 .. note::
 
-   PubChem queries require an internet connection. If a 3D conformer is unavailable, CHEMSMART automatically falls back
-   to the 2D structure and generates 3D coordinates using RDKit.
+   PubChem queries require an **internet connection** and the ``tenacity``
+   Python package (``pip install tenacity``). If a 3D conformer is
+   unavailable, CHEMSMART automatically falls back to the 2D structure and
+   generates 3D coordinates using RDKit (``pip install rdkit``).
+
+.. tip::
+
+   To avoid the harmless-but-confusing "400 BadRequest" logger message for
+   name-based queries, prefer CID or SMILES identifiers when running in a
+   notebook or CI.
 
 From Other Python Objects
 =========================
@@ -153,6 +186,11 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
    from ase import Atoms
    atoms = Atoms("H2O", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
    mol = Molecule.from_ase_atoms(atoms)
+   print(mol.chemical_formula)   # H2O
+
+   # Deep copy (works for any Molecule)
+   mol_copy = mol.copy()
+   print(mol_copy.chemical_formula)   # H2O
 
    # From RDKit Mol
    from rdkit import Chem
@@ -160,6 +198,7 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
    rdkit_mol = Chem.MolFromSmiles("CCO")
    AllChem.EmbedMolecule(rdkit_mol)
    mol = Molecule.from_rdkit_mol(rdkit_mol)
+   print(mol.chemical_formula)   # C2H6O
 
    # From a coordinate block text (Gaussian-style)
    mol = Molecule.from_coordinate_block_text(
@@ -167,9 +206,7 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
        "O  1.2  0.0  0.0\n"
        "O -1.2  0.0  0.0"
    )
-
-   # From another Molecule (copy)
-   mol_copy = Molecule.from_molecule(mol)
+   print(mol.chemical_formula)   # CO2
 
 .. seealso::
 
@@ -274,7 +311,7 @@ ORCA input files.
    # Subset of atoms (1-based indices)
    subset = mol[[1, 2]]             # atoms 1 and 2
    subset.chemical_formula          # 'HO' (Hill notation: alphabetical when no C)
-   
+
    # Deep copy
    mol_copy = mol.copy()
 
@@ -357,28 +394,37 @@ CHEMSMART provides bidirectional conversion with popular chemistry libraries:
 
 .. code:: python
 
+   # Start from a molecule with charge and multiplicity set (e.g. from Gaussian)
+   mol = Molecule.from_filepath("tests/data/GaussianTests/outputs/benzene.log")
+   print(mol.chemical_formula)   # C6H6
+
    # To ASE Atoms (energy converted from Hartree to eV, forces to eV/Å)
    atoms = mol.to_ase()
+   print(type(atoms))   # <class 'ase.Atoms'>
 
    # To pymatgen Molecule
    pymatgen_mol = mol.to_pymatgen()
+   print(type(pymatgen_mol))   # <class 'pymatgen.core.Molecule'>
 
    # To RDKit Mol (with stereochemistry from 3D)
    rdkit_mol = mol.to_rdkit()
+   print(type(rdkit_mol))   # <class 'rdkit.Chem.rdchem.Mol'>
 
    # To SMILES string
    smiles = mol.to_smiles()
+   print(smiles)   # e.g. "c1ccccc1"
 
    # To PDB string
    pdb_string = mol.to_pdb()
-   # NOTE: Small-molecule records may start with HETATM (not ATOM); check both.
-   assert "HETATM" in pdb_string or "ATOM" in pdb_string
+   print(pdb_string[:80])   # first line
 
    # To NetworkX graph (nodes = atoms, edges = bonds with bond_order)
    graph = mol.to_graph()
+   print(graph.number_of_nodes(), graph.number_of_edges())   # 12 12
 
    # To ML feature vector
    X = mol.to_X_data()
+   print(len(X))   # feature vector length
 
 .. automethod:: chemsmart.io.molecules.structure.Molecule.to_ase
 
@@ -671,18 +717,23 @@ Distances, Angles, and Dihedrals
 
    # Bond distance between atoms 1 and 2 (in Å)
    dist = mol.get_distance(1, 2)
+   print(f"Distance 1-2: {dist:.3f} Å")
 
    # Bond angle H2–O1–H3 (in degrees)
    angle = mol.get_angle(2, 1, 3)
+   print(f"Angle 2-1-3: {angle:.1f}°")
 
    # Dihedral angle about bond 2–3 (in degrees)
    dihedral = mol.get_dihedral(1, 2, 3, 4)
+   print(f"Dihedral 1-2-3-4: {dihedral:.1f}°")
 
    # All pairwise distances
    all_distances = mol.get_all_distances()
+   print(f"All distances: {len(all_distances)} pairs")
 
    # Pairwise distance matrix (N × N)
    dist_matrix = mol.distance_matrix
+   print(f"Distance matrix shape: {dist_matrix.shape}")
 
 .. automethod:: chemsmart.io.molecules.structure.Molecule.get_distance
 
@@ -924,15 +975,23 @@ low level atoms), link bonds, and scale factors.
 
 .. code:: python
 
-   from chemsmart.io.molecules.structure import QMMMMolecule
+   from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 
+   # Load a molecule with at least 8 atoms
+   mol = Molecule.from_filepath(
+       "tests/data/GaussianTests/outputs/collidine_opt.log"
+   )
+   print(mol.chemical_formula, mol.num_atoms)   # C8H11N 20
+
+   # When low_level_atoms is not specified, all atoms not in high/medium
+   # are automatically assigned to low level
    qmmm = QMMMMolecule(
        molecule=mol,
        high_level_atoms=[1, 2, 3],
-       low_level_atoms=[4, 5, 6, 7, 8],
        bonded_atoms=[(3, 4)],
    )
-   print(qmmm.partition_level_strings)  # ['H', 'H', 'H', 'L', 'L', 'L', 'L', 'L']
+   print(qmmm.partition_level_strings[:8])
+   # ['H', 'H', 'H', 'L', 'L', 'L', 'L', 'L']
 
 .. autoclass:: chemsmart.io.molecules.structure.QMMMMolecule
    :members:
