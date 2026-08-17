@@ -4508,3 +4508,31 @@ The third case, the fifth-moment fallback (`:386-389`, reached only when *both* 
 **Impact:** None -- these are defensive/belt-and-suspenders branches that never fire given the math that produces their inputs; not a correctness bug.
 
 **Suggested direction:** no action needed for the equal-mass and first-moment branches; they could be removed as dead code, or kept as defensive programming against future refactors that might break the COM/rotation invariants they rely on. The fifth-moment branch should be kept as-is (it is the documented, intentional final fallback in the sign-disambiguation cascade), just accepted as untestable-in-practice with realistic molecular geometries.
+
+---
+
+## 106. Five `else: # Just a negative number` branches across `str_indices_range_to_list` and `parse_index_specification` are unreachable, given their own guarding condition
+
+**Location:** `chemsmart/utils/utils.py:388-391` and `:427-429` (`str_indices_range_to_list`), `:676-683` and `:762-773` (`parse_index_specification`), and `:457-461` (`adjust_to_0based`, nested inside `string2index_1based`)
+
+```python
+if "-" in part and not part.startswith("-"):
+    range_parts = part.split("-", 1)
+    if len(range_parts) == 2 and range_parts[0]:
+        start = int(range_parts[0])
+        end = int(range_parts[1])
+        list_indices.extend(range(start, end + 1))
+    else:
+        # Just a negative number
+        list_indices.append(int(part))   # <-- unreachable
+```
+
+All four of these `else` clauses share the identical guard shape: `"-" in s and not s.startswith("-")`, followed by `parts = s.split("-", 1)`, followed by `if len(parts) == 2 and parts[0]: ... else: <"just a negative number" fallback>`. Given the outer guard, `s` is guaranteed to contain at least one `-` character and to not start with one. `str.split("-", 1)` on a string containing at least one `-` always returns exactly 2 elements (so `len(parts) == 2` is always `True`), and `parts[0]` -- everything before the first `-` -- is guaranteed non-empty because the first character of `s` exists and is not `-` (so `parts[0]` contains at least that character). Therefore `len(parts) == 2 and parts[0]` is *always* `True` whenever the outer guard is satisfied, and the `else` fallback -- despite its "Just a negative number like -1" comment, which describes an input that would actually fail the outer guard (`"-5".startswith("-")` is `True`, so it never even reaches this code) -- can never execute. The comment describes a case the code was never actually reachable for.
+
+The fifth instance is structurally different but the same root cause: `string2index_1based`'s nested `adjust_to_0based(index)` helper (`:457-462`) raises `ValueError` if `index == 0`, but both of its two call sites (`:487-488` and `:489-490`) guard the call with `if i[...] is not None and i[...] > 0:` -- so `adjust_to_0based` is never invoked with `0` (or any non-positive value) through either call site, making its `if index == 0: raise ValueError(...)` unreachable. (`string2index_1based("0")` does not hit this at all -- it is handled entirely by the earlier non-slice branch at `:465-472`, which computes `int("0") - 1 == -1` without ever touching `adjust_to_0based`.)
+
+**Reproduce:** No test can reach these lines through the public functions without violating the guard that makes them unreachable (unlike a standalone dead *method*, these are branches inside otherwise-live functions). `tests/test_utils.py::TestGetListFromStringRangeTests::test_comma_separated_negative_index` and `::test_single_negative_index`, and `tests/test_utils.py::TestParseIndexSpecification::test_ase_style_single_indices`, already exercise the "negative number" *inputs* these comments describe (e.g. `"-1"`) -- they simply take the *outer* guard's `False` branch (since `"-1".startswith("-")` is `True`) and fall through to a different, correctly-reachable single-index code path elsewhere in the same function, never entering the block shown above at all.
+
+**Impact:** None -- dead code with no behavioral effect, since these fallbacks can never be reached with any input.
+
+**Suggested direction:** delete all five `else` fallbacks (or, if kept for defensive-programming reasons, replace the misleading "Just a negative number" comments with a note explaining they are intentionally-unreachable safety nets, since the current comments describe inputs that cannot reach that code).

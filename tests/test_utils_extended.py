@@ -152,6 +152,24 @@ class TestFileCache:
         assert read_it(str(path)) == "changed"
         assert len(calls) == 2
 
+    def test_non_file_string_argument_is_ignored_for_cache_key(self, tmp_path):
+        """A plain string argument that is not an existing file path
+        (e.g. a mode flag) must be skipped when collecting
+        cache-key filenames, not treated as a file."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        calls = []
+
+        @file_cache()
+        def read_it(filepath, mode):
+            calls.append((filepath, mode))
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path), "text") == "hello"
+        assert read_it(str(path), "text") == "hello"
+        assert len(calls) == 1
+
 
 class TestConvertListToFrozenList:
     def test_gaussian_frozen_list_is_1_indexed(self):
@@ -950,6 +968,59 @@ class TestFindIrmsdCommand:
 
         with patch("shutil.which", return_value=None):
             assert find_irmsd_command() is None
+
+    def test_conda_prefix_path_missing_falls_through_to_common_locations(
+        self, monkeypatch
+    ):
+        """CONDA_PREFIX resolves to a real directory, but the irmsd
+        executable is not actually there -- falls through to the
+        hardcoded common conda locations list, which is then also
+        exhausted without a match."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        monkeypatch.setenv("CONDA_PREFIX", "/some/envs/base_env")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stdout = ""
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_conda_run_succeeds_but_path_not_executable_falls_through(
+        self, monkeypatch
+    ):
+        """conda run reports success and prints a path, but that path
+        does not actually exist/is not executable -- falls through to
+        the PATH fallback instead of returning it."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "/no/such/irmsd\n"
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_found_via_common_conda_locations_list(self, monkeypatch):
+        """No CONDA_PREFIX set, but the irmsd executable happens to
+        exist under one of the hardcoded common conda install
+        locations."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        target = os.path.join(
+            os.path.expanduser("~/anaconda3"), "envs", "myenv", "bin", "irmsd"
+        )
+
+        def fake_isfile(path):
+            return path == target
+
+        def fake_access(path, mode):
+            return path == target
+
+        with patch("os.path.isfile", side_effect=fake_isfile):
+            with patch("os.access", side_effect=fake_access):
+                assert find_irmsd_command() == target
 
 
 class TestSplineData:

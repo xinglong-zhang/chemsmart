@@ -486,6 +486,12 @@ class TestGetListFromStringRange:
     def test_comma_separated_negative_index(self):
         assert str_indices_range_to_list("1,-1") == [1, -1]
 
+    def test_empty_string_returns_empty_list(self):
+        """No comma, no colon, no hyphen -- falls into the "single
+        index" branch, but the "if str_indices:" guard is False for
+        an empty string, so nothing is appended."""
+        assert str_indices_range_to_list("") == []
+
 
 class TestSdf2Molecule:
     _sdf_lines = [
