@@ -3928,6 +3928,118 @@ class TestORCAOutputDirectPropertyCoverage:
         assert len(structures) == 1
         assert structures[0].is_optimized_structure is True
 
+    def test_get_all_structures_is_dead_code(self, tmp_path):
+        """_get_all_structures (distinct from _get_all_orientations,
+        which all_structures actually uses) has no callers anywhere in
+        the codebase or tests -- unreferenced dead code, like
+        _get_input_structure_coordinates_block_in_output (BUGS_FOUND.md
+        #99). Call it directly to cover it."""
+        content = (
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "  O   0.000000   0.000000   0.087341\n"
+            "  H  -0.755205   0.000000  -0.509670\n"
+            "  H   0.755205   0.000000  -0.509670\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "dead_all_structures.out", content)
+        oo = ORCAOutput(filename=path)
+        structures = oo._get_all_structures()
+        assert len(structures) == 1
+        assert structures[0].chemical_symbols == ["O", "H", "H"]
+
+    def test_get_optimized_final_structure_abnormal_termination_with_data(
+        self, tmp_path
+    ):
+        """Abnormal termination (no "ORCA TERMINATED NORMALLY"), but the
+        optimization did converge and print a stationary-point
+        structure -- optimized_structure routes to
+        _get_optimized_final_structure and successfully parses it."""
+        content = (
+            "THE OPTIMIZATION HAS CONVERGED\n"
+            "*** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***\n"
+            "***               (AFTER    5 CYCLES)               ***\n"
+            "*******************************************************\n"
+            "---------------------------------\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "---------------------------------\n"
+            "  O     -0.000000    0.000000    0.087341\n"
+            "  H     -0.755205    0.000000   -0.509670\n"
+            "  H      0.755205    0.000000   -0.509670\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "converged_abnormal.out", content)
+        oo = ORCAOutput(filename=path)
+        assert oo.normal_termination is False
+        molecule = oo._get_optimized_final_structure()
+        assert molecule.chemical_symbols == ["O", "H", "H"]
+        assert oo.optimized_structure.chemical_symbols == ["O", "H", "H"]
+
+    def test_last_structure_returns_final_all_structures_entry(
+        self, water_output_gas_path
+    ):
+        oo = ORCAOutput(filename=water_output_gas_path)
+        assert oo.last_structure is oo.all_structures[-1]
+
+    def test_get_all_orientations_skips_empty_and_nonmatching_blocks(
+        self, tmp_path
+    ):
+        content = (
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "\n"
+            "CARTESIAN COORDINATES (ANGSTROEM)\n"
+            "----------------------------------\n"
+            "junk non-matching line\n"
+            "  O   0.000000   0.000000   0.087341\n"
+            "\n"
+        )
+        path = _write_orca_output(tmp_path, "mixed_orientations.out", content)
+        oo = ORCAOutput(filename=path)
+        orientations = oo._get_all_orientations()
+        assert len(orientations) == 1
+        assert orientations[0].tolist() == [[0.0, 0.0, 0.087341]]
+
+    def test_get_optimized_parameters_bond_angle_dihedral(self, tmp_path):
+        content = (
+            "THE OPTIMIZATION HAS CONVERGED\n"
+            "                  --- Optimized Parameters ---\n"
+            "                   (Angstroem and degrees)\n"
+            "\n"
+            "    Definition                    OldVal   dE/dq     Step     FinalVal\n"
+            "-----------------------------------------------------------------------\n"
+            " 1. B(H   1,O   0)                0.9627 -0.000014  0.0000    0.9627\n"
+            " 2. A(H   1,O   0,H   2)          103.34 -0.000009    0.00    103.35\n"
+            " 3. D(H   1,O   0,H   2,C   3)     10.00 -0.000009    0.00     10.50\n"
+            "-----------------------------------------------------------------------\n"
+        )
+        path = _write_orca_output(tmp_path, "opt_params.out", content)
+        oo = ORCAOutput(filename=path)
+        params = oo.get_optimized_parameters()
+        assert params == {
+            "B(H2,O1)": 0.9627,
+            "A(H2,O1,H3)": 103.35,
+            "D(H2,O1,H3,C4)": 10.50,
+        }
+
+    def test_get_optimized_parameters_natural_exhaustion(self, tmp_path):
+        """No terminating dashes line after the data rows -- the inner
+        loop runs off the end of optimized_output_lines instead of
+        breaking."""
+        content = (
+            "THE OPTIMIZATION HAS CONVERGED\n"
+            "                  --- Optimized Parameters ---\n"
+            "                   (Angstroem and degrees)\n"
+            "\n"
+            "    Definition                    OldVal   dE/dq     Step     FinalVal\n"
+            "-----------------------------------------------------------------------\n"
+            " 1. B(H   1,O   0)                0.9627 -0.000014  0.0000    0.9627\n"
+        )
+        path = _write_orca_output(tmp_path, "opt_params_trunc.out", content)
+        oo = ORCAOutput(filename=path)
+        params = oo.get_optimized_parameters()
+        assert params == {"B(H2,O1)": 0.9627}
+
     def test_abnormal_termination_all_structures_and_final_structure(
         self, gtoint_errfile
     ):

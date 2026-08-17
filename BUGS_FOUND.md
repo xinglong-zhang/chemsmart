@@ -4336,7 +4336,9 @@ def _get_input_structure_coordinates_block_in_output(self):
 
 Despite its name closely matching `input_coordinates_block`, that property actually calls `_get_first_structure_coordinates_block_in_output` (a different, similarly-named method that scans for `"CARTESIAN COORDINATES (ANGSTROEM)"` instead of `"INPUT FILE"`). Nothing else in the codebase calls `_get_input_structure_coordinates_block_in_output` -- it is entirely unreferenced.
 
-**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_num_forces_crashes_when_forces_absent`, `::test_get_constraints_absent_crashes_dependent_properties`, `::test_get_constraints_runs_to_natural_exhaustion`, and `::test_get_input_structure_coordinates_block_in_output_is_dead_code` (the last calls the method directly, since nothing else does).
+**(d)** `_get_all_structures` (`:856-871`) is a second, separate instance of the same unreferenced-method problem: it duplicates most of `_get_all_orientations`'s logic (the method `all_structures`/`last_structure`/etc. actually use) but nothing anywhere calls `_get_all_structures` itself.
+
+**Reproduce:** `tests/test_ORCAIO.py::TestORCAOutputDirectPropertyCoverage::test_num_forces_crashes_when_forces_absent`, `::test_get_constraints_absent_crashes_dependent_properties`, `::test_get_constraints_runs_to_natural_exhaustion`, `::test_get_input_structure_coordinates_block_in_output_is_dead_code`, and `::test_get_all_structures_is_dead_code` (the last two call their respective methods directly, since nothing else does).
 
 **Impact:** Low-medium for (a)/(b) -- both are common cases (any output without a gradient print, or without active geometry constraints) that would currently crash callers relying on these properties as a lightweight "is this present" check. Low for (c) -- purely wasted code, but harmless since `input_coordinates_block` (the only plausibly-intended caller) already works via the other method.
 
