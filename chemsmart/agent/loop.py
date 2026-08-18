@@ -125,6 +125,26 @@ def estimate_request_input_tokens(request: Mapping[str, Any]) -> int:
     return int(total / _CHARS_PER_TOKEN)
 
 
+def _unapprovable_reason(summary: Mapping[str, Any]) -> str:
+    """State which nodes stand between this workflow and an approval.
+
+    The node ids come from the host's own readiness bookkeeping. Naming them
+    is the difference between a session being told it is not finished and a
+    session being told nothing at all.
+    """
+
+    blocking = tuple(summary.get("blocking_node_ids") or ())
+    reason = str(summary.get("workflow_blocked_reason") or "").strip()
+    if reason:
+        return f"workflow recorded but not approvable: {reason}"
+    if blocking:
+        return (
+            "workflow recorded but not approvable; these nodes still block "
+            "approval: " + ", ".join(blocking)
+        )
+    return "workflow recorded but not approvable"
+
+
 class ToolLoopRunner:
     """Drive provider-native turns through the only approved dispatcher."""
 
@@ -453,12 +473,24 @@ class ToolLoopRunner:
                         terminal_state = "failed"
                         terminal_reason = final_text
                 else:
+                    # A session that built a workflow it cannot get approved
+                    # used to end on "action-grade gates remain", which names
+                    # nothing, while its own prose could claim the plan was
+                    # ready for approval and nothing contradicted it. The host
+                    # already knows which nodes stand in the way; say so, in
+                    # the same place and the same way the analysis policy
+                    # above reports its own unmet obligations.
+                    unapproved = self.host.unapproved_workflow_summary()
                     try:
                         completion_required = (
                             self.host.completion_receipts_for_latest_preflight()
                         )
-                        terminal_state = "complete"
-                        terminal_reason = "host readiness gates passed"
+                        if unapproved is None:
+                            terminal_state = "complete"
+                            terminal_reason = "host readiness gates passed"
+                        else:
+                            terminal_state = "planned"
+                            terminal_reason = _unapprovable_reason(unapproved)
                     except ContractError:
                         try:
                             completion_required = (
@@ -466,8 +498,10 @@ class ToolLoopRunner:
                             )
                             terminal_state = "planned"
                             terminal_reason = (
-                                "workflow draft recorded; action-grade gates "
-                                "remain"
+                                _unapprovable_reason(unapproved)
+                                if unapproved is not None
+                                else "workflow draft recorded; action-grade "
+                                "gates remain"
                             )
                         except ContractError:
                             terminal_state = "blocked"

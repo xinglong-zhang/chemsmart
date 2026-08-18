@@ -3214,17 +3214,33 @@ class CommandCompiledToolHostV1:
                 | finding_nodes
             )
         )
+        # The system prompt sends a session here for host-derived next
+        # actions, and this was the one projection that never said whether the
+        # workflow could actually be approved. `workflow_context` reports
+        # dependency state -- a node stays `actionable` forever whether or not
+        # it holds a green preview -- so a session could read the frontier,
+        # see nothing outstanding, and stop while a node still blocked
+        # approval. The readiness is already computed; it just was not offered
+        # where the model was told to look.
+        readiness = (
+            self._approval_readiness(scientific_v2)
+            if scientific_v2 is not None
+            else None
+        )
         plan = resolved.scientific_toolchain_plan
         if plan is None:
-            return {
+            result = {
                 "scientific_workflow_plan": scientific_v2,
                 "workflow_context": context,
             }
+            if readiness is not None:
+                result["approval_readiness"] = readiness
+            return result
         analysis_receipts = self._scientific_toolchain_analysis_receipts(
             plan,
             task_spec_sha256=draft.task_spec_id,
         )
-        return {
+        result = {
             "scientific_toolchain_plan": plan,
             "workflow_context": context,
             "workflow_frontier": project_scientific_toolchain_frontier(
@@ -3235,6 +3251,9 @@ class CommandCompiledToolHostV1:
                 completed_analysis_node_ids=analysis_receipts,
             ),
         }
+        if readiness is not None:
+            result["approval_readiness"] = readiness
+        return result
 
     def _scientific_toolchain_analysis_receipts(
         self,
@@ -8863,6 +8882,37 @@ class CommandCompiledToolHostV1:
         if not self.workflow_drafts:
             raise ContractError("no command workflow draft has been observed")
         return next(reversed(self.workflow_drafts))
+
+    def unapproved_workflow_summary(self) -> dict[str, Any] | None:
+        """Say whether the newest plan could be approved, and what stops it.
+
+        A session ends on its first message without tool calls, and at that
+        moment nothing re-checked whether the workflow it built could actually
+        be approved.  The readiness was computed once, on the receipt of the
+        plan itself, before any node had been prepared -- so a session could
+        do the work, never see the result of it, and stop believing it had
+        delivered an approvable plan while the host knew otherwise.
+
+        This reports the state, it does not judge the chemistry: the node ids
+        are the host's own bookkeeping, already computed by
+        ``_approval_readiness``.  Returns ``None`` when there is no plan to
+        speak about, which keeps an analysis-only session unaffected.
+        """
+
+        if not self.scientific_plans:
+            return None
+        plan = next(reversed(self.scientific_plans.values()))
+        readiness = self._approval_readiness(plan)
+        if readiness.get("approvable"):
+            return None
+        return {
+            "workflow_id": getattr(plan, "workflow_id", ""),
+            "blocking_node_ids": tuple(readiness.get("blocking_node_ids", ())),
+            "deferred_node_ids": tuple(readiness.get("deferred_node_ids", ())),
+            "workflow_blocked_reason": readiness.get(
+                "workflow_blocked_reason", ""
+            ),
+        }
 
     def _inspect_calculation_artifact(self, turn_id: str, values: dict) -> Any:
         artifact = self._artifact(values["artifact_id"])

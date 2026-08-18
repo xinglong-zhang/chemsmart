@@ -68,6 +68,11 @@ class _DispatchSpyHost:
     def latest_workflow_draft_receipt(self):
         raise ContractError("no workflow draft in synthetic test")
 
+    def unapproved_workflow_summary(self):
+        """No plan exists here, so there is nothing to say about approval."""
+
+        return None
+
 
 def _run_contracts(
     host: _DispatchSpyHost,
