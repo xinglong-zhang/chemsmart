@@ -3815,12 +3815,25 @@ class CommandCompiledToolHostV1:
 
         project = self.artifacts.get(node.project_role)
         if project is None:
+            # A node names its project by artifact id, so a role that differs
+            # from the promoted id only in spelling reads here as no project at
+            # all -- and "render, promote, and validate this project role" is
+            # then advice to redo work that is already done. Name what has been
+            # promoted, the way needs_engine_selection above names the engines
+            # it found, so the mismatch is visible rather than inferred.
+            promoted = tuple(sorted(self.project_promotions))
             return {
                 "status": "needs_project",
                 "workflow_id": workflow_id,
                 "node_id": node_id,
                 "project_role": node.project_role,
-                "next_action": "render, promote, and validate this project role",
+                "promoted_project_roles": promoted,
+                "next_action": (
+                    "promote this project role, or amend the node to name one "
+                    "of the promoted roles"
+                    if promoted
+                    else "render, promote, and validate this project role"
+                ),
             }
         validations = tuple(
             receipt
