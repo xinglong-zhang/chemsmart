@@ -1,4 +1,4 @@
-"""
+﻿"""
 Gaussian Minimum Energy Cross Point (MECP) job implementation.
 
 This module provides the GaussianMECPJob class for performing
@@ -275,6 +275,35 @@ class GaussianMECPJob(GaussianJob):
 
         return displacement, projected_grad, seam_correction
 
+    def _harvey_step_size(self, current_step_size, prev_energy_a, curr_energy_a):
+        """
+        Harvey's heuristic step-size update (1998).
+
+        Uses the *total energy of state A* (not a merit function) to decide
+        whether to grow or shrink:
+
+        * If ``E_A`` decreased -> step grew by ``step_size_grow`` (default x1.2).
+        * If ``E_A`` increased or stagnated -> step shrunk by
+          ``step_size_shrink`` (default x0.5).
+
+        This mirrors the original Fortran code's ``TSTEP`` / ``TSMIN`` / ``TSMAX``
+        logic where ``TSMAX`` is typically 0.30 Bohr (much smaller than the
+        chemsmart default of 1.0).
+
+        The result is clamped to ``[step_size_min, step_size_max]``.
+        """
+        if curr_energy_a < prev_energy_a:
+            new_step = current_step_size * self.settings.step_size_grow
+        else:
+            new_step = current_step_size * self.settings.step_size_shrink
+        return float(
+            np.clip(
+                new_step,
+                self.settings.step_size_min,
+                self.settings.step_size_max,
+            )
+        )
+
     def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
         """
         Return an updated step size based on the merit function progress.
@@ -397,6 +426,7 @@ class GaussianMECPJob(GaussianJob):
         prev_merit = None
         prev_positions = None
         prev_proj_grad = None
+        prev_energy_a = None
 
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
@@ -453,6 +483,12 @@ class GaussianMECPJob(GaussianJob):
                             )
                         prev_positions = positions_bohr.copy()
                         prev_proj_grad = projected_grad.copy()
+                    elif self.settings.step_size_method == "harvey":
+                        if prev_energy_a is not None:
+                            current_step_size = self._harvey_step_size(
+                                current_step_size, prev_energy_a, ea
+                            )
+                        prev_energy_a = ea
                     else:  # "grow_shrink"
                         current_merit = (
                             abs(energy_diff) / self.settings.energy_diff_tol
