@@ -474,6 +474,11 @@ class ApprovedWorkflowExecutor:
                 multiplicity=binding.multiplicity,
                 capability_receipt_sha256=capability_sha256,
                 engine_binding_sha256=engine_binding_sha256,
+                **(
+                    {"internal_coordinates": binding.internal_coordinates}
+                    if binding.internal_coordinates
+                    else {}
+                ),
             )
             invocation_sha256 = _field(
                 _field(synthesized, "invocation"), "invocation_sha256"

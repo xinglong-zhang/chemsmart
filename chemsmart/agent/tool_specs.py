@@ -453,6 +453,11 @@ def build_command_compiled_tool_surface(
                 "capability_receipt_sha256": digest,
                 "engine_binding_sha256": digest,
                 "project_validation_receipt_sha256": digest,
+                # Optional, and only meaningful for a family that drives or
+                # holds a coordinate. The executor rebuilds an approved node
+                # through this tool, so the coordinate has to be expressible
+                # here or it cannot survive into the launched command.
+                "internal_coordinates": _internal_coordinates_schema(),
             },
             (
                 "node_id",

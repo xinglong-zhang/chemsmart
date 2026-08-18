@@ -680,6 +680,17 @@ class ApprovedNodeBindingV1:
     scientific_identity_sha256: str
     producer_edge_sha256: str
     auxiliary_input_bindings: tuple[AuxiliaryArtifactBindingV1, ...] = ()
+    #: Which internal coordinates this node drives or holds. The executor
+    #: rebuilds each invocation from this binding alone, so a coordinate that
+    #: lives only in the planning draft is not there to rebuild from: two scans
+    #: of the same molecule over different ranges then synthesise to the same
+    #: coordinate-free argv, which correctly fails the comparison against what
+    #: a human approved. It is also the honest place for it -- the range that
+    #: was displayed is part of what was approved.
+    #:
+    #: Optional and omitted from the canonical body when absent, so every
+    #: already-recorded approval keeps its digest and stays replayable.
+    internal_coordinates: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -740,6 +751,10 @@ def _approved_node_binding_body(
     }
     if binding.auxiliary_input_bindings:
         body["auxiliary_input_bindings"] = binding.auxiliary_input_bindings
+    if binding.internal_coordinates:
+        body["internal_coordinates"] = canonical_data(
+            binding.internal_coordinates
+        )
     return body
 
 

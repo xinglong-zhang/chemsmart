@@ -242,6 +242,18 @@ class _CommandContext:
     input_artifact: TrustedArtifactRefV1
     scientific_identity: ScientificIdentityBindingV1
     job_artifact_options: tuple[tuple[str, TrustedArtifactRefV1], ...] = ()
+    #: The driven or held internal coordinates of this node, carried so the
+    #: approved binding can record them. Without that the executor has nothing
+    #: to rebuild a scan's range from.
+    internal_coordinates: Mapping[str, Any] | None = None
+
+
+def _node_coordinates(node) -> dict[str, str]:
+    """Render a planning node's internal coordinates into program options."""
+
+    return native_coordinate_options(
+        node.program, getattr(node, "internal_coordinates", None)
+    )
 
 
 def _formula_from_symbols(symbols: Sequence[str]) -> str:
@@ -3897,9 +3909,7 @@ class CommandCompiledToolHostV1:
             input_artifact=input_artifact,
             scientific_identity=identity,
             job_artifact_options=dict(job_artifact_options),
-            job_option_values=native_coordinate_options(
-                node.program, getattr(node, "internal_coordinates", None)
-            ),
+            job_option_values=_node_coordinates(node),
             live_schema=self.live_schema,
             server=(
                 self.execution_server
@@ -3909,6 +3919,7 @@ class CommandCompiledToolHostV1:
             ),
         )
         context = _CommandContext(
+            internal_coordinates=getattr(node, "internal_coordinates", None),
             proposal=proposal,
             capability=capability,
             program_binding=program_binding,
@@ -4744,6 +4755,12 @@ class CommandCompiledToolHostV1:
             charge=values["charge"],
             multiplicity=values["multiplicity"],
         )
+        # The executor rebuilds every approved node through this tool, so a
+        # per-node coordinate that is not accepted here cannot be rebuilt at
+        # all: two scans of one molecule over different ranges synthesised to
+        # the same coordinate-free argv and were correctly refused as
+        # differing from the reviewed operation.
+        coordinates = values.get("internal_coordinates") or None
         invocation = compile_command(
             proposal,
             capability=capability,
@@ -4752,6 +4769,9 @@ class CommandCompiledToolHostV1:
             project_validation=validation,
             input_artifact=input_artifact,
             scientific_identity=identity,
+            job_option_values=native_coordinate_options(
+                values["program"], coordinates
+            ),
             live_schema=self.live_schema,
             server=(
                 self.execution_server
@@ -4766,6 +4786,7 @@ class CommandCompiledToolHostV1:
             "program binding",
         )
         context = _CommandContext(
+            internal_coordinates=coordinates,
             proposal=proposal,
             capability=capability,
             program_binding=program_binding,
@@ -7157,6 +7178,7 @@ class CommandCompiledToolHostV1:
                     producer_edge_sha256=(
                         edge.edge_sha256 if edge is not None else ""
                     ),
+                    internal_coordinates=context.internal_coordinates,
                     auxiliary_input_bindings=(
                         self._latest_invocation_for_node(
                             planned_node.node_id,
@@ -7427,6 +7449,7 @@ class CommandCompiledToolHostV1:
                     producer_edge_sha256=(
                         edge.edge_sha256 if edge is not None else ""
                     ),
+                    internal_coordinates=context.internal_coordinates,
                     auxiliary_input_bindings=(
                         self._latest_invocation_for_node(
                             planned_node.node_id,
@@ -7643,6 +7666,7 @@ class CommandCompiledToolHostV1:
             self._plan_invocation_for_node(plan=plan, node_id=producer)
         )
         return _CommandContext(
+            internal_coordinates=getattr(node, "internal_coordinates", None),
             proposal=CommandProposalV1(
                 node_id=planned_node.node_id,
                 execution_target="run",
