@@ -2735,7 +2735,10 @@ class CommandCompiledToolHostV1:
                 current = outputs[index]
                 renamed = str(item.get("new_output_id") or target)
                 if renamed != target:
-                    renames[target] = renamed
+                    # Keyed by producing node as well as name: two nodes may
+                    # each declare an output called the same thing, and a
+                    # rename of one must not follow the other's consumers.
+                    renames[(node.node_id, target)] = renamed
                 outputs[index] = AnalysisOutputIntentV1(
                     output_id=renamed,
                     quantity_kind=str(
@@ -2811,6 +2814,33 @@ class CommandCompiledToolHostV1:
                     )
                 ),
             )
+
+        # A renamed output is still read by whoever consumed it under the old
+        # name, and leaving those references behind orphans them: the plan
+        # builder refuses an input naming an output its producer no longer
+        # declares.  Following the rename through every consumer is the same
+        # bookkeeping this whole operation exists to stop demanding, so the
+        # host does it rather than asking for a second repair per consumer.
+        if renames:
+            for node_id, node in list(revised.items()):
+                followed = []
+                changed = False
+                for value in node.inputs:
+                    key = (
+                        getattr(value, "producer_node_id", ""),
+                        getattr(value, "producer_output_id", ""),
+                    )
+                    if isinstance(value, AnalysisInputIntentV1) and (
+                        key in renames
+                    ):
+                        followed.append(
+                            replace(value, producer_output_id=renames[key])
+                        )
+                        changed = True
+                    else:
+                        followed.append(value)
+                if changed:
+                    revised[node_id] = replace(node, inputs=tuple(followed))
         return tuple(revised[node.node_id] for node in nodes), renames
 
     def _rebind_scientific_workflow_projects(
@@ -2831,10 +2861,17 @@ class CommandCompiledToolHostV1:
             current_plan.plan_sha256
         ]
         current_draft = current_result["workflow_draft"]
+        # A frozen approval carries the *v2* workflow digest, not this v1
+        # toolchain digest.  Comparing the two compares hashes of disjoint
+        # bodies whose schema_version alone differs, so the guard could never
+        # fire; resolve the v2 plan for this workflow the way every other
+        # frozen-approval check in this file does.
+        approved_plan = self.scientific_plans.get(current_plan.workflow_id)
         if (
             self.frozen_workflow_approval is not None
+            and approved_plan is not None
             and self.frozen_workflow_approval.plan_sha256
-            == current_plan.plan_sha256
+            == approved_plan.plan_sha256
         ):
             raise ContractError(
                 "this workflow already carries a frozen execution approval; "
@@ -2959,7 +2996,7 @@ class CommandCompiledToolHostV1:
             calculation_observables=observables,
             analysis_nodes=revised_analysis,
             required_output_ids=tuple(
-                renames.get(output_id, output_id)
+                _renamed_output_id(renames, output_id)
                 for output_id in current_plan.required_output_ids
             ),
         )
@@ -8365,6 +8402,38 @@ class CommandCompiledToolHostV1:
                 )
                 observation["xtb"] = xtb_observation
                 findings.extend(xtb_findings)
+                # The receipt says whether the run satisfied its contract; it
+                # does not say what xTB itself complained about.  xTB is one of
+                # the three programs this release executes, so a failed run
+                # deserves the same account as ORCA gets.
+                xtb_logs = tuple(
+                    artifact
+                    for artifact in output_artifacts
+                    if artifact.kind == "program_output"
+                    and Path(artifact.path).suffix.lower() != ".err"
+                )
+                if xtb_logs:
+                    from chemsmart.io.native_failure import (
+                        summarize_xtb_native_failure,
+                    )
+
+                    failure_summary = summarize_xtb_native_failure(
+                        _iter_native_diagnostic_lines(xtb_logs),
+                        diagnostic_lines=_iter_native_diagnostic_lines(
+                            _native_diagnostic_artifacts(output_artifacts)
+                        ),
+                    )
+                    if failure_summary is not None:
+                        xtb_observation["native_failure"] = (
+                            _bound_native_failure_summary(
+                                failure_summary,
+                                artifacts=xtb_logs[:1],
+                            )
+                        )
+                        findings.append(
+                            "xtb.native_failure."
+                            + failure_summary.error_class
+                        )
         elif program == "gaussian":
             if exit_status != 0:
                 findings.append("execution.process.nonzero_or_unknown")
@@ -9350,6 +9419,26 @@ def _public_validator_findings(validator: Any) -> tuple[dict[str, str], ...]:
             },
         )
     return recorded
+
+
+def _renamed_output_id(
+    renames: dict[tuple[str, str], str], output_id: str
+) -> str:
+    """Follow an output rename into the required-output set.
+
+    A required output names an id, not the node that produces it, so the
+    rename is matched on the name alone.  Renaming the same name on two
+    different producers is therefore ambiguous here and is left alone rather
+    than guessed at; the plan builder will say so if the requirement no longer
+    resolves.
+    """
+
+    matches = {
+        renamed
+        for (_node_id, old_id), renamed in renames.items()
+        if old_id == output_id
+    }
+    return matches.pop() if len(matches) == 1 else output_id
 
 
 def _validate_tool_arguments(

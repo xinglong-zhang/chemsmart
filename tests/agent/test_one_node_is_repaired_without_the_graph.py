@@ -93,6 +93,7 @@ def host_with_plan():
         }
     }
     host.frozen_workflow_approval = None
+    host.scientific_plans = {}
     host._bind_program_toolchain = lambda *args, **kwargs: None
     return host, plan
 
@@ -230,13 +231,24 @@ def test_a_registered_result_input_cannot_be_repointed(host_with_plan):
 
 
 def test_an_approved_workflow_cannot_be_amended_in_place(host_with_plan):
-    """An amended plan is a new workflow and needs its own review."""
+    """An amended plan is a new workflow and needs its own review.
+
+    The frozen approval carries the *v2* workflow digest.  An earlier version
+    of this test set it to the v1 toolchain digest instead, manufacturing an
+    equality that cannot occur in production: the guard it was meant to cover
+    could never fire, and the test would have kept passing with the guard
+    deleted outright.  It now stands up the digest in its production shape.
+    """
 
     host, original = host_with_plan
 
-    class _Frozen:
-        plan_sha256 = original.plan_sha256
+    class _ApprovedV2:
+        plan_sha256 = "a" * 64
 
+    class _Frozen:
+        plan_sha256 = _ApprovedV2.plan_sha256
+
+    host.scientific_plans = {original.workflow_id: _ApprovedV2()}
     host.frozen_workflow_approval = _Frozen()
 
     with pytest.raises(ContractError, match="its own review"):
@@ -300,3 +312,110 @@ def test_a_name_being_authored_still_follows_the_naming_rule():
                 ],
             },
         )
+
+
+def _consumer_node(node_id, *, producer, producer_output, output_id):
+    """An expression node that reads another node's named output."""
+
+    from chemsmart.agent.scientific_toolchain import AnalysisInputIntentV1
+
+    return AnalysisNodeIntentV1(
+        node_id=node_id,
+        analysis_kind="quantity_expression",
+        dependencies=(producer,),
+        inputs=(
+            AnalysisInputIntentV1(
+                input_id="lhs",
+                source_kind="analysis_output",
+                producer_node_id=producer,
+                producer_output_id=producer_output,
+            ),
+        ),
+        selectors=(),
+        outputs=(
+            AnalysisOutputIntentV1(
+                output_id=output_id,
+                quantity_kind="electronic_energy",
+                unit="hartree",
+            ),
+        ),
+        expression_nodes=(
+            {"node_id": "abs1", "operation": "abs", "input_ids": ("lhs",)},
+        ),
+        expression_output_node_ids=("abs1",),
+        temperature_k=None,
+        pressure_atm=None,
+        support_state="planned",
+        blocked_reason="",
+    )
+
+
+@pytest.fixture()
+def host_with_chain():
+    """A producer feeding a consumer -- the shape a rename can orphan."""
+
+    host = CommandCompiledToolHostV1.__new__(CommandCompiledToolHostV1)
+    nodes = (
+        _extraction_node("extract-a", output_id="e-a"),
+        _consumer_node(
+            "expr-a", producer="extract-a", producer_output="e-a",
+            output_id="abs-a",
+        ),
+    )
+    plan = build_scientific_toolchain_plan(
+        plan_id="chain",
+        workflow_id="chain",
+        command_workflow_draft_sha256="d" * 64,
+        calculation_nodes=(),
+        calculation_observables={},
+        analysis_nodes=nodes,
+        required_output_ids=("abs-a",),
+    )
+    host.scientific_toolchain_plans = {plan.plan_sha256: plan}
+    host._scientific_toolchain_command_results = {
+        plan.plan_sha256: {
+            "workflow_draft": _EmptyDraft(),
+            "actionable_node_ids": (),
+            "unresolved_node_ids": (),
+        }
+    }
+    host.frozen_workflow_approval = None
+    host.scientific_plans = {}
+    host._bind_program_toolchain = lambda *args, **kwargs: None
+    return host, plan
+
+
+def test_renaming_a_consumed_output_follows_it_into_its_consumer(
+    host_with_chain,
+):
+    """The case every leaf-only fixture misses.
+
+    Renaming an output that something downstream reads used to leave the
+    consumer pointing at a name its producer no longer declares, and the plan
+    builder refuses that -- so the amendment failed on exactly the multi-stage
+    chains it exists to serve.
+    """
+
+    host, _ = host_with_chain
+
+    result = host._amend_scientific_workflow(
+        "turn-1",
+        {
+            "workflow_id": "chain",
+            "analysis_repairs": [
+                {
+                    "node_id": "extract-a",
+                    "outputs": [
+                        {"output_id": "e-a", "new_output_id": "e-alpha"}
+                    ],
+                }
+            ],
+        },
+    )
+
+    nodes = {
+        node.node_id: node
+        for node in result["scientific_toolchain_plan"].analysis_nodes
+    }
+    assert nodes["extract-a"].outputs[0].output_id == "e-alpha"
+    assert nodes["expr-a"].inputs[0].producer_output_id == "e-alpha"

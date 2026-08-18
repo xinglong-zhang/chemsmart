@@ -179,3 +179,57 @@ def test_an_unredacted_engine_line_cannot_be_constructed():
             diagnostic_lines=(),
             engine_lines=("failed reading /home/someone/private/run.inp",),
         )
+
+
+def test_a_gaussian_style_nested_summary_still_reaches_the_node():
+    """Programs record the summary at different depths; the reader must cope.
+
+    ORCA puts native_failure on the per-program observation; Gaussian puts it
+    on each per-artifact row beneath it. A reader that only looked at the top
+    level dropped every Gaussian diagnostic silently.
+    """
+
+    summary = summarize_orca_native_failure(
+        _lines("orca_unclassified_size_consistency.txt")
+    )
+
+    class _NestedHost:
+        result_validation_receipts = {
+            "v"
+            * 64: _Validation(
+                {
+                    "gaussian": {
+                        "outputs": (
+                            {"artifact_sha256": "x" * 64},
+                            {"native_failure": dict(summary.as_dict())},
+                        )
+                    }
+                }
+            )
+        }
+
+    text = _execution_failure_summary(_Receipt(), _NestedHost())
+
+    assert "engine reported (verbatim):" in text
+    assert "turn off rijk" in text.lower()
+
+
+def test_xtb_native_failure_has_a_production_producer():
+    """The xTB parser must be reachable, not only unit-tested.
+
+    It was added with no caller: nothing in the validation path invoked it, so
+    the rules and canonical diagnostics were unreachable on the release path
+    while the documentation advertised them.
+    """
+
+    import inspect
+
+    from chemsmart.agent import tool_runtime
+
+    source = inspect.getsource(tool_runtime)
+    assert "summarize_xtb_native_failure" in source, (
+        "xTB is release-qualified; its failure summary needs a real caller"
+    )
+    assert 'xtb_observation["native_failure"]' in source, (
+        "the summary must land where _engine_lines_for can find it"
+    )

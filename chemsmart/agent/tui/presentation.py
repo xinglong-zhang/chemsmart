@@ -28,7 +28,7 @@ _VISIBLE_TOOLS = frozenset(
         # Calculation and analysis DAG construction and repair.
         "plan_command_workflow",
         "plan_scientific_workflow",
-        "rebind_scientific_workflow_projects",
+        "amend_scientific_workflow",
         "inspect_workflow_frontier",
         # Live CLI compilation, safe preview, and preflight.
         "prepare_program_node",

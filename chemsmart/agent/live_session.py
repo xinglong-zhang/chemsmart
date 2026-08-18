@@ -3829,8 +3829,6 @@ def inspect_workflow_execution_replay(
     let drift through to an engine.
     """
 
-    from chemsmart.agent.executor import _locate_by_digest
-
     root = _validated_workspace(workspace)
     review = load_workflow_execution_review(
         Path(review_file).expanduser().resolve()
@@ -3844,6 +3842,32 @@ def inspect_workflow_execution_replay(
     ):
         raise ContractError("execution review targets another task")
 
+    # Index the workspace once.  Resolving each binding through a fresh search
+    # rehashes the same files for every digest, and replay exists precisely to
+    # be run again over a workspace that keeps accumulating outputs -- so the
+    # naive form gets slower exactly as the feature gets used.
+    wanted = {
+        digest
+        for binding in review.request.node_bindings
+        for digest in (
+            binding.initial_artifact_sha256,
+            binding.project_artifact_sha256,
+        )
+        if digest
+    }
+    found: set[str] = set()
+    for candidate in sorted(root.rglob("*")):
+        if not candidate.is_file() or candidate.is_symlink():
+            continue
+        try:
+            digest = file_sha256(candidate)
+        except OSError:
+            continue
+        if digest in wanted:
+            found.add(digest)
+            if found == wanted:
+                break
+
     missing: list[str] = []
     present: list[str] = []
     for binding in review.request.node_bindings:
@@ -3854,9 +3878,7 @@ def inspect_workflow_execution_replay(
             if not digest:
                 continue
             record = f"{binding.node_id}:{label}:{digest[:16]}"
-            try:
-                _locate_by_digest(root, digest)
-            except ContractError:
+            if digest not in found:
                 missing.append(record)
             else:
                 present.append(record)

@@ -234,14 +234,33 @@ def _engine_lines_for(receipt: Any, host: Any) -> tuple[str, ...]:
         observations = getattr(validation, "observations", None) or {}
     except (ContractError, AttributeError):
         return ()
-    for observation in observations.values():
-        if not isinstance(observation, Mapping):
-            continue
-        failure = observation.get("native_failure")
-        if isinstance(failure, Mapping):
-            lines = failure.get("engine_lines") or ()
-            if isinstance(lines, (list, tuple)):
-                return tuple(str(item) for item in lines if str(item).strip())
+    # Programs record the summary at different depths: ORCA puts it on the
+    # per-program observation, Gaussian on each per-artifact row beneath it.
+    # Search one level into nested collections rather than requiring every
+    # branch to hoist it, so a program whose shape differs loses its
+    # diagnostic silently no longer.
+    # observations -> program -> "outputs" tuple -> row is already four levels,
+    # so the bound is set above the deepest shape any program uses today
+    # rather than at the shallowest one that happens to work.
+    def _summaries(value: Any, depth: int = 0):
+        if depth > 5:
+            return
+        if isinstance(value, Mapping):
+            failure = value.get("native_failure")
+            if isinstance(failure, Mapping):
+                yield failure
+            for item in value.values():
+                yield from _summaries(item, depth + 1)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                yield from _summaries(item, depth + 1)
+
+    for failure in _summaries(observations):
+        lines = failure.get("engine_lines") or ()
+        if isinstance(lines, (list, tuple)):
+            quoted = tuple(str(item) for item in lines if str(item).strip())
+            if quoted:
+                return quoted
     return ()
 
 
