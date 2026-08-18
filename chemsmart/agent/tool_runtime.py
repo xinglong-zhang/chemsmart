@@ -2982,6 +2982,23 @@ class CommandCompiledToolHostV1:
                             if node.charge is not None
                             else {}
                         ),
+                        # Every per-node scientific fact has to be listed
+                        # here by hand, and anything forgotten is dropped
+                        # silently. A scan whose project role was amended
+                        # came back out of this rebuild with no driven
+                        # coordinate at all -- still typed `scan`, compiled
+                        # without --coordinates, and therefore a plain
+                        # optimisation wearing a scan's name. Changing a
+                        # project must not change the chemistry.
+                        **(
+                            {
+                                "internal_coordinates": (
+                                    node.internal_coordinates
+                                )
+                            }
+                            if node.internal_coordinates is not None
+                            else {}
+                        ),
                         "dependencies": node.dependencies,
                         "inputs": tuple(
                             {
