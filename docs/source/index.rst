@@ -139,7 +139,15 @@ chemistry software.
    :maxdepth: 2
    :caption: API Reference
 
-   api-molecule
+   api-molecule-overview
+   api-molecule-creating
+   api-molecule-manipulation
+   api-molecule-conversion
+   api-molecule-properties
+   api-molecule-geometry
+   api-molecule-vibrations
+   api-molecule-subclasses
+   api-molecule-reference
    modules
 
 ********************
