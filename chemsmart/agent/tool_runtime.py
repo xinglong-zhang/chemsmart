@@ -188,6 +188,7 @@ from chemsmart.analysis.quantity_expressions import (
     normalize_numeric_value,
     quantity_expression_receipt_from_record,
 )
+from chemsmart.analysis.result_readers import reader_for
 from chemsmart.analysis.result_quantities import (
     QuantityExtractionReceiptV1,
     QuantitySelectorV1,
@@ -1667,6 +1668,7 @@ class CommandCompiledToolHostV1:
             "promote_project_yaml": self._promote_project_yaml,
             "establish_project": self._establish_project,
             "bind_scientific_identity": self._bind_scientific_identity,
+            "bind_scan_point_geometry": self._bind_scan_point_geometry,
             "read_project_yaml": self._read_project_yaml,
             "validate_project_yaml": self._validate_project_yaml,
             "plan_command_workflow": self._plan_command_workflow,
@@ -1771,6 +1773,85 @@ class CommandCompiledToolHostV1:
                 "status: readiness, approval, terminal state, validity and "
                 "accuracy come only from typed host receipts, and where a "
                 "receipt and this text disagree the receipt is what happened."
+            ),
+        }
+
+    def _bind_scan_point_geometry(self, turn_id: str, values: dict) -> Any:
+        """Register one chosen point of a completed scan as a geometry input.
+
+        A relaxed scan ends at a surface. ChemSmart writes the structure it
+        converged at every point, but those files were opaque
+        ``program_output`` with nothing tying them to a coordinate or an
+        energy, and nothing could carry one into a later calculation. So a
+        session could compute a torsional profile, see exactly where the well
+        was, and still have no way to optimise the structure sitting in it.
+
+        Which point matters is a scientific judgement and stays with the
+        scientist: this binds the index it is given and ranks nothing. The
+        surface is readable through the ordinary selectors --
+        ``scan_point_indices``, ``scan_coordinate_values``, ``scan_energies``
+        -- so the choice is made from evidence rather than from a rule the
+        host imposed.
+
+        What the host owns is the lineage: which result, which point, at what
+        coordinate and energy. The geometry that comes back is an ordinary
+        trusted input, so using it is a changed molecular input and therefore a
+        new workflow with its own review, exactly as the charter requires.
+        """
+
+        source = self._artifact(values["artifact_id"])
+        reader = reader_for(values.get("program") or "orca")
+        if source.kind != reader.artifact_kind:
+            raise ContractError(
+                f"scan point binding needs a {reader.artifact_kind} result; "
+                f"{source.artifact_id!r} is {source.kind}"
+            )
+        parsed = reader.open_output(Path(source.path))
+        records = tuple(getattr(parsed, "scan_point_records", ()) or ())
+        if not records:
+            raise ContractError(
+                f"{source.artifact_id!r} records no scan surface, so it has "
+                "no points to choose between"
+            )
+        requested = int(values["point_index"])
+        chosen = next(
+            (item for item in records if item["index"] == requested), None
+        )
+        if chosen is None:
+            raise ContractError(
+                f"this scan has points 1 to {len(records)}; there is no "
+                f"point {requested}"
+            )
+        if not chosen["geometry_file"]:
+            raise ContractError(
+                f"point {requested} converged but ChemSmart kept no geometry "
+                "file for it, so it cannot be carried forward"
+            )
+        path = Path(chosen["geometry_file"]).resolve()
+        if not path.is_file():
+            raise ContractError("the chosen scan point geometry is missing")
+        artifact = TrustedArtifactRefV1(
+            artifact_id=values["artifact_id"] + f".point.{requested:03d}",
+            kind="geometry_xyz",
+            sha256=file_sha256(path),
+            size_bytes=path.stat().st_size,
+            path=str(path),
+            cli_value=str(path),
+        )
+        self.artifacts[artifact.artifact_id] = artifact
+        return {
+            "schema_version": "chemsmart.scan-point-geometry.v1",
+            "artifact": artifact,
+            "source_result_artifact_id": source.artifact_id,
+            "source_result_sha256": source.sha256,
+            "point_index": requested,
+            "point_count": len(records),
+            "coordinate": chosen["coordinate"],
+            "energy_hartree": chosen["energy"],
+            "selection_owner": "model",
+            "next_action": (
+                "bind this geometry's charge and multiplicity, then plan the "
+                "stage that uses it as a new workflow for review"
             ),
         }
 

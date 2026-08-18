@@ -156,6 +156,43 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @cached_property
+    def scan_point_records(self):
+        """Each relaxed-scan point, joined to the geometry ORCA wrote for it.
+
+        The surface alone answers "how does the energy vary"; it cannot answer
+        "and give me that structure". ORCA writes one file per point beside the
+        output -- ``<stem>.001.xyz`` upward, 1-indexed in step order -- and the
+        two were never connected, so a completed scan's geometries sat on disk
+        and were unreachable as evidence.
+
+        Joining them is what lets a scientist read the surface, choose a point
+        on it, and carry that structure forward. The choice stays theirs: this
+        reports every point and ranks none.
+
+        A point whose file is absent still appears, with ``geometry_file`` as
+        ``None``, because a truncated scan's converged points are real data.
+        """
+
+        profile = self.scan_profile
+        if not profile:
+            return ()
+        stem, _extension = os.path.splitext(self.filename)
+        records = []
+        for position, point in enumerate(profile, start=1):
+            candidate = f"{stem}.{position:03d}.xyz"
+            records.append(
+                {
+                    "index": position,
+                    "coordinate": point["coordinate"],
+                    "energy": point["energy"],
+                    "geometry_file": (
+                        candidate if os.path.isfile(candidate) else None
+                    ),
+                }
+            )
+        return tuple(records)
+
+    @cached_property
     def scan_profile(self):
         """Return the relaxed-scan surface as (coordinate, energy) points.
 

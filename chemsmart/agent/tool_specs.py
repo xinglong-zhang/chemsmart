@@ -231,6 +231,27 @@ def build_command_compiled_tool_surface(
             ),
         ),
         _tool(
+            "bind_scan_point_geometry",
+            (
+                "Carry one point of a completed relaxed scan forward as a "
+                "geometry input. You choose the point -- read the surface "
+                "first through scan_point_indices, scan_coordinate_values "
+                "and scan_energies, then name the 1-based index of the "
+                "structure you want; the host records which result and which "
+                "point it came from, at what coordinate and energy. Using "
+                "the returned geometry is a changed molecular input, so the "
+                "stage that consumes it is a new workflow needing its own "
+                "review. artifact_id must identify a completed scan result "
+                "already registered in this workspace."
+            ),
+            {
+                "artifact_id": _string(),
+                "point_index": {"type": "integer", "minimum": 1},
+                "program": program,
+            },
+            ("artifact_id", "point_index"),
+        ),
+        _tool(
             "read_project_yaml",
             "Read an already host-bound project artifact by stable ID.",
             {"program": program, "project_artifact_id": _string()},
@@ -894,6 +915,12 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
         "Digest of the inspection receipt for the compiled command."
     ),
     "constraint_kinds": "The geometric constraints this request needs.",
+    "point_index": (
+        "1-based position of the scan point whose converged geometry to "
+        "carry forward, counted in step order along the driven coordinate. "
+        "Read scan_point_indices with scan_coordinate_values and "
+        "scan_energies first; the choice is yours and is recorded as such."
+    ),
     "counterexample_id": (
         "ID of a counterexample the host produced when a compiled command "
         "failed inspection, safe preview or program validation. One exists "

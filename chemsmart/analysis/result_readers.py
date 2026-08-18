@@ -73,6 +73,9 @@ SELECTOR_UNITS = {
     # values carry the kind the run actually drove, which the scan coordinate
     # record states.
     "scan_coordinate_values": "",
+    # The position of each point in the surface, so a session can name the
+    # point it chose rather than describe it.
+    "scan_point_indices": "",
     "vpt2_harmonic_frequencies": "cm^-1",
     "vpt2_fundamental_frequencies": "cm^-1",
     "vpt2_zero_point_rovibrational_energy": "cm^-1",
@@ -695,6 +698,10 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
             ],
             "scan_energies": lambda output: [
                 float(point["energy"]) for point in output.scan_profile
+            ],
+            "scan_point_indices": lambda output: [
+                float(record["index"])
+                for record in output.scan_point_records
             ],
             "absorption_wavelengths": lambda output: [
                 float(item) for item in output.absorption_wavelengths
@@ -1341,6 +1348,7 @@ _SELECTOR_DIMENSIONS = {
     "energies": "ENERGY",
     "scan_energies": "ENERGY",
     "scan_coordinate_values": "DIMENSIONLESS",
+    "scan_point_indices": "DIMENSIONLESS",
     "entropy_times_temperature": "ENERGY",
     "excitation_energies": "ENERGY",
     "singlet_excitation_energies": "ENERGY",
