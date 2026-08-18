@@ -944,15 +944,41 @@ def _provider_public_record(
     )
     return record
 
+def cross_program_skill_ids() -> tuple[str, ...]:
+    """Skills every program pack carries, and which therefore belong to none.
+
+    Derived from the packs rather than listed separately: a skill that all of
+    them advertise is program-neutral by construction, so adding or removing
+    one cannot leave a second list behind to drift.
+    """
+
+    advertised = [set(pack.skill_ids) for pack in BUILTIN_PROGRAM_PACKS]
+    if not advertised:
+        return ()
+    return tuple(sorted(set.intersection(*advertised)))
+
+
 def activated_skill_documents(
     task: str,
 ) -> tuple[tuple[str, ...], tuple[SkillDocumentV1, ...]]:
-    """Resolve the advisory skills a task activates.
+    """Resolve the advisory skills available for a task.
 
-    Returns the activated pack digests and the resolved documents.  Activation
-    is text-gated by each pack's own ``activation_terms``/``exclusions``; the
-    packs are evaluated for every builtin program/engine target so a
-    cross-program conventions skill is reachable from any request.
+    Returns the activated pack digests and the resolved documents.
+
+    Program-specific advice stays text-gated by each pack's own
+    ``activation_terms``.  Program-neutral skills do not, and that distinction
+    is the whole point: this function's own docstring used to promise that "a
+    cross-program conventions skill is reachable from any request" while
+    delivering the opposite.  Every pack's terms are program brand names, so a
+    task saying "a DFT setup and a cheaper semi-empirical one" -- correct
+    chemistry, naming no product -- matched nothing, the index came back empty,
+    and the prompt then listed no skills at all.  The tool's own description
+    tells the model to consult a skill "listed in the system prompt", so an
+    empty list is an instruction not to consult anything.
+
+    Three recorded observations of a frozen task were read as evidence that the
+    model would not consult; they were measuring this gate.  General chemistry
+    knowledge is not gated behind mentioning a vendor.
     """
 
     if not skills_enabled():
@@ -964,11 +990,13 @@ def activated_skill_documents(
         }
     )
     pack_sha256s: set[str] = set()
-    skill_ids: set[str] = set()
+    skill_ids: set[str] = set(cross_program_skill_ids())
     for program, engine in targets:
         receipt = activate_program_knowledge(
             request=task, program=program, engine=engine
         )
+        # Only genuinely matched packs are recorded as activated; the neutral
+        # skills above are available without claiming any pack fired.
         pack_sha256s.update(receipt.activated_pack_sha256s)
         skill_ids.update(skills_for_activation(receipt))
     return tuple(sorted(pack_sha256s)), resolve_skills(
