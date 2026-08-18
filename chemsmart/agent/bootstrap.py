@@ -23,6 +23,7 @@ from chemsmart.agent.capabilities import (
     build_program_component_conformance_receipt,
     build_trusted_compute_environment_receipt,
 )
+from chemsmart.agent.commands import native_coordinate_options
 from chemsmart.agent.cli_schema import LiveClickSchemaV1
 from chemsmart.cli.main import entry_point
 
@@ -100,6 +101,23 @@ def probe_python_compute_environment(
         gpu_evidence=gpu_evidence,
         source_probe_id=f"live-python-probe:{canonical_sha256(observed)}",
     )
+
+
+#: The coordinate a conformance probe drives or holds.  The first two atoms of
+#: the fixture geometry are enough to reach the same Click callback a real user
+#: command reaches; nothing here computes, so the values only have to be legal.
+_CONFORMANCE_COORDINATES = {
+    "modred": {"constrained": [{"kind": "bond", "atoms": [1, 2]}]},
+    "scan": {
+        "scan": {
+            "kind": "bond",
+            "atoms": [1, 2],
+            "start": 1.0,
+            "stop": 2.0,
+            "points": 3,
+        }
+    },
+}
 
 
 def bootstrap_program_conformance(
@@ -183,6 +201,29 @@ def bootstrap_program_conformance(
                         argv.extend(
                             (ending_option.primary_flag, str(input_path))
                         )
+                # A scan or a constrained optimisation is defined by the
+                # coordinate it drives or holds, and its Click callback
+                # refuses to build a job without one.  Render the fixture
+                # coordinate through the same translation the production path
+                # uses, so conformance exercises that translation rather than
+                # a hand-written argv that could drift from it.
+                if jobtype in {"modred", "scan"}:
+                    job_command = live_schema.command(
+                        (target, program, jobtype)
+                    )
+                    values = native_coordinate_options(
+                        program, _CONFORMANCE_COORDINATES[jobtype]
+                    )
+                    for parameter_name, value in sorted(values.items()):
+                        option = (
+                            job_command.option(parameter_name)
+                            if job_command is not None
+                            else None
+                        )
+                        if option is None:
+                            stage_green = False
+                            break
+                        argv.extend((option.primary_flag, str(value)))
                 with runner.isolated_filesystem():
                     result = runner.invoke(entry_point, argv)
                 stage_rows.append(
