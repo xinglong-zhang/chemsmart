@@ -119,6 +119,103 @@ class ORCAOutput(ORCAFileMixin):
         )
 
     @cached_property
+    def scan_coordinate(self):
+        """Return the internal coordinate a relaxed scan drove, if any.
+
+        ORCA states it once, before the first step, as for example
+        ``Dihedral (  3,   2,   1,   0):   range=   0.00 .. 180.00 steps = 7``.
+        The atom numbering is ORCA's own, counted from zero.
+
+        Returns ``None`` when the run drove nothing, which is every job that is
+        not a scan.
+        """
+
+        number = r"[-+]?\d+(?:\.\d+)?"
+        pattern = re.compile(
+            r"^\s*(Bond|Angle|Dihedral)\s*\(([\d,\s]+)\)\s*:\s*"
+            rf"range\s*=\s*({number})\s*\.\.\s*({number})\s*"
+            r"steps\s*=\s*(\d+)",
+            re.IGNORECASE,
+        )
+        for line in self.contents:
+            match = pattern.match(line)
+            if match is None:
+                continue
+            atoms = tuple(
+                int(item) for item in match.group(2).replace(" ", "").split(",")
+            )
+            return {
+                "kind": match.group(1).lower(),
+                # Reported from zero by ORCA; restated from one so it matches
+                # the numbering every other ChemSmart surface uses.
+                "atoms": tuple(index + 1 for index in atoms),
+                "start": float(match.group(3)),
+                "stop": float(match.group(4)),
+                "points": int(match.group(5)),
+            }
+        return None
+
+    @cached_property
+    def scan_profile(self):
+        """Return the relaxed-scan surface as (coordinate, energy) points.
+
+        ORCA prints the finished surface twice, under the 'Actual Energy' and
+        under the SCF energy.  The first is the authority: for a plain DFT scan
+        the two agree, and where they differ the actual energy is the one that
+        includes whatever correction the method applied.
+
+        Energies stay in hartree, the unit ORCA prints, so the caller converts
+        once with the rest of its arithmetic rather than twice.
+
+        Returns an empty tuple for a run that is not a scan, and only the
+        points ORCA actually reached for one that stopped early -- a truncated
+        surface is partial evidence rather than no evidence.
+        """
+
+        number = r"[-+]?\d+\.\d+"
+        point = re.compile(rf"^\s*({number})\s+({number})\s*$")
+        points: list[dict[str, float]] = []
+        collecting = False
+        for line in self.contents:
+            if "The Calculated Surface using the 'Actual Energy'" in line:
+                collecting = True
+                continue
+            if not collecting:
+                continue
+            match = point.match(line)
+            if match is not None:
+                points.append(
+                    {
+                        "coordinate": float(match.group(1)),
+                        "energy": float(match.group(2)),
+                    }
+                )
+                continue
+            if points:
+                # The block ends at the first line that is not a point.
+                break
+        return tuple(points)
+
+    @cached_property
+    def scan_step_count(self):
+        """How many scan steps the run actually started.
+
+        A relaxed scan announces each step, so counting the announcements says
+        how far the run got independently of how many points converged.  That
+        difference is the whole diagnosis when a scan dies partway.
+        """
+
+        marker = re.compile(
+            r"RELAXED SURFACE SCAN STEP\s+(\d+)", re.IGNORECASE
+        )
+        steps = [
+            int(match.group(1))
+            for match in (marker.search(line) for line in self.contents)
+            if match is not None
+        ]
+        return max(steps) if steps else 0
+
+    @cached_property
     def has_forces(self):
         """
         Check if the output file contains force calculations.

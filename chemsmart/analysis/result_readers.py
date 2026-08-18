@@ -67,6 +67,12 @@ SELECTOR_UNITS = {
     "singlet_oscillator_strengths": "",
     "triplet_oscillator_strengths": "",
     "vibrational_frequencies": "cm^-1",
+    "scan_energies": "Eh",
+    # A scanned coordinate is a distance for a bond and an angle for a torsion,
+    # so a single declared unit here would be false for half of all scans.  The
+    # values carry the kind the run actually drove, which the scan coordinate
+    # record states.
+    "scan_coordinate_values": "",
     "vpt2_harmonic_frequencies": "cm^-1",
     "vpt2_fundamental_frequencies": "cm^-1",
     "vpt2_zero_point_rovibrational_energy": "cm^-1",
@@ -679,6 +685,17 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
     accessors = _text_output_accessors()
     accessors.update(
         {
+            # A relaxed scan is a surface, so it reaches the typed layer as
+            # two parallel vectors rather than one opaque record list: the
+            # existing operations then compose against it directly -- the
+            # height of a torsional barrier is the spread of the energies --
+            # instead of waiting on a bespoke profile type.
+            "scan_coordinate_values": lambda output: [
+                float(point["coordinate"]) for point in output.scan_profile
+            ],
+            "scan_energies": lambda output: [
+                float(point["energy"]) for point in output.scan_profile
+            ],
             "absorption_wavelengths": lambda output: [
                 float(item) for item in output.absorption_wavelengths
             ],
@@ -1322,6 +1339,8 @@ _SELECTOR_DIMENSIONS = {
     "absorption_wavelengths": "LENGTH",
     "energy": "ENERGY",
     "energies": "ENERGY",
+    "scan_energies": "ENERGY",
+    "scan_coordinate_values": "DIMENSIONLESS",
     "entropy_times_temperature": "ENERGY",
     "excitation_energies": "ENERGY",
     "singlet_excitation_energies": "ENERGY",
