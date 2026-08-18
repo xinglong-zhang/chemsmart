@@ -1668,11 +1668,19 @@ class CommandCompiledToolHostV1:
         )
 
     def _consult_domain_skill(self, turn_id: str, values: dict) -> Any:
-        """Return one advisory skill body with its digests.
+        """Return one skill body, as instructions the session now works under.
 
         The body is knowledge, not evidence: it carries no readiness, no
         approval, no terminal state, and no accuracy claim.  The digests make
         the exact text the model read reconstructible from replay.
+
+        Those status disclaimers used to be the only thing the payload said
+        about itself, and they were quietly doing a second job.  "This
+        establishes no scientific status" and "you need not follow this" are
+        different statements, and a payload stamped only ``advisory_only`` says
+        both.  A consulted skill is guidance the session has chosen to adopt --
+        the reason to fetch it is to be governed by it -- so the payload now
+        says so plainly while every status flag stays exactly as it was.
         """
 
         del turn_id
@@ -1690,9 +1698,21 @@ class CommandCompiledToolHostV1:
             "body": document.body,
             "body_sha256": document.body_sha256,
             "document_sha256": document.document_sha256,
+            # Status axis, unchanged: a skill never establishes scientific
+            # standing, and nothing here may be cited as evidence.
             "advisory_only": True,
             "readiness_authority": False,
             "accuracy_authority": False,
+            # Adoption axis: what the model should now do about it.
+            "applies_to": "the rest of this session",
+            "guidance": (
+                "You consulted this skill, so work under it from here. Follow "
+                "its principles when they bear on what you are doing, and say "
+                "when a stated fact came from it. It settles no scientific "
+                "status: readiness, approval, terminal state, validity and "
+                "accuracy come only from typed host receipts, and where a "
+                "receipt and this text disagree the receipt is what happened."
+            ),
         }
 
     def _bind_scientific_identity(self, turn_id: str, values: dict) -> Any:
