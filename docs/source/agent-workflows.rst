@@ -12,8 +12,10 @@ Supported scope
 Version 3.1.4 provides broad planning, project-YAML generation, live CLI
 compilation, and safe preview for these Agent job families:
 
-* Gaussian CPU: ``irc``, ``link``, ``opt``, ``sp``, ``td``, and ``ts``.
-* ORCA CPU: ``irc``, ``neb``, ``opt``, ``sp``, ``td``, and ``ts``.
+* Gaussian CPU: ``irc``, ``link``, ``modred``, ``opt``, ``scan``, ``sp``,
+  ``td``, and ``ts``.
+* ORCA CPU: ``irc``, ``modred``, ``neb``, ``opt``, ``scan``, ``sp``, ``td``,
+  and ``ts``.
 * PySCF CPU: ``hess``, ``opt``, ``sp``, and preview-only ``td``.
 * GPU4PySCF: PySCF ``hess``, ``opt``, and ``sp`` with the ``gpu`` engine.
 * xTB CPU: ``hess``, ``opt``, and ``sp``.
@@ -23,13 +25,26 @@ Release-qualified real Agent execution is narrower:
 * PySCF CPU ``sp``, ``opt``, and ``hess``;
 * xTB CPU ``sp``, ``opt``, and ``hess``; and
 * ORCA CPU single-points, optimization/frequency, transition-state,
-  excited-state, and serial producer-to-consumer DAGs.
+  excited-state, relaxed coordinate scans, and serial producer-to-consumer
+  DAGs.
 
-ORCA ``irc`` and ``neb`` remain planning and preview paths until the selected
-target is qualified.  Gaussian Agent execution is not claimed in this release;
-Gaussian support covers project YAML, generated native input, safe preview, and
-typed analysis of user-supplied completed outputs.  GPU4PySCF remains a
-configuration and preview path until a compatible GPU target is qualified.
+A relaxed scan states its driven coordinate on the workflow node rather than in
+project YAML: which atoms, which coordinate type, and the range and number of
+points.  The same specification is rendered into each program's own idiom, so
+one physical description reaches ORCA's absolute endpoints and Gaussian's
+increment without the caller writing either.  A completed scan's surface is
+read into typed quantities through the ordinary analysis layer.
+
+The first constrained optimisation of a scan imposes the driven coordinate on
+the geometry supplied, so a range beginning far from that geometry's current
+value may be refused by the program before any optimisation runs.
+
+ORCA ``irc``, ``neb``, and ``modred`` remain planning and preview paths until
+the selected target is qualified.  Gaussian Agent execution is not claimed in
+this release; Gaussian support covers project YAML, generated native input,
+safe preview, and typed analysis of user-supplied completed outputs.  GPU4PySCF
+remains a configuration and preview path until a compatible GPU target is
+qualified.
 
 These boundaries do not alter the wider human ``chemsmart run`` and
 ``chemsmart sub`` CLI.  They also do not imply that an executable is available

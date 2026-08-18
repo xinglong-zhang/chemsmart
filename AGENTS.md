@@ -22,18 +22,31 @@ The production Agent supports:
 - causal scientific workflow planning;
 - inspection and typed analysis of supported results; and
 - explicitly approved execution on release-qualified CPU paths: ORCA
-  single-points, optimization/frequency, transition-state, excited-state, and
-  serial DAG workflows; PySCF ``sp/opt/hess``; and xTB ``sp/opt/hess``.
+  single-points, optimization/frequency, transition-state, excited-state,
+  relaxed coordinate scans, and serial DAG workflows; PySCF ``sp/opt/hess``;
+  and xTB ``sp/opt/hess``.
 
-Gaussian ``sp/opt/ts/irc/td/link`` is supported for project YAML, native-input
-generation, safe preview, and parsing of user-supplied completed results; this
-release does not claim Gaussian Agent execution. GPU4PySCF ``sp/opt/hess`` is a
-PySCF-engine configuration and preview surface, not a release-qualified Agent
-execution path. PySCF CPU ``td`` is likewise preview-only. ORCA ``irc`` and
-``neb`` may be planned and previewed, but require target-specific qualification
-before they are described as completed execution. NCIPLOT and additional human
-CLI families without an Agent declaration remain outside the version-3.1.4
-Agent execution surface.
+ORCA ``scan`` is qualified for approved execution: a relaxed torsional profile
+ran through the ordinary plan, preview, single human approval, and provider-free
+execution path, and its surface is read into typed quantities by the same
+analysis layer as any other result. A scan's driven coordinate is carried on the
+workflow node, not in project YAML, because it is a fact about this molecule in
+this calculation rather than reusable method rationale.
+
+ORCA ``modred`` is declared for planning, preview, and native-input generation
+only. Constrained optimisation is expressible and previewable, and no
+constrained optimisation has yet run here, so this release does not describe it
+as completed Agent execution.
+
+Gaussian ``sp/opt/ts/irc/td/link/scan/modred`` is supported for project YAML,
+native-input generation, safe preview, and parsing of user-supplied completed
+results; this release does not claim Gaussian Agent execution. GPU4PySCF
+``sp/opt/hess`` is a PySCF-engine configuration and preview surface, not a
+release-qualified Agent execution path. PySCF CPU ``td`` is likewise
+preview-only. ORCA ``irc`` and ``neb`` may be planned and previewed, but require
+target-specific qualification before they are described as completed execution.
+NCIPLOT and additional human CLI families without an Agent declaration remain
+outside the version-3.1.4 Agent execution surface.
 
 Product support never asserts that an engine is installed on the current host.
 Every real operation must pass its normal environment probe and appear in the
