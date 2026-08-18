@@ -98,13 +98,25 @@ def test_the_selectors_deliver_the_surface_through_typed_extraction():
 
 
 def test_the_barrier_is_reachable_from_the_existing_operations():
-    """Height needs no new arithmetic once the surface is typed."""
+    """Height needs no new arithmetic once the surface is typed.
+
+    What this height belongs to is worth stating exactly, because the file
+    invites the wrong reading. The run drove ORCA's ``D 0 1 2 3``, which for
+    this atom order is O1-O2-H3-H4 -- and H3 is bonded to O1 (0.950 A), not to
+    O2 (1.820 A). So the driven coordinate is a geometrically valid dihedral
+    over a non-bonded path, *not* the H-O-O-H torsion about the O-O bond. The
+    proper torsion in this geometry is 119.8 degrees, near hydrogen peroxide's
+    known equilibrium value, and its barriers are the familiar ~7 and ~1
+    kcal/mol pair.
+
+    The number below is neither of those. It is the real height along the
+    coordinate that was actually scanned, which is all this test claims and all
+    the parser is being checked against.
+    """
 
     energies = [point["energy"] for point in ORCAOutput(_SCAN).scan_profile]
     barrier = (max(energies) - min(energies)) * _HARTREE_TO_KCAL
 
-    # Hydrogen peroxide's torsional profile has one high and one low barrier;
-    # this is the high one, and it is the number a session would report.
     assert barrier == pytest.approx(8.26, abs=0.05)
 
 
