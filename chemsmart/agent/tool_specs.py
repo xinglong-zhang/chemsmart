@@ -186,6 +186,32 @@ def build_command_compiled_tool_surface(
             ("render_receipt_sha256", "artifact_id"),
         ),
         _tool(
+            "establish_project",
+            (
+                "Render, promote, and validate one project in a single call, "
+                "returning all three receipts. Prefer this whenever a node "
+                "needs a project: it is the same three steps in the same "
+                "order, and doing them separately costs three turns per node "
+                "for no additional evidence. Section rules are exactly those "
+                "of render_project_yaml."
+            ),
+            {
+                "program": program,
+                "sections": {
+                    "type": "object",
+                    "additionalProperties": {"type": "object"},
+                },
+                "artifact_id": _string(),
+                "capability_receipt_sha256": digest,
+            },
+            (
+                "program",
+                "sections",
+                "artifact_id",
+                "capability_receipt_sha256",
+            ),
+        ),
+        _tool(
             "bind_scientific_identity",
             (
                 "Bind an explicit charge and multiplicity to the exact host "

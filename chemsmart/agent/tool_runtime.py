@@ -1619,6 +1619,7 @@ class CommandCompiledToolHostV1:
             "assess_program_candidate": self._assess_program_candidate,
             "render_project_yaml": self._render_project_yaml,
             "promote_project_yaml": self._promote_project_yaml,
+            "establish_project": self._establish_project,
             "bind_scientific_identity": self._bind_scientific_identity,
             "read_project_yaml": self._read_project_yaml,
             "validate_project_yaml": self._validate_project_yaml,
@@ -1963,6 +1964,49 @@ class CommandCompiledToolHostV1:
             artifact_id=artifact.artifact_id,
         )
         return {"artifact": artifact, "promotion": promotion}
+
+    def _establish_project(self, turn_id: str, values: dict) -> Any:
+        """Render, promote, and validate one project in a single turn.
+
+        These three are never used apart. A node needs all of them before it
+        can be prepared, always in this order, and each node needs its own --
+        so the ceremony scales with the size of the graph. Measured across
+        three live sessions it took 34%, 56% and 61% of the whole tool budget,
+        and the paper task ran out of turns inside it, having reasoned about
+        the chemistry correctly and never reached a reviewable workflow.
+
+        Nothing is skipped or weakened: each step is the same handler, called
+        in the same order, emitting the same events, and every receipt is
+        returned. What changes is that a five-node graph spends five turns here
+        instead of fifteen.
+        """
+
+        rendered = self._render_project_yaml(
+            turn_id,
+            {"program": values["program"], "sections": values["sections"]},
+        )
+        promoted = self._promote_project_yaml(
+            turn_id,
+            {
+                "render_receipt_sha256": rendered.receipt_sha256,
+                "artifact_id": values["artifact_id"],
+            },
+        )
+        validated = self._validate_project_yaml(
+            turn_id,
+            {
+                "project_artifact_id": values["artifact_id"],
+                "capability_receipt_sha256": values[
+                    "capability_receipt_sha256"
+                ],
+            },
+        )
+        return {
+            "schema_version": "chemsmart.project-establishment.v1",
+            "rendered": rendered,
+            "promoted": promoted,
+            "validated": validated,
+        }
 
     def _read_project_yaml(self, turn_id: str, values: dict) -> Any:
         artifact = self._artifact(values["project_artifact_id"])
