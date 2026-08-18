@@ -429,11 +429,19 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                     execution_supported=False,
                 ),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
-                EngineJobCapability(
-                    engine="cpu",
-                    jobtype="scan",
-                    execution_supported=False,
-                ),
+                # Qualified by a real run rather than by inspection: an ORCA
+                # 6.1.1 relaxed scan executed on this host through the
+                # ChemSmart CLI and its seven converged points match the
+                # .relaxscanact.dat sidecar ORCA wrote beside them; the
+                # Agent's own compiled invocation reproduces that native input
+                # and its safe preview is green.
+                #
+                # The declaration necessarily precedes the first approved
+                # Agent execution, because it is what admits a node to
+                # approval at all -- leaving it false until an approved run
+                # exists would keep the family unqualifiable for ever. It is
+                # withdrawn if that run does not hold.
+                EngineJobCapability(engine="cpu", jobtype="scan"),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),

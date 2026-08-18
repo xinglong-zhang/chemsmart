@@ -51,14 +51,37 @@ def test_the_family_is_previewable_through_the_live_registry(
     assert capability.preview_supported is True
 
 
+#: The one pair a real run has qualified: an ORCA 6.1.1 relaxed scan executed
+#: on this host through the ChemSmart CLI, whose converged points match the
+#: .relaxscanact.dat sidecar ORCA wrote beside them, with the Agent's own
+#: compiled invocation reproducing that native input and previewing green.
+_QUALIFIED = {("orca", "scan")}
+
+
 @pytest.mark.parametrize("program", ("orca", "gaussian"))
 @pytest.mark.parametrize("jobtype", ("scan", "modred"))
-def test_execution_is_not_claimed_before_a_qualification_run(
+def test_execution_is_claimed_only_where_a_run_qualified_it(
     program, jobtype
 ):
-    """The declaration must not quietly promise a run nobody has made."""
+    """The declaration must not quietly promise a run nobody has made.
 
-    assert _pairs(program)[jobtype].execution_supported is False
+    Adding a pair to `_QUALIFIED` is the deliberate act of claiming that
+    evidence exists, so it cannot happen as a side effect of editing the
+    matrix. Gaussian stays out of it regardless of evidence: this release
+    does not claim Gaussian Agent execution at all.
+    """
+
+    expected = (program, jobtype) in _QUALIFIED
+
+    assert _pairs(program)[jobtype].execution_supported is expected
+
+
+@pytest.mark.parametrize("jobtype", ("scan", "modred"))
+def test_gaussian_execution_is_never_claimed_here(jobtype):
+    """A release-policy hold, not a missing-evidence one."""
+
+    assert ("gaussian", jobtype) not in _QUALIFIED
+    assert _pairs("gaussian")[jobtype].execution_supported is False
 
 
 @pytest.mark.parametrize("program", ("orca", "gaussian"))
