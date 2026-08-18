@@ -130,7 +130,29 @@ populated states, so the result depends on which states were found.
 Report the search that was actually done, including its limits. An ensemble
 assembled from hand-supplied structures is a hand-supplied ensemble.
 
-## 5. Composite and multi-level results inherit every layer's assumptions
+## 5. A driven coordinate starts from the geometry you supply
+
+A relaxed scan is a sequence of constrained optimisations, and the first of
+them begins by forcing the driven coordinate to the scan's starting value on
+the structure that was handed in. That step is a real geometric operation and
+it can fail.
+
+- If the starting value is far from the coordinate's value in the supplied
+  geometry, the program has to distort the molecule a long way before any
+  optimisation happens. It may refuse outright, or succeed into a strained
+  arrangement that is not on the path you meant to map.
+- Prefer a scan that begins near the supplied geometry and walks outward, or
+  supply a geometry that already sits near the intended start.
+- Periodic coordinates are periodic: a torsion scanned across a full turn ends
+  where it began, and the closure is a free internal check on the profile.
+- The same applies to a held coordinate: a constraint imposed far from the
+  current value is a distortion, not a restraint.
+
+When a program reports that it could not impose an initial constraint, that is
+this failure and not a convergence problem. Read the coordinate's value in the
+input geometry before changing anything else.
+
+## 6. Composite and multi-level results inherit every layer's assumptions
 
 Combining a high-level energy with a lower-level geometry and thermal
 correction is standard and defensible, and it carries three separate
@@ -142,7 +164,7 @@ double counting.
 State which level produced which term. A composite quoted as one number, with
 no account of its parts, cannot be checked by anyone.
 
-## 6. Say what the uncertainty is, and where it comes from
+## 7. Say what the uncertainty is, and where it comes from
 
 An uncertainty that quantifies only convergence understates the real one by a
 wide margin. Distinguish:
@@ -160,7 +182,7 @@ defensible numerical uncertainty is available, say which term dominates and in
 which direction it biases the result, rather than reporting a bare value or
 inventing an interval.
 
-## 7. Reporting adequacy honestly
+## 8. Reporting adequacy honestly
 
 State the method that was *applied*, read from the result, not the method that
 was requested. State whether the effect being reported is larger than the
