@@ -374,6 +374,20 @@ def _summarize(
     for line in diagnostic_candidates:
         _append_bounded(diagnostics, line)
 
+    if not engine_lines and error_class == "incomplete_output":
+        # An output that simply stops has no marker to quote around, so the
+        # window above never opens and the failure reaches the session as a
+        # class with no reason attached. The last substantive lines are where
+        # the engine got to, and that is usually where it said why.
+        #
+        # Observed on a real approved run: a relaxed scan ended on "GSTEP:
+        # could not impose initial constraints. Please check your input and
+        # try again!" -- the engine naming the exact problem -- and the typed
+        # evidence carried `engine_lines: []`. A session told only
+        # "incomplete_output" cannot repair that; told what ORCA said, it can.
+        for line in recent:
+            _append_engine_line(engine_lines, line)
+
     return NativeFailureSummaryV1(
         schema_version=_SCHEMA_VERSION,
         program=program,

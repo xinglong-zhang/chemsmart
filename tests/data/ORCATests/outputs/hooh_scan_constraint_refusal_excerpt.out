@@ -1,0 +1,45 @@
+Dipole components along the rotational axes: 
+x,y,z [a.u.] :    -0.017050    -0.000006     0.000000 
+x,y,z [Debye]:    -0.043338    -0.000015     0.000000 
+
+ 
+
+Dipole moment calculation done in   0.0 sec 
+
+Maximum memory used throughout the entire PROP-calculation: 5.5 MB
+
+         *************************************************************
+         *               RELAXED SURFACE SCAN STEP   2               *
+         *                                                           *
+         *   Dihedral (  3,   1,   0,   2)  :  15.00000000           *
+         *************************************************************
+
+Geometry optimization settings:
+Update method            Update   .... BFGS
+Choice of coordinates    CoordSys .... (2022) Redundant Internals
+Initial Hessian          InHess   .... Almloef's Model
+Max. no of cycles        MaxIter  .... 50
+
+Convergence Tolerances:
+Energy Change            TolE     ....  5.0000e-06 Eh
+Max. Gradient            TolMAXG  ....  3.0000e-04 Eh/bohr
+RMS Gradient             TolRMSG  ....  1.0000e-04 Eh/bohr
+Max. Displacement        TolMAXD  ....  4.0000e-03 bohr
+RMS Displacement         TolRMSD  ....  2.0000e-03 bohr
+Strict Convergence                .... False
+
+------------------------------------------------------------------------------
+                        ORCA OPTIMIZATION COORDINATE SETUP
+------------------------------------------------------------------------------
+
+The optimization will be done in redundant internal coordinates (2022)
+Making redundant internal coordinates   ...  (2022 redundants) done
+Evaluating the initial hessian          ...  (Almloef) done
+Evaluating the coordinates              ...  done
+Calculating the B-matrix                .... done
+Calculating the G-matrix                .... done
+Decreasing the constraint accuracy, check your results carefully!
+Decreasing the constraint accuracy, check your results carefully!
+Decreasing the constraint accuracy, check your results carefully!
+[file orca_tools/Tool-GStep/qcgstep.cpp, line 521]: GSTEP: could not impose initial constraints. Please check your input and try again!
+
