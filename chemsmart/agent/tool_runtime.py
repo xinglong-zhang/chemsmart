@@ -6310,6 +6310,14 @@ class CommandCompiledToolHostV1:
                     memory_limit_mb=(
                         self.execution_resources.memory_gb * 1024.0
                     ),
+                    # The wrapper traps SIGTERM to stop the engine and copy
+                    # its partial outputs back from scratch before exiting.
+                    # The default one-second grace SIGKILLed it mid-copy, so a
+                    # timed-out scan's converged points -- data the parsers
+                    # deliberately read as a truncated surface -- never
+                    # reached the job folder. Thirty seconds bounds the
+                    # salvage without changing what the timeout means.
+                    termination_grace_seconds=30.0,
                     signal_guard=signal_guard,
                 )
                 process_observation = process_result.observation

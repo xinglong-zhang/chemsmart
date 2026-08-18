@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import signal
 import subprocess
 from abc import abstractmethod
 from contextlib import suppress
@@ -431,7 +432,38 @@ class JobRunner(RegistryMixin):
         process = self._create_process(job, command=command, env=env)
         logger.debug(f"Process created for job {job}: {process}")
         logger.debug(f"Running process for job: {job}")
-        returncode = self._run(process, **kwargs)
+        # An external SIGTERM -- a scheduler timeout, a wall-clock kill, an
+        # operator's scancel -- used to kill this wrapper before the postrun
+        # copy-back, so everything the engine had computed in scratch was
+        # stranded there and the job folder received nothing. A timed-out
+        # relaxed scan had 55 of its 73 converged points destroyed as
+        # evidence that way; the points were real data the parsers read as a
+        # truncated surface. Terminating the child and letting the normal
+        # postrun run turns the same signal into "stop the engine, keep what
+        # it wrote": completion state is unchanged and honest, scratch
+        # deletion is already skipped for incomplete jobs, and the wrapper
+        # still exits nonzero through the ordinary path below.
+        received_signal: dict[str, int | None] = {"signum": None}
+
+        def _terminate_child(signum, _frame):
+            received_signal["signum"] = signum
+            with suppress(Exception):
+                process.terminate()
+
+        previous_handler = None
+        try:
+            previous_handler = signal.signal(
+                signal.SIGTERM, _terminate_child
+            )
+        except ValueError:
+            # Not the main thread; keep the default delivery.
+            previous_handler = None
+        try:
+            returncode = self._run(process, **kwargs)
+        finally:
+            if previous_handler is not None:
+                with suppress(Exception):
+                    signal.signal(signal.SIGTERM, previous_handler)
         logger.debug(f"Postrunning job: {job}")
         postrun_error = None
         try:
