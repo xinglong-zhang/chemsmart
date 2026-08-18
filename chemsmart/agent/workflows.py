@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
@@ -124,11 +124,18 @@ class CommandNodeIntentV1:
     #: an electronic-state transfer.
     charge: int | None = None
     multiplicity: int | None = None
+    #: Which internal coordinates this node drives or holds fixed.  Same class
+    #: of fact as the state above -- a property of this molecule in this
+    #: calculation rather than reusable method rationale -- so it lives here
+    #: and not in the project.  Carried as canonical data so the draft digest
+    #: covers it; the host renders it into each program's own idiom.
+    internal_coordinates: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         require_identifier(self.node_id, "node_id")
         require_identifier(self.program, "program")
         self._validate_node_kind()
+        self._validate_internal_coordinates()
         _validate_optional_electronic_state(
             self.charge,
             self.multiplicity,
@@ -165,6 +172,51 @@ class CommandNodeIntentV1:
                     f"{field_name!r}; use a lower-case public identifier such "
                     "as 'input.geometry'"
                 ) from exc
+
+    def _validate_internal_coordinates(self) -> None:
+        """Refuse a coordinate specification the jobtype cannot mean.
+
+        A scan without a driven coordinate, or a driven coordinate on a job
+        type that does not drive one, is a plan that reads as science but
+        cannot compile.  Say so where it is written rather than at argv.
+        """
+
+        spec = self.internal_coordinates
+        if spec is None:
+            return
+        if not isinstance(spec, Mapping):
+            raise ContractError(
+                f"node {self.node_id!r} internal_coordinates must be an "
+                "object with 'scan' and/or 'constrained'"
+            )
+        unknown = sorted(set(spec).difference({"scan", "constrained"}))
+        if unknown:
+            raise ContractError(
+                f"node {self.node_id!r} internal_coordinates does not accept "
+                f"{unknown}; it accepts ['constrained', 'scan']"
+            )
+        has_scan = bool(spec.get("scan"))
+        has_constrained = bool(spec.get("constrained"))
+        if not has_scan and not has_constrained:
+            raise ContractError(
+                f"node {self.node_id!r} declares internal_coordinates with "
+                "neither a scan nor a constraint; omit the field instead"
+            )
+        if self.jobtype == "scan" and not has_scan:
+            raise ContractError(
+                f"node {self.node_id!r} is a scan but names no driven "
+                "coordinate; a scan is defined by what it drives"
+            )
+        if self.jobtype == "modred" and not has_constrained:
+            raise ContractError(
+                f"node {self.node_id!r} is a constrained optimisation but "
+                "names no constrained coordinate"
+            )
+        if has_scan and self.jobtype not in {"scan", "ts"}:
+            raise ContractError(
+                f"node {self.node_id!r} names a driven coordinate but its "
+                f"jobtype {self.jobtype!r} does not drive one; use 'scan'"
+            )
 
     def _validate_node_kind(self) -> None:
         if self.node_kind not in WORKFLOW_NODE_KINDS:

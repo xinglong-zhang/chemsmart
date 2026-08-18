@@ -261,6 +261,106 @@ class CommandCounterexampleV1:
             raise ContractError("command counterexample digest mismatch")
 
 
+#: Options the host resolves from approved bindings rather than from model
+#: intent.  A job option value naming one of these would let the model restate
+#: -- and so silently contradict -- a fact the approval chain already fixed.
+_HOST_OWNED_OPTIONS = frozenset(
+    {
+        "charge",
+        "filename",
+        "multiplicity",
+        "project",
+        "scratch",
+        "server",
+    }
+)
+
+#: How many atoms each internal coordinate is defined by.
+_COORDINATE_ATOM_COUNTS = {"bond": 2, "angle": 3, "dihedral": 4}
+
+
+def _coordinate_atoms(entry: Mapping[str, Any]) -> list[int]:
+    """Validate one internal coordinate and return its atom numbering."""
+
+    kind = str(entry.get("kind", ""))
+    expected = _COORDINATE_ATOM_COUNTS.get(kind)
+    if expected is None:
+        raise ContractError(
+            f"unsupported internal coordinate kind {kind!r}; it is one of "
+            f"{sorted(_COORDINATE_ATOM_COUNTS)}"
+        )
+    atoms = [int(value) for value in entry.get("atoms", ())]
+    if len(atoms) != expected:
+        raise ContractError(
+            f"a {kind} is defined by {expected} atoms, not {len(atoms)}"
+        )
+    if any(value < 1 for value in atoms):
+        raise ContractError("coordinate atoms are numbered from 1")
+    if len(set(atoms)) != len(atoms):
+        raise ContractError(f"a {kind} names an atom twice")
+    return atoms
+
+
+def native_coordinate_options(
+    program: str, internal_coordinates: Mapping[str, Any] | None
+) -> dict[str, str]:
+    """Render one physical coordinate specification into a program's idiom.
+
+    The specification the model supplies is physical and program-neutral: these
+    atoms, this coordinate, from here to there in this many points.  What each
+    program wants is not.  ORCA drives a coordinate between absolute endpoints
+    (``--dist-start``/``--dist-end``/``--num-steps``); Gaussian drives it by an
+    increment repeated a number of times (``--step-size``/``--num-steps``).
+    Both describe the same scan, and translating between them is exactly the
+    hub's job -- the alternative is making every model learn both idioms, which
+    is the memorisation this project exists to remove.
+    """
+
+    if not internal_coordinates:
+        return {}
+    scan = internal_coordinates.get("scan") or None
+    constrained = tuple(internal_coordinates.get("constrained") or ())
+    if not scan and not constrained:
+        return {}
+
+    coordinates: list[list[int]] = []
+    values: dict[str, str] = {}
+    if scan:
+        atoms = _coordinate_atoms(scan)
+        coordinates.append(atoms)
+        start = float(scan["start"])
+        stop = float(scan["stop"])
+        points = int(scan["points"])
+        if points < 2:
+            raise ContractError("a scan needs at least two points")
+        if start == stop:
+            raise ContractError(
+                "a scan needs a range; start and stop are the same value"
+            )
+        if program == "orca":
+            values["dist_start"] = f"{start}"
+            values["dist_end"] = f"{stop}"
+            values["num_steps"] = f"{points}"
+        elif program == "gaussian":
+            # Gaussian walks outward from the starting geometry, so the
+            # increment carries the direction and the endpoint is implied.
+            intervals = points - 1
+            values["step_size"] = f"{(stop - start) / intervals}"
+            values["num_steps"] = f"{intervals}"
+        else:
+            raise ContractError(
+                f"{program} declares no coordinate scan idiom"
+            )
+
+    for entry in constrained:
+        coordinates.append(_coordinate_atoms(entry))
+
+    # Both programs take the coordinate list in the same literal form, and the
+    # CLI parses it with ast.literal_eval.
+    values["coordinates"] = repr(coordinates)
+    return values
+
+
 def compile_command(
     proposal: CommandProposalV1,
     *,
@@ -271,6 +371,7 @@ def compile_command(
     input_artifact: TrustedArtifactRefV1,
     scientific_identity: ScientificIdentityBindingV1,
     job_artifact_options: Mapping[str, TrustedArtifactRefV1] | None = None,
+    job_option_values: Mapping[str, str] | None = None,
     live_schema: LiveClickSchemaV1 | None = None,
     server: str = "",
     repair_parent_sha256: str = "",
@@ -408,6 +509,28 @@ def compile_command(
                 parameter_name=parameter_name,
                 artifact_id=artifact.artifact_id,
                 artifact_sha256=artifact.sha256,
+            )
+        )
+
+    # Some scientific intent is neither a project setting nor a file.  A
+    # scanned coordinate -- which atoms, over what range, in how many steps --
+    # is a fact about this molecule in this calculation, so freezing it into a
+    # reusable project would be wrong, and it has no artifact to bind to.  It
+    # reaches the command the same way an auxiliary file does, through the live
+    # Click option that owns it, and lands in argv and display_command so the
+    # human approving the run sees the coordinate being scanned.
+    for parameter_name, value in sorted((job_option_values or {}).items()):
+        if parameter_name in _HOST_OWNED_OPTIONS:
+            raise ContractError(
+                f"{parameter_name} is resolved by the host, not supplied as a "
+                "job option value"
+            )
+        options.append(
+            _scoped_option(
+                live_schema,
+                job_scope,
+                parameter_name,
+                str(value),
             )
         )
 

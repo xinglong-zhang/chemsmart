@@ -71,6 +71,7 @@ from chemsmart.agent.commands import (
     build_scientific_identity_binding,
     compile_command,
     inspect_command,
+    native_coordinate_options,
 )
 from chemsmart.agent.inspection import (
     GeneratedArtifactInspectionReceiptV1,
@@ -2272,6 +2273,11 @@ class CommandCompiledToolHostV1:
                 node_kind=raw_node.get("node_kind", "program_call"),
                 charge=raw_node.get("charge"),
                 multiplicity=raw_node.get("multiplicity"),
+                internal_coordinates=canonical_data(
+                    raw_node.get("internal_coordinates")
+                )
+                if raw_node.get("internal_coordinates")
+                else None,
             )
             if node.node_kind == "aggregate":
                 # ChemSmart performs the arithmetic, so there is no program
@@ -3841,6 +3847,9 @@ class CommandCompiledToolHostV1:
             input_artifact=input_artifact,
             scientific_identity=identity,
             job_artifact_options=dict(job_artifact_options),
+            job_option_values=native_coordinate_options(
+                node.program, getattr(node, "internal_coordinates", None)
+            ),
             live_schema=self.live_schema,
             server=(
                 self.execution_server

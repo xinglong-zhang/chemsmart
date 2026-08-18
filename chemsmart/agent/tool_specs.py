@@ -1324,6 +1324,93 @@ def _semantic_role_identifier() -> dict:
     }
 
 
+def _internal_coordinates_schema() -> dict:
+    """Which internal coordinates this node scans or holds fixed.
+
+    A scanned dihedral or a frozen bond is a fact about *this molecule in this
+    calculation*, the same class of fact as charge and multiplicity, so it
+    belongs on the node rather than frozen into a reusable project.  The
+    specification here is physical and program-neutral: the host renders it
+    into each program's own idiom, which genuinely differ -- ORCA takes an
+    absolute range, Gaussian an increment.
+    """
+
+    atoms = {
+        "type": "array",
+        "items": {"type": "integer", "minimum": 1},
+        "minItems": 2,
+        "maxItems": 4,
+        "description": (
+            "The atoms defining this coordinate, numbered from 1 in the "
+            "order of the bound geometry: two for a bond, three for an "
+            "angle, four for a dihedral."
+        ),
+    }
+    kind = {
+        "type": "string",
+        "enum": ["bond", "angle", "dihedral"],
+        "description": "Which internal coordinate these atoms define.",
+    }
+    return {
+        "type": "object",
+        "description": (
+            "Internal coordinates this node scans or constrains. Required by "
+            "a scan or a constrained optimisation and meaningless without "
+            "one; the geometry itself, the method and the basis come from the "
+            "bound artifact and the project, not from here."
+        ),
+        "properties": {
+            "scan": {
+                "type": "object",
+                "description": (
+                    "The one coordinate driven across a range. State the "
+                    "range physically -- angstrom for a bond, degrees for an "
+                    "angle or dihedral -- and the host renders it as the "
+                    "target program expects."
+                ),
+                "properties": {
+                    "kind": kind,
+                    "atoms": atoms,
+                    "start": {
+                        "type": "number",
+                        "description": "First value of the driven coordinate.",
+                    },
+                    "stop": {
+                        "type": "number",
+                        "description": "Last value of the driven coordinate.",
+                    },
+                    "points": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "description": (
+                            "How many values are computed, endpoints "
+                            "included."
+                        ),
+                    },
+                },
+                "required": ["kind", "atoms", "start", "stop", "points"],
+                "additionalProperties": False,
+            },
+            "constrained": {
+                "type": "array",
+                "maxItems": 32,
+                "description": (
+                    "Coordinates held fixed while everything else relaxes. "
+                    "These are the constraint of a constrained optimisation, "
+                    "and may also accompany a scan."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {"kind": kind, "atoms": atoms},
+                    "required": ["kind", "atoms"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "additionalProperties": False,
+    }
+
+
 def _workflow_node_schema() -> dict:
     return {
         "type": "object",
@@ -1370,6 +1457,7 @@ def _workflow_node_schema() -> dict:
                     "the task-bound state of the molecular input."
                 ),
             },
+            "internal_coordinates": _internal_coordinates_schema(),
             "dependencies": {"type": "array", "items": _string()},
             "inputs": {
                 "type": "array",
