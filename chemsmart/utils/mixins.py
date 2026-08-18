@@ -1462,7 +1462,79 @@ class ORCAFileMixin(FileMixin):
         # such as Opt/OptTS, but classify a block-driven single point as TD.
         if route_jobtype == "sp" and self._orca_tddft_values:
             return "td"
+        # The same is true one level up. A relaxed scan and a constrained
+        # optimisation are both written as ``! Opt`` plus a %geom block, so
+        # the route line alone cannot tell them from a plain optimisation --
+        # and reading it alone made a compiled scan preview fail as
+        # ``preview.semantic.mismatch``, jobtype expected 'scan', observed
+        # 'opt', with no project setting able to change it because the
+        # emitted input was correct all along.
+        if route_jobtype == "opt":
+            if self._orca_geom_subblocks.get("scan"):
+                return "scan"
+            if self._orca_geom_subblocks.get("constraints"):
+                return "modred"
         return route_jobtype
+
+    @cached_property
+    def _orca_geom_subblocks(self):
+        """Map each named sub-block inside ``%geom`` to its own lines.
+
+        ORCA drives a relaxed scan and holds a constraint through sub-blocks
+        of ``%geom``, each closed by its own ``end`` before the block's own
+        ``end``. Echoed output lines carry a ``| n>`` prefix, which is
+        stripped here so one parser serves a generated ``.inp`` and a
+        completed ``.out`` alike, as the %tddft and %irc readers already do.
+        """
+
+        blocks: dict[str, list[str]] = {}
+        echo_pattern = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        inside_geom = False
+        current = None
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo_pattern.match(stripped)
+            if match is not None:
+                stripped = match.group(1).strip()
+            stripped = stripped.split("#", 1)[0].strip()
+            if not stripped:
+                continue
+            lowered = stripped.casefold()
+            if lowered.split()[0] == "%geom":
+                inside_geom = True
+                current = None
+                continue
+            if not inside_geom:
+                continue
+            if lowered == "end":
+                if current is None:
+                    inside_geom = False
+                else:
+                    current = None
+                continue
+            if current is None:
+                name = lowered.split()[0]
+                if name in {"scan", "constraints", "modify_internal"}:
+                    current = name
+                    blocks.setdefault(current, [])
+                    remainder = stripped.split(None, 1)
+                    if len(remainder) > 1:
+                        blocks[current].append(remainder[1])
+                continue
+            blocks[current].append(stripped)
+        return blocks
+
+    @property
+    def scan_coordinates(self):
+        """Driven coordinate lines of a %geom Scan block, verbatim."""
+
+        return tuple(self._orca_geom_subblocks.get("scan", ()))
+
+    @property
+    def constrained_coordinates(self):
+        """Held coordinate lines of a %geom Constraints block, verbatim."""
+
+        return tuple(self._orca_geom_subblocks.get("constraints", ()))
 
     @property
     def freq(self):
