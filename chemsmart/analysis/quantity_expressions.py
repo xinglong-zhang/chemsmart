@@ -63,6 +63,8 @@ _OPERATIONS = frozenset(
         "mean",
         "min",
         "max",
+        "coordinate_at_maximum",
+        "coordinate_at_minimum",
         "distance",
         "angle",
         "dihedral",
@@ -114,6 +116,18 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
     "mean": "arithmetic mean over inputs or over one vector input",
     "min": "smallest of the inputs",
     "max": "largest of the inputs",
+    "coordinate_at_maximum": (
+        "where along a series its largest value falls. Takes exactly two "
+        "equal-length vectors in order: the values being extremised, then the "
+        "coordinate they were measured at. Returns that coordinate, carrying "
+        "the coordinate's own dimension. For a scanned surface this is the "
+        "position of the barrier, which max alone cannot give"
+    ),
+    "coordinate_at_minimum": (
+        "where along a series its smallest value falls; same two ordered "
+        "vectors as coordinate_at_maximum. For a scanned surface this is the "
+        "position of the well"
+    ),
     "distance": "distance between two indexed coordinate vectors",
     "angle": "angle at the middle of three indexed coordinate vectors",
     "dihedral": (
@@ -1718,6 +1732,48 @@ def _node_value(
             "max": np.max,
         }[operation]
         payload = float(reducer(joined))
+        unit = canonical_unit_for_dimension(dimension)
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=payload,
+            unit=unit,
+            dimension=dimension,
+            evidence_ref=evidence_ref,
+        )
+
+    if operation in {"coordinate_at_maximum", "coordinate_at_minimum"}:
+        # max() gives a barrier's height; nothing gave its position, because
+        # the reducers above discard the index they reduced over.  Locating an
+        # extremum is therefore not reachable by composing them, which is why
+        # this is an operation rather than a recipe.
+        if len(inputs) != 2:
+            raise QuantityExpressionError(
+                f"{operation} requires exactly two inputs in order, the "
+                "values being extremised and the coordinate they were "
+                f"measured at; got {len(inputs)}"
+            )
+        values = _numeric(inputs[0]).reshape(-1)
+        coordinates = _numeric(inputs[1]).reshape(-1)
+        if values.size != coordinates.size:
+            raise QuantityExpressionError(
+                f"{operation} needs one coordinate per value; got "
+                f"{values.size} values and {coordinates.size} coordinates"
+            )
+        if values.size < 2:
+            raise QuantityExpressionError(
+                f"{operation} needs a series; a single point has no extremum"
+            )
+        index = int(
+            np.argmax(values)
+            if operation == "coordinate_at_maximum"
+            else np.argmin(values)
+        )
+        # The answer is a coordinate, so it carries the coordinate's dimension
+        # and not the extremised quantity's.
+        dimension = inputs[1].dimension
+        payload = float(coordinates[index])
         unit = canonical_unit_for_dimension(dimension)
         return make_quantity_value(
             quantity_id=node.node_id,
