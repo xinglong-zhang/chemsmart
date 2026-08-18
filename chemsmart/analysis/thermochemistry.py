@@ -6,6 +6,7 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
+from chemsmart.analysis.aggregation import boltzmann_populations
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
@@ -1664,12 +1665,26 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
     """Class to compute Boltzmann-averaged
     thermochemical properties from a list of files."""
 
-    def __init__(self, files, energy_type="gibbs", **kwargs):
+    def __init__(
+        self, files, energy_type="gibbs", degeneracies=None, **kwargs
+    ):
         super().__init__(
             filename=files[
                 0
             ],  # No single file, we will take molecule from first filename
             **kwargs,
+        )
+        #: One multiplicity per conformer, in file order.  A pair of
+        #: enantiomeric or symmetry-related wells contributes twice and
+        #: omitting that is a scientific error rather than an approximation:
+        #: counting n-butane's two gauche wells once gives 82% anti where the
+        #: correct treatment gives 70%.  Defaults to one each, which is the
+        #: previous behaviour, so a caller that does not know its degeneracies
+        #: is no worse off than before -- but one that does can now say so.
+        self.degeneracies = (
+            tuple(float(item) for item in degeneracies)
+            if degeneracies is not None
+            else None
         )
         """
         Initialize with a list of Gaussian or ORCA output files.
@@ -1770,16 +1785,18 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             energies.append(energy)
         energies = np.array(energies)
 
-        # Compute Boltzmann weights
-        beta = 1.0 / (
-            R * temperature
-        )  #  beta = 1 / (R * temperature) in J^-1 mol
-        energies_shifted = energies - np.min(
-            energies
-        )  # Shift to avoid overflow
-        boltzmann_factors = np.exp(-beta * energies_shifted)
-        partition_function = np.sum(boltzmann_factors)
-        weights = boltzmann_factors / partition_function
+        # One implementation of this weighting, not two.  This hand-rolled the
+        # partition function and silently omitted per-state degeneracies, while
+        # the shared routine documents that omission as a scientific error and
+        # takes them as an argument.  Energies here are J/mol.
+        weights = np.array(
+            boltzmann_populations(
+                tuple(float(value) / 1000.0 for value in energies),
+                temperature=temperature,
+                unit="kj/mol",
+                degeneracies=self.degeneracies,
+            )
+        )
 
         # Compute weighted averages for thermochemical properties
         self._electronic_energy = np.sum(
