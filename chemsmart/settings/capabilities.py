@@ -346,7 +346,17 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 ),
                 EngineJobCapability(
                     engine="cpu",
+                    jobtype="modred",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
                     jobtype="opt",
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="scan",
                     execution_supported=False,
                 ),
                 EngineJobCapability(
@@ -406,10 +416,24 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 ),
                 EngineJobCapability(
                     engine="cpu",
+                    jobtype="modred",
+                    # Constrained optimisation is declared for planning and
+                    # preview first.  Execution is claimed only once a real
+                    # run on this target has qualified it, which is the same
+                    # order irc and neb are held to above.
+                    execution_supported=False,
+                ),
+                EngineJobCapability(
+                    engine="cpu",
                     jobtype="neb",
                     execution_supported=False,
                 ),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
+                EngineJobCapability(
+                    engine="cpu",
+                    jobtype="scan",
+                    execution_supported=False,
+                ),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
                 EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(engine="cpu", jobtype="ts"),

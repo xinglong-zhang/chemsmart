@@ -33,14 +33,18 @@ def _write_input(path: Path, route: str) -> None:
 
 
 def test_gaussian_declares_canonical_ts_and_irc_preview_stages():
-    assert _conformance_jobtypes("gaussian", "cpu") == (
-        "irc",
-        "link",
-        "opt",
-        "sp",
-        "td",
-        "ts",
-    )
+    """The reaction-path stages stay declared as the surface widens.
+
+    This asserted the whole jobtype tuple, which made it a tripwire for any
+    capability addition rather than a guard on what it is named for.  Declaring
+    a new family is a deliberate act with its own evidence; silently losing
+    ``ts`` or ``irc`` is the regression worth catching.
+    """
+
+    declared = _conformance_jobtypes("gaussian", "cpu")
+
+    assert {"irc", "link", "opt", "sp", "td", "ts"} <= set(declared)
+    assert declared == tuple(sorted(declared)), "declaration order is sorted"
 
 
 def test_irc_maxpoints_is_not_misread_as_transition_state():
