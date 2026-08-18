@@ -3055,6 +3055,17 @@ def _frozen_producer_edge_rule(
     return FrozenProducerEdgeRuleV1(**body, rule_sha256=canonical_sha256(body))
 
 
+#: Producer stages whose geometry a consumer may wait on inside one approval.
+#: Each of these ends at a single stationary structure that ChemSmart's parser
+#: selects and validates without anyone choosing between candidates.
+#:
+#: A relaxed scan is deliberately absent. It ends at a surface, not a structure,
+#: and picking which point to carry forward is a scientific judgement that the
+#: computed surface has to inform -- so it cannot be settled in advance, and the
+#: host must not settle it on the scientist's behalf.
+DEFERRABLE_GEOMETRY_PRODUCER_STAGES = frozenset({"opt", "ts"})
+
+
 def is_validated_optimized_geometry_edge(
     plan: ScientificWorkflowPlanV2,
     edge: ScientificWorkflowEdgeV2,
@@ -3086,7 +3097,10 @@ def is_validated_optimized_geometry_edge(
         ),
         None,
     )
-    return bool(source is not None and source.stage in {"opt", "ts"})
+    return bool(
+        source is not None
+        and source.stage in DEFERRABLE_GEOMETRY_PRODUCER_STAGES
+    )
 
 
 def is_validated_orca_ts_hessian_edge(

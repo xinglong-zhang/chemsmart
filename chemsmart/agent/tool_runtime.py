@@ -116,6 +116,7 @@ from chemsmart.agent.execution import (
     handoff_final_orca_ts_hessian,
     invocation_identity_sha256,
     is_validated_orca_ts_hessian_edge,
+    DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
     is_validated_optimized_geometry_edge,
     promote_project_candidate,
     execution_path_placeholder,
@@ -246,6 +247,51 @@ class _CommandContext:
     #: approved binding can record them. Without that the executor has nothing
     #: to rebuild a scan's range from.
     internal_coordinates: Mapping[str, Any] | None = None
+
+
+def _undeferrable_producer_finding(
+    waiting_producers: Sequence[Mapping[str, Any]],
+) -> dict[str, str]:
+    """Explain a wait that no amount of model effort can end.
+
+    A consumer waiting on an ``opt`` or ``ts`` geometry is deferrable: that
+    producer ends at one stationary structure, so the stage can sit inside the
+    same approval and take it when it exists. A consumer waiting on a relaxed
+    scan cannot, because a scan ends at a surface and which point to carry
+    forward is a scientific judgement the surface has to inform.
+
+    Told only to "materialize the declared workflow inputs", a session tries to
+    do the impossible and its node blocks approval for ever with no reason
+    given. Naming the real constraint is the difference between a dead end and
+    a decision: run the scan, read its surface, choose a point, and plan the
+    next stage against that geometry -- which is a changed molecular input and
+    therefore a new workflow with its own review.
+    """
+
+    undeferrable = tuple(
+        item
+        for item in waiting_producers
+        if not item.get("deferrable_within_one_approval", True)
+    )
+    if not undeferrable:
+        return {"next_action": "materialize the declared workflow inputs"}
+    names = ", ".join(
+        f"{item.get('producer_node_id')} ({item.get('producer_stage')})"
+        for item in undeferrable
+    )
+    return {
+        "finding": (
+            f"this node waits on {names}, which does not end at a single "
+            "stationary geometry; which structure to carry forward is a "
+            "scientific choice the computed result has to inform, so it "
+            "cannot be settled inside this approval"
+        ),
+        "next_action": (
+            "either retain this stage as declared non-executable intent with "
+            "its reason, or drop it from this workflow and plan it once the "
+            "producer's result exists and a structure has been chosen from it"
+        ),
+    }
 
 
 def _node_coordinates(node) -> dict[str, str]:
@@ -3712,11 +3758,24 @@ class CommandCompiledToolHostV1:
                     )
                 )
                 if artifact is None:
+                    producer_stage = next(
+                        (
+                            candidate.stage
+                            for candidate in scientific_v2.nodes
+                            if candidate.node_id == item.producer_node_id
+                        ),
+                        "",
+                    )
                     waiting_producers.append(
                         {
                             "binding_id": item.binding_id,
                             "producer_node_id": item.producer_node_id,
                             "producer_output_id": item.producer_output_id,
+                            "producer_stage": producer_stage,
+                            "deferrable_within_one_approval": (
+                                producer_stage
+                                in DEFERRABLE_GEOMETRY_PRODUCER_STAGES
+                            ),
                         }
                     )
                     continue
@@ -3738,7 +3797,7 @@ class CommandCompiledToolHostV1:
                 "node_id": node_id,
                 "producer_inputs": tuple(waiting_producers),
                 "external_inputs": tuple(waiting_artifacts),
-                "next_action": "materialize the declared workflow inputs",
+                **_undeferrable_producer_finding(waiting_producers),
             }
         if not resolved_inputs:
             return {
