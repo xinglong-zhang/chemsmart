@@ -489,6 +489,13 @@ class ToolLoopRunner:
                             terminal_state = "complete"
                             terminal_reason = "host readiness gates passed"
                         else:
+                            # A green preflight with an unapprovable workflow
+                            # is a planned stop, and the event store requires
+                            # a planned termination to carry the workflow
+                            # draft itself -- not the preflight receipts.
+                            completion_required = (
+                                self.host.latest_workflow_draft_receipt(),
+                            )
                             terminal_state = "planned"
                             terminal_reason = _unapprovable_reason(unapproved)
                     except ContractError:
