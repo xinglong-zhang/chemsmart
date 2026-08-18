@@ -4830,6 +4830,9 @@ class CommandCompiledToolHostV1:
             input_artifact=context.input_artifact,
             scientific_identity=context.scientific_identity,
             job_artifact_options=dict(context.job_artifact_options),
+            job_option_values=native_coordinate_options(
+                context.proposal.program, context.internal_coordinates
+            ),
             live_schema=self.live_schema,
             server=(
                 self.execution_server
@@ -7041,6 +7044,16 @@ class CommandCompiledToolHostV1:
                     input_artifact=context.input_artifact,
                     scientific_identity=scientific_identity,
                     job_artifact_options=dict(context.job_artifact_options),
+                    # A node whose geometry comes from a producer compiles
+                    # here rather than through the prepare path, so a driven
+                    # coordinate omitted here is dropped for exactly the
+                    # workflows that need it most: a scan of a structure some
+                    # earlier stage optimised. Observed on a real paper task,
+                    # where two correctly specified torsion scans reached the
+                    # human review as a bare `scan` with no range at all.
+                    job_option_values=native_coordinate_options(
+                        context.proposal.program, context.internal_coordinates
+                    ),
                     live_schema=self.live_schema,
                     server=self.preview_server,
                 )

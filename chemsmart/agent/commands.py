@@ -278,6 +278,10 @@ _HOST_OWNED_OPTIONS = frozenset(
 #: How many atoms each internal coordinate is defined by.
 _COORDINATE_ATOM_COUNTS = {"bond": 2, "angle": 3, "dihedral": 4}
 
+#: Job families that are defined by the coordinate they drive or hold. Without
+#: one they are not that job at all.
+_COORDINATE_DRIVEN_JOBTYPES = frozenset({"scan", "modred"})
+
 
 def _coordinate_atoms(entry: Mapping[str, Any]) -> list[int]:
     """Validate one internal coordinate and return its atom numbering."""
@@ -510,6 +514,23 @@ def compile_command(
                 artifact_id=artifact.artifact_id,
                 artifact_sha256=artifact.sha256,
             )
+        )
+
+    # A family whose whole purpose is to drive or hold a coordinate must
+    # actually carry one by the time it reaches argv.  Compiling it without
+    # produces a command that runs cleanly and computes something else -- an
+    # ordinary optimisation wearing a scan's name -- which is the silent
+    # substitution of one calculation for another that this layer exists to
+    # prevent.  It is worth a guard rather than a comment because the
+    # coordinate has to be threaded through every path that compiles from a
+    # node, and each one that forgot it failed exactly this way.
+    if proposal.jobtype in _COORDINATE_DRIVEN_JOBTYPES and not (
+        job_option_values or {}
+    ):
+        raise ContractError(
+            f"a {proposal.program} {proposal.jobtype} drives or holds an "
+            "internal coordinate; compiling one with no coordinate would "
+            "run an ordinary optimisation under this node's name"
         )
 
     # Some scientific intent is neither a project setting nor a file.  A
