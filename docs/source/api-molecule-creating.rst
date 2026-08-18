@@ -47,11 +47,21 @@ The following examples use real test files shipped with the CHEMSMART repository
    print(mol.chemical_formula)   # C6H6
 
    # Use a specific structure from a multi-step optimization (1-based index)
-   # Note: ``index`` must be a string (``"5"``, ``"-1"``, or ``":"`` for all)
+   # Note: index must be a string ("5", "-1", or ":" for all)
    mol = Molecule.from_filepath(
        "tests/data/GaussianTests/outputs/collidine_opt.log", index="5"
    )
-   print(mol.chemical_formula)   # C8H11N
+   print(f"Structure 5: E = {mol.energy:.6f} Ha")   # -365.455947
+
+   # Compare with the first and last structures
+   mol_first = Molecule.from_filepath(
+       "tests/data/GaussianTests/outputs/collidine_opt.log", index="1"
+   )
+   mol_last = Molecule.from_filepath(
+       "tests/data/GaussianTests/outputs/collidine_opt.log", index="-1"
+   )
+   print(f"Structure 1:  E = {mol_first.energy:.6f} Ha")   # -365.446140
+   print(f"Structure 13: E = {mol_last.energy:.6f} Ha")   # -365.456178
 
    # Get all conformers as a list (18 structures in this file)
    mols = Molecule.from_filepath(

@@ -14,9 +14,5 @@ See the following pages for detailed documentation:
 
 -  :doc:`api-molecule-creating`
 -  :doc:`api-molecule-manipulation`
--  :doc:`api-molecule-conversion`
 -  :doc:`api-molecule-properties`
 -  :doc:`api-molecule-geometry`
--  :doc:`api-molecule-vibrations`
--  :doc:`api-molecule-subclasses`
--  :doc:`api-molecule-reference`

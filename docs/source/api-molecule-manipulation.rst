@@ -144,3 +144,52 @@ writer methods directly:
 - ``write_cosmorsxyz(filename, mode="w")`` — Write COSMORS-XYZ format.
 - ``write_coordinates(filename, mode="w", atom_indices=None)`` — Write a text coordinate block.
 - ``write_pdb_pybabel(filename)`` — Write PDB via PyBabel.
+
+Format Conversion
+-----------------
+
+CHEMSMART provides bidirectional conversion with popular chemistry libraries (ASE, pymatgen, RDKit, NetworkX, etc.)
+via a set of :meth:`to_*` methods.
+
+.. note::
+
+   Always start a format-conversion workflow from a **calculation output file**
+   (``xTB .out``, ``Gaussian .log``, ``ORCA .out``, etc.). Plain ``.xyz``
+   files carry no charge or spin multiplicity, so downstream conversions may fail.
+
+.. code:: python
+
+   # Start from a calculation output (has charge, multiplicity, energy, forces)
+   mol = Molecule.from_filepath(
+       "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+   )
+   print(mol.chemical_formula)   # CO2
+
+   # ASE Atoms (energy → eV, forces → eV/Å)
+   atoms = mol.to_ase()
+   print(type(atoms).__name__)          # AtomsChargeMultiplicity
+
+   # pymatgen Molecule
+   pymatgen_mol = mol.to_pymatgen()
+   print(type(pymatgen_mol).__name__)   # Molecule
+
+   # RDKit Mol (bonds & stereo from 3D)
+   rdkit_mol = mol.to_rdkit()
+   print(type(rdkit_mol).__name__)      # Mol
+
+   # SMILES string
+   print(mol.to_smiles())               # O=C=O
+
+   # PDB string
+   print(mol.to_pdb()[:50])             # first line of PDB block
+
+   # NetworkX graph (nodes = atoms, edges = bonds)
+   graph = mol.to_graph()
+   print(graph.number_of_nodes(), graph.number_of_edges())   # 3 2
+
+   # ML feature vector
+   X = mol.to_X_data()
+   print(len(X))                        # feature vector length
+
+**Conversion methods:** :meth:`to_ase`, :meth:`to_pymatgen`, :meth:`to_rdkit`, :meth:`to_smiles`,
+:meth:`to_pdb`, :meth:`to_cosmorsxyz`, :meth:`to_graph`, :meth:`to_X_data`.

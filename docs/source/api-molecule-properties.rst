@@ -4,7 +4,7 @@ Molecular Properties
 Molecular Identifiers
 ---------------------
 
-CHEMSMART provides several identifiers for molecules and structures:
+CHEMSMART provides several identifiers for molecules and structures. The four most commonly used ones are:
 
 .. list-table::
    :header-rows: 1
@@ -12,12 +12,6 @@ CHEMSMART provides several identifiers for molecules and structures:
 
    -  -  Property
       -  Description
-
-   -  -  :attr:`~Molecule.chemical_formula`
-      -  Chemical formula in Hill notation (e.g. ``"H2O"``)
-
-   -  -  :attr:`~Molecule.empirical_formula`
-      -  Empirical formula in Hill notation
 
    -  -  :attr:`~Molecule.smiles`
       -  SMILES string via RDKit
@@ -31,21 +25,11 @@ CHEMSMART provides several identifiers for molecules and structures:
    -  -  :attr:`~Molecule.inchikey`
       -  InChIKey string (requires Open Babel)
 
-   -  -  :attr:`~Molecule.molecule_id`
-      -  Unique molecular identifier (= InChIKey)
-
-   -  -  :attr:`~Molecule.structure_id`
-      -  SHA-256 hash of canonical geometry + charge + multiplicity
-
-   -  -  :attr:`~Molecule.structure_label`
-      -  Human-readable label: ``"str-H2O-a1b2c3d4e5f6"``
-
-   -  -  :attr:`~Molecule.molecule_label`
-      -  Human-readable label: ``"mol-H2O-UHOVQNZJYSORNB-UHFFFAOYSA-N"``
+All other identifiers — :attr:`~Molecule.chemical_formula`, :attr:`~Molecule.empirical_formula`,
+:attr:`~Molecule.molecule_id`, :attr:`~Molecule.structure_id`, etc. — are also available as attributes.
 
 .. code:: python
 
-   # Use H2O molecule (from the "Creating a Molecule" section above)
    mol = Molecule(
        symbols=["O", "H", "H"],
        positions=np.array([
@@ -53,36 +37,12 @@ CHEMSMART provides several identifiers for molecules and structures:
            [0.0,  0.76, -0.477],
            [0.0, -0.76, -0.477],
        ]),
-       charge=0,
-       multiplicity=1,
    )
 
-   print(mol.chemical_formula)       # H2O
-   print(mol.smiles)                 # O
-   print(mol.inchikey)               # UHOVQNZJYSORNB-UHFFFAOYSA-N
-   print(mol.structure_id)           # a1b2c3d4e5f6...
-   print(mol.structure_label)        # str-H2O-a1b2c3d4e5f6
-
-**Attributes:**
-
--  ``smiles`` (str or None) — SMILES string (convenience, equivalent to ``to_smiles()``).
--  ``cxsmiles`` (str or None) — CXSMILES string (extended SMILES with 3D/stereo info, via RDKit).
--  ``inchi`` (str or None) — InChI string (via RDKit).
--  ``inchikey`` (str or None) — InChIKey string (27 characters, via Open Babel).
--  ``molecule_id`` (str or None) — Unique molecular identifier (InChIKey).
--  ``molecule_label`` (str or None) — Human-readable label, e.g. ``"mol-C6H6-UHOVQNZJYSORNB-UHFFFAOYSA-N"``.
--  ``structure_id`` (str) — SHA-256 hex digest of canonical geometry + charge + multiplicity.
--  ``structure_label`` (str) — Human-readable label, e.g. ``"str-C6H6-a1b2c3d4e5f6"``.
--  ``chemical_formula`` (str) — Chemical formula in Hill notation.
--  ``empirical_formula`` (str) — Empirical formula in Hill notation.
--  ``elements`` (list) — Sorted unique element symbols, e.g. ``["C", "O"]``.
--  ``element_counts`` (dict) — Per-element counts, e.g. ``{"C": 1, "O": 2}``.
-
-:meth:`~chemsmart.io.molecules.structure.Molecule.get_chemical_formula(hill=True)`
-Return the chemical formula string in Hill notation (or plain order if ``hill=False``).
-
-- ``hill`` (bool) — If ``True`` (default), Hill ordering is used (C first, then H, then the rest alphabetically; if no C, all alphabetical).
-- Returns: ``str`` — Chemical formula, e.g. ``"H2O"``, ``"C6H6"``.
+   print(mol.smiles)       # O
+   print(mol.cxsmiles)     # O
+   print(mol.inchi)        # InChI=1S/H2O/h1H2O
+   print(mol.inchikey)     # UHOVQNZJYSORNB-UHFFFAOYSA-N
 
 Atomic and Molecular Properties
 -------------------------------
