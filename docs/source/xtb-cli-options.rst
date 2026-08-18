@@ -131,12 +131,14 @@ Molecular Properties Options
 
    -  -  ``-m, --multiplicity``
       -  int
-      -  Molecular multiplicity
+      -  Molecular spin multiplicity, this is the actual spin multiplicity (2S+1) and it will be converted automatically
+         by CHEMSMART to uhf in xTB, which is the number of unpaired electrons.
 
 .. note::
 
-   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m``. CHEMSMART passes charge as ``--chrg``
-   and unpaired electrons as ``--uhf`` (``multiplicity - 1``).
+   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m`` for charge and spin multiplicity.
+   CHEMSMART automatically converts the supplied charge and multiplicity into ``--chrg`` and unpaired electrons
+   ``--uhf`` (= multiplicity - 1), respectively, required by xTB.
 
 Examples:
 
@@ -161,7 +163,8 @@ Method Options
 
    -  -  ``-g, --gfn-version``
       -  choice
-      -  GFN method: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``
+      -  GFN method: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``. If not specified, defaults to the xTB default
+         (``gfn2``).
 
 Examples:
 
@@ -173,8 +176,8 @@ Examples:
    # GFN-FF single point
    chemsmart run xtb -p test -f molecule.xyz -g gfnff sp
 
-Route and Calculation Options
-=============================
+Calculation Options
+===================
 
 .. list-table::
    :header-rows: 1
@@ -190,7 +193,8 @@ Route and Calculation Options
 
    -  -  ``--grad/--no-grad``
       -  bool
-      -  Enable or disable gradient output (``--grad``)
+      -  Enable or disable gradient output (``--grad``). If not specified, defaults to the xTB default (disable gradient
+         output).
 
 Examples:
 
@@ -231,6 +235,16 @@ Solvent options are specified at the xTB group level and apply to all job types.
 
    CHEMSMART renders solvent flags only when **both** ``solvent_model`` and ``solvent_id`` are set. Specifying only one
    of them leaves the calculation in the gas phase.
+
+.. note::
+
+   See the `xTB documentation on parameterized solvents
+   <https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents>`_ for the authoritative list and
+   model-specific availability tables.
+
+   CHEMSMART does not verify model-specific compatibility at job-setup time. If a ``solvent_id`` is not supported for
+   your chosen model, xTB may fail at runtime. Please check the official xTB documentation before submitting the
+   calculation.
 
 Examples:
 

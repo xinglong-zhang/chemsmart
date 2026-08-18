@@ -51,6 +51,7 @@ computational chemistry software.
    gaussian-qrc
    gaussian-electronic-structure
    gaussian-qmmm-jobs
+   gaussian_submitqmmmjobs
    gaussian-other-jobs
 
 .. toctree::
@@ -62,6 +63,7 @@ computational chemistry software.
    orca-transition-state
    orca-direct-input
    orca-multiscale-calculations
+   orca_submitqmmmjobs
 
 .. toctree::
    :maxdepth: 2

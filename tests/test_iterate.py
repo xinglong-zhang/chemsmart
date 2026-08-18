@@ -364,7 +364,7 @@ def test_iterate_validation_failures_comprehensive(tmpdir):
             label = "s1"
             link_index = "0" 
             """,
-            ["Found invalid index <= 0", "link_index"],
+            ["Invalid format '0'", "link_index"],
             "Skeleton zero link_index",
         ),
         # Case 7: Negative skeleton_indices (S2 Check)
