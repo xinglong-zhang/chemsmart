@@ -1,7 +1,7 @@
 ---
 name: method-adequacy
 version: 0.1.0
-description: When a chosen method, basis set, solvation model or conformer sample is good enough for the question being asked — which errors cancel in a comparison and which do not, when a computed number is too small to be resolved by the method that produced it, and how to state the resulting uncertainty honestly.
+description: Judges whether a method, basis set, solvation model or conformer sample can answer the question that was asked - which errors cancel in a comparison and which do not, when an effect is smaller than the method's own error, and where the uncertainty comes from. Use this skill BEFORE reporting any computed difference, comparing a value with experiment, or answering whether a setup is trustworthy, reliable or good enough - including when nothing in the request mentions accuracy. Triggers on comparing two species, conformers or isomers; any charged or open-shell species; interaction, binding, association or non-covalent energies; branching or substituent effects; a double-zeta or otherwise small basis; a shortfall against a measured value; and the words trustworthy, reliable, accurate, adequate, uncertainty or limitation. Do NOT use it for the direction, sign, units or standard state of a reported quantity, which belong to scientific-conventions.
 ---
 
 # Is this method adequate for this question?

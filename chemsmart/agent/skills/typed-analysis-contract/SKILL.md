@@ -1,7 +1,7 @@
 ---
 name: typed-analysis-contract
 version: 0.1.0
-description: How the typed analysis layer expects a workflow to be expressed — what an identifier, a unit, a declared quantity kind and an evidence reference each mean, which parts the host derives for you, and how a rejected node is repaired without re-authoring the graph.
+description: Explains how the typed analysis layer expects intent to be written - identifiers, units, declared quantity kinds, evidence references, and which bookkeeping the host derives for you rather than demanding. Use this skill BEFORE re-sending any analysis call the host refused, and before authoring a workflow whose analysis nodes compare repeated quantities. Triggers on a refusal naming an identifier pattern, a missing or unsupported unit, a dimensionless quantity, a declared quantity kind an operation does not derive, a selector a result does not resolve, a semantic role, a producer output, or a blocked stage. Do NOT use it to choose the chemistry, the method or the observable - only for how an already-chosen analysis is expressed.
 ---
 
 # Expressing an analysis so the host can carry the evidence
