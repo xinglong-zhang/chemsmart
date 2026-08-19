@@ -252,6 +252,79 @@ def build_command_compiled_tool_surface(
             ("artifact_id", "point_index"),
         ),
         _tool(
+            "compose_molecular_arrangement",
+            (
+                "Place two identity-bound geometry artifacts into one "
+                "arrangement at an explicit atomic contact. You choose the "
+                "fragments, the 1-based contact atoms, and the contact "
+                "distance in angstrom; the host owns the placement "
+                "mathematics (the named pair held at the distance, every "
+                "other interfragment pair kept outside covalent radii plus "
+                "buffer, remaining freedom maximising separation) and "
+                "writes the composed geometry into the workspace with full "
+                "parent lineage. Composition never infers an electronic "
+                "state: bind the arrangement's charge and multiplicity "
+                "explicitly afterwards, and the stage that consumes it is "
+                "a new workflow needing its own review. Both fragments must "
+                "already carry a scientific identity."
+            ),
+            {
+                "composed_artifact_id": {
+                    **_public_identifier(),
+                    "description": (
+                        "Workspace-unique identifier for the composed "
+                        "geometry artifact."
+                    ),
+                },
+                "fragment_a_artifact_id": {
+                    **_string(),
+                    "description": (
+                        "Identity-bound geometry_xyz artifact whose "
+                        "coordinates are kept fixed; its atoms come first "
+                        "in the composed file."
+                    ),
+                },
+                "fragment_b_artifact_id": {
+                    **_string(),
+                    "description": (
+                        "Identity-bound geometry_xyz artifact the host "
+                        "places against fragment A."
+                    ),
+                },
+                "fragment_a_atom": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "1-based contact atom within fragment A."
+                    ),
+                },
+                "fragment_b_atom": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "1-based contact atom within fragment B."
+                    ),
+                },
+                "distance_angstrom": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 10.0,
+                    "description": (
+                        "Contact distance between the two named atoms, in "
+                        "angstrom."
+                    ),
+                },
+            },
+            (
+                "composed_artifact_id",
+                "fragment_a_artifact_id",
+                "fragment_b_artifact_id",
+                "fragment_a_atom",
+                "fragment_b_atom",
+                "distance_angstrom",
+            ),
+        ),
+        _tool(
             "read_project_yaml",
             "Read an already host-bound project artifact by stable ID.",
             {"program": program, "project_artifact_id": _string()},

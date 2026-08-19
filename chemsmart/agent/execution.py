@@ -359,6 +359,224 @@ class ProjectArtifactPromotionV1:
             raise ContractError("project promotion receipt digest mismatch")
 
 
+@dataclass(frozen=True)
+class MolecularCompositionReceiptV1:
+    """Host-owned lineage of one two-fragment molecular arrangement.
+
+    The host owns the placement mathematics; the model owns the choice of
+    fragments, contact atoms, and distance. Composition never infers an
+    electronic state: charge and multiplicity of the arrangement are bound
+    separately and explicitly, and the stage that consumes the composed
+    geometry is a new workflow for human review.
+    """
+
+    schema_version: str
+    composed_artifact_id: str
+    composed_artifact_sha256: str
+    fragment_a_artifact_id: str
+    fragment_a_sha256: str
+    fragment_a_identity_sha256: str
+    fragment_b_artifact_id: str
+    fragment_b_sha256: str
+    fragment_b_identity_sha256: str
+    placement: dict[str, Any]
+    achieved_contact_distance_angstrom: float
+    min_interfragment_distance_angstrom: float
+    atom_count: int
+    formula: str
+    atom_order_note: str
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.molecular-composition.v1":
+            raise ContractError("unsupported molecular composition receipt")
+        for name, digest in (
+            ("composed_artifact_sha256", self.composed_artifact_sha256),
+            ("fragment_a_sha256", self.fragment_a_sha256),
+            ("fragment_a_identity_sha256", self.fragment_a_identity_sha256),
+            ("fragment_b_sha256", self.fragment_b_sha256),
+            ("fragment_b_identity_sha256", self.fragment_b_identity_sha256),
+        ):
+            require_sha256(digest, name)
+        if self.atom_count < 2:
+            raise ContractError("a composition carries at least two atoms")
+        if self.status != "composed":
+            raise ContractError("molecular composition must be composed")
+        object.__setattr__(
+            self, "placement", canonical_data(dict(self.placement))
+        )
+        body = {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "receipt_sha256"
+        }
+        if self.receipt_sha256 != canonical_sha256(body):
+            raise ContractError("molecular composition digest mismatch")
+
+
+def compose_trusted_molecular_arrangement(
+    *,
+    approved_workspace: str | Path,
+    composed_artifact_id: str,
+    fragment_a: TrustedArtifactRefV1,
+    fragment_a_identity_sha256: str,
+    fragment_b: TrustedArtifactRefV1,
+    fragment_b_identity_sha256: str,
+    fragment_a_atom: int,
+    fragment_b_atom: int,
+    distance_angstrom: float,
+) -> tuple[TrustedArtifactRefV1, MolecularCompositionReceiptV1]:
+    """Place fragment B against fragment A at one explicit atomic contact.
+
+    Deterministic host-owned placement: the named contact pair is held at
+    the requested distance while every other interfragment pair stays
+    outside covalent-radii-plus-buffer, and the remaining freedom maximises
+    separation (the iterate module's SLSQP machinery, reused with the
+    model's contact distance instead of a covalent bond length). Fragment A
+    keeps its coordinates; the composed file lists fragment A's atoms first.
+    """
+
+    import numpy as np
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.iterate.iterate import (
+        DEFAULT_BUFFER,
+        IterateAnalyzer,
+    )
+    from chemsmart.utils.periodictable import covalent_radii
+
+    if fragment_a.kind != "geometry_xyz" or fragment_b.kind != "geometry_xyz":
+        raise ContractError(
+            "composition consumes two geometry_xyz artifacts"
+        )
+    distance = float(distance_angstrom)
+    if not 0.5 <= distance <= 10.0:
+        raise ContractError(
+            "contact distance must lie in [0.5, 10.0] angstrom; got "
+            f"{distance}"
+        )
+    path_a = _require_current_artifact(fragment_a, "composition fragment A")
+    path_b = _require_current_artifact(fragment_b, "composition fragment B")
+    molecule_a = Molecule.from_filepath(str(path_a))
+    molecule_b = Molecule.from_filepath(str(path_b))
+    count_a = len(molecule_a.chemical_symbols)
+    count_b = len(molecule_b.chemical_symbols)
+    if not 1 <= int(fragment_a_atom) <= count_a:
+        raise ContractError(
+            f"fragment_a_atom must be 1..{count_a}; got {fragment_a_atom}"
+        )
+    if not 1 <= int(fragment_b_atom) <= count_b:
+        raise ContractError(
+            f"fragment_b_atom must be 1..{count_b}; got {fragment_b_atom}"
+        )
+    link_a = int(fragment_a_atom) - 1
+    link_b = int(fragment_b_atom) - 1
+
+    array_a = IterateAnalyzer._molecule_to_array(molecule_a)
+    array_b = IterateAnalyzer._molecule_to_array(molecule_b)
+    relative = IterateAnalyzer._calc_relative_coords(array_b, link_b)
+    elements_a = array_a[:, 0].astype(int)
+    elements_b = array_b[:, 0].astype(int)
+    radii_a = np.array([covalent_radii[z] for z in elements_a])
+    radii_b = np.array([covalent_radii[z] for z in elements_b])
+    min_dist_matrix = (
+        radii_b[:, np.newaxis] + radii_a[np.newaxis, :] + DEFAULT_BUFFER
+    )
+    ineq_mask = np.ones((count_b, count_a), dtype=bool)
+    ineq_mask[link_b, link_a] = False
+    placed = IterateAnalyzer._optimize_lagrange(
+        array_b,
+        array_a[:, 1:4],
+        96,
+        6,
+        link_a,
+        relative[:, 1:4],
+        distance,
+        min_dist_matrix,
+        link_b,
+        ineq_mask,
+    )
+    if placed is None:
+        raise ContractError(
+            "no clash-free arrangement satisfies the requested contact: "
+            "raise distance_angstrom or choose different contact atoms"
+        )
+    positions_a = array_a[:, 1:4]
+    positions_b = placed[:, 1:4]
+    achieved = float(
+        np.linalg.norm(positions_b[link_b] - positions_a[link_a])
+    )
+    pair_distances = np.linalg.norm(
+        positions_b[:, np.newaxis, :] - positions_a[np.newaxis, :, :],
+        axis=2,
+    )
+    minimum_separation = float(pair_distances.min())
+    symbols = tuple(molecule_a.chemical_symbols) + tuple(
+        molecule_b.chemical_symbols
+    )
+    composed = Molecule(
+        symbols=list(symbols),
+        positions=np.vstack((positions_a, positions_b)),
+    )
+    lines = [str(len(symbols)), (
+        "ChemSmart composed arrangement; fragment A atoms first; "
+        f"contact {fragment_a_atom}(A)-{fragment_b_atom}(B) at "
+        f"{achieved:.4f} angstrom; electronic state deliberately unbound"
+    )]
+    for symbol, position in zip(symbols, composed.positions):
+        lines.append(
+            f"{symbol:<3} {position[0]:.10f} {position[1]:.10f} "
+            f"{position[2]:.10f}"
+        )
+    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    target = _target_below(
+        _absolute_workspace(approved_workspace),
+        "artifacts",
+        f"{require_identifier(composed_artifact_id, 'artifact_id')}.xyz",
+    )
+    _write_exact_once(target, payload)
+    artifact = TrustedArtifactRefV1(
+        artifact_id=composed_artifact_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    placement = {
+        "schema_version": "chemsmart.placement-spec.v1",
+        "mode": "contact",
+        "fragment_a_atom": int(fragment_a_atom),
+        "fragment_b_atom": int(fragment_b_atom),
+        "distance_angstrom": distance,
+        "buffer_angstrom": DEFAULT_BUFFER,
+        "sphere_direction_samples": 96,
+        "axial_rotation_samples": 6,
+    }
+    body = {
+        "schema_version": "chemsmart.molecular-composition.v1",
+        "composed_artifact_id": artifact.artifact_id,
+        "composed_artifact_sha256": artifact.sha256,
+        "fragment_a_artifact_id": fragment_a.artifact_id,
+        "fragment_a_sha256": fragment_a.sha256,
+        "fragment_a_identity_sha256": fragment_a_identity_sha256,
+        "fragment_b_artifact_id": fragment_b.artifact_id,
+        "fragment_b_sha256": fragment_b.sha256,
+        "fragment_b_identity_sha256": fragment_b_identity_sha256,
+        "placement": placement,
+        "achieved_contact_distance_angstrom": round(achieved, 6),
+        "min_interfragment_distance_angstrom": round(minimum_separation, 6),
+        "atom_count": len(symbols),
+        "formula": composed.get_chemical_formula(),
+        "atom_order_note": "fragment A atoms first, then fragment B",
+        "status": "composed",
+    }
+    return artifact, MolecularCompositionReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
 def promote_project_candidate(
     render_receipt: ProjectRenderReceiptV1,
     *,

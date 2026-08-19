@@ -113,6 +113,8 @@ from chemsmart.agent.execution import (
     handoff_optimized_native_geometry,
     handoff_optimized_pyscf_geometry,
     handoff_optimized_xtb_geometry,
+    compose_trusted_molecular_arrangement,
+    MolecularCompositionReceiptV1,
     handoff_final_orca_ts_hessian,
     handoff_validated_orca_producer_hessian,
     invocation_identity_sha256,
@@ -1376,6 +1378,9 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 "analysis completion policy targets another task spec"
             )
+        self.molecular_compositions: dict[
+            str, MolecularCompositionReceiptV1
+        ] = {}
         self.invocations: dict[str, CanonicalCommandInvocationV1] = {}
         self.command_inspections: dict[str, CommandInspectionReceiptV1] = {}
         self.safe_previews: dict[str, SafePreviewReceiptV1] = {}
@@ -1684,6 +1689,9 @@ class CommandCompiledToolHostV1:
             "establish_project": self._establish_project,
             "bind_scientific_identity": self._bind_scientific_identity,
             "bind_scan_point_geometry": self._bind_scan_point_geometry,
+            "compose_molecular_arrangement": (
+                self._compose_molecular_arrangement
+            ),
             "read_project_yaml": self._read_project_yaml,
             "validate_project_yaml": self._validate_project_yaml,
             "plan_command_workflow": self._plan_command_workflow,
@@ -1867,6 +1875,89 @@ class CommandCompiledToolHostV1:
             "next_action": (
                 "bind this geometry's charge and multiplicity, then plan the "
                 "stage that uses it as a new workflow for review"
+            ),
+        }
+
+    def _compose_molecular_arrangement(
+        self, turn_id: str, values: dict
+    ) -> Any:
+        """Place two identity-bound fragments into one host-owned arrangement.
+
+        Cycle-039 observed four sessions in a row end with the paper's
+        observable uncomputable because nothing could join two approved
+        monomers; one session probed four invented option names looking for
+        this affordance. The host owns the placement mathematics and the
+        bytes; the model owns the scientific choices (fragments, contact
+        atoms, distance) and must bind the arrangement's charge and
+        multiplicity explicitly afterwards -- composition never infers an
+        electronic state, and the consuming stage is a new workflow.
+        """
+
+        if self.approved_workspace is None:
+            raise ContractError(
+                "composition requires an approved workspace to write into"
+            )
+        composed_artifact_id = str(values["composed_artifact_id"])
+        if composed_artifact_id in self.artifacts:
+            taken = sorted(self.artifacts)
+            raise ContractError(
+                f"artifact ID {composed_artifact_id!r} is already "
+                f"registered; choose one not in {taken}"
+            )
+        fragment_a = self._artifact(values["fragment_a_artifact_id"])
+        fragment_b = self._artifact(values["fragment_b_artifact_id"])
+        identities = {
+            binding.geometry_artifact_sha256: binding
+            for binding in self.scientific_identities.values()
+        }
+        for label, fragment in (("A", fragment_a), ("B", fragment_b)):
+            if fragment.sha256 not in identities:
+                raise ContractError(
+                    f"fragment {label} ({fragment.artifact_id!r}) carries "
+                    "no scientific identity; composition requires "
+                    "identity-bound parents -- call bind_scientific_identity "
+                    "for it first"
+                )
+        artifact, receipt = compose_trusted_molecular_arrangement(
+            approved_workspace=self.approved_workspace,
+            composed_artifact_id=composed_artifact_id,
+            fragment_a=fragment_a,
+            fragment_a_identity_sha256=(
+                identities[fragment_a.sha256].binding_sha256
+            ),
+            fragment_b=fragment_b,
+            fragment_b_identity_sha256=(
+                identities[fragment_b.sha256].binding_sha256
+            ),
+            fragment_a_atom=int(values["fragment_a_atom"]),
+            fragment_b_atom=int(values["fragment_b_atom"]),
+            distance_angstrom=float(values["distance_angstrom"]),
+        )
+        self.artifacts[artifact.artifact_id] = artifact
+        self.molecular_compositions[artifact.sha256] = receipt
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.MOLECULAR_ARRANGEMENT_COMPOSED.value,
+            payload={
+                "receipt_sha256": receipt.receipt_sha256,
+                "composed_artifact_id": artifact.artifact_id,
+                "composed_artifact_sha256": artifact.sha256,
+                "fragment_a_sha256": fragment_a.sha256,
+                "fragment_b_sha256": fragment_b.sha256,
+                "placement": receipt.placement,
+            },
+            idempotency_key=(
+                "molecular-composition:" + receipt.receipt_sha256
+            ),
+        )
+        return {
+            "composition": receipt,
+            "artifact": artifact,
+            "next_action": (
+                "bind charge and multiplicity explicitly with "
+                "bind_scientific_identity -- composition does not infer "
+                "electronic state; the stage that consumes this geometry "
+                "is a new workflow needing its own review"
             ),
         }
 
@@ -7781,7 +7872,45 @@ class CommandCompiledToolHostV1:
                 ),
                 None,
             )
-            if approved_identity is None:
+            composition = self.molecular_compositions.get(
+                context.input_artifact.sha256
+            )
+            if composition is not None:
+                # The human review displays the composed arrangement's full
+                # lineage: which approved parents, which contact, at what
+                # distance -- the single /approve covers exactly this
+                # displayed construction.
+                approved_parent_sha256s = {
+                    identity.geometry_sha256
+                    for identity in (
+                        self.approved_molecular_identities.values()
+                    )
+                }
+                parents_approved = {
+                    composition.fragment_a_sha256,
+                    composition.fragment_b_sha256,
+                }.issubset(approved_parent_sha256s)
+                composition_record = canonical_data(composition)
+                molecular_identity = {
+                    "identity_evidence_status": (
+                        "composed-from-approved-parents"
+                        if parents_approved
+                        else "composed-task-bound"
+                    ),
+                    **_review_molecule_identity(context.input_artifact),
+                    "composition": composition_record,
+                    "coordinate_identity": coordinate_identity,
+                    "input_binding_sha256": review_input_sha256,
+                    "charge": target_charge,
+                    "multiplicity": target_multiplicity,
+                    "electronic_state": "charge-and-multiplicity-specified",
+                    "scientific_identity_sha256": (
+                        context.scientific_identity.binding_sha256
+                        if edge is None
+                        else "deferred-until-producer-output"
+                    ),
+                }
+            elif approved_identity is None:
                 molecular_identity = {
                     "identity_evidence_status": "task-bound-geometry-only",
                     **_review_molecule_identity(context.input_artifact),
