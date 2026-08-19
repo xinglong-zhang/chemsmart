@@ -678,7 +678,12 @@ def build_command_compiled_tool_surface(
                 "electronic energy with low-level qRRHO thermochemistry. Use "
                 "enthalpy_increment_above_zero_point when adding a finite-"
                 "temperature increment to an already ZPE-corrected 0 K "
-                "quantity."
+                "quantity. The receipt also carries near_zero_mode_count: "
+                "modes within 20 cm-1 of zero are treated as numerical "
+                "noise, not evidence of a saddle point -- the documented "
+                "convention and the default acceptance criterion when the "
+                "task states none; an explicit criterion in the task text "
+                "always overrides it."
             ),
             {
                 "program": thermochemistry_program,
@@ -1762,10 +1767,22 @@ def _analysis_intent_node_schema() -> dict:
                 "type": "array",
                 "description": (
                     "Program-neutral validation predicates over named typed "
-                    "inputs. Use minimum_greater_equal with threshold 0 cm-1 "
-                    "for a no-imaginary-frequency requirement; do not hide "
-                    "criteria only in prose. A scientific_validation node "
-                    "declares exactly one dimensionless verdict output."
+                    "inputs; do not hide criteria only in prose. A "
+                    "scientific_validation node declares exactly one "
+                    "dimensionless verdict output. For imaginary-mode "
+                    "criteria there are two different questions -- say which "
+                    "you asked. Strict: minimum_greater_equal with threshold "
+                    "0 cm-1 fails on ANY negative mode; use it when the task "
+                    "demands zero imaginary modes without tolerance. "
+                    "Convention: ChemSmart's thermochemistry treats a mode "
+                    "within 20 cm-1 of zero as numerical noise "
+                    "(near_zero_mode_count in the derive_thermochemistry "
+                    "receipt counts them), so minimum_greater_equal with "
+                    "threshold -20 cm-1 asks the question the "
+                    "thermochemistry answers. Default to the 20 cm-1 "
+                    "convention when the task states no criterion; an "
+                    "explicit criterion in the task text always overrides "
+                    "the default."
                 ),
                 "items": {
                     "type": "object",

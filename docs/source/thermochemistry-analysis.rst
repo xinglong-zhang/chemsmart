@@ -168,7 +168,9 @@ Two consequences are worth knowing:
   convention that tool used.
 
 The threshold is a property of the analysis rather than of any one program, so it applies identically to Gaussian,
-ORCA, and xTB results.
+ORCA, and xTB results. In agent workflows the convention is the default acceptance criterion when a task states none;
+an explicit criterion in the task text ("no imaginary modes, never", or "imaginary modes below x are acceptable")
+always overrides it, and the report should say which question was asked.
 
 
 Examples

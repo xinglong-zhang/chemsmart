@@ -156,6 +156,17 @@ cancellation the difference relies on.
   temperature is `H(T) - E_electronic - ZPE`. By contrast,
   `H(T) - E_electronic` already contains ZPE and belongs with an electronic
   energy difference. Do not add both corrections to the same reaction value.
+- **Imaginary-mode criteria are two different questions; say which one you
+  asked.** A strict criterion (`no imaginary modes, ever`) fails on any
+  negative frequency. ChemSmart's thermochemistry instead treats a mode
+  within **20 cm⁻¹ of zero as numerical noise**, not evidence of a saddle
+  point, and reports how many such modes exist as `near_zero_mode_count`.
+  When the task states a criterion — "no imaginary modes, never", or
+  "imaginary modes below x are acceptable" — encode exactly that criterion
+  in the validation rule. When the task states none, default to the 20 cm⁻¹
+  convention (a `minimum_greater_equal` threshold of −20 cm⁻¹, or a
+  `count_equals` check on `near_zero_mode_count`), and state in the report
+  that the convention, not a strict zero, was applied.
 
 ## 8. A number without a unit and a convention is not a result
 
