@@ -1,4 +1,4 @@
-﻿"""
+"""
 Gaussian Minimum Energy Cross Point (MECP) job implementation.
 
 This module provides the GaussianMECPJob class for performing
