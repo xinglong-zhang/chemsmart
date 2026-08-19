@@ -3547,12 +3547,54 @@ class CommandCompiledToolHostV1:
 
         nodes = {node.node_id: node for node in plan.analysis_nodes}
         matched: dict[str, tuple[str, ...]] = {}
+        calculation_ids = set(plan.calculation_node_ids)
+
+        def _calculation_dependency_satisfied(dependency: str) -> bool:
+            receipt = self.execution_receipts.get(dependency)
+            return receipt is not None and bool(
+                getattr(receipt, "validated", False)
+            )
 
         def _dependency_receipts(node: AnalysisNodeIntentV1) -> dict[str, set[str]]:
-            return {
-                dependency: set(matched.get(dependency, ()))
-                for dependency in node.dependencies
-            }
+            # A dependency on a calculation node used to route through
+            # ``matched`` like an analysis dependency, and calculation nodes
+            # are never in ``matched`` -- so no producer-fed analysis node
+            # could ever be reported complete, even after its producer had
+            # executed and validated. Calculation dependencies are satisfied
+            # by validated execution receipts; only analysis dependencies
+            # carry receipt digests forward.
+            receipts: dict[str, set[str]] = {}
+            for dependency in node.dependencies:
+                if dependency in calculation_ids:
+                    if _calculation_dependency_satisfied(dependency):
+                        receipts[dependency] = {"calculation-validated"}
+                    else:
+                        receipts[dependency] = set()
+                else:
+                    receipts[dependency] = set(matched.get(dependency, ()))
+            return receipts
+
+        def _producer_result_artifact_ids(
+            node: AnalysisNodeIntentV1,
+        ) -> set[str]:
+            """Registered engine-result artifacts feeding this node."""
+
+            artifact_ids: set[str] = set()
+            for item in node.inputs:
+                if isinstance(item, RegisteredResultInputIntentV1):
+                    continue
+                producer = item.producer_node_id
+                if producer not in calculation_ids:
+                    continue
+                if not _calculation_dependency_satisfied(producer):
+                    continue
+                prefix = f"result.{producer}."
+                artifact_ids.update(
+                    artifact_id
+                    for artifact_id in self.artifacts
+                    if artifact_id.startswith(prefix)
+                )
+            return artifact_ids
 
         def _decision_evidence(decision: ScientificDecisionRecordV1) -> set[str]:
             evidence: set[str] = set()
@@ -3596,7 +3638,15 @@ class CommandCompiledToolHostV1:
                     for item in node.inputs
                     if isinstance(item, RegisteredResultInputIntentV1)
                 )
-                if len(registered) != 1:
+                if len(registered) == 1:
+                    extraction_artifact_ids = {registered[0].artifact_id}
+                elif not registered:
+                    extraction_artifact_ids = _producer_result_artifact_ids(
+                        node
+                    )
+                    if not extraction_artifact_ids:
+                        continue
+                else:
                     continue
                 # Typed extraction evidence is the triple (registered result,
                 # selector, value).  ``quantity_id`` is the model's own label
@@ -3614,7 +3664,7 @@ class CommandCompiledToolHostV1:
                     receipt.receipt_sha256
                     for receipt in self.quantity_extractions.values()
                     if receipt.status == "extracted"
-                    and receipt.artifact_id == registered[0].artifact_id
+                    and receipt.artifact_id in extraction_artifact_ids
                     and selectors.issubset(
                         self.quantity_extraction_selectors.get(
                             receipt.receipt_sha256, ()
@@ -3634,7 +3684,7 @@ class CommandCompiledToolHostV1:
                         receipt.receipt_sha256
                         for receipt in self.quantity_extractions.values()
                         if receipt.status == "extracted"
-                        and receipt.artifact_id == registered[0].artifact_id
+                        and receipt.artifact_id in extraction_artifact_ids
                         and (
                             observed := self.quantity_extraction_selectors.get(
                                 receipt.receipt_sha256, ()
@@ -3676,6 +3726,9 @@ class CommandCompiledToolHostV1:
                         )
                         is not None
                     }
+                    source_artifact_ids.update(
+                        _producer_result_artifact_ids(node)
+                    )
                 required_kinds = {
                     canonical_thermochemistry_quantity(
                         output.quantity_kind
