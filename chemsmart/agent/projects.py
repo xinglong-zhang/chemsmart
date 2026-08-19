@@ -79,24 +79,33 @@ class ProjectRenderReceiptV1:
     status: str
     rule_ids: tuple[str, ...]
     receipt_sha256: str
+    #: Vocabulary notes for values outside every declared domain: the value
+    #: passed, the program validator and safe preview remain the authority,
+    #: and this says so where the author can still act on it. Additive and
+    #: omitted from the digest body when empty, so every receipt recorded
+    #: before the field existed keeps its identity.
+    vocabulary_advisories: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.project-render-receipt.v1":
             raise ContractError("unsupported project render receipt schema")
         if self.status != "candidate_rendered":
             raise ContractError("rendering alone can only create a candidate")
-        expected = canonical_sha256(
-            {
-                "schema_version": self.schema_version,
-                "program": self.program,
-                "registry_sha256": self.registry_sha256,
-                "document_sha256": self.document_sha256,
-                "rendered_yaml": self.rendered_yaml,
-                "rendered_sha256": self.rendered_sha256,
-                "status": self.status,
-                "rule_ids": self.rule_ids,
-            }
-        )
+        body = {
+            "schema_version": self.schema_version,
+            "program": self.program,
+            "registry_sha256": self.registry_sha256,
+            "document_sha256": self.document_sha256,
+            "rendered_yaml": self.rendered_yaml,
+            "rendered_sha256": self.rendered_sha256,
+            "status": self.status,
+            "rule_ids": self.rule_ids,
+        }
+        # Additive, digest-covered only when present, so receipts recorded
+        # before the field existed keep their identity.
+        if self.vocabulary_advisories:
+            body["vocabulary_advisories"] = self.vocabulary_advisories
+        expected = canonical_sha256(body)
         if self.receipt_sha256 != expected:
             raise ContractError("project render receipt digest mismatch")
 
@@ -482,6 +491,92 @@ def _require_declared_section_shape(
         )
 
 
+#: Provenance of each program's method vocabulary, stated wherever a value is
+#: refused or advised so the authority of the claim is inspectable. ORCA's is
+#: the installed binary itself; Gaussian's is its documentation, because the
+#: job-submission hold on this host forbids the equivalent probe.
+_VOCABULARY_PROVENANCE = {
+    "orca": "probe-verified against the installed ORCA 6.1.1",
+    "gaussian": "curated from the Gaussian 16 Rev C.01 keyword documentation",
+    "pyscf": "the loader's declared model set",
+    "xtb": "the xTB 6.7 loader tables",
+}
+
+
+def _domain_index(registry) -> dict[str, dict[str, tuple[str, ...]]]:
+    """parameter -> program -> declared values, over every program."""
+
+    index: dict[str, dict[str, tuple[str, ...]]] = {}
+    for capability in registry.programs:
+        for name, values in capability.project_parameter_domains:
+            index.setdefault(name, {})[capability.program] = values
+    return index
+
+
+def _check_section_vocabulary(
+    program: str,
+    payload: Mapping[str, Mapping[str, object]],
+    registry,
+) -> tuple[str, ...]:
+    """Hold authored values against the declared vocabularies.
+
+    Three outcomes, and only the middle one refuses. A value inside this
+    program's domain passes silently. A value outside it that some *other*
+    program declares is refused with the redirect -- that is the MN15 case,
+    where a session authored a Gaussian functional into an ORCA project and
+    learnt the truth only after the whole stage was built and previewed. A
+    value no declared domain knows passes with an advisory: the dictionary
+    is not the authority on chemistry, the program validator and the safe
+    preview are, and a name the dictionary merely does not know must never
+    be blocked on the dictionary's word alone.
+    """
+
+    from difflib import get_close_matches
+
+    index = _domain_index(registry)
+    advisories: list[str] = []
+    for section_name, settings in payload.items():
+        for parameter, raw_value in settings.items():
+            domains = index.get(parameter)
+            if not domains or program not in domains:
+                continue
+            if not isinstance(raw_value, str):
+                continue
+            value = raw_value.strip().lower()
+            if not value or value in domains[program]:
+                continue
+            elsewhere = sorted(
+                other
+                for other, values in domains.items()
+                if other != program and value in values
+            )
+            provenance = _VOCABULARY_PROVENANCE.get(
+                program, "the declared program vocabulary"
+            )
+            if elsewhere:
+                nearest = get_close_matches(
+                    value, domains[program], n=3, cutoff=0.6
+                )
+                suggestion = (
+                    f" Nearest {program} names: {', '.join(nearest)}."
+                    if nearest
+                    else ""
+                )
+                raise ContractError(
+                    f"{parameter} {raw_value!r} in section "
+                    f"{section_name!r} is not in {program}'s {parameter} "
+                    f"vocabulary ({provenance}); it is implemented by: "
+                    f"{', '.join(elsewhere)}.{suggestion}"
+                )
+            advisories.append(
+                f"{parameter} {raw_value!r} in section {section_name!r} is "
+                f"outside every declared {parameter} vocabulary "
+                f"({provenance}); it passes here, and the program validator "
+                "and safe preview remain the authority on it"
+            )
+    return tuple(advisories)
+
+
 def render_project_yaml(
     document: ProjectDocumentV1,
     *,
@@ -497,7 +592,12 @@ def render_project_yaml(
         section.name: dict(section.settings) for section in document.sections
     }
     _require_declared_section_shape(document.program, payload)
+    vocabulary_advisories = _check_section_vocabulary(
+        document.program, payload, registry
+    )
     rule_ids = ["project.render.candidate_only"]
+    if vocabulary_advisories:
+        rule_ids.append("project.render.vocabulary_advisory")
     if document.program == "pyscf":
         settings_module = importlib.import_module("chemsmart.settings.pyscf")
         materializer = getattr(
@@ -530,6 +630,8 @@ def render_project_yaml(
         "status": "candidate_rendered",
         "rule_ids": tuple(sorted(rule_ids)),
     }
+    if vocabulary_advisories:
+        body["vocabulary_advisories"] = vocabulary_advisories
     return ProjectRenderReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )

@@ -5,7 +5,7 @@ qmmm:
   jobtype: "QM/QM2/MM"
 
   # High-level (QM) region
-  high_level_functional: "mn15"
+  high_level_functional: "m062x"  # mn15 is not an ORCA keyword (probe-verified, ORCA 6.1.1)
   high_level_basis: "genecp"
   charge_high: 0
   mult_high: 1
@@ -31,7 +31,7 @@ qmmm:
   embedding_type: "Electronic"
   delete_la_double_counting: true
 solv:
-  functional: mn15
+  functional: m062x  # mn15 is not an ORCA keyword (probe-verified, ORCA 6.1.1)
   basis: def2qzvp
   freq: false
   solvent_model: smd
