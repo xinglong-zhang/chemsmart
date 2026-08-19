@@ -614,6 +614,24 @@ class ApprovedWorkflowExecutor:
             node.node_id: node for node in toolchain.analysis_nodes
         }
         calculation_ids = set(toolchain.calculation_node_ids)
+        # The producer's typed result kind, from the approved V2 plan: an
+        # engine run registers several artifact kinds (an xTB node leaves a
+        # log AND a geometry), and only the program's reader kind is the
+        # result an extraction reads. Observed live: an xtb single point
+        # offered both xtb_output and geometry_xyz and the walker refused
+        # the ambiguity instead of resolving it.
+        program_by_node = {
+            node.node_id: node.program
+            for node in getattr(self.plan, "nodes", ())
+        }
+
+        def _producer_result_kind(producer: str) -> str:
+            program = program_by_node.get(producer, "")
+            from chemsmart.agent.postprocessing import (
+                typed_result_artifact_kind,
+            )
+
+            return typed_result_artifact_kind(program)
         settled: dict[str, ExecutedAnalysisNodeV1] = {}
         #: (producer node, output id) -> (receipt digest, receipt quantity id)
         outputs: dict[tuple[str, str], tuple[str, str]] = {}
@@ -642,16 +660,18 @@ class ApprovedWorkflowExecutor:
 
         def _producer_artifact(producer: str) -> Any:
             prefix = f"result.{producer}."
+            result_kind = _producer_result_kind(producer)
             candidates = [
                 artifact
                 for artifact_id, artifact in self.host.artifacts.items()
                 if artifact_id.startswith(prefix)
-                and artifact.kind in program_by_kind
+                and artifact.kind == result_kind
             ]
             if len(candidates) != 1:
                 raise ContractError(
-                    f"expected exactly one registered result artifact for "
-                    f"producer {producer!r}; found {len(candidates)}"
+                    f"expected exactly one registered {result_kind!r} result "
+                    f"artifact for producer {producer!r}; found "
+                    f"{len(candidates)}"
                 )
             return candidates[0]
 

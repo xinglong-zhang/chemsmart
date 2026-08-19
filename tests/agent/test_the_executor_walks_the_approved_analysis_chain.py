@@ -224,7 +224,11 @@ def _executor(tmp_path, toolchain):
     run_directory.mkdir()
     return ApprovedWorkflowExecutor(
         host=host,
-        plan=SimpleNamespace(workflow_id="w", plan_sha256="b" * 64),
+        plan=SimpleNamespace(
+            workflow_id="w",
+            plan_sha256="b" * 64,
+            nodes=(SimpleNamespace(node_id="sp", program="orca"),),
+        ),
         approval=SimpleNamespace(node_bindings=()),
         frozen_approval=SimpleNamespace(approval_sha256="c" * 64),
         initial_artifacts={},
