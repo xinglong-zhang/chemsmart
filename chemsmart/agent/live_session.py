@@ -1366,7 +1366,26 @@ def _scan_orca_result_artifacts(
                 or not math.isfinite(float(energy))
                 or not method
                 or (not basis and not semiempirical)
-                or jobtype not in {"sp", "opt", "freq", "td", "ts", "irc"}
+                # A hand-listed set like this is how a new family gets
+                # silently dropped: when `scan` joined the surface, completed
+                # scans stopped being registered here, so a session opening a
+                # workspace that held two validated 72-point surfaces was
+                # shown neither and rationally replanned both from scratch.
+                # (Before the reader learned to classify a %geom Scan block,
+                # scan outputs slipped through this filter mislabelled as
+                # `opt` -- the exclusion only started biting when the label
+                # became correct.)
+                or jobtype
+                not in {
+                    "sp",
+                    "opt",
+                    "freq",
+                    "td",
+                    "ts",
+                    "irc",
+                    "scan",
+                    "modred",
+                }
                 or not isinstance(charge, int)
                 or not isinstance(multiplicity, int)
                 or multiplicity < 1
