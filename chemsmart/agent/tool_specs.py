@@ -1565,7 +1565,13 @@ def _workflow_node_schema() -> dict:
                                 "An ORCA IRC that reads the final transition-"
                                 "state Hessian has exactly two producer inputs: "
                                 "'filename'/geometry_xyz and "
-                                "'hess_filename'/orca_hessian."
+                                "'hess_filename'/orca_hessian. An ORCA TS "
+                                "search that starts from a producer's Hessian "
+                                "(any frequency-bearing ORCA stage; any "
+                                "imaginary-mode count) likewise has "
+                                "'filename'/geometry_xyz plus "
+                                "'inhess_filename'/orca_hessian, and its "
+                                "project ts section must set inhess: true."
                             ),
                         },
                         "artifact_id": _string(),

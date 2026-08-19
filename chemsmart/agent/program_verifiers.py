@@ -817,7 +817,11 @@ def _settings_match(parsed, expected, *, native_input=None):
 
             if _orca_scf_preset(value) == _orca_scf_preset(observed):
                 continue
-        if is_orca and field == "hess_filename" and native_input is not None:
+        if (
+            is_orca
+            and field in {"hess_filename", "inhess_filename"}
+            and native_input is not None
+        ):
             # ORCA receives a portable basename in %irc while the CLI keeps
             # the approved source path.  Compare the staged native file by
             # content instead of treating those two filesystem spellings as

@@ -114,8 +114,10 @@ from chemsmart.agent.execution import (
     handoff_optimized_pyscf_geometry,
     handoff_optimized_xtb_geometry,
     handoff_final_orca_ts_hessian,
+    handoff_validated_orca_producer_hessian,
     invocation_identity_sha256,
     is_validated_orca_ts_hessian_edge,
+    is_validated_producer_orca_hessian_edge,
     DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
     is_validated_optimized_geometry_edge,
     promote_project_candidate,
@@ -6552,10 +6554,12 @@ class CommandCompiledToolHostV1:
             ),
             auxiliary_input_artifacts=dict(context.job_artifact_options),
             auxiliary_handoffs=(
-                {"hess_filename": self.hessian_handoffs[node_id]}
-                if "hess_filename" in dict(context.job_artifact_options)
-                and node_id in self.hessian_handoffs
-                else {}
+                {
+                    role: self.hessian_handoffs[node_id]
+                    for role in ("hess_filename", "inhess_filename")
+                    if role in dict(context.job_artifact_options)
+                    and node_id in self.hessian_handoffs
+                }
             ),
         )
         frozen_preview = frozen_approval.preview_binding(node_id)
@@ -6973,6 +6977,54 @@ class CommandCompiledToolHostV1:
                         charge=consumer_binding.charge,
                         multiplicity=consumer_binding.multiplicity,
                     )
+                    self.artifacts[artifact.artifact_id] = artifact
+                    self.hessian_handoffs[edge.consumer_node_id] = observed
+                elif (
+                    edge.selection_rule == "validated_producer_orca_hessian"
+                ):
+                    if context.proposal.program != "orca":
+                        raise ContractError(
+                            "a producer ORCA Hessian handoff requires an "
+                            "ORCA producer"
+                        )
+                    result_candidates = tuple(
+                        item for item in outputs if item.kind == "orca_output"
+                    )
+                    hessian_candidates = tuple(
+                        item for item in outputs if item.kind == "orca_hessian"
+                    )
+                    if len(result_candidates) != 1 or not hessian_candidates:
+                        raise ContractError(
+                            "a validated ORCA producer requires one output "
+                            "and at least one native Hessian candidate"
+                        )
+                    artifact, observed = (
+                        handoff_validated_orca_producer_hessian(
+                            producer_receipt=receipt,
+                            result_artifact=result_candidates[0],
+                            hessian_candidates=hessian_candidates,
+                            producer_edge=edge,
+                            approved_workspace=self.approved_workspace,
+                            hessian_artifact_id=(
+                                f"hessian.{edge.producer_node_id}-to-"
+                                f"{edge.consumer_node_id}"
+                            ),
+                            expected_charge=(
+                                context.scientific_identity.charge
+                            ),
+                            expected_multiplicity=(
+                                context.scientific_identity.multiplicity
+                            ),
+                        )
+                    )
+                    if observed.consumer_state != (
+                        consumer_binding.charge,
+                        consumer_binding.multiplicity,
+                    ):
+                        raise ContractError(
+                            "an ORCA TS search must start from a Hessian on "
+                            "its own charge and multiplicity surface"
+                        )
                     self.artifacts[artifact.artifact_id] = artifact
                     self.hessian_handoffs[edge.consumer_node_id] = observed
                 elif context.proposal.program == "pyscf":
@@ -7502,11 +7554,14 @@ class CommandCompiledToolHostV1:
                 selection_rule = "validated_optimized_geometry"
             elif is_validated_orca_ts_hessian_edge(plan, edge):
                 selection_rule = "validated_final_orca_ts_hessian"
+            elif is_validated_producer_orca_hessian_edge(plan, edge):
+                selection_rule = "validated_producer_orca_hessian"
             else:
                 raise ContractError(
                     "execution review has no exact selection rule for data "
-                    f"edge {edge.edge_id!r}; expected optimized geometry or "
-                    "an ORCA final-TS Hessian for IRC"
+                    f"edge {edge.edge_id!r}; expected optimized geometry, "
+                    "an ORCA final-TS Hessian for IRC, or an ORCA producer "
+                    "Hessian for a TS inhess_filename role"
                 )
             if (
                 selection_rule == "validated_optimized_geometry"
@@ -8017,11 +8072,14 @@ class CommandCompiledToolHostV1:
                 selection_rule = "validated_optimized_geometry"
             elif is_validated_orca_ts_hessian_edge(plan, edge):
                 selection_rule = "validated_final_orca_ts_hessian"
+            elif is_validated_producer_orca_hessian_edge(plan, edge):
+                selection_rule = "validated_producer_orca_hessian"
             else:
                 raise ContractError(
                     "bounded execution has no exact selection rule for data "
-                    f"edge {edge.edge_id!r}; expected optimized geometry or "
-                    "an ORCA final-TS Hessian for IRC"
+                    f"edge {edge.edge_id!r}; expected optimized geometry, "
+                    "an ORCA final-TS Hessian for IRC, or an ORCA producer "
+                    "Hessian for a TS inhess_filename role"
                 )
             if (
                 selection_rule == "validated_optimized_geometry"
@@ -8282,15 +8340,28 @@ class CommandCompiledToolHostV1:
             and auxiliary_inputs[0].binding_id == "hess_filename"
             and auxiliary_inputs[0].artifact_class == "orca_hessian"
         )
+        valid_orca_ts_auxiliary = bool(
+            planned_node.program == "orca"
+            and planned_node.stage == "ts"
+            and len(auxiliary_inputs) == 1
+            and len(geometry_inputs) == 1
+            and geometry_inputs[0].binding_id == "filename"
+            and auxiliary_inputs[0].binding_id == "inhess_filename"
+            and auxiliary_inputs[0].artifact_class == "orca_hessian"
+        )
         if (
             node is None
             or len(geometry_inputs) != 1
-            or (auxiliary_inputs and not valid_orca_irc_auxiliary)
+            or (
+                auxiliary_inputs
+                and not (valid_orca_irc_auxiliary or valid_orca_ts_auxiliary)
+            )
         ):
             raise ContractError(
                 "future bounded node requires one filename/geometry_xyz input; "
                 "ORCA IRC may additionally consume one "
-                "hess_filename/orca_hessian input"
+                "hess_filename/orca_hessian input, and an ORCA TS one "
+                "inhess_filename/orca_hessian starting-Hessian input"
             )
         project = self._artifact(node.project_role)
         capabilities = tuple(
