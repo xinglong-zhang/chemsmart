@@ -2873,11 +2873,16 @@ class CommandCompiledToolHostV1:
 
         project_replacements = tuple(values.get("project_replacements") or ())
         analysis_repairs = tuple(values.get("analysis_repairs") or ())
-        if not project_replacements and not analysis_repairs:
+        support_repairs = tuple(values.get("support_repairs") or ())
+        if (
+            not project_replacements
+            and not analysis_repairs
+            and not support_repairs
+        ):
             raise ContractError(
-                "an amendment must supply project_replacements or "
-                "analysis_repairs; it changes something or it is not an "
-                "amendment"
+                "an amendment must supply project_replacements, "
+                "analysis_repairs, or support_repairs; it changes something "
+                "or it is not an amendment"
             )
         return self._rebind_scientific_workflow_projects(
             turn_id,
@@ -2885,6 +2890,7 @@ class CommandCompiledToolHostV1:
                 "workflow_id": values["workflow_id"],
                 "replacements": project_replacements,
                 "analysis_repairs": analysis_repairs,
+                "support_repairs": support_repairs,
             },
         )
 
@@ -3137,6 +3143,39 @@ class CommandCompiledToolHostV1:
             }
             for node in (scientific_v2.nodes if scientific_v2 else ())
         }
+        # A support repair converts evidence learned mid-session into
+        # declared intent. A real session planned the paper's third
+        # functional, watched the program validator refuse it -- the
+        # functional is not implemented in that program -- and correctly
+        # said the stage should remain as non-executable scientific intent;
+        # nothing could then make it so, and five nodes blocked an approval
+        # they were never going to be part of.
+        #
+        # The repair is one-directional by design. Declaring a stage
+        # blocked_unsupported only narrows what runs: it is displayed with
+        # the workflow, excluded from the approval, and never launched.
+        # The reverse direction would widen the executable partition and
+        # therefore belongs to a fresh plan a human reviews, not an amend.
+        support_repairs = tuple(values.get("support_repairs") or ())
+        for repair in support_repairs:
+            node_id = str(repair["node_id"])
+            if node_id not in annotations:
+                raise ContractError(
+                    f"support repair references unknown node {node_id!r}; "
+                    f"this workflow has {sorted(annotations)}"
+                )
+            reason = str(repair.get("blocked_reason") or "").strip()
+            if not reason:
+                raise ContractError(
+                    "declaring a stage non-executable requires its reason"
+                )
+            if annotations[node_id]["support_state"] == "blocked_unsupported":
+                continue
+            annotations[node_id] = {
+                **annotations[node_id],
+                "support_state": "blocked_unsupported",
+                "blocked_reason": reason,
+            }
         # Recompiling the calculation side is only needed when a project
         # binding changed.  An analysis-only repair leaves every command,
         # binding and receipt on that side exactly as reviewed, so it is
@@ -3144,7 +3183,7 @@ class CommandCompiledToolHostV1:
         # this function has always carried the analysis side verbatim.
         command_result = (
             current_result
-            if not replacements
+            if not replacements and not support_repairs
             else self._plan_command_workflow(
             turn_id,
             {
@@ -6869,28 +6908,34 @@ class CommandCompiledToolHostV1:
     def _release_non_executable_node_ids(
         self, plan: ScientificWorkflowPlanV2
     ) -> frozenset[str]:
-        """Plan stages this release cannot execute, whatever the plan asked for.
+        """Plan stages that will not execute, and must not block the rest.
 
-        Release maturity is a host fact, not a planning choice.  A scientific
-        workflow is required to keep a stage it cannot materialize rather than
-        silently drop it, so such a stage must not also block the human review
-        of the stages that *can* run.  It is displayed with the workflow,
-        excluded from the approval, and never launched.
+        Two ways a stage earns this, and both are narrowings. Release maturity
+        is a host fact: a family outside the executable matrix cannot run
+        whatever the plan asked for. And a *declared* ``blocked_unsupported``
+        stage is the scientist retaining intent the program cannot realise --
+        which can be true even when the job family itself is executable. A
+        real session hit exactly that: it planned the paper's third functional,
+        ORCA's validator refused it (the functional is not implemented there),
+        and the session correctly declared those stages non-executable intent
+        -- but this predicate honoured the declaration only for non-executable
+        *families*, so five nodes riding on plain ``orca/opt`` and
+        ``orca/scan`` kept blocking an approval they were never going to be
+        part of.
+
+        Honouring the declaration is safe by construction: a blocked stage is
+        displayed with the workflow, excluded from the approval, and never
+        launched, so the only thing the declaration can do is narrow what
+        runs. The node contract already requires a stated reason.
         """
 
         non_executable: set[str] = set()
         for node in plan.nodes:
-            capability = self.registry.get(node.program)
-            executable = (
-                set(capability.execution_engine_job_pairs)
-                if capability is not None
-                else set()
-            )
-            if (node.engine, node.stage) in executable:
-                continue
-            if node.support_state != "blocked_unsupported":
-                continue
-            non_executable.add(node.node_id)
+            # A family outside the executable matrix that is *not* declared
+            # blocked stays a blocker on purpose: the planner is required to
+            # state the blockage, keeping this state explicit, never inferred.
+            if node.support_state == "blocked_unsupported":
+                non_executable.add(node.node_id)
         return frozenset(non_executable)
 
     def execution_review_ineligibility_reason(

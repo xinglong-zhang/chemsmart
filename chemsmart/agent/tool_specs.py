@@ -388,6 +388,28 @@ def build_command_compiled_tool_surface(
                         "additionalProperties": False,
                     },
                 },
+                "support_repairs": {
+                    "type": "array",
+                    "description": (
+                        "Declare named calculation stages non-executable "
+                        "scientific intent, with the reason -- for example a "
+                        "functional the program's validator refused. One "
+                        "direction only: a declared stage stays displayed "
+                        "with the workflow, is excluded from approval, and "
+                        "is never launched, so this can only narrow what "
+                        "runs. Reversing it is a new workflow."
+                    ),
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "node_id": _public_identifier(),
+                            "blocked_reason": _string(),
+                        },
+                        "required": ["node_id", "blocked_reason"],
+                        "additionalProperties": False,
+                    },
+                },
                 "analysis_repairs": {
                     "type": "array",
                     "description": (
@@ -915,6 +937,10 @@ ARGUMENT_DESCRIPTIONS: dict[str, str] = {
         "Digest of the inspection receipt for the compiled command."
     ),
     "constraint_kinds": "The geometric constraints this request needs.",
+    "blocked_reason": (
+        "Why this stage cannot run here, stated for the human review -- for "
+        "example the program validator's refusal of its functional."
+    ),
     "point_index": (
         "1-based position of the scan point whose converged geometry to "
         "carry forward, counted in step order along the driven coordinate. "
