@@ -68,7 +68,9 @@ class ORCARefs:
         # Local functionals
         # ***************************************
         "HFS",  # Hartree-Fock Slater (Slater exchange only)
-        "XAlpha",  # The famous old Slater Xa theory
+        # "XAlpha" was removed from this list after the installed ORCA 6.1.1
+        # rejected the keyword itself ("UNRECOGNIZED ... KEYWORD"); see the
+        # campaign keyword-probe report. Older ORCA generations accepted it.
         "LSD",  # Local spin density (VWN-5A form)
         "VWN5",  # Local spin density (VWN-5)
         "VWN3",  # Local spin density (VWN-3)
@@ -187,7 +189,7 @@ class ORCARefs:
         # and Goerigk (SCS only applies to the CIS(D) component)[206]
         "SOS-wB2GP-PLYP",  # spin-opposite scaled DHDF optimized for excitation energies by Casanova-P ́aez
         # and Goerigk (SOS only applies to the CIS(D) component) [206]
-        "SCS-RSX-QIDH ",  # spin-component scaled DHDF optimized for excitation energies by Casanova-P ́aez
+        "SCS-RSX-QIDH",  # spin-component scaled DHDF optimized for excitation energies by Casanova-P ́aez
         # and Goerigk (SCS only applies to the CIS(D) component) [206]
         "SOS-RSX-QIDH",  # spin-opposite scaled DHDF optimized for excitation energies by Casanova-P ́aez
         # and Goerigk (SOS only applies to the CIS(D) component) [206]
@@ -199,6 +201,30 @@ class ORCARefs:
         # and Goerigk (SCS only applies to the CIS(D) component) [206]
         "SOS-wPBEPP86",  # spin-opposite scaled DHDF optimized for excitation energies by Casanova-P ́aez
         # and Goerigk (SOS only applies to the CIS(D) component) [206]
+        # ***************************************
+        # Probe-verified additions, ORCA 6.1.1
+        # ***************************************
+        # Each keyword below was accepted by the installed ORCA 6.1.1 binary
+        # itself (campaign keyword-probe report,
+        # program-coverage/keyword-probe/probe-report.json). The list above
+        # predates ORCA 6 and refused these at preview exactly the way it
+        # refused genuinely absent functionals -- an omission
+        # indistinguishable from an absence, which is what made the probe
+        # necessary.
+        "wB97M-V",  # range-separated mGGA with VV10 [probe: accepted_ran]
+        "wB97M-D3BJ",  # wB97M with D3BJ dispersion [probe: accepted_ran]
+        "wB97M-D4",  # wB97M with D4 dispersion [probe: accepted_ran]
+        "wB97X-D4",  # wB97X with D4 dispersion [probe: accepted_ran]
+        "r2SCAN-3c",  # composite r2SCAN method [probe: accepted_ran]
+        "B97-3c",  # composite GGA method [probe: accepted_ran]
+        "PBEh-3c",  # composite hybrid method [probe: accepted_ran]
+        "HF-3c",  # composite HF method [probe: accepted_ran]
+        "r2SCANh",  # r2SCAN hybrid, 10% HF exchange [probe: accepted_ran]
+        "r2SCAN0",  # r2SCAN hybrid, 25% HF exchange [probe: accepted_ran]
+        "r2SCAN50",  # r2SCAN hybrid, 50% HF exchange [probe: accepted_ran]
+        "DSD-BLYP",  # dispersion-corrected double hybrid [probe: accepted_keyword]
+        "DSD-PBEP86",  # dispersion-corrected double hybrid [probe: accepted_keyword]
+        "revDSD-PBEP86/2021",  # revised DSD double hybrid [probe: accepted_keyword]
         ## end
     ]
 
@@ -1330,6 +1356,20 @@ class ORCARefs:
         )
 
     @property
+    def orca_all_basis_sets_lower(self):
+        """The basis vocabulary in lower case, the way route tokens arrive.
+
+        ``ORCARoute`` lower-cases the whole route before tokenizing, so a
+        membership test against the mixed-case family lists silently missed
+        every relativistically recontracted name -- all 28 ``DKH-``/``ZORA-``
+        prefixed sets were unreadable from the day they were listed. Parsers
+        compare against this projection; the family lists above keep their
+        display casing.
+        """
+
+        return [name.strip().lower() for name in self.orca_all_basis_sets]
+
+    @property
     def orca_all_auxiliary_basis_sets(self):
         return (
             self.orca_auxiliary_basis_coulomb
@@ -1386,6 +1426,7 @@ ORCA_ALL_FUNCTIONALS = orca_ref.orca_functionals
 ORCA_ALL_AB_INITIO = orca_ref.orca_ab_initio
 ORCA_ALL_METHODS = orca_ref.orca_all_methods
 ORCA_ALL_BASIS_SETS = orca_ref.orca_all_basis_sets
+ORCA_ALL_BASIS_SETS_LOWER = orca_ref.orca_all_basis_sets_lower
 ORCA_ALL_AUXILIARY_BASIS_SETS = orca_ref.orca_all_auxiliary_basis_sets
 ORCA_ALL_EXTRAPOLATION_BASIS_SETS = orca_ref.orca_all_extrapolation_basis_sets
 ORCA_ALL_JOB_TYPES = orca_ref.ORCA_JOB_TYPES

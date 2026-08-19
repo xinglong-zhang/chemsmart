@@ -1,6 +1,9 @@
+import re
 import logging
 
 from chemsmart.io.orca import (
+    ORCA_ALL_BASIS_SETS_LOWER,
+    ORCA_ALL_SOLVENT_MODELS,
     ORCA_ALL_AB_INITIO,
     ORCA_ALL_AUXILIARY_BASIS_SETS,
     ORCA_ALL_BASIS_SETS,
@@ -161,7 +164,7 @@ class ORCARoute:
             str: Basis set name or None if not found
         """
         for route_keyword in self.route_keywords:
-            if route_keyword in ORCA_ALL_BASIS_SETS:
+            if route_keyword in ORCA_ALL_BASIS_SETS_LOWER:
                 return route_keyword
         return None
 
@@ -172,6 +175,50 @@ class ORCARoute:
             if route_keyword in ORCA_ALL_AUXILIARY_BASIS_SETS:
                 return route_keyword
         return None
+
+    @property
+    def aux_basis(self):
+        """The declared-parameter spelling of :attr:`auxiliary_basis`.
+
+        Project YAML and the capability domains call this ``aux_basis``; the
+        round-trip contract looks a parameter up on the route by its declared
+        name, and the historic property name silently failed that lookup.
+        """
+
+        return self.auxiliary_basis
+
+    @property
+    def solvent_model(self):
+        """Implicit-solvation model named on the route, if any.
+
+        ChemSmart writes every ORCA solvation request onto the route as
+        ``MODEL`` or ``MODEL(solvent)`` -- CPCM(water), SMD(dmso), CPCMC,
+        COSMORS. No parser read it back, so the preview validator compared a
+        requested solvent model against nothing: the exact shape that once
+        argued a session out of a correct ``ri_approximation: none``.
+        """
+
+        for route_keyword in self.route_keywords:
+            head = route_keyword.split("(", 1)[0]
+            if head in ORCA_ALL_SOLVENT_MODELS:
+                return head
+        return None
+
+    @property
+    def solvent_id(self):
+        """Solvent named inside the solvation model's parentheses, if any.
+
+        Read from the raw lower-cased route rather than token-wise, because
+        23 ORCA solvent names contain spaces ("carbon disulfide") and the
+        tokenizer splits them.
+        """
+
+        match = re.search(
+            r"\b(?:cpcmc|cpcm|smd|cosmors)\(([^)]+)\)", self.route_string
+        )
+        if match is None:
+            return None
+        return match.group(1).strip()
 
     @property
     def auxiliary_basis_role(self):

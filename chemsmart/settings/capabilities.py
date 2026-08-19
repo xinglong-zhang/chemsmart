@@ -287,6 +287,52 @@ _XTB_PROJECT_PARAMETERS = (
 )
 
 
+def _normalized_domain(values) -> tuple[str, ...]:
+    """Lower-case, strip, dedupe and sort one vocabulary for a domain.
+
+    Domains carry the invariant that values are sorted, unique and
+    lower-case; the io tables carry mixed case and, historically, one entry
+    with trailing whitespace, so the projection normalizes rather than
+    trusting.
+    """
+
+    return tuple(sorted({str(value).strip().lower() for value in values if str(value).strip()}))
+
+
+def orca_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Method vocabulary projected from the single-source ORCA io tables.
+
+    A live session planned MN15 for ORCA; the YAML validated, the CLI
+    compiled, the native input was generated, and only the safe preview's
+    membership test against these very tables refused it -- after the whole
+    stage was built. The tables existed all along; nothing declared them as
+    domains, so the receipt the model reads first carried every enumerated
+    vocabulary *except* the ones a chemist actually chooses by.
+
+    The tables are probe-verified against the installed ORCA 6.1.1 binary
+    (campaign keyword-probe report): all 94 prior entries were probed, one
+    legacy keyword the binary rejects was removed, and fourteen keywords the
+    binary accepts were added. The io module stays the single source, so the
+    route parser, the preview verifier, and this receipt can never fork.
+    """
+
+    from chemsmart.io.orca import (
+        ORCA_ALL_AUXILIARY_BASIS_SETS,
+        ORCA_ALL_BASIS_SETS,
+        ORCA_ALL_FUNCTIONALS,
+        ORCA_ALL_SOLVENT_MODELS,
+        ORCA_ALL_SOLVENTS,
+    )
+
+    return (
+        ("aux_basis", _normalized_domain(ORCA_ALL_AUXILIARY_BASIS_SETS)),
+        ("basis", _normalized_domain(ORCA_ALL_BASIS_SETS)),
+        ("functional", _normalized_domain(ORCA_ALL_FUNCTIONALS)),
+        ("solvent_id", _normalized_domain(ORCA_ALL_SOLVENTS)),
+        ("solvent_model", _normalized_domain(ORCA_ALL_SOLVENT_MODELS)),
+    )
+
+
 def loader_project_section_names(program: str) -> tuple[str, ...]:
     """Project-section vocabulary projected from each concrete loader."""
 
@@ -447,7 +493,12 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="ts"),
             ),
             project_section_names=loader_project_section_names("orca"),
-            project_parameter_domains=(
+            # The literal domains below are merged with the probe-verified
+            # method vocabulary (orca_method_domains) and sorted, because the
+            # contract requires domain names in order and the method names --
+            # functional, basis, aux_basis, solvent_* -- interleave with them.
+            project_parameter_domains=tuple(sorted((
+                *orca_method_domains(),
                 (
                     "ab_initio",
                     (
@@ -487,7 +538,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                     "state_manifold",
                     ("singlet", "singlet_triplet"),
                 ),
-            ),
+            ))),
         ),
         "pyscf": ProgramCapability(
             program="pyscf",

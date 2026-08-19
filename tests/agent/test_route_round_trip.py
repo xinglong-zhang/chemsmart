@@ -55,7 +55,11 @@ def _domains():
 @pytest.mark.parametrize("name,value", list(_domains()))
 def test_a_declared_route_parameter_reads_back_as_itself(name, value):
     project = {"basis": "6-31G*", name: value}
-    if name != "ab_initio":
+    if name not in {"ab_initio", "functional"}:
+        # The probe needs *some* method, but must not overwrite the very
+        # parameter under test: when the functional domain arrived, this
+        # line silently replaced every probed functional with B3LYP and the
+        # whole vocabulary appeared to fail its own round trip.
         project["functional"] = "B3LYP"
     elif str(value).casefold().startswith("dlpno-cc"):
         # The parameter-domain probe still has to construct a scientifically
