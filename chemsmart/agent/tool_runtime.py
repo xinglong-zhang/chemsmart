@@ -3119,7 +3119,24 @@ class CommandCompiledToolHostV1:
             if plan.workflow_id == workflow_id
         )
         if not candidates:
-            raise ContractError("unknown scientific workflow ID")
+            # A live session amended straight after a rejected plan call and
+            # was told only that the ID was unknown -- true, but useless: a
+            # rejected plan_scientific_workflow records nothing, so there was
+            # never anything to amend. Say what is known and what the repair
+            # actually is.
+            known = sorted(
+                {
+                    plan.workflow_id
+                    for plan in self.scientific_toolchain_plans.values()
+                }
+            )
+            raise ContractError(
+                f"unknown scientific workflow ID {workflow_id!r}; recorded "
+                f"workflow IDs: {', '.join(known) if known else 'none'}. A "
+                "rejected plan_scientific_workflow call records nothing, so "
+                "there is no workflow to amend -- submit the corrected plan "
+                "as a fresh plan_scientific_workflow call instead."
+            )
         current_plan = candidates[-1]
         current_result = self._scientific_toolchain_command_results[
             current_plan.plan_sha256
