@@ -126,15 +126,36 @@ _WITHHELD = {
 }
 
 
+def _property_names(schema, into):
+    """Collect property names at every depth the describer reaches.
+
+    `_describe_tool_definitions` descends through nested object properties
+    and array items, so a name that appears only inside an item schema --
+    `blocked_reason` inside `support_repairs`, for example -- is genuinely
+    described and is not stale. A guard that looked one level deep flagged
+    exactly such an entry.
+    """
+
+    if not isinstance(schema, dict):
+        return
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for name, value in properties.items():
+            into.add(name)
+            _property_names(value, into)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _property_names(items, into)
+
+
 def test_the_registry_carries_no_entry_no_surface_uses():
     """A stale entry describes a field that no longer exists."""
 
     used = set(_WITHHELD)
     for build in _SURFACES:
         for item in build().tool_definitions:
-            properties = (
-                item["function"].get("parameters") or {}
-            ).get("properties") or {}
-            used |= set(properties)
+            _property_names(
+                item["function"].get("parameters") or {}, used
+            )
     stale = sorted(set(ARGUMENT_DESCRIPTIONS) - used)
     assert not stale, f"described but never exposed: {stale}"
