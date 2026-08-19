@@ -56,6 +56,8 @@ class EventKind(str, Enum):
     SCIENTIFIC_VALIDATION_EVALUATED = "scientific_validation_evaluated"
     ANALYSIS_CLAIMS_RECORDED = "analysis_claims_recorded"
     ANALYSIS_COMPLETION_EVALUATED = "analysis_completion_evaluated"
+    WORKFLOW_ANALYSIS_NODE_SETTLED = "workflow_analysis_node_settled"
+    WORKFLOW_ANALYSIS_REPORT_RENDERED = "workflow_analysis_report_rendered"
     TASK_DEPENDENCY_CONTEXT_SELECTED = "task_dependency_context_selected"
     PROGRAM_EXECUTED = "program_execution_observed"
     OPTIMIZED_GEOMETRY_HANDED_OFF = "optimized_geometry_handed_off"

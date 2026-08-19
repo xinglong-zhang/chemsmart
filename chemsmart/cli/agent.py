@@ -575,6 +575,21 @@ def execute(approval_file, workspace, run_directory, task_spec_sha256):
                 "provider_calls": result.provider_calls,
                 "non_executable_node_ids": result.non_executable_node_ids,
                 "run_directory": result.run_directory,
+                "analysis_status": result.analysis_status,
+                "analysis_report_path": result.analysis_report_path,
+                "analysis_completion_receipt_sha256s": (
+                    result.analysis_completion_receipt_sha256s
+                ),
+                "analysis_nodes": [
+                    {
+                        "node_id": node.node_id,
+                        "analysis_kind": node.analysis_kind,
+                        "state": node.state,
+                        "reason": node.reason,
+                        "receipt_sha256s": node.receipt_sha256s,
+                    }
+                    for node in result.analysis_nodes
+                ],
                 "nodes": [
                     {
                         "node_id": node.node_id,

@@ -6,6 +6,8 @@ not choose science, re-plan, or widen approval.
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
@@ -16,6 +18,8 @@ from typing import Any, Mapping
 from chemsmart.agent._contracts import (
     ContractError,
     TrustedArtifactRefV1,
+    canonical_json,
+    canonical_sha256,
     file_sha256,
 )
 from chemsmart.agent.capabilities import load_program_capabilities
@@ -96,6 +100,18 @@ class ExecutedNodeV1:
 
 
 @dataclass(frozen=True)
+class ExecutedAnalysisNodeV1:
+    """One approved analysis node's fate in the provider-free walk."""
+
+    node_id: str
+    analysis_kind: str
+    #: ``executed`` | ``failed`` | ``skipped`` | ``blocked_unsupported``
+    state: str
+    receipt_sha256s: tuple[str, ...] = ()
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class WorkflowExecutionResultV1:
     """Outcome of one host-driven walk over an approved plan."""
 
@@ -107,6 +123,12 @@ class WorkflowExecutionResultV1:
     status: str
     provider_calls: int = 0
     non_executable_node_ids: tuple[str, ...] = ()
+    #: The approved analysis chain's fate, when the bundle carried one.
+    analysis_nodes: tuple[ExecutedAnalysisNodeV1, ...] = ()
+    #: "" (no chain) | "completed" | "partial" | "not_run"
+    analysis_status: str = ""
+    analysis_completion_receipt_sha256s: tuple[str, ...] = ()
+    analysis_report_path: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -559,6 +581,409 @@ class ApprovedWorkflowExecutor:
                 invocation_sha256=invocation_sha256,
             )
 
+    def _run_analysis_phase(
+        self, toolchain: Any
+    ) -> tuple[tuple["ExecutedAnalysisNodeV1", ...], str, tuple[str, ...], str]:
+        """Walk the approved analysis chain with host-computed arguments.
+
+        No provider exists in this process.  Every argument is derived from
+        the digest-bound plan the human approved; the dispatched tools emit
+        their own typed receipts and events, exactly as they do in a session.
+        A failed validation VERDICT is a completed determination; only a
+        refused kernel call fails a node, and its dependents are skipped
+        with the failure named.
+        """
+
+        from chemsmart.analysis.result_quantities import (
+            canonical_thermochemistry_quantity,
+        )
+        from chemsmart.agent.scientific_toolchain import (
+            AnalysisInputIntentV1,
+            RegisteredResultInputIntentV1,
+        )
+        from chemsmart.agent.runtime.events import EventKind
+
+        program_by_kind = {
+            "pyscf_hdf5": "pyscf",
+            "orca_output": "orca",
+            "gaussian_output": "gaussian",
+            "xtb_output": "xtb",
+            "geometry_xyz": "xyz",
+        }
+        analysis_by_id = {
+            node.node_id: node for node in toolchain.analysis_nodes
+        }
+        calculation_ids = set(toolchain.calculation_node_ids)
+        settled: dict[str, ExecutedAnalysisNodeV1] = {}
+        #: (producer node, output id) -> (receipt digest, receipt quantity id)
+        outputs: dict[tuple[str, str], tuple[str, str]] = {}
+        ledger: list[str] = []
+
+        def _emit(record: ExecutedAnalysisNodeV1) -> None:
+            settled[record.node_id] = record
+            self.host.event_store.append(
+                turn_id=f"exec-analysis-{len(settled):03d}",
+                kind=EventKind.WORKFLOW_ANALYSIS_NODE_SETTLED.value,
+                payload={
+                    "node_id": record.node_id,
+                    "analysis_kind": record.analysis_kind,
+                    "state": record.state,
+                    "reason": record.reason,
+                    "receipt_sha256s": record.receipt_sha256s,
+                    "toolchain_plan_sha256": toolchain.plan_sha256,
+                },
+                idempotency_key=(
+                    "analysis-node:"
+                    + toolchain.plan_sha256
+                    + ":"
+                    + record.node_id
+                ),
+            )
+
+        def _producer_artifact(producer: str) -> Any:
+            prefix = f"result.{producer}."
+            candidates = [
+                artifact
+                for artifact_id, artifact in self.host.artifacts.items()
+                if artifact_id.startswith(prefix)
+                and artifact.kind in program_by_kind
+            ]
+            if len(candidates) != 1:
+                raise ContractError(
+                    f"expected exactly one registered result artifact for "
+                    f"producer {producer!r}; found {len(candidates)}"
+                )
+            return candidates[0]
+
+        def _extraction_quantity_id(node: Any, output: Any) -> str:
+            selector_ids = {
+                selector.quantity_id for selector in node.selectors
+            }
+            if output.output_id in selector_ids:
+                return output.output_id
+            if len(selector_ids) == 1:
+                return next(iter(selector_ids))
+            raise ContractError(
+                f"extraction output {output.output_id!r} names no selector "
+                "quantity and the selector set is not a singleton"
+            )
+
+        def _resolve_source(item: Any) -> tuple[str, str]:
+            key = (item.producer_node_id, item.producer_output_id)
+            if key not in outputs:
+                raise ContractError(
+                    "analysis input references an output the walk has not "
+                    f"produced: {key!r}"
+                )
+            return outputs[key]
+
+        def _run_node(node: Any) -> ExecutedAnalysisNodeV1:
+            kind = node.analysis_kind
+            if kind == "result_extraction":
+                sources: list[Any] = []
+                for item in node.inputs:
+                    if isinstance(item, RegisteredResultInputIntentV1):
+                        sources.append(
+                            self.host.artifacts[item.artifact_id]
+                        )
+                    elif item.producer_node_id in calculation_ids:
+                        sources.append(
+                            _producer_artifact(item.producer_node_id)
+                        )
+                if len(sources) != 1:
+                    raise ContractError(
+                        "result extraction requires exactly one result "
+                        f"artifact; resolved {len(sources)}"
+                    )
+                artifact = sources[0]
+                receipt = self._call(
+                    "extract_result_quantities",
+                    program=program_by_kind[artifact.kind],
+                    artifact_id=artifact.artifact_id,
+                    selectors=[
+                        {
+                            "quantity_id": selector.quantity_id,
+                            "selector": selector.selector,
+                        }
+                        for selector in node.selectors
+                    ],
+                )
+                digest = _field(receipt, "receipt_sha256")
+                for output in node.outputs:
+                    outputs[(node.node_id, output.output_id)] = (
+                        digest,
+                        _extraction_quantity_id(node, output),
+                    )
+                return ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=kind,
+                    state="executed",
+                    receipt_sha256s=(digest,),
+                )
+            if kind == "thermochemistry":
+                if node.temperature_k is None or node.pressure_atm is None:
+                    raise ContractError(
+                        "a thermochemistry stage requires explicit "
+                        "temperature and pressure"
+                    )
+                sources = []
+                for item in node.inputs:
+                    if isinstance(item, RegisteredResultInputIntentV1):
+                        sources.append(
+                            self.host.artifacts[item.artifact_id]
+                        )
+                    elif item.producer_node_id in calculation_ids:
+                        sources.append(
+                            _producer_artifact(item.producer_node_id)
+                        )
+                if len(sources) != 1:
+                    raise ContractError(
+                        "thermochemistry requires exactly one result "
+                        f"artifact; resolved {len(sources)}"
+                    )
+                artifact = sources[0]
+                arguments: dict[str, Any] = {
+                    "program": program_by_kind[artifact.kind],
+                    "artifact_id": artifact.artifact_id,
+                    "temperature_k": float(node.temperature_k),
+                    "pressure_atm": float(node.pressure_atm),
+                    "entropy_method": node.entropy_method,
+                    "alpha": node.alpha,
+                    "use_weighted_mass": node.use_weighted_mass,
+                    "frequency_scale_factor": node.frequency_scale_factor,
+                }
+                if node.concentration_mol_l is not None:
+                    arguments["concentration_mol_l"] = (
+                        node.concentration_mol_l
+                    )
+                if node.entropy_cutoff_cm1 is not None:
+                    arguments["entropy_cutoff_cm1"] = node.entropy_cutoff_cm1
+                if node.enthalpy_cutoff_cm1 is not None:
+                    arguments["enthalpy_cutoff_cm1"] = (
+                        node.enthalpy_cutoff_cm1
+                    )
+                receipt = self._call("derive_thermochemistry", **arguments)
+                digest = _field(receipt, "receipt_sha256")
+                for output in node.outputs:
+                    outputs[(node.node_id, output.output_id)] = (
+                        digest,
+                        canonical_thermochemistry_quantity(
+                            output.quantity_kind
+                        ),
+                    )
+                return ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=kind,
+                    state="executed",
+                    receipt_sha256s=(digest,),
+                )
+            if kind == "quantity_expression":
+                expression_inputs = []
+                for item in node.inputs:
+                    if isinstance(item, RegisteredResultInputIntentV1):
+                        raise ContractError(
+                            "a quantity expression consumes typed receipts, "
+                            "not raw registered results"
+                        )
+                    digest, quantity_id = _resolve_source(item)
+                    expression_inputs.append(
+                        {
+                            "input_id": item.input_id,
+                            "receipt_sha256": digest,
+                            "quantity_id": quantity_id,
+                        }
+                    )
+                receipt = self._call(
+                    "evaluate_quantity_expression",
+                    expression_id=node.node_id,
+                    inputs=expression_inputs,
+                    nodes=json.loads(
+                        canonical_json(tuple(node.expression_nodes))
+                    ),
+                    output_node_ids=list(node.expression_output_node_ids),
+                )
+                digest = _field(receipt, "receipt_sha256")
+                for output in node.outputs:
+                    outputs[(node.node_id, output.output_id)] = (
+                        digest,
+                        output.output_id,
+                    )
+                return ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=kind,
+                    state="executed",
+                    receipt_sha256s=(digest,),
+                )
+            if kind == "scientific_validation":
+                validation_inputs = []
+                for item in node.inputs:
+                    digest, quantity_id = _resolve_source(item)
+                    validation_inputs.append(
+                        {
+                            "input_id": item.input_id,
+                            "receipt_sha256": digest,
+                            "quantity_id": quantity_id,
+                        }
+                    )
+                receipt = self._call(
+                    "evaluate_scientific_validation",
+                    workflow_id=toolchain.workflow_id,
+                    node_id=node.node_id,
+                    inputs=validation_inputs,
+                )
+                digest = _field(receipt, "receipt_sha256")
+                raw_outputs = (
+                    receipt.get("outputs", ())
+                    if isinstance(receipt, Mapping)
+                    else getattr(receipt, "outputs", ())
+                )
+                verdicts = tuple(
+                    "{}={}".format(
+                        _field(item, "quantity_id"), _field(item, "value")
+                    )
+                    for item in raw_outputs
+                )
+                for output in node.outputs:
+                    outputs[(node.node_id, output.output_id)] = (
+                        digest,
+                        output.output_id,
+                    )
+                return ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=kind,
+                    state="executed",
+                    receipt_sha256s=(digest,),
+                    reason="verdicts: " + "; ".join(verdicts),
+                )
+            if kind == "claim_rendering":
+                producer_units = {
+                    (producer.node_id, output.output_id): output.unit
+                    for producer in toolchain.analysis_nodes
+                    for output in producer.outputs
+                }
+                claims = []
+                for item in node.inputs:
+                    digest, quantity_id = _resolve_source(item)
+                    unit = producer_units.get(
+                        (item.producer_node_id, item.producer_output_id)
+                    )
+                    if unit is None:
+                        raise ContractError(
+                            "claim input names an output with no declared "
+                            f"unit: {item.producer_output_id!r}"
+                        )
+                    claims.append(
+                        {
+                            "claim_id": item.input_id,
+                            "receipt_sha256": digest,
+                            "quantity_id": quantity_id,
+                            "display_unit": unit,
+                        }
+                    )
+                receipt = self._call(
+                    "record_analysis_claims",
+                    task_spec_sha256=self.task_spec_sha256,
+                    claims=claims,
+                )
+                digest = _field(receipt, "receipt_sha256")
+                return ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=kind,
+                    state="executed",
+                    receipt_sha256s=(digest,),
+                )
+            raise ContractError(
+                f"the executor cannot run analysis kind {kind!r}"
+            )
+
+        for node_id in toolchain.node_order:
+            node = analysis_by_id.get(node_id)
+            if node is None:
+                continue
+            if node.support_state == "blocked_unsupported":
+                _emit(
+                    ExecutedAnalysisNodeV1(
+                        node_id=node.node_id,
+                        analysis_kind=node.analysis_kind,
+                        state="blocked_unsupported",
+                        reason=node.blocked_reason
+                        or "declared non-executable intent",
+                    )
+                )
+                continue
+            broken = tuple(
+                dependency
+                for dependency in node.dependencies
+                if dependency in settled
+                and settled[dependency].state
+                in {"failed", "skipped", "blocked_unsupported"}
+            )
+            if broken:
+                _emit(
+                    ExecutedAnalysisNodeV1(
+                        node_id=node.node_id,
+                        analysis_kind=node.analysis_kind,
+                        state="skipped",
+                        reason=(
+                            "upstream analysis did not execute: "
+                            + ", ".join(broken)
+                        ),
+                    )
+                )
+                continue
+            try:
+                record = _run_node(node)
+            except ContractError as exc:
+                record = ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=node.analysis_kind,
+                    state="failed",
+                    reason=str(exc),
+                )
+            _emit(record)
+            ledger.extend(record.receipt_sha256s)
+
+        executed_all = all(
+            record.state in {"executed", "blocked_unsupported"}
+            for record in settled.values()
+        )
+        analysis_status = "completed" if executed_all else "partial"
+        completion_receipts: tuple[str, ...] = ()
+        report_path = ""
+        if executed_all and ledger:
+            completion_receipts = (
+                self.host.evaluate_approved_toolchain_completion(
+                    toolchain,
+                    source_receipt_sha256s=tuple(ledger),
+                )
+            )
+            report = self.host.render_completed_analysis_report(
+                completion_receipts[0]
+            )
+            report_directory = self.run_directory / "analysis"
+            report_directory.mkdir(parents=True, exist_ok=True)
+            target = report_directory / "completed-analysis-report.md"
+            target.write_text(report + "\n", encoding="utf-8")
+            report_path = str(target)
+            self.host.event_store.append(
+                turn_id="exec-analysis-report",
+                kind=EventKind.WORKFLOW_ANALYSIS_REPORT_RENDERED.value,
+                payload={
+                    "completion_receipt_sha256": completion_receipts[0],
+                    "report_sha256": canonical_sha256(report),
+                    "toolchain_plan_sha256": toolchain.plan_sha256,
+                },
+                idempotency_key=(
+                    "analysis-report:" + toolchain.plan_sha256
+                ),
+            )
+        return (
+            tuple(settled[node_id] for node_id in sorted(settled)),
+            analysis_status,
+            completion_receipts,
+            report_path,
+        )
+
     def _settle(self, run_state: Any, outcome: ExecutedNodeV1) -> Any:
         """Move a node to the state its own execution receipt reports.
 
@@ -680,6 +1105,23 @@ class ApprovedWorkflowExecutor:
                 break
         done = {item.node_id for item in executed if item.validated}
         status = "completed" if done == approved_node_ids else "partial"
+        analysis_nodes: tuple[ExecutedAnalysisNodeV1, ...] = ()
+        analysis_status = ""
+        completion_receipts: tuple[str, ...] = ()
+        report_path = ""
+        toolchain = getattr(
+            self.execution_bundle, "scientific_toolchain_plan", None
+        )
+        if toolchain is not None:
+            if status != "completed":
+                analysis_status = "not_run"
+            else:
+                (
+                    analysis_nodes,
+                    analysis_status,
+                    completion_receipts,
+                    report_path,
+                ) = self._run_analysis_phase(toolchain)
         return WorkflowExecutionResultV1(
             workflow_id=self.plan.workflow_id,
             plan_sha256=self.plan.plan_sha256,
@@ -691,6 +1133,10 @@ class ApprovedWorkflowExecutor:
             non_executable_node_ids=(
                 self.execution_bundle.non_executable_node_ids
             ),
+            analysis_nodes=analysis_nodes,
+            analysis_status=analysis_status,
+            analysis_completion_receipt_sha256s=completion_receipts,
+            analysis_report_path=report_path,
         )
 
 
@@ -775,6 +1221,9 @@ def _execution_inputs_from_bundle(
             bundle.approved_environment_identities
         ),
         "stationary_point_policy": bundle.stationary_point_policy,
+        "approved_scientific_toolchain_plan": getattr(
+            bundle, "scientific_toolchain_plan", None
+        ),
     }
 
 

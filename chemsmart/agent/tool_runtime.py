@@ -1073,6 +1073,9 @@ class CommandCompiledToolHostV1:
         stationary_point_policy: (
             StationaryPointValidationPolicyV1 | None
         ) = None,
+        approved_scientific_toolchain_plan: (
+            ScientificToolchainPlanV1 | None
+        ) = None,
         scientific_workflow_plan: ScientificWorkflowPlanV2 | None = None,
         preview_server: str = "",
         execution_server: str = "",
@@ -1357,6 +1360,12 @@ class CommandCompiledToolHostV1:
         for key in self.result_functional_evidence:
             require_sha256(key, "result functional evidence receipt")
         self.analysis_completion_policy = analysis_completion_policy
+        # The approved analysis chain, in the executor host. The validation
+        # evaluator and the completion gate resolve their sealed plan from
+        # here when no planning session ever ran in this process.
+        self.approved_scientific_toolchain_plan = (
+            approved_scientific_toolchain_plan
+        )
         if (
             self.analysis_completion_policy is not None
             and self.analysis_completion_policy.task_spec_sha256
@@ -1391,6 +1400,10 @@ class CommandCompiledToolHostV1:
         self.scientific_toolchain_plans: dict[
             str, ScientificToolchainPlanV1
         ] = {}
+        if approved_scientific_toolchain_plan is not None:
+            self.scientific_toolchain_plans[
+                approved_scientific_toolchain_plan.plan_sha256
+            ] = approved_scientific_toolchain_plan
         self._scientific_toolchain_command_results: dict[
             str, dict[str, Any]
         ] = {}
@@ -5732,14 +5745,29 @@ class CommandCompiledToolHostV1:
         )
         if not source_receipts:
             return ()
+        return self._record_toolchain_completion(
+            plan,
+            task_spec_sha256=draft.task_spec_id,
+            source_receipt_sha256s=source_receipts,
+        )
+
+    def _record_toolchain_completion(
+        self,
+        plan: ScientificToolchainPlanV1,
+        *,
+        task_spec_sha256: str,
+        source_receipt_sha256s: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Record one toolchain-as-policy completion receipt and its event."""
+
         body = {
             "schema_version": "chemsmart.analysis-completion-receipt.v1",
-            # A registered-result scientific toolchain is already a visible,
-            # typed output contract.  Its digest fills the existing aggregate
-            # gate's policy identity without inventing a parallel policy file.
+            # A scientific toolchain is already a visible, typed output
+            # contract.  Its digest fills the existing aggregate gate's
+            # policy identity without inventing a parallel policy file.
             "policy_sha256": plan.plan_sha256,
-            "task_spec_sha256": draft.task_spec_id,
-            "source_receipt_sha256s": source_receipts,
+            "task_spec_sha256": task_spec_sha256,
+            "source_receipt_sha256s": source_receipt_sha256s,
             "status": "passed",
             "findings": (),
         }
@@ -5770,6 +5798,47 @@ class CommandCompiledToolHostV1:
             ),
         )
         return (completion.receipt_sha256,)
+
+    def evaluate_approved_toolchain_completion(
+        self,
+        plan: ScientificToolchainPlanV1,
+        *,
+        source_receipt_sha256s: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Executor-side completion over an approved, fully executed chain.
+
+        The session gate infers completion by matching receipts backward onto
+        the plan; the executor needs no inference -- it dispatched every
+        analysis call itself and holds the ledger of resulting receipt
+        digests.  The gates that remain host-owned here: every approved
+        calculation node must hold a validated execution receipt, and the
+        ledger must be non-empty.  A scientific decision is deliberately not
+        required -- interpretation stays a session act.
+        """
+
+        for node_id in plan.calculation_node_ids:
+            receipt = self.execution_receipts.get(node_id)
+            if receipt is None or not bool(
+                getattr(receipt, "validated", False)
+            ):
+                raise ContractError(
+                    "approved toolchain completion requires every "
+                    f"calculation node validated; {node_id!r} is not"
+                )
+        receipts = tuple(sorted(set(source_receipt_sha256s)))
+        if not receipts:
+            raise ContractError(
+                "approved toolchain completion requires at least one "
+                "analysis receipt"
+            )
+        task_spec_sha256 = self._resolve_task_spec_reference(
+            {}, "task_spec_sha256"
+        )
+        return self._record_toolchain_completion(
+            plan,
+            task_spec_sha256=task_spec_sha256,
+            source_receipt_sha256s=receipts,
+        )
 
     def completion_receipts_for_latest_preflight(self) -> tuple[str, ...]:
         """Return a green analysis-toolchain or command-preflight gate."""
@@ -6195,6 +6264,24 @@ class CommandCompiledToolHostV1:
             for decision in self.scientific_decisions.values()
             if decision.record_sha256 in source_receipts
         )
+        toolchain = self.scientific_toolchain_plans.get(
+            completion.policy_sha256
+        )
+        if toolchain is not None:
+            # The toolchain itself was the completion policy.  Claims are
+            # rendered when a claim stage recorded them; a scientific decision
+            # is a session act and may legitimately not exist yet.
+            if len(claim_records) > 1 or len(decisions) > 1:
+                raise ContractError(
+                    "a toolchain completion binds at most one claim record "
+                    "and one decision"
+                )
+            return self._render_toolchain_analysis_report(
+                completion=completion,
+                toolchain=toolchain,
+                claims=claim_records[0] if claim_records else None,
+                decision=decisions[0] if decisions else None,
+            )
         if len(claim_records) != 1 or len(decisions) != 1:
             raise ContractError(
                 "completed analysis must bind one claim record and one decision"
@@ -6260,6 +6347,90 @@ class CommandCompiledToolHostV1:
                 continue
             lines.extend(("", f"## {title}", ""))
             lines.extend(f"- {value}" for value in entries)
+        return "\n".join(lines)
+
+    def _render_toolchain_analysis_report(
+        self,
+        *,
+        completion: AnalysisCompletionReceiptV1,
+        toolchain: ScientificToolchainPlanV1,
+        claims: Any,
+        decision: Any,
+    ) -> str:
+        """Render an approved toolchain's executed analysis, decision or not."""
+
+        lines = [
+            "# Host-validated structured analysis",
+            "",
+            f"Completion receipt: `{completion.receipt_sha256}`",
+            f"Toolchain plan: `{toolchain.plan_sha256}`",
+        ]
+        conditions = tuple(
+            (node.node_id, node.temperature_k, node.pressure_atm)
+            for node in toolchain.analysis_nodes
+            if node.analysis_kind == "thermochemistry"
+            and node.temperature_k is not None
+        )
+        if conditions:
+            lines.extend(
+                (
+                    "",
+                    "## Thermochemical conditions",
+                    "",
+                    "| Stage | Temperature (K) | Pressure (atm) |",
+                    "|---|---:|---:|",
+                )
+            )
+            for node_id, temperature, pressure in conditions:
+                lines.append(
+                    f"| {node_id} | `{temperature}` | `{pressure}` |"
+                )
+        if claims is not None:
+            lines.extend(
+                (
+                    "",
+                    f"Claim record: `{claims.receipt_sha256}`",
+                    "",
+                    "## Host-rendered numerical claims",
+                    "",
+                    "| Claim | Value | Unit | Source receipt |",
+                    "|---|---:|---|---|",
+                )
+            )
+            for claim in claims.claims:
+                display = json.dumps(
+                    canonical_data(claim.display_value),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                lines.append(
+                    f"| {claim.claim_id} | `{display}` | {claim.display_unit} "
+                    f"| `{claim.source_receipt_sha256}` |"
+                )
+        if decision is not None:
+            sections = (
+                ("Method rationale", (decision.method_rationale,)),
+                ("Assumptions", decision.assumptions),
+                ("Diagnostics", decision.diagnostics),
+                ("Uncertainties", decision.uncertainties),
+                ("Alternatives", decision.alternatives),
+            )
+            for title, values in sections:
+                entries = tuple(value for value in values if value)
+                if not entries:
+                    continue
+                lines.extend(("", f"## {title}", ""))
+                lines.extend(f"- {value}" for value in entries)
+        else:
+            lines.extend(
+                (
+                    "",
+                    "Scientific decision: not recorded -- interpretation is "
+                    "a session act; this run executed extraction, "
+                    "thermochemistry, expressions, validation verdicts, and "
+                    "claim rendering only.",
+                )
+            )
         return "\n".join(lines)
 
     def _execute_approved_program_node(
@@ -9640,8 +9811,23 @@ class CommandCompiledToolHostV1:
 
         workflow_id = str(values["workflow_id"])
         node_id = str(values["node_id"])
-        resolved = self._resolve_program_workflow(workflow_id)
-        plan = resolved.scientific_toolchain_plan
+        approved = self.approved_scientific_toolchain_plan
+        if (
+            approved is not None
+            and workflow_id == approved.workflow_id
+            and workflow_id not in self._latest_program_workflows
+        ):
+            # Executor host: no planning session ran in this process, so the
+            # sealed rules come from the approved bundle's digest-bound plan
+            # and the task from the single approved task spec.
+            plan = approved
+            task_spec_sha256 = self._resolve_task_spec_reference(
+                {}, "task_spec_sha256"
+            )
+        else:
+            resolved = self._resolve_program_workflow(workflow_id)
+            plan = resolved.scientific_toolchain_plan
+            task_spec_sha256 = resolved.draft.task_spec_id
         if plan is None:
             raise ContractError("workflow has no scientific analysis toolchain")
         nodes = tuple(
@@ -9658,7 +9844,7 @@ class CommandCompiledToolHostV1:
 
         matched = self._scientific_toolchain_analysis_receipts(
             plan,
-            task_spec_sha256=resolved.draft.task_spec_id,
+            task_spec_sha256=task_spec_sha256,
         )
         input_intents = {
             item.input_id: item
