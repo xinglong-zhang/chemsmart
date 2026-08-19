@@ -61,6 +61,39 @@ class GaussianRefs:
         "MINDO3",
     ]
 
+    # Complete standalone functional keywords accepted on a Gaussian 16
+    # route line. Curated from the Gaussian 16 Rev C.01 keyword
+    # documentation ("Density Functional (DFT) Methods"); provenance is
+    # manual -- the Gaussian job-submission hold on this host forbids the
+    # binary probe the ORCA vocabulary received -- so this list holds only
+    # keywords the documentation names explicitly. It is a vocabulary of
+    # standalone route tokens, unlike g_functionals above, which is a
+    # substring-fragment list used for route classification and must not be
+    # mistaken for one.
+    g_all_functionals = [
+        # local / pure
+        "lsda", "svwn", "svwn5",
+        "blyp", "bp86", "bpw91", "bpbe", "bvwn", "bvp86",
+        "pbepbe", "hcth", "hcth93", "hcth147", "hcth407", "thcth",
+        "tpsstpss", "revtpssrevtpss", "m06l", "m11l", "mn12l", "mn15l",
+        "n12", "sogga11", "b97d", "b97d3", "vsxc",
+        # global hybrids
+        "b3lyp", "b3p86", "b3pw91", "o3lyp", "x3lyp",
+        "b1b95", "b1lyp", "b98", "b971", "b972", "bmk",
+        "bhandh", "bhandhlyp",
+        "mpw1pw91", "mpw1lyp", "mpw1pbe", "mpw3pbe",
+        "pbe1pbe", "pbeh1pbe", "hseh1pbe", "ohse2pbe", "ohse1pbe",
+        "tpssh", "thcthhyb", "apf", "apfd",
+        "m05", "m052x", "m06", "m062x", "m06hf",
+        "m08hx", "mn15", "pw6b95", "pw6b95d3", "sogga11x",
+        "hissbpbe", "x3lyp",
+        # range-separated
+        "cam-b3lyp", "lc-whpbe", "wb97", "wb97x", "wb97xd",
+        "m11", "mn12sx", "n12sx",
+        # double hybrids
+        "b2plyp", "b2plypd3", "mpw2plyp",
+    ]
+
     # Solvation models available in Gaussian
     g_solvation_models = [
         "smd",
@@ -125,6 +158,12 @@ class GaussianRefs:
     def gaussian_semiempirical_methods(self):
         """Get list of semi-empirical methods."""
         return self.g_semiempirical
+
+    @property
+    def gaussian_all_functionals(self):
+        """Standalone G16 functional keywords, lower-case and deduplicated."""
+
+        return sorted({name.strip().lower() for name in self.g_all_functionals})
 
     @property
     def gaussian_solvation_models(self):
@@ -228,6 +267,7 @@ GAUSSIAN_FUNCTIONALS = gaussian_ref.gaussian_dft_fuctionals
 GAUSSIAN_BASES = gaussian_ref.gaussian_basis_sets
 GAUSSIAN_SEMIEMPIRICAL = gaussian_ref.gaussian_semiempirical_methods
 GAUSSIAN_SOLVATION_MODELS = gaussian_ref.gaussian_solvation_models
+GAUSSIAN_ALL_FUNCTIONALS = gaussian_ref.gaussian_all_functionals
 GAUSSIAN_ADDITIONAL_OPT_OPTIONS = gaussian_ref.gaussian_additional_opt_options
 GAUSSIAN_DIEZE_TAGS = gaussian_ref.gaussian_dieze_tags
 GAUSSIAN_ADDITIONAL_ROUTE_PARAMETERS = (

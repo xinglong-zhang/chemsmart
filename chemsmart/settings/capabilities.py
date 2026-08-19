@@ -333,6 +333,43 @@ def orca_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
     )
 
 
+def gaussian_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Gaussian vocabulary projected from the io tables.
+
+    The functional list is manually curated from the Gaussian 16 Rev C.01
+    keyword documentation -- the job-submission hold on this host forbids the
+    binary probe ORCA received -- so its provenance is the documentation, not
+    the binary. Dispersion covers both the native EmpiricalDispersion tokens
+    and the aliases the loader normalizes.
+    """
+
+    from chemsmart.io.gaussian import (
+        GAUSSIAN_ALL_FUNCTIONALS,
+        GAUSSIAN_SOLVATION_MODELS,
+    )
+    from chemsmart.io.gaussian.route import GAUSSIAN_EMPIRICAL_DISPERSIONS
+
+    dispersion = set(GAUSSIAN_EMPIRICAL_DISPERSIONS) | {
+        "d2",
+        "d3",
+        "d3bj",
+        "d3zero",
+    }
+    return (
+        ("dispersion", _normalized_domain(dispersion)),
+        ("functional", _normalized_domain(GAUSSIAN_ALL_FUNCTIONALS)),
+        ("solvent_model", _normalized_domain(GAUSSIAN_SOLVATION_MODELS)),
+    )
+
+
+def xtb_solvent_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """The xTB solvent vocabulary, previously invisible to the model."""
+
+    from chemsmart.io.xtb import XTB_ALL_SOLVENT_IDS
+
+    return (("solvent_id", _normalized_domain(XTB_ALL_SOLVENT_IDS)),)
+
+
 def loader_project_section_names(program: str) -> tuple[str, ...]:
     """Project-section vocabulary projected from each concrete loader."""
 
@@ -422,9 +459,10 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 ),
             ),
             project_section_names=loader_project_section_names("gaussian"),
-            project_parameter_domains=(
+            project_parameter_domains=tuple(sorted((
                 ("states", ("50-50", "singlets", "triplets")),
-            ),
+                *gaussian_method_domains(),
+            ))),
         ),
         "nciplot": ProgramCapability(
             program="nciplot",
@@ -610,6 +648,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                         "vtight",
                     ),
                 ),
+                xtb_solvent_domains()[0],
                 (
                     "solvent_model",
                     ("alpb", "cosmo", "cpcmx", "gbsa", "tmcosmo"),
