@@ -1871,7 +1871,38 @@ class CommandCompiledToolHostV1:
             multiplicity=values["multiplicity"],
         )
         self.scientific_identities[binding.binding_sha256] = binding
-        return binding
+        # The bare binding told a session nothing about the molecule it had
+        # just bound, and nothing pointed geometry artifacts at the
+        # measurement operations that already exist -- in a four-session
+        # observation exactly one session discovered that a bound geometry
+        # is measurable and verified its own conformer labels; the others
+        # assumed and disclosed. Surface the facts and the route here, where
+        # every session already looks. The binding itself stays digest-frozen
+        # inside the wrapper.
+        try:
+            from chemsmart.io.molecules.structure import Molecule
+
+            molecule = Molecule.from_filepath(artifact.path)
+            geometry_facts = {
+                "atom_count": len(molecule.chemical_symbols),
+                "formula": molecule.get_chemical_formula(),
+                "symbols": tuple(molecule.chemical_symbols),
+            }
+        except Exception:
+            geometry_facts = {}
+        return {
+            "schema_version": "chemsmart.scientific-identity-bound.v1",
+            "binding_sha256": binding.binding_sha256,
+            "binding": binding,
+            "geometry": geometry_facts,
+            "measurement_route": (
+                "this geometry_xyz artifact is readable without any engine: "
+                "extract_result_quantities with program 'xyz' yields "
+                "positions and symbols, and evaluate_quantity_expression "
+                "offers distance, angle, and dihedral operations over those "
+                "positions -- measure a coordinate before assuming its value"
+            ),
+        }
 
     def _inspect_program_capability(self, turn_id: str, values: dict) -> Any:
         receipt = query_capability(
