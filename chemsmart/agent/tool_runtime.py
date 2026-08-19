@@ -2385,9 +2385,15 @@ class CommandCompiledToolHostV1:
         bindings: list[dict[str, Any]] = []
         active_roles: dict[str, tuple[str, ...]] = {}
         for workflow_id, plan in sorted(latest_by_workflow.items()):
-            command_result = self._scientific_toolchain_command_results[
+            command_result = self._scientific_toolchain_command_results.get(
                 plan.plan_sha256
-            ]
+            )
+            if command_result is None:
+                # The executor host seeds the approved toolchain plan without
+                # any planning-session command result; the relational
+                # observation below exists to keep a *planning* session from
+                # binding a stale project, which cannot happen here.
+                continue
             draft = command_result["workflow_draft"]
             roles = tuple(sorted({node.project_role for node in draft.nodes}))
             active_roles[workflow_id] = roles
@@ -9380,10 +9386,17 @@ class CommandCompiledToolHostV1:
                 # does not say what xTB itself complained about.  xTB is one of
                 # the three programs this release executes, so a failed run
                 # deserves the same account as ORCA gets.
+                # The xTB log itself is registered as kind "xtb_output";
+                # "program_output" covers the charges/wbo/xtbrestart/topology
+                # sidecars, which never contain the "finished run" sentinel.
+                # Summarizing over those called every healthy live run an
+                # incomplete_output failure -- observed on the first real
+                # xtb execution through agent execute, where all three
+                # normally terminated single points failed validation.
                 xtb_logs = tuple(
                     artifact
                     for artifact in output_artifacts
-                    if artifact.kind == "program_output"
+                    if artifact.kind == "xtb_output"
                     and Path(artifact.path).suffix.lower() != ".err"
                 )
                 if xtb_logs:
