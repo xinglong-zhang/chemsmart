@@ -750,6 +750,7 @@ def project_scientific_toolchain_frontier(
     unresolved_calculation_node_ids: Iterable[str] = (),
     completed_calculation_node_ids: Iterable[str] = (),
     completed_analysis_node_ids: Iterable[str] = (),
+    non_executable_calculation_node_ids: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Return model-useful next actions without pretending future data exist."""
 
@@ -757,6 +758,12 @@ def project_scientific_toolchain_frontier(
     unresolved = set(unresolved_calculation_node_ids)
     completed = set(completed_calculation_node_ids)
     completed_analysis = set(completed_analysis_node_ids)
+    # A live session read "actionable / compile_and_preview" on a stage that
+    # approval readiness was simultaneously excluding as non-executable, and
+    # had to flag the contradiction itself. The readiness side already owns
+    # the truth (declared blocked_unsupported plus its data-edge cascade);
+    # the frontier now states the same truth instead of a second opinion.
+    non_executable = dict(non_executable_calculation_node_ids or {})
     states: dict[str, str] = {}
     nodes: list[dict[str, object]] = []
     analysis_by_id = {node.node_id: node for node in plan.analysis_nodes}
@@ -777,14 +784,21 @@ def project_scientific_toolchain_frontier(
         if node_id in plan.calculation_node_ids:
             if node_id in completed:
                 state = "completed"
+            elif node_id in non_executable:
+                state = "non_executable"
             elif node_id in actionable:
                 state = "actionable"
             else:
                 state = "waiting"
-            if node_id in unresolved and state != "completed":
+            if node_id in unresolved and state not in {
+                "completed",
+                "non_executable",
+            }:
                 state = "waiting"
             if state == "completed":
                 reason = "validated execution result already exists"
+            elif state == "non_executable":
+                reason = non_executable[node_id]
             elif state == "actionable":
                 reason = "compile_and_preview"
             else:
@@ -796,7 +810,11 @@ def project_scientific_toolchain_frontier(
                     parent
                     for parent in node.dependencies
                     if states.get(parent)
-                    in {"blocked_unsupported", "blocked_upstream"}
+                    in {
+                        "blocked_unsupported",
+                        "blocked_upstream",
+                        "non_executable",
+                    }
                 )
             )
             if node.support_state == "blocked_unsupported":

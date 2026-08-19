@@ -2834,6 +2834,9 @@ class CommandCompiledToolHostV1:
             completed_calculation_node_ids=command_result.get(
                 "completed_node_ids", ()
             ),
+            non_executable_calculation_node_ids=self._non_executable_reasons(
+                command_result.get("scientific_workflow_plan")
+            ),
         )
         return {
             "scientific_toolchain_plan": plan,
@@ -3481,6 +3484,9 @@ class CommandCompiledToolHostV1:
                 unresolved_calculation_node_ids=unresolved,
                 completed_calculation_node_ids=context.completed_node_ids,
                 completed_analysis_node_ids=analysis_receipts,
+                non_executable_calculation_node_ids=(
+                    self._non_executable_reasons(scientific_v2)
+                ),
             ),
         }
         if readiness is not None:
@@ -7026,6 +7032,49 @@ class CommandCompiledToolHostV1:
             if not grew:
                 break
         return frozenset(non_executable)
+
+    def _non_executable_reasons(
+        self, plan: ScientificWorkflowPlanV2 | None
+    ) -> dict[str, str]:
+        """Per-node reasons for the same set the readiness projection uses.
+
+        The frontier used to compute actionability without consulting
+        support state at all, so it told a session "compile_and_preview" for
+        a stage the readiness was simultaneously excluding as
+        non-executable, and the session had to flag the contradiction
+        itself. One truth source: the declared-plus-cascaded set above,
+        joined with the declared reason where one exists and the naming of
+        the blocked producer where the state is inherited.
+        """
+
+        if plan is None:
+            return {}
+        non_executable = self._release_non_executable_node_ids(plan)
+        declared = {
+            node.node_id: node.blocked_reason
+            for node in plan.nodes
+            if node.support_state == "blocked_unsupported"
+        }
+        reasons: dict[str, str] = {}
+        for node_id in non_executable:
+            if node_id in declared:
+                reasons[node_id] = (
+                    declared[node_id]
+                    or "declared non-executable intent"
+                )
+            else:
+                sources = sorted(
+                    edge.source_node_id
+                    for edge in getattr(plan, "edges", ())
+                    if getattr(edge, "edge_kind", "") == "data"
+                    and edge.target_node_id == node_id
+                    and edge.source_node_id in non_executable
+                )
+                reasons[node_id] = (
+                    "consumes the output of non-executable stage "
+                    + (", ".join(sources) if sources else "upstream")
+                )
+        return reasons
 
     def execution_review_ineligibility_reason(
         self,
