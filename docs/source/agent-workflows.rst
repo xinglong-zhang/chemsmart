@@ -368,6 +368,27 @@ result as quasi-harmonic.
 
 Supply ``--analysis-completion-file`` only when another application needs a
 host-authored list of mandatory quantities or claims.  Ordinary
-existing-result analysis does not require it.  After approved execution,
-start a new analysis request over the completed result workspace; this does
-not rerun the engine or extend the earlier execution decision.
+existing-result analysis does not require it.
+
+A typed analysis chain planned with a workflow travels verbatim in the review
+packet and the approval bundle, and the single approval covers it.  After
+every approved calculation node validates, ``agent execute`` runs the chain
+provider-free -- extraction, thermochemistry, expressions, validation
+verdicts, and claim rendering -- and writes ``analysis/
+completed-analysis-report.md`` into the run directory.  A failed validation
+verdict is a completed determination, not an execution failure.  Scientific
+interpretation and the recorded decision remain a session act: start a new
+analysis request over the completed result workspace to record them; this
+does not rerun the engine or extend the earlier execution decision.  A
+workflow approved without an analysis chain executes exactly as before.
+
+Two further affordances round out multi-stage work.
+``compose_molecular_arrangement`` places two identity-bound geometries into
+one arrangement at an explicit atomic contact; the host owns the placement
+mathematics and the composed bytes with full parent lineage, the electronic
+state is bound explicitly afterwards, and the consuming stage is a new
+workflow.  A validated frequency-bearing ORCA producer may feed its Hessian
+to an ORCA transition-state search through the live ``--inhess-filename``
+option (selection rule ``validated_producer_orca_hessian``); the starting
+Hessian may carry any imaginary-mode count, and the observed count is
+recorded in the handoff receipt.

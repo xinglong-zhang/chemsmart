@@ -38,6 +38,26 @@ only. Constrained optimisation is expressible and previewable, and no
 constrained optimisation has yet run here, so this release does not describe it
 as completed Agent execution.
 
+A typed analysis chain planned with a workflow is carried verbatim in the
+review packet and the approval bundle, and the single human approval covers
+it: after every approved calculation node validates, the provider-free
+executor runs the chain and renders a completed-analysis report. The model
+never writes those numbers; interpretation and the recorded scientific
+decision remain a session act.
+
+``compose_molecular_arrangement`` places two identity-bound geometry
+artifacts into one arrangement at an explicit atomic contact. The host owns
+the placement mathematics and the composed bytes with full parent lineage;
+the model owns the fragment, contact, and distance choices, must bind the
+arrangement's charge and multiplicity explicitly, and the consuming stage is
+a new workflow for review.
+
+A validated frequency-bearing ORCA producer may feed its Hessian to an ORCA
+transition-state search through the live ``--inhess-filename`` option under
+the third producer selection rule (``validated_producer_orca_hessian``); the
+starting Hessian may carry any imaginary-mode count and the observed count
+is recorded. Wavefunction (gbw) reuse has no CLI surface and is not claimed.
+
 Gaussian ``sp/opt/ts/irc/td/link/scan/modred`` is supported for project YAML,
 native-input generation, safe preview, and parsing of user-supplied completed
 results; this release does not claim Gaussian Agent execution. GPU4PySCF
@@ -73,9 +93,13 @@ do not grant engine authority. Real calculation follows this chain:
 4. a human enters ``/approve`` once, or chooses ``/deny`` or ``/revise``;
 5. the displayed workflow is removed from the pending state before launch;
 6. a provider-free executor runs only that reviewed executable partition; and
-7. ChemSmart records engine and validation evidence; a subsequent explicit
-   analysis request reads the completed result into typed quantities,
-   expressions, thermochemistry, claims, and interpretation.
+7. ChemSmart records engine and validation evidence; a typed analysis chain
+   displayed and approved with the workflow then executes provider-free in
+   the same run, recording extraction, thermochemistry, expression,
+   validation-verdict, and claim receipts, while scientific interpretation
+   and the recorded decision remain a subsequent explicit session act; a
+   workflow approved without an analysis chain keeps the prior behavior, and
+   a later explicit analysis request may always read completed results.
 
 There is no permanent calculation grant, session-wide "always allow", command
 prefix allow-list, or model-created approval. A revised molecule, state,

@@ -31,7 +31,12 @@ TS Options
 
    -  -  ``-f, --inhess-filename``
       -  string
-      -  Hessian filename
+      -  Hessian filename.  In agent workflows this option is also the
+         consumer role of the ``validated_producer_orca_hessian`` data
+         edge: a validated frequency-bearing ORCA producer's Hessian is
+         handed to the TS search under the same single approval, with
+         ``inhess: true`` carried as method configuration in the project
+         ``ts`` section.
 
    -  -  ``--numhess/--no-numhess``
       -  flag

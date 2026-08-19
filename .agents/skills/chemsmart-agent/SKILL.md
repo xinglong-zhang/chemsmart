@@ -81,6 +81,15 @@ non-executing. Before an engine launch:
 5. hand only the displayed executable partition to the provider-free
    deterministic executor; deferred stages remain visible but unapproved.
 
+A typed analysis chain displayed in the review is covered by the same single
+approval: after every approved calculation node validates, the executor runs
+the chain provider-free and renders a completed-analysis report, while
+scientific interpretation and the recorded decision remain a session act. A
+composed molecular arrangement (compose_molecular_arrangement) is host-built
+from two identity-bound parents with its lineage displayed at review;
+composition never infers an electronic state, and its consuming stage is a
+new workflow.
+
 Never create an approval on the model's behalf. Never offer permanent,
 session-wide, prefix-based, or "always allow" chemistry execution. A revised
 scientific input, project, environment, resource request, or DAG requires a new
