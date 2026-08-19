@@ -2791,6 +2791,28 @@ class CommandCompiledToolHostV1:
                 f"{item.get('node_id')}: {item.get('rule_id')}"
                 for item in findings
             ) or "no finding was recorded"
+            # A live session that had blocked every stage (as instructed) and
+            # bound two identities (as instructed) was still refused twice,
+            # because the general sentence below was already satisfied
+            # vacuously: nothing in its draft consumed any artifact, so
+            # nothing could anchor a molecule. Say that case in its own words.
+            anchors_nothing = not any(
+                getattr(intent, "artifact_id", "")
+                for node in draft_for_findings.nodes
+                for intent in getattr(node, "inputs", ())
+            )
+            if anchors_nothing:
+                raise ContractError(
+                    "the calculation nodes could not be bound into a "
+                    f"scientific plan ({named}). No input anywhere in this "
+                    "workflow names a workspace artifact, so the workflow "
+                    "anchors no molecule: blocked stages document intent but "
+                    "cannot anchor identity, and producer-fed inputs only "
+                    "chain back to initial ones. At least one plannable "
+                    "initial node must consume an identity-bound workspace "
+                    "geometry artifact (bind_scientific_identity, then name "
+                    "its artifact_id in that node's input)."
+                )
             raise ContractError(
                 "the calculation nodes could not be bound into a scientific "
                 f"plan ({named}). Every initial node input must name a "

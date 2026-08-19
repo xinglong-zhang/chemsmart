@@ -86,11 +86,11 @@ def test_the_refusal_carries_the_findings_and_the_actions(tmp_path):
         task_spec_sha256s=("a" * 64,),
         approved_workspace=tmp_path / "workspace",
     )
-    empty_input = [
+    named_but_unbound = [
         {
             "binding_id": "filename",
             "artifact_class": "geometry_xyz",
-            "artifact_id": "",
+            "artifact_id": "geometry-feedbeef",
             "producer_node_id": "",
             "producer_output_id": "",
         }
@@ -100,7 +100,7 @@ def test_the_refusal_carries_the_findings_and_the_actions(tmp_path):
         host.dispatch(
             turn_id="t1",
             tool_name="plan_scientific_workflow",
-            arguments=_plan_args(empty_input),
+            arguments=_plan_args(named_but_unbound),
         )
 
     message = str(refusal.value)
@@ -111,3 +111,37 @@ def test_the_refusal_carries_the_findings_and_the_actions(tmp_path):
     assert "blocked_unsupported" in message
     # The internal invariant no longer leaks for this shape.
     assert "task-bound scientific plan" not in message
+
+
+def test_a_workflow_that_anchors_nothing_is_told_so(tmp_path):
+    """Plan 3 of the same protocol: every stage blocked, identities bound,
+    and still refused twice -- the general sentence was satisfied vacuously.
+    An all-blocked draft consumes no artifact anywhere, and the refusal must
+    say that anchoring, not input hygiene, is what is missing."""
+
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="s2"
+        ),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=tmp_path / "workspace",
+    )
+    args = _plan_args([])
+    args["calculation_nodes"][0]["support_state"] = "blocked_unsupported"
+    args["calculation_nodes"][0]["blocked_reason"] = (
+        "no complex geometry exists in this workspace"
+    )
+
+    with pytest.raises(ContractError) as refusal:
+        host.dispatch(
+            turn_id="t1",
+            tool_name="plan_scientific_workflow",
+            arguments=args,
+        )
+
+    message = str(refusal.value)
+    assert "anchors no molecule" in message
+    assert "At least one plannable initial node" in message
+    assert "bind_scientific_identity" in message
+    # The input-hygiene sentence would mislead here; it must not be the text.
+    assert "declared blocked_unsupported with its reason" not in message
