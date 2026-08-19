@@ -589,6 +589,7 @@ def test_legacy_frozen_approval_remains_readable_but_not_admissible():
         "materialized_preview_bindings",
         "producer_edge_rules",
         "admission_sha256",
+        "scientific_toolchain_plan_sha256",
     ):
         record.pop(field)
     record.pop("approval_sha256")

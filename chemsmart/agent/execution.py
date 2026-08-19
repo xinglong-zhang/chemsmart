@@ -36,6 +36,7 @@ from chemsmart.agent._contracts import (
     require_auxiliary_artifact_bindings,
     require_sha256,
 )
+from chemsmart.agent.scientific_toolchain import ScientificToolchainPlanV1
 from chemsmart.agent.projects import (
     ProjectRenderReceiptV1,
     ProjectValidationReceiptV1,
@@ -3161,6 +3162,9 @@ class FrozenWorkflowApprovalV1:
     ] = ()
     producer_edge_rules: tuple[FrozenProducerEdgeRuleV1, ...] = ()
     admission_sha256: str = ""
+    #: Digest of the analysis chain the same approval covers; empty when the
+    #: review carried none, preserving every pre-existing approval digest.
+    scientific_toolchain_plan_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.frozen-workflow-approval.v1":
@@ -3204,6 +3208,11 @@ class FrozenWorkflowApprovalV1:
                 self.stationary_point_policy_sha256,
                 "stationary_point_policy_sha256",
             )
+        if self.scientific_toolchain_plan_sha256:
+            require_sha256(
+                self.scientific_toolchain_plan_sha256,
+                "scientific_toolchain_plan_sha256",
+            )
         if self.status != "approved":
             raise ContractError("frozen workflow approval must be approved")
         legacy_body = {
@@ -3223,6 +3232,10 @@ class FrozenWorkflowApprovalV1:
             ),
             "status": self.status,
         }
+        if self.scientific_toolchain_plan_sha256:
+            legacy_body["scientific_toolchain_plan_sha256"] = (
+                self.scientific_toolchain_plan_sha256
+            )
         has_admission = bool(
             self.materialized_preview_bindings
             or self.producer_edge_rules
@@ -3323,6 +3336,7 @@ def build_frozen_workflow_approval(
     environment_identity_by_receipt: Mapping[str, str] | None = None,
     stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
     non_executable_node_ids: Sequence[str] = (),
+    scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None,
 ) -> FrozenWorkflowApprovalV1:
     """Freeze one plan without pretending future data artifacts exist.
 
@@ -3520,6 +3534,10 @@ def build_frozen_workflow_approval(
         "producer_edge_rules": producer_rules,
         "admission_sha256": canonical_sha256(admission_body),
     }
+    if scientific_toolchain_plan is not None:
+        body["scientific_toolchain_plan_sha256"] = (
+            scientific_toolchain_plan.plan_sha256
+        )
     digest_body = {
         **body,
         "materialized_preview_bindings": preview_binding_bodies,
@@ -3949,10 +3967,28 @@ class WorkflowExecutionReviewV1:
     #: Plan nodes this release cannot execute.  They stay in the scientific
     #: plan, are displayed to the human, and are never approved or launched.
     non_executable_node_ids: tuple[str, ...] = ()
+    #: The typed analysis chain the same /approve covers.  Until this field
+    #: existed the analysis nodes were RAM-only in the planning session: the
+    #: human approved a packet that never displayed them and the executor had
+    #: nothing to walk, so every validation rule a session wrote remained
+    #: intent.  Present, it is digest-bound with the rest of the review.
+    scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-execution-review.v1":
             raise ContractError("unsupported workflow execution review schema")
+        if self.scientific_toolchain_plan is not None:
+            toolchain = self.scientific_toolchain_plan
+            if toolchain.workflow_id != self.scientific_plan.workflow_id:
+                raise ContractError(
+                    "review toolchain plan belongs to another workflow"
+                )
+            if set(toolchain.calculation_node_ids) != {
+                node.node_id for node in self.scientific_plan.nodes
+            }:
+                raise ContractError(
+                    "review toolchain plan covers different calculation nodes"
+                )
         object.__setattr__(
             self,
             "non_executable_node_ids",
@@ -4114,10 +4150,12 @@ class WorkflowExecutionReviewV1:
             for key, value in self.__dict__.items()
             if key != "review_sha256"
         }
-        # This additive v1 field was introduced after review packets existed.
-        # Preserve their canonical body when the new semantic is absent.
+        # These additive v1 fields were introduced after review packets
+        # existed.  Preserve their canonical body when the semantic is absent.
         if not self.non_executable_node_ids:
             body.pop("non_executable_node_ids", None)
+        if self.scientific_toolchain_plan is None:
+            body.pop("scientific_toolchain_plan", None)
         return body
 
 
@@ -4132,6 +4170,7 @@ def build_workflow_execution_review(
     node_reviews: Sequence[WorkflowExecutionNodeReviewV1],
     stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
     non_executable_node_ids: Sequence[str] = (),
+    scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None,
 ) -> WorkflowExecutionReviewV1:
     """Assemble one self-verifying review packet without granting authority.
 
@@ -4157,6 +4196,8 @@ def build_workflow_execution_review(
     }
     if non_executable:
         body["non_executable_node_ids"] = non_executable
+    if scientific_toolchain_plan is not None:
+        body["scientific_toolchain_plan"] = scientific_toolchain_plan
     return WorkflowExecutionReviewV1(
         **body, review_sha256=canonical_sha256(body)
     )
@@ -4246,6 +4287,9 @@ class WorkflowExecutionApprovalBundleV1:
     #: Approved-plan stages this release cannot execute.  The executor never
     #: launches them; they remain in the plan as declared scientific intent.
     non_executable_node_ids: tuple[str, ...] = ()
+    #: The typed analysis chain the same approval covers, verbatim from the
+    #: reviewed packet; None for every bundle approved before it existed.
+    scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-execution-approval-bundle.v1":
@@ -4361,6 +4405,25 @@ class WorkflowExecutionApprovalBundleV1:
             raise ContractError(
                 "execution bundle stationary-point policy differs from approval"
             )
+        toolchain_sha256 = (
+            self.scientific_toolchain_plan.plan_sha256
+            if self.scientific_toolchain_plan is not None
+            else ""
+        )
+        if frozen.scientific_toolchain_plan_sha256 != toolchain_sha256:
+            raise ContractError(
+                "execution bundle analysis chain differs from approval"
+            )
+        if self.scientific_toolchain_plan is not None:
+            toolchain = self.scientific_toolchain_plan
+            if toolchain.workflow_id != self.approved_scientific_plan.workflow_id:
+                raise ContractError(
+                    "bundle toolchain plan belongs to another workflow"
+                )
+            if set(toolchain.calculation_node_ids) != set(planned_by_id):
+                raise ContractError(
+                    "bundle toolchain plan covers different calculation nodes"
+                )
         if (
             self.stationary_point_policy is not None
             and self.stationary_point_policy.hessian_node_id not in executed_ids
@@ -4443,10 +4506,12 @@ class WorkflowExecutionApprovalBundleV1:
             for key, value in self.__dict__.items()
             if key != "bundle_sha256"
         }
-        # This additive v1 field was introduced after approval bundles existed.
-        # Preserve their canonical body when the new semantic is absent.
+        # These additive v1 fields were introduced after approval bundles
+        # existed.  Preserve their canonical body when the semantic is absent.
         if not self.non_executable_node_ids:
             body.pop("non_executable_node_ids", None)
+        if self.scientific_toolchain_plan is None:
+            body.pop("scientific_toolchain_plan", None)
         return body
 
     def node_review(self, node_id: str) -> WorkflowExecutionNodeReviewV1:
@@ -4513,6 +4578,7 @@ def approve_workflow_execution_review(
         environment_identity_by_receipt=identity_by_receipt,
         stationary_point_policy=review.stationary_point_policy,
         non_executable_node_ids=review.non_executable_node_ids,
+        scientific_toolchain_plan=review.scientific_toolchain_plan,
     )
     resolution = build_workflow_review_resolution(
         resolution_id=resolution_id,
@@ -4539,6 +4605,8 @@ def approve_workflow_execution_review(
     }
     if review.non_executable_node_ids:
         body["non_executable_node_ids"] = review.non_executable_node_ids
+    if review.scientific_toolchain_plan is not None:
+        body["scientific_toolchain_plan"] = review.scientific_toolchain_plan
     return WorkflowExecutionApprovalBundleV1(
         **body, bundle_sha256=canonical_sha256(body)
     )

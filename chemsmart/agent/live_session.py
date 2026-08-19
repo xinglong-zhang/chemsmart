@@ -3521,6 +3521,81 @@ def _parse_workflow_approval_request(
         ) from exc
 
 
+def _parse_scientific_toolchain_plan(
+    value: Any,
+) -> "ScientificToolchainPlanV1 | None":
+    """Rebuild the digest-bound analysis chain from a review or bundle."""
+
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ContractError("scientific toolchain plan must be an object or null")
+    from chemsmart.agent.scientific_toolchain import (
+        AnalysisInputIntentV1,
+        AnalysisNodeIntentV1,
+        AnalysisOutputIntentV1,
+        AnalysisSelectorIntentV1,
+        AnalysisValidationRuleIntentV1,
+        RegisteredResultInputIntentV1,
+        ScientificToolchainPlanV1,
+    )
+
+    def _input(item: Mapping[str, Any]) -> Any:
+        record = dict(item)
+        if record.get("source_kind") == "registered_result":
+            return RegisteredResultInputIntentV1(**record)
+        return AnalysisInputIntentV1(**record)
+
+    try:
+        raw = dict(value)
+        raw["analysis_nodes"] = tuple(
+            AnalysisNodeIntentV1(
+                **{
+                    **dict(node),
+                    "inputs": tuple(
+                        _input(item) for item in node.get("inputs", ())
+                    ),
+                    "selectors": tuple(
+                        AnalysisSelectorIntentV1(**dict(item))
+                        for item in node.get("selectors", ())
+                    ),
+                    "outputs": tuple(
+                        AnalysisOutputIntentV1(**dict(item))
+                        for item in node.get("outputs", ())
+                    ),
+                    "expression_nodes": tuple(
+                        canonical_data(dict(item))
+                        for item in node.get("expression_nodes", ())
+                    ),
+                    "validation_rules": tuple(
+                        AnalysisValidationRuleIntentV1(**dict(item))
+                        for item in node.get("validation_rules", ())
+                    ),
+                }
+            )
+            for node in raw.get("analysis_nodes", ())
+        )
+        for key in (
+            "calculation_node_ids",
+            "node_order",
+            "required_output_ids",
+        ):
+            raw[key] = tuple(raw.get(key, ()))
+        raw["calculation_observables"] = tuple(
+            (str(node_id), tuple(observables))
+            for node_id, observables in raw.get(
+                "calculation_observables", ()
+            )
+        )
+        return ScientificToolchainPlanV1(**raw)
+    except ContractError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractError(
+            "scientific toolchain plan does not match the v1 schema"
+        ) from exc
+
+
 def _parse_stationary_point_policy(
     value: Any,
 ) -> StationaryPointValidationPolicyV1 | None:
@@ -3639,6 +3714,12 @@ def load_workflow_execution_review(
         raw["stationary_point_policy"] = _parse_stationary_point_policy(
             raw.get("stationary_point_policy")
         )
+        if raw.get("scientific_toolchain_plan") is not None:
+            raw["scientific_toolchain_plan"] = (
+                _parse_scientific_toolchain_plan(
+                    raw.get("scientific_toolchain_plan")
+                )
+            )
         return WorkflowExecutionReviewV1(**raw)
     except ContractError:
         raise
@@ -3728,6 +3809,12 @@ def load_workflow_execution_approval_bundle(
         raw["stationary_point_policy"] = _parse_stationary_point_policy(
             raw.get("stationary_point_policy")
         )
+        if raw.get("scientific_toolchain_plan") is not None:
+            raw["scientific_toolchain_plan"] = (
+                _parse_scientific_toolchain_plan(
+                    raw.get("scientific_toolchain_plan")
+                )
+            )
         return WorkflowExecutionApprovalBundleV1(**raw)
     except ContractError:
         raise

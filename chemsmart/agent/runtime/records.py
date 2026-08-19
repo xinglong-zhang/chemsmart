@@ -171,6 +171,9 @@ def frozen_workflow_approval_from_record(
             "frozen workflow approval must be a canonical mapping"
         )
     normalized = dict(value)
+    # Additive scalar introduced after approvals existed: absent in every
+    # earlier record, empty in a calculation-only one.
+    normalized.setdefault("scientific_toolchain_plan_sha256", "")
     legacy_fields = {
         item.name for item in fields(FrozenWorkflowApprovalV1)
     }.difference(

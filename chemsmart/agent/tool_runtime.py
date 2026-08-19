@@ -7672,7 +7672,36 @@ class CommandCompiledToolHostV1:
             ),
             stationary_point_policy=self.stationary_point_policy,
             non_executable_node_ids=tuple(sorted(non_executable_ids)),
+            scientific_toolchain_plan=self._toolchain_plan_for_review(plan),
         )
+
+    def _toolchain_plan_for_review(
+        self, plan: ScientificWorkflowPlanV2
+    ) -> ScientificToolchainPlanV1 | None:
+        """The analysis chain bound to exactly this plan, if one exists.
+
+        The toolchain plan used to live only in session RAM, so the human
+        approved a packet that never displayed the analysis nodes and the
+        executor had nothing to walk. Attach it to the review only when it
+        belongs to this exact workflow resolution -- the same exactness rule
+        _resolve_program_workflow applies -- and stay silent otherwise so a
+        calculation-only review keeps its historical bytes.
+        """
+
+        resolved = self._latest_program_workflows.get(plan.workflow_id)
+        if resolved is None:
+            return None
+        if resolved.scientific_plan is not plan:
+            return None
+        toolchain = resolved.scientific_toolchain_plan
+        if toolchain is None:
+            return None
+        if (
+            toolchain.command_workflow_draft_sha256
+            != resolved.draft.draft_sha256
+        ):
+            return None
+        return toolchain
 
     def _admit_bounded_workflow(
         self, *, node_id: str, plan_sha256: str = ""
