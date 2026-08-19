@@ -1,0 +1,5 @@
+conformers:
+  gfn_version: gfnff
+  optimization_level: tight
+  solvent_model: gbsa
+  solvent_id: water

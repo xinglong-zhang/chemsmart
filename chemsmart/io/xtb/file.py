@@ -46,9 +46,7 @@ class XTBMainOut(XTBFileMixin):
         return False
 
     def _get_route(self):
-        """
-        Get parsed route information.
-        """
+        """Get program call from xTB main output file contents."""
         for line in self.contents:
             if "program call" in line:
                 route = line.split(":")[-1].strip()
@@ -213,6 +211,8 @@ class XTBMainOut(XTBFileMixin):
     def optimization_level(self):
         """Optimization level."""
         opt_level = self._get_setup_information("optimization level")
+        if opt_level and opt_level.lower() == "verytight":
+            return "vtight"
         return opt_level
 
     @property

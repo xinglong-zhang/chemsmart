@@ -5,6 +5,8 @@ import inspect
 import logging
 import os
 import re
+import tempfile
+from contextlib import contextmanager
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -20,11 +22,35 @@ from scipy.spatial.distance import cdist
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.geometry import canonicalize_positions, is_collinear
 from chemsmart.utils.periodictable import PeriodicTable as pt
+from chemsmart.utils.repattern import (
+    gaussian_mm_element_type_charge_neg_pattern,
+    gaussian_mm_element_type_charge_pos_pattern,
+)
 from chemsmart.utils.utils import file_cache, string2index_1based
 
 p = pt()
 
 logger = logging.getLogger(__name__)
+
+# Extensions that must use ASE (Open Babel either cannot read them or
+# silently drops cell / PBC information). Kept as a module-level set so
+# callers and tests can inspect the skip-list.
+ASE_ONLY_EXTENSIONS = frozenset(
+    {
+        "traj",
+        "db",
+        "cif",
+        "cfg",
+        "vasp",
+        "poscar",
+        "contcar",
+        "gen",
+        "cell",
+        "castep",
+        "xsf",
+        "extxyz",
+    }
+)
 
 
 class Molecule:
@@ -57,7 +83,8 @@ class Molecule:
     qm high/medium/low_level_atoms：list of integers to define QM/MM layers
         The atoms that are treated at the high/medium/low level of theory.
     bonded_atoms: list of tuples of integers
-        The atom pairs that are treated as bonded in QM/MM calculations.
+        Covalent atom pairs that cross QM/MM layer boundaries (1-based).
+        If omitted, pairs are assigned from ``to_graph`` connectivity.
     scale factors: a dictionary of scale factors for QM/MM calculations,
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
@@ -781,10 +808,8 @@ class Molecule:
                 reconstructed = pca.inverse_transform(
                     pca.transform(self.positions)
                 )
-                error = np.linalg.norm(
-                    self.positions - reconstructed, axis=1
-                ).max()
-                return error < 1e-2
+                error = np.linalg.norm(self.positions - reconstructed, axis=1)
+                return float(np.max(error, initial=0.0)) < 1e-2
 
     @property
     def moments_of_inertia_tensor(self):
@@ -1088,6 +1113,25 @@ class Molecule:
         """
         basename = os.path.basename(filepath)
 
+        # Check .extxyz before .xyz: basename.endswith(".xyz") is False for
+        # ".extxyz", but keep an explicit branch so ASE (lattice / properties)
+        # is preferred. If ASE cannot parse the file, fall back to the lenient
+        # XYZ parser. Folder scanners that match filetype "xyz" use a dotted
+        # suffix and no longer pick up *.extxyz.
+        if basename.endswith(".extxyz"):
+            try:
+                return cls._read_other(filepath, index, **kwargs)
+            except Exception as exc:
+                logger.debug(
+                    f"ASE failed to read extxyz {filepath}; "
+                    f"trying XYZ parser. ({exc})"
+                )
+                return cls._read_xyz_file(
+                    filepath=filepath,
+                    index=index,
+                    return_list=return_list,
+                )
+
         if basename.endswith(".xyz"):
             logger.debug(f"Reading xyz file: {filepath}")
             return cls._read_xyz_file(
@@ -1095,6 +1139,13 @@ class Molecule:
                 index=index,
                 return_list=return_list,
             )
+
+        if basename.endswith(".trj"):
+            from chemsmart.utils.io import is_xyzfile
+
+            if is_xyzfile(filepath):
+                return cls._read_xyz_file(filepath, index, return_list)
+            return cls._read_other(filepath, index, **kwargs)
 
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
@@ -1110,6 +1161,10 @@ class Molecule:
             return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
+            from chemsmart.utils.io import is_xyzfile
+
+            if is_xyzfile(filepath):
+                return cls._read_xyz_file(filepath, index, return_list)
             return cls._read_gaussian_logfile(filepath, index, **kwargs)
 
         if basename.endswith(".inp"):
@@ -1204,10 +1259,15 @@ class Molecule:
         """
         Read Gaussian input file (.com/.gjf) format.
         """
-        from chemsmart.io.gaussian.input import Gaussian16Input
+        from chemsmart.io.gaussian.input import (
+            Gaussian16Input,
+            Gaussian16QMMMInput,
+        )
 
         try:
             g16_input = Gaussian16Input(filename=filepath)
+            if "oniom" in g16_input.route_string:
+                g16_input = Gaussian16QMMMInput(filename=filepath)
             return g16_input.molecule
         except ValueError as e:
             # log the error or raise a more specific exception
@@ -1394,13 +1454,155 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
+    @classmethod
+    def _molecule_from_pybel(cls, ob_mol):
+        """
+        Convert an Open Babel ``pybel.Molecule`` to a CHEMSMART ``Molecule``.
+
+        Geometry is obtained by writing the Open Babel molecule to an XYZ
+        string and parsing the coordinate block. Charge and multiplicity are
+        taken from the underlying ``OBMol`` when available.
+        """
+        xyz_string = ob_mol.write("xyz")
+        lines = xyz_string.strip().splitlines()
+        if len(lines) < 3:
+            raise ValueError(
+                "Open Babel produced an empty or incomplete XYZ representation."
+            )
+        try:
+            n_atoms = int(lines[0].split()[0])
+        except (ValueError, IndexError) as exc:
+            raise ValueError(
+                f"Unable to parse atom count from Open Babel XYZ: {lines[0]!r}"
+            ) from exc
+
+        symbols = []
+        positions = []
+        for line in lines[2 : 2 + n_atoms]:
+            parts = line.split()
+            if len(parts) < 4:
+                raise ValueError(
+                    f"Unable to parse Open Babel XYZ coordinate line: {line!r}"
+                )
+            symbols.append(parts[0])
+            positions.append(
+                [float(parts[1]), float(parts[2]), float(parts[3])]
+            )
+
+        if len(symbols) != n_atoms:
+            raise ValueError(
+                f"Open Babel XYZ atom count mismatch: expected {n_atoms}, "
+                f"got {len(symbols)}."
+            )
+
+        charge = None
+        multiplicity = None
+        try:
+            charge_val = int(ob_mol.OBMol.GetTotalCharge())
+            # Propagate charge when non-zero; keep None for neutral so
+            # downstream defaults remain unchanged.
+            if charge_val != 0:
+                charge = charge_val
+            multiplicity = int(ob_mol.OBMol.GetTotalSpinMultiplicity())
+        except Exception:  # pragma: no cover - defensive for stub OBMol
+            pass
+
+        return cls(
+            symbols=symbols,
+            positions=np.asarray(positions, dtype=float),
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+
+    @classmethod
+    def _read_via_openbabel(cls, filepath, index="-1", **kwargs):
+        """
+        Read a molecular structure file via Open Babel (``pybel``).
+
+        Unsupported / empty reads raise so the caller can fall back to ASE.
+        Zero-dimensional inputs (e.g. SMILES) are expanded to 3D with
+        ``make3D()`` when possible.
+
+        Args:
+            filepath (str): Path to the input file.
+            index (str): 1-based structure selector (``'-1'``, ``':'``, ``'1'``).
+            **kwargs: Accepted for API compatibility; unused.
+
+        Returns:
+            Molecule or list[Molecule]: Selected structure(s).
+
+        Raises:
+            ImportError: If Open Babel is not installed.
+            ValueError: If Open Babel cannot read any molecules from the file.
+        """
+        del kwargs  # reserved for _read_other passthrough
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Reading via Open Babel requires openbabel. Install with: "
+                "``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        fmt = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if not fmt:
+            raise ValueError(
+                f"Cannot infer Open Babel format from path: {filepath}"
+            )
+
+        try:
+            ob_mols = list(pybel.readfile(fmt, filepath))
+        except Exception as exc:
+            raise ValueError(
+                f"Open Babel could not read {filepath} as format '{fmt}': {exc}"
+            ) from exc
+
+        if not ob_mols:
+            raise ValueError(f"Open Babel found no molecules in {filepath}")
+
+        molecules = []
+        for ob_mol in ob_mols:
+            # SMILES / InChI etc. arrive as 0-D; generate 3D coordinates.
+            if getattr(ob_mol, "dim", 3) < 3:
+                try:
+                    ob_mol.make3D()
+                except Exception as exc:
+                    logger.warning(
+                        "Open Babel make3D failed for %s (%s); "
+                        "returning molecule with incomplete 3D coordinates.",
+                        filepath,
+                        exc,
+                    )
+            molecules.append(cls._molecule_from_pybel(ob_mol))
+
+        selected = molecules[string2index_1based(index)]
+        return selected
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
         """
-        Reads a file using ASE and returns a Molecule object.
+        Read an unsupported extension via Open Babel, falling back to ASE.
+
+        Molecular formats try Open Babel first. Periodic / ASE-specific
+        extensions listed in ``ASE_ONLY_EXTENSIONS`` (``.traj``, ``.cif``,
+        ``.cfg``, ``.db``, VASP, etc.) skip Open Babel and go straight to ASE,
+        because Open Babel either cannot read them or silently drops cell /
+        PBC data.
         """
         from .atoms import AtomsChargeMultiplicity
+
+        ext = os.path.splitext(filepath)[1].lstrip(".").lower()
+        if ext not in ASE_ONLY_EXTENSIONS:
+            try:
+                return Molecule._read_via_openbabel(
+                    filepath, index=index, **kwargs
+                )
+            except Exception as exc:
+                logger.debug(
+                    f"Open Babel could not read {filepath}; trying ASE. ({exc})"
+                )
 
         # supplied index is 1-indexed, thus need to convert
         index = string2index_1based(index)
@@ -1570,27 +1772,35 @@ class Molecule:
         """
         Write molecule to file in specified format.
 
+        Native writers handle ``xyz``, ``extxyz``, ``com``, ``pdb``, and
+        ``cosmorsxyz``. Any other format falls back to Open Babel via
+        :meth:`_write_via_openbabel` (requires the ``openbabel`` package).
+
         Args:
             filename (str): Output file path
-            format (str): File format ('xyz', 'com', or 'pdb'). Default 'xyz'
-            mode (str): File write mode. Default 'w'
+            format (str): File format. Default ``'xyz'``
+            mode (str): File write mode. Default ``'w'``
             **kwargs: Additional keyword arguments for format-specific writers
 
         Raises:
-            ValueError: If format is not supported
+            ImportError: If a non-native format is requested and Open Babel
+                is not installed.
+            ValueError: If Open Babel cannot write the requested format.
         """
-        if format.lower() == "xyz":
-            self.write_xyz(filename, mode=mode, **kwargs)
-        elif format.lower() == "extxyz":
-            self.write_extxyz(filename, mode=mode, **kwargs)
-        elif format.lower() == "com":
-            self.write_com(filename, **kwargs)
-        elif format.lower() == "pdb":
-            self.write_pdb(filename, mode=mode, **kwargs)
-        # elif format.lower() == "mol":
-        #     self.write_mol(filename, **kwargs)
+        fmt = format.lower()
+        native = {
+            "xyz": lambda: self.write_xyz(filename, mode=mode, **kwargs),
+            "extxyz": lambda: self.write_extxyz(filename, mode=mode, **kwargs),
+            "com": lambda: self.write_com(filename, **kwargs),
+            "pdb": lambda: self.write_pdb(filename, mode=mode, **kwargs),
+            "cosmorsxyz": lambda: self.write_cosmorsxyz(
+                filename, mode=mode, **kwargs
+            ),
+        }
+        if fmt in native:
+            native[fmt]()
         else:
-            raise ValueError(f"Format {format} is not supported for writing.")
+            self._write_via_openbabel(filename, fmt, mode=mode, **kwargs)
 
     def write_xyz(self, filename, mode, **kwargs):
         """
@@ -1785,46 +1995,114 @@ class Molecule:
 
         Examples
         --------
-        >>> molecule.write_pdb_openbabel("output.pdb")
+        >>> molecule.write_pdb_pybabel("output.pdb")
         """
-        import tempfile
+        self._write_via_openbabel(
+            pdb_filename,
+            "pdb",
+            mode=mode,
+            overwrite=overwrite,
+            cleanup=cleanup,
+        )
 
+    @contextmanager
+    def _temp_xyz_path(self, mode="w", cleanup=True):
+        """
+        Yield a temporary XYZ path written from this molecule.
+
+        When *cleanup* is ``True``, the temporary file is removed on exit.
+        """
         tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
         tmp.close()
         xyz_filename = tmp.name
-        logger.debug(
-            f"Created temporary XYZ {xyz_filename} for PDB conversion."
-        )
+        logger.debug(f"Created temporary XYZ {xyz_filename}")
         self.write_xyz(xyz_filename, mode=mode)
-
         try:
-            from openbabel import pybel
-        except ImportError as exc:
+            yield xyz_filename
+        finally:
             if cleanup:
                 try:
                     os.remove(xyz_filename)
-                except OSError:
-                    pass
-            raise ImportError(
-                "Converting to PDB via Open Babel requires openbabel. "
-                "Install with: ``conda install -c conda-forge openbabel``"
-            ) from exc
+                    logger.debug(f"Removed temporary XYZ file {xyz_filename}")
+                except OSError as exc:
+                    logger.warning(
+                        f"Failed to remove temporary file {xyz_filename}: "
+                        f"{exc}"
+                    )
 
-        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
-        if xyz_mol is None:
-            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+    def _write_via_openbabel(
+        self,
+        filename,
+        format,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+        **kwargs,
+    ):
+        """
+        Write molecule to *format* via Open Babel from a temporary XYZ.
 
-        logger.info(
-            f"Converting Molecule {self.__repr__()} to PDB {pdb_filename} via "
-            f"Open Babel (overwrite={overwrite})"
-        )
-        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
-        if cleanup:
+        Used as a fallback for formats that CHEMSMART does not implement
+        natively, and by :meth:`write_pdb_pybabel`.
+
+        Parameters
+        ----------
+        filename : str
+            Destination file path.
+        format : str
+            Open Babel format string (e.g. ``'mol2'``, ``'cml'``, ``'pdb'``).
+        mode : str, default 'w'
+            File mode passed to :meth:`write_xyz` for the temporary XYZ.
+        overwrite : bool, default True
+            Whether to overwrite *filename* if it already exists.
+        cleanup : bool, default True
+            Remove the auto-generated temporary XYZ file after conversion.
+        **kwargs
+            Unused; accepted for compatibility with :meth:`write` kwargs.
+
+        Raises
+        ------
+        ImportError
+            If Open Babel (``openbabel``) is not installed.
+        ValueError
+            If the temporary XYZ cannot be read, or Open Babel cannot write
+            the requested format.
+        """
+        # kwargs reserved for write() passthrough; unused here
+        del kwargs
+
+        with self._temp_xyz_path(mode=mode, cleanup=cleanup) as xyz_filename:
+            logger.debug(
+                f"Using temporary XYZ {xyz_filename} for Open Babel "
+                f"write (format={format})."
+            )
             try:
-                os.remove(xyz_filename)
-                logger.debug(f"Removed temporary XYZ file {xyz_filename}")
-            except OSError as exc:
-                logger.warning(f"Failed to remove temporary file: {exc}")
+                from openbabel import pybel
+            except ImportError as exc:
+                raise ImportError(
+                    f"Writing format '{format}' via Open Babel requires "
+                    "openbabel. Install with: "
+                    "``conda install -c conda-forge openbabel``"
+                ) from exc
+
+            xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+            if xyz_mol is None:
+                raise ValueError(
+                    f"Unable to read molecule from temporary XYZ "
+                    f"{xyz_filename}"
+                )
+
+            logger.info(
+                f"Writing Molecule {self!r} to {filename} via Open Babel "
+                f"(format={format}, overwrite={overwrite})"
+            )
+            try:
+                xyz_mol.write(format, filename, overwrite=overwrite)
+            except Exception as exc:
+                raise ValueError(
+                    f"Open Babel could not write format '{format}' to "
+                    f"{filename}: {exc}"
+                ) from exc
 
     def _write_gaussian_coordinates(self, f):
         """
@@ -1963,7 +2241,11 @@ class Molecule:
         valid_bond = bond_length[..., np.newaxis] < (
             bond_cutoff[..., np.newaxis] * bond_multiplier_matrix
         )
-        bond_order = np.where(valid_bond, multipliers, 0).max(axis=-1)
+        # np.maximum.reduce avoids ndarray.max, which can break when ASE
+        # reloads NumPy under coverage.py branch tracing (_NoValue TypeError).
+        bond_order = np.maximum.reduce(
+            np.where(valid_bond, multipliers, 0), axis=-1
+        )
 
         return bond_order
 
@@ -2007,8 +2289,8 @@ class Molecule:
             **kwargs: Additional keyword arguments (unused)
         """
         with open(filename, mode) as f:
-            for line in self.to_cosmorsxyz():
-                f.write(line)
+            f.write(self.to_cosmorsxyz())
+            f.write("\n")
 
     def to_smiles(self):
         """
@@ -2656,7 +2938,7 @@ class Molecule:
         if normalize:
             logger.debug("normalize so max per-atom displacement = 1")
             per_atom = np.linalg.norm(cart_mode, axis=1)
-            max_disp = float(per_atom.max())
+            max_disp = float(np.max(per_atom, initial=0.0))
             if max_disp == 0.0:
                 raise ValueError("Provided vibrational mode has zero norm.")
             cart_mode = cart_mode / max_disp
@@ -2798,6 +3080,9 @@ class CoordinateBlock:
                 high_level_atoms=high_level_atoms,
                 medium_level_atoms=medium_level_atoms,
                 low_level_atoms=low_level_atoms,
+                mm_atom_info=QMMMMolecule.mm_atom_info_from_coordinate_lines(
+                    self.coordinate_block
+                ),
             )
 
     def _get_symbols(self):
@@ -2845,7 +3130,7 @@ class CoordinateBlock:
             ):  # cases where PBC system occurs in Gaussian
                 logger.debug(f"Skipping line {line} with TV!")
                 continue
-            if all(el.isdigit() for el in line_elements):
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 # skip the charge and multiplicity
                 # line of QM/MM coordinate block
                 logger.debug(f"Skipping line {line} with all digit elements!")
@@ -2878,7 +3163,7 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
-            if all(el.isdigit() for el in line_elements):
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 # skip the charge and multiplicity
                 # line of QM/MM coordinate block
                 continue
@@ -2927,12 +3212,27 @@ class CoordinateBlock:
                     return False
 
             last_token_numeric = _is_numeric_token(line_elements[-1])
+            oniom_freeze_then_xyz = (
+                is_constraint_flag
+                and len(line_elements) > 5
+                and str(line_elements[5]).strip() in ("H", "M", "L")
+                and _is_numeric_token(line_elements[2])
+                and _is_numeric_token(line_elements[3])
+                and _is_numeric_token(line_elements[4])
+            )
+            oniom_layer_at_xyz = len(line_elements) > 4 and str(
+                line_elements[4]
+            ).strip() in ("H", "M", "L")
 
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
             if len(line_elements) > 4:
-                if is_constraint_flag and last_token_numeric:
+                if oniom_freeze_then_xyz or (
+                    is_constraint_flag
+                    and last_token_numeric
+                    and not oniom_layer_at_xyz
+                ):
                     # Frozen coordinate line: second
                     # token is an explicit -1/0 flag
                     constraints.append(second_val_int)
@@ -3009,6 +3309,8 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
+                continue
+            if QMMMMolecule._is_charge_multiplicity_line(line_elements):
                 continue
             if len(line_elements) > 5 and all(
                 line_elements[i]
@@ -3200,6 +3502,8 @@ class QMMMMolecule(Molecule):
         real_multiplicity=None,
         bonded_atoms=None,
         scale_factors=None,
+        mm_atom_info=None,
+        mm_parameters=None,
         **kwargs,
     ):
         # store reference to the original molecule early to avoid
@@ -3225,18 +3529,102 @@ class QMMMMolecule(Molecule):
         else:
             # Otherwise, let QMMM behave like a Molecule itself
             super().__init__(**kwargs)
+
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
         self.scale_factors = scale_factors
+        self.mm_atom_info = mm_atom_info
+        self.mm_parameters = mm_parameters
         self.real_charge = real_charge
         self.real_multiplicity = real_multiplicity
-        if self.real_charge and self.real_multiplicity:
+        if self.real_charge is not None and self.real_multiplicity is not None:
             # the charge and multiplicity of the real system equal to
             # that of the low_level_charge and low_level_multiplicity
             self.charge = self.real_charge
             self.multiplicity = self.real_multiplicity
+
+    @staticmethod
+    def parse_element_type_charge(atom_label):
+        """Parse ``Element-Type-Charge``; return ``(type, charge)`` or ``None``."""
+        atom_label = str(atom_label).strip()
+        neg = re.match(gaussian_mm_element_type_charge_neg_pattern, atom_label)
+        if neg:
+            return neg.group(2), -float(neg.group(3))
+        pos = re.match(gaussian_mm_element_type_charge_pos_pattern, atom_label)
+        if pos:
+            return pos.group(2), float(pos.group(3))
+        return None
+
+    @staticmethod
+    def _is_charge_multiplicity_line(line_elements):
+        """Return True for a Gaussian ONIOM charge/multiplicity line."""
+        if len(line_elements) < 2:
+            return False
+        return all(
+            element.replace("-", "").isdigit()
+            and element.replace("-", "") != ""
+            for element in line_elements
+        )
+
+    @classmethod
+    def mm_atom_info_from_coordinate_lines(cls, coordinate_lines):
+        """Parse MM ``(type, charge, link_type, link_charge)`` from ONIOM coords.
+
+        Returns ``None`` if no ``Element-Type-Charge`` labels are present.
+        """
+        records = []
+        typed = False
+        for line in coordinate_lines:
+            if line.startswith("TV"):
+                continue
+            line_elements = line.strip().split()
+            if len(line_elements) < 4 or cls._is_charge_multiplicity_line(
+                line_elements
+            ):
+                continue
+
+            parsed = cls.parse_element_type_charge(line_elements[0])
+            link_type = None
+            link_charge = None
+            # Layer column index matches CoordinateBlock._get_partitions.
+            layer_idx = None
+            if len(line_elements) > 5 and all(
+                line_elements[j]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for j in range(2, 5)
+            ):
+                layer_idx = 5
+            elif len(line_elements) > 4 and all(
+                line_elements[j]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for j in range(1, 4)
+            ):
+                layer_idx = 4
+            if layer_idx is not None and len(line_elements) > layer_idx + 1:
+                link_parsed = cls.parse_element_type_charge(
+                    line_elements[layer_idx + 1]
+                )
+                if link_parsed is not None:
+                    link_type, link_charge = link_parsed
+
+            if parsed is None:
+                records.append(None)
+            else:
+                typed = True
+                atom_type, charge = parsed
+                records.append((atom_type, charge, link_type, link_charge))
+
+        if not typed:
+            return None
+        return records
 
     def __getattr__(self, name):
         # Forward any missing attribute to the underlying Molecule.
@@ -3388,19 +3776,42 @@ class QMMMMolecule(Molecule):
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
+        if self.bonded_atoms is None:
+            self.bonded_atoms = self._detect_cut_bonds()
+        elif not isinstance(self.bonded_atoms, list):
+            self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+
         for i, (s, (x, y, z)) in enumerate(
             zip(self.chemical_symbols, self.positions)
         ):
-            line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.frozen_atoms is not None:
-                line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            mm_info = None
+            if self.mm_atom_info is not None:
+                mm_info = self.mm_atom_info[i]
+            atom_label = GaussianQMMMJobSettings.format_mm_atom_label(
+                s, mm_info
+            )
+            if mm_info is None:
+                line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+                if self.frozen_atoms is not None:
+                    line = (
+                        f"{s:6} {self.frozen_atoms[i]:5} "
+                        f"{x:15.10f} {y:15.10f} {z:15.10f}"
+                    )
+            else:
+                line = f"{atom_label:16} {x:15.10f} {y:15.10f} {z:15.10f}"
+                if self.frozen_atoms is not None:
+                    line = (
+                        f"{atom_label:16} {self.frozen_atoms[i]:5} "
+                        f"{x:15.10f} {y:15.10f} {z:15.10f}"
+                    )
             if self.partition_level_strings is not None:
                 line += f" {self.partition_level_strings[i]}"
 
-            if self.bonded_atoms is not None:
+            if self.bonded_atoms:
                 # Handle QM link atoms and bonded-to atoms
-                if not isinstance(self.bonded_atoms, list):
-                    self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+                link_atom_bonded_to = None
                 for atom1, atom2 in self.bonded_atoms:
                     atom1_level = self._determine_level_from_atom_index(atom1)
                     atom2_level = self._determine_level_from_atom_index(atom2)
@@ -3412,23 +3823,23 @@ class QMMMMolecule(Molecule):
                         raise ValueError(
                             f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
                         )
-                    elif atom1_level == "H" and (
-                        atom2_level == "M" or atom2_level == "L"
-                    ):
-                        if (i + 1) == atom2:
-                            line += f" H {atom1}"
-                    elif atom1_level == "M" and atom2_level == "L":
-                        if (i + 1) == atom2:
-                            line += f" H {atom1}"
-                    elif (
-                        atom1_level == "M" or atom1_level == "L"
-                    ) and atom2_level == "H":
-                        # lower level line will get the link atom (Hydrogen)
-                        if (i + 1) == atom1:
-                            line += f" H {atom2}"
-                    elif atom1_level == "L" and atom2_level == "M":
-                        if (i + 1) == atom1:
-                            line += f" H {atom2}"
+                    higher, lower = self._gaussian_link_atom_pair(
+                        atom1, atom2, atom1_level, atom2_level
+                    )
+                    if lower is None or (i + 1) != lower:
+                        continue
+                    if link_atom_bonded_to is not None:
+                        raise ValueError(
+                            "Gaussian permits only one link-atom "
+                            "specification per atom; "
+                            f"atom {i + 1} is already linked to atom "
+                            f"{link_atom_bonded_to} and cannot also be "
+                            f"linked to atom {higher}."
+                        )
+                    line += " " + GaussianQMMMJobSettings.format_mm_link_atom(
+                        higher, mm_info
+                    )
+                    link_atom_bonded_to = higher
 
             if self.scale_factors is not None:
                 logger.warning(
@@ -3437,6 +3848,12 @@ class QMMMMolecule(Molecule):
                     "scale factors.\n Please specify scale factors for each required"
                     "bonded atoms."
                 )
+                if isinstance(self.scale_factors, str):
+                    from chemsmart.utils.utils import parse_qmmm_scale_factors
+
+                    self.scale_factors = parse_qmmm_scale_factors(
+                        self.scale_factors
+                    )
                 for (
                     atom1,
                     atom2,
@@ -3478,20 +3895,79 @@ class QMMMMolecule(Molecule):
             f.write(line + "\n")
         return f
 
+    def write_gaussian_connectivity(self, f):
+        """Write a Gaussian Geom=Connectivity section from the bond graph."""
+        graph = self.to_graph()
+        for i in range(self.num_atoms):
+            parts = [str(i + 1)]
+            for j in sorted(graph.neighbors(i)):
+                if j <= i:
+                    continue
+                bond_order = graph.edges[i, j].get("bond_order", 1.0)
+                parts.append(str(j + 1))
+                parts.append(f"{float(bond_order):.1f}")
+            f.write(" ".join(parts) + "\n")
+        f.write("\n")
+
+    def _normalize_atom_indices(self, atoms):
+        """Normalize layer atom specs to a 1-based integer list."""
+        if atoms is None:
+            return None
+        if isinstance(atoms, list):
+            return atoms
+        from chemsmart.utils.utils import get_list_from_string_range
+
+        return get_list_from_string_range(atoms)
+
+    def _detect_cut_bonds(self):
+        """Return 1-based pairs for covalent bonds that cross layer boundaries."""
+        cut_bonds = []
+        for i, j in sorted(self.to_graph().edges()):
+            atom1 = i + 1
+            atom2 = j + 1
+            level1 = self._determine_level_from_atom_index(atom1)
+            level2 = self._determine_level_from_atom_index(atom2)
+            if level1 is None or level2 is None:
+                continue
+            if level1 != level2:
+                cut_bonds.append((atom1, atom2))
+        if cut_bonds:
+            logger.debug(
+                "Auto-assigned ONIOM link-atom boundary bonds from cut "
+                f"covalent bonds: {cut_bonds}"
+            )
+        return cut_bonds
+
+    @staticmethod
+    def _gaussian_link_atom_pair(atom1, atom2, atom1_level, atom2_level):
+        """Return (higher-layer atom, lower-layer host) for a boundary bond."""
+        rank = {"H": 2, "M": 1, "L": 0}
+        r1 = rank.get(atom1_level)
+        r2 = rank.get(atom2_level)
+        if r1 is None or r2 is None:
+            return None, None
+        if r1 > r2:
+            return atom1, atom2
+        return atom2, atom1
+
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of
         an atom based on its integer index."""
-        if self.high_level_atoms is not None:
-            if atom_index in self.high_level_atoms:
-                return "H"
-            elif (
-                self.medium_level_atoms
-                and atom_index in self.medium_level_atoms
-            ):
-                return "M"
-            else:
-                # if high level atoms is given, then
-                # low level atoms will be needed
-                return "L"
-        else:
+        if isinstance(self.high_level_atoms, str):
+            self.high_level_atoms = self._normalize_atom_indices(
+                self.high_level_atoms
+            )
+        high_level_atoms = self.high_level_atoms
+        if high_level_atoms is None:
             return None
+        if atom_index in high_level_atoms:
+            return "H"
+
+        if isinstance(self.medium_level_atoms, str):
+            self.medium_level_atoms = self._normalize_atom_indices(
+                self.medium_level_atoms
+            )
+        medium_level_atoms = self.medium_level_atoms or []
+        if atom_index in medium_level_atoms:
+            return "M"
+        return "L"
