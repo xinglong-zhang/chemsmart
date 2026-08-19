@@ -6936,6 +6936,29 @@ class CommandCompiledToolHostV1:
             # state the blockage, keeping this state explicit, never inferred.
             if node.support_state == "blocked_unsupported":
                 non_executable.add(node.node_id)
+        # Non-executability cascades along data edges. A consumer of a
+        # blocked producer can never receive its input, so it is
+        # non-executable by implication -- a pure narrowing the host can
+        # derive, sparing the planner from hand-marking every downstream
+        # node of a stage it already declared. Without this, the readiness
+        # projection called such a workflow approvable while the review
+        # builder refused it ("an executed node cannot consume the output of
+        # a stage this release cannot execute"), and a session ended
+        # honest-looking with no packet. Observed live on a cluster-continuum
+        # plan whose complex-optimisation stage was declared blocked and fed
+        # the TD stage.
+        while True:
+            grew = False
+            for edge in getattr(plan, "edges", ()):
+                if (
+                    getattr(edge, "edge_kind", "") == "data"
+                    and edge.source_node_id in non_executable
+                    and edge.target_node_id not in non_executable
+                ):
+                    non_executable.add(edge.target_node_id)
+                    grew = True
+            if not grew:
+                break
         return frozenset(non_executable)
 
     def execution_review_ineligibility_reason(

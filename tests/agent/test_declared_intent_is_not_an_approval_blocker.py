@@ -125,6 +125,49 @@ def test_an_undeclared_unrunnable_family_still_blocks(tmp_path):
     assert non_executable == frozenset()
 
 
+def test_non_executability_cascades_to_the_consumer(tmp_path):
+    """A consumer of a blocked producer can never receive its input.
+
+    Observed live: a cluster-continuum plan declared its complex-optimisation
+    stage blocked (the workspace held only monomers) and fed the TD stage
+    from it. Readiness called the workflow approvable while the review
+    builder refused it, and the session ended honest-looking with no packet.
+    The cascade closes that disagreement as a pure narrowing.
+    """
+
+    from types import SimpleNamespace
+
+    host = _host(tmp_path)
+    host.bounded_execution_envelope = SimpleNamespace(
+        allows=lambda program, engine: True
+    )
+    producer = _node(
+        "opt-complex",
+        "opt",
+        support_state="blocked_unsupported",
+        blocked_reason="no complex arrangement exists in this workspace",
+    )
+    consumer = _node("td-complex", "td")
+    plan = _Plan(producer, consumer)
+    plan.edges = (
+        SimpleNamespace(
+            edge_kind="data",
+            artifact_class="geometry_xyz",
+            source_node_id="opt-complex",
+            target_node_id="td-complex",
+        ),
+    )
+
+    readiness = host._approval_readiness(plan)
+
+    states = {
+        item["node_id"]: item["approval_state"] for item in readiness["nodes"]
+    }
+    assert states["opt-complex"] == "non_executable"
+    assert states["td-complex"] == "non_executable"
+    assert readiness["blocking_node_ids"] == ()
+
+
 def test_a_support_repair_on_an_unknown_node_is_refused(tmp_path):
     host = _host(tmp_path)
 
