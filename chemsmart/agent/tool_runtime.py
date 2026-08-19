@@ -2773,6 +2773,33 @@ class CommandCompiledToolHostV1:
         self._scientific_toolchain_command_results[plan.plan_sha256] = (
             command_result
         )
+        # When the calculation side could not project a scientific plan, the
+        # resolver has already written down exactly why -- unbound identity,
+        # unresolved inputs -- into the findings. Failing later on the
+        # toolchain-binding invariant discarded that diagnosis and handed the
+        # model a sentence about the host's own bookkeeping ("scientific
+        # toolchain lacks its task-bound scientific plan"), which three
+        # identical retries in one live session could not act on. Refuse here
+        # instead, with the findings and the actions they call for.
+        draft_for_findings = command_result.get("workflow_draft")
+        if (
+            getattr(draft_for_findings, "nodes", ())
+            and command_result.get("scientific_workflow_plan") is None
+        ):
+            findings = tuple(command_result.get("findings") or ())
+            named = "; ".join(
+                f"{item.get('node_id')}: {item.get('rule_id')}"
+                for item in findings
+            ) or "no finding was recorded"
+            raise ContractError(
+                "the calculation nodes could not be bound into a scientific "
+                f"plan ({named}). Every initial node input must name a "
+                "workspace geometry artifact whose scientific identity is "
+                "bound (bind_scientific_identity), or the node must be "
+                "declared blocked_unsupported with its reason; an input with "
+                "neither an artifact_id nor a producer cannot anchor "
+                "molecular identity."
+            )
         self._bind_program_toolchain(plan, command_result)
         frontier = project_scientific_toolchain_frontier(
             plan,
