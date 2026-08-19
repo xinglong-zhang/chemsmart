@@ -118,7 +118,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--step-size-method",
-    type=click.Choice(["bb", "grow_shrink", "harvey"], case_sensitive=False),
+    type=click.Choice(["bb", "grow_shrink", "harvey", "harvey_bfgs"], case_sensitive=False),
     default=None,
     help=(
         "Step size adaptation algorithm when adaptive is enabled. "

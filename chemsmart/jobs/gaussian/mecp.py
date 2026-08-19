@@ -304,6 +304,139 @@ class GaussianMECPJob(GaussianJob):
             )
         )
 
+    @staticmethod
+    def _update_inverse_hessian(inv_hessian, delta_x, delta_g):
+        """Return a curvature-safe inverse-BFGS update.
+
+        The rank-three form used by Harvey is algebraically equivalent to
+        the conventional inverse-BFGS formula.  If the secant pair does not
+        have positive curvature, retain the previous approximation.
+        """
+        h_del_g = inv_hessian @ delta_g
+        fac = float(np.dot(delta_g, delta_x))
+        fae = float(np.dot(delta_g, h_del_g))
+        curvature_tol = 1.0e-8 * np.linalg.norm(delta_x) * np.linalg.norm(
+            delta_g
+        )
+
+        if fac <= curvature_tol or fae <= 1.0e-30:
+            return inv_hessian
+
+        w = delta_x / fac - h_del_g / fae
+        updated = (
+            inv_hessian
+            + np.outer(delta_x, delta_x) / fac
+            - np.outer(h_del_g, h_del_g) / fae
+            + fae * np.outer(w, w)
+        )
+        return 0.5 * (updated + updated.T)
+
+    def _bfgs_displacement(
+        self,
+        ea,
+        eb,
+        grad_a,
+        grad_b,
+        prev_positions,
+        curr_positions,
+        prev_eff_grad,
+        inv_hessian,
+    ):
+        """
+        Harvey 原版 BFGS 准牛顿法位移计算。
+
+        完整实现 J. N. Harvey (2003) 的 MECP 优化算法:
+        1. 计算有效梯度 G_eff = (Ea-Eb)*facPP*PerpG + facP*ParG
+        2. 维护逆 Hessian 矩阵并用 BFGS 公式更新
+        3. 位移 = -HI @ G_eff
+        4. 应用 STPMX 位移限制
+
+        参考: easymecp 中的 MECP_FORTRAN UpdateX 子程序。
+
+        Args:
+            ea, eb: 两个态的能量
+            grad_a, grad_b: 两个态的梯度 (Hartree/Bohr)
+            prev_positions: 前一步几何 (Bohr), 第一步为 None
+            curr_positions: 当前几何 (Bohr)
+            prev_eff_grad: 前一步有效梯度 (1-D), 第一步为 None
+            inv_hessian: 当前逆 Hessian (N×N), 第一步为 None
+
+        Returns:
+            displacement: 位移 (Bohr)
+            eff_grad: 有效梯度 (用于收敛判断)
+            seam_correction: seam 修正项 (用于日志)
+            inv_hessian: 更新后的逆 Hessian
+        """
+        n = grad_a.size
+
+        # 1. 计算有效梯度 (Harvey 原版 Effective_Gradient 子程序)
+        diff_grad = grad_a - grad_b  # PerpG
+        diff_norm_sq = float(np.sum(diff_grad * diff_grad))
+        if diff_norm_sq < self.MIN_DIFF_GRAD_NORM_SQ:
+            raise RuntimeError(
+                "Difference gradient is too small; cannot continue MECP step."
+            )
+        diff_norm = np.sqrt(diff_norm_sq)
+        pp = float(np.sum(grad_a * diff_grad)) / diff_norm
+        par_grad = grad_a - diff_grad / diff_norm * pp  # ParG
+
+        # facPP=140: 经验值, 使沿 PerpG 方向逆 Hessian ≈ 1/140
+        # facP=1: ParG 方向用 BFGS 维护的逆 Hessian
+        fac_pp = 140.0
+        fac_p = 1.0
+        eff_grad = (ea - eb) * fac_pp * diff_grad + fac_p * par_grad
+        eff_grad_flat = eff_grad.ravel().copy()
+
+        # 2. BFGS 更新逆 Hessian 并计算位移
+        # Harvey 原版用 Angstrom, chemsmart 用 Bohr
+        # 初始逆 Hessian: 0.7 Å²/Hartree -> 0.7 * (1/Bohr)² Bohr²/Hartree
+        bohr_per_ang = 1.0 / units.Bohr
+        initial_hi_val = 0.7 * (bohr_per_ang ** 2)
+
+        if prev_positions is None or prev_eff_grad is None:
+            # 第一步: 用对角逆 Hessian (Harvey Initialize 子程序)
+            inv_hess = initial_hi_val * np.eye(n)
+            displacement_flat = -inv_hess @ eff_grad_flat
+        else:
+            # BFGS 更新 (Harvey UpdateX 子程序)
+            delta_x = (curr_positions - prev_positions).ravel()  # DelX
+            delta_g = (eff_grad_flat - prev_eff_grad)  # DelG
+
+            inv_hess = self._update_inverse_hessian(
+                inv_hessian, delta_x, delta_g
+            )
+
+            displacement_flat = -inv_hess @ eff_grad_flat
+
+            # A finite positive-definite inverse Hessian should always yield a
+            # descent direction.  Reset defensively if accumulated numerical
+            # error or noisy electronic gradients violate that invariant.
+            if not np.all(np.isfinite(displacement_flat)) or float(
+                np.dot(eff_grad_flat, displacement_flat)
+            ) >= 0.0:
+                inv_hess = initial_hi_val * np.eye(n)
+                displacement_flat = -inv_hess @ eff_grad_flat
+
+        # 3. 位移限制 (Harvey UpdateX 中的 STPMX 逻辑)
+        # STPMX = 0.1 Å -> 0.1 * (1/Bohr) Bohr
+        stpmx = 0.1 * bohr_per_ang
+        stpmax = stpmx * n  # 总位移向量最大范数
+
+        stpl = float(np.sqrt(np.sum(displacement_flat ** 2)))
+        if stpl > stpmax:
+            displacement_flat = displacement_flat / stpl * stpmax
+
+        lgstst = float(np.max(np.abs(displacement_flat)))
+        if lgstst > stpmx:
+            displacement_flat = displacement_flat / lgstst * stpmx
+
+        displacement = displacement_flat.reshape(grad_a.shape)
+
+        # seam_correction: 精确线性 seam 修正 (用于日志对比)
+        seam_correction = -(ea - eb) / diff_norm_sq * diff_grad
+
+        return displacement, eff_grad, seam_correction, inv_hess
+
     def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
         """
         Return an updated step size based on the merit function progress.
@@ -427,6 +560,10 @@ class GaussianMECPJob(GaussianJob):
         prev_positions = None
         prev_proj_grad = None
         prev_energy_a = None
+        # BFGS state variables for harvey_bfgs method
+        inv_hessian = None
+        prev_eff_grad = None
+        prev_positions_bfgs = None
 
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
@@ -444,14 +581,32 @@ class GaussianMECPJob(GaussianJob):
 
                 energy_diff = ea - eb
 
-                displacement, projected_grad, seam_correction = self._mecp_displacement(
-                    energy_diff=energy_diff,
-                    grad_a=grad_a,
-                    grad_b=grad_b,
-                    step_size=current_step_size,
-                )
+                if self.settings.step_size_method == "harvey_bfgs":
+                    (
+                        displacement,
+                        projected_grad,
+                        seam_correction,
+                        inv_hessian,
+                    ) = self._bfgs_displacement(
+                        ea=ea,
+                        eb=eb,
+                        grad_a=grad_a,
+                        grad_b=grad_b,
+                        prev_positions=prev_positions_bfgs,
+                        curr_positions=positions_bohr,
+                        prev_eff_grad=prev_eff_grad,
+                        inv_hessian=inv_hessian,
+                    )
+                else:
+                    displacement, projected_grad, seam_correction = self._mecp_displacement(
+                        energy_diff=energy_diff,
+                        grad_a=grad_a,
+                        grad_b=grad_b,
+                        step_size=current_step_size,
+                    )
 
-                displacement = self._apply_trust_radius(displacement)
+                if self.settings.step_size_method != "harvey_bfgs":
+                    displacement = self._apply_trust_radius(displacement)
 
                 self._log_step(
                     report,
@@ -489,6 +644,9 @@ class GaussianMECPJob(GaussianJob):
                                 current_step_size, prev_energy_a, ea
                             )
                         prev_energy_a = ea
+                    elif self.settings.step_size_method == "harvey_bfgs":
+                        # BFGS maintains its own step size via inverse Hessian
+                        pass
                     else:  # "grow_shrink"
                         current_merit = (
                             abs(energy_diff) / self.settings.energy_diff_tol
@@ -500,6 +658,10 @@ class GaussianMECPJob(GaussianJob):
                                 current_step_size, prev_merit, current_merit
                             )
                         prev_merit = current_merit
+
+                if self.settings.step_size_method == "harvey_bfgs":
+                    prev_positions_bfgs = positions_bohr.copy()
+                    prev_eff_grad = projected_grad.ravel().copy()
 
                 positions_bohr = positions_bohr + displacement
             else:
