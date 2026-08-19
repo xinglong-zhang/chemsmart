@@ -262,7 +262,13 @@ def test_alibaba_malformed_envelope_is_auditable_without_partial_dispatch(
         for event in store.read_events()
         if event.kind == EventKind.API_ATTEMPT_OBSERVED.value
     ]
-    assert len(attempts) == 1
+    # A persistently malformed provider is re-asked independently a bounded
+    # number of times before the session terminates; every attempt is in the
+    # trail and only the last one gives up.
+    assert len(attempts) == 3
+    assert [
+        a.payload["protocol_failure"]["retry_decision"] for a in attempts
+    ] == ["retried_independently", "retried_independently", "not_retried"]
     event = attempts[0]
     public_response = public_provider_response(response)
     expected_digest = canonical_sha256(public_response)
@@ -282,7 +288,7 @@ def test_alibaba_malformed_envelope_is_auditable_without_partial_dispatch(
         "response_envelope_bytes": len(
             canonical_json(public_response).encode("utf-8")
         ),
-        "retry_decision": "not_retried",
+        "retry_decision": "retried_independently",
         "recovery_requirement": "new_independent_attempt",
     }
 

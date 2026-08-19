@@ -104,6 +104,15 @@ _CHARS_PER_TOKEN = 3.5
 # episode timeout remains a last resort rather than the normal transport stop.
 _PROVIDER_POST_TURN_RESERVE_SECONDS = 30.0
 
+#: Independent re-asks of one provider turn after a transport or protocol
+#: failure. The adapter validates all-or-nothing before any history append,
+#: so a failed attempt left the session exactly as it was; its recovery
+#: classification is "new_independent_attempt" and these bounds implement
+#: it. Consecutive failures beyond the first bound, or this many in one
+#: session, terminate as before.
+_PROVIDER_FAILURE_CONSECUTIVE_RETRIES = 2
+_PROVIDER_FAILURE_SESSION_BUDGET = 5
+
 
 def estimate_request_input_tokens(request: Mapping[str, Any]) -> int:
     """Estimate the input size of a provider request before sending it.
@@ -221,6 +230,8 @@ class ToolLoopRunner:
         terminal_reason = "tool loop failed"
         completion_required: tuple[str, ...] = ()
         transport_ordinal = 0
+        consecutive_provider_failures = 0
+        total_provider_failures = 0
         while True:
             elapsed = self.clock() - start
             remaining_wall_time = (
@@ -291,6 +302,25 @@ class ToolLoopRunner:
                     tools=list(self.host.surface.tool_definitions)
                 )
             except (DeepSeekTransportError, DeepSeekProtocolError) as exc:
+                # A failed attempt never mutated session state: the adapter
+                # validates all-or-nothing before any history append, so its
+                # own recovery classification ("new_independent_attempt") is
+                # implementable right here by asking again. One malformed
+                # provider response ended a live session that had previewed
+                # its whole workflow and stood one turn from its decision
+                # record; that loss is not required by any invariant. Retry a
+                # bounded number of times -- every attempt stays in the event
+                # trail either way -- and terminate only when failures are
+                # consecutive enough or numerous enough to mean the provider,
+                # not the weather, is broken.
+                consecutive_provider_failures += 1
+                total_provider_failures += 1
+                will_retry = (
+                    consecutive_provider_failures
+                    <= _PROVIDER_FAILURE_CONSECUTIVE_RETRIES
+                    and total_provider_failures
+                    <= _PROVIDER_FAILURE_SESSION_BUDGET
+                )
                 attempt = self._failed_attempt(
                     envelope=envelope,
                     request_context=request_context,
@@ -302,25 +332,33 @@ class ToolLoopRunner:
                     provider=session.config.provider,
                 )
                 attempts.append(attempt)
+                retry_decision = (
+                    "retried_independently" if will_retry else "not_retried"
+                )
+                protocol_observation = None
+                transport_observation = None
+                if isinstance(exc, DeepSeekProtocolError):
+                    protocol_observation = dict(exc.public_observation())
+                    protocol_observation["retry_decision"] = retry_decision
+                else:
+                    transport_observation = dict(
+                        _public_transport_failure(session, exc)
+                    )
+                    transport_observation["retry_decision"] = retry_decision
                 self._emit_attempt(
                     envelope.turn_id,
                     attempt,
-                    protocol_observation=(
-                        exc.public_observation()
-                        if isinstance(exc, DeepSeekProtocolError)
-                        else None
-                    ),
-                    transport_observation=(
-                        _public_transport_failure(session, exc)
-                        if isinstance(exc, DeepSeekTransportError)
-                        else None
-                    ),
+                    protocol_observation=protocol_observation,
+                    transport_observation=transport_observation,
                 )
+                if will_retry:
+                    continue
                 terminal_state = "failed"
                 final_text = str(exc)
                 terminal_reason = "provider transport or protocol failed"
                 break
             provider_receipts.append(provider_receipt)
+            consecutive_provider_failures = 0
             attempt = build_provider_attempt_receipt(
                 attempt_id=f"{envelope.turn_id}.provider.{transport_ordinal}",
                 provider=session.config.provider,
