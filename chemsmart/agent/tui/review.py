@@ -5,7 +5,8 @@ electronic state, effective settings, CLI operations, dependencies,
 environment, resources -- and, because the one approval also covers them,
 the typed analysis chain carried with the workflow and the full lineage of
 any composed arrangement. Every panel is a projection of the same typed
-review object; ``render_raw_review`` shows the identical canonical bytes.
+review object; the identical canonical bytes live on in the run evidence,
+and no digest is ever displayed to the human.
 """
 
 from __future__ import annotations
@@ -17,16 +18,11 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from chemsmart.agent._contracts import canonical_data, canonical_json
-
 if TYPE_CHECKING:
     from chemsmart.agent.execution import WorkflowExecutionReviewV1
 
 from .presentation import human_cli_operation
-
-
-def _short(digest: str, length: int = 12) -> str:
-    return digest[:length] + "…" if digest else ""
+from .voice import human_identity_evidence, human_state
 
 
 def _overview_table(review: "WorkflowExecutionReviewV1") -> Table:
@@ -175,12 +171,8 @@ def _composition_panels(review: "WorkflowExecutionReviewV1") -> list[Panel]:
         contact = record.get("placement", {}).get("contact", {})
         status = item.molecular_identity.get("identity_evidence_status")
         lines = [
-            f"parent A: {record.get('fragment_a_artifact_id')} "
-            f"(geometry {_short(str(record.get('fragment_a_sha256') or ''))}, "
-            f"identity {_short(str(record.get('fragment_a_identity_sha256') or ''))})",
-            f"parent B: {record.get('fragment_b_artifact_id')} "
-            f"(geometry {_short(str(record.get('fragment_b_sha256') or ''))}, "
-            f"identity {_short(str(record.get('fragment_b_identity_sha256') or ''))})",
+            f"parent A: {record.get('fragment_a_artifact_id')}",
+            f"parent B: {record.get('fragment_b_artifact_id')}",
             f"contact: atom {contact.get('fragment_a_atom')} of A to atom "
             f"{contact.get('fragment_b_atom')} of B (1-based)",
             f"requested distance: {contact.get('distance_angstrom')} Å · "
@@ -191,7 +183,7 @@ def _composition_panels(review: "WorkflowExecutionReviewV1") -> list[Panel]:
             f"composed: {record.get('formula')} "
             f"({record.get('atom_count')} atoms); "
             f"{record.get('atom_order_note')}",
-            f"evidence status: {status}",
+            f"evidence: {human_identity_evidence(str(status))}",
         ]
         panels.append(
             Panel(
@@ -239,7 +231,7 @@ def _analysis_chain_renderable(review: "WorkflowExecutionReviewV1") -> Any:
             conditions.append(f"{node.temperature_k:g} K")
         if node.pressure_atm is not None:
             conditions.append(f"{node.pressure_atm:g} atm")
-        state = node.support_state
+        state = human_state(node.support_state)
         if node.blocked_reason:
             state += f": {node.blocked_reason}"
         table.add_row(
@@ -251,15 +243,6 @@ def _analysis_chain_renderable(review: "WorkflowExecutionReviewV1") -> Any:
             state,
         )
     return table
-
-
-def _digest_line(review: "WorkflowExecutionReviewV1") -> Text:
-    return Text(
-        f"review sha256 {_short(review.review_sha256, 16)} · plan sha256 "
-        f"{_short(review.scientific_plan.plan_sha256, 16)} · /raw shows the "
-        "canonical bytes this display projects",
-        style="dim",
-    )
 
 
 def _decision_panel(review: "WorkflowExecutionReviewV1") -> Panel:
@@ -284,7 +267,10 @@ def _decision_panel(review: "WorkflowExecutionReviewV1") -> Panel:
             + ", ".join(sorted(deferred))
             + "."
         )
-    decision += " A changed scientific request must be replanned."
+    decision += (
+        " A changed scientific request must be replanned. The full review "
+        "record is kept in the run evidence."
+    )
     return Panel(decision, title="Human decision", border_style="yellow")
 
 
@@ -317,23 +303,8 @@ def render_review_blocks(
                 title=f"{item.node_id} · ChemSmart CLI operation",
             )
         )
-    blocks.append(_digest_line(review))
     blocks.append(_decision_panel(review))
     return tuple(blocks)
 
 
-def render_raw_review(review: "WorkflowExecutionReviewV1") -> Panel:
-    """The canonical bytes behind the humanized panels, unchanged."""
-
-    return Panel(
-        Syntax(
-            canonical_json({"workflow_execution_review": canonical_data(review)}),
-            "json",
-            word_wrap=True,
-            background_color="default",
-        ),
-        title=f"Canonical review · sha256 {review.review_sha256}",
-    )
-
-
-__all__ = ["render_raw_review", "render_review_blocks"]
+__all__ = ["render_review_blocks"]

@@ -2,14 +2,16 @@
 
 Charter step 3 requires the terminal to display the complete plan. These
 render-capture tests pin that the analysis chain travels visibly with the
-review, that a composed arrangement shows its parents and contact, that the
-review digest is displayed (never retyped), and that a chainless review says
-so explicitly instead of staying silent.
+review, that a composed arrangement shows its parents and contact by NAME
+(digests are provenance and never reach a human panel), and that a chainless
+review says so explicitly instead of staying silent.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
+
+import re
 
 import pytest
 
@@ -76,8 +78,9 @@ def test_a_chainless_review_says_so_instead_of_staying_silent():
     text = _flatten(render_review_blocks(_review()))
 
     assert "No typed analysis chain is planned with this workflow" in text
-    assert "review sha256 aaaaaaaaaaaaaaaa…" in text
-    assert "/raw shows the canonical bytes" in text
+    assert re.search(r"[0-9a-f]{64}", text) is None
+    assert "sha256" not in text
+    assert "The full review record is kept in the run evidence" in text
 
 
 def test_the_analysis_chain_is_displayed_with_the_workflow():
@@ -128,7 +131,10 @@ def test_the_analysis_chain_is_displayed_with_the_workflow():
     assert "thermo" in text and "freq.result-freq" in text
     assert "gibbs (hartree)" in text
     assert "298.15 K" in text
-    assert "blocked_unsupported: rule family not in this release" in text
+    assert (
+        "not executable in this release: rule family not in this release"
+        in text
+    )
     assert "The displayed analysis chain executes provider-free" in text
 
 
@@ -176,4 +182,5 @@ def test_a_composed_arrangement_shows_its_parents_and_contact():
     assert "water-monomer" in text and "ammonia-monomer" in text
     assert "atom 2 of A to atom 1 of B" in text
     assert "requested distance: 1.94" in text
-    assert "composed-from-approved-parents" in text
+    assert "built from two approved parent structures" in text
+    assert re.search(r"[0-9a-f]{64}", text) is None, "parent digests leaked"

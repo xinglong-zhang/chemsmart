@@ -40,7 +40,7 @@ from .monitor import (
 )
 from .panels import DagPanel, JobsPanel, phase_chip, wordmark
 from .presentation import human_cli_operation, session_evidence_blocks
-from .review import render_raw_review, render_review_blocks
+from .review import render_review_blocks
 from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
@@ -229,7 +229,6 @@ class ChemSmartAgentApp(App[None]):
             "approve": self._approve,
             "deny": self._deny,
             "revise": self._revise,
-            "raw": self._show_raw_review,
             "skills": self._show_skills,
             "skill": self._tag_skill,
             "export": self._export_transcript,
@@ -829,21 +828,6 @@ class ChemSmartAgentApp(App[None]):
     def _present_request(self, review: WorkflowExecutionReviewV1) -> None:
         for block in render_review_blocks(review):
             self._write(block)
-
-    def _show_raw_review(self, tail: list[str]) -> None:
-        review = self.controller.prepared_execution
-        if review is None and self.controller.plan_result is not None:
-            review = self.controller.plan_result.prepared_execution
-        if review is None:
-            self._write(
-                Panel(
-                    "No execution review exists in this session yet; plan a "
-                    "workflow with an execution envelope first.",
-                    title="Raw review",
-                )
-            )
-            return
-        self._write(render_raw_review(review))
 
     def _operation_failed(self, label: str, exc: Exception) -> None:
         self._busy = False

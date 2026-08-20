@@ -118,7 +118,6 @@ def test_the_registry_knows_the_full_production_surface():
         "/dag",
         "/report",
         "/runs",
-        "/raw",
         "/export",
         "/help",
         "/quit",
