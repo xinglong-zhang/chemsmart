@@ -13,16 +13,18 @@ from chemsmart.agent.runtime.deepseek import (
     DEEPSEEK_OFFICIAL_ENDPOINT,
     DeepSeekV4FlashConfigV1,
 )
+from chemsmart.agent.providers import (
+    PROVIDERS,
+    declaration_for_endpoint,
+)
 from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
 from chemsmart.io.yaml import YAMLFile
 
 ALIBABA_TOKEN_PLAN_PROVIDER = "alibaba-token-plan"
-ALIBABA_TOKEN_PLAN_ENDPOINT = (
-    "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
-)
+ALIBABA_TOKEN_PLAN_ENDPOINT = PROVIDERS[ALIBABA_TOKEN_PLAN_PROVIDER].endpoint
 ALIBABA_TOKEN_PLAN_MODEL = "qwen3.8-max"
-OPENAI_OFFICIAL_ENDPOINT = "https://api.openai.com/v1"
-ANTHROPIC_OFFICIAL_ENDPOINT = "https://api.anthropic.com"
+OPENAI_OFFICIAL_ENDPOINT = PROVIDERS["openai"].endpoint
+ANTHROPIC_OFFICIAL_ENDPOINT = PROVIDERS["anthropic"].endpoint
 ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS = 1_000_000
 ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS = 262_144
 
@@ -144,11 +146,9 @@ class AgentProviderProfileV1:
                 max_output_tokens=self.max_output_tokens,
                 turn_deadlines=turn_deadlines,
             )
-        if self.provider == "anthropic":
-            raise ContractError(
-                "the anthropic adapter is not registered in this release; "
-                "the profile remains valid configuration"
-            )
+        declaration = PROVIDERS.get(self.provider)
+        if declaration is not None and not declaration.runnable:
+            raise ContractError(declaration.refusal)
         raise ContractError("provider profile has no runtime adapter")
 
 
@@ -385,48 +385,22 @@ def _build_profile(
                 "transport deadline values must be numbers"
             ) from exc
 
-    if endpoint == ALIBABA_TOKEN_PLAN_ENDPOINT:
-        provider = ALIBABA_TOKEN_PLAN_PROVIDER
-        model = _explicit_model(raw_model, provider="Alibaba Token Plan")
-        require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or "max"
-        if reasoning_effort not in {"high", "max", "xhigh"}:
-            raise ContractError(
-                "Alibaba Token Plan reasoning effort must be high, max or "
-                "xhigh"
-            )
-        if not preserve_thinking:
-            raise ContractError(
-                "Alibaba Token Plan tool continuation must be preserved"
-            )
-    elif endpoint == DEEPSEEK_OFFICIAL_ENDPOINT:
-        provider = "deepseek"
-        model = _explicit_model(raw_model, provider="DeepSeek")
-        require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or "max"
-        if reasoning_effort not in {"high", "max"}:
-            raise ContractError(
-                "DeepSeek reasoning effort must be high or max"
-            )
-    elif endpoint == OPENAI_OFFICIAL_ENDPOINT:
-        provider = "openai"
-        model = _explicit_model(raw_model, provider="OpenAI")
-        require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or ""
-        if reasoning_effort not in {"", "low", "medium", "high"}:
-            raise ContractError(
-                "OpenAI reasoning effort must be low, medium, high, or "
-                "omitted"
-            )
-    elif endpoint == ANTHROPIC_OFFICIAL_ENDPOINT:
-        # Accepted as configuration; execution refuses in runtime_config
-        # until the anthropic adapter (and its wire protocol) register.
-        provider = "anthropic"
-        model = _explicit_model(raw_model, provider="Anthropic")
-        require_provider_key_label(api_key_env, provider=provider)
-        reasoning_effort = reasoning_effort or ""
-    else:
+    declaration = declaration_for_endpoint(endpoint)
+    if declaration is None:
         raise ContractError("agent provider endpoint is not registered")
+    # A declared-but-unrunnable provider (anthropic today) is accepted as
+    # configuration; execution refuses in runtime_config until its
+    # adapter (and wire protocol) register.
+    provider = declaration.name
+    model = _explicit_model(raw_model, provider=declaration.display_name)
+    require_provider_key_label(api_key_env, provider=provider)
+    reasoning_effort = reasoning_effort or declaration.default_effort
+    if declaration.efforts and reasoning_effort not in declaration.efforts:
+        raise ContractError(declaration.effort_error)
+    if declaration.requires_preserved_thinking and not preserve_thinking:
+        raise ContractError(
+            f"{declaration.display_name} tool continuation must be preserved"
+        )
 
     body = {
         "schema_version": (

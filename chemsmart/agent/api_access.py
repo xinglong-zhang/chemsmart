@@ -10,35 +10,42 @@ from pathlib import Path
 from typing import Callable, TypeVar
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent.providers import PROVIDERS
 
 _LABEL = re.compile(r"^[A-Za-z0-9_-]+$")
 _T = TypeVar("_T")
 
-DEFAULT_KEY_LABELS = {
-    "alibaba-token-plan": ("ALIBABA_TOKEN_PLAN_KEY",),
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "deepseek": (
-        "DEEPSEEK-api-key",
-        "DEEPSEEK_API_KEY",
-        "DEEPSEEK-API-KEY",
-    ),
-    "openai": ("OPENAI_API_KEY",),
+#: Instrument credentials have no runtime adapter; they live beside the
+#: provider-derived entries so one mapping still answers every label.
+_INSTRUMENT_KEY_LABELS = {
     "elsevier": ("ELSEVIER_API_KEY", "ELSIVIER_api_key"),
     "serpapi": ("SERPAPI_API_KEY", "SerpApi_api_key"),
     "tavily": ("TAVILY_API_KEY", "Tavily_api_key"),
 }
 
-#: The substring a provider's key label must carry.  Kept here, beside
-#: ``DEFAULT_KEY_LABELS``, so one module owns what a label may be: a second
-#: copy in the profile loader would be free to disagree with this one.
-PROVIDER_KEY_LABEL_TOKENS = {
-    "alibaba-token-plan": "ALIBABA",
-    "anthropic": "ANTHROPIC",
-    "deepseek": "DEEPSEEK",
-    "openai": "OPENAI",
+_INSTRUMENT_KEY_LABEL_TOKENS = {
     "elsevier": "ELS",
     "serpapi": "SERPAPI",
     "tavily": "TAVILY",
+}
+
+DEFAULT_KEY_LABELS = {
+    **{
+        name: declaration.key_labels
+        for name, declaration in PROVIDERS.items()
+    },
+    **_INSTRUMENT_KEY_LABELS,
+}
+
+#: The substring a provider's key label must carry.  Provider entries
+#: derive from the registry so the engine-env scrub set cannot lag a
+#: newly registered provider.
+PROVIDER_KEY_LABEL_TOKENS = {
+    **{
+        name: declaration.key_label_token
+        for name, declaration in PROVIDERS.items()
+    },
+    **_INSTRUMENT_KEY_LABEL_TOKENS,
 }
 
 

@@ -775,7 +775,9 @@ class ToolLoopRunner:
             != provider_budget.budget_sha256
         ):
             raise ContractError("request context uses another provider budget")
-        if provider not in {"deepseek", "alibaba-token-plan", "openai"}:
+        from chemsmart.agent.providers import runnable_provider_names
+
+        if provider not in runnable_provider_names():
             raise ContractError("active tool loop provider is not registered")
         if provider_budget.allowed_provider != provider:
             raise ContractError("provider budget belongs to another provider")

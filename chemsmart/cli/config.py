@@ -845,23 +845,16 @@ def scratch(ctx, folder):
 # Agent-layer setup: `chemsmart config agent`
 # ---------------------------------------------------------------------------
 
+#: Provider identity, endpoints, effort menus, and hints all derive from
+#: the one registry; "" in an effort menu means "omit from the payload",
+#: and the model prompt has NO preselection (charter rule).
+def _provider_registry():
+    from chemsmart.agent.providers import PROVIDERS
+
+    return PROVIDERS
+
+
 _AGENT_PROVIDERS = ("openai", "anthropic", "alibaba-token-plan", "deepseek")
-
-#: Effort vocabularies are adapter-owned; "" means "omit from the payload".
-_AGENT_EFFORTS = {
-    "openai": ("", "low", "medium", "high"),
-    "anthropic": ("", "low", "medium", "high"),
-    "alibaba-token-plan": ("high", "max", "xhigh"),
-    "deepseek": ("high", "max"),
-}
-
-#: Help text only -- the model prompt has NO preselection (charter rule).
-_AGENT_MODEL_HINTS = {
-    "openai": "the exact model id from your OpenAI account",
-    "anthropic": "the exact model id from your Anthropic account",
-    "alibaba-token-plan": "the exact catalog id your Token Plan serves",
-    "deepseek": "the exact model id from your DeepSeek account",
-}
 
 
 def _agent_paths():
@@ -872,19 +865,7 @@ def _agent_paths():
 
 
 def _agent_endpoint(provider):
-    from chemsmart.agent.provider_config import (
-        ALIBABA_TOKEN_PLAN_ENDPOINT,
-        ANTHROPIC_OFFICIAL_ENDPOINT,
-        DEEPSEEK_OFFICIAL_ENDPOINT,
-        OPENAI_OFFICIAL_ENDPOINT,
-    )
-
-    return {
-        "openai": OPENAI_OFFICIAL_ENDPOINT,
-        "anthropic": ANTHROPIC_OFFICIAL_ENDPOINT,
-        "alibaba-token-plan": ALIBABA_TOKEN_PLAN_ENDPOINT,
-        "deepseek": DEEPSEEK_OFFICIAL_ENDPOINT,
-    }[provider]
+    return _provider_registry()[provider].endpoint
 
 
 def _agent_key_label(provider):
@@ -1021,11 +1002,11 @@ def agent_config(
         )
     if model is None:
         model = click.prompt(
-            f"Model id ({_AGENT_MODEL_HINTS[provider]})"
+            f"Model id ({_provider_registry()[provider].model_hint})"
         ).strip()
     if not model:
         raise click.BadParameter("a model id is required; there is no default")
-    efforts = _AGENT_EFFORTS[provider]
+    efforts = _provider_registry()[provider].cli_efforts
     if reasoning_effort is None:
         shown = [effort or "(omit)" for effort in efforts]
         chosen = click.prompt(
@@ -1121,9 +1102,9 @@ def agent_config(
             "this command to store one."
         )
     _offer_api_env_migration(keys_path)
-    if provider == "anthropic":
+    if not _provider_registry()[provider].runnable:
         click.echo(
-            "Note: the anthropic profile is valid configuration, and its "
+            f"Note: the {provider} profile is valid configuration, and its "
             "runtime adapter is not registered in this release -- selecting "
             "it for a session will refuse until the adapter lands."
         )
