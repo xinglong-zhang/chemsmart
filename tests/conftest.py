@@ -70,6 +70,10 @@ def make_thermochemistry_mock():
     """
     from chemsmart.analysis.thermochemistry import Thermochemistry
 
+    from chemsmart.analysis.thermochemistry import (
+        NEAR_ZERO_FREQUENCY_TOLERANCE_CM,
+    )
+
     def _factory(
         vibrational_frequencies,
         jobtype="opt",
@@ -77,6 +81,7 @@ def make_thermochemistry_mock():
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
         rotational_mode="gaussian",
+        near_zero_frequency_tolerance_cm=NEAR_ZERO_FREQUENCY_TOLERANCE_CM,
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -85,6 +90,11 @@ def make_thermochemistry_mock():
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
         mock.rotational_mode = rotational_mode
+        # Instance attributes set in __init__ are invisible to spec=; the
+        # near-zero convention's tolerance must be mirrored explicitly.
+        mock.near_zero_frequency_tolerance_cm = (
+            near_zero_frequency_tolerance_cm
+        )
         mock.filename = "dummy.log"
         mock.target = "dummy.log"
         return mock
