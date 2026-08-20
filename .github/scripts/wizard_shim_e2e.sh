@@ -93,4 +93,58 @@ test -f "$CFG2" || fail "local.yaml was not written"
 grep -q "SCHEDULER: null" "$CFG2" || fail "local file must not claim a scheduler"
 grep -q "no batch scheduler detected" "$CFG2" || fail "honest provenance missing"
 
+echo "== PBS: detection, queue probe, and a PBS server file =="
+PBS_SHIMS="$WORK/pbs-shims"
+HOME3="$WORK/home3"
+mkdir -p "$PBS_SHIMS" "$HOME3"
+cat > "$PBS_SHIMS/qstat" <<'SHIM'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  echo "pbs_version = 23.06.06"
+  exit 0
+fi
+# The wizard requests: qstat -Q -f
+cat <<'OUT'
+Queue: workq
+    queue_type = Execution
+    resources_max.ncpus = 64
+    resources_max.mem = 250gb
+    resources_max.walltime = 72:00:00
+    enabled = True
+    started = True
+
+Queue: gpuq
+    queue_type = Execution
+    resources_max.walltime = 24:00:00
+    enabled = True
+    started = False
+OUT
+SHIM
+cat > "$PBS_SHIMS/pbsnodes" <<'SHIM'
+#!/usr/bin/env bash
+cat <<'OUT'
+node01
+    state = free
+    resources_available.ncpus = 64
+    resources_available.mem = 262144000kb
+
+node02
+    state = free
+    resources_available.ncpus = 64
+    resources_available.mem = 262144000kb
+OUT
+SHIM
+cat > "$PBS_SHIMS/qsub" <<'SHIM'
+#!/usr/bin/env bash
+echo "1.pbs"
+SHIM
+chmod +x "$PBS_SHIMS"/qstat "$PBS_SHIMS"/pbsnodes "$PBS_SHIMS"/qsub
+env HOME="$HOME3" PATH="$PBS_SHIMS:$CHEMSMART_BIN:$PY_BIN:/usr/bin:/bin" \
+  chemsmart wizard --server --yes
+CFG3="$HOME3/.chemsmart/server/PBS.yaml"
+test -f "$CFG3" || fail "PBS.yaml was not written"
+grep -q "SCHEDULER: PBS" "$CFG3" || fail "PBS was not detected"
+grep -q "QUEUE_NAME: workq" "$CFG3" || fail "the started queue must win"
+grep -q "NUM_CORES: 64" "$CFG3" || fail "cores must come from the PBS queue"
+
 echo "wizard shim e2e: all checks passed"
