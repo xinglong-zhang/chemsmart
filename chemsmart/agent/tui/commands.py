@@ -209,7 +209,7 @@ def footer_hint(phase: str) -> str:
 
     by_phase = {
         "ready": "Enter a scientific request · /help commands",
-        "planning": "Planning through the selected provider",
+        "planning": "Planning with the selected model",
         "request-reviewed": "/approve runs once · /revise or /deny declines",
         "executing": "Executing the approved ChemSmart DAG",
     }

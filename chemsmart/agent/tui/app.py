@@ -44,6 +44,7 @@ from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
+from .voice import human_state
 
 
 #: The one styling rule: running = text, finished = muted, failed = error.
@@ -158,7 +159,7 @@ class ChemSmartAgentApp(App[None]):
         self._write(
             Markdown(
                 "## Ready\n\n"
-                "ChemSmart turns scientific intent into canonical project YAML, "
+                "ChemSmart turns scientific intent into readable project YAML, "
                 "compiled CLI operations, and a safe preview. A calculation "
                 "runs only after the displayed scientific workflow is reviewed "
                 "and the human enters /approve."
@@ -195,7 +196,7 @@ class ChemSmartAgentApp(App[None]):
             return
         self._write(Panel(Text(normalized), title="Scientific request"))
         self._busy = True
-        self._sync_phase("Planning through the selected provider")
+        self._sync_phase("Planning with the selected model")
         self._run_plan(normalized)
 
     def _dispatch_command(self, text: str) -> None:
@@ -321,7 +322,7 @@ class ChemSmartAgentApp(App[None]):
             Panel(
                 "The human approved the displayed molecule, project YAML, "
                 "CLI operations, DAG, observed execution environments and "
-                "resource limits. The provider is "
+                "resource limits. The model is "
                 "disconnected before any engine launch.",
                 title="Approve and run",
                 border_style="red",
@@ -540,8 +541,8 @@ class ChemSmartAgentApp(App[None]):
         self._write(
             Text(
                 "/skill <id> tags your next request; the session still "
-                "consults it through its own tool, so the receipt chain is "
-                "preserved.",
+                "consults it through its own tool, so the record of what "
+                "was consulted is kept.",
                 style="dim",
             )
         )
@@ -683,21 +684,21 @@ class ChemSmartAgentApp(App[None]):
         table = Table(title="Plan and safe-preview result")
         table.add_column("State", style="bold cyan")
         table.add_column("Value")
-        table.add_row("terminal", result.terminal_state)
-        table.add_row("session", result.session_id)
-        table.add_row("successful tools", str(result.successful_tool_calls))
-        table.add_row("failed tools", str(result.failed_tool_calls))
+        table.add_row("outcome", human_state(result.terminal_state))
+        steps = f"{result.successful_tool_calls} steps"
+        if result.failed_tool_calls:
+            steps += f", {result.failed_tool_calls} refused"
+        table.add_row("steps", steps)
         self._write(table)
-        for block in session_evidence_blocks(result):
-            if (
-                self._live_rows_seen
-                and block.title != "Canonical project YAML"
-            ):
-                # The live feed already narrated every tool result; repeat
-                # only the scientifically load-bearing project YAML. The
-                # complete canonical payloads remain in the session's
-                # append-only event stream.
-                continue
+        # The live feed narrated every tool result; what bears repeating is
+        # the scientifically load-bearing project YAML. The complete record
+        # stays in the session's append-only run evidence.
+        yaml_blocks = [
+            block
+            for block in session_evidence_blocks(result)
+            if block.language == "yaml"
+        ]
+        for block in yaml_blocks:
             self._write(
                 Panel(
                     Syntax(
@@ -707,6 +708,14 @@ class ChemSmartAgentApp(App[None]):
                         background_color="default",
                     ),
                     title=block.title,
+                )
+            )
+        if not self._live_rows_seen and not yaml_blocks:
+            self._write(
+                Text(
+                    "The live feed captured no tool activity; the complete "
+                    "record is in the session's run evidence.",
+                    style="dim",
                 )
             )
         if result.final_text:

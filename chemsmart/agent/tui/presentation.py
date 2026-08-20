@@ -145,7 +145,7 @@ def session_evidence_blocks(
             if marker not in seen:
                 blocks.append(
                     EvidenceBlockV1(
-                        title="Canonical project YAML",
+                        title="Project settings (YAML)",
                         text=rendered_yaml.rstrip() + "\n",
                         language="yaml",
                     )
