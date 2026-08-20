@@ -206,7 +206,10 @@ def test_completed_calculation_is_not_offered_for_rerun():
 
     assert _node(projected, "sp-dz")["state"] == "completed"
     assert projected["completed_node_ids"] == ("sp-dz",)
-    assert projected["actionable_node_ids"] == ()
+    # The completed calculation is not re-offered; what becomes actionable is
+    # the extraction its completion just satisfied.
+    assert "sp-dz" not in projected["actionable_node_ids"]
+    assert projected["actionable_node_ids"] == ("extract-dz",)
 
 
 def test_a_blocked_upstream_node_names_which_parent_is_blocked():
