@@ -62,7 +62,7 @@ def _thermochemistry() -> AnalysisNodeIntentV1:
         outputs=(
             AnalysisOutputIntentV1(
                 output_id="gibbs",
-                quantity_kind="gibbs_energy",
+                quantity_kind="gibbs_free_energy",
                 unit="hartree",
             ),
         ),
